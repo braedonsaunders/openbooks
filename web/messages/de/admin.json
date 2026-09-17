@@ -8,7 +8,8 @@
       "people": "Personen & Zugriff",
       "workspace": "Arbeitsbereich",
       "activity": "Aktivität & Daten",
-      "data": "Integrationen & Daten"
+      "data": "Integrationen & Daten",
+      "platform": "Plattform & Entwicklung"
     },
     "cards": {
       "settings": {
@@ -86,6 +87,18 @@
       "email": {
         "title": "E-Mail-Zustellung",
         "description": "Konfigurieren Sie Ihren E-Mail-Anbieter, damit geplante Berichte gesendet werden können"
+      },
+      "agentsSetup": {
+        "description": "Hintergrund-Agentenpakete: installieren, Pläne und Prüfungen konfigurieren, Läufe prüfen",
+        "title": "Agenten"
+      },
+      "flows": {
+        "description": "Geregelte Automatisierungen, Genehmigungstore, Bedingungen und Aktionen erstellen",
+        "title": "Flows"
+      },
+      "queryConsole": {
+        "description": "Berechtigungsgesteuerte Abfragen für Analyse- und Integrationsarbeit ausführen",
+        "title": "Abfragekonsole"
       }
     }
   },
@@ -131,7 +144,48 @@
     "userFilter": "Benutzer",
     "dateFrom": "Von",
     "dateTo": "Bis",
-    "clearDates": "Datumsangaben löschen"
+    "clearDates": "Datumsangaben löschen",
+    "drawer": {
+      "actor": "Benutzer",
+      "after": "Nachher",
+      "afterSnapshot": "Datensatz nach diesem Ereignis",
+      "before": "Vorher",
+      "beforeSnapshot": "Datensatz vor diesem Ereignis",
+      "changeCount": "{count, plural, one {# Änderung} other {# Änderungen}}",
+      "changedFields": "Geänderte Felder",
+      "description": "Erfasst von {actor} · {when}",
+      "emptyCollection": "Keine Werte",
+      "eventContext": "Ereigniskontext",
+      "field": "Feld",
+      "item": "Position",
+      "itemCount": "{count, plural, one {# Position} other {# Positionen}}",
+      "itemPosition": "{current} von {total}",
+      "lineItem": "Zeile {line}",
+      "noDifferences": "Für dieses Ereignis wurden keine Vorher-/Nachher-Feldunterschiede erfasst.",
+      "notSet": "Nicht gesetzt",
+      "propertyCount": "{count, plural, one {# Eigenschaft} other {# Eigenschaften}}",
+      "recordRemoved": "Datensatz entfernt",
+      "recordRemovedDescription": "Dieses Ereignis hat den Datensatz gelöscht, daher gibt es keinen Nachher-Schnappschuss.",
+      "recordType": "Datensatztyp",
+      "reference": "Datensatzreferenz",
+      "tabs": {
+        "after": "Nachher",
+        "before": "Vorher",
+        "changes": "Änderungen"
+      },
+      "tabsAria": "Ansichten des Prüfereignisses",
+      "technicalDetails": "Technische Details",
+      "when": "Erfasst",
+      "no": "Nein",
+      "yes": "Ja"
+    },
+    "summaries": {
+      "changeCount": "{count, plural, =0 {Ereignisdetails} one {# geändertes Feld} other {# geänderte Felder}}",
+      "metadata": "Datensatzmetadaten",
+      "snapshot": "Vollständiger Vorher-/Nachher-Schnappschuss"
+    },
+    "documentation": "Dokumentation",
+    "openEventAria": "{action}-Ereignis für {recordType} vom {when} öffnen"
   },
   "customFields": {
     "title": "Benutzerdefinierte Felder",
@@ -381,7 +435,9 @@
       "subsidiaryPlaceholder": "Tochtergesellschaft auswählen…",
       "subsidiarySearchPlaceholder": "Tochtergesellschaften suchen…",
       "subsidiaryRequired": "Tochtergesellschaft auswählen",
-      "subsidiaryListRequired": "Wählen Sie mindestens eine Tochtergesellschaft aus"
+      "subsidiaryListRequired": "Wählen Sie mindestens eine Tochtergesellschaft aus",
+      "inactivePermissions": "Inaktive App-Berechtigungen",
+      "permissionsLoadFailed": "App-Berechtigungen konnten nicht geladen werden"
     }
   },
   "scripts": {
@@ -409,7 +465,8 @@
       "scheduled": "geplant",
       "endpoint": "Endpunkt",
       "bulk": "Massenverarbeitung",
-      "client": "Client"
+      "client": "Client",
+      "customGlLines": "benutzerdefinierte Hauptbuchzeilen"
     },
     "kinds": {
       "vendorBill": "Eingangsrechnung",
@@ -550,7 +607,9 @@
       "reportPdfStyle": "PDF-Stil für Finanzberichte",
       "reportPdfStyleModern": "Modern (mit Branding)",
       "reportPdfStyleFormal": "Formell (GAAP)",
-      "reportPdfStyleHint": "Wie exportierte Finanzberichte aussehen: Modern verwendet Ihre Markenakzentfarbe und eine serifenlose Schrift; Formell ist ein klassischer, serifenbetonter, graustufiger, prüfungsbereiter Abschluss."
+      "reportPdfStyleHint": "Wie exportierte Finanzberichte aussehen: Modern verwendet Ihre Markenakzentfarbe und eine serifenlose Schrift; Formell ist ein klassischer, serifenbetonter, graustufiger, prüfungsbereiter Abschluss.",
+      "perEntityNote": "Dieses Unternehmen ist Ihre oberste Gesellschaft – ihr rechtlicher Name, Land und Währung leben hier. Fügen Sie Tochtergesellschaften darunter hinzu, jede mit eigenen.",
+      "subsidiariesLink": "Tochtergesellschaften öffnen"
     },
     "fiscal": {
       "title": "Geschäftsjahr",
@@ -655,8 +714,13 @@
         "valuationAllowance": {
           "label": "Wertberichtigung",
           "hint": "Gegenkonto zu aktiven latenten Steuern"
+        },
+        "retainagePayable": {
+          "hint": "Einbehalt aus Lieferanten-Abschlagsrechnungen bis zu einer genehmigten Freigabe",
+          "label": "Einbehaltverbindlichkeiten"
         }
-      }
+      },
+      "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück."
     },
     "revenue": {
       "title": "Umsatzrealisierung",
@@ -741,7 +805,8 @@
     "inviteCopyLink": "Link kopieren",
     "inviteCopied": "Link kopiert",
     "inviteCopyFailed": "Link konnte nicht kopiert werden – bitte manuell auswählen",
-    "inviteTooManyAttempts": "Zu viele Einladungen – versuchen Sie es später erneut"
+    "inviteTooManyAttempts": "Zu viele Einladungen – versuchen Sie es später erneut",
+    "unassignedRole": "keine Rolle zugeordnet"
   },
   "permissions": {
     "groups": {
@@ -766,7 +831,10 @@
       "admin": "Verwaltung",
       "assets": "Anlagevermögen & Abschreibung",
       "data": "Import & Export",
-      "crm": "Kundenbeziehungsmanagement"
+      "crm": "Kundenbeziehungsmanagement",
+      "allocations": "Umlagen",
+      "compliance": "Compliance",
+      "payroll": "Lohnabrechnung"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -853,7 +921,19 @@
     "crm_forecasts_read": "Verkaufsprognosen anzeigen",
     "crm_forecasts_manage": "Prognose-Momentaufnahmen erstellen",
     "crm_forecasts_override": "Teamprognosen überschreiben",
-    "crm_setup_manage": "CRM-Einrichtung verwalten"
+    "crm_setup_manage": "CRM-Einrichtung verwalten",
+    "allocations_approve": "Umlagelläufe mit ausstehender Genehmigung freigeben",
+    "allocations_manage": "Umlageregeln und Treiber erstellen und bearbeiten",
+    "allocations_read": "Umlageregeln, Läufe und Herkunft anzeigen",
+    "allocations_run": "Umlagen in Vorschau ansehen, buchen, stornieren und erneut laufen lassen",
+    "compliance_file": "Informationsmeldungen finalisieren und einreichen",
+    "compliance_manage": "Zertifikate, Verzichtserklärungen und Meldungen erfassen",
+    "compliance_read": "Nachunternehmer-Compliance anzeigen",
+    "compliance_verify": "Zertifikate verifizieren",
+    "compliance_waive": "Compliance-Ausnahmen gewähren",
+    "payroll_manage": "Lohnabrechnung und Mitarbeiterprofile konfigurieren",
+    "payroll_read": "Lohnläufe und Abrechnungen anzeigen",
+    "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -947,7 +1027,8 @@
         "count": "Elemente",
         "percent": "%",
         "multiple": "× Wesentlichkeit",
-        "points": "Prozentpunkte"
+        "points": "Prozentpunkte",
+        "weeks": "Wochen"
       },
       "parameters": {
         "criticalAgeDays": "Kritisch nach",
@@ -959,7 +1040,23 @@
         "minimumDeclinePercent": "Minimaler Umsatzrückgang",
         "criticalDeclinePercent": "Kritischer Umsatzrückgang",
         "minimumDropPoints": "Minimaler Margenrückgang",
-        "criticalDropPoints": "Kritischer Margenrückgang"
+        "criticalDropPoints": "Kritischer Margenrückgang",
+        "breachToleranceDays": "Verletzungstoleranz",
+        "criticalCustomerCount": "Kritische Kundenanzahl",
+        "criticalPairCount": "Kritische Paaranzahl",
+        "dueWithinDays": "Fällig innerhalb",
+        "duplicateDays": "Doppelfenster",
+        "duplicateWindowDays": "Doppelfenster",
+        "forecastWeeks": "Prognosehorizont",
+        "holdMaterialityMultiple": "Einbehalt-Expositionsvielfaches",
+        "holdOverdueDays": "Überfälligkeitsalter des Einbehalts",
+        "lookbackDays": "Rückblick",
+        "matchWindowDays": "Abgleichsfenster",
+        "minOverdueInvoices": "Mindestanzahl überfälliger Rechnungen",
+        "minimumConfidencePercent": "Mindestkonfidenz",
+        "minimumDiscountPercent": "Mindestrabatt",
+        "payRunHorizonDays": "Lohnlaufhorizont",
+        "unbilledDays": "Nicht fakturiert nach"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -989,6 +1086,142 @@
         "gross_margin_decline": {
           "title": "Rückgang der Bruttomarge",
           "description": "Vergleicht die Bruttomarge abgeschlossener Zeiträume und kennzeichnet eine wesentliche Verringerung in Prozentpunkten."
+        },
+        "broken_payment_promise": {
+          "title": "Gebrochene Zahlungsversprechen",
+          "description": "Versprechen nach der Verletzungstoleranz, gereiht nach Alter und Engagement."
+        },
+        "cash_bill_crunch": {
+          "description": "Markiert fällige Verbindlichkeiten im Fenster, die den Barbestand übersteigen.",
+          "title": "Rechnungsspitze"
+        },
+        "cash_forecast_shortfall": {
+          "description": "Markiert die Prognoselinie, die im Horizont unter null fällt.",
+          "title": "Prognoseunterdeckung"
+        },
+        "cash_low_balance": {
+          "description": "Markiert Bankguthaben unter der Untergrenze, mit Fehlbetrag.",
+          "title": "Niedriger Barbestand"
+        },
+        "forensic_duplicate_bills": {
+          "description": "Nahezu doppelte Eingangsrechnungen, die den Kreditorenprüfungen entgangen sein könnten.",
+          "title": "Forensische doppelte Eingangsrechnungen"
+        },
+        "forensic_round_dollar": {
+          "description": "Verdächtig runde Buchungen im Rückblickfenster.",
+          "title": "Glatte Buchungen"
+        },
+        "forensic_threshold_trap": {
+          "description": "Beträge, die knapp unter Genehmigungsgrenzen geparkt sind.",
+          "title": "Schwellenfallen"
+        },
+        "forensic_weekend_postings": {
+          "description": "Auf Wochenenden datierte Buchungen im Rückblickfenster.",
+          "title": "Wochenendbuchungen"
+        },
+        "overdue_customer_balance": {
+          "description": "Überfällige Kunden mit Gesamtengagement, Zahlungsverhalten und Alterungskonzentrationen.",
+          "title": "Überfällige Kundensalden"
+        },
+        "payroll_missing_elections": {
+          "description": "Markiert aktive Mitarbeiter ohne hinterlegte TD1- oder W-4-Wahl.",
+          "title": "Fehlende gesetzliche Wahlen"
+        },
+        "payroll_remittance_due": {
+          "description": "Markiert aufgelaufene Abzüge mit Fälligkeit im Horizont, die kein Beleg abdeckt.",
+          "title": "Abführung fällig"
+        },
+        "payroll_unknown_accounts": {
+          "description": "Markiert festgeschriebene Läufe, deren Abrechnungen niemals einem Melde- oder Verbindlichkeitskonto zugeordnet wurden.",
+          "title": "Unbekannte Lohnkonten"
+        },
+        "payroll_yearend_gaps": {
+          "description": "Markiert fehlende SINs und nicht konfigurierte gesetzliche Sätze, die die Bescheinigungen brauchen.",
+          "title": "Jahresendmeldelücken"
+        },
+        "project_budget_overrun": {
+          "description": "Markiert Projekte, bei denen gebuchte Kosten plus offene Verpflichtungen das genehmigte Budget überschritten haben.",
+          "title": "Projektbudgetüberschreitung"
+        },
+        "project_negative_margin": {
+          "description": "Markiert aktive Projekte mit negativer gebuchter Marge, mit Hinweis auf Wechsel seit dem letzten Lauf.",
+          "title": "Negative Projektmarge"
+        },
+        "project_stale_unbilled": {
+          "description": "Markiert genehmigte abrechenbare Arbeit, die nach der Alterungsgrenze noch nicht fakturiert ist.",
+          "title": "Alte nicht fakturierte Leistung"
+        },
+        "tax_missing_codes": {
+          "description": "Findet gebuchte Belege mit unbesteuerten Zeilen, die die Erklärung nicht sieht.",
+          "title": "Belege ohne Steuerkennzeichen"
+        },
+        "tax_missing_registration": {
+          "description": "Markiert aktive Erklärungsformulare ohne hinterlegte Registrierungsnummer.",
+          "title": "Fehlende Steuerregistrierung"
+        },
+        "tax_return_blocked": {
+          "description": "Markiert konfigurierte Erklärungen, die die Melde-Engine nicht berechnen kann.",
+          "title": "Blockierte Steuererklärung"
+        },
+        "tax_unlocked_period": {
+          "description": "Markiert die letzte abgeschlossene Periode ohne geschlossene Steuersperre.",
+          "title": "Ungesperrte Steuerperiode"
+        },
+        "bank_line_match_candidate": {
+          "description": "Nicht zugeordnete Bankzeilen mit sicherem Abgleichskandidaten im Fenster.",
+          "title": "Abgleichskandidaten"
+        },
+        "bills_due_before_payrun": {
+          "description": "Genehmigte Belege mit Fälligkeit im Lohnlaufhorizont, auf Deckung gemessen.",
+          "title": "Belege fällig vor dem Lohnlauf"
+        },
+        "bills_missing_approval": {
+          "description": "Belege, die nach der Alterungsgrenze ohne Genehmigung warten.",
+          "title": "Belege ohne Genehmigung"
+        },
+        "budget_scenario_without_lines": {
+          "description": "Budgetszenarien ohne Zeilen.",
+          "title": "Leere Budgetszenarien"
+        },
+        "control_account_type_mismatch": {
+          "description": "Konten, deren Kontrollrolle ihrem Typ widerspricht.",
+          "title": "Kontrollkonten-Fehlzuordnungen"
+        },
+        "credit_hold_candidate": {
+          "description": "Kunden über Einbehaltsalter und Engagement mit wiederholt überfälligen Rechnungen.",
+          "title": "Kreditsperrkandidaten"
+        },
+        "duplicate_bills": {
+          "description": "Lieferantenbelege, die wie erneut erfasste Kopien im Doppelfenster aussehen.",
+          "title": "Doppelte Belege"
+        },
+        "duplicate_party_identity": {
+          "description": "Parteien mit gleichem Namen oder gleicher Steuernummer.",
+          "title": "Doppelte Parteienidentitäten"
+        },
+        "early_pay_discount_opportunity": {
+          "description": "Belege mit mindestens dem Mindestrabatt für frühe Zahlung.",
+          "title": "Frühzahlungsrabatte"
+        },
+        "item_missing_tax_code": {
+          "description": "Artikel ohne Steuerkennzeichen zur Belegsteuersteuerung.",
+          "title": "Artikel ohne Steuerkennzeichen"
+        },
+        "never_reconciled_account": {
+          "description": "Bankkonten mit Bewegung im Rückblickfenster und ohne Abstimmung.",
+          "title": "Niemals abgestimmte Konten"
+        },
+        "project_missing_cost_budget": {
+          "description": "Projekte ohne Kostenbudget zur Margenmessung.",
+          "title": "Projekte ohne Kostenbudget"
+        },
+        "stale_reconciliation": {
+          "description": "Laufende Abstimmungen, die seit der Alterungsgrenze unberührt sind.",
+          "title": "Alte Abstimmungen"
+        },
+        "unmapped_payroll_component": {
+          "description": "Lohnbestandteile ohne Buchungszuordnung.",
+          "title": "Nicht zugeordnete Lohnbestandteile"
         }
       },
       "accounting": {
@@ -1012,6 +1245,51 @@
         "failed": "fehlgeschlagen",
         "skipped": "übersprungen",
         "running": "läuft"
+      },
+      "cash": {
+        "coverage": "Prüft niedrige Salden, Rechnungsspitzen und Prognoseunterdeckungen.",
+        "description": "Laufende Liquiditätskontrollen.",
+        "title": "Liquiditätsagent"
+      },
+      "collections": {
+        "coverage": "Prüft überfällige Kundensalden mit Zahlungsverhalten, gebrochene Zahlungsversprechen und Sperrkandidaten.",
+        "description": "Laufende Debitorenkontrollen.",
+        "title": "Inkassoagent"
+      },
+      "forensics": {
+        "coverage": "Prüft Wochenendbuchungen, glatte Beträge, knapp unter Grenzen liegende Beträge und doppelte Belege.",
+        "description": "Laufende Anomaliekontrollen bei Ausgaben.",
+        "title": "Forensikagent"
+      },
+      "hygiene": {
+        "coverage": "Prüft Kontrollkonten-Fehlzuordnungen, doppelte Parteien und Datensätze ohne benötigte Kennzeichen, Budgets oder Zuordnungen.",
+        "description": "Laufende Stammdatenkontrollen.",
+        "title": "Datenhygieneagent"
+      },
+      "payables": {
+        "coverage": "Prüft doppelte Belege, Belege vor dem nächsten Lohnlauf, Frühzahlungsrabatte und fehlende Genehmigungen.",
+        "description": "Laufende Kreditorenkontrollen.",
+        "title": "Kreditorenagent"
+      },
+      "payroll": {
+        "coverage": "Prüft Abführungsfälligkeiten, unbekannte Konten, fehlende Wahlen und Jahresendlücken.",
+        "description": "Laufende Lohn-Compliance-Kontrollen.",
+        "title": "Lohnagent"
+      },
+      "projects": {
+        "coverage": "Prüft negative Margen, Budgetüberschreitungen und alte nicht fakturierte Leistung.",
+        "description": "Laufende Projektmargenkontrollen.",
+        "title": "Projektagent"
+      },
+      "reconciliation": {
+        "coverage": "Prüft nicht zugeordnete Bankzeilen mit sicherem Abgleichskandidaten, alte Abstimmungen und niemals abgestimmte Konten.",
+        "description": "Laufende Bankabstimmungskontrollen.",
+        "title": "Abstimmungsagent"
+      },
+      "tax": {
+        "coverage": "Prüft fehlende Steuerkennzeichen, Registrierungen, berechenbare Erklärungen und Periodensperren.",
+        "description": "Laufende Kontrollen zur Meldebereitschaft.",
+        "title": "Steueragent"
       }
     },
     "documentCapture": {
@@ -1050,8 +1328,16 @@
       "typeManually": "Manuell eingeben",
       "current": "{id} (aktuell)",
       "hint": "Laden Sie die Live-Modellliste mit Ihrem API-Schlüssel oder geben Sie eine Modell-ID manuell ein.",
-      "idPlaceholder": "Modell-ID"
-    }
+      "idPlaceholder": "Modell-ID",
+      "result": {
+        "empty": "Der Anbieter hat keine Modelle zurückgegeben – geben Sie die ID manuell ein.",
+        "missingKey": "Geben Sie einen API-Schlüssel für diesen Anbieter ein, um seine Modelle zu laden.",
+        "unauthorized": "Der API-Schlüssel wurde abgelehnt ({status}). Prüfen Sie den Schlüssel und versuchen Sie es erneut."
+      }
+    },
+    "manageAgentsDescription": "Pläne, Prüfungen und Weiterleitung von Feststellungen leben unter Einrichtung → Agenten.",
+    "manageAgentsLink": "Agenteneinrichtung öffnen",
+    "manageAgentsTitle": "Hintergrundagenten"
   },
   "setup": {
     "title": "Einrichtung",
@@ -1069,10 +1355,59 @@
           "trade": "Gewerk auswählen",
           "department": "Abteilung auswählen",
           "subsidiary": "Tochtergesellschaft auswählen"
-        }
+        },
+        "add": "Satz hinzufügen",
+        "annualHours": "Jahresstunden",
+        "annualHoursRequired": "Geben Sie Jahresstunden größer als null ein",
+        "basis": "Basis",
+        "confirmDelete": "Diesen Satz löschen? Bereits kalkulierte Zeit behält ihren Schnappschuss; künftige Genehmigungen werden ohne ihn aufgelöst.",
+        "drawerEditDescription": "Aktualisieren Sie den gültigkeitsdatierten Lohnsatz für {scope}.",
+        "drawerEditTitle": "Lohnsatz bearbeiten",
+        "drawerNewTitle": "Neuer Lohnsatz",
+        "employeeNote": "{covered} von {total} Mitarbeitern lösen auf einen Lohn auf. Mitarbeiterspezifische Löhne und Erhöhungshistorie stehen in jedem Mitarbeiterdatensatz (Betrieb → Mitarbeiter).",
+        "emptyFiltered": "Keine Lohnsätze entsprechen diesen Filtern.",
+        "endDateHint": "Leer lassen, um diesen Satz unbefristet zu halten.",
+        "from": "Von",
+        "hourlyEquivalent": "Stundenäquivalent: {amount}",
+        "hr": "Std.",
+        "invalidEndDate": "Das Enddatum darf nicht vor dem Startdatum liegen",
+        "notes": "Notizen",
+        "openRate": "Lohnsatz für {scope} öffnen",
+        "perHour": "pro Stunde",
+        "perYear": "pro Jahr",
+        "rate": "Satz",
+        "rateDeleted": "Lohnsatz gelöscht",
+        "rateUpdated": "Lohnsatz aktualisiert",
+        "scope": "Bereich",
+        "scopeOrg": "Org-Standard",
+        "scopeTrade": "Gewerk",
+        "search": "Sätze suchen …",
+        "selectTrade": "Gewerk auswählen",
+        "status": "Status",
+        "statusActive": "Aktiv und geplant",
+        "statusCurrent": "Aktuell",
+        "statusEnded": "Beendet",
+        "statusScheduled": "Geplant",
+        "to": "Bis",
+        "who": "Wer",
+        "yr": "J.",
+        "title": "Lohnsätze"
       },
       "reconciliation": {
-        "subsidiary": "Tochtergesellschaft"
+        "subsidiary": "Tochtergesellschaft",
+        "from": "Von",
+        "hint": "Standardlohn schreibt dem Verrechnungskonto bei Genehmigung gut; das Lohnjournal (importiert oder manuell) belastet dasselbe Konto. Der Rest ist Ihre Lohnabweichung – buchen Sie sie aus, wenn die Periode abgeschlossen ist.",
+        "load": "Laden",
+        "openBalance": "Verrechnungssaldo (gesamt)",
+        "payrollPosted": "Abgeglichene Lohn-Ist-Werte",
+        "periodVariance": "Periodenabweichung",
+        "postVariance": "Abweichung buchen",
+        "project": "Projekt",
+        "standardCost": "Standardkosten",
+        "standardPosted": "Gebuchter Standardlohn",
+        "title": "Lohnabstimmung",
+        "to": "Bis",
+        "variancePosted": "${amount} Lohnabweichung gebucht"
       },
       "billing": {
         "title": "Abrechnungssatzkarten",
@@ -1174,9 +1509,155 @@
         }
       },
       "tabs": {
-        "billing": "Abrechnungssätze"
+        "billing": "Abrechnungssätze",
+        "components": "Nebenkostenschätzung",
+        "posting": "Buchung",
+        "rates": "Lohnsätze",
+        "reconciliation": "Lohnabstimmung"
       },
-      "navTitle": "Lohnkosten"
+      "navTitle": "Lohnkosten",
+      "components": {
+        "addBurden": "Nebenkosten-% hinzufügen",
+        "addPerDiem": "Tagegeld hinzufügen",
+        "hint": "Wird auf den Lohn aufgeschlagen, um Auftragskosten vor der Lohnabrechnung realistisch zu machen (gesetzliche Nebenkosten, Tagegeld). Wird durch echte Lohnkosten ersetzt, sobald Ist-Werte gebucht werden – niemals eine dauerhafte Schicht.",
+        "hoursPerDay": "Stunden pro Tag",
+        "kind": "Art",
+        "name": "Name",
+        "newBurden": "Lohnnebenkosten (Schätzung)",
+        "newPerDiem": "Tagegeld",
+        "perDay": "$ pro Tag",
+        "perHour": "$ pro Stunde",
+        "percentOfWage": "% vom Lohn",
+        "remove": "Komponente entfernen",
+        "scalesOt": "skaliert mit Überstunden",
+        "title": "Kostenschätzungskomponenten",
+        "value": "Wert",
+        "addWorkerComp": "Arbeitsunfallversicherung hinzufügen",
+        "annualHours": "Jahresstunden (Gehalt)",
+        "example": "Beispiel bei einem Lohn von {wage}/Std.:",
+        "exampleDt": "Doppelt ×2",
+        "exampleOt": "Überstunden ×1,5",
+        "exampleReg": "Regulär",
+        "newWorkerComp": "Arbeitsunfallversicherung (WSIB)",
+        "presetCa": "Kanada ~13 %",
+        "presetCaName": "Gesetzliche Nebenkosten – CPP, EI, WSIB, EHT, Urlaub (Schätzung)",
+        "presetLead": "Schnellstart:",
+        "presetUs": "USA ~30 %",
+        "presetUsName": "Lohnnebenkosten – FICA, FUTA/SUTA, Arbeitsunfallversicherung (Schätzung)",
+        "workerComp": "Arbeitsunfallversicherung (je Gruppe)",
+        "workerCompHint": "Der Satz stammt aus der Arbeitsunfallversicherungsgruppe jedes Mitarbeiters (Einrichtung → Personal → Arbeitsunfallversicherungsgruppen; Zuordnung im Mitarbeiterdatensatz). Der Wert hier ist nur der Ersatz-Prozentsatz, wenn ein Mitarbeiter keine Gruppe hat."
+      },
+      "description": "Was eine Arbeitsstunde kostet: gültigkeitsdatierte Löhne, die Schätzungskomponenten vor Eintreffen der Lohn-Ist-Werte und wie Standardkosten auf Aufträge gebucht werden. Gemeinkosten werden separat im Gemeinkostenmodell konfiguriert.",
+      "orgDefault": "Organisationsstandard",
+      "rateRequired": "Geben Sie einen Satz ein",
+      "rateSaved": "Satz gespeichert",
+      "save": "Einstellungen speichern",
+      "saved": "Lohnkalkulationseinstellungen gespeichert",
+      "scopeRequired": "Wählen Sie einen Mitarbeiter oder ein Gewerk",
+      "title": "Lohnkalkulation",
+      "tradePrefix": "Gewerk:",
+      "checklist": {
+        "burden": "Nebenkostenschätzung",
+        "burdenDone": "{count} Komponente(n) konfiguriert",
+        "burdenNone": "Keine Komponenten – Kosten vor Lohnlauf = reiner Lohn",
+        "launchWizard": "Einrichtungsanleitung",
+        "postingAccounts": "Einschalten erfordert WIP- + Verrechnungskonten",
+        "postingOff": "Aus – nur Satzschnappschuss",
+        "postingOn": "Standardkosten werden bei Genehmigung auf Aufträge gebucht",
+        "trueupNone": "Differenzkonto zuordnen, um Perioden zu schließen",
+        "trueupReady": "Differenzkonto zugeordnet – unten abstimmen",
+        "wages": "Lohnsätze",
+        "wagesDetail": "{covered} von {total} Mitarbeitern lösen auf einen Satz auf",
+        "posting": "Auftragsbuchung",
+        "trueup": "Lohnabstimmung"
+      },
+      "docs": "Dokumentation",
+      "posting": {
+        "hint": "Bei eingeschalteter Buchung bucht genehmigte Zeit Soll Lohn-WIP (je Projekt) / Haben Lohnverrechnung zum Standardkostensatz. Lohn-Ist-Werte leeren später dasselbe Konto; der Rest ist Ihre Lohnabweichung.",
+        "laborClearing": "Lohnverrechnungskonto",
+        "laborWip": "Lohn-WIP- / Auftragskostenkonto",
+        "modeOff": "Aus – nur Satzschnappschuss",
+        "modePost": "Standardkosten auf Aufträge buchen",
+        "overheadNote": "Gemeinkosten sind nicht Teil dieses Satzes – sie werden vom Gemeinkostenmodell als eigene Schicht angewandt.",
+        "payrollVariance": "Lohnabweichungskonto",
+        "title": "Buchung"
+      },
+      "wizard": {
+        "apply": "Einrichtung anwenden",
+        "applying": "Wird angewandt …",
+        "back": "Zurück",
+        "burden": {
+          "canada": "Kanada – gesetzlich ~13 %",
+          "canadaHint": "CPP, EI, WSIB, EHT, Urlaubsgeld. Eine vernünftige Startschätzung; jederzeit verfeinerbar.",
+          "custom": "Benutzerdefinierter Prozentsatz",
+          "customHint": "Sie kennen Ihre Zahl – geben Sie sie ein.",
+          "customPct": "% vom Lohn",
+          "skip": "Vorerst überspringen",
+          "skipHint": "Auftragskosten zeigen nur reine Löhne, bis Sie Komponenten hinzufügen.",
+          "us": "Vereinigte Staaten – Bau ~30 %",
+          "usHint": "FICA, FUTA/SUTA, Arbeitsunfallversicherung. Übliche Spanne 25–40 %."
+        },
+        "description": "Eine geführte Einrichtung für Lohnausweichwerte, Lohnnebenkosten und Hauptbuchbuchung.",
+        "done": "Lohnkalkulation konfiguriert",
+        "next": "Weiter",
+        "q1": "Wie möchten Sie Lohnnebenkosten schätzen?",
+        "q1Hint": "Die Arbeitgeberkosten, die Ihre Löhne verursachen – Steuern, Versicherungen, Urlaub. Eine Schätzung hält Auftragskosten realistisch, bevor der Lohnlauf stattfindet; echter Lohn ersetzt sie.",
+        "title": "Lohnkalkulation einrichten",
+        "customBurdenName": "Lohnnebenkosten (Schätzung)",
+        "exDt": "Doppelt ×2",
+        "exOt": "Überstunden ×1,5",
+        "exReg": "Regulär",
+        "fallbackHint": "Hält die Auftragskalkulation am Laufen, während Datensätze vervollständigt werden – die meisten Unternehmen lassen dies leer.",
+        "fallbackRate": "Optionaler Ausweichsatz für Mitarbeiter noch ohne Lohn",
+        "nextOverhead": "Lohnkalkulation deckt Löhne und gesetzliche Nebenkosten ab. Die GEMEINKOSTEN Ihres Unternehmens (Miete, Verwaltung, Fuhrpark …) sind eine separate Schicht mit eigener geführter Einrichtung – Kosten klassifizieren, berechnete Sätze prüfen und auf Projektarten anwenden.",
+        "nextOverheadLink": "Gemeinkostenmodell öffnen",
+        "nextSteps": "Danach: Gemeinkosten",
+        "openEmployees": "Mitarbeiter öffnen",
+        "orgRate": "Standardstundenlohn (alle ohne spezifischen Satz)",
+        "perEmployeeLater": "Exakte Mitarbeitersätze können Sie jederzeit im Arbeitsbereich hinzufügen – sie schlagen Gewerk- und Standardsätze.",
+        "posting": {
+          "clearing": "Lohnverrechnungskonto",
+          "off": "Noch nicht – nur Sätze verfolgen",
+          "offHint": "Zeit wird für Berichte kalkuliert; nichts wird ins Hauptbuch gebucht.",
+          "post": "Ja – Standardkosten bei Genehmigung buchen",
+          "postHint": "Soll Lohn-WIP (je Projekt) / Haben Lohnverrechnung. Lohn-Ist-Werte leeren später dasselbe Konto.",
+          "variance": "Lohnabweichungskonto (optional – für die Monatsendabstimmung)",
+          "varianceLater": "Später wählen",
+          "wip": "Lohn-WIP- / Auftragskostenkonto"
+        },
+        "q2": "Woher kommen die Löhne?",
+        "q2Hint": "Jeder Mitarbeiter erhält seinen eigenen Lohn. Suchen und besetzen Sie die Mannschaft – wer leer bleibt, kann den optionalen Ausweichwert unten nutzen, und Gehaltsmitarbeiter können danach im Arbeitsbereich verfeinert werden.",
+        "q3": "Arbeitskosten auf Ihre Aufträge buchen?",
+        "q3Hint": "Bei eingeschalteter Buchung schreibt die Genehmigung von Zeit Standardarbeitskosten gegen jedes Projekt ins Hauptbuch – der Lohnabrechnung vorgreifend.",
+        "ratedCount": "{rated} von {total} Mitarbeitern haben einen Lohn",
+        "ratePlaceholder": "0.00",
+        "review": "Bereit zum Anwenden:",
+        "reviewBurden": "Nebenkostenschätzung: {name} mit {pct} %",
+        "reviewEmployeeRates": "Löhne für {count} Mitarbeiter.",
+        "reviewExample": "Beispiel bei einem Lohn von {wage}/Std.:",
+        "reviewFallback": "Ausweichwert {rate}/Std. für alle ohne Satz.",
+        "reviewNoBurden": "Keine Nebenkostenschätzung (nur reine Löhne)",
+        "reviewNoOrgRate": "Kein Standardlohn.",
+        "reviewNoPosting": "Buchung bleibt aus – Sie können sie später aktivieren",
+        "reviewNote": "Alles hier ist danach im Arbeitsbereich bearbeitbar – die Anleitung füllt dieselben Einstellungen aus.",
+        "reviewOrgRate": "Standardlohn ${rate}/Std.",
+        "reviewPosting": "Standardkosten werden bei Genehmigung auf Aufträge gebucht",
+        "reviewTradeRates": "+ {count} Gewerksatz(-sätze).",
+        "reviewWagesOnRecord": "Löhne stammen aus dem Datensatz jedes Mitarbeiters.",
+        "searchEmployees": "Mitarbeiter suchen …",
+        "tradeRates": "Gewerksätze (optional – schlagen den Standard)",
+        "wagesOnRecord": "Lohn (und Erhöhungshistorie) jedes Mitarbeiters wird in dessen Mitarbeiterdatensatz gesetzt – genau dort, wo Sie alles andere über ihn verwalten. Hier gibt es nichts auszufüllen."
+      },
+      "discard": "Verwerfen",
+      "related": {
+        "overhead": "Gemeinkostenmodell",
+        "overheadHint": "Die Unternehmensschicht – Pools, Abteilungssätze und wie Gemeinkosten auf Aufträge gelangen.",
+        "rateBooks": "Artikel-Tarifbücher",
+        "rateBooksHint": "Was Sie berechnen – Verrechnungssätze je Artikel und Kunde, mit Regulär-/Überstunden-/Doppel-Stufen.",
+        "timeTypes": "Zeitarten",
+        "timeTypesHint": "Regulär, Überstunden, doppelte Überstunden – die Kosten- und Abrechnungsmultiplikatoren dieser Seite."
+      },
+      "unsaved": "Ungespeicherte Änderungen"
     },
     "taxLibrary": {
       "title": "Bibliothek für Steuererklärungen",
@@ -1202,7 +1683,7 @@
     "assetDepreciationSetup": {
       "navTitle": "Buch-Abschreibung",
       "title": "Book Depreciation",
-      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "description": "Wiederverwendbare Abschreibungsmethoden konfigurieren sowie Methode, Nutzungsdauer und Konvention, die jedes Rechnungslegungsbuch auf eine Anlagegüterklasse anwendet.",
       "tabsAria": "Book depreciation setup sections",
       "tabs": {
         "methods": "Methods",
@@ -1745,75 +2226,214 @@
         "description": "Verabschiedete Ertragsteuersätze je Jurisdiktion, gültigkeitsdatiert — Grundlage der ASC-740-Abgrenzung."
       },
       "tax-jurisdictions": {
-        "title": "Steuerjurisdiktionen"
+        "title": "Steuerjurisdiktionen",
+        "description": "Die Länder, Bundesstaaten und Gemeinden, die indirekte Steuern erheben – das Rückgrat Ihres Nexus.",
+        "singularTitle": "Steuerjurisdiktion"
       },
       "tax-registrations": {
-        "title": "Steuernexus"
+        "title": "Steuernexus",
+        "description": "Wo das Unternehmen für Erhebung und Abführung registriert ist, seine Meldehäufigkeit und die Erklärung, die es einreicht.",
+        "singularTitle": "Steuerregistrierung"
       },
       "tax-regimes": {
-        "title": "Steuerregime"
+        "title": "Steuerregime",
+        "description": "Konfigurierbare gepoolte Regime für steuerliche Abschreibung. Integriert für Kanada (CCA), Großbritannien, Australien und Neuseeland; fügen Sie eigene hinzu oder überschreiben Sie ein integriertes.",
+        "singularTitle": "Regime für steuerliche Abschreibung"
       },
       "tax-pool-classes": {
-        "title": "Steuerklassen"
+        "title": "Steuerklassen",
+        "description": "Poolklassen je Regime: Satz, Methode, Erstjahresanteil und Rückforderungsverhalten. Überschreibt die integrierte Klassentabelle.",
+        "singularTitle": "Steuerliche Abschreibungsklasse"
       },
       "tax-first-year-rules": {
-        "title": "Erstjahresregeln"
+        "title": "Erstjahresregeln",
+        "description": "Datierte Erstjahresregeln je Regime/Klasse (Halbjahresregel, beschleunigte Investitionsanreize, sofortige Aufwandsverrechnung).",
+        "singularTitle": "Erstjahresregel"
       },
       "pay-schedules": {
-        "title": "Lohnpläne"
+        "title": "Lohnpläne",
+        "description": "Lohnfrequenzkalender: Perioden pro Jahr, Ankerperiodenende und Zahltagsversatz."
       },
       "pay-components": {
-        "title": "Lohnbestandteile"
+        "title": "Lohnbestandteile",
+        "description": "Bezüge, Abzüge und Arbeitgeberbeiträge mit ihrer steuerlichen Behandlung, Hauptbuchkonten und Abführungslieferanten."
       },
       "union-agreements": {
-        "title": "Tarifverträge"
+        "title": "Tarifverträge",
+        "description": "Tarifverträge: die Gewerkschaft, die Ortsgruppe und der Lieferant, an den Gewerkschaftsabführungen gezahlt werden."
       },
       "subsidiary-ownership-interests": {
-        "title": "Beteiligungen an Tochtergesellschaften"
+        "title": "Beteiligungen an Tochtergesellschaften",
+        "description": "Gültigkeitsdatierte Eigentumsanteile, Erwerb, NCI- und Equity-Methoden-Richtlinie für die Konsolidierung.",
+        "singularTitle": "Beteiligung"
       },
       "allocations": {
-        "title": "Umlagen"
+        "title": "Umlagen",
+        "description": "Verteilen Sie gepoolte Kosten anhand eines Treibers auf Ziele: Aufteilungen bei Erfassung, Beiträge bei Buchung und Periodenläufe.",
+        "singular": "Umlageregel"
       },
       "overhead-model": {
         "title": "Gemeinkosten",
         "application": {
           "systemRule": {
-            "title": "Kern-Umlageregel"
+            "title": "Kern-Umlageregel",
+            "body": "Jede obige Buchung wird durch die engine-eigene Umlageregel {key} erstellt (Version {version}, gültig {date}, Definition {hash}). Sie spiegelt diese Richtlinie und die veröffentlichte Tariftabelle, daher kann sie hier weder bearbeitet noch gelöscht werden – ändern Sie stattdessen die Richtlinie oder veröffentlichen Sie neue Sätze.",
+            "noVersion": "Keine Regelversion ist in Kraft: Die Richtlinie ist kein aktives Nullsummen-Paar oder die Stundentariftabelle ist leer. Buchungen werden über den Kernel fortgesetzt, sobald beides zutrifft.",
+            "viewRule": "In Umlagen anzeigen"
+          },
+          "account": "Konto für angewandte Gemeinkosten",
+          "autoHint": "Gemeinkosten werden automatisch angewandt: Wenn Stunden genehmigt werden, bucht der Anteil jedes Eintrags (Stunden × veröffentlichter Abteilungssatz des gearbeiteten Tages) mit derselben Genehmigung – kein Monatsschlussschritt, und er wartet niemals auf den Lohnlauf.",
+          "backfill": "Auf vergangene Stunden anwenden",
+          "backfillPrompt": "{entries} genehmigte Einträge (~{hours} Std.) liegen vor diesem Modus und tragen noch keine Gemeinkosten.",
+          "backfilled": "${total} Gemeinkosten auf {entries} vergangene Einträge angewandt",
+          "date": "Datum",
+          "entry": "Buchung",
+          "hint": "Wie Gemeinkosten in die Bücher gelangen. Nur Bericht bleibt statistisch. Das Nullsummen-Paar bucht den Anteil jedes Projekts MIT dem Projektkennzeichen auf das Gemeinkostenkonto und storniert denselben Betrag ohne Kennzeichen – Auftragskostensichten tragen Gemeinkosten, Konto und Unternehmens-GuV saldieren auf null.",
+          "modes": {
+            "net_zero_pair": "Nullsummen-Paar",
+            "off": "Aus",
+            "report_only": "Nur Bericht"
+          },
+          "projects": "Projekte",
+          "save": "Speichern",
+          "saved": "Gemeinkostenanwendung gespeichert",
+          "status": "Status",
+          "title": "Hauptbuchanwendung",
+          "total": "Angewandt"
+        },
+        "approach": {
+          "per_hour": {
+            "desc": "Ein unternehmensweiter Dollarsatz pro Arbeitsstunde. Einfach, keine Abteilungen.",
+            "title": "Pauschal $ pro Arbeitsstunde"
+          },
+          "percent": {
+            "desc": "Gemeinkosten als prozentualer Aufschlag auf die Lohnkosten. Üblich in professionellen Dienstleistungen.",
+            "title": "Prozent der Lohnkosten"
+          },
+          "rate_card": {
+            "desc": "Gültigkeitsdatierte $/Stunde-Sätze je Abteilung, aus der Engine veröffentlicht oder manuell erfasst. Auftragskosten sind stabil und prüfbar – vergangene Perioden behalten immer die damals gültigen Sätze.",
+            "title": "Abteilungs-Tariftabelle"
           }
+        },
+        "applyHint": "Wenden Sie diese Gemeinkostenmethode auf die ausgewählten Projektarten an. Ihre GuV erhält eine Gemeinkostenzeile, die in den Gesamtauftragskosten enthalten ist.",
+        "back": "Zurück",
+        "cancel": "Abbrechen",
+        "current": "Aktuelle Konfiguration",
+        "docs": "Dokumentation",
+        "effectiveFrom": "Gültig ab",
+        "finish": "Fertigstellen",
+        "flatPerHour": "Gemeinkosten $ pro Arbeitsstunde",
+        "flatPercent": "Gemeinkosten % der Lohnkosten",
+        "liveNow": "Aus Ist-Werten berechnet: ${rate}/Std.",
+        "methodCard": "Abteilungs-Tariftabelle",
+        "methodGl": "Gebuchtes Hauptbuch (Kontengruppe)",
+        "methodHr": "${rate}/Arbeitsstunde",
+        "methodNone": "Keine Gemeinkosten",
+        "methodPct": "{rate} % der Lohnkosten",
+        "next": "Weiter",
+        "noRates": "Noch keine veröffentlichten Sätze – führen Sie den Einrichtungsassistenten aus oder veröffentlichen Sie Sätze.",
+        "publish": "Sätze veröffentlichen",
+        "publishConfirm": "Veröffentlichen",
+        "publishDone": "Sätze in der Tariftabelle veröffentlicht",
+        "publishHint": "Schreibt die berechneten Sätze der Engine als gültigkeitsdatierte Zeilen in die Gemeinkosten-Tariftabelle fest. Projekte kalkulieren Gemeinkosten aus diesen veröffentlichten Sätzen, bis Sie erneut veröffentlichen – frühere Perioden behalten ihre ursprünglichen Sätze.",
+        "publishTitle": "In der Tariftabelle veröffentlichen",
+        "ratesActive": "{count} veröffentlichte Sätze, gültig ab {date}",
+        "recommended": "Empfohlen",
+        "step1d": "{count} Kategorien auf der Registerkarte „Kategorien“ unten; {unassigned} Konten nicht zugeordnet. Gruppieren Sie jedes indirekte Aufwandskonto, damit nichts fehlt.",
+        "step1t": "Gemeinkosten klassifizieren",
+        "step2d": "Die Registerkarte „Matrix“ zeigt den Satz jeder Abteilung aus Ist-Werten – derzeit ${rate}/Std. im Verbund. Nur eine Vorschau; sie belastet Aufträge niemals direkt.",
+        "step2t": "Berechnete Sätze prüfen",
+        "step3t": "Veröffentlichen & anwenden",
+        "stepOf": "Schritt {step} von {total}",
+        "viewAnalytics": "Analysen anzeigen",
+        "wizard": "Einrichtungsassistent",
+        "wizardDone": "Gemeinkosten konfiguriert",
+        "wizardIntro": "Gemeinkosten geben jedem Auftrag seinen Anteil an den Kosten des Unternehmens – eine kalkulatorische Größe in der Projekt-GuV, niemals eine Hauptbuchbuchung. Auftragsgemeinkosten werden immer aus veröffentlichten, gültigkeitsdatierten Sätzen kalkuliert, sodass abgeschlossene Perioden sich niemals ändern. Wählen Sie, wie Sätze ermittelt werden:",
+        "wizardTitle": "Projektgemeinkosten einrichten",
+        "working": "Wird gespeichert …",
+        "description": "Die Tarif-Engine hinter den Projektgemeinkosten – Kostenpools, Umlagebasen, die Abteilungs-Tarifmatrix und Profile. Projekte mit der Tarif-Engine-Gemeinkostenmethode wenden diese Sätze auf ihre Arbeitsstunden an.",
+        "laborCostingLink": "Lohnkalkulation",
+        "lifecycle": {
+          "cadences": {
+            "monthly": "Monatlich",
+            "quarterly": "Quartalsweise"
+          },
+          "department": "Abteilung",
+          "drift": "Abweichung",
+          "hint": "Wer die veröffentlichte Tariftabelle pflegt, die die Standardmethode und das Nullsummen-Paar lesen.",
+          "live": "Live $/Std.",
+          "modeHints": {
+            "live": "Projekttypen lesen die Live-Engine direkt (Tarifquelle „live“); die veröffentlichte Tabelle dient nur zur Information.",
+            "manual": "Die Engine berechnet und empfiehlt; eine Person prüft die Abweichung unten und klickt auf „Veröffentlichen“.",
+            "scheduled": "Der Worker schreibt die Live-Verbundsätze zu jedem Periodenbeginn in die Tabelle."
+          },
+          "modes": {
+            "live": "Live",
+            "manual": "Manuell",
+            "scheduled": "Geplant"
+          },
+          "published": "Veröffentlicht $/Std.",
+          "save": "Speichern",
+          "saved": "Tariflebenszyklus gespeichert",
+          "title": "Tariflebenszyklus"
+        },
+        "tabs": {
+          "application": "Hauptbuchanwendung",
+          "lifecycle": "Tariflebenszyklus",
+          "model": "Modell",
+          "rates": "Sätze"
         }
       },
       "compliance-classes": {
-        "title": "Kontrahentenklassen"
+        "title": "Kontrahentenklassen",
+        "description": "Welche Art von Gegenpartei ein Lieferant ist und welche Zahlungskontrolle das mit sich bringt.",
+        "singular": "Gegenparteiklasse"
       },
       "compliance-requirements": {
-        "title": "Compliance-Anforderungen"
+        "title": "Compliance-Anforderungen",
+        "description": "Eine Zeile pro Richtlinie: was vorliegen muss, welche Grenzen es zeigen muss und was ein Verfall bewirkt.",
+        "singular": "Compliance-Anforderung"
       },
       "information-return-box-rules": {
-        "title": "Felder für Informationsmeldungen"
+        "title": "Felder für Informationsmeldungen",
+        "description": "In welches 1099-/T4A-Kästchen die Ausgaben eines Kontos gehören. Alles nicht Zugeordnete fällt auf das Standardkästchen des Lieferanten zurück.",
+        "singular": "Kästchenregel"
       },
       "payroll-filing-accounts": {
-        "title": "Anmeldekonten"
+        "title": "Anmeldekonten",
+        "description": "Lohnprogramm-, EIN- und Arbeitslosenversicherungskonten der Bundesstaaten, unter denen der Arbeitgeber abführt und meldet. Mitarbeitern wird eines in ihrem Lohnprofil zugeordnet."
       },
       "entitlement-plans": {
-        "title": "Anspruchspläne"
+        "title": "Anspruchspläne",
+        "description": "Lohnkonten – angesammelte Überstunden, Urlaubs- und Krankheitskonten sowie Leistungsrückforderung während Abwesenheit. Salden werden in Geld gespeichert und zum aktuellen Lohn in Stunden angezeigt.",
+        "singular": "Anspruchsplan"
       },
       "entitlement-plan-limits": {
-        "title": "Kontolimits"
+        "title": "Kontolimits",
+        "description": "Wie viel jede Rolle ansammeln darf. Grenzen lösen nach Spezifität auf: Mitarbeiter, dann Stellenbezeichnung, Gewerk, Abteilung, Rechtsträger, dann der Planstandard.",
+        "singular": "Kontolimit"
       },
       "entitlement-service-tiers": {
-        "title": "Dienstjahrstaffeln"
+        "title": "Dienstjahrstaffeln",
+        "description": "Was Betriebszugehörigkeit einbringt: Leistungen nach drei Monaten, RRSP nach einem Jahr, ein höherer Urlaubsprozentsatz nach fünf, zehn und fünfzehn.",
+        "singular": "Betriebszugehörigkeitsstaffel"
       },
       "pay-derived-rules": {
-        "title": "Berechnete Bezüge"
+        "title": "Berechnete Bezüge",
+        "description": "Regeln, die operative Fakten in Lohn verwandeln – Tagegeld für übernachtete Nächte, Bereitschaftstage, Anfahrten zum ersten Auftrag des Tages, Baustellen- und Geräteprämien. Prüfen Sie eine Regel in der Vorschau, bevor Sie sie aktivieren."
       },
       "trades": {
-        "title": "Gewerke"
+        "title": "Gewerke",
+        "description": "Elektriker, Industriemechaniker, Schweißer – das Gewerk, in dem ein Mitarbeiter arbeitet; verwendet von Lohnumfang, Lohnnebenkosten und abgeleiteten Bezugsregeln."
       },
       "payroll-holidays": {
-        "title": "Feiertage"
+        "title": "Feiertage",
+        "description": "Welche optionalen gesetzlichen Feiertage Sie beachten und welche Firmenschließungen Sie hinzufügen. Obligatorische gesetzliche Feiertage stammen aus dem Länderpaket und können hier nicht entfernt werden.",
+        "singularTitle": "Feiertag"
       },
       "extension-settings": {
-        "title": "App-Einstellungen"
+        "title": "App-Einstellungen",
+        "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten."
       }
     },
     "fields": {
@@ -1961,10 +2581,170 @@
       "rateBookId": "Satzbuch",
       "customerId": "Kunde",
       "projectId": "Projekt",
-      "isDefault": "Standard"
+      "isDefault": "Standard",
+      "acquisitionCost": "Anschaffungskosten",
+      "acquisitionDate": "Erwerbsdatum",
+      "acquisitionRate": "Erwerbs-Wechselkurs",
+      "anchorPeriodEnd": "Ankerperiodenende",
+      "billMultiplier": "Abrechnungsmultiplikator",
+      "classId": "Gilt für Klasse",
+      "coverageCurrency": "Grenzwährung",
+      "defaultInformationReturn": "Standard-Informationsmeldung",
+      "defaultLienWaiverType": "Standard-Verzichtsformular",
+      "distributionAccountId": "Ausschüttungskonto",
+      "distributionIncomeAccountId": "Ausschüttungsertragskonto",
+      "enforcement": "Bei Verstoß",
+      "equityIncomeAccountId": "Equity-Ertragskonto",
+      "expenseAccountId": "Aufwandskonto",
+      "expiryWarningDays": "Vor Ablauf warnen (Tage)",
+      "fairValueAdjustmentAccountId": "Konto für Zeitwertanpassungen",
+      "fairValueNetAssets": "Beizulegender Zeitwert des Nettovermögens",
+      "filingFrequency": "Meldehäufigkeit",
+      "frequency": "Häufigkeit",
+      "goodwillAccountId": "Geschäftswertkonto",
+      "graceDays": "Karenztage",
+      "insurable": "Versicherungspflichtig",
+      "investmentAccountId": "Beteiligungskonto",
+      "jurisdictionId": "Jurisdiktion",
+      "level": "Ebene",
+      "liabilityAccountId": "Verbindlichkeitskonto",
+      "lienWaiverEnforcement": "Verzichtserklärungskontrolle",
+      "localNumber": "Ortsgruppennummer",
+      "minAggregateAmount": "Mindestgesamtgrenze",
+      "minCoverageAmount": "Mindestgrenze je Schadensfall",
+      "nciEquityAccountId": "NCI-Eigenkapitalkonto",
+      "nciFairValue": "NCI beizulegender Zeitwert",
+      "nciIncomeAccountId": "NCI-Ertragskonto",
+      "nciMeasurement": "NCI-Bewertung",
+      "nonPeriodic": "Nicht periodisch (Bonusmethode)",
+      "ownershipPercent": "Beteiligung %",
+      "parentSubsidiaryId": "Mutter-Tochtergesellschaft",
+      "payDateOffsetDays": "Zahltagsversatz (Tage)",
+      "pensionable": "Rentenversicherungspflichtig",
+      "periodsPerYear": "Perioden pro Jahr",
+      "rateKind": "Satzart",
+      "registrationNumber": "Registrierungsnummer",
+      "remittancePartyId": "Abführungslieferant",
+      "requiresAdditionalInsured": "Erfordert mitversicherten Zusatz",
+      "requiresExpiry": "Muss ein Ablaufdatum tragen",
+      "requiresPrimaryNoncontributory": "Erfordert vorrangigen Schutz ohne Anrechnung",
+      "requiresVerification": "Erfordert Prüfung durch zweite Person",
+      "requiresWaiverOfSubrogation": "Erfordert Regressverzicht",
+      "returnFormCode": "Erklärungsformular",
+      "taxTreatment": "Steuerliche Behandlung",
+      "taxType": "Steuerart",
+      "taxable": "Steuerpflichtig",
+      "unionName": "Gewerkschaft",
+      "vacationable": "Zählt zum Urlaubsgeld",
+      "value": "Wert",
+      "accrualComponentId": "Ansammlungskomponente",
+      "accrualMethod": "Ansammlungsmethode",
+      "accrualValue": "Ansammlungswert",
+      "accountNumber": "Kontonummer",
+      "afterMonths": "Nach (Monaten Betriebszugehörigkeit)",
+      "basisCapAmountPerPeriod": "Bemessungsdeckel – Betrag pro Periode",
+      "basisCapAmountPerYear": "Bemessungsdeckel – Betrag pro Jahr",
+      "basisCapHoursPerPeriod": "Bemessungsdeckel – Stunden pro Periode",
+      "billableOnly": "Nur abrechenbare Zeit",
+      "box": "Kästchen",
+      "capBehavior": "Wenn die Grenze erreicht ist",
+      "componentId": "Lohnbestandteil",
+      "costingMode": "Auftragskalkulation",
+      "direction": "Richtung",
+      "eligible": "Anspruchsberechtigt",
+      "employeePartyId": "Mitarbeiter",
+      "equipmentUnitId": "Geräteeinheit",
+      "excludeFromWages": "Nur Ereignis (keine Arbeitszeit)",
+      "excludedJobTitles": "Ausgeschlossene Stellenbezeichnungen",
+      "extensionKey": "App",
+      "formType": "Formular",
+      "includeInDisposableEarnings": "Zählt zur geschützten Grundlage",
+      "includedJobTitles": "Nur diese Stellenbezeichnungen",
+      "isObserved": "Beachtet",
+      "isPaid": "Bezahlt",
+      "jobTitle": "Stellenbezeichnung",
+      "jurisdiction": "Jurisdiktion",
+      "maxAssessable": "Jährliches veranlagbares Höchstentgelt",
+      "maxBalance": "Limit",
+      "notifyBalance": "Melden bei",
+      "observance": "Falls auf ein Wochenende fallend",
+      "observedOn": "Datum",
+      "packKey": "Gesetzlicher Feiertag",
+      "payoutComponentId": "Auszahlungskomponente",
+      "planId": "Plan",
+      "programType": "Kontoart",
+      "protectionBase": "Geschützte Bezugsgrundlage",
+      "protectionMaxPercent": "Höchstanteil der Grundlage",
+      "protectionPriority": "Schutzrang",
+      "quantityMode": "Menge",
+      "rateMode": "Satz",
+      "rateValue": "Satzwert",
+      "reason": "Änderungsgrund",
+      "remitterType": "Abführerart",
+      "ruleDay": "Monatstag",
+      "ruleKind": "Wiederkehr",
+      "ruleMonth": "Monat",
+      "ruleNth": "Welcher",
+      "ruleOffset": "Tage ab Ostersonntag",
+      "ruleWeekday": "Wochentag",
+      "settingKey": "Einstellung",
+      "stateCode": "Bundesstaat",
+      "timeTypeId": "Zeitart",
+      "tradeId": "Gewerk",
+      "trigger": "Ausgelöst durch",
+      "unit": "Einheit"
     },
     "fieldHelp": {
-      "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen."
+      "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
+      "basisCapAmountPerPeriod": "Diese Komponente stoppen, sobald sie in einer Lohnperiode diesen Betrag erreicht hat.",
+      "basisCapAmountPerYear": "Diese Komponente stoppen, sobald sie im Steuerjahr diesen Betrag erreicht hat – die CRA-Grenze für Money-Purchase-Pläne oder die US-Grenze 402(g) für freiwillige Beiträge. Bereits in diesem Jahr gebundene Beträge, einschließlich Eröffnungssalden, zählen mit.",
+      "basisCapHoursPerPeriod": "Diese Komponente auf höchstens diese Stundenzahl je Periode berechnen – zum Beispiel RRSP auf 40 Stunden pro Woche. Überstunden und doppelte Überstunden, die einem Auftrag belastet werden, sind ausgenommen und werden niemals gedeckelt.",
+      "complianceEnforcement": "Zahlungssperre stoppt das Geld; Belegsperre verhindert, dass der Beleg überhaupt erfasst wird.",
+      "complianceRequirementClass": "Leer lassen, um auf jede erfasste Gegenpartei anzuwenden.",
+      "coverageCurrency": "Erforderlich, sobald eine Mindestgrenze gesetzt ist – eine Grenze ist ein Geldbetrag und muss vergleichbar sein.",
+      "defaultInformationReturn": "Wird verwendet, wenn ein Lieferant dieser Klasse selbst kein Formular benennt.",
+      "defaultLienWaiverType": "Vorausgewählt, wenn Sie eine Verzichtserklärung für eine dieser Gegenparteien erstellen.",
+      "entitlementAccrualValue": "Ein Prozentsatz für Pläne mit prozentualer Ansammlung (4 = 4 %), sonst ein Betrag pro Stunde oder pro Lohnperiode.",
+      "entitlementAfterMonths": "Monate ununterbrochener Betriebszugehörigkeit ab Einstellungsdatum. 36 = drei Jahre.",
+      "entitlementCapBehavior": "Warnen erfasst die Ansammlung und markiert sie. Sperren stoppt den Lohnlauf für diesen Mitarbeiter. Automatische Auszahlung deckelt das Konto und zahlt den Überschuss aus.",
+      "entitlementDirection": "Ansammeln: Der Arbeitgeber schuldet dem Mitarbeiter. Schulden: Der Mitarbeiter schuldet dem Arbeitgeber – der Saldo läuft ins Negative und wird aus künftigem Lohn getilgt, bis er genau null erreicht.",
+      "entitlementLiabilityAccount": "Wo das Konto in der Bilanz steht. Leer lassen, um den Plan nur berichtend zu führen.",
+      "entitlementMaxBalance": "Die harte Obergrenze, in der Einheit des Plans.",
+      "entitlementNotifyBalance": "Die weiche Schwelle, die einen Mitarbeiter als nahe am Limit markiert.",
+      "entitlementPayoutComponent": "Der Bezug, der das Konto auszahlt. Bei einem Schulden-Plan ist dies der Abzug, der es zurückfordert.",
+      "entitlementScope": "Höchstens einen Bereich setzen. Alle Bereiche leer lassen für den planweiten Standard.",
+      "entitlementTierTarget": "Entweder einen Plan setzen (um dessen Ansammlungswert zu erhöhen) oder einen Lohnbestandteil (um ihn anspruchsberechtigt zu machen) – nicht beides.",
+      "entitlementUnit": "Geld wird dringend empfohlen. Ein in Stunden geführtes Konto wird bei jeder Lohnerhöhung neu bewertet, was den Arbeitgeber stillschweigend die Differenz kostet.",
+      "equipmentUnitId": "Nur auf einer benannten Maschine vergüten. Leer lassen und stattdessen die Abrechnungsposition verwenden, um eine ganze Geräteklasse mit einer Regel abzudecken.",
+      "excludeFromWages": "Der Eintrag dokumentiert ein Feldereignis – einen Bereitschaftstag, eine Nacht mit Tagegeld – keine geleistete Arbeitszeit. Abgeleitete Bezugsregeln lesen ihn; die Lohnberechnung überspringt ihn.",
+      "excludedJobTitles": "Mitarbeiter, deren Stellenbezeichnung hier aufgeführt ist, verdienen diese Regel niemals. Ausschlüsse schlagen Einschlüsse. Der Abgleich ignoriert Groß-/Kleinschreibung und Abstände.",
+      "expiryWarningDaysHint": "30",
+      "filingAccountDefault": "Mitarbeiter, deren Profil kein Konto benennt, werden unter dem Standardkonto ihres Landes gemeldet und abgeführt.",
+      "graceDaysHint": "0",
+      "holidayEffectiveTo": "Leer lassen für kein Enddatum. Wirksamkeitsdaten werden mit dem Feiertagsdatum verglichen, sodass frühere Lohnläufe den Kalender behalten, unter dem sie liefen.",
+      "holidayIsObserved": "Aus blendet einen optionalen Feiertag aus, den Sie zuvor gewählt haben.",
+      "holidayIsPaid": "Aus macht daraus eine Schließung, für die der Tag nicht bezahlt wird. Gesetzliche Feiertage werden immer bezahlt.",
+      "holidayJurisdiction": "Die Jurisdiktion, deren Kalender dies ändert. Verwenden Sie die Provinz, unter die Ihre Mitarbeiter fallen, oder Kanada (Bund) für einen bundesrechtlich regulierten Arbeitgeber.",
+      "holidayName": "Der Name des Firmenfeiertags, den Sie hinzufügen. Leer lassen, wenn diese Zeile eine Wahl zu einem gesetzlichen Feiertag ist.",
+      "holidayObservance": "Gesetzliche Feiertage behalten ihr Datum, und das Gesetz gewährt stattdessen einen Ersatzruhetag. Wählen Sie eine Verschiebung nur für einen Firmenfeiertag, den Sie tatsächlich verlegen.",
+      "holidayPackKey": "Der gesetzliche Feiertag, für den diese Wahl gilt, zum Beispiel boxing_day oder heritage_day. Leer lassen, um einen eigenen Firmenfeiertag hinzuzufügen. Nur optionale Feiertage können abgeschaltet werden – ein obligatorischer wird abgelehnt.",
+      "holidayRuleNth": "1 ist der erste solche Wochentag des Monats; -1 ist der letzte.",
+      "holidayRuleOffset": "Negativ zählt zurück. Karfreitag ist -2 und Ostermontag ist 1.",
+      "holidayRuleWeekday": "0 ist Sonntag bis 6 ist Samstag.",
+      "includedJobTitles": "Nur Mitarbeiter, deren Stellenbezeichnung hier aufgeführt ist, verdienen diese Regel – wählen Sie aus den Bezeichnungen des Personalbestands oder geben Sie eine neue ein. Leer lassen, um allen zu zahlen. Der Abgleich ignoriert Groß-/Kleinschreibung und Abstände.",
+      "includeInDisposableEarnings": "Ob diese Komponente zur geschützten Bemessungsgrundlage gehört. Bezüge in der Grundlage erhöhen sie, Abzüge in der Grundlage mindern sie. Abschalten für eine Zulage oder einen Vorteil, der außerhalb des Pfändungsanteils stehen soll.",
+      "informationReturnBox": "Kästchen sind gesetzlich vorgegeben. Was Sie konfigurieren, ist, welches Ihrer Konten in welches Kästchen fließt.",
+      "itemId": "Auf jeder Einheit vergüten, die über diese Katalogposition abgerechnet wird – „alle Bagger“ als eine Regel statt einer Regel pro Maschine.",
+      "lienWaiverEnforcement": "Sperren bedeutet, dass ein Beleg dieser Klasse nicht bezahlt werden kann, bis eine unterschriebene Verzichtserklärung ihn abdeckt.",
+      "maxAssessable": "Die Arbeitsunfallversicherung veranlagt die Bezüge eines Mitarbeiters nur bis zu diesem Jahresbetrag (das versicherbare Höchstentgelt je Arbeitnehmer der Behörde). Leer lassen für keine Obergrenze.",
+      "minCoverageAmount": "Zertifikate unterhalb dieser Grenze werden abgelehnt. Grenzen werden niemals zwischen Währungen umgerechnet.",
+      "payScheduleAnchor": "Ein beliebiges Perioden-ENDdatum; jede andere Periode leitet sich daraus ab. Halbmonatlich liest den Monatstag: Der 20. bedeutet Perioden zum 5. und 20., und der 15. (oder der letzte Tag eines 30-/31-tägigen Monats) bedeutet den 15. und das Monatsende. Der 14. und der letzte Februartag benennen keinen Kalender und werden abgelehnt.",
+      "protectionBase": "Woran die Obergrenze des Abzugs gemessen wird. Netto ist Lohn nach allen anderen Abzügen. Pfändbares Einkommen zählt nur die Bezüge und Abzüge, die in die untenstehende Grundlage aufgenommen wurden – so steht eine Zulage oder ein Vorteil außerhalb des Anteils.",
+      "protectionMaxPercent": "Das Höchste, was dieser Abzug von dieser Grundlage nehmen darf – 20 % für eine gewöhnliche Pfändung in Ontario, 50 % für Familienunterhalt, 25 % nach dem US-CCPA. Was nicht passt, wird als Fehlbetrag im Lohnlauf gemeldet.",
+      "protectionPriority": "Welche Reihenfolge gewinnt, wenn mehrere geschützte Abzüge um denselben Lohn konkurrieren. Niedrigste zuerst; Unterhaltstitel haben normalerweise Vorrang vor gewöhnlichen Gläubigern.",
+      "requiresExpiry": "Ein für Versicherungen; aus für ein W-9, das nicht abläuft.",
+      "requiresVerification": "Wer ein Zertifikat erfasst, darf niemals derjenige sein, der es verifiziert.",
+      "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft."
     },
     "options": {
       "timeClassification": {
@@ -2098,6 +2878,209 @@
         "staging": "Bereitstellung",
         "transit": "Transit",
         "quarantine": "Quarantäne"
+      },
+      "complianceCategory": {
+        "bond": "Bürgschaft",
+        "insurance": "Versicherung",
+        "licence": "Lizenz",
+        "other": "Sonstiges",
+        "safety": "Arbeitssicherheit",
+        "taxForm": "Steuerformular"
+      },
+      "complianceEnforcement": {
+        "advisory": "Nur Bericht",
+        "blockBill": "Beleg sperren",
+        "blockPayment": "Zahlung sperren",
+        "warn": "Bei Zahlung warnen"
+      },
+      "consolidationMethod": {
+        "equity": "Equity-Methode",
+        "full": "Vollkonsolidierung",
+        "proportionate": "Quotenmäßige Konsolidierung"
+      },
+      "filingFrequency": {
+        "annual": "Jährlich",
+        "bimonthly": "Zweimonatlich",
+        "monthly": "Monatlich",
+        "quarterly": "Quartalsweise",
+        "semiannual": "Halbjährlich"
+      },
+      "informationReturnBox": {
+        "misc1": "MISC 1 – Mieten",
+        "misc2": "MISC 2 – Lizenzgebühren",
+        "misc3": "MISC 3 – Sonstige Einkünfte",
+        "misc4": "MISC 4 – Einbehaltene Bundeseinkommensteuer",
+        "nec1": "NEC 1 – Vergütung an Nichtarbeitnehmer",
+        "nec2": "NEC 2 – Direktverkäufe ab 5.000 $",
+        "nec4": "NEC 4 – Einbehaltene Bundeseinkommensteuer",
+        "misc10": "MISC 10 – An Rechtsanwälte gezahlte Bruttoerlöse",
+        "misc11": "MISC 11 – Zum Weiterverkauf gekaufte Fische",
+        "misc12": "MISC 12 – Zurückstellungen nach Section 409A",
+        "misc14": "MISC 14 – Übermäßige Golden-Parachute-Zahlungen",
+        "misc15": "MISC 15 – Nicht qualifizierte aufgeschobene Vergütung",
+        "misc5": "MISC 5 – Erlöse aus Fischfang",
+        "misc6": "MISC 6 – Zahlungen für medizinische Versorgung",
+        "misc8": "MISC 8 – Ersatzzahlungen",
+        "misc9": "MISC 9 – Ernteversicherungserlöse",
+        "t4a020": "T4A 020 – Provisionen Selbstständiger",
+        "t4a022": "T4A 022 – Abgezogene Einkommensteuer",
+        "t4a048": "T4A 048 – Honorare für Dienstleistungen"
+      },
+      "informationReturnForm": {
+        "misc": "1099-MISC",
+        "nec": "1099-NEC",
+        "none": "Nicht meldepflichtig",
+        "t4a": "T4A"
+      },
+      "jurisdictionLevel": {
+        "city": "Stadt",
+        "country": "Land",
+        "county": "County",
+        "federal": "Bund",
+        "special": "Sonderbezirk",
+        "state": "Bundesstaat / Provinz"
+      },
+      "lienWaiverEnforcement": {
+        "block": "Zahlung sperren",
+        "none": "Nicht verfolgt",
+        "warn": "Warnen"
+      },
+      "lienWaiverType": {
+        "conditionalFinal": "Bedingt – Schluss",
+        "conditionalProgress": "Bedingt – Abschlag",
+        "unconditionalFinal": "Unbedingt – Schluss",
+        "unconditionalProgress": "Unbedingt – Abschlag"
+      },
+      "nciMeasurement": {
+        "fairValue": "Beizulegender Zeitwert",
+        "proportionate": "Anteiliger Anteil am Nettovermögen"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/Stunde",
+        "percent": "% der Lohnkosten"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "Fester Betrag",
+        "perHour": "Pro Stunde",
+        "percentOfGross": "Prozent vom Brutto"
+      },
+      "payComponentKind": {
+        "deduction": "Abzug",
+        "earning": "Bezug",
+        "employerContribution": "Arbeitgeberbeitrag"
+      },
+      "payFrequency": {
+        "biweekly": "Zweiwöchentlich",
+        "monthly": "Monatlich",
+        "semiMonthly": "Halbmonatlich",
+        "weekly": "Wöchentlich"
+      },
+      "payTaxTreatment": {
+        "alimony": "Unterhalt (F2)",
+        "none": "Nach Steuern",
+        "pensionF": "Pension (RPP/RRSP, Faktor F)",
+        "unionDues": "Gewerkschaftsbeiträge (U1)"
+      },
+      "sourceKind": {
+        "builtin": "Integriert",
+        "custom": "Benutzerdefiniert"
+      },
+      "taxType": {
+        "consumption": "Verbrauchsteuer",
+        "gst": "GST",
+        "hst": "HST",
+        "other": "Sonstiges",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "Verkaufs- und Gebrauchssteuer",
+        "vat": "Mehrwertsteuer"
+      },
+      "derivedCosting": {
+        "firstProjectOfDay": "Der erste Auftrag des Tages",
+        "none": "Nicht auf Aufträge kalkuliert",
+        "source": "Der Auftrag, aus dem der Fakt stammt"
+      },
+      "derivedQuantity": {
+        "count": "Anzahl Einheiten",
+        "countNights": "Anzahl Nächte",
+        "sumBillAmount": "Abgerechneter Betrag gesamt",
+        "sumHours": "Stunden gesamt",
+        "sumQuantity": "Abgerechnete Einheiten gesamt"
+      },
+      "derivedRate": {
+        "fixedPerUnit": "Fester Betrag pro Einheit",
+        "percentOfGross": "Prozent vom Brutto",
+        "percentOfQuantity": "Prozent des abgerechneten Betrags",
+        "rateCard": "Aus dem Lohnbestandteil"
+      },
+      "derivedTrigger": {
+        "distinctDay": "Jeder gearbeitete Tag",
+        "distinctProjectDay": "Jeder Auftrag, jeder Tag",
+        "equipmentCharge": "Monatlich, auf Gerätebelastungen",
+        "monthEnd": "Monatlich, nach Monatsende",
+        "nightStayed": "Jede übernachtete Nacht",
+        "timeEntry": "Jede Zeiterfassung"
+      },
+      "entitlementAccrualMethod": {
+        "fixedPerPeriod": "Fest pro Lohnperiode",
+        "manual": "Nur manuell",
+        "perHourWorked": "Pro geleisteter Stunde",
+        "percentOfEarnings": "Prozent der Bezüge"
+      },
+      "entitlementCapBehavior": {
+        "autoPayout": "Überschuss auszahlen",
+        "block": "Lauf sperren",
+        "warn": "Warnen"
+      },
+      "entitlementDirection": {
+        "accrue": "Arbeitgeber schuldet Mitarbeiter",
+        "owe": "Mitarbeiter schuldet Arbeitgeber"
+      },
+      "entitlementUnit": {
+        "hours": "Stunden",
+        "money": "Geld"
+      },
+      "holidayJurisdiction": {
+        "ca": "Kanada (bundesrechtlich reguliert)",
+        "caAb": "Alberta",
+        "caBc": "British Columbia",
+        "caOn": "Ontario",
+        "caQc": "Québec",
+        "caSk": "Saskatchewan",
+        "us": "Vereinigte Staaten"
+      },
+      "holidayObservance": {
+        "nearestWeekday": "Auf den nächsten Wochentag verlegen",
+        "nextMonday": "Auf den nächsten Arbeitstag verlegen",
+        "none": "Datum behalten"
+      },
+      "holidayRuleKind": {
+        "date": "Ein bestimmtes Datum",
+        "easterOffset": "Relativ zum Ostersonntag",
+        "fixed": "Dasselbe Datum jedes Jahr",
+        "nthWeekday": "Der n-te Wochentag eines Monats",
+        "weekdayBefore": "Der letzte Werktag vor einem Datum"
+      },
+      "payComponentCountry": {
+        "CA": "Kanada",
+        "US": "Vereinigte Staaten"
+      },
+      "payProtectionBase": {
+        "disposableEarnings": "Pfändbares Einkommen",
+        "gross": "Brutto",
+        "netPay": "Netto",
+        "none": "Nicht geschützt"
+      },
+      "payrollProgramType": {
+        "caRp": "CRA-Lohnprogramm (RP)",
+        "usEin": "US-Arbeitgeberidentifikationsnummer (EIN)",
+        "usStateSui": "Bundesstaatliche Arbeitslosenversicherung (SUI)"
+      },
+      "payrollRemitterType": {
+        "accelerated1": "Beschleunigt – Schwelle 1",
+        "accelerated2": "Beschleunigt – Schwelle 2",
+        "quarterly": "Quartalsweise",
+        "regular": "Regulär (monatlich)"
       }
     },
     "bankFeeds": {
@@ -2361,16 +3344,505 @@
         "blocked": "Diese Funktion lässt sich nicht deaktivieren — ihre Daten sind tragend für das Hauptbuch.",
         "dependency": "Aktivieren Sie zuerst die erforderliche Funktion: {features}.",
         "dependents": "Deaktivieren Sie zuerst die abhängige Funktion: {features}."
-      }
+      },
+      "affectsNote": "Durch Ausschalten wird {items} ausgeblendet – die Daten bleiben erhalten und kehren zurück, wenn Sie erneut aktivieren.",
+      "blockedReason": "Kann nicht ausgeschaltet werden – {items}.",
+      "categories": {
+        "accounting": "Buchhaltung",
+        "operations": "Betrieb",
+        "platform": "Plattform",
+        "sales": "Vertrieb & Kunden"
+      },
+      "childOptions": "{count, plural, one {# Option nach Aktivierung} other {# Optionen nach Aktivierung}}",
+      "confirmDisable": "{name} ausschalten?\n\nDadurch wird {items} ausgeblendet. Die Daten bleiben erhalten und kehren zurück, wenn Sie erneut aktivieren.",
+      "countOn": "{n} von {total} ein",
+      "description": "Schalten Sie optionale Module für Ihr Unternehmen ein oder aus. Ausgeschaltete Funktionen werden überall ausgeblendet – ihre Daten werden niemals gelöscht.",
+      "disabled": "{name} deaktiviert",
+      "enabled": "{name} aktiviert",
+      "impacts": {
+        "activeAllocationRules": "{count, plural, one {# aktive Umlageregel} other {# aktive Umlageregeln}}",
+        "activeApiKeys": "{count, plural, one {# aktiver API-Schlüssel} other {# aktive API-Schlüssel}}",
+        "activeBankFeeds": "{count, plural, one {# aktive Bankfeed-Verbindung} other {# aktive Bankfeed-Verbindungen}}",
+        "activeBankImportSchedules": "{count, plural, one {# aktiver SFTP-Bankimportplan} other {# aktive SFTP-Bankimportpläne}}",
+        "activeCertificates": "{count, plural, one {# gültiges Zertifikat} other {# gültige Zertifikate}}",
+        "activeProjects": "{count, plural, one {# aktives Projekt} other {# aktive Projekte}}",
+        "activeScripts": "{count, plural, one {# aktives Skript} other {# aktive Skripte}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {# aktive Zahlungssteuerung für Nachunternehmer} other {# aktive Zahlungssteuerungen für Nachunternehmer}}",
+        "activeSubcontracts": "{count, plural, one {# aktiver Nachunternehmervertrag} other {# aktive Nachunternehmerverträge}}",
+        "activeSubscriptions": "{count, plural, one {# aktives Abonnement} other {# aktive Abonnements}}",
+        "activeWipHolds": "{count, plural, one {# aktive WIP-Sperre} other {# aktive WIP-Sperren}}",
+        "advancedSubscriptionContracts": "{count, plural, one {# aktiver versionierter Abonnementvertrag} other {# aktive versionierte Abonnementverträge}}",
+        "assets": "{count, plural, one {# Anlagegut} other {# Anlagegüter}}",
+        "bankStatements": "{count, plural, one {# Kontoauszug} other {# Kontoauszüge}}",
+        "blockingCompliancePolicies": "{count, plural, one {# Richtlinie, die die Zahlung blockiert} other {# Richtlinien, die die Zahlung blockieren}}",
+        "controlCheckUnavailable": "eine Integritätsprüfung, die nicht abgeschlossen werden konnte",
+        "draftInformationReturns": "{count, plural, one {# Informationsmeldung in Bearbeitung} other {# Informationsmeldungen in Bearbeitung}}",
+        "foreignTxns": "{count, plural, one {# Fremdwährungsbuchung} other {# Fremdwährungsbuchungen}}",
+        "inventoryMovements": "{count, plural, one {# Lagerbewegung} other {# Lagerbewegungen}}",
+        "openChangeOrders": "{count, plural, one {# Nachtrag im Entwurf} other {# Nachträge im Entwurf}}",
+        "openFieldTickets": "{count, plural, one {# offener Regiebericht} other {# offene Regieberichte}}",
+        "openLienWaivers": "{count, plural, one {# Verzichtserklärung wartet auf Unterschrift} other {# Verzichtserklärungen warten auf Unterschrift}}",
+        "openOrders": "{count, plural, one {# erteilte Bestellung mit nicht umgewandeltem Restbetrag} other {# erteilte Bestellungen mit nicht umgewandelten Restbeträgen}}",
+        "openPayApplications": "{count, plural, one {# offene Abschlagsrechnung} other {# offene Abschlagsrechnungen}}",
+        "openPrebills": "{count, plural, one {# Vorabrechnung wartet auf Fertigstellung} other {# Vorabrechnungen warten auf Fertigstellung}}",
+        "openProjectBillingRequests": "{count, plural, one {# offene Projektabrechnungsanforderung} other {# offene Projektabrechnungsanforderungen}}",
+        "openProjectDocuments": "{count, plural, one {# nicht gebuchtes Projektdokument} other {# nicht gebuchte Projektdokumente}}",
+        "openProjectTimeEntries": "{count, plural, one {# nicht genehmigte Projektzeiterfassung} other {# nicht genehmigte Projektzeiterfassungen}}",
+        "activePropertyLeases": "{count, plural, one {# aktiver Immobilienmietvertrag} other {# aktive Immobilienmietverträge}}",
+        "openVendorPayApplications": "{count, plural, one {# Abschlagsrechnung von Lieferanten in Bearbeitung} other {# Abschlagsrechnungen von Lieferanten in Bearbeitung}}",
+        "outstandingRetainage": "offener Einbehalt",
+        "postedPayRuns": "{count, plural, one {# gebuchter Lohnlauf im Hauptbuch} other {# gebuchte Lohnläufe im Hauptbuch}}",
+        "previewedAllocationRuns": "{count, plural, one {# Umlagelauf in der Vorschau} other {# Umlageläufe in der Vorschau}}",
+        "projects": "{count, plural, one {# Projekt} other {# Projekte}}",
+        "reconciliations": "{count, plural, one {# Abstimmung} other {# Abstimmungen}}",
+        "revenueSchedules": "{count, plural, one {# Plan zur passiven Rechnungsabgrenzung} other {# Pläne zur passiven Rechnungsabgrenzung}}",
+        "scheduledTasks": "{count, plural, one {# geplante Aktivität} other {# geplante Aktivitäten}}",
+        "securityDepositTransactions": "{count, plural, one {# Kautionsbuchung} other {# Kautionsbuchungen}}",
+        "submittedTimeEntries": "{count, plural, one {# eingereichte Zeiterfassung wartet auf Prüfung} other {# eingereichte Zeiterfassungen warten auf Prüfung}}",
+        "subsidiaryTxns": "{count, plural, one {# Tochtergesellschaft mit} other {# Tochtergesellschaften mit}} gebuchten Buchungen",
+        "trackedVendors": "{count, plural, one {# erfasster Nachunternehmer} other {# erfasste Nachunternehmer}}",
+        "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}"
+      },
+      "title": "Funktionen"
     },
     "invoicing": {
       "navTitle": "Rechnungsstellung"
     },
     "taxSetup": {
-      "navTitle": "Steuer-Einrichtung"
+      "navTitle": "Steuer-Einrichtung",
+      "toggleStates": "Jurisdiktionen für {country} anzeigen",
+      "countryPackReady": "Quellenbasiertes Länderpaket",
+      "countryTaxSetup": "Ländersteuereinrichtung",
+      "detailedPack": "Detailliertes Paket",
+      "installed": "Eingerichtet",
+      "jurisdictionSetup": "Jurisdiktionseinrichtung",
+      "packInDevelopment": "Länderpaket in Entwicklung",
+      "provisionHint": "Detaillierte Pakete erstellen gepflegte Inhalte zu Jurisdiktionen, Steuerkennzeichen, Sätzen, Erklärungen und Nexus. Die Ländereinrichtung installiert die übergeordnete Erklärung sowie die gültigkeitsdatierten Sätze, die in diesem versionierten Länderpaket definiert sind. Die Jurisdiktionseinrichtung erstellt kontrollierte Referenzdaten und einen inaktiven Nexus-Entwurf, ohne fehlende gesetzliche Inhalte zu erfinden. Prüfen Sie jede Registrierung vor der Produktivschaltung.",
+      "provisionSelected": "{count, plural, =0 {Einrichten} one {# Jurisdiktion einrichten} other {# Jurisdiktionen einrichten}}",
+      "provisionSuccess": "{jurisdictions} Jurisdiktionen, {codes} Steuerkennzeichen und {groups} Steuergruppen erstellt; {nexus} Nexus-Registrierungen vorbereitet",
+      "provisioning": "Wird eingerichtet …",
+      "searchPlaceholder": "Länder oder Jurisdiktionen suchen …",
+      "statesAvailable": "{count, plural, one {# Jurisdiktion verfügbar} other {# Jurisdiktionen verfügbar}}",
+      "statesSelected": "{count, plural, one {# Jurisdiktion ausgewählt} other {# Jurisdiktionen ausgewählt}}",
+      "step1": {
+        "description": "Wählen Sie Länder und klappen Sie sie auf, um die vollständige Abdeckung von Provinzen, Territorien, Bundesstaaten und Bezirken zu erhalten. Jede Option zeigt an, ob ein gepflegtes detailliertes Erklärungspaket verfügbar ist.",
+        "title": "Wählen Sie, wo Sie tätig sind"
+      },
+      "step2": {
+        "cta": "Jurisdiktionen öffnen",
+        "description": "Die Länder, Bundesstaaten und Gemeinden, die Ihre Pakete erstellt haben. Fügen Sie manuell weitere hinzu oder schachteln Sie sie.",
+        "stat": "{count, plural, =0 {Noch keine Jurisdiktionen} one {# Jurisdiktion} other {# Jurisdiktionen}}",
+        "title": "Jurisdiktionen prüfen"
+      },
+      "step3": {
+        "cta": "Nexus einrichten",
+        "description": "Erfassen Sie, wo das Unternehmen für Erhebung und Abführung registriert ist, sowie dessen Meldehäufigkeit und die Erklärung, die es einreicht.",
+        "stat": "{count, plural, =0 {Noch keine Registrierungen} one {# Registrierung} other {# Registrierungen}}",
+        "title": "Nexus deklarieren"
+      },
+      "subtitle": "Wählen Sie jedes Land, jede Provinz, jedes Territorium, jeden Bundesstaat und jeden Bezirk, in dem Steuerpflichten entstehen können. Kanada und die Vereinigten Staaten verfügen über eine vollständige Abdeckung der Jurisdiktionen der ersten Ebene.",
+      "title": "Steuereinrichtung"
     },
     "payroll": {
       "navTitle": "Lohnabrechnung"
+    },
+    "guide": {
+      "activity": {
+        "high": "mehr als 1.000 monatliche Vorgänge",
+        "light": "unter 100 monatliche Vorgänge",
+        "steady": "100–1.000 monatliche Vorgänge"
+      },
+      "bank": {
+        "action": "Bankkonten prüfen",
+        "descReady": "{count, plural, one {# abstimmbares Konto} other {# abstimmbare Konten}} erscheinen unter Banking. Halten Sie nur echte Konten abstimmbar.",
+        "descWaiting": "Markieren Sie jedes echte Bank- oder Karten-Hauptbuchkonto als abstimmbar, bevor Sie Auszüge importieren.",
+        "title": "Bank- und Kartenkonten"
+      },
+      "close": {
+        "actionDone": "Abschlüsse prüfen",
+        "actionReview": "Abschluss-Arbeitsbereich öffnen",
+        "descDone": "{count, plural, one {# Periodenabschluss} other {# Periodenabschlüsse}} abgeschlossen – mit erhaltener Checkliste, Freigabe, Sperren und Abschlusspaket.",
+        "descReview": "Es gibt Live-Bewegungen. Stimmen Sie die Periode ab, prüfen Sie die Abschlüsse, arbeiten Sie die {close}-Checkliste ab, bestätigen oder genehmigen Sie, sperren Sie und veröffentlichen Sie.",
+        "descWaiting": "Sobald Live-Bewegungen beginnen, führt OpenBooks Sie durch den ersten {close}-Abschluss – von der Abstimmung bis zu gesperrten Büchern und einem erhaltenen Abschlusspaket.",
+        "titleAnnual": "Erster Jahresabschluss",
+        "titleMonthly": "Erster Monatsabschluss",
+        "titleQuarterly": "Erster Quartalsabschluss"
+      },
+      "closeName": {
+        "annual": "Jahres",
+        "monthly": "Monats",
+        "quarterly": "Quartals"
+      },
+      "foundation": {
+        "action": "Grundlagen prüfen",
+        "descReady": "{count, plural, one {# aktives Konto} other {# aktive Konten}}, ein primäres Buch, Geschäftsjahrsperioden, Kontrollkonten und eine Wurzelgesellschaft sind bereit.",
+        "descWaiting": "Stellen Sie Kontenplan, Buch, Perioden, Wurzelgesellschaft, Währung und Kontrollkontenzuordnung fertig, bevor Sie buchen.",
+        "title": "Buchhalterische Grundlagen"
+      },
+      "hero": {
+        "badgeNeeds": "Grundlagen brauchen Aufmerksamkeit",
+        "badgeReady": "Buchhalterische Grundlagen bereit",
+        "description": "OpenBooks hat den Arbeitsbereich auf Ihr Unternehmen zugeschnitten. Diese Anleitung prüft die Entscheidungen, die Rechnungen, Eingangsrechnungen, Banking und Periodenabschluss vom ersten Tag an verlässlich machen.",
+        "kicker": "Go-live-Anleitung",
+        "progressLabel": "Einrichtungsfortschritt",
+        "progressOf": "{done} von {total} Bereichen vorbereitet",
+        "title": "Machen Sie die erste Buchung langweilig – im besten Sinne."
+      },
+      "invoicing": {
+        "action": "Fakturierung prüfen",
+        "descReady": "{count, plural, one {# aktive Zahlungsbedingung} other {# aktive Zahlungsbedingungen}} verfügbar. Prüfen Sie Nummerierung und Belegstandards.",
+        "descWaiting": "Wählen Sie mindestens eine Zahlungsbedingung, damit Fälligkeiten nicht von Hand berechnet werden müssen.",
+        "title": "Rechnungen, Eingangsrechnungen und Zahlungsbedingungen"
+      },
+      "opening": {
+        "actionFreshLedger": "Hauptbuch prüfen",
+        "actionMigrateEnter": "Eröffnungsbilanz erfassen",
+        "actionMigrateJournal": "Journal prüfen",
+        "descFreshEmpty": "Sie haben bestätigt, dass die Bücher bei null beginnen, daher wird kein Migrationsjournal erwartet.",
+        "descFreshPosted": "Die Bücher begannen bei null; {count, plural, one {# gebuchte Buchung} other {# gebuchte Buchungen}} dokumentieren Live-Bewegungen statt einer migrierten Eröffnungsbilanz.",
+        "descMigrateEmpty": "Sie übernehmen bestehende Bücher. Erfassen Sie ein ausgeglichenes Eröffnungsjournal und prüfen Sie Debitoren-, Kreditoren-, Bank-, Steuer- und Gewinnvortragsdetails.",
+        "descMigratePosted": "{count, plural, one {# gebuchte Buchung ist vorhanden} other {# gebuchte Buchungen sind vorhanden}}. Stimmen Sie das Eröffnungsjournal auf die Quell-Saldenbilanz und die offenen Posten ab, bevor Sie die Umstellung für abgeschlossen erklären.",
+        "title": "Eröffnungsbilanz und Umstellung"
+      },
+      "profile": {
+        "actionReady": "Profil prüfen",
+        "actionWaiting": "Rundgang starten",
+        "descReady": "Branche, Teamzuständigkeiten, {activity}, {close}-Abschlussrhythmus und Funktionsempfehlungen wurden geprüft.",
+        "descWaiting": "Sagen Sie OpenBooks, wie Ihr Unternehmen arbeitet, damit der Arbeitsbereich auf dem richtigen Niveau startet.",
+        "title": "Unternehmens- und Arbeitsbereichsprofil"
+      },
+      "state": {
+        "complete": "abgeschlossen",
+        "review": "Prüfung",
+        "waiting": "wartend"
+      },
+      "tax": {
+        "action": "Steuern prüfen",
+        "descNotRegistered": "Sie haben bestätigt, dass dieses Unternehmen derzeit weder Sales Tax noch GST/HST noch VAT erheben muss. Prüfen Sie dies erneut, bevor sich die Pflichten ändern.",
+        "descReady": "{count, plural, one {# aktives Steuerkennzeichen} other {# aktive Steuerkennzeichen}} konfiguriert. Bestätigen Sie Registrierungen und Erklärungspflichten.",
+        "descRegistered": "Sie haben bestätigt, dass das Unternehmen registriert ist. Fügen Sie Jurisdiktion, Registrierung, Steuerkennzeichen und Melderhythmus hinzu, bevor Sie Live-Belege ausstellen.",
+        "descUndecided": "Die Steuerregistrierung ist noch unentschieden. Klären Sie sie, bevor Sie Live-Rechnungen ausstellen oder erstattungsfähige Steuern erfassen.",
+        "title": "Steuerliche Behandlung"
+      }
+    },
+    "wizard": {
+      "apply": "Bücher einrichten",
+      "back": "Zurück",
+      "company": {
+        "country": "Land",
+        "currency": "Basiswährung",
+        "description": "Diese Angaben bilden Ihre buchhalterische Grundlage. Name und rechtliche Angaben bleiben bearbeitbar; Basiswährung, Branche und Geschäftsjahreskalender sind nach der ersten Buchung fixiert.",
+        "fiscalYear": "Geschäftsjahr beginnt im",
+        "legalName": "Rechtlicher Name (optional)",
+        "legalNamePlaceholder": "Eingetragener Rechtsträgername",
+        "name": "Firmenname",
+        "namePlaceholder": "e.g. Saunders Construction Ltd.",
+        "title": "Erzählen Sie uns von Ihrem Unternehmen"
+      },
+      "error": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+      "industry": {
+        "classificationOnly": "Ihr bestehender Kontenplan und gebuchte Historie bleiben erhalten. Diese erstmalige Einordnung stimmt nur Arbeitsbereichs- und Funktionsempfehlungen ab.",
+        "description": "Wir empfehlen einen Kontenplan und passende Funktionen für die Arbeitsweise Ihrer Branche. Sie prüfen die Empfehlung, bevor sie angewandt wird.",
+        "locked": "Ihre Branche kann nach gebuchten Bewegungen nicht mehr geändert werden, aber Sie können Kontenplan und Funktionen weiterhin einzeln anpassen.",
+        "search": "Branchen suchen …",
+        "title": "Was ist Ihre Branche?"
+      },
+      "next": "Weiter",
+      "operations": {
+        "agentsNote": "Sobald die Bücher laufen, leben Hintergrund-Agentenpakete, die sie überwachen, unter Unternehmenseinrichtung → Agenten: Installieren Sie Pakete, stimmen Sie deren Prüfungen ab und routen Sie Feststellungen von dort.",
+        "description": "Bestätigen Sie die Arbeit, die Sie tatsächlich leisten, und die Finanzstruktur, in der Sie operieren. Ihre Branchenantworten sind unten bereits berücksichtigt.",
+        "inventory": {
+          "description": "Bestandsverfolgung, Standorte, Artikelkalkulation und Baugruppen.",
+          "title": "Vorräte"
+        },
+        "note": "Dies ist ein prüfbarer Startpunkt. Jeder Schalter bleibt maßgeblich und anpassbar unter Unternehmenseinstellungen → Funktionen, mit datenerhaltenden Sicherheitsprüfungen.",
+        "orders": {
+          "description": "Verwenden Sie Kostenvoranschläge, Kunden- und Bestellaufträge vor Rechnungen oder Eingangsrechnungen.",
+          "title": "Angebote & Aufträge"
+        },
+        "projects": {
+          "description": "Aufträge mit Budgets, Kalkulation, Abrechnung und Rentabilität verfolgen.",
+          "title": "Projekte & Auftragskalkulation"
+        },
+        "structureDescription": "Beantworten Sie diese direkt. OpenBooks nimmt aus Mitarbeiterzahl oder Branche niemals zusätzliche Rechtsträger oder Fremdwährungsbuchhaltung an.",
+        "structureTitle": "Finanzstruktur",
+        "subscriptionBilling": {
+          "description": "Pläne und Abonnements, die wiederkehrende Rechnungen automatisch erzeugen.",
+          "title": "Abonnementabrechnung"
+        },
+        "timeTracking": {
+          "description": "Stundenzettel mit Einreichung, Genehmigung und Kosten-/Verrechnungssatzverfolgung.",
+          "title": "Zeiterfassung"
+        },
+        "title": "Wie arbeiten Sie?",
+        "workTitle": "Arbeit, die Ihr Unternehmen leistet",
+        "crm": {
+          "description": "Interessenten, Chancen, Aktivitäten und Prognosen vor dem Verkauf verfolgen.",
+          "title": "Vertriebspipeline"
+        },
+        "multiCurrency": {
+          "description": "In Fremdwährungen mit Wechselkursen und Neubewertung arbeiten.",
+          "title": "Mehrere Währungen"
+        },
+        "multiSubsidiary": {
+          "description": "Mehr als einen Rechtsträger mit Konsolidierung und Intercompany führen.",
+          "title": "Mehrere Gesellschaften"
+        },
+        "payroll": {
+          "description": "Lohnabrechnung mit gesetzlichen Abzugspaketen der Länder fahren.",
+          "title": "Lohnabrechnung"
+        }
+      },
+      "profile": {
+        "adapting": "OpenBooks nutzt diese konkreten Arbeitsgewohnheiten – kein vages Unternehmensgrößenetikett –, um Kontrollen zu empfehlen. Sie prüfen jede aktivierte Fähigkeit, bevor etwas angewandt wird.",
+        "complexity": {
+          "advanced": {
+            "description": "Aufgaben sind getrennt, und Genehmigungen, Nachweise und Abschlussfreigaben müssen geregelt sein.",
+            "title": "Formale Kontrollen"
+          },
+          "essentials": {
+            "description": "Dieselbe vertraute Person kann Bücher vorbereiten, prüfen, buchen und abschließen.",
+            "title": "Inhabergeführt"
+          },
+          "growing": {
+            "description": "Menschen teilen die Arbeit, und wichtige Buchungen sollten einen klaren Prüfer haben.",
+            "title": "Teamprüfung"
+          }
+        },
+        "complexityQuestion": "Wie wird Finanzarbeit geprüft?",
+        "description": "OpenBooks kann heute wunderbar einfach bleiben und tiefere Kontrollen offenbaren, wenn Team und buchhalterische Anforderungen wachsen.",
+        "team": {
+          "large": {
+            "description": "Spezialisierte Teams und stärkere Kontrollen",
+            "title": "51+ Personen"
+          },
+          "medium": {
+            "description": "Definierte Zuständigkeiten und Prüfer",
+            "title": "11–50 Personen"
+          },
+          "small": {
+            "description": "Ein kleines Team mit geteilter Arbeit",
+            "title": "2–10 Personen"
+          },
+          "solo": {
+            "description": "Inhaber, Buchhalter oder Gründer",
+            "title": "Nur ich"
+          }
+        },
+        "teamQuestion": "Wie viele Personen arbeiten in OpenBooks?",
+        "title": "Ihr Unternehmen dort abholen, wo es steht"
+      },
+      "skip": "Vorerst überspringen",
+      "welcome": {
+        "description": "Sagen Sie uns, wie Ihr Unternehmen arbeitet, und OpenBooks formt einen fokussierten Startarbeitsbereich darum. Sie prüfen jede Wahl, bevor sich etwas ändert.",
+        "f1": "Kontenplan",
+        "f2": "Ein passender Arbeitsbereich",
+        "f3": "Eine geführte Inbetriebnahme",
+        "title": "Richten wir Ihre Bücher ein"
+      },
+      "launch": {
+        "books": {
+          "fresh": {
+            "description": "Es gibt keine früheren Salden zu übernehmen; das Hauptbuch beginnt bei null.",
+            "title": "Neubeginn"
+          },
+          "migrate": {
+            "description": "Eröffnungsbilanz, offene Rechnungen und Eingangsrechnungen sowie ein Umstellungsdatum müssen geprüft werden.",
+            "title": "Bestehende Bücher übernehmen"
+          }
+        },
+        "booksQuestion": "Wo beginnen die Bücher?",
+        "description": "Ein paar letzte Antworten lassen die Bereitschaftsanleitung auf die Arbeit zwischen Einrichtung und Ihrer ersten Live-Buchung fokussieren.",
+        "features": {
+          "bankFeeds": {
+            "description": "Bankbewegungen automatisch einlesen.",
+            "title": "Angebundenes Banking"
+          },
+          "fixedAssets": {
+            "description": "Anlagegüter und Abschreibungspläne verfolgen.",
+            "title": "Anlagenabschreibung"
+          },
+          "onlinePayments": {
+            "description": "Kunden von Rechnungen aus zahlen lassen.",
+            "title": "Onlinezahlungen"
+          }
+        },
+        "sample": {
+          "description": "Ein realistisches Unternehmen mit Bewegungen, Projekten, Berichten und abgeschlossenen Perioden – passend zur gewählten Branche.",
+          "error": "Ihr Live-Unternehmen wurde konfiguriert, aber das optionale Beispielunternehmen konnte nicht vorbereitet werden. Sie können es unter Import & Export erneut versuchen.",
+          "question": "Möchten Sie ein Unternehmen, das Sie sofort erkunden können?",
+          "safety": "Es ist ein separater, klar gekennzeichneter Arbeitsbereich. Beispieleinträge gelangen niemals in diese Bücher, und ausgehende E-Mails, Zahlungen, APIs und Integrationen sind deaktiviert.",
+          "title": "Branchen-Beispielunternehmen erstellen"
+        },
+        "tax": {
+          "not_registered": "Nein, nicht erforderlich",
+          "registered": "Ja, registriert",
+          "unsure": "Noch unsicher"
+        },
+        "taxQuestion": "Erhebt dieses Unternehmen Sales Tax, GST/HST oder VAT?",
+        "title": "Ihre Inbetriebnahme formen",
+        "toolsQuestion": "Welche davon sollen vom ersten Tag an bereit sein?"
+      },
+      "review": {
+        "bookStart": "Hauptbuch-Startpunkt",
+        "companyName": "Firmenname",
+        "complexity": "Startarbeitsbereich",
+        "country": "Land",
+        "currency": "Währung",
+        "description": "Das werden wir konfigurieren. Klicken Sie auf „Bücher einrichten“, um alles anzuwenden.",
+        "fiscalYear": "Geschäftsjahr beginnt",
+        "legalName": "Rechtlicher Name",
+        "notProvided": "Nicht angegeben",
+        "teamSize": "OpenBooks-Team",
+        "title": "Ihre Einrichtung prüfen",
+        "accounts": "Konten",
+        "chartOfAccounts": "Kontenplan",
+        "chartPreserved": "Bestehender Kontenplan erhalten",
+        "closeCadence": "Formaler Abschluss",
+        "features": "Aktivierte Funktionen",
+        "industry": "Branche",
+        "monthlyActivity": "Monatliche Bewegung",
+        "note": "Dies erstellt Ihre buchhalterische Grundlage und Ihren Startarbeitsbereich. Die Bereitschaftsanleitung zeigt alles, was vor Ihrer ersten Live-Buchung noch fehlt. Jede optionale Fähigkeit bleibt anpassbar unter Unternehmenseinstellungen → Funktionen.",
+        "notePreserved": "Dies aktualisiert Unternehmensklassifizierung und Arbeitsbereichsempfehlungen, ohne bestehenden Kontenplan oder gebuchte Historie zu ändern. Jede optionale Fähigkeit bleibt anpassbar unter Unternehmenseinstellungen → Funktionen.",
+        "payrollPack": "Lohn-Länderpaket",
+        "payrollPackCanada": "Kanada (CRA T4127)",
+        "payrollPackNone": "Keines – später aus der Lohneinrichtung installieren",
+        "sampleCompany": "Erkundungsarbeitsbereich",
+        "sampleCompanyNo": "Nicht jetzt",
+        "sampleCompanyYes": "Separates Branchen-Beispielunternehmen erstellen",
+        "taxPosition": "Steuerposition"
+      },
+      "rhythm": {
+        "activity": {
+          "high": {
+            "description": "Automatisierung und laufende Überwachung sollten von Anfang an bereit sein.",
+            "title": "Mehr als 1.000"
+          },
+          "light": {
+            "description": "Ein fokussierter Ablauf mit wenig Automatisierungsaufwand.",
+            "title": "Unter 100"
+          },
+          "steady": {
+            "description": "Genug Bewegung, damit Importe, Regeln und laufende Prüfung Zeit sparen.",
+            "title": "100–1.000"
+          }
+        },
+        "activityHint": "Zählen Sie Kunden- und Lieferantenbelege, Spesen, Zahlungen sowie Bank- oder Kartentransaktionen – keine Journalzeilen.",
+        "activityQuestion": "Wie viel Bewegung bewältigen Sie etwa pro Monat?",
+        "close": {
+          "annual": {
+            "description": "Minimaler formaler Abschlussrhythmus; laufende Abstimmung bleibt wichtig.",
+            "title": "Zum Jahresende"
+          },
+          "monthly": {
+            "description": "Empfohlen für zeitnahe Managementberichte und frühe Fehlererkennung.",
+            "title": "Jeden Monat"
+          },
+          "quarterly": {
+            "description": "Ein leichterer formaler Zyklus, wobei Banking im Quartal weiterhin abgestimmt wird.",
+            "title": "Jedes Quartal"
+          }
+        },
+        "closeQuestion": "Wie oft möchten Sie die Bücher formal abschließen und berichten?",
+        "description": "Volumen verändert, wie sehr Automatisierung hilft. Der Abschlussrhythmus verändert, welche Routinen OpenBooks Ihnen vorlegen sollte.",
+        "note": "Dies sind Startpräferenzen, keine Grenzen. OpenBooks wird Buchungsintegrität oder Abschlusskontrollen niemals schwächen, weil die Bewegung gering ist.",
+        "title": "Ihren Buchhaltungsrhythmus setzen"
+      },
+      "applying": {
+        "description": "Erstellt Ihren Kontenplan, konfiguriert Funktionen und ordnet Kontrollkonten zu.",
+        "title": "Ihre Bücher werden eingerichtet …"
+      },
+      "done": {
+        "description": "Als Nächstes prüft die Go-live-Anleitung die übrigen Unternehmens-, Steuer-, Nummerierungs-, Bank- und Eröffnungsbilanzentscheidungen, bevor Sie Live-Bewegungen buchen. Hintergrundagenten können jederzeit unter Einrichtung → Agenten installiert werden.",
+        "title": "Ihr Startarbeitsbereich ist bereit"
+      },
+      "industries": {
+        "accounting_firm": {
+          "description": "Buchhaltungs- und Steuerkanzleien. Multi-Mandanten, Treuhandbuchhaltung und Auftragsverfolgung.",
+          "title": "Steuer- & Buchhaltungspraxis"
+        },
+        "construction_contractor": {
+          "description": "Bauunternehmer, Handwerk und Bauträger. Auftragskalkulation, Abschlagsrechnung, Einbehalt und Regieberichte.",
+          "title": "Bau & Handwerk"
+        },
+        "engineering_architecture": {
+          "description": "EPC- und AEC-Büros. PSP, Phasenabrechnung, Gerätekalkulation und Abschlagsrechnung.",
+          "title": "Ingenieurwesen & Architektur"
+        },
+        "general_business": {
+          "description": "Eine Standard­einrichtung, die für jedes Unternehmen funktioniert. Keine branchenspezifischen Annahmen.",
+          "title": "Allgemeines Unternehmen"
+        },
+        "healthcare_practice": {
+          "description": "Arzt- und Zahnarztpraxen. Patientenforderungen, medizinische Verbrauchsmaterialien und Geräte.",
+          "title": "Arztpraxis"
+        },
+        "it_software_saas": {
+          "description": "Abonnementabrechnung, Umsatzrealisierung nach ASC 606 und Verfolgung passiver Rechnungsabgrenzung.",
+          "title": "Software & SaaS"
+        },
+        "manufacturing": {
+          "description": "Leichte und diskrete Fertigung. Stücklisten, Rohmaterialien, WIP, Fertigwaren und Gemeinkosten.",
+          "title": "Fertigung"
+        },
+        "nonprofit": {
+          "description": "Gemeinnützige Organisationen. Zuschussverfolgung, Fondsbuchhaltung, Spenden und zweckgebundenes Nettovermögen.",
+          "title": "Gemeinnützig"
+        },
+        "professional_services": {
+          "description": "Berater, Agenturen und Kanzleien. Zeiterfassung, Projektrentabilität und Retainer-Abrechnung.",
+          "title": "Professionelle Dienstleistungen"
+        },
+        "property_management": {
+          "description": "Mietportfolios und Hausverwaltungen. Wiederkehrende Mieten, CAM, Kautionen und Anlagevermögen.",
+          "title": "Hausverwaltung"
+        },
+        "wholesale_distribution": {
+          "description": "Händler und Großhändler. Vorräte, Anschaffungsnebenkosten, GRNI und Lagerstandorte.",
+          "title": "Großhandel & Distribution"
+        }
+      },
+      "payroll": {
+        "checklist": {
+          "accounts": "Richten Sie die Buchungskonten (Löhne, Netto, Abzugsverbindlichkeiten) auf Ihren Kontenplan aus in",
+          "accountsLink": "Lohneinrichtung → Konten & Buchung",
+          "pack": "Das gewählte Länderpaket installiert sich automatisch, wenn Sie diese Einrichtung anwenden.",
+          "schedule": "Erstellen Sie Ihren ersten Lohnplan in",
+          "scheduleLink": "Lohneinrichtung → Lohnpläne",
+          "title": "Lohnabrechnung nach diesem Rundgang fertigstellen"
+        },
+        "description": "Lohnabrechnung läuft über installierbare Länderpakete – jedes Paket bringt die gesetzliche Abzugs-Engine und Komponenten dieser Jurisdiktion mit.",
+        "installError": "Lohnabrechnung wurde aktiviert, aber das Länderpaket konnte nicht installiert werden. Sie können es unter Lohneinrichtung → Länderpakete installieren.",
+        "packQuestion": "Welches Länderpaket soll installiert werden?",
+        "packs": {
+          "canada": {
+            "description": "Gesetzliche CRA-T4127-Engine, alle Provinzen & Territorien, gegen CRA-PDOC verifiziert.",
+            "title": "Kanada"
+          },
+          "us": {
+            "description": "Geplant – noch nicht verfügbar.",
+            "title": "Vereinigte Staaten"
+          }
+        },
+        "title": "Lohnabrechnung einrichten"
+      }
+    },
+    "filterAll": "Alle",
+    "sections": {
+      "basisCaps": "Bemessungsdeckel",
+      "deductionProtection": "Abzugsschutz",
+      "holidayCompanyDay": "Firmenfeiertag",
+      "holidayElection": "Wahl zu einem gesetzlichen Feiertag"
+    },
+    "segmentValues": {
+      "builtinLink": "{name} öffnen",
+      "builtinNotice": "{name} ist eine integrierte Dimension. Ihre Werte werden auf der Registerkarte {name} verwaltet.",
+      "builtinNoticeNoLink": "{name} ist eine integrierte Dimension. Ihre Werte werden auf einer eigenen Registerkarte verwaltet.",
+      "builtinTitle": "Integrierte Dimension",
+      "description": "Wählbare Werte für das Segment {name}.",
+      "empty": "Noch keine Werte – fügen Sie den ersten hinzu.",
+      "new": "Neuer Wert",
+      "searchPlaceholder": "Werte suchen …"
     }
   },
   "flows": {
@@ -2621,70 +4093,436 @@
         "subject": "Datensatz",
         "started": "Gestartet",
         "finished": "Abgeschlossen",
-        "error": "Fehler"
-      }
+        "error": "Fehler",
+        "actions": "Aktionen"
+      },
+      "retry": "Wiederholen",
+      "retryFailed": "Wiederholung fehlgeschlagen",
+      "retried": "Lauf erneut angestoßen",
+      "retrying": "Wird wiederholt …"
     }
   },
   "features": {
     "bankFeeds": {
       "title": "Bank Feeds",
-      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+      "description": "Automatisierte Bankanbindung – SFTP-Dateiablagen und Live-Feeds von Plaid, GoCardless und TrueLayer."
     },
     "subscriptionBilling": {
       "title": "Subscription Billing",
-      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+      "description": "Pläne und Abonnements, die wiederkehrende Rechnungen automatisch erzeugen (SaaS / Retainer)."
     },
     "onlinePayments": {
       "title": "Online-Zahlungen",
       "description": "Gehostete Zahlungslinks auf Rechnungen (Stripe / Adyen / GoCardless-Lastschrift), Entgeltregeln und Webhooks, die Zahlungseingänge automatisch zuordnen."
     },
     "advancedClose": {
-      "title": "Erweiterte Abschlusssteuerung"
+      "title": "Erweiterte Abschlusssteuerung",
+      "description": "Nachweislastige Abschlussblaupausen, unabhängige Genehmigungsrouten, kontrollierte Sperren und geregelte Abschlusspaket-Veröffentlichung. Der Kern-Monatsabschluss bleibt verfügbar, wenn dies aus ist."
     },
     "advancedSubscriptions": {
-      "title": "Erweiterter Abonnement-Lebenszyklus"
+      "title": "Erweiterter Abonnement-Lebenszyklus",
+      "description": "Versionierte Pläne, mehrere Komponenten, Testphasen, Verlängerungen, Co-Terminierung, Änderungen sowie Voraus- oder Nachabrechnung."
     },
     "allocations": {
-      "title": "Umlagen"
+      "title": "Umlagen",
+      "description": "Ein versioniertes Regelmodell, das gepoolte Kosten anhand eines Treibers auf Ziele verteilt: Verteilungsschlüssel bei Belegerfassung, zusätzliche Hauptbuchzeilen bei Buchung und geplante Periodenendläufe, mit vollständiger Herkunft."
     },
     "allocationsAtEntry": {
-      "title": "Umlagen bei Erfassung"
+      "title": "Umlagen bei Erfassung",
+      "description": "Umlageregeln eine gespeicherte Belegzeile in eine Gruppe von Kindzeilen über Konten und Dimensionen aufspalten lassen."
     },
     "allocationsAtPosting": {
-      "title": "Umlagen bei Buchung"
+      "title": "Umlagen bei Buchung",
+      "description": "Umlageregeln und autorisierte Skripte zur Buchung zusätzliche Hauptbuchzeilen zum eigenen Journaleintrag einer Transaktion beitragen lassen."
     },
     "apiAccess": {
-      "title": "REST-API"
+      "title": "REST-API",
+      "description": "Bereichsbezogene API-Schlüssel erstellen und die versionierte, mandantenfähige REST-API mit ihrer Live-Referenz bereitstellen."
     },
     "mcpAccess": {
-      "title": "MCP-Zugriff"
+      "title": "MCP-Zugriff",
+      "description": "Geregelte OpenBooks-Werkzeuge über bereichsbezogene API-Schlüssel-Authentifizierung für MCP-Clients bereitstellen."
     },
     "multiCurrency": {
-      "title": "Mehrwährung"
+      "title": "Mehrwährung",
+      "description": "In anderen Währungen als Ihrer Basiswährung arbeiten, mit Wechselkursen, Neubewertung und realisierten/nicht realisierten Währungsgewinnen und -verlusten. Schaltet Wechselkurs-Feed und Kurstabellen ein."
     },
     "multiSubsidiary": {
-      "title": "Mehrere Gesellschaften"
+      "title": "Mehrere Gesellschaften",
+      "description": "Mehr als einen Rechtsträger mit eigener Währung und eigenen Büchern führen, dann konsolidieren. Schaltet Tochtergesellschaften, Intercompany und konsolidierte Wechselkurse ein."
     },
     "payroll": {
-      "title": "Lohnabrechnung"
+      "title": "Lohnabrechnung",
+      "description": "Lohnläufe, Lohnpläne, Mitarbeiterprofile, gesetzliche Abzugspakete der Länder und Abführungsverbindlichkeiten. Kanada (CRA T4127) und die Vereinigten Staaten (49 unterstützte Staaten: 40 Steuer-Engines + 9 ohne Steuern; DC und NM abgelehnt, bis offizielle Referenzdaten vorliegen)."
     },
     "projectScheduling": {
-      "title": "Projektterminplanung"
+      "title": "Projektterminplanung",
+      "description": "Gantt-Diagramme, kritischer Pfad und Ressourcenglättung für Projektpläne."
     },
     "propertyManagement": {
-      "title": "Immobilienverwaltung"
+      "title": "Immobilienverwaltung",
+      "description": "Immobilien, Einheiten, Mieter-Mietverträge, wiederkehrende Mieten, Staffelungen, Verzugsgebühren, Kautionen und CAM-Abstimmung."
     },
     "queryConsole": {
-      "title": "Abfragekonsole"
+      "title": "Abfragekonsole",
+      "description": "Autorisierten Benutzern erlauben, lesendes, mandantenbezogenes SQL gegen das Live-Berichtsschema laufen zu lassen."
     },
     "scripts": {
-      "title": "Skripte"
+      "title": "Skripte",
+      "description": "Sandbox-JavaScript an kontrollierten Transaktions-, Plan-, Massen-, Client- und Endpunkt-Auslösern ausführen."
     },
     "subcontracts": {
-      "title": "Nachunternehmer und Abschlagsrechnung"
+      "title": "Nachunternehmer und Abschlagsrechnung",
+      "description": "Lieferantenverpflichtungen, Nachunternehmeränderungen, Lieferanten-SOVs und Abschlagsrechnungen, Einbehaltverbindlichkeiten, Freigaben, Gemeinschaftsschecks und Zahlungssperren."
     },
     "wipBilling": {
-      "title": "Unfertige Leistungen und Vorauszahlungen"
+      "title": "Unfertige Leistungen und Vorauszahlungen",
+      "description": "Abrechenbare Projektarbeit prüfen, Zeilen mit Nachweis zurückhalten oder anpassen, Vorabrechnungen genehmigen und WIP-Alterung, Realisierung und Schwund überwachen."
+    },
+    "apps": {
+      "description": "App-Pakete und die App-Bibliothek.",
+      "title": "Apps"
+    },
+    "banking": {
+      "description": "Bankfeeds, Auszugsabgleich, Abstimmung und Regeln.",
+      "title": "Banking"
+    },
+    "budgets": {
+      "description": "Budgetierung nach Konto und Dimension mit Berichtvergleich.",
+      "title": "Budgets"
+    },
+    "continuousClose": {
+      "description": "Permanente Abschlussprüfungen zusätzlich zum Periodenabschluss.",
+      "title": "Kontinuierlicher Abschluss"
+    },
+    "crm": {
+      "description": "Leads, Interessenten, Chancen, Aktivitäten und Verkaufsprognosen.",
+      "title": "CRM"
+    },
+    "equipment": {
+      "description": "Geräteeinheiten, Staffeltarife und Gebrauchsbelastungen auf Aufträge.",
+      "title": "Geräte & Vermietung"
+    },
+    "expenses": {
+      "description": "Erfassung, Genehmigung und Erstattung von Mitarbeiterspesen.",
+      "title": "Spesenabrechnungen"
+    },
+    "fieldTickets": {
+      "description": "Unterschriebene Mannschaftsstundenzettel für T&M-Arbeit: Der Vorarbeiter erfasst die Stunden der ganzen Mannschaft plus Geräte und Material, der Kunde unterschreibt, und Rechnungen werden aus den unterschriebenen Berichten erstellt.",
+      "title": "Regieberichte"
+    },
+    "fixedAssets": {
+      "description": "Anlagenregister, Abschreibungsbücher und steuerliche Abschreibung.",
+      "title": "Anlagevermögen"
+    },
+    "flows": {
+      "description": "Workflow-Automatisierung: Auslöser, Bedingungen, Genehmigungstore.",
+      "title": "Flows & Genehmigungen"
+    },
+    "inventory": {
+      "description": "Bestandsverfolgung, Standorte, Artikelkalkulation und Baugruppen.",
+      "title": "Vorräte"
+    },
+    "orders": {
+      "description": "Kostenvoranschläge, Kunden- und Bestellaufträge mit Überleitung in Rechnungen und Eingangsrechnungen.",
+      "title": "Angebote & Aufträge"
+    },
+    "projects": {
+      "description": "Aufträge mit Budgets, Kalkulation, Abrechnung und Rentabilität.",
+      "title": "Projekte & Auftragskalkulation"
+    },
+    "revenueRecognition": {
+      "description": "Realisierungsregeln, Pläne und passive Rechnungsabgrenzung für Verträge.",
+      "title": "Umsatzrealisierung"
+    },
+    "subcontractorCompliance": {
+      "description": "Versicherungszertifikate, Verzichtserklärungen und 1099-NEC/MISC- und T4A-Informationsmeldungen, mit Zahlungssperren bei erloschenem Nachunternehmerschutz.",
+      "title": "Nachunternehmer-Compliance"
+    },
+    "timeTracking": {
+      "description": "Persönliche Wochenstundenzettel mit Einreichung und Genehmigung.",
+      "title": "Zeiterfassung"
+    }
+  },
+  "extensions": {
+    "draft": {
+      "action": "Backend-Aktion: {name}",
+      "actionCount": "Aktionen",
+      "activate": "App aktivieren",
+      "added": "Hinzugefügt",
+      "backToReview": "Zurück zur Prüfung",
+      "changed": "Geändert",
+      "changes": "Änderungen gegenüber der installierten Version",
+      "closed": "Dieser Entwurf wurde bereits angewandt oder ersetzt.",
+      "confirm": "Ich habe diese Version und ihren angeforderten Zugriff geprüft.",
+      "contents": "Paketinhalt",
+      "customApp": "Benutzerdefinierte Oberfläche",
+      "discard": "Entwurf verwerfen",
+      "discardConfirm": "Diesen Entwurf verwerfen? Das ausstehende Paket wird gelöscht. Aktives ändert sich nicht.",
+      "discardEdits": "Ungespeicherte Paketänderungen verwerfen?",
+      "editPackage": "Paket bearbeiten",
+      "explore": "App erkunden",
+      "exploreHelp": "Öffnen Sie eine Maske, um Layout und Formulare mit Beispieldaten zu testen.",
+      "failed": "Die App konnte nicht aktiviert werden.",
+      "field": "Benutzerdefiniertes Feld: {name}",
+      "files": "{count} Paketdateien",
+      "grants": "Berechtigungen dieser Version: {permissions}",
+      "nativeApp": "Native App",
+      "nav": "Navigationseintrag: {name}",
+      "newPackage": "Neue App",
+      "noPermissions": "Keine Plattformberechtigungen angefordert.",
+      "page": "Seitenanpassung: {name}",
+      "pending": "Prüfung ausstehend",
+      "permission": "Berechtigung: {name}",
+      "permissions": "Angeforderter Zugriff",
+      "preview": "Vorschau",
+      "previewNotice": "Unveröffentlichte Vorschau · Nur Beispieldaten. Testen Sie Liste und Formulare; Änderungen werden nicht gespeichert und Backend-Aktionen laufen nicht.",
+      "previewPage": "Vorschauseite: {route}",
+      "removed": "Entfernt",
+      "retainedData": "Das Entfernen einer Definition aus dem Paket löscht weder bestehende Datensätze noch Prüfhistorie.",
+      "reviewReady": "Vor Aktivierung prüfen",
+      "reviewTab": "Änderungen & Zugriff",
+      "revise": "Änderungen anfordern",
+      "saveEditsFirst": "Speichern Sie Ihre Paketänderungen vor dem Aktivieren als neuen Entwurf.",
+      "screenCount": "Masken",
+      "screenKind": {
+        "action": "Aktionsformular",
+        "page": "Seite",
+        "records": "Datensatzarbeitsbereich"
+      },
+      "setting": "Einstellung: {name}",
+      "source": "Erweitert: Paketquelle und Fingerabdruck",
+      "title": "Entwurfsprüfung",
+      "unpublished": "Dieser Vorschlag ist nicht aktiv. Prüfen Sie Masken, angeforderten Zugriff und Änderungen vor dem Aktivieren.",
+      "workspaceCount": "Datensatztypen",
+      "proposalNotes": "Vorschlagsnotizen",
+      "recordType": "Datensatzarbeitsbereich: {name}"
+    },
+    "actions": {
+      "advanced": "Erweiterte Paketquelle",
+      "deactivate": "Deaktivieren",
+      "drafts": "Entwürfe warten auf Prüfung",
+      "new": "Neue App",
+      "publish": "In Bibliothek veröffentlichen",
+      "reactivate": "Reaktivieren",
+      "updateListing": "Bibliothekseintrag aktualisieren"
+    },
+    "columns": {
+      "contents": "Inhalte",
+      "key": "Schlüssel",
+      "name": "Name",
+      "status": "Status",
+      "updated": "Aktualisiert",
+      "version": "Version"
+    },
+    "description": "Apps für Ihre Organisation erstellen, importieren, bearbeiten und verwalten.",
+    "empty": "Keine Apps gefunden. Erstellen Sie eine App, um zu beginnen.",
+    "native": {
+      "actionComplete": "Aktion abgeschlossen.",
+      "actionFailed": "Die Aktion konnte nicht abgeschlossen werden. Wiederholen Sie, um dieselbe Übermittlung zu prüfen.",
+      "actionRunning": "Arbeitet …",
+      "existingRecordsPreview": "Diese Maske verweist auf einen bestehenden Datensatztyp. Live-Datensätze sind nach Aktivierung für Benutzer mit Zugriff verfügbar.",
+      "previewAction": "Nur Formularvorschau. Backend-Aktionen laufen nach Aktivierung, mit der installierten Version und Ihren Berechtigungen.",
+      "previewRecords": "Formularvorschau mit der vorgeschlagenen Datensatzdefinition. Nach Aktivierung nutzt dieser Arbeitsbereich die geteilte Datensatzliste, Filter und Schubladen.",
+      "sampleNumber": "Beispiel {number}",
+      "sampleOnly": "Vorschauänderungen werden nicht gespeichert.",
+      "sampleReference": "Beispielreferenz",
+      "sampleValue": "Beispiel {field} {number}"
+    },
+    "request": {
+      "agentHelp": "Anleitung zur App-Erstellung",
+      "agentInstruction": "Erstellen Sie eine App für diese Anforderung. Beginnen Sie mit describe_app_vocabulary. Verwenden Sie draft_app, um ein unveröffentlichtes Paket vorzubereiten, und geben Sie mir dessen Prüf- und Vorschaulinks. Fragen Sie nur nach fehlenden fachlichen Anforderungen. Aktivieren Sie sie erst, wenn ich sie geprüft habe.",
+      "brief": "Was möchten Sie erstellen?",
+      "help": "Beschreiben Sie die benötigte App und erstellen Sie sie mit dem Assistenten, oder beginnen Sie unten mit einem Paket.",
+      "placeholder": "Zum Beispiel: ein Geräteprüfungs-Arbeitsbereich mit Checklisten, Notizen und Prüfhistorie.",
+      "reviewHelp": "Sie können vor jeder Aktivierung eine Vorschau ansehen und Änderungen anfordern. Verbundene Agenten können über die App-Werkzeuge ebenfalls Entwürfe vorbereiten.",
+      "start": "Mit Assistent erstellen"
+    },
+    "searchPlaceholder": "Apps suchen …",
+    "status": "Status",
+    "statuses": {
+      "awaitingApproval": "Wartet auf Genehmigung",
+      "disabled": "Deaktiviert",
+      "installed": "Installiert"
+    },
+    "title": "Apps"
+  },
+  "backupsManager": {
+    "alerts": {
+      "noObjectStorageBody": "Diese Bereitstellung hat keinen S3-Objektspeicher (S3_ENDPOINT / S3_BUCKET / Zugangsdaten), daher sind gespeicherte und geplante Sicherungen nicht verfügbar. Reines Browser-Streaming ist absichtlich deaktiviert, weil es keine wiederherstellungsfähigen Hash-Nachweise liefern kann. Verwenden Sie den Operator-Workflow <cli>backup-local-cli.ts</cli>.",
+      "noObjectStorageTitle": "Objektspeicher ist nicht konfiguriert",
+      "workerOfflineBody": "Gespeicherte und geplante Sicherungen laufen auf dem Hintergrund-Worker, der sich seit Kurzem nicht gemeldet hat. Neue Läufe bleiben in der Warteschlange, bis er startet.",
+      "workerOfflineTitle": "Hintergrund-Worker ist offline"
+    },
+    "autoCard": {
+      "body": "Auf den S3-Objektspeicher der Bereitstellung nach Plan sichern. Nur die neuesten <keep>keep</keep> Sicherungen werden aufbewahrt – ältere werden nach jedem erfolgreichen Lauf automatisch rotiert.",
+      "daily": "Täglich",
+      "dayOfMonth": "Monatstag",
+      "dayOfWeek": "Wochentag",
+      "enabled": "Aktiviert",
+      "frequency": "Häufigkeit",
+      "keepNewest": "Neueste behalten",
+      "lastSuccess": " · Letzte erfolgreiche Sicherung: {when}",
+      "monthly": "Monatlich",
+      "nextRun": "Nächster geplanter Lauf: {when} (UTC-Plan)",
+      "off": "Geplante Sicherungen sind aus.",
+      "saveSchedule": "Plan speichern",
+      "timeUtc": "Uhrzeit (UTC)",
+      "title": "Automatische Sicherungen",
+      "weekly": "Wöchentlich"
+    },
+    "deleteConfirm": "Die gespeicherte Sicherung{fileName} löschen? Dies kann nicht rückgängig gemacht werden.",
+    "errors": {
+      "couldNotDelete": "konnte die Sicherung nicht löschen",
+      "couldNotSave": "konnte die Sicherungsrichtlinie nicht speichern",
+      "couldNotStart": "konnte die Sicherung nicht starten"
+    },
+    "exportsCard": {
+      "body": "Erstellen Sie unten eine gespeicherte Sicherung und laden Sie dann sowohl ihr <archive>Archiv</archive> als auch ihr <manifest>Manifest</manifest> herunter. Das Manifest trägt den vollständigen SHA-256 und die Zählungen, die die Wiederherstellungs-CLI verlangt; halten Sie beide Dateien zusammen. Ein roher Browser-Stream ohne diesen Nachweis wird als Wiederherstellungseingabe nicht unterstützt.",
+      "title": "Wiederherstellungsfähige Exporte"
+    },
+    "storedCard": {
+      "backUpNow": "Jetzt sichern",
+      "body": "Die neuesten {count} abgeschlossenen Sicherungen werden im Objektspeicher gehalten; der Rest wird rotiert. Das Löschen einer Sicherung entfernt sie sofort aus dem Speicher.",
+      "noneYet": "Noch keine gespeicherten Sicherungen.",
+      "title": "Gespeicherte Sicherungen"
+    },
+    "table": {
+      "actionsSr": "Aktionen",
+      "archive": "Archiv",
+      "contents": "Inhalte",
+      "created": "Erstellt",
+      "delete": "Löschen",
+      "inProgress": "läuft …",
+      "kept": "behalten",
+      "kind": "Art",
+      "manifest": "Manifest",
+      "purged": "gelöscht ({reason}) · {when}",
+      "retention": "Aufbewahrung",
+      "rowsTables": "{rows} Zeilen · {tables} Tabellen",
+      "sha256": "SHA-256",
+      "size": "Größe",
+      "status": "Status"
+    },
+    "toasts": {
+      "deleted": "Sicherung gelöscht",
+      "scheduleOff": "Geplante Sicherungen ausgeschaltet",
+      "scheduleSaved": "Sicherungsplan gespeichert",
+      "started": "Sicherung gestartet – sie erscheint unten"
+    },
+    "weekdays": {
+      "0": "Sonntag",
+      "1": "Montag",
+      "2": "Dienstag",
+      "3": "Mittwoch",
+      "4": "Donnerstag",
+      "5": "Freitag",
+      "6": "Samstag"
+    }
+  },
+  "pageLayouts": {
+    "actions": {
+      "openPreview": "Vorschau öffnen",
+      "remove": "Anpassung entfernen",
+      "removed": "Anpassung entfernt; die Seite zeigt das integrierte Layout.",
+      "restore": "Wiederherstellen",
+      "restored": "Diese Version ist wieder live.",
+      "save": "Layout speichern",
+      "saved": "Layout gespeichert.",
+      "undo": "Rückgängig",
+      "validate": "Prüfen",
+      "validated": "Dieses Layout ist gültig."
+    },
+    "blocks": {
+      "filter-bar": "Filterleiste",
+      "frame": "Hülle",
+      "grid": "Gruppe",
+      "heading": "Überschrift",
+      "page-header": "Seitenkopf",
+      "panel": "Bereich",
+      "pagination": "Seitennummerierung",
+      "paper": "Berichtsblatt",
+      "repeat": "Wiederholungsgruppe",
+      "stat-tile": "Kennzahlenkachel",
+      "summary-line": "Zusammenfassungszeile",
+      "table": "Tabelle",
+      "text": "Text",
+      "widget": "Komponente"
+    },
+    "columns": {
+      "module": "Modul",
+      "note": "Notiz",
+      "route": "Route",
+      "status": "Status",
+      "updated": "Aktualisiert"
+    },
+    "description": "Ändern Sie, was eine Seite für alle in dieser Organisation zeigt, oder setzen Sie sie auf das Layout zurück, das die App mitbringt.",
+    "drawer": {
+      "builtIn": "Diese Seite zeigt das Layout, das die App mitbringt.",
+      "customized": "Diese Seite zeigt das Layout Ihrer Organisation.",
+      "customizedByYou": "Diese Seite zeigt Ihr eigenes persönliches Layout.",
+      "note": "Notiz",
+      "notePlaceholder": "Warum diese Seite geändert wurde",
+      "replacesWarning": "Ein gespeichertes Layout ersetzt die integrierte Seite statt sie zu ergänzen, daher erscheinen spätere Verbesserungen dieser Seite erst, wenn Sie die Anpassung entfernen."
+    },
+    "empty": "Keine Seiten entsprechen dieser Suche.",
+    "errors": {
+      "json": "Das ist kein gültiges JSON: {message}"
+    },
+    "fields": {
+      "count": "{count, plural, one {# Zeile} other {# Zeilen}}",
+      "help": "Pfade, die ein Layout binden kann, aus den eigenen Daten dieser Seite. Eingerückte Pfade gehören zu einer Zeile der Liste darüber.",
+      "truncated": "Einige tiefere Felder wurden weggelassen, um diese Liste lesbar zu halten."
+    },
+    "history": {
+      "active": "Jetzt live",
+      "empty": "Diese Seite wurde nie angepasst.",
+      "help": "Jedes für diese Route gespeicherte Layout. Speicherungen löschen niemals das vorherige, sodass eine Bearbeitung nachträglich rückgängig gemacht werden kann.",
+      "loading": "Wird geladen …"
+    },
+    "outline": {
+      "body": "Rumpf",
+      "conditional": "Manchmal ausgeblendet",
+      "count": "{count, plural, one {# Teil} other {# Teile}}",
+      "header": "Kopf",
+      "hide": "Diesen Block ausblenden",
+      "moveDown": "Nach unten verschieben",
+      "moveUp": "Nach oben verschieben"
+    },
+    "preview": {
+      "help": "Öffnet die echte Seite mit Ihrem ungespeicherten Layout. Nur Sie sehen sie, und sie gilt nach 30 Minuten nicht mehr.",
+      "newTab": "Sie öffnet sich in einem neuen Tab: Die App verweigert die Anzeige in einem Rahmen – das ist der Schutz, der verhindert, dass eine andere Website Ihre Seiten einbettet.",
+      "opened": "Geöffnet"
+    },
+    "scope": {
+      "legend": "Für wen ist dieses Layout?",
+      "org": "Alle in dieser Organisation",
+      "orgHelp": "Ändert die Seite für jede Person hier. Das ist die übliche Wahl.",
+      "user": "Nur mich",
+      "userHelp": "Ändert die Seite nur für Sie und belässt alle anderen auf dem Layout der Organisation."
+    },
+    "searchPlaceholder": "Routen und Module suchen",
+    "status": {
+      "builtIn": "Integriert",
+      "customized": "Angepasst",
+      "filter": "Status",
+      "personal": "Persönlich"
+    },
+    "summary": "{customized} von {total} Seiten angepasst.",
+    "tabs": {
+      "aria": "Layouteditor-Bereiche",
+      "fields": "Verfügbare Felder",
+      "history": "Verlauf",
+      "json": "Erweitert",
+      "preview": "Vorschau",
+      "structure": "Struktur"
+    },
+    "title": "Seitenlayouts",
+    "unavailable": {
+      "segment": "Diese Route braucht einen Datensatz zur Anzeige – fügen Sie ?param.{segment}=… zur Adresse hinzu, um sie zu bearbeiten.",
+      "redirect": "Diese Seite sendet Sie stattdessen an {href}. Das ist meist eine Berechtigung, die Ihnen fehlt, oder eine Funktion, die aus ist.",
+      "notFound": "Diese Seite antwortet für Sie mit „nicht gefunden“, daher gibt es kein Layout zu lesen.",
+      "empty": "Diese Seite zeigt für Sie nichts, daher gibt es kein Layout zu lesen."
     }
   }
 }
