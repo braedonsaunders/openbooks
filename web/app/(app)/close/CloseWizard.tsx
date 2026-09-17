@@ -735,8 +735,7 @@ function TaskCard(props: Props & { task: Row }) {
         ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&
-        props.task.completion_mode === "manual" &&
-        props.task.task_type !== "approval" ? (
+        props.task.completion_mode === "manual" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-52 flex-1"
