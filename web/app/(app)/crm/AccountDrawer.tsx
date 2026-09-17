@@ -8,7 +8,7 @@ import { displayAccountStatusName } from '../../../lib/crm-status-display'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 
-type Option = { id: string; name: string; lifecycle_stage?: string }
+type Option = { id: string; name: string; lifecycle_stage?: string; is_default?: boolean }
 
 export function AccountDrawer({ data, statuses, owners, territories, sources, basePath, canManage }: {
   data: any
@@ -61,11 +61,19 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
     } finally { setBusy(false) }
   }
   const filteredStatuses = statuses.filter((status) => status.lifecycle_stage === form.lifecycleStage)
+  // A stage change retires the previous status: the old value names a status
+  // from another stage, which the save endpoint rejects (F-t02-001). Fall back
+  // to the new stage's default so the drawer never sends a stale pairing.
+  function changeStage(next: string) {
+    const fallback = statuses.find((status) => status.lifecycle_stage === next && status.is_default)?.id
+      ?? statuses.find((status) => status.lifecycle_stage === next)?.id ?? ''
+    setForm((current) => ({ ...current, lifecycleStage: next, statusId: fallback }))
+  }
   return <UrlDrawer open closeHref={basePath} size="xl" title={<span className="flex items-center gap-2">{form.displayName || t('accounts.newFallback')}<Badge>{t(`stages.${form.lifecycleStage}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
     {saveError ? <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{saveError}</p> : null}
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={t('fields.accountName')}><Input value={form.displayName} onChange={(e) => set('displayName', e.target.value)} disabled={!canManage} /></Field>
-      <Field label={t('fields.lifecycleStage')}><Select value={form.lifecycleStage} onChange={(e) => set('lifecycleStage', e.target.value)} disabled={!canManage}><option value="lead">{t('stages.lead')}</option><option value="prospect">{t('stages.prospect')}</option><option value="customer">{t('stages.customer')}</option></Select></Field>
+      <Field label={t('fields.lifecycleStage')}><Select value={form.lifecycleStage} onChange={(e) => changeStage(e.target.value)} disabled={!canManage}><option value="lead">{t('stages.lead')}</option><option value="prospect">{t('stages.prospect')}</option><option value="customer">{t('stages.customer')}</option></Select></Field>
       <Field label={t('fields.status')}><Select value={form.statusId} onChange={(e) => set('statusId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{filteredStatuses.map((o) => <option key={o.id} value={o.id}>{displayAccountStatusName(o.name, (key) => t(`accounts.statuses.${key}`))}</option>)}</Select></Field>
       <Field label={t('fields.owner')}><Select value={form.ownerUserId} onChange={(e) => set('ownerUserId', e.target.value)} disabled={!canManage}><option value="">{t('fields.unassigned')}</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.territory')}><Select value={form.territoryId} onChange={(e) => set('territoryId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{territories.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>

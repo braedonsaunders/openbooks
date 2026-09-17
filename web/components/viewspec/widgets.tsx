@@ -2816,6 +2816,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       param={str(props, 'param') ?? ''}
       label={str(props, 'label') ?? ''}
       failed={str(props, 'failed') ?? ''}
+      body={(props.body as Record<string, unknown> | undefined) ?? undefined}
     />
   ),
   'activity-drawer': (props) => {
