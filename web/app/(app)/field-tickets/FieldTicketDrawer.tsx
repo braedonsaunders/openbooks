@@ -323,6 +323,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [sending, setSending] = useState(false)
   const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
   const [sendMessage, setSendMessage] = useState('')
+  // F-t04-001: a refused send (e.g. email delivery unconfigured, 422) must
+  // persist in the dialog — toasts alone expire and the failure reads silent.
+  const [sendError, setSendError] = useState<string | null>(null)
   const [customerName, setCustomerName] = useState(props.ticket.customerName)
   const [projectTasks, setProjectTasks] = useState(props.projectTasks)
 
@@ -507,7 +510,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   async function call(
     method: 'PATCH' | 'POST',
     payload: Record<string, unknown>,
-    options: { preserveDraft?: boolean } = {},
+    options: { preserveDraft?: boolean; onErrorMessage?: (message: string) => void } = {},
   ): Promise<boolean> {
     setBusy(true)
     try {
@@ -519,6 +522,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       })
       if (result.status !== 'saved') {
         toast.error(result.message)
+        options.onErrorMessage?.(result.message)
         if (result.status === 'conflict') await reloadTicketAfterConflict()
         return false
       }
@@ -827,7 +831,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
         ) : null
       case 'workflow':
         return ticket.status === 'approved' && props.canManage && !sig?.customer ? (
-          <Button disabled={busy} onClick={() => setSending(true)}>
+          <Button disabled={busy} onClick={() => { setSendError(null); setSending(true) }}>
             <Mail size={14} /> {ticket.fieldTicket.send?.sentAt ? t('editor.resendSignature') : t('editor.sendSignature')}
           </Button>
         ) : null
@@ -947,10 +951,16 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   <Textarea id="ft-send-msg" rows={3} value={sendMessage} onChange={(event) => setSendMessage(event.target.value)} />
                 </div>
                 <p className="px-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('editor.signatures.deliveryHelp')}</p>
+                {sendError ? (
+                  <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                    {sendError}
+                  </p>
+                ) : null}
                 <Button
                   disabled={busy || !sendTo.trim()}
                   onClick={async () => {
-                    if (await call('POST', { action: 'send-signature', to: sendTo, message: sendMessage || null })) {
+                    setSendError(null)
+                    if (await call('POST', { action: 'send-signature', to: sendTo, message: sendMessage || null }, { onErrorMessage: setSendError })) {
                       setSending(false)
                       setSendMessage('')
                       toast.success(t('editor.signatureSent', { to: sendTo }))
