@@ -372,13 +372,470 @@
     "labels": {
       "unknownCustomer": "不明",
       "untitledProject": "無題のプロジェクト"
-    }
+    },
+    "chart": {
+      "projectedClv": "予測CLV"
+    },
+    "clvHow": {
+      "annualBold": "年間価値",
+      "annualTail": " ＝ 平均請求書 ×（請求書数 ÷ 稼働年数、下限3か月）。 ",
+      "clvBold": "予測CLV",
+      "clvTail": " ＝ 年間価値 × 3年 × 維持率。\n",
+      "retentionBold": "維持係数",
+      "retentionHead": " ＝ 0.95·e",
+      "retentionSup": "−最終取引からの日数 ÷ 120",
+      "retentionTail": "、10–95%に制限。 ",
+      "tiersNote": "階層は予測CLVで順位付け：上位10%がプラチナ、次の20%がゴールド、次の30%がシルバー、下位40%がブロンズ。"
+    },
+    "config": {
+      "fields": {
+        "churnCritical": {
+          "help": "この値以上の複合離反スコアは重大リスクと判定されます",
+          "label": "離反 — 重大（スコア）"
+        },
+        "churnHigh": {
+          "help": "この値以上の複合離反スコアは高リスクと判定されます",
+          "label": "離反 — 高（スコア）"
+        },
+        "churnMedium": {
+          "help": "この値以上の複合離反スコアは中リスクと判定されます",
+          "label": "離反 — 中（スコア）"
+        },
+        "clvYears": {
+          "help": "生涯価値予測に含める将来価値の年数",
+          "label": "CLV予測期間（年）"
+        },
+        "hhiCritical": {
+          "help": "この値以上のハーフィンダール指数は重大な集中と判定されます",
+          "label": "集中度：重大（HHI）"
+        },
+        "hhiWarning": {
+          "help": "この値以上のハーフィンダール指数は集中の警告と判定されます",
+          "label": "集中度：警告（HHI）"
+        }
+      }
+    },
+    "csv": {
+      "churn": "離反",
+      "grade": "評価",
+      "payment": "支払",
+      "projectedClv": "予測CLV",
+      "recommendation": "推奨対応",
+      "segment": "セグメント"
+    },
+    "customersCount": "{count}社",
+    "daysAgo": "{days}日前",
+    "drill": {
+      "invoicesRevenue": "{invoices}件の請求書 · {revenue}"
+    },
+    "empty": {
+      "noAtRisk": "離反リスクの得意先はありません — 維持状況は健全です。",
+      "noFriction": "当期のクレジットメモ摩擦はありません。",
+      "noOverdue": "通常の発注サイクルを過ぎた得意先はありません。",
+      "noProjectProfitability": "当期のプロジェクト別収益性はありません。",
+      "noSignals": "当期の注目シグナルはありません。"
+    },
+    "fakeChampionTitle": "売上は大きいがマージンが低い — 価格を見直し",
+    "fakeChampionTitleShort": "売上大・マージン小",
+    "groupBy": {
+      "churn": "離反リスク別",
+      "grade": "健全性評価別",
+      "none": "グループ化なし",
+      "segment": "セグメント別",
+      "tier": "CLV階層別"
+    },
+    "groupSummary": "{count}社 · {revenue}",
+    "jobsCount": "{count}件",
+    "kpi": {
+      "atRisk": "要注意",
+      "atRiskRevenue": "要注意売上",
+      "avgHealth": "平均健全性",
+      "avgMargin": "平均マージン",
+      "avgMonthly": "月次平均",
+      "champions": "チャンピオン",
+      "critical": "重大",
+      "excellent": "優良",
+      "grossProfit": "売上総利益",
+      "highFriction": "摩擦大",
+      "medianMonthly": "月次中央値",
+      "newCustomers": "新規得意先",
+      "overdueOrders": "延滞発注",
+      "periodRevenue": "期間売上",
+      "profitLeaks": "利益流出",
+      "projectedClv": "予測CLV",
+      "recencyRisk": "レセンシーリスク",
+      "retentionRate": "維持率",
+      "totalCosts": "総コスト",
+      "totalCustomers": "得意先総数",
+      "totalProjectedClv": "予測CLV合計",
+      "totalRevenue": "売上合計",
+      "warning": "警告",
+      "yoyGrowth": "前年比成長率"
+    },
+    "lastActive": "最終：{days}",
+    "margin": {
+      "excellent": "優良",
+      "fair": "普通",
+      "good": "良好",
+      "loss": "赤字",
+      "low": "低い",
+      "profit": "黒字"
+    },
+    "metrics": {
+      "avgDso": "平均DSO",
+      "avgValue": "平均額",
+      "monthlyGrowth": "月次成長率",
+      "paymentRate": "入金率",
+      "retention": "維持率",
+      "top10Share": "上位10%シェア"
+    },
+    "metricsSub": {
+      "avgMoM": "平均前月比（成熟月）",
+      "daysToPay": "入金日数",
+      "ofRevenue": "売上比",
+      "paidInFull": "全額支払済請求書",
+      "perCustomer": "社あたり",
+      "retentionProb": "平均維持確率"
+    },
+    "overdueBanner": {
+      "count": "{count}件の延滞請求書",
+      "rest": " が当期にあります — 回収リスクが成長を覆い隠している可能性があります。離反リスクタブを確認してください。"
+    },
+    "pager": {
+      "next": "次へ",
+      "nounCustomers": "得意先",
+      "prev": "前へ",
+      "showing": "{total}件中 {from}〜{to} を表示"
+    },
+    "panels": {
+      "atRiskCustomers": "要注意得意先（{count}）",
+      "atRiskHint": "離反スコア：レセンシー0–40（120日超/60日超/30日超）＋頻度低下0–30（自社平均の2倍/1.5倍）＋低関与0–30（1件以下/3件以下）",
+      "clvRanking": "生涯価値ランキング",
+      "cohortHint": "初回発注年別 · アクティブ＝過去6か月以内に発注",
+      "cohortRetention": "コホート維持率",
+      "customerHealth": "得意先健全性（{count}）",
+      "customerHealthHint": "加重：レセンシー25% · 頻度25% · 金額30% · 支払20%、摩擦ペナルティを減算",
+      "customerProfitability": "得意先収益性",
+      "customersBySegment": "セグメント別得意先（{count}）",
+      "dataSources": "データソースと算出方法",
+      "frictionHint": "クレジット×2ポイント（この元帳には返品承認書類がないため、返品は常に0）",
+      "frictionSignals": "摩擦シグナル",
+      "howClvProjected": "CLV予測の方法",
+      "insights": "インテリジェンス洞察",
+      "keyMetrics": "主要指標",
+      "monthlyDetails": "月次明細",
+      "monthlyDetailsHint": "前月比は+200/−80%で上限、「—」は成熟していない月からの立ち上がりを示す",
+      "monthlyRevenueTrend": "月次売上トレンド",
+      "overdueHint": "各得意先の平均発注サイクルからの超過日数",
+      "overdueOrders": "延滞発注",
+      "profitabilityHint": "得意先をクリックでジョブを展開 · ⚠️は利益流出（売上>{threshold}、マージン<15%）",
+      "revenueByTier": "CLV階層別売上",
+      "rfmHint": "R/F/Mスコア：5が最良、1が最悪 — レセンシーは固定日数しきい値、頻度/金額は33/66パーセンタイル",
+      "rfmSegments": "RFMセグメント",
+      "scoringModel": "スコアリングモデル",
+      "scoringModelHint": "複合スコアの算出方法",
+      "segmentCustomers": "{segment}（{count}）",
+      "segmentMix": "セグメント構成",
+      "segmentPerformance": "セグメント実績",
+      "tierDistribution": "CLV階層分布",
+      "topByRevenue": "売上上位得意先"
+    },
+    "profitTier": {
+      "high": "高",
+      "loss": "赤字",
+      "low": "低",
+      "marginal": "限界的",
+      "medium": "中"
+    },
+    "rec": {
+      "maintain": "維持",
+      "nurture": "育成",
+      "onboard": "オンボーディング",
+      "reactivate": "再活性化",
+      "reprice": "価格改定",
+      "resolve-issues": "問題解決",
+      "review": "見直し",
+      "win-back": "呼び戻し"
+    },
+    "risk": {
+      "critical": "重大",
+      "high": "高",
+      "low": "低",
+      "medium": "中"
+    },
+    "scoring": {
+      "clvRetention": {
+        "label": "CLV維持率",
+        "value": "維持率 0.95·e^(−日数/120)、10–95%に制限"
+      },
+      "clvTiers": {
+        "label": "CLV階層",
+        "value": "上位10% プラチナ · 次の20% ゴールド · 次の30% シルバー · 残り ブロンズ"
+      },
+      "frictionPenalty": {
+        "label": "摩擦ペナルティ",
+        "value": "重大 −25 · 高 −15 · 中 −8"
+      },
+      "healthGrades": {
+        "label": "健全性評価",
+        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · Fは50未満"
+      },
+      "healthWeights": {
+        "label": "健全性加重",
+        "value": "レセンシー25% · 頻度25% · 金額30% · 支払20%"
+      },
+      "paymentScore": {
+        "label": "支払スコア",
+        "value": "100 − DSOが60日超/30日超/15日超で40/20/10を減点 − min(40, 延滞×10)"
+      },
+      "rfmFrequency": {
+        "label": "RFM頻度/金額",
+        "value": "33/66パーセンタイルで分割 → 1 / 3 / 5"
+      },
+      "rfmRecency": {
+        "label": "RFMレセンシーしきい値",
+        "value": "30日以内 → 5 · 90日以内 → 3 · 180日以内 → 2 · その他1"
+      }
+    },
+    "segment": {
+      "at-risk": "要注意",
+      "champions": "チャンピオン",
+      "hibernating": "休眠",
+      "lost": "離反",
+      "loyal": "ロイヤル",
+      "new": "新規",
+      "potential": "見込み",
+      "regular": "一般"
+    },
+    "segmentDesc": {
+      "at-risk": "レセンシー・頻度が低い（R≤2 F≤2）",
+      "champions": "最近・頻繁・高支出（R≥4 F≥4 M≥4）",
+      "hibernating": "価値はあるが非アクティブ（R≤2 F≥3 M≥3）",
+      "lost": "非アクティブ・低価値（R≤2 M≤2）",
+      "loyal": "安定的な高支出（R≥3 F≥3 M≥4）",
+      "new": "最近の初回購入（R≥4 F≤2）",
+      "potential": "最近で確かな価値（R≥3 M≥3）",
+      "regular": "中程度の関与"
+    },
+    "sources": {
+      "cohortsBold": "コホート：",
+      "cohortsTail": " 初回発注年別の生涯請求書履歴。アクティブ＝過去6か月以内に発注。",
+      "frictionBold": "摩擦：",
+      "frictionTail": " クレジットメモのみ — この元帳には返品承認書類がないため、返品要素は常に0。",
+      "intelligenceBold": "インテリジェンススコア：",
+      "intelligenceTail": " チャンピオン比率30%（得意先の20%が最大）＋平均維持確率30%＋集中健全性20%＋入金率20% — スコア{score}（{grade}）。",
+      "newCustomersBold": "新規得意先：",
+      "newCustomersTail": " 初回取引月より前には生涯にわたり請求書も受注も存在しない。",
+      "paymentBold": "支払行動：",
+      "paymentTail": " 支払済＝請求書の全額消込。支払日数＝最終消込日−請求日。延滞＝期日超過かつ未全額消込。",
+      "profitabilityBold": "収益性：",
+      "profitabilityTail": " プロジェクト紐付けの総勘定元帳明細をジョブ→得意先に集約。プロジェクト紐付けのない得意先はマージンなし（推定しない）。",
+      "recencyBold": "レセンシー：",
+      "recencyTail": " 当日（履歴表示時は期間末）基準。将来の会計年度末は使わない。",
+      "revenueBold": "売上基準：",
+      "revenueTail": " 記帳済み得意先請求書の書類合計。"
+    },
+    "sub": {
+      "activeLast6mo": "過去6か月アクティブ",
+      "avgPerCustomer": "平均{amount}/社",
+      "clvBase": "履歴CLV基準",
+      "creditHeavy": "クレジットの多い得意先",
+      "customersCount": "{count}社",
+      "firstOrderInPeriod": "期間内初回発注",
+      "highCriticalAccounts": "高・重大の得意先",
+      "highCriticalChurn": "高・重大な離反",
+      "highRevenueLowMargin": "売上大・マージン<15%",
+      "jobsCount": "{count}件",
+      "last3moVsLy": "過去3か月（前年同期比）",
+      "marginPct": "{pct}%マージン",
+      "newInPeriod": "期間内新規{count}社",
+      "pastUsualCycle": "通常サイクル超過",
+      "revenue": "売上",
+      "rfmChampions": "RFMチャンピオン層",
+      "score40to59": "スコア40–59",
+      "score80Plus": "スコア80以上",
+      "scoreBelow40": "スコア40未満",
+      "threeYearProjection": "3年予測",
+      "trend": "トレンド：{trend}",
+      "weightedRfm": "加重R/F/M/支払"
+    },
+    "table": {
+      "active": "アクティブ",
+      "annualValue": "年間価値",
+      "avgCycle": "平均サイクル",
+      "avgLifetimeRev": "平均生涯売上",
+      "avgPerCustomer": "社平均",
+      "churn": "離反",
+      "cohort": "コホート",
+      "costs": "コスト",
+      "creditValue": "クレジット額",
+      "credits": "クレジット",
+      "customer": "得意先",
+      "customerJob": "得意先 / ジョブ",
+      "customers": "得意先",
+      "daysInactive": "非取引日数",
+      "f": "F",
+      "health": "健全性",
+      "invoices": "請求書",
+      "issueRate": "問題率",
+      "level": "レベル",
+      "m": "M",
+      "margin": "マージン",
+      "mom": "前月比",
+      "month": "月",
+      "new": "新規",
+      "overdue": "延滞",
+      "payment": "支払",
+      "profit": "利益",
+      "projectedClv": "予測CLV",
+      "r": "R",
+      "recency": "レセンシー",
+      "recommendation": "推奨対応",
+      "retention": "維持率",
+      "retentionProb": "維持確率",
+      "revShare": "売上シェア",
+      "revenue": "売上",
+      "risk": "リスク",
+      "riskFactors": "リスク要因",
+      "score": "スコア",
+      "segment": "セグメント",
+      "tier": "階層",
+      "txns": "取引",
+      "urgency": "緊急度"
+    },
+    "tabs": {
+      "churn": "離反リスク",
+      "configuration": "設定",
+      "growth": "成長",
+      "health": "健全性スコア",
+      "lifetime": "生涯価値",
+      "overview": "概要",
+      "profitability": "収益性",
+      "segmentation": "セグメンテーション"
+    },
+    "tier": {
+      "bronze": "ブロンズ",
+      "gold": "ゴールド",
+      "platinum": "プラチナ",
+      "silver": "シルバー"
+    },
+    "txnsCount": "{count}件の取引"
   },
   "vendor": {
     "title": "仕入先パフォーマンス",
     "backToHub": "アナリティクス",
     "labels": {
       "unknownVendor": "不明"
+    },
+    "chart": {
+      "spend": "支出",
+      "tooltipOnTime": "期日内：{pct}%",
+      "tooltipSpend": "支出：{amount}",
+      "xAxis": "支出（対数）→",
+      "yAxis": "期日内率"
+    },
+    "csv": {
+      "onTimePct": "期日内率",
+      "sharePct": "シェア率"
+    },
+    "days": "{days}日",
+    "drill": {
+      "billsSpend": "仕入請求書{bills}件 · 支出{spend}"
+    },
+    "empty": {
+      "noLatePaid": "延滞支払の支出はありません。"
+    },
+    "gauge": {
+      "balanced": "均衡",
+      "concentrated": "集中",
+      "diversified": "分散"
+    },
+    "info": {
+      "body": "OTIF（期日内全量納入）、リードタイムの信頼性、購買価格差異、マーベリック支出（発注外支出）の算出には、発注→検収→請求書の明細連携が必要ですが、このデータには含まれていません（書類リンクなし、請求書に明細レベルの品目なし）。支払行動、集中度、関係スコアカードは完全なデータから算出しています。",
+      "title": "この元帳では測定できません："
+    },
+    "kpi": {
+      "activeVendors": "取引中仕入先",
+      "avgBill": "平均請求額",
+      "avgDaysToPay": "平均支払日数",
+      "hhi": "集中度（HHI）",
+      "latePaidSpend": "延滞支払額",
+      "onTimeRate": "期日内支払率",
+      "top5Share": "上位5社シェア",
+      "topVendor": "最大仕入先",
+      "totalSpend": "支出合計",
+      "vendorsPaid": "支払済仕入先"
+    },
+    "panels": {
+      "allVendors": "全仕入先（{count}）",
+      "leverageHint": "支出（影響度）×支払信頼性（実績） — バブルサイズ＝支出",
+      "leverageMatrix": "レバレッジマトリクス",
+      "mostLatePaid": "延滞支払が多い仕入先",
+      "paymentBehaviour": "仕入先別支払行動",
+      "scorecard": "仕入先スコアカード",
+      "scorecardHint": "関係価値 — 支出の重要度、関与度、安定性",
+      "spendByTier": "階層別支出",
+      "spendTrend12mo": "支出トレンド（12か月）",
+      "topBySpend": "支出上位仕入先"
+    },
+    "quadrant": {
+      "commodity": {
+        "desc": "支出が大きく関係が緊張 — 再交渉または複数調達先化を",
+        "label": "コモディティ"
+      },
+      "niche": {
+        "desc": "支出は小さいが信頼できる — 育成を",
+        "label": "ニッチ"
+      },
+      "strategic": {
+        "desc": "支出が大きく信頼できる — 提携と保護を",
+        "label": "戦略的"
+      },
+      "transactional": {
+        "desc": "支出が小さく関与度が低い — 自動化・集約を",
+        "label": "トランザクショナル"
+      }
+    },
+    "sub": {
+      "billsCount": "{count}件の仕入請求書",
+      "diversified": "分散",
+      "fromBillToPayment": "請求から支払まで",
+      "highlyConcentrated": "高集中",
+      "inPeriod": "期間内",
+      "moderate": "中程度",
+      "onTimeBills": "期日内に支払われた請求書",
+      "paidAfterDue": "期日後に支払",
+      "perBill": "1件あたり",
+      "top5Concentration": "支出集中度",
+      "withPaymentHistory": "支払履歴あり",
+      "yoy": "前年比 {pct}"
+    },
+    "table": {
+      "avgDays": "平均日数",
+      "bills": "請求書",
+      "grade": "評価",
+      "lateSpend": "延滞支出",
+      "onTime": "期日内",
+      "paid": "支払済",
+      "score": "スコア",
+      "share": "シェア",
+      "spend": "支出",
+      "tier": "階層",
+      "vendor": "仕入先",
+      "yoy": "前年比"
+    },
+    "tabs": {
+      "matrix": "レバレッジマトリクス",
+      "overview": "概要",
+      "payment": "支払行動",
+      "scorecard": "スコアカード",
+      "vendors": "仕入先"
+    },
+    "tier": {
+      "core": "中核",
+      "strategic": "戦略的",
+      "tactical": "戦術的",
+      "tail": "テール"
     }
   },
   "cashflow": {
@@ -860,7 +1317,301 @@
     "labels": {
       "noTitle": "タイトルなし",
       "unknownName": "不明"
-    }
+    },
+    "allDepartments": "全部門",
+    "anomalyNote": "異常検知では、請求可能見込みなし部門の従業員を除外します。",
+    "chart": {
+      "billable": "請求可能",
+      "forecast": "予測",
+      "historical": "実績",
+      "nonBillable": "請求対象外",
+      "target": "目標"
+    },
+    "config": {
+      "fields": {
+        "costSpike": {
+          "help": "前回期間比で請求対象外コストがこの額を超えて増加したら警告します",
+          "label": "コスト急増アラート（$）"
+        },
+        "minHours": {
+          "help": "この時間未満の従業員は異常・ピア分析から除外されます",
+          "label": "最小時間"
+        },
+        "targetBillable": {
+          "help": "全社の稼働率ベンチマーク",
+          "label": "目標請求可能率"
+        }
+      },
+      "historyNote": "直近{months}か月のローリング期間がトレンドと予測の入力",
+      "historyPeriods": "履歴期間",
+      "priorRange": "前回期間",
+      "priorRangeNote": "選択期間の直前の同期間"
+    },
+    "empCount": "{count}名",
+    "empty": {
+      "allWithinTarget": "すべて目標内。",
+      "noDriftingTitles": "低下中の役職なし",
+      "noImprovements": "改善機会は見つかりませんでした",
+      "noIssues": "問題は検出されませんでした",
+      "noPeerTitles": "比較可能な役職なし（2名以上）",
+      "noSuddenDrops": "急低下は検出されませんでした"
+    },
+    "entries": {
+      "billableOf": "請求可能{pct}",
+      "count": "{count}{suffix}件の作業時間入力",
+      "employee": "従業員",
+      "hrs": "{hours}時間",
+      "item": "品目",
+      "peers": "ピア比較：{title}（{count}名）",
+      "pills": {
+        "byCustomer": "得意先別",
+        "byEmployee": "従業員別",
+        "byItem": "サービス品目別",
+        "entries": "明細"
+      },
+      "serviceItem": "サービス品目",
+      "thisVsPeer": "当従業員{emp} · ピア平均{peer}",
+      "title": "作業時間入力"
+    },
+    "error": {
+      "loadFailed": "入力を読み込めませんでした。"
+    },
+    "forecast": {
+      "atRisk": "要注意",
+      "current": "現在",
+      "methodology": " 予測は履歴期間に対する線形回帰を使用します。請求可能率が高いほど、同じ時間が請求対象外から請求可能に移るため、請求対象外コストは自然に低下します。",
+      "methodologyBold": "方法：",
+      "onTrack": "順調",
+      "projected": "予測"
+    },
+    "gauge": {
+      "atRisk": "要注意",
+      "belowTarget": "目標未達",
+      "nearTarget": "目標目前",
+      "onTarget": "目標達成",
+      "targetPct": "目標 {target}%"
+    },
+    "heatmap": "ヒートマップ",
+    "hide": "非表示",
+    "hotspot": {
+      "highestCostItem": "最高コスト品目",
+      "lowestBilledEmp": "最低請求従業員",
+      "mostExpensiveDept": "最高コスト部門",
+      "others": "+ その他{count}件{count, plural, one {} other {}}"
+    },
+    "itemsWithActivity": "アクティブな品目{count}件 · 行をクリックで明細表示",
+    "kpi": {
+      "aboveTarget": "目標超過",
+      "avgBillablePct": "平均請求可能率",
+      "avgHours": "平均時間",
+      "avgHoursItem": "平均時間/品目",
+      "avgSpread": "平均ばらつき",
+      "avgTeamSize": "平均チーム人数",
+      "belowTarget": "目標未達",
+      "bestTitle": "最良役職",
+      "billableHours": "請求可能時間",
+      "capacityHeadroom": "余剰キャパシティ",
+      "confidence": "信頼度",
+      "costPerDay": "日次コスト",
+      "efficiencyScore": "効率スコア",
+      "employees": "従業員",
+      "highestCost": "最高コスト",
+      "jobTitles": "役職",
+      "jobTitlesAnalyzed": "分析対象役職",
+      "needsAttention": "要対応",
+      "nonBillableCost": "請求対象外コスト",
+      "opportunities": "改善機会",
+      "overtimeNoValue": "無価値残業",
+      "potentialSavings": "削減可能額",
+      "projectedBillablePct": "予測請求可能率",
+      "projectedNonBillCost": "予測請求対象外コスト",
+      "serviceItems": "サービス品目",
+      "suddenDrops": "急低下",
+      "target": "目標",
+      "targetStatus": "目標達成状況",
+      "titleDrift": "役職ドリフト",
+      "titlesWithOutliers": "外れ値のある役職",
+      "topPerformer": "最高実績者",
+      "totalHours": "総時間",
+      "totalIssues": "問題総数"
+    },
+    "loading": "読み込み中…",
+    "lowHoursCount": "{minHours}時間未満の従業員{count}名",
+    "metric": {
+      "billableHours": "請求可能時間",
+      "costPerDay": "日次コスト",
+      "nonBillableCost": "請求対象外コスト",
+      "nonBillableHours": "請求対象外時間",
+      "percentBilled": "請求可能率",
+      "totalHours": "総時間"
+    },
+    "no": "いいえ",
+    "noBillExpShort": "請求見込みなし",
+    "noBillExpectation": "請求可能見込みなし",
+    "noBillableNote": "請求可能時間がゼロの部門は、全社請求可能率とホットスポットから除外されます（間接部門には請求可能見込みがありません）。",
+    "noTitle": "役職なし",
+    "none": "なし",
+    "outlook": {
+      "challenging": "厳しい",
+      "favorable": "良好",
+      "neutral": "中立"
+    },
+    "panels": {
+      "alerts": "稼働率アラート",
+      "costHotspots": "コストホットスポット",
+      "dataSources": "データソースと算出方法",
+      "efficiencySummary": "効率サマリー",
+      "forecastTrend": "予測付き請求可能率トレンド",
+      "hiringIntelligence": "採用インテリジェンス",
+      "hoursDistribution": "時間分布",
+      "improvementHint": "5ポイントの稼働率改善による削減見込み",
+      "improvementOpportunities": "改善機会",
+      "modelAssumptions": "モデルと前提",
+      "noBillableExpectation": "請求可能見込みなし",
+      "overtimeHint": "平均より20%以上多い時間、請求可能率が目標を20ポイント下回る",
+      "peerComparison": "役職別ピア比較",
+      "peerHint": "類似業務の従業員を比較",
+      "reallocationIdeas": "再配分案",
+      "suddenDrop": "急低下",
+      "suddenDropHint": "前回比で請求可能率が15ポイント超低下",
+      "titleDriftHint": "全従業員が低下傾向の役割",
+      "topDepartments": "上位部門",
+      "topDepartmentsHint": "請求対象外コスト順",
+      "treemap": "稼働率ツリーマップ",
+      "treemapHint": "サイズ＝時間 · 色＝請求可能率 · クリックでドリルダウン"
+    },
+    "peers": {
+      "outliersBold": "外れ値",
+      "outliersNote": " は、請求可能率が役職平均から1.5標準偏差以上離れた従業員です。ばらつきが大きい、または外れ値がある場合は、研修不足、作業量の不均衡、役割のミスマッチを示している可能性があります。"
+    },
+    "ppAvg": "平均{avg}ポイント",
+    "prior": "前回：{pct}",
+    "searchEmployees": "従業員を検索…",
+    "searchItems": "品目を検索…",
+    "show": "表示",
+    "sources": {
+      "billableBold": "請求可能",
+      "billableItem": " — 入力の請求可能フラグ（請求可能な入力にはすべてプロジェクト→得意先が付きます）。",
+      "dominantClass": "主要労務区分",
+      "intro": "すべて ",
+      "introTail": "：",
+      "jobTitleBold": "役職",
+      "jobTitleItem": " （最も多くの時間を記録したサービス品目、例：“MECH:Foreman”）。",
+      "jobTitleMid": " — 従業員には役職フィールドがないため、個人の役職はその人の ",
+      "noBillItem": " — 請求可能時間がゼロの部門（当期＋前回）は自動でフラグ付けされ、全社率から除外されます（例：間接部門）。",
+      "nonBillCostBold": "請求対象外コスト",
+      "nonBillCostItem": " — Σ 時間 × 請求対象外時間の入力自体の原価レート。",
+      "timeEntries": "作業時間入力"
+    },
+    "sub": {
+      "aboveNear": "{above}件超過、{near}件目前",
+      "acrossItems": "品目横断",
+      "belowTargetCount": "目標未達{count}件",
+      "billableThreshold": "請求可能しきい値",
+      "dataPoints": "{count}件のデータ",
+      "daysInRange": "範囲内{days}日間",
+      "detectedAnomalies": "検出済み異常",
+      "drop15pp": "15ポイント超低下の従業員",
+      "employeesPerTitle": "1役職あたり従業員数",
+      "highHoursLowBillable": "長時間・低請求可能",
+      "hiresAtEfficiency": "現在の効率での採用",
+      "hoursWeighted": "時間加重",
+      "ifAllImplemented": "全実施時",
+      "improvementScenarios": "改善シナリオ",
+      "maxMinusMin": "役職内の最大−最小",
+      "outOf100": "100点満点中",
+      "perEmployee": "従業員あたり",
+      "perServiceItem": "サービス品目あたり",
+      "performanceVariance": "実績ばらつき",
+      "qualified": "対象{count}件（{minHours}時間以上）",
+      "recordedTime": "記録時間",
+      "revenueGenerating": "収益創出",
+      "rolesTrendingDown": "低下傾向の役割",
+      "targetPct": "目標：{target}%",
+      "totalForRange": "期間合計",
+      "trajectory": "{arrow} {amount}の推移",
+      "trendArrow": "{arrow} {trend}ポイントのトレンド",
+      "uniqueRoles": "固有の役割（労務区分）",
+      "with2Plus": "2名以上の従業員",
+      "withActivity": "アクティブあり"
+    },
+    "subTabs": {
+      "anomalies": "異常",
+      "forecasting": "予測",
+      "peers": "ピア分析",
+      "treemap": "ツリーマップ",
+      "whatif": "シミュレーション"
+    },
+    "table": {
+      "avgPct": "平均率",
+      "billable": "請求可能",
+      "billablePct": "請求可能率",
+      "change": "変動",
+      "cost": "コスト",
+      "currentRange": "当期範囲",
+      "customer": "得意先",
+      "date": "日付",
+      "department": "部門",
+      "employees": "従業員",
+      "hours": "時間",
+      "jobTitle": "役職",
+      "max": "最大",
+      "metric": "指標",
+      "min": "最小",
+      "nonBill": "請求対象外",
+      "nonBillCost": "請求対象外コスト",
+      "outliers": "外れ値",
+      "pctBilled": "請求可能率",
+      "pctPrior": "前回率",
+      "priorRange": "前回範囲",
+      "share": "シェア",
+      "spread": "ばらつき",
+      "totalHrs": "総時間"
+    },
+    "tableLabel": "表",
+    "tabs": {
+      "config": "設定",
+      "departments": "部門",
+      "employees": "従業員",
+      "intelligence": "インテリジェンス",
+      "items": "品目",
+      "overview": "概要",
+      "titles": "役職"
+    },
+    "titles": {
+      "drawerDesc": "従業員{count}名 · 請求可能{billable} · 請求対象外コスト{cost}"
+    },
+    "treemap": {
+      "breadcrumb": "パンくずで上へ移動",
+      "clickDrill": "クリックでドリルダウン",
+      "colourBillable": "色＝請求可能率",
+      "sizeHours": "サイズ＝作業時間"
+    },
+    "unit": {
+      "billable": "請求可能",
+      "hrs": "時間"
+    },
+    "whatif": {
+      "avgCostEmployee": "平均コスト/従業員",
+      "avgHoursEmployee": "平均時間/従業員",
+      "bestTitle": "最良役職",
+      "billablePctLabel": "請求可能率",
+      "breakEvenRate": "損益分岐レート",
+      "costPerNonBillHour": "請求対象外時間あたりコスト",
+      "highBillableRoles": "高請求可能役割",
+      "improve": "「{title}」を5%改善",
+      "improveDetail": "現在平均{pct}%の従業員{count}名",
+      "na": "N/A",
+      "needsFocus": "要注力",
+      "nonBillableLabel": "請求対象外",
+      "recExceptional": "新規採用が採算に合うには極めて高い請求可能率が必要です。繁忙対応は契約社員を検討してください。",
+      "recFocus": "{title}への採用に注力。現在のトップ実績者の平均は{avgPct}%です。",
+      "recSupports": "現在の稼働率は新規採用を支えられます。既存チームの強みを補う役割を優先してください。",
+      "save": "{amount}削減",
+      "teamAvgBillable": "チーム平均請求可能率",
+      "totalEmployees": "従業員総数"
+    },
+    "yes": "はい"
   },
   "spendVelocity": {
     "title": "支出速度",
@@ -917,6 +1668,280 @@
       "seasonalHigh": "支出が増加しやすい時期：{months}",
       "seasonalLow": "支出が減少しやすい時期：{months}",
       "shadowItReason": "経費精算の明細には店舗名や仕入先名が含まれず、費用勘定と自由記述のみのため、従業員間でのソフトウェアのバイラルな普及を追跡できません。"
+    },
+    "banner": {
+      "count": "アラート総数{total}件",
+      "rest": "（8検知器） — カードをクリックで絞り込み"
+    },
+    "chart": {
+      "priorYear": "前年",
+      "spend": "支出"
+    },
+    "chips": {
+      "all": "すべて",
+      "decreases": "↓ 減少",
+      "highVel": "🔥 高速度",
+      "increases": "↑ 増加",
+      "new": "+ 新規"
+    },
+    "clearFilter": "絞り込み解除 · {key}",
+    "config": {
+      "anomalyThreshold": {
+        "label": "異常しきい値",
+        "note": "統計的外れ値のZスコア（3σで重大）"
+      },
+      "boilingFrog": {
+        "label": "ゆでガエル",
+        "note": "10%未満の単調増加が続く最小月数"
+      },
+      "fields": {
+        "anomalySigma": {
+          "help": "この標準偏差数を超えた月を異常と判定します",
+          "label": "異常σ"
+        },
+        "boilingFrogMonths": {
+          "help": "小幅な増加が続く最小月数",
+          "label": "ゆでガエル月数"
+        },
+        "fragmentationAvgSize": {
+          "help": "断片化検知の平均取引サイズ上限",
+          "label": "断片化平均サイズ"
+        },
+        "fragmentationTxns": {
+          "help": "サイズ上限未満で月取引数がこの値を超えたら断片化と判定します",
+          "label": "断片化取引数/月"
+        },
+        "highVelocity": {
+          "help": "月次CAGRがこの値を超えたら加速/高と判定します",
+          "label": "高速度（%/月）"
+        },
+        "mediumVelocity": {
+          "help": "月次CAGRがこの値を超えたら上昇と判定します",
+          "label": "中速度（%/月）"
+        },
+        "zombieMonths": {
+          "help": "月次仕入先合計が同一で続く最小月数",
+          "label": "ゾンビ月数"
+        }
+      },
+      "fragmentation": {
+        "label": "断片化",
+        "note": "月取引数 / 平均取引サイズ"
+      },
+      "velocityEngine": {
+        "label": "速度エンジン",
+        "note": "（期末/期首）^(1/期間数) − 1、最小基準{minBase}",
+        "value": "月次CAGR"
+      },
+      "velocityThresholds": {
+        "label": "速度しきい値",
+        "note": "上昇/高の月次CAGR境界"
+      },
+      "zombieWindow": {
+        "label": "ゾンビ期間",
+        "note": "同一の定期仕入先合計（偏差1%未満）"
+      }
+    },
+    "csv": {
+      "changePct": "変動率",
+      "current": "当期",
+      "prior": "前期",
+      "projected": "予測",
+      "twoBack": "前々回",
+      "velocityPctMo": "速度%/月"
+    },
+    "details": {
+      "anomaly": "{month}に平均から{sigma}σ",
+      "cliff": "差{gap}%、比率{ratio}倍",
+      "cliffItem": "発注・受注の速度",
+      "concentration": "支出の{share}%、{trend}",
+      "fragmentation": "月{txns}件、平均{avg}",
+      "frog": "{months}か月間+{rate}%/月",
+      "seasonal": "平均月比{deviation}%",
+      "zombie": "{months}か月間{amount}/月で不変"
+    },
+    "detectors": {
+      "anomaly": {
+        "desc": "統計的外れ値（2.5σ超）",
+        "label": "異常",
+        "sub": "重大"
+      },
+      "cliff": {
+        "desc": "発注・受注の速度差",
+        "label": "コミットメントクリフ",
+        "sub": "発注速度"
+      },
+      "concentration": {
+        "desc": "カテゴリ依存",
+        "label": "集中",
+        "sub": "上位5社シェア"
+      },
+      "fragmentation": {
+        "desc": "多数の小口購買",
+        "label": "断片化",
+        "sub": "断片化支出"
+      },
+      "frog": {
+        "desc": "静かなコスト増",
+        "label": "ゆでガエル",
+        "sub": "年間影響"
+      },
+      "seasonal": {
+        "desc": "非定型支出",
+        "label": "季節性",
+        "sub": "非定型月"
+      },
+      "shadow": {
+        "desc": "拡散するソフトウェア導入",
+        "label": "シャドーIT",
+        "sub": "利用不可"
+      },
+      "zombie": {
+        "desc": "不変の定期コスト",
+        "label": "ゾンビ",
+        "sub": "年間コスト"
+      }
+    },
+    "deviationNote": "平均からの月次乖離",
+    "empty": {
+      "forDetector": "（この検知器）",
+      "noAlerts": "アラートは検出されませんでした",
+      "noAnomalies": "異常は検出されませんでした",
+      "noSeasonal": "有意な季節パターンは検出されませんでした"
+    },
+    "health": {
+      "atRisk": "要注意",
+      "caption": "支出健全性",
+      "elevated": "上昇",
+      "healthy": "健全",
+      "watch": "要観察"
+    },
+    "kpi": {
+      "alerts": "アラート",
+      "avgVelocity": "平均速度",
+      "savingsPotential": "削減見込み額",
+      "totalSpend": "支出合計"
+    },
+    "newBadge": "新規",
+    "panels": {
+      "accountVelocity": "費用勘定速度",
+      "alertDetails": "アラート詳細",
+      "dataSources": "データソース",
+      "deepAnalysis": "勘定詳細分析",
+      "deepAnalysisHint": "{count}件の勘定 · 行をクリックで取引表示",
+      "detectorSummary": "検知器サマリー",
+      "highestVelocity": "最高速度の勘定",
+      "insights": "洞察",
+      "modelThresholds": "モデルとしきい値",
+      "monthlySpendVelocity": "月次支出速度",
+      "monthlySpendVelocityHint": "当月と前年同月の比較",
+      "monthlySummary": "月次サマリー",
+      "monthlyTrend": "月次トレンド",
+      "seasonalPatterns": "季節パターン",
+      "top10BySpend": "支出上位10",
+      "velocityVsAccel": "速度と加速度",
+      "velocityVsAccelHint": "速度＝月次支出変動 · 加速度＝速度の変化 · サイズ＝支出",
+      "vendorDrillDown": "仕入先ドリルダウン"
+    },
+    "period": {
+      "basedOnTrend": "トレンド基準",
+      "current": "当期",
+      "prior": "前期",
+      "projectedNext": "次期予測",
+      "twoBack": "前々期間"
+    },
+    "row": {
+      "txns": "{txns}件",
+      "txnsMonths": "{txns}件 · {months}か月"
+    },
+    "scatter": {
+      "tooltipAccel": "加速度：{pct}%",
+      "tooltipSpend": "支出：{amount}",
+      "tooltipVelocity": "速度：{pct}%",
+      "xAxis": "速度%",
+      "yAxis": "加速度"
+    },
+    "searchPlaceholder": "勘定を検索…",
+    "severity": {
+      "critical": "重大",
+      "high": "高",
+      "low": "低",
+      "medium": "中"
+    },
+    "shadowIt": {
+      "body": " はopenbooksで利用できません：{reason}",
+      "title": "シャドーIT"
+    },
+    "sort": {
+      "accel": "並べ替え：加速度",
+      "changePct": "並べ替え：変動率",
+      "spend": "並べ替え：支出",
+      "velocity": "並べ替え：速度"
+    },
+    "sources": {
+      "intro": "支出 ＝ 4つの支出書類種別からの費用/売上原価の仕訳明細：",
+      "li1Bold1": "仕入請求書、経費精算書、小切手",
+      "li1Bold2": "仕入先クレジット",
+      "li1Mid": " は支出に加算、",
+      "li1Tail": " は相殺。",
+      "li2Bold": "コミットメントクリフ",
+      "li2Tail": " 発注と受注の月次速度を比較します。",
+      "li3Bold": "売上正規化",
+      "li3Tail": " 販管費率には総勘定元帳の収益を使用（{ratio}%）。",
+      "li4Bold": "シャドーIT",
+      "li4Tail": " — 利用不可：{reason}",
+      "outro": "ドリルダウンではクリックでその勘定・仕入先の当期全取引を取得します（検索可能、月次トレンドと内訳付き）。各行は本来モジュールの実レコードにリンクします。"
+    },
+    "sub": {
+      "acceleratingCount": "加速中{count}件",
+      "accountsCount": "{count}件の勘定",
+      "anomaliesCount": "異常{count}件",
+      "creepAndZombies": "忍び寄る増加＋ゾンビ由来",
+      "noIssues": "問題なし"
+    },
+    "table": {
+      "accel": "加速度",
+      "account": "勘定",
+      "billsExp": "請求/経費",
+      "change": "変動",
+      "current": "当期",
+      "details": "詳細",
+      "detector": "検知器",
+      "impact": "影響",
+      "item": "品目",
+      "month": "月",
+      "prior": "前期",
+      "priorYear": "前年",
+      "projected": "予測",
+      "severity": "深刻度",
+      "sparkline": "スパークライン",
+      "spend": "支出",
+      "totalSpend": "支出合計",
+      "trend": "トレンド",
+      "txns": "取引",
+      "velocity": "速度",
+      "vendor": "仕入先",
+      "vendors": "仕入先",
+      "yoyChange": "前年比変動"
+    },
+    "tabs": {
+      "accounts": "勘定",
+      "config": "設定",
+      "detectors": "検知器",
+      "overview": "概要",
+      "trends": "トレンド",
+      "velocity": "速度"
+    },
+    "trend": {
+      "accelerating": "加速中",
+      "declining": "減少中",
+      "high": "高",
+      "new": "新規",
+      "rising": "上昇中",
+      "stable": "安定"
+    },
+    "unit": {
+      "months": "か月"
     }
   },
   "sentinel": {
@@ -928,11 +1953,43 @@
     "table": {
       "currency": "通貨",
       "members": "ドキュメント",
-      "span": "期間"
+      "span": "期間",
+      "action": "アクション",
+      "amount": "金額",
+      "change": "変動",
+      "confidence": "信頼度",
+      "count": "件数",
+      "date": "日付",
+      "daysApart": "日数差",
+      "deviation": "乖離",
+      "digit": "桁",
+      "digits": "桁",
+      "doc1": "書類1",
+      "doc2": "書類2",
+      "document": "書類",
+      "employee": "従業員",
+      "flag": "フラグ",
+      "flagTypes": "フラグ種別",
+      "flaggedAmount": "フラグ金額",
+      "flags": "フラグ",
+      "match": "一致",
+      "party": "取引先",
+      "partyAvg": "取引先平均",
+      "reason": "理由",
+      "risk": "リスク",
+      "riskScore": "リスクスコア",
+      "secondLargest": "2番目の金額",
+      "table": "表",
+      "vendor": "仕入先",
+      "when": "時期",
+      "z": "Z"
     },
     "duplicates": {
       "sharedReference": "共通の参照 {reference}",
-      "spanDays": "{days}日"
+      "spanDays": "{days}日",
+      "ruleNote": "同一仕入先＋種別＋通貨＋金額＋参照、{min}以上",
+      "ruleValue": "{days}日以内",
+      "sameMemo": "同一メモ"
     },
     "benford": {
       "conforming": "適合",
@@ -983,7 +2040,221 @@
         "area": "ベンフォード乖離",
         "message": "第一位の分布が大きく乖離しています"
       }
-    }
+    },
+    "analysis": {
+      "calendar": "カレンダー",
+      "rsfFull": "相対規模係数",
+      "rsfNote": " ＝ 金額 ÷ 同一通貨でのその仕入先の履歴2番目の金額（36か月基準、1回のウィンドウ関数パスで計算）。RSF ≥ 10は、その仕入先にとって桁違いの規模の取引を意味します — 典型的な誤り・不正のシグナルです。",
+      "zscoreNote": " は、取引がその仕入先自身の平均（同一通貨）から標準偏差何個分離れているかを示します（仕入先別・通貨別に36か月基準、1回の集計パス）。|z| ≥ 3は、全体しきい値では見逃す仕入先固有の外れ値を検出します。",
+      "zscoreWord": "Zスコア"
+    },
+    "auditNote": "ネイティブ監査ログ。この元帳の記録の多くは一括移行されたため、変更履歴は稼働開始日から始まります — openbooksでの作業に伴い証跡は蓄積されます。",
+    "banner": {
+      "ledger": "完全な元帳",
+      "pre": "お客様の ",
+      "stats": "{docs}件の書類 · {amount} · {days}日間 · {seconds}秒で分析 — 上限も日付範囲制限もありません。"
+    },
+    "chart": {
+      "expected": "期待値",
+      "expectedBenford": "期待値（ベンフォード）",
+      "observed": "観測値"
+    },
+    "config": {
+      "benfordConformity": "ベンフォード適合度",
+      "benfordNote": "1Dバンド 0.006/0.012/0.015 · 2Dバンド 0.0012/0.0022/0.0033",
+      "duplicatesNote": "期間内の同一仕入先・種別・通貨・金額・参照。クレジット除外。1グループ1件。",
+      "fields": {
+        "duplicateDays": {
+          "help": "この日数以内の同一仕入先・種別・金額はペアと判定します",
+          "label": "重複ウィンドウ（日数）"
+        },
+        "duplicateMinAmount": {
+          "help": "この金額未満のペアは無視します",
+          "label": "重複下限（$）"
+        },
+        "sequentialMinCount": {
+          "help": "欠番なしの請求書番号の連続にはこの件数以上の書類が必要です",
+          "label": "連続最小件数"
+        },
+        "sequentialMinDays": {
+          "help": "これより短い期間の連続はフラグではなく一括入力とみなします",
+          "label": "連続期間（日数）"
+        }
+      },
+      "rsfNote": "金額 ÷ 仕入先の履歴2番目の金額（36か月基準、下限{floor}）",
+      "sequentialNote": "欠番なしの仕入先参照番号。30日以上の連続は高リスク。",
+      "sequentialRuns": "連続検出",
+      "trapNote": "きりの良い金額の直前（.00または.99セント終わり）",
+      "weekendNote": "会計書類日付（移行データは取込タイムスタンプを持つため、システム作成時刻はここでは意味を持ちません）",
+      "zscoreNote": "仕入先別の平均/σ基準、5件以上の取引かつσ > {sigma}"
+    },
+    "coverage": {
+      "benfordBold": "ベンフォード",
+      "benfordItem": " — 先頭桁が自然な支出パターンに従わない金額を検出します。",
+      "duplicatesItem": " — 仕入先・種別・通貨・金額・参照で取引をグループ化し、重複支払を検出します（1グループ1件）。",
+      "intro": "すべての検査はお客様の ",
+      "introTail": " 全体で実行 — 30日ウィンドウなし、仕入先別の近道なし、サンプリングなし。除外はありません：",
+      "ledger": "完全な元帳",
+      "outro": "当期：{docs}件の書類（{amount}）、{days}日間、{seconds}秒で分析。明細表は検査ごとの上位一致を表示しますが、件数と分布は常に全体を対象とします。",
+      "rszBold": "相対規模とZスコア",
+      "rszItem": " — 各取引をその仕入先の履歴と比較し、外れ値を検出します。",
+      "sequentialItem": " — 仕入先参照番号の不自然に途切れない連続を検出します。"
+    },
+    "csv": {
+      "kind": "種別"
+    },
+    "detectors": {
+      "auditEvents": "監査イベント",
+      "duplicates": "重複",
+      "ghostVendors": "ゴースト仕入先"
+    },
+    "drill": {
+      "documentsTotal": "{count}件の書類 · {total}",
+      "firstTwoDigits": "上位二桁",
+      "leadingDigit": "第一位",
+      "noDocuments": "{digit}で始まる書類はありません。",
+      "top": "上位{count}件"
+    },
+    "empty": {
+      "noAuditEvents": "当期の高リスク監査イベントはありません",
+      "noElevatedRisk": "リスク上昇領域はありません",
+      "noGhostMatches": "仕入先・従業員の氏名・住所一致はありません",
+      "noSequential": "欠番なしの連続は検出されませんでした",
+      "nothingFlagged": "フラグなし"
+    },
+    "error": {
+      "loadFailed": "取引を読み込めませんでした。"
+    },
+    "flag": {
+      "duplicate": "重複",
+      "rsf": "RSF",
+      "sequential": "連続",
+      "trap": "99トラップ",
+      "weekend": "週末",
+      "zscore": "Zスコア"
+    },
+    "ghost": {
+      "note": " は従業員が支配する受取会社です。取引先登録全体での二段階照合：従業員名と仕入先名の照合、および支払済仕入先と従業員で共有される正規化住所（住所1行目＋郵便番号）。氏名一致75点、住所共有90点、両方で95点。",
+      "title": "ゴースト仕入先"
+    },
+    "kind": {
+      "check": "小切手",
+      "customer_credit": "得意先クレジット",
+      "expense_report": "経費",
+      "journal": "仕訳",
+      "vendor_bill": "仕入請求書",
+      "vendor_credit": "仕入先クレジット",
+      "vendor_payment": "支払"
+    },
+    "kpi": {
+      "amountsAnalyzed": "分析対象金額",
+      "anomalousPairs": "異常ペア",
+      "approvalLimitRisk": "承認限度リスク",
+      "auditEvents": "監査イベント",
+      "benford": "ベンフォード",
+      "conformity": "適合度",
+      "deletions": "削除",
+      "deviatingDigits": "乖離桁",
+      "digit1Share": "桁1シェア",
+      "duplicatePairs": "重複グループ",
+      "endsIn": "{ending}終わり",
+      "flagged": "フラグ付き",
+      "rule": "ルール",
+      "saturday": "土曜日",
+      "sensitiveChanges": "重要変更",
+      "shellSignals": "ペーパーカンパニー兆候",
+      "signal": "シグナル",
+      "sunday": "日曜日",
+      "totalValue": "合計額",
+      "trapAmounts": "トラップ金額",
+      "valueAtRisk": "リスク額",
+      "weekendDocuments": "週末日付書類"
+    },
+    "loading": "読み込み中…",
+    "no": "いいえ",
+    "panels": {
+      "allFlaggedDocs": "フラグ付き書類すべて（{total}件中上位{top}件）",
+      "anomalousPairs": "異常桁ペア",
+      "benfordFirstDigit": "ベンフォードの法則 — 第一位",
+      "benfordHint": "{amounts}件の金額 · MAD {mad} · {conformity}",
+      "completeCoverage": "完全カバレッジ",
+      "detectorSummary": "検知器サマリー",
+      "detectorThresholds": "検知器しきい値",
+      "digitDetail": "桁詳細",
+      "digitDetailHint": "桁をクリックで背後の取引を表示",
+      "duplicatesHint": "1グループ1件 — メンバーは本来モジュールで開きます",
+      "ghostMatches": "ゴースト仕入先一致（{count}）",
+      "ghostVendors": "ゴースト仕入先",
+      "highRiskAudit": "高リスク監査イベント",
+      "highestRiskFlags": "最高リスクフラグ",
+      "highestRiskHint": "全検知器横断 · 書類をクリックで開きます",
+      "observedVsExpected": "観測と期待の分布",
+      "potentialDuplicates": "重複候補グループ",
+      "rsfAnomalies": "RSF異常（{count}）",
+      "sequentialRuns": "連続請求書",
+      "spendCalendar": "支出カレンダー",
+      "spendCalendarHint": "日次支出強度 — 週末の急増と異常な集中が目立ちます",
+      "thresholdTrapDocs": "しきい値トラップ書類",
+      "topRiskAreas": "上位リスク領域",
+      "twoDigitDistribution": "上位二桁分布（10–99）",
+      "vendorRiskHint": "検知器横断のフラグ深刻度で取引先を順位付け · 行をクリックでその取引先の取引を表示",
+      "vendorRiskRollup": "仕入先リスク集計",
+      "weekendDated": "週末日付書類（金額上位200件）",
+      "zscoreAnomalies": "Zスコア異常（{count}）"
+    },
+    "risk": {
+      "caption": "整合性リスク",
+      "elevated": "上昇",
+      "high": "高リスク",
+      "low": "低リスク",
+      "moderate": "中程度"
+    },
+    "sequential": {
+      "indicatorNote1": " ある仕入先の請求書番号が数週間・数か月にわたり完全に連続している場合、あなたはその仕入先の ",
+      "indicatorNote2": " 顧客である可能性が高いです。正規の仕入先は他社への請求で番号に欠番が生じます。通貨ごとに全仕入先の参照番号を走査して途切れない連続を検出します。",
+      "indicatorTitle": "ペーパーカンパニーの兆候：",
+      "more": "他{count}件",
+      "only": "のみ",
+      "runTotal": " — 合計{total}（{first} → {last}）"
+    },
+    "sub": {
+      "allMatchingPairs": "1グループ1件",
+      "atRisk": "リスク額{amount}",
+      "bankingContactAddress": "銀行 / 連絡先 / 住所",
+      "documents": "書類",
+      "ending99": "99 / 999 / 9999終わり",
+      "everyDocument": "全書類、上限なし",
+      "expected301": "期待値30.1%",
+      "ghostsSequential": "ゴースト{ghosts}件 · 連続{sequential}件",
+      "higherRiskWeighting": "高リスク加重",
+      "inPeriod": "期間内",
+      "limitGaming": "限度回避の可能性",
+      "offExpected25": "期待値から25%超乖離",
+      "offExpected50": "期待値から50%超乖離（n≥5）",
+      "recordsRemoved": "削除レコード",
+      "seeThresholdTrap": "しきい値トラップ参照",
+      "sumPairAmounts": "書類レートでの超過分",
+      "twoD": "2D：{value}",
+      "twoDigitPairs": "上位二桁ペア"
+    },
+    "tabs": {
+      "analysis": "分析",
+      "audit": "監査証跡",
+      "benford": "ベンフォード",
+      "config": "設定",
+      "detection": "検知",
+      "overview": "概要",
+      "vendors": "仕入先"
+    },
+    "trapNote": "きりの良い金額の直前の金額（99、999、9999終わり）は、承認限度内に収めるための購買操作の可能性があります。同一申請者・仕入先からの反復トラップは確認が必要です。トラップは常に書類金額で判定します：99米ドルの書類は、換算額がしきい値から離れていても99トラップと判定されます。",
+    "vendors": {
+      "drillSub": "{flags}件のフラグ · フラグ額{amount}"
+    },
+    "weekend": {
+      "signalNote": "土/日の会計日付",
+      "signalValue": "書類日付"
+    },
+    "yes": "はい"
   },
   "charts": {
     "history": "履歴",
@@ -1019,5 +2290,218 @@
       "dec": "12月"
     },
     "monthYear": "{yy}年{month}"
+  },
+  "cashWeek": {
+    "actionBar": {
+      "bills": "仕入請求書",
+      "buildCollectionRun": "回収処理を作成",
+      "buildPayRun": "支払処理を作成",
+      "invoices": "請求書",
+      "summary": "{count}件の{kind} · {total}"
+    },
+    "breakdown": {
+      "deferredBacklog": "繰延（バックログ）",
+      "endingCash": "期末現金",
+      "inflowAr": "入金（AR）",
+      "inflowOther": "入金（その他）",
+      "netChange": "純変動額",
+      "outCategory": "出金：{name}",
+      "outflowAp": "出金（AP）",
+      "safeApCapacity": "安全支払余力",
+      "startingCash": "期首現金"
+    },
+    "category": {
+      "export": "エクスポート",
+      "exportCsvTitle": "CSVエクスポート",
+      "method": "方式",
+      "sourceItems": "取得元明細",
+      "thisWeek": "今週",
+      "totalForecast": "予測合計"
+    },
+    "coverageRatio": "カバレッジ比率",
+    "csvHeaders": {
+      "amount": "金額",
+      "date": "日付",
+      "entityDescription": "取引先/説明",
+      "type": "タイプ"
+    },
+    "drawerDescription": "純変動額 {net} · 期末残高 {ending}",
+    "empty": {
+      "inflows": "入金",
+      "noMatches": "検索条件に一致する明細はありません。",
+      "noSourceItems": "この見積の取得元明細はありません。",
+      "noneThisWeek": "今週の{side}予測はありません。",
+      "outflows": "出金"
+    },
+    "meta": {
+      "accountsIncluded": "対象口座",
+      "adjustmentPct": "調整率",
+      "amount": "金額",
+      "avgAmount": "平均金額",
+      "avgPayment": "平均支払額",
+      "bankAccounts": "銀行口座",
+      "currentBalance": "カード残高",
+      "currentWeekApplied": "今週適用分",
+      "dailyBurnRate": "日次資金消費",
+      "daysSinceLastPayment": "最終支払からの日数",
+      "detectedPaymentDay": "支払日",
+      "finalAverage": "週間平均",
+      "finalWeekly": "週間見積",
+      "frequency": "頻度",
+      "historyWeeks": "履歴週数",
+      "interval": "間隔（日数）",
+      "medianPayment": "支払中央値",
+      "memoKeywords": "メモ絞り込み",
+      "monthlyMedian": "月次中央値",
+      "monthlySpendRate": "月次支出",
+      "monthsAnalyzed": "分析月数",
+      "nextPaymentDate": "次回支払",
+      "paymentTrend": "トレンド",
+      "projectedGrowth": "予測成長率",
+      "rawAverage": "調整前平均",
+      "samples": "サンプル数",
+      "sourceTotal": "取得元合計",
+      "vendor": "仕入先",
+      "vendors": "仕入先",
+      "weeksUsed": "使用週数"
+    },
+    "methods": {
+      "average": "平均",
+      "dueDate": "期日",
+      "history": "履歴",
+      "pushed": "プッシュ"
+    },
+    "netChange": "純変動額",
+    "pagination": {
+      "showing": "{total}件中 {from}〜{to} を表示"
+    },
+    "paymentHistoryTitle": "支払履歴と信頼性",
+    "search": {
+      "customers": "得意先",
+      "sourceItems": "取得元明細を検索…",
+      "transactions": "{party}または書類番号を検索…",
+      "vendors": "仕入先"
+    },
+    "table": {
+      "amount": "金額",
+      "customer": "得意先",
+      "date": "日付",
+      "entityDescription": "取引先 / 説明",
+      "id": "ID",
+      "method": "方式",
+      "predicted": "予測値",
+      "status": "ステータス",
+      "type": "タイプ",
+      "vendor": "仕入先"
+    },
+    "tabs": {
+      "apOutflows": "AP出金",
+      "arInflows": "AR入金"
+    }
+  },
+  "categoryManager": {
+    "days": {
+      "distributed": "配分",
+      "friday": "金曜日",
+      "monday": "月曜日",
+      "saturday": "土曜日",
+      "sunday": "日曜日",
+      "thursday": "木曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日"
+    },
+    "editTitle": "編集",
+    "empty": "カテゴリはまだありません — 予測に含まれるフローはAR/AP予測のみです。",
+    "form": {
+      "addCategory": "カテゴリを追加",
+      "adjustmentPct": "調整率",
+      "amount": "金額",
+      "bankAccounts": "銀行口座",
+      "calcMethod": "計算方法",
+      "cancel": "キャンセル",
+      "cardAccounts": "クレジットカード口座",
+      "checksPayments": "小切手・支払",
+      "expectedDay": "予定日",
+      "expectedWeek": "予定週",
+      "formula": "計算式",
+      "frequency": "頻度",
+      "frequencyBiweekly": "隔週",
+      "frequencyMonthly": "毎月",
+      "frequencyWeekly": "毎週",
+      "glAccounts": "総勘定元帳勘定",
+      "historyMonths": "履歴月数",
+      "historyWeeks": "履歴週数",
+      "journals": "仕訳帳",
+      "memoKeywords": "メモキーワード",
+      "memoKeywordsHelp": "取引を絞り込むキーワード（カンマ区切り、空欄＝すべて）",
+      "memoKeywordsPlaceholder": "payroll, lease, hydro…",
+      "name": "名前",
+      "namePlaceholder": "カテゴリ名",
+      "saveCategory": "カテゴリを保存",
+      "saving": "保存中…",
+      "searchAccounts": "勘定を検索…",
+      "searchBankAccounts": "銀行口座を検索…",
+      "searchCardAccounts": "カード口座を検索…",
+      "searchVendors": "仕入先を検索…",
+      "threshold": "重要支払しきい値（$）",
+      "thresholdHelp": "0＝自動検出（支払中央値の50%）",
+      "transfers": "振替",
+      "type": "タイプ",
+      "typeInflow": "入金（収益/回収）",
+      "typeOutflow": "出金（費用/支払）",
+      "useNetAmount": "正味金額を使用する（+/−を反映）",
+      "vendors": "仕入先"
+    },
+    "formulaHelp": "変数：{vars} · 関数：{funcs}",
+    "methods": {
+      "bank_register_history": {
+        "description": "銀行口座の実際の資金移動から予測します",
+        "label": "銀行登録履歴"
+      },
+      "credit_card_cycle": {
+        "description": "クレジットカード負債と支払日までの予測増加を追跡します",
+        "label": "クレジットカードサイクル"
+      },
+      "formula_expression": {
+        "description": "予測変数を使ったExcel形式のカスタム計算式",
+        "label": "計算式"
+      },
+      "gl_history_average": {
+        "description": "総勘定元帳の記帳を指定期間で分析し、週間平均を算出します",
+        "label": "総勘定元帳履歴平均"
+      },
+      "manual_recurring": {
+        "description": "指定頻度（毎週・隔週・毎月）の固定金額",
+        "label": "手動定期"
+      },
+      "vendor_payment_history": {
+        "description": "仕入先への過去の支払を集計し、将来の支出を予測します",
+        "label": "仕入先支払履歴"
+      },
+      "vendor_recurring_average": {
+        "description": "支払頻度を自動検出し、仕入先履歴から実行レートを算出します",
+        "label": "仕入先定期（自動）"
+      }
+    },
+    "newCategory": "新規カテゴリ",
+    "panelHint": "AR/AP以外のキャッシュフロー — エンジンの7つの計算方法",
+    "panelTitle": "予測カテゴリ",
+    "picker": {
+      "noMatches": "一致なし。",
+      "selectedCount": "{count, plural, one {# 件選択中} other {# 件選択中}}"
+    },
+    "remove": "削除",
+    "toasts": {
+      "forbidden": "保存には設定権限が必要です。",
+      "saveFailed": "保存に失敗しました（{status}）。",
+      "savedRecomputing": "保存しました — 再計算中…"
+    },
+    "weeks": {
+      "1stWeek": "第1週",
+      "2ndWeek": "第2週",
+      "3rdWeek": "第3週",
+      "4thWeek": "第4週",
+      "distributed": "配分"
+    }
   }
 }
