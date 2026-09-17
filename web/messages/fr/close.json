@@ -22,7 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Statut",
     "readiness": "Préparation",
-    "action": "Action"
+    "action": "Action",
+    "lockedDetail": "{modules} verrouillé · {book}"
   },
   "modules": {
     "ar": "CC",

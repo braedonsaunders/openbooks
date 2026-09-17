@@ -22,7 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Status",
     "readiness": "Prontidão",
-    "action": "Ação"
+    "action": "Ação",
+    "lockedDetail": "{modules} bloqueado · {book}"
   },
   "modules": {
     "ar": "CR",

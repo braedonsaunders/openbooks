@@ -299,6 +299,7 @@ import { buildListDrawerHref } from '../../lib/list-params'
 import {
   CloseActionCell,
   CloseReadinessCell,
+  CloseStatusCell,
   SingleBookLabel,
 } from '../../app/(app)/close/sections'
 import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
@@ -2866,6 +2867,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   'close-readiness-cell': (props) => (
     <CloseReadinessCell readiness={Number(props.readiness ?? 0)} />
+  ),
+  /** The run badge stacked over the lock-detail line (null when unlocked). */
+  'close-status-cell': (props) => (
+    <CloseStatusCell
+      statusLabel={str(props, 'statusLabel') ?? ''}
+      statusVariant={
+        props.statusVariant === 'success' || props.statusVariant === 'warning'
+          ? props.statusVariant
+          : 'outline'
+      }
+      lockLabel={(props.lockLabel as string | null) ?? null}
+    />
   ),
   /** The action cell's conditional triple — resume link, start control, or an
    *  em-dash. The LOADER decides which applies; the component renders the

@@ -22,7 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Estado",
     "readiness": "Preparación",
-    "action": "Acción"
+    "action": "Acción",
+    "lockedDetail": "{modules} bloqueado · {book}"
   },
   "modules": {
     "ar": "CxC",

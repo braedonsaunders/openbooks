@@ -5,7 +5,6 @@ import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
-  badge,
   column,
   field,
   grid,
@@ -88,6 +87,11 @@ export interface ClosePeriodRow {
   range: string
   statusLabel: string
   statusVariant: BadgeVariant
+  /** Localized "which modules are locked · on which book" line, or null when
+   * the selected book holds no closed locks for the period. Locks can exist
+   * without any close run (autopilot/provisioner closes, API closes), so the
+   * run badge alone cannot speak for them (F-t02-005). */
+  lockLabel: string | null
   readiness: number
   entries: string
   actionHref: string | null
@@ -239,6 +243,24 @@ async function loadCloseWizard(
   }
 }
 
+/**
+ * Closed locks are the enforcement truth the run badge cannot see: a period
+ * closed outside any run (autopilot month-end, provisioner seed, API) must
+ * still name its locked modules on the list (F-t02-005). One row per
+ * (period, book, module) is unique by period_locks_scope, so the ordered
+ * aggregate is exact with no DISTINCT. Canonical CLOSE_MODULES order keeps
+ * the label stable across renders.
+ */
+function lockModulesLateral(selectedBookId: string) {
+  return sql`
+        left join lateral (
+          select string_agg(pl.module, ',' order by array_position(array['ar','ap','banking','assets','tax','gl'], pl.module)) as locked_modules
+            from period_locks pl
+           where pl.period_id = p.id and pl.org_id = p.org_id and pl.subsidiary_id is null and pl.state = 'closed'
+             and pl.book_id = ${selectedBookId || null}
+        ) l on true`
+}
+
 export async function loadClose(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<CloseData> {
@@ -288,16 +310,12 @@ export async function loadClose(
       select p.id, p.name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number,
              r.id as run_id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
              coalesce(a.entries, 0) as entries,
-             coalesce(l.closed_modules, 0) as closed_modules
+             l.locked_modules
         from accounting_periods p
         left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
           and r.book_id = ${selectedBookId || null}
         left join lateral (select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id and e.book_id = ${selectedBookId || null}) a on true
-        left join lateral (
-          select count(*) as closed_modules from period_locks pl
-           where pl.period_id = p.id and pl.org_id = p.org_id and pl.subsidiary_id is null and pl.state = 'closed'
-             and pl.book_id = ${selectedBookId || null}
-        ) l on true
+        ${lockModulesLateral(selectedBookId)}
        where p.org_id = ${orgId} and p.fiscal_year = ${fy}
          ${q ? sql`and p.name ilike ${`%${q}%`}` : sql``}
          ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}
@@ -315,6 +333,10 @@ export async function loadClose(
     ),
   ])))
   const canStartClose = can(authz, 'close.run')
+  // Every row's locks belong to the selected book; name it so the lock line
+  // answers which book is locked without a trip to the filter chips.
+  const lockBookName =
+    (books.rows as { id: string; name: string }[]).find((book) => book.id === selectedBookId)?.name ?? ''
 
   return {
     title: t('title'),
@@ -352,7 +374,11 @@ export async function loadClose(
     onList,
     onRun,
     wizard,
-    rows: (periods.rows as any[]).map((period) => ({
+    rows: (periods.rows as any[]).map((period) => {
+      const lockedModules = String(period.locked_modules ?? '')
+        .split(',')
+        .filter(Boolean)
+      return {
       id: period.id,
       name: period.name,
       range: `${period.starts_on} → ${period.ends_on}`,
@@ -364,13 +390,20 @@ export async function loadClose(
             ? 'warning'
             : 'outline'
       ) as BadgeVariant,
+      lockLabel: lockedModules.length
+        ? t('table.lockedDetail', {
+            modules: lockedModules.map((module) => t(`modules.${module}`)).join(', '),
+            book: lockBookName,
+          })
+        : null,
       readiness: period.readiness_score ?? 0,
       entries: Number(period.entries).toLocaleString(),
       actionHref: period.run_id ? `/close?run=${period.run_id}` : null,
       canStart: !period.run_id && canStartClose,
       startPeriodId: period.id,
       startDefaultBookId: selectedBookId,
-    })),
+      }
+    }),
     total: Number(count.rows[0]?.count ?? 0),
     currentPage: pageNum,
     perPage: PER_PAGE,
@@ -474,7 +507,11 @@ export function closeSpec(data: CloseData): PageSpec {
                 }),
                 column(
                   rootF('columnStatus'),
-                  badge(item('statusLabel'), { variant: item('statusVariant') }),
+                  widgetCell('close-status-cell', {
+                    statusLabel: item('statusLabel'),
+                    statusVariant: item('statusVariant'),
+                    lockLabel: item('lockLabel'),
+                  }),
                 ),
                 column(
                   rootF('columnReadiness'),

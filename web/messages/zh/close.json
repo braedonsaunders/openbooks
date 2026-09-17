@@ -22,7 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "状态",
     "readiness": "就绪度",
-    "action": "操作"
+    "action": "操作",
+    "lockedDetail": "{modules}已锁定 · {book}"
   },
   "modules": {
     "ar": "应收",
