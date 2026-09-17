@@ -231,7 +231,7 @@ export function BankFeedsClient({
                   <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) }); refresh(); }}>
                     {c.isActive ? t("connection.pause") : t("connection.resume")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "DELETE" }); refresh(); }}>{t("connection.remove")}</Button>
+                  <Button size="sm" variant="ghost" onClick={async () => { if (!confirm(t("connection.removeConfirm"))) return; await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "DELETE" }); refresh(); }}>{t("connection.remove")}</Button>
                 </div>
               </Card>
             );
