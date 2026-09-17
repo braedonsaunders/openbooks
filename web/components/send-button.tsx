@@ -65,7 +65,7 @@ export function SendButton({ recordType, recordId }: { recordType: string; recor
       open={open}
       onOpenChange={onOpenChange}
       trigger={
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => onOpenChange(true)}>
           <Send size={15} className="mr-1.5" />
           {t('send.label')}
         </Button>
