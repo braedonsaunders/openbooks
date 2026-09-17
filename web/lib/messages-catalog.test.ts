@@ -2643,7 +2643,7 @@ test('analytics copy ships translated in fr, es and de', () => {
 })
 
 test('admin namespace ships translated in zh and pt-BR', () => {
-  // i3: the admin namespace (3356 keys) was missing 1380 keys each in zh
+  // i3: the admin namespace (3357 keys) was missing 1380 keys each in zh
   // and pt-BR — setup, ai agents, features, backups, page layouts and
   // extensions rendered English inside otherwise translated screens.
   // Every leaf must exist, keep its ICU placeholders, and differ from
@@ -2766,7 +2766,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3356, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3357, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3099,8 +3099,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3356
-  const ADMIN_I2_SOURCE_HASH = '52e27d5b06a8de0dcedf9a7f73cf61dbb0e8b88f1671bcc2a4c9635ab3c611a6'
+  const ADMIN_I2_SOURCE_COUNT = 3357
+  const ADMIN_I2_SOURCE_HASH = '9a89568cbd45ff1299a6acd4d9d93fd2c346b2f3ef30fa2a078f998c7ab34387'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
