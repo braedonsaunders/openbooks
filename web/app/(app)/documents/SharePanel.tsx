@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Loader2, Plus, Trash2, User, Users } from 'lucide-react'
 import { Badge, Button, Label, Select } from '@openbooks/ui'
+import { useAppAction } from '@/lib/use-app-action'
 
 type Tier = 'viewer' | 'editor' | 'manager'
 const TIERS: Tier[] = ['viewer', 'editor', 'manager']
@@ -41,7 +43,11 @@ export function SharePanel({
   const [roles, setRoles] = useState<Principal[]>([])
   const [selected, setSelected] = useState('')
   const [tier, setTier] = useState<Tier>('viewer')
-  const [busy, setBusy] = useState(false)
+  // Grant add/remove run on the shared action path: a refusal pins beside
+  // the panel until the next action AND toasts (no dismiss), and busy always
+  // releases. The grants load below stays hand-rolled: it already pins with
+  // a retry, which is the load equivalent of this contract.
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
   const [loadError, setLoadError] = useState(false)
 
   const base = `/api/file-cabinet/${resourceType === 'folder' ? 'folders' : 'files'}/${resourceId}/grants`
@@ -84,45 +90,41 @@ export function SharePanel({
   const granted = new Set((grants ?? []).map((g) => `${g.principalType}:${g.principalId}`))
 
   async function post(principalType: string, principalId: string, access: Tier) {
-    setBusy(true)
-    try {
-      const res = await fetch(base, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ principalType, principalId, access }),
-      })
-      if (res.ok) {
-        toast.success(tt('shareUpdated'))
-        await load()
-      } else {
-        toast.error(tt('shareFailed'))
-      }
-    } finally {
-      setBusy(false)
-    }
+    return execute(
+      () =>
+        fetchAction(base, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ principalType, principalId, access }),
+        }),
+      {
+        fallbackMessage: tt('shareFailed'),
+        successMessage: tt('shareUpdated'),
+        onOk: () => {
+          void load()
+        },
+      },
+    )
   }
 
   async function addGrant() {
     if (!selected) return
     const [pType, pId] = selected.split(':')
-    await post(pType!, pId!, tier)
-    setSelected('')
-    setTier('viewer')
+    const ok = await post(pType!, pId!, tier)
+    if (ok) {
+      setSelected('')
+      setTier('viewer')
+    }
   }
 
   async function remove(g: Grant) {
-    setBusy(true)
-    try {
-      const res = await fetch(`${base}/${g.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success(tt('shareRemoved'))
-        await load()
-      } else {
-        toast.error(tt('shareFailed'))
-      }
-    } finally {
-      setBusy(false)
-    }
+    await execute(() => fetchAction(`${base}/${g.id}`, { method: 'DELETE' }), {
+      fallbackMessage: tt('shareFailed'),
+      successMessage: tt('shareRemoved'),
+      onOk: () => {
+        void load()
+      },
+    })
   }
 
   return (
@@ -137,6 +139,11 @@ export function SharePanel({
         </p>
       </div>
 
+      {/* A refused grant pins here until the next action — the toast catches
+          the eye, this survives it. No dismiss: erasing the only record of
+          why the grant failed must not be one stray click. */}
+      <ActionAlert error={refusal} fallbackMessage={tt('shareFailed')} />
+
       {/* Add grant — kept at the top so the principal dropdown always has room
           to open below it inside the drawer. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -147,7 +154,10 @@ export function SharePanel({
           sheetTitle={t('addPrincipal')}
           placeholder={t('selectPrincipal')}
           className="h-9 min-w-[12rem] flex-1"
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => {
+            clearRefusal()
+            setSelected(e.target.value)
+          }}
         >
           <option value="">{t('selectPrincipal')}</option>
           <optgroup label={t('usersGroup')}>
@@ -173,7 +183,10 @@ export function SharePanel({
           value={tier}
           disabled={busy || loadError || grants == null || !selected}
           className="h-9 w-28"
-          onChange={(e) => setTier(e.target.value as Tier)}
+          onChange={(e) => {
+            clearRefusal()
+            setTier(e.target.value as Tier)
+          }}
         >
           {TIERS.map((tr) => (
             <option key={tr} value={tr}>
@@ -224,7 +237,10 @@ export function SharePanel({
                 value={g.access}
                 disabled={busy || loadError}
                 className="h-8 w-28 shrink-0"
-                onChange={(e) => void post(g.principalType, g.principalId, e.target.value as Tier)}
+                onChange={(e) => {
+                  clearRefusal()
+                  void post(g.principalType, g.principalId, e.target.value as Tier)
+                }}
               >
                 {TIERS.map((tr) => (
                   <option key={tr} value={tr}>
