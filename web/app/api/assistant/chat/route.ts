@@ -6,7 +6,10 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
-import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
+import { NO_ANSWER_MESSAGE, runAgentTurn, type AgentTurnResult } from "../../../../lib/assistant/agent";
+import { assembleStoreBranch, streamOwnedChatTurn } from "../../../../lib/assistant/owned-chat-turn";
+import { createDbOwnedRunStore } from "../../../../lib/assistant/owned-runs-db";
+import type { OwnedRunOutcome } from "../../../../lib/assistant/owned-runs";
 import { buildChatTurn } from "../../../../lib/assistant/registry";
 import { ASSISTANT_TOOLS } from "../../../../lib/assistant/registry";
 import { APPLICATION_TOOLS } from "../../../../lib/application/tool-catalog";
@@ -156,6 +159,10 @@ export async function POST(req: Request): Promise<Response> {
   // simply has none yet.
   const storedSummary = await readConversationSummary(authz, conversationId);
   let userPersisted = false;
+  // Set when the owned run row exists: the catch below must not duplicate a
+  // failure the row already carries. Declared outside try: catch cannot see
+  // block-scoped try bindings.
+  let runRowId: string | null = null;
   try {
     // Persist first so a dropped connection cannot lose a turn that actually started.
     await appendMessage(authz, { conversationId, role: "user", content: prompt });
@@ -229,56 +236,71 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    const res = runAgentTurn(aiConfig, {
-      messages: modelMessages,
-      system,
-      tools,
-      activeTools: turn.activeTools,
-      maxSteps,
-      abortSignal: req.signal,
-      onComplete: async ({ parts, aborted, finishReason, usage }) => {
-        const text = parts
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join("\n")
-          .trim();
-        const fallback = aborted
-          ? "Response stopped."
-          : finishReason === "error"
-            ? TURN_FAILURE_MESSAGE
-            : NO_ANSWER_MESSAGE;
-        const content = text || fallback;
-        const persistedParts = parts.length
-          ? parts
-          : content
-            ? ([{ type: "text", text: content }] as UIMessage["parts"])
-            : [];
-        await appendMessage(authz, {
-          conversationId: conversationId!,
-          role: "assistant",
-          content,
-          data: {
-            v: 1,
-            kind: "agent-turn",
-            status: aborted ? "stopped" : finishReason === "error" ? "failed" : "complete",
-            finishReason,
-            aborted,
-            usage,
-            parts: persistedParts,
+    // Server-owned run: the turn executes under a run-owned signal and its
+    // parts persist to the run row as they stream. A dropped client
+    // connection only ends the client's branch below — never the run.
+    const store = createDbOwnedRunStore(authz);
+    let resolveCompletion!: (result: AgentTurnResult & { content: string }) => void;
+    const completion = new Promise<AgentTurnResult & { content: string }>((resolve) => {
+      resolveCompletion = resolve;
+    });
+    const ownedTurn = await streamOwnedChatTurn({
+      store,
+      conversationId: conversationId!,
+      userText: prompt,
+      onRunStarted: (runId) => {
+        runRowId = runId;
+      },
+      startTurn: async ({ signal, onChunk, onStreamReady }): Promise<OwnedRunOutcome> => {
+        const res = runAgentTurn(aiConfig, {
+          messages: modelMessages,
+          system,
+          tools,
+          activeTools: turn.activeTools,
+          maxSteps,
+          abortSignal: signal,
+          onComplete: async ({ parts, aborted, finishReason, usage }) => {
+            const text = parts
+              .filter((p): p is { type: "text"; text: string } => p.type === "text")
+              .map((p) => p.text)
+              .join("\n")
+              .trim();
+            const fallback = aborted
+              ? "Response stopped."
+              : finishReason === "error"
+                ? TURN_FAILURE_MESSAGE
+                : NO_ANSWER_MESSAGE;
+            resolveCompletion({ parts, aborted, finishReason, usage, content: text || fallback });
           },
         });
+        if (!res.body) throw new Error("assistant turn produced no stream");
+        const [toClient, toStore] = res.body.tee();
+        // Surface the (possibly new) conversation id to the client, plus the
+        // run id the Stop button targets explicitly.
+        const headers = new Headers(res.headers);
+        headers.set("x-conversation-id", conversationId);
+        if (runRowId) headers.set("x-run-id", runRowId);
+        onStreamReady(toClient, { status: res.status, headers });
+        const assembly = assembleStoreBranch(toStore, onChunk);
+        const completed = await completion;
+        await assembly;
+        const persistedParts = completed.parts.length
+          ? completed.parts
+          : completed.content
+            ? ([{ type: "text", text: completed.content }] as UIMessage["parts"])
+            : [];
         // Fire-and-forget AFTER the stream closes: the answer finishes for
         // the user the instant the last text chunk flushes — the composer
         // never waits for the title round-trip (bounded tokens + hard
         // timeout inside scheduleAutoTitle). The client's end-of-turn
         // refresh, plus one delayed refresh, picks the title up. Scheduled
         // BEFORE the summary block below, whose early return must not skip it.
-        if (!aborted && finishReason !== "error") {
+        if (!completed.aborted && completed.finishReason !== "error") {
           scheduleAutoTitle({
             authz,
             conversationId: conversationId!,
             prompt,
-            assistantContent: content,
+            assistantContent: completed.content,
             model: getModel(aiConfig, "fast"),
           });
         }
@@ -286,51 +308,70 @@ export async function POST(req: Request): Promise<Response> {
         // a completed turn for memory.
         try {
           const turns = await countConversationAssistantTurns(authz, conversationId!);
-          if (!shouldRefreshSummary(turns, storedSummary)) return;
-          try {
-            const model = getModel(aiConfig, "fast");
-            if (!model) return;
-            const transcript = [
-              ...history.map((message) => `${message.role}: ${message.content}`),
-              `user: ${prompt}`,
-              `assistant: ${content}`,
-            ]
-              .join("\n")
-              .slice(-12_000);
-            const generated = await generateText({
-              model,
-              system: "You summarise accounting-assistant conversations for continuity.",
-              prompt: buildSummaryPrompt(transcript, storedSummary),
-              temperature: 0.2,
-            });
-            const parsed = parseSummaryModelOutput(generated.text);
-            const turnPins = foldPartsIntoPins(
-              windowPins,
-              persistedParts as unknown as HistoryPart[],
-            );
-            await writeConversationSummary(authz, conversationId!, {
-              text: parsed.text || content.slice(0, 1_000),
-              entities: mergeResolvedEntities(storedSummary?.entities ?? [], [
-                ...parsed.entities,
-                ...collectPinnedEntities(turnPins),
-              ]),
-              turnsCovered: turns,
-            });
-          } catch (summaryError) {
-            console.warn("[assistant/chat] summary refresh failed", summaryError);
+          if (shouldRefreshSummary(turns, storedSummary)) {
+            try {
+              const model = getModel(aiConfig, "fast");
+              if (model) {
+                const transcript = [
+                  ...history.map((message) => `${message.role}: ${message.content}`),
+                  `user: ${prompt}`,
+                  `assistant: ${completed.content}`,
+                ]
+                  .join("\n")
+                  .slice(-12_000);
+                const generated = await generateText({
+                  model,
+                  system: "You summarise accounting-assistant conversations for continuity.",
+                  prompt: buildSummaryPrompt(transcript, storedSummary),
+                  temperature: 0.2,
+                });
+                const parsed = parseSummaryModelOutput(generated.text);
+                const turnPins = foldPartsIntoPins(
+                  windowPins,
+                  persistedParts as unknown as HistoryPart[],
+                );
+                await writeConversationSummary(authz, conversationId!, {
+                  text: parsed.text || completed.content.slice(0, 1_000),
+                  entities: mergeResolvedEntities(storedSummary?.entities ?? [], [
+                    ...parsed.entities,
+                    ...collectPinnedEntities(turnPins),
+                  ]),
+                  turnsCovered: turns,
+                });
+              }
+            } catch (summaryError) {
+              console.warn("[assistant/chat] summary refresh failed", summaryError);
+            }
           }
         } catch (countError) {
           console.warn("[assistant/chat] summary turn count failed", countError);
         }
+        return {
+          status: completed.aborted
+            ? "stopped"
+            : completed.finishReason === "error"
+              ? "failed"
+              : "complete",
+          parts: persistedParts,
+          content: completed.content,
+          usage: completed.usage,
+          finishReason: completed.finishReason,
+        };
       },
     });
-
-    // Surface the (possibly new) conversation id to the client.
-    const headers = new Headers(res.headers);
-    headers.set("x-conversation-id", conversationId);
-    return new Response(res.body, { status: res.status, headers });
+    // The client branch is the only thing tied to this request: when the
+    // client goes away, free the tee buffer. The run continues via its row.
+    req.signal.addEventListener("abort", () => {
+      ownedTurn.response.body?.cancel().catch(() => {});
+    });
+    // Completion persistence (finishRun) floats past the response: it is
+    // already fail-safe inside the run tracker; log here, never throw.
+    ownedTurn.done.catch((doneError: unknown) => console.error("[assistant/chat] owned run failed", doneError));
+    return ownedTurn.response;
   } catch (err) {
-    if (userPersisted) {
+    // A created run row already carries its own terminal state — only persist
+    // a failure message when the turn never started one.
+    if (userPersisted && !runRowId) {
       try {
         await appendMessage(authz, {
           conversationId,
