@@ -27,10 +27,12 @@ export function RouteStateView({
    */
   state?: 'error' | 'not-found'
 }) {
+  // One heading + one message: the PageHeader owns the copy; the body keeps
+  // icon + recovery action so the boundary never reads twice (F-t05-005).
   return (
     <ListPageLayout header={<PageHeader title={title} description={description} />}>
       <div data-route-state={state}>
-        <EmptyState icon={icon} title={title} description={description} action={action} />
+        <EmptyState icon={icon} action={action} />
         {footer ? (
           <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">{footer}</p>
         ) : null}
@@ -56,7 +58,7 @@ export function RouteStateStandalone({
       <PageHeader title={title} description={description} className="mb-8" />
       <div className="flex flex-1 items-center justify-center">
         <div className="w-full max-w-lg">
-          <EmptyState icon={icon} title={title} description={description} action={action} />
+          <EmptyState icon={icon} action={action} />
         </div>
       </div>
     </div>
