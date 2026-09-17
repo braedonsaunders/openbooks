@@ -2,14 +2,12 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
 import {
   dashboardFinancialMetricsQuery,
   type DashboardFinancialMetricsRow,
 } from '@openbooks/engine/src/dashboard-reporting.ts'
 import { type Authz, can } from '@/lib/authz'
-import { approvalWorklistForAuthz } from '@/lib/application/approvals'
-import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
+import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { openItems } from '@/lib/cash/open-items'
 import {
@@ -48,7 +46,7 @@ export type DashboardMetrics = {
     lineCount: number
     totalDebits: string
   }>
-  /** Org-wide pending approval gates (flows engine). */
+  /** Top-5 of the unified approval worklist (gates + documents + pay runs). */
   pendingApprovalList: Array<{
     id: string
     targetKind: string
@@ -58,9 +56,8 @@ export type DashboardMetrics = {
     createdAt: string
   }>
   /**
-   * Approval gates the current user can actually decide — direct assignee,
-   * role holder, or delegated-to-them — from worklistGates(), the same query
-   * that backs the /approvals "mine" tab.
+   * Top-5 of the caller's actionable unified worklist — the same reader as
+   * the tile and the /approvals tabs, so all three tie by construction.
    */
   myApprovalList: Array<{
     id: string
@@ -99,7 +96,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   // a caller scoped to some subsidiaries tiles exactly what the hubs show
   // them, never the org-wide total.
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
-  const [totals, financials, arItems, apItems, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const [totals, financials, arItems, apItems, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -137,19 +134,6 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
        order by e.created_at desc, e.entry_number desc
     `),
     db.execute(sql`
-      select g.id, g.title, g.subject_kind, g.subject_id, g.created_at,
-             d.kind as doc_kind, d.total
-        from flow_gates g
-        left join documents d on d.id = g.subject_id and d.org_id = g.org_id
-       where g.org_id = ${orgId} and g.status = 'pending'
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by g.created_at desc
-       limit 5
-    `),
-    // "My approvals" only: subsidiary-scoped like the decide path, so the
-    // widget never lists financial details from other legal entities.
-    worklistGates(orgId, userId, undefined, authz.allowedSubsidiaryIds),
-    db.execute(sql`
       select id, kind, document_number, document_date, total, status
         from documents
        where org_id = ${orgId} and status = 'draft' and created_by = ${userId}
@@ -184,6 +168,44 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   }
   const arTile = sideTile(arItems)
   const apTile = sideTile(apItems)
+  const unionRequestedAt = (item: ApprovalWorklistItem): string => {
+    const raw =
+      item.kind === 'flow_gate' ? item.createdAt : (item.submittedAt ?? item.createdAt)
+    return raw instanceof Date ? raw.toISOString() : raw
+  }
+  const unionTop5 = [...unifiedApprovals]
+    .sort((a, b) => unionRequestedAt(a).localeCompare(unionRequestedAt(b)))
+    .slice(0, 5)
+    .map((item) => {
+      if (item.kind === 'document') {
+        return {
+          id: item.id,
+          targetKind: item.docKind,
+          targetId: item.id,
+          amount: item.total,
+          title: item.documentNumber,
+          createdAt: unionRequestedAt(item),
+        }
+      }
+      if (item.kind === 'pay_run') {
+        return {
+          id: item.id,
+          targetKind: 'pay_run',
+          targetId: item.id,
+          amount: item.totalAmount,
+          title: item.runNumber,
+          createdAt: unionRequestedAt(item),
+        }
+      }
+      return {
+        id: item.id,
+        targetKind: item.document?.kind ?? item.subjectKind,
+        targetId: item.subjectId,
+        amount: item.document?.total ?? null,
+        title: item.title,
+        createdAt: unionRequestedAt(item),
+      }
+    })
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {
     baseCurrency: financial.base_currency,
@@ -209,23 +231,10 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
       lineCount: Number(r.line_count),
       totalDebits: r.total_debits,
     })),
-    pendingApprovalList: (((pendingApprovalList)).rows).map((r: any) => ({
-      id: r.id,
-      targetKind: r.doc_kind ?? r.subject_kind,
-      targetId: r.subject_id,
-      amount: r.total ?? null,
-      title: r.title,
-      createdAt:
-        r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-    })),
-    myApprovalList: myGates.slice(0, 5).map((g) => ({
-      id: g.id,
-      targetKind: g.document?.kind ?? g.subjectKind,
-      targetId: g.subjectId,
-      amount: g.document?.total ?? null,
-      title: g.title,
-      createdAt: g.createdAt instanceof Date ? g.createdAt.toISOString() : String(g.createdAt),
-    })),
+    // Both widgets list the same unified worklist the tile counts (F-t01-007):
+    // top-5 oldest first, gates + gateless documents + pay runs.
+    pendingApprovalList: unionTop5.map((r) => ({ ...r })),
+    myApprovalList: unionTop5.map((r) => ({ ...r })),
     draftDocuments: (((draftDocuments)).rows).map((r: any) => ({
       id: r.id,
       kind: r.kind,

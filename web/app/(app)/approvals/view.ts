@@ -4,7 +4,11 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { worklistGates, type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
+import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
+import {
+  approvalWorklistForAuthz,
+  type ApprovalWorklistItem,
+} from '../../../lib/application/approvals'
 import {
   badge,
   column,
@@ -137,13 +141,20 @@ export async function loadApprovals(
   const kindLabel = (kind: string) =>
     KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
 
-  // ---- My approvals (always loaded: the tab label carries the count) -------
-  // Subsidiary-scoped like the decide path: a gate assignment is not a grant
-  // to every legal entity.
-  const gates = await worklistGates(orgId, user.id, undefined, authz.allowedSubsidiaryIds)
+  // ---- My + All approvals: the unified worklist (F-t01-007) -----------------
+  // The dashboard tile counts approvalWorklistForAuthz (Flows gates +
+  // gateless document approvals + pending pay runs); the center reads the
+  // same reader so same-labeled figures tie by construction. Same doorway
+  // as the tile and get_vitals: a caller who cannot approve anything sees
+  // no rows rather than a forbidden error.
+  const mayApprove =
+    can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve')
+  const unified: ApprovalWorklistItem[] = mayApprove ? await approvalWorklistForAuthz(authz) : []
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
-  const flowIds = [...new Set(gates.map((g) => g.flowId))]
+  const flowIds = [
+    ...new Set(unified.flatMap((i) => (i.kind === 'flow_gate' ? [i.flowId] : []))),
+  ]
   const flowNames = new Map<string, string>()
   if (flowIds.length > 0) {
     const rows = await db
@@ -151,6 +162,22 @@ export async function loadApprovals(
       .from(schema.flows)
       .where(inArray(schema.flows.id, flowIds))
     for (const r of rows) flowNames.set(r.id, r.name)
+  }
+
+  // Display names for gate assignees (the union carries ids/roles only).
+  const assigneeIds = [
+    ...new Set(
+      unified.flatMap((i) =>
+        i.kind === 'flow_gate' && i.assigneeUserId != null ? [i.assigneeUserId] : [],
+      ),
+    ),
+  ]
+  const assigneeNames = new Map<string, string>()
+  if (assigneeIds.length > 0) {
+    const rows = await db.execute<Record<string, unknown>>(sql`
+      select id, name from users where org_id = ${orgId} and id = any(${assigneeIds}::uuid[])
+    `)
+    for (const r of rows.rows) assigneeNames.set(String(r.id), String(r.name))
   }
 
   const gateToRow = (g: WorklistGate, assignee: string | null): ApprovalRow => {
@@ -174,59 +201,70 @@ export async function loadApprovals(
     }
   }
 
-  const mineRows: ApprovalRow[] = gates
-    .map((g) => gateToRow(g, null))
+  // Document rows link to their record drawer, where the module surface
+  // decides gateless approvals; pay-run rows link to the run. Only flow
+  // gates carry bulk/delegate actions (GateActions stays gate-scoped).
+  const docToRow = (d: Extract<ApprovalWorklistItem, { kind: 'document' }>): ApprovalRow => ({
+    key: `doc:${d.id}`,
+    gateId: null,
+    documentNumber: d.documentNumber,
+    kind: d.docKind,
+    kindLabel: kindLabel(d.docKind),
+    href: approvalRecordHref(d.docKind, d.id),
+    party: d.partyName,
+    amount: formatMoney(d.total),
+    approvalTitle: null,
+    engineName: '',
+    requestedAt: iso(d.submittedAt ?? d.createdAt),
+    assignee: null,
+    canDelegate: false,
+    quorumAll: false,
+    signatureRequired: false,
+  })
+
+  const payToRow = (p: Extract<ApprovalWorklistItem, { kind: 'pay_run' }>): ApprovalRow => ({
+    key: `payrun:${p.id}`,
+    gateId: null,
+    documentNumber: p.runNumber,
+    kind: 'pay_run',
+    kindLabel: kindLabel('pay_run'),
+    href: approvalRecordHref('pay_run', p.id),
+    party: null,
+    amount: formatMoney(p.totalAmount),
+    approvalTitle: p.purpose || null,
+    engineName: '',
+    requestedAt: iso(p.submittedAt ?? p.createdAt),
+    assignee: null,
+    canDelegate: false,
+    quorumAll: false,
+    signatureRequired: false,
+  })
+
+  const unionToRow = (item: ApprovalWorklistItem, assignee: string | null): ApprovalRow => {
+    if (item.kind === 'document') return docToRow(item)
+    if (item.kind === 'pay_run') return payToRow(item)
+    return gateToRow(item, assignee)
+  }
+
+  const mineRows: ApprovalRow[] = unified
+    .map((item) => unionToRow(item, null))
     .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
   const mineCount = mineRows.length
 
-  // ---- All approvals (org-wide; only queried when the tab is open) ---------
+  // ---- All approvals (same union reader as mine + tile) --------------------
+  // The tab stays canSeeAll-gated, but its rows are the caller's actionable
+  // union — identical to the tile count by construction.
   let allRows: ApprovalRow[] = []
   if (tab === 'all' && canSeeAll) {
-    const gatesRes = await db.execute<Record<string, unknown>>(sql`
-      select g.id, g.flow_id as "flowId", g.title, g.quorum, g.created_at as "createdAt",
-             g.signature_required as "signatureRequired",
-             g.subject_kind as "subjectKind", g.subject_id as "subjectId",
-             g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
-             u.name as "assigneeName", f.name as "flowName",
-             d.document_number as "documentNumber", d.kind as "docKind", d.total,
-             p.display_name as "partyName", cp.name as "closePeriodName"
-        from flow_gates g
-        join flows f on f.id = g.flow_id and f.org_id = g.org_id
-        left join users u on u.id = g.assignee_user_id
-        left join documents d on d.id = g.subject_id and d.org_id = g.org_id
-        left join parties p on p.id = d.party_id and p.org_id = d.org_id
-        left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = 'close_run'
-        left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
-       where g.org_id = ${orgId} and g.status = 'pending'
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by g.created_at
-    `)
-
-    allRows = gatesRes.rows
-      .map((g): ApprovalRow => {
-        const kind = String(g.docKind ?? g.subjectKind)
-        return {
-          key: `gate:${g.id}`,
-          gateId: String(g.id),
-          documentNumber: g.documentNumber
-            ? String(g.documentNumber)
-            : g.closePeriodName
-              ? String(g.closePeriodName)
-              : String(g.subjectId).slice(0, 8),
-          kind,
-          kindLabel: kindLabel(kind),
-          href: approvalRecordHref(kind, String(g.subjectId)),
-          party: (g.partyName as string | null) ?? null,
-          amount: g.total != null ? formatMoney(g.total as string) : null,
-          approvalTitle: String(g.title),
-          engineName: String(g.flowName),
-          requestedAt: iso(g.createdAt),
-          assignee: (g.assigneeName as string | null) ?? (g.assigneeRole as string | null) ?? null,
-          canDelegate: canManageFlows,
-          quorumAll: g.quorum === 'all',
-          signatureRequired: !!g.signatureRequired,
-        }
-      })
+    const assigneeOf = (item: ApprovalWorklistItem): string | null => {
+      if (item.kind !== 'flow_gate') return null
+      if (item.assigneeUserId != null) {
+        return assigneeNames.get(item.assigneeUserId) ?? item.assigneeRole ?? null
+      }
+      return item.assigneeRole ?? null
+    }
+    allRows = unified
+      .map((item) => unionToRow(item, assigneeOf(item)))
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
   }
 

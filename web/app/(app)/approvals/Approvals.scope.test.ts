@@ -9,17 +9,19 @@ const dashboard = source('../dashboard/_metrics.ts')
 const application = source('../../../lib/application/approvals.ts')
 
 test('approval worklists enforce subsidiary visibility in every consumer', () => {
-  assert.match(page, /worklistGates\(orgId, user\.id, undefined, authz\.allowedSubsidiaryIds\)/)
+  // The center mine/all tabs and the dashboard tile + widgets all read the
+  // unified worklist (F-t01-007) — never a gates-only subquery — so
+  // same-labeled figures tie by construction.
+  assert.match(page, /approvalWorklistForAuthz\(authz\)/)
+  assert.match(dashboard, /approvalWorklistForAuthz\(authz\)/)
+  assert.doesNotMatch(page, /worklistGates\(/)
+  assert.doesNotMatch(dashboard, /worklistGates\(/)
   assert.match(api, /worklistGates\(\s*authz\.user\.orgId,\s*authz\.user\.id,\s*undefined,\s*authz\.allowedSubsidiaryIds/)
-  assert.match(dashboard, /worklistGates\(orgId, userId, undefined, authz\.allowedSubsidiaryIds\)/)
   assert.match(application, /context\.authz\.allowedSubsidiaryIds/)
 
   const pageFilters = page.match(/subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/g) ?? []
-  assert.equal(pageFilters.length, 2, 'all and submitted approval queries must be scoped')
-  const dashboardFilters = dashboard.match(/subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/g) ?? []
-  assert.equal(dashboardFilters.length, 1, 'dashboard approval count query must be scoped')
-  // The dashboard list reads the unified worklist, which scopes every kind
+  assert.equal(pageFilters.length, 1, 'submitted approval query must be scoped')
+  // The dashboard lists read the unified worklist, which scopes every kind
   // (Flows gates, document approvals, pay runs) by the caller's authz.
-  assert.match(dashboard, /approvalWorklistForAuthz\(authz\)/)
   assert.match(application, /export async function approvalWorklistForAuthz\(authz: Authz\)/)
 })
