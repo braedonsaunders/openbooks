@@ -5,6 +5,7 @@ import {
   clearedDistributionFields,
   computeDocumentDrawerTotals,
   distributionFieldsOf,
+  findCurrencyMismatchedAccount,
   isPricedDrawerLine,
   lineAmountFromQtyPrice,
   readDocumentActionResult,
@@ -154,4 +155,39 @@ test('drawer action result read passes approvals through', async () => {
   const pending = new Response(JSON.stringify({ ok: true, pendingApproval: true }), { status: 202 })
   const result = await readDocumentActionResult(pending)
   assert.deepEqual(result, { ok: true, message: null, pendingApproval: true })
+})
+
+// F-t06-002: the form refuses a currency-mismatched account up front instead
+// of saving a document the ledger is certain to reject at post.
+test('currency proof names the first restricted account outside the doc currency', () => {
+  const restrictions = new Map([
+    ['bank-cad', 'CAD'],
+    ['bank-usd', 'USD'],
+    ['revenue', null],
+  ])
+  const refs = [
+    { accountId: 'revenue', label: '4000 Service Revenue' },
+    { accountId: 'bank-cad', label: '1000 Operating Cash' },
+  ]
+  assert.deepEqual(findCurrencyMismatchedAccount('USD', refs, restrictions), {
+    accountId: 'bank-cad',
+    label: '1000 Operating Cash',
+    allowed: 'CAD',
+  })
+})
+
+test('currency proof passes matching, unrestricted, unknown, and blank accounts', () => {
+  const restrictions = new Map([
+    ['bank-usd', 'USD'],
+    ['revenue', null],
+  ])
+  const refs = [
+    { accountId: 'revenue', label: '4000 Service Revenue' },
+    { accountId: 'bank-usd', label: '1010 Payroll Checking' },
+    { accountId: 'vanished', label: '0000 Gone' },
+    { accountId: '', label: '—' },
+  ]
+  // Unknown accounts stay the server's call (fail open); blanks never judge.
+  assert.equal(findCurrencyMismatchedAccount('USD', refs, restrictions), null)
+  assert.equal(findCurrencyMismatchedAccount('', refs, restrictions), null)
 })

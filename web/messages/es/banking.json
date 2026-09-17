@@ -351,6 +351,7 @@
     "transferAmount": "Importe",
     "accountColumn": "Cuenta",
     "accountPlaceholder": "Cuenta…",
+    "currencyMismatch": "{account} solo acepta movimientos en {allowed}, no en {actual}",
     "noTax": "Sin impuesto",
     "taxAmountColumn": "Impuesto",
     "selectVendorPlaceholder": "Seleccionar proveedor…",

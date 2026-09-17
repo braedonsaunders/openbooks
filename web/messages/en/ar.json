@@ -29,6 +29,7 @@
     "reference": "Customer ref #",
     "accountColumn": "Income account",
     "accountPlaceholder": "Account…",
+    "currencyMismatch": "{account} only accepts {allowed} postings, not {actual}",
     "noTax": "No tax",
     "taxAmountColumn": "Tax amt",
     "selectCustomerPlaceholder": "Select customer…",

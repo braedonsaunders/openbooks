@@ -32,6 +32,7 @@
     "reference": "供应商参考号",
     "accountColumn": "科目",
     "accountPlaceholder": "科目…",
+    "currencyMismatch": "{account}仅接受{allowed}记账，不接受{actual}",
     "noTax": "无税",
     "taxAmountColumn": "税额",
     "selectVendorPlaceholder": "选择供应商…",

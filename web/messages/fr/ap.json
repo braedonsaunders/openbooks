@@ -32,6 +32,7 @@
     "reference": "N° de réf. fournisseur",
     "accountColumn": "Compte",
     "accountPlaceholder": "Compte…",
+    "currencyMismatch": "{account} n'accepte que les écritures en {allowed}, pas en {actual}",
     "noTax": "Sans taxe",
     "taxAmountColumn": "Mt taxe",
     "selectVendorPlaceholder": "Sélectionner un fournisseur…",

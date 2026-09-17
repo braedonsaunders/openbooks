@@ -351,6 +351,7 @@
     "transferAmount": "Valor",
     "accountColumn": "Conta",
     "accountPlaceholder": "Conta…",
+    "currencyMismatch": "{account} só aceita lançamentos em {allowed}, não em {actual}",
     "noTax": "Sem imposto",
     "taxAmountColumn": "Valor imposto",
     "selectVendorPlaceholder": "Selecionar fornecedor…",

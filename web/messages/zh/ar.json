@@ -29,6 +29,7 @@
     "reference": "客户参考编号",
     "accountColumn": "收入科目",
     "accountPlaceholder": "科目……",
+    "currencyMismatch": "{account}仅接受{allowed}记账，不接受{actual}",
     "noTax": "无税",
     "taxAmountColumn": "税额",
     "selectCustomerPlaceholder": "选择客户……",

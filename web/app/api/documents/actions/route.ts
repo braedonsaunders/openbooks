@@ -13,6 +13,25 @@ import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermiss
 export const runtime = 'nodejs'
 
 /**
+ * Map an action failure to its response (F-t06-002). Typed kernel, control-
+ * account, and payroll refusals keep their message (422) — the operator can
+ * act on them. Anything else is a server defect: the detail goes to the
+ * server log and the client gets a stable code, never driver text, bind
+ * params, or internal ids. Clients render their own localized fallback for
+ * the code and pin it beside the record.
+ */
+export function toActionFailure(error: unknown): { status: 422 | 500; body: { error?: string; code?: string } } {
+  if (
+    error instanceof PostingError ||
+    error instanceof ControlAccountsIncompleteError ||
+    error instanceof PayrollError
+  ) {
+    return { status: 422, body: { error: (error as Error).message } }
+  }
+  return { status: 500, body: { code: 'internal_error' } }
+}
+
+/**
  * Submit a draft for approval, or post an approved/draft document.
  *
  * Approvals are owned by the Flows engine: submit fires the record's on_submit
@@ -196,13 +215,16 @@ export async function POST(req: Request) {
     await runPostDocumentEffects(doc.id, outcome.previousStatus)
     return NextResponse.json({ ok: true, entryId: outcome.entryId })
   } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts) are
-    // request-state failures, not server defects — as is a payroll domain
-    // refusal (a run the caller may not submit evidence for).
-    const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError || e instanceof PayrollError
-        ? 422
-        : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    // Typed refusals (kernel rules, unconfigured control accounts, payroll
+    // domain) keep their message (422) — the operator can act on them.
+    // Anything else is a server defect: never echo driver text, bind params,
+    // or internal ids to the user (F-t06-002 pasted a raw INSERT into the
+    // page). The detail stays in the server log; the client renders its own
+    // localized fallback and pins it beside the record.
+    const failure = toActionFailure(e)
+    if (failure.status === 500) {
+      console.error('documents/actions failed', { action, documentId: body.documentId, error: e })
+    }
+    return NextResponse.json(failure.body, { status: failure.status })
   }
 }

@@ -1587,6 +1587,9 @@ export type Opt = {
   last_four?: string
   network?: string
   liability_account_id?: string
+  /** Settlement currency the account accepts (null = any). Drawers read it
+   * for form-level currency validation (F-t06-002). */
+  currency_restriction?: string | null
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
   tax_components?: import('@openbooks/engine/src/tax.ts').TaxComponentConfig[]
@@ -1618,7 +1621,7 @@ export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promis
     ? sql` and a.type in (${sql.join(cfg.accountTypes.map((ty) => sql`${ty}`), sql`, `)})`
     : sql``
   const r = (await db.execute<Opt>(sql`
-    select id, number, name from accounts a
+    select id, number, name, currency_restriction from accounts a
      where a.org_id = ${resolvedOrgId} and a.is_active and not a.is_summary ${typeFilter}
      order by a.number nulls last
   `))
@@ -1702,7 +1705,7 @@ export async function cardOptions(orgId?: string): Promise<Opt[]> {
 export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute<Opt>(sql`
-    select id, number, name from accounts
+    select id, number, name, currency_restriction from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
      order by number nulls last
   `))
@@ -1718,7 +1721,7 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
 export async function cardLiabilityAccountOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute<Opt>(sql`
-    select id, number, name from accounts
+    select id, number, name, currency_restriction from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'liability_card'
      order by number nulls last
   `))
