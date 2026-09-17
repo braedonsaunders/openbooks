@@ -15,6 +15,7 @@ import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { readDocumentActionResult } from '../../../components/document-drawer'
+import { displayDocumentNumber } from '../../../lib/document-display'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -305,21 +306,33 @@ export function PaymentDrawer({
   async function save() {
     setBusy(true)
     setSaveState('saving')
-    const res = await fetch(`/api/payments/${doc.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (res.ok) {
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      router.refresh()
-    } else {
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/payments/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await readDocumentActionResult(res)
+      if (result.ok) {
+        setSaveState('saved')
+        setDirty(false)
+        setMode('view')
+        router.refresh()
+      } else {
+        const message = result.message ?? t('toasts.postFailed')
+        setSaveState('error')
+        setActionError(message)
+        toast.error(message)
+      }
+    } catch {
+      const message = t('toasts.postFailed')
       setSaveState('error')
-      toast.error((await res.json()).error ?? t('toasts.postFailed'))
+      setActionError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   function cancel() {
@@ -394,18 +407,34 @@ export function PaymentDrawer({
     })
     if (!reason) return
     setBusy(true)
-    const res = await fetch(`/api/documents/${doc.id}/void`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The void API fences on the exact revision like every other document
-      // write: without it every void answers 409 and the button is dead.
-      body: JSON.stringify({ reason, expectedUpdatedAt: doc.updated_at }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))
-    else if (data.status === 'pending_approval') toast.success(tCommon('actions.submitForApproval'))
-    else toast.success(tCommon('status.voided'))
-    setBusy(false)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The void API fences on the exact revision like every other document
+        // write: without it every void answers 409 and the button is dead.
+        body: JSON.stringify({ reason, expectedUpdatedAt: doc.updated_at }),
+      })
+      // The void API answers 202 with a status string (not pendingApproval)
+      // when the void lands as pending approval: read the code first, since
+      // the shared reader only parses the typed error shape.
+      const accepted = res.status === 202
+      const result = await readDocumentActionResult(res)
+      if (!result.ok) {
+        const message = result.message ?? t('toasts.postFailed')
+        setActionError(message)
+        toast.error(message)
+      }
+      else if (accepted) toast.success(tCommon('actions.submitForApproval'))
+      else toast.success(tCommon('status.voided'))
+    } catch {
+      const message = t('toasts.postFailed')
+      setActionError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
     router.refresh()
   }
 
@@ -513,7 +542,7 @@ export function PaymentDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))} />
-          <span className="font-mono">{doc.document_number}</span>
+          <span className="font-mono">{displayDocumentNumber(doc.document_number, doc.reference_number)}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(String(doc.status))}
           </Badge>
