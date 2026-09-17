@@ -29,9 +29,24 @@ const databaseUrl =
     ? env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL
     : env.OPENBOOKS_DB_URL;
 
+/**
+ * Pool size per process. Ten connections suits one web replica behind the
+ * swarm; a single process serving many concurrent operators over a slow link
+ * (a UI fleet against a remote cluster) exhausts ten and surfaces as
+ * "timeout exceeded when trying to connect" 500s. Operators raise it with
+ * OPENBOOKS_DB_POOL_MAX; the read pool follows unless OPENBOOKS_DB_READ_POOL_MAX
+ * is set. Bounded so a typo cannot open hundreds of sessions.
+ */
+const poolMax = (raw: string | undefined, fallback: number): number => {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 200 ? n : fallback;
+};
+const BASE_POOL_MAX = poolMax(env.OPENBOOKS_DB_POOL_MAX, 10);
+const READ_POOL_MAX = poolMax(env.OPENBOOKS_DB_READ_POOL_MAX, BASE_POOL_MAX);
+
 const basePool = new pg.Pool({
   connectionString: databaseUrl,
-  max: 10,
+  max: BASE_POOL_MAX,
   keepAlive: true,
   // Without a client-side read timeout, a query in flight during an intermittent
   // network interruption can hang on a half-open socket for the OS TCP
@@ -59,7 +74,7 @@ basePool.on("error", (err) => {
 // transaction and SELECT-only role without weakening command atomicity.
 const governedReadPool = new pg.Pool({
   connectionString: databaseUrl,
-  max: 10,
+  max: READ_POOL_MAX,
   keepAlive: true,
   connectionTimeoutMillis: 30_000,
   query_timeout: 120_000,
