@@ -112,7 +112,8 @@
     "selectItem": "选择项目",
     "createEstimate": "创建报价单",
     "estimateCreated": "报价单已创建",
-    "estimateFailed": "无法创建报价单。"
+    "estimateFailed": "无法创建报价单。",
+    "estimateNeedsAccount": "创建估算前请先设置客户"
   },
   "forecastCategories": {
     "omitted": "已排除",
@@ -267,7 +268,8 @@
   "validation": {
     "nameRequired": "请输入客户名称。",
     "subjectRequired": "请输入活动主题。",
-    "titleRequired": "请输入商机标题。"
+    "titleRequired": "请输入商机标题。",
+    "lossReasonRequired": "关闭为输单需要填写输单原因"
   },
   "feedback": { "createFailed": "无法创建草稿。" }
 }

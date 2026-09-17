@@ -113,7 +113,8 @@
     "selectItem": "Select an item",
     "createEstimate": "Create estimate",
     "estimateCreated": "Estimate created",
-    "estimateFailed": "The estimate could not be created."
+    "estimateFailed": "The estimate could not be created.",
+    "estimateNeedsAccount": "Set an account before creating an estimate"
   },
   "forecastCategories": {
     "omitted": "Omitted",
@@ -268,7 +269,8 @@
   "validation": {
     "nameRequired": "Enter an account name.",
     "subjectRequired": "Enter an activity subject.",
-    "titleRequired": "Enter an opportunity title."
+    "titleRequired": "Enter an opportunity title.",
+    "lossReasonRequired": "A loss reason is required to close as lost"
   },
   "feedback": { "createFailed": "The draft could not be created." }
 }

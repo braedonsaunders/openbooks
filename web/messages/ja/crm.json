@@ -112,7 +112,8 @@
     "selectItem": "品目を選択",
     "createEstimate": "見積を作成",
     "estimateCreated": "見積を作成しました",
-    "estimateFailed": "見積を作成できませんでした。"
+    "estimateFailed": "見積を作成できませんでした。",
+    "estimateNeedsAccount": "見積を作成する前に取引先を設定してください"
   },
   "forecastCategories": {
     "omitted": "除外",
@@ -267,7 +268,8 @@
   "validation": {
     "nameRequired": "アカウント名を入力してください。",
     "subjectRequired": "アクティビティの件名を入力してください。",
-    "titleRequired": "商談のタイトルを入力してください。"
+    "titleRequired": "商談のタイトルを入力してください。",
+    "lossReasonRequired": "失注としてクローズするには失注理由が必要です"
   },
   "feedback": { "createFailed": "下書きを作成できませんでした。" }
 }
