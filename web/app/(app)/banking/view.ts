@@ -458,6 +458,9 @@ export function bankingSpec(data: BankingData): PageSpec {
                   series: [{ name: data.trendSeriesName, data: data.trendData }],
                   height: 170,
                   area: true,
+                  // 13 weekly points: thin to a data-fixed stride so the
+                  // ticks read the same at every width (F-t05-010).
+                  maxTicks: 5,
                 }),
               ],
             }),

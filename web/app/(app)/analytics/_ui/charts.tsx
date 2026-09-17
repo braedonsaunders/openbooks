@@ -43,8 +43,21 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const baseGrid = { left: 8, right: 12, top: 24, bottom: 8, containLabel: true }
 const tooltip = { trigger: 'axis' as const, backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 } }
 
-function catAxis(data: string[]): EChartsOption {
-  return { type: 'category', data, axisLine: { lineStyle: { color: SPLIT } }, axisTick: { show: false }, axisLabel: { color: AXIS, fontSize: 10 } }
+function catAxis(data: string[], maxTicks?: number): EChartsOption {
+  const axisLabel: Record<string, unknown> = { color: AXIS, fontSize: 10 }
+  if (maxTicks !== undefined) axisLabel.interval = tickInterval(data.length, maxTicks)
+  return { type: 'category', data, axisLine: { lineStyle: { color: SPLIT } }, axisTick: { show: false }, axisLabel }
+}
+
+/**
+ * Deterministic category-axis thinning (F-t05-010): ECharts' width-dependent
+ * auto stride swaps WHICH labels render as the viewport changes, so a tick
+ * can read "Aug 24" at one width and "Aug 4" at another. Capping the tick
+ * count fixes the stride from the data, stable at every width.
+ */
+export function tickInterval(labelCount: number, maxTicks: number): number {
+  if (!Number.isFinite(maxTicks) || maxTicks < 1) return 0
+  return Math.max(0, Math.ceil(labelCount / maxTicks) - 1)
 }
 function valAxis(money: MoneyLabel, fmt: 'money' | 'pct' | 'raw' = 'money'): EChartsOption {
   return {
@@ -71,12 +84,15 @@ export function TrendChart({
   height = 200,
   area = false,
   pctAxis = false,
+  maxTicks,
 }: {
   labels: string[]
   series: { name: string; data: number[]; color?: string; pct?: boolean }[]
   height?: number
   area?: boolean
   pctAxis?: boolean
+  /** Cap x-axis ticks to a data-fixed stride (F-t05-010); unset keeps ECharts auto. */
+  maxTicks?: number
 }) {
   const money = useChartMoney()
   const option: EChartsOption = {
@@ -88,7 +104,7 @@ export function TrendChart({
         [params[0]?.axisValue, ...params.map((p) => `${p.marker} ${p.seriesName}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : money(p.value)}`)].join('<br/>'),
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
-    xAxis: catAxis(labels),
+    xAxis: catAxis(labels, maxTicks),
     yAxis: valAxis(money, pctAxis ? 'pct' : 'money'),
     series: series.map((s, i) => ({
       name: s.name,
