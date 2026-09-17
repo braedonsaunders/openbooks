@@ -54,7 +54,9 @@
     "other": "Autres",
     "otherTotal": "Total Autres",
     "accumulatedEarnings": "Bénéfices accumulés (calculés)",
-    "translationAdjustment": "Écart de conversion cumulatif"
+    "translationAdjustment": "Écart de conversion cumulatif",
+    "ratesBlockedTitle": "Taux consolidés non encore calculés",
+    "ratesBlockedAction": "Calculer les taux dans la clôture"
   },
   "saveView": {
     "namePrompt": "Nommez cette vue :",

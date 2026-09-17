@@ -21,6 +21,20 @@ import { subsidiaryFeatureEnabled } from "./features";
 export class MissingRatesError extends Error {}
 
 /**
+ * Typed surface contract for a statement blocked on underived consolidated
+ * rates (F-t06-025). The description carries the kernel's user-language
+ * message verbatim (it names the pair and period); the code lets surfaces
+ * render a localized banner with a derive link instead of throwing.
+ */
+export interface RatesBlockedNotice {
+  code: 'rates-not-derived'
+  title: string
+  description: string
+  deriveLabel: string
+  deriveHref: string
+}
+
+/**
  * Pure root-owned rule shared by every subsidiary-context consumer: the
  * viewed set reads null-subsidiary (root-owned) rows alongside attributed
  * rows exactly when the caller is unrestricted AND the viewed set contains

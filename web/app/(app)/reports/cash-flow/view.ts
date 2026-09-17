@@ -17,7 +17,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -53,6 +53,11 @@ export interface CashFlowData {
   reconciliationLabel: string
   reconciliationStatus: string
   reconciled: boolean
+  /** Set when underived consolidated rates block the statement (F-t06-025):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   rows: StatementRow[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
@@ -75,9 +80,28 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims, undefined, selectedBook.id), dimensionOptions(), orgInfo()])
+  // Underived consolidated rates must not throw out of SSR (F-t06-025):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws.
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let cf: Awaited<ReturnType<typeof cashFlow>> | null = null
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    cf = await cashFlow(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: tr('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: tr('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const [opts, org] = await Promise.all([dimensionOptions(), orgInfo()])
+  // Resolves empty when blocked; drills only render beside the paper.
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const m = (v: ExactDecimal) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -88,8 +112,9 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
     investing: t('sections.investing'),
     financing: t('sections.financing'),
   }
-  const reconciled = !decimalIsMaterial(cf.reconciliationGap, '0.0100')
-  const hasMovements = cf.sections.some((s) => s.lines.length > 0)
+  const sections = cf?.sections ?? []
+  const reconciled = cf !== null && !decimalIsMaterial(cf.reconciliationGap, '0.0100')
+  const hasMovements = sections.some((s) => s.lines.length > 0)
   const toneOf = (v: ExactDecimal) => (decimalCmp(v, '0') < 0 ? ('negative' as const) : ('default' as const))
 
   const rows: StatementRow[] = []
@@ -100,9 +125,12 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       label: t('empty'),
       labelClassName: 'text-center text-slate-400 italic',
     })
-  } else {
+  } else if (cf !== null) {
+    // The null guard doubles as the rates-blocked gate (F-t06-025): with no
+    // derived rates there is nothing to build, and the banner replaces the
+    // paper. TypeScript narrows every cf.* access below through this branch.
     for (const section of SECTION_ORDER) {
-      const s = cf.sections.find((x) => x.section === section)!
+      const s = sections.find((x) => x.section === section)!
       const title = sectionLabels[section]
       const subtotalLabel = t('subtotal', { section: title.toLowerCase() })
       rows.push({
@@ -230,11 +258,17 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('dateRange', { from, to })}`,
     reconciliationLabel: t('reconciliation'),
-    reconciliationStatus: reconciled ? t('reconciled') : t('offBy', { amount: m(cf.reconciliationGap) }),
+    reconciliationStatus: cf === null
+      ? ''
+      : reconciled
+        ? t('reconciled')
+        : t('offBy', { amount: m(cf.reconciliationGap) }),
     reconciled,
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
     rows,
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
@@ -274,17 +308,34 @@ export function cashFlowSpec(data: CashFlowData): PageSpec {
           ],
         },
       ),
-      widgetBlock('reconciliation-note', {
-        label: data.reconciliationLabel,
-        status: data.reconciliationStatus,
-        reconciled: data.reconciled,
-      }),
+      {
+        ...widgetBlock('reconciliation-note', {
+          label: data.reconciliationLabel,
+          status: data.reconciliationStatus,
+          reconciled: data.reconciled,
+        }),
+        // No reconciliation to report while rates block the statement.
+        when: f('ratesReady'),
+      },
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
+        when: f('ratesReady'),
         blocks: [widgetBlock('statement-rows', { rows: data.rows })],
       }),
     ],
