@@ -759,7 +759,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
       es: 2,
       fr: 11,
       ja: 1,
-      'pt-BR': 165,
+      'pt-BR': 6,
       zh: 1,
     }
     assert.equal(
