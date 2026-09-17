@@ -887,6 +887,42 @@ test("third same-year repost writes a third distinct reversal without number col
   }
 });
 
+test("positive NOL carryforward and warranty reserve measure as DTA, never DTL (F-t10-003)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Provision Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "25", { userId });
+    // Preparers enter the reserve/carryforward as the positive amount it is.
+    // Both are future-deductible by nature, so at 25% the whole 30,000 must
+    // land in gross DTA with the DTL side empty. Pre-fix both booked as DTL.
+    const runId = await computeProvisionRun(
+      org.orgId,
+      2026,
+      {
+        additionalDifferences: [
+          { category: "loss_carryforward", description: "NOL carryforward", difference: "100000", source: "manual" },
+          { category: "provisions", description: "Warranty reserve", difference: "20000", source: "manual" },
+        ],
+      },
+      userId,
+    );
+    const run = await getProvisionRun(org.orgId, runId);
+    assert.ok(run);
+    const balances = (run.payload as unknown as { balances: { dtaGross: string; dtlGross: string } }).balances;
+    assert.equal(balances.dtaGross, "30000.0000");
+    assert.equal(balances.dtlGross, "0.0000");
+    // The normalization is visible on the measured rows; entered negatives
+    // keep flowing through untouched (covered by the -80000 warranty above).
+    assert.deepEqual(
+      run.differences.map((d) => [d.category, d.difference]),
+      [["loss_carryforward", "-100000.0000"], ["provisions", "-20000.0000"]],
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Tax filing segregation of duties (fnd_mt9844pt_0bwnsn)
 // ---------------------------------------------------------------------------

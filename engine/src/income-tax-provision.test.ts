@@ -4,7 +4,22 @@ import {
   buildProvision,
   deferredAssetAdjustmentLabel,
   hasPriorDeferredTaxMeasurement,
+  toDeductibleSide,
 } from "./income-tax-provision.ts";
+
+test("inherently-deductible categories normalize positive inputs to the DTA side (F-t10-003)", () => {
+  const nol = { category: "loss_carryforward" as const, description: "NOL", difference: "100000", source: "manual" as const };
+  assert.equal(toDeductibleSide(nol).difference, "-100000.0000");
+  const warranty = { category: "provisions" as const, description: "Warranty", difference: "20000", source: "manual" as const };
+  assert.equal(toDeductibleSide(warranty).difference, "-20000.0000");
+  // Already-negative inputs keep their sign; every other category is caller-signed.
+  const signed = { category: "provisions" as const, description: "Warranty", difference: "-20000", source: "manual" as const };
+  assert.equal(toDeductibleSide(signed).difference, "-20000");
+  const taxable = { category: "fixed_assets" as const, description: "P&E", difference: "200000", source: "manual" as const };
+  assert.equal(toDeductibleSide(taxable).difference, "200000");
+  const revenue = { category: "revenue_recognition" as const, description: "Unbilled", difference: "50000", source: "manual" as const };
+  assert.equal(toDeductibleSide(revenue).difference, "50000");
+});
 
 test("framework changes recognition language, not math (ASC 740 vs IAS 12)", () => {
   const base = {
