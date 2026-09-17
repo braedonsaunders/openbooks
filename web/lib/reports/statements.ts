@@ -62,47 +62,61 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
   }[];
 }
 
-/** Roll child balances into parents, return tree-ordered rows with depth. */
+/**
+ * Gross presentation over the account tree (F-t08-001, mirroring
+ * treeifyMatrix): every row shows its OWN balance and contra accounts print
+ * as sibling lines, so displayed lines foot to the section total.
+ */
 function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: string[]): StatementRow[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const rolled = new Map<string, ExactDecimal>(rows.map((r) => [r.id, r.raw]));
-  for (const r of rows) {
-    // A malformed imported cycle (the PATCH route refuses these, but imports
-    // land parent_id without validation) must terminate, not hang the report:
-    // each ancestor absorbs the balance once, matching the display layer's
-    // tolerate-and-show policy.
-    const seen = new Set<string>([r.id]);
-    let p = r.parent_id;
-    while (p && !seen.has(p)) {
-      seen.add(p);
-      rolled.set(p, decimalAdd(rolled.get(p) ?? ZERO, r.raw));
-      p = byId.get(p)?.parent_id ?? null;
-    }
-  }
+  const signedOwn = new Map(
+    rows.map((r) => [r.id, CREDIT_NORMAL.has(r.type) ? decimalNeg(r.raw) : r.raw] as const),
+  );
+  const ownMaterial = new Map(
+    rows.map((r) => [r.id, decimalIsMaterial(signedOwn.get(r.id) ?? ZERO)]),
+  );
   const children = new Map<string | null, typeof rows>();
   for (const r of rows) {
     if (!children.has(r.parent_id)) children.set(r.parent_id, []);
     children.get(r.parent_id)!.push(r);
   }
+  // A malformed imported cycle (the PATCH route refuses these, but imports
+  // land parent_id without validation) must terminate, not hang the report:
+  // the path guard refuses re-entry, matching the display layer's
+  // tolerate-and-show policy.
+  const emitsMemo = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const emits = (id: string): boolean => {
+    const hit = emitsMemo.get(id);
+    if (hit !== undefined) return hit;
+    const r = byId.get(id);
+    if (!r || visiting.has(id)) return false;
+    visiting.add(id);
+    let kid = false;
+    for (const k of children.get(id) ?? []) kid = emits(k.id) || kid;
+    const out =
+      (types.includes(r.type) && (ownMaterial.get(id) === true || r.is_summary)) ||
+      (types.includes(r.type) && kid);
+    visiting.delete(id);
+    emitsMemo.set(id, out);
+    return out;
+  };
   const out: StatementRow[] = [];
   const walk = (parent: string | null, depth: number) => {
     for (const r of children.get(parent) ?? []) {
-      if (!types.includes(r.type)) continue;
-      const bal = rolled.get(r.id) ?? ZERO;
-      const signed = CREDIT_NORMAL.has(r.type) ? decimalNeg(bal) : bal;
-      if (decimalIsMaterial(signed) || r.is_summary) {
+      if (emits(r.id)) {
         out.push({
           id: r.id, number: r.number, name: r.name, type: r.type,
-          balance: signed, depth, isSummary: r.is_summary,
+          balance: signedOwn.get(r.id) ?? ZERO, depth, isSummary: r.is_summary,
         });
       }
       walk(r.id, depth + 1);
     }
   };
   walk(null, 0);
-  // prune empty summary rows (no visible descendants, zero balance)
+  // prune immaterial group headers with no visible descendants
   return out.filter((r, i) => {
-    if (!r.isSummary || decimalIsMaterial(r.balance)) return true;
+    if (ownMaterial.get(r.id)) return true;
     const next = out[i + 1];
     return next !== undefined && next.depth > r.depth;
   });
@@ -156,8 +170,11 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
         bookId,
       );
   const items = treeify(rows, PNL_TYPES);
+  // Each account prints once at its own balance (gross presentation), so
+  // section totals sum every row — depth-0-only summing belonged to the
+  // rolled-balance presentation.
   const total = (types: string[]) =>
-    decimalSum(items.filter((r) => types.includes(r.type) && r.depth === 0).map((r) => r.balance));
+    decimalSum(items.filter((r) => types.includes(r.type)).map((r) => r.balance));
   const revenue = total(["income", "income_other"]);
   const cogs = total(["cogs"]);
   const expenses = total(["expense", "expense_other", "expense_deferred"]);
@@ -183,7 +200,9 @@ export async function balanceSheet(
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
 
-  const sum = (xs: StatementRow[]) => decimalSum(xs.filter((r) => r.depth === 0).map((r) => r.balance));
+  // Gross presentation: every account prints once at its own balance, so the
+  // section total sums every row (see treeify).
+  const sum = (xs: StatementRow[]) => decimalSum(xs.map((r) => r.balance));
   const totalAssets = sum(assets);
   const totalLiabilities = sum(liabilities);
   const statedEquity = sum(equity);

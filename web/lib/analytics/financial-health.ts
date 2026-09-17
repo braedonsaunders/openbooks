@@ -244,10 +244,11 @@ function monthsBetween(from: string, to: string): number {
   return Math.max(1, days / 30.4375);
 }
 
-/** Sum reader-signed statement rows of the given types at the top level. */
+/** Sum reader-signed statement rows of the given types. Each account prints
+ * once at its own balance (gross presentation), so the total sums every row. */
 function totalOf(items: StatementRow[], types: string[]): ExactDecimal {
   return decimalSum(items
-    .filter((r) => types.includes(r.type) && r.depth === 0)
+    .filter((r) => types.includes(r.type))
     .map((row) => row.balance));
 }
 

@@ -90,6 +90,51 @@ test('budget vs actual translates every functional to presentation', { skip: !en
   }
 })
 
+/**
+ * The budget tree keeps the rolled presentation (F-t08-001 leaves this reader
+ * alone), so its section totals must sum depth-0 rows only: a nested expense
+ * posted once through a child must total once, not twice (parent rolled +
+ * child own). The shared sumSection assumes gross-presentation rows.
+ */
+test('budget section totals count nested accounts once', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const childId = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type)
+        values (${childId}, ${org.orgId}, '5010', 'Nested Supplies', 'expense')`)
+      await db.execute(sql`update accounts set parent_id = ${childId} where id = ${org.accounts.cogs}`)
+      const entry = randomUUID()
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'BN-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
+      await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, '100', 'CAD', '100', '1'),
+               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-100', 'CAD', '-100', '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+      const scenario = randomUUID()
+      await db.execute(sql`insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, status)
+        values (${scenario}, ${org.orgId}, ${org.bookId}, 2026, 'W2 nested', 'draft')`)
+      await db.execute(sql`insert into budget_lines (id, org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
+        values (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, '1000')`)
+      await db.execute(sql`update budget_scenarios set status = 'pending_approval', revision = revision + 1 where id = ${scenario}`)
+      await db.execute(sql`update budget_scenarios set status = 'approved', revision = revision + 1 where id = ${scenario}`)
+      ;(org as unknown as { w2nested: string }).w2nested = scenario
+    })
+    const scenario = (org as unknown as { w2nested: string }).w2nested
+    await withOrgContext(org.orgId, async () => {
+      const view = await budgetVsActualView(scenario, org.orgId, labels, {}, undefined, JULY)
+      assert.ok(view, 'scenario resolves')
+      const total = view.lines.find((l) => l.kind === 'subtotal' && l.label === 'Total Expenses')
+      assert.ok(total && total.kind === 'subtotal', 'expenses subtotal present')
+      const [actual, budget] = total.values as unknown as string[]
+      assert.equal(toUnits(String(actual)), toUnits('100.0000'), 'nested actuals total once')
+      assert.equal(toUnits(String(budget)), toUnits('1000.0000'), 'nested budget totals once')
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('budget vs actual fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await seedTwoCurrencyBudget()
   try {
