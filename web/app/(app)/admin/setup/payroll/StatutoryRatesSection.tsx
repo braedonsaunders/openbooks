@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
+import { formatRateFieldValue } from './statutory-rates-format'
 
 /**
  * Statutory rates the employer supplies — at the scope the country pack says
@@ -157,9 +158,14 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
     return [current - 1, current, current + 1]
   }, [year, today])
 
+  // The last save rejection, kept visible inside the drawer: a 422 that
+  // only toasts reads as "still saving" and invites repeated Save clicks.
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   async function save() {
     if (!draft) return
     setBusy(true)
+    setSaveError(null)
     try {
       const res = await fetch('/api/payroll/settings/rates', {
         method: 'PUT',
@@ -180,7 +186,9 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
       setDraft(null)
       await load(year)
     } catch (error) {
-      toast.error((error as Error).message)
+      const message = (error as Error).message
+      setSaveError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -202,12 +210,14 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
     }
   }
 
+  // Decimal-rate fields read as percents in the table (0.0060 renders
+  // 0.60%); percent and amount fields render as entered.
   const formatValues = (row: RateRow): string => {
     const slot = slotOf(row.country, row.rateKey)
     if (!slot) return Object.keys(row.values).map((key) => `${key} ${row.values[key]}`).join(' · ')
     return slot.fields
       .filter((field) => row.values[field.key] != null)
-      .map((field) => `${field.label} ${row.values[field.key]}`)
+      .map((field) => `${field.label} ${formatRateFieldValue(field, row.values[field.key] ?? '')}`)
       .join(' · ')
   }
 
@@ -404,6 +414,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         data={data}
         busy={busy}
         label={label}
+        saveError={saveError}
         onChange={setDraft}
         onClose={() => setDraft(null)}
         onSave={save}
@@ -414,12 +425,13 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
 }
 
 function RateDrawer({
-  draft, data, busy, label, onChange, onClose, onSave, onRemove,
+  draft, data, busy, label, saveError, onChange, onClose, onSave, onRemove,
 }: {
   draft: DraftRate | null
   data: Payload | null
   busy: boolean
   label: (key: string, fallback: string) => string
+  saveError: string | null
   onChange: (next: DraftRate) => void
   onClose: () => void
   onSave: () => void
@@ -455,6 +467,7 @@ function RateDrawer({
     >
       {draft && data ? (
         <div className="space-y-4">
+          {saveError ? <Alert variant="destructive">{saveError}</Alert> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             {data.packs.length > 1 ? (
               <div>
@@ -592,6 +605,15 @@ function RateDrawer({
                   values: { ...draft.values, [field.key]: e.target.value },
                 })}
               />
+              {(field.kind === 'rate' || field.kind === 'percent') && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {field.kind === 'rate'
+                    ? label('rates.rateScaleHint', 'Decimal rate')
+                    : label('rates.percentScaleHint', 'Percent')}
+                  {' · '}
+                  {field.min}–{field.max}
+                </p>
+              )}
             </div>
           ))}
 
