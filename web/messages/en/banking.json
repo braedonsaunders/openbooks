@@ -724,7 +724,8 @@
         "sync": "Sync",
         "pause": "Pause",
         "resume": "Resume",
-        "remove": "Remove"
+        "remove": "Remove",
+        "removeConfirm": "Remove this connection? Scheduled imports stop and the wiring cannot be undone."
       },
       "feedMessages": {
         "verified": "Connection verified.",
