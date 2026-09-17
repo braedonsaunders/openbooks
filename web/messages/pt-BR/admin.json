@@ -680,6 +680,10 @@
           "label": "Ganho/perda cambial realizado",
           "hint": "Conta das diferenças cambiais na liquidação de pagamentos em moeda estrangeira"
         },
+        "retainageReceivable": {
+          "label": "Retenções a receber",
+          "hint": "Retenção de medições de clientes, mantida até a liberação"
+        },
         "retainagePayable": {
           "label": "Retenções a pagar",
           "hint": "Retenção de medições de fornecedores, mantida até uma liberação aprovada"

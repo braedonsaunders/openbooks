@@ -1094,6 +1094,28 @@ test('project billing (applications) copy is present in every locale and transla
   }
 })
 
+test('retainage receivable control-account copy is present in every locale and translated', () => {
+  // The Company control-accounts picker (F-t04-002) renders these keys; a
+  // missing key falls back to English on screen and the slot reads unsetup.
+  const keys = [
+    'admin.settings.controlAccounts.fields.retainageReceivable.label',
+    'admin.settings.controlAccounts.fields.retainageReceivable.hint',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
 test('banking feed operational panel copy is present in every locale and translated', () => {
   // The /banking/imports live-feeds panel (F-t05-015) renders these keys;
   // present-but-English values read as hardcoded copy on screen.
@@ -2621,7 +2643,7 @@ test('analytics copy ships translated in fr, es and de', () => {
 })
 
 test('admin namespace ships translated in zh and pt-BR', () => {
-  // i3: the admin namespace (3354 keys) was missing 1380 keys each in zh
+  // i3: the admin namespace (3356 keys) was missing 1380 keys each in zh
   // and pt-BR — setup, ai agents, features, backups, page layouts and
   // extensions rendered English inside otherwise translated screens.
   // Every leaf must exist, keep its ICU placeholders, and differ from
@@ -2744,7 +2766,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3354, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3356, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3077,8 +3099,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3354
-  const ADMIN_I2_SOURCE_HASH = '11e6f5fe69a76d99b78eba4189031b3b357143bb96a2ef2bc11e463ce6be40c1'
+  const ADMIN_I2_SOURCE_COUNT = 3356
+  const ADMIN_I2_SOURCE_HASH = '52e27d5b06a8de0dcedf9a7f73cf61dbb0e8b88f1671bcc2a4c9635ab3c611a6'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

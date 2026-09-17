@@ -715,6 +715,10 @@
           "label": "評価性引当額",
           "hint": "繰延税金資産の控除項目"
         },
+        "retainageReceivable": {
+          "hint": "解除まで保持される得意先出来高請求の保留金",
+          "label": "売掛保留金"
+        },
         "retainagePayable": {
           "hint": "承認済みの解除まで保持される仕入先出来高請求の保留金",
           "label": "買掛保留金"
