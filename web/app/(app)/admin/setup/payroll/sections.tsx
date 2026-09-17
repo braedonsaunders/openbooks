@@ -22,6 +22,7 @@ import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/tax-years.
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, getAuthz } from '../../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
@@ -254,15 +255,7 @@ export async function AccountsTabSlot() {
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active
-         and (${allowedSubsidiaryIds == null
-           ? sql`true`
-           : allowedSubsidiaryIds.size > 0
-             ? sql`coalesce(p.subsidiary_id, (select root.id from subsidiaries root
-                    where root.org_id = ${orgId} and root.parent_id is null and root.is_active
-                    order by root.created_at limit 1)) in (${sql.join(
-                      [...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `,
-                    )})`
-             : sql`false`})
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
        order by p.display_name`),
   ])
   const blob = blobRes.rows[0]?.p ?? {}
