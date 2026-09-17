@@ -130,6 +130,7 @@
       "emptyGroup": "No fields in this group yet.",
       "fields": "Fields",
       "visible": "Visible",
+      "hidden": "Hidden",
       "required": "Required",
       "locked": "Locked",
       "label": "Label",

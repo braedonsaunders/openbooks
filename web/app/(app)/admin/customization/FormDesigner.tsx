@@ -561,7 +561,8 @@ export function FormDesigner({
                         disabled={locked}
                         onClick={() => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, visible: !item.visible } : item)))}
                         className={locked ? 'cursor-not-allowed text-slate-200 dark:text-slate-700' : tab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
-                        aria-label={t('designer.forms.visible')}
+                        aria-pressed={tab.visible}
+                        aria-label={tab.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}
                         title={locked ? t('designer.forms.tabLocked') : undefined}
                       >
                         {tab.visible ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -598,7 +599,8 @@ export function FormDesigner({
                                 ),
                               )}
                               className={subtab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
-                              aria-label={t('designer.forms.visible')}
+                              aria-pressed={subtab.visible}
+                              aria-label={subtab.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}
                             >
                               {subtab.visible ? <Eye size={14} /> : <EyeOff size={14} />}
                             </button>
@@ -627,7 +629,7 @@ export function FormDesigner({
                 <span className="flex-1 text-xs font-medium text-slate-600 dark:text-slate-300">{actionLabel(action.key)}</span>
                 <button type="button" onClick={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.actions = reorder(n.actions, ai, ai - 1); return n })} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={15} /></button>
                 <button type="button" onClick={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.actions = reorder(n.actions, ai, ai + 1); return n })} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={15} /></button>
-                <button type="button" onClick={() => updateAction(ai, { visible: !action.visible })} className={action.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'} aria-label={t('designer.forms.visible')}>
+                <button type="button" onClick={() => updateAction(ai, { visible: !action.visible })} className={action.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'} aria-pressed={action.visible} aria-label={action.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}>
                   {action.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
               </div>
@@ -679,7 +681,7 @@ function FieldRow({
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={onMoveUp} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
           <button type="button" onClick={onMoveDown} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
-          <button type="button" onClick={onToggleVisible} className={cn('text-slate-400 hover:text-slate-600', !field.visible && 'text-red-500')} aria-label={t('designer.forms.visible')}>
+          <button type="button" onClick={onToggleVisible} className={cn('text-slate-400 hover:text-slate-600', !field.visible && 'text-red-500')} aria-pressed={field.visible} aria-label={field.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}>
             {field.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         </div>

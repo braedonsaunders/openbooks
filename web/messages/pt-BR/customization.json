@@ -124,6 +124,7 @@
       "emptyGroup": "Nenhum campo neste grupo ainda.",
       "fields": "Campos",
       "visible": "Visível",
+      "hidden": "Oculto",
       "required": "Obrigatório",
       "locked": "Bloqueado",
       "label": "Rótulo",

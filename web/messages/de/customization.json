@@ -124,6 +124,7 @@
       "emptyGroup": "Noch keine Felder in dieser Gruppe.",
       "fields": "Felder",
       "visible": "Sichtbar",
+      "hidden": "Ausgeblendet",
       "required": "Erforderlich",
       "locked": "Gesperrt",
       "label": "Bezeichnung",

@@ -124,6 +124,7 @@
       "emptyGroup": "此分组中尚无字段。",
       "fields": "字段",
       "visible": "可见",
+      "hidden": "已隐藏",
       "required": "必填",
       "locked": "锁定",
       "label": "标签",
