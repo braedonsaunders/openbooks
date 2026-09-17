@@ -38,7 +38,12 @@
     "createFailed": "No se pudo crear el parte"
   },
   "editor": {
-    "tabs": { "time": "Tiempo", "items": "Artículos", "tasks": "Tareas", "related": "Relacionados" },
+    "tabs": {
+      "time": "Tiempo",
+      "items": "Artículos",
+      "tasks": "Tareas",
+      "related": "Relacionados"
+    },
     "periodLocked": "Elimine las horas ingresadas antes de cambiar el período.",
     "back": "Partes de obra",
     "submit": "Enviar",
@@ -108,13 +113,24 @@
       "amount": "Importe",
       "equipment": "Unidad de equipo",
       "pooledItem": "Sin unidad específica",
-      "rateSource": { "rate_book": "Resuelto desde el libro de tarifas", "item_default": "Tarifa predeterminada del artículo" },
+      "rateSource": {
+        "rate_book": "Resuelto desde el libro de tarifas",
+        "item_default": "Tarifa predeterminada del artículo"
+      },
       "add": "Agregar línea",
       "remove": "Quitar línea",
       "empty": "Aún no hay líneas.",
-      "itemRequired": "Elija un artículo"
+      "itemRequired": "Elija un artículo",
+      "operator": "Operario",
+      "noOperator": "No registrado"
     },
-    "tasks": { "title": "Tareas del proyecto", "hint": "Tareas WBS disponibles para imputar las horas.", "code": "Código", "task": "Tarea", "estimatedHours": "Horas estimadas" },
+    "tasks": {
+      "title": "Tareas del proyecto",
+      "hint": "Tareas WBS disponibles para imputar las horas.",
+      "code": "Código",
+      "task": "Tarea",
+      "estimatedHours": "Horas estimadas"
+    },
     "totals": {
       "title": "Totales del parte",
       "labor": "Mano de obra",
@@ -147,6 +163,10 @@
     "sendMessage": "Mensaje (opcional)",
     "send": "Enviar",
     "signatureSent": "Enlace de firma enviado a {to}",
-    "pdf": "PDF"
+    "pdf": "PDF",
+    "discard": "Descartar el borrador",
+    "discardConfirm": "¿Descartar este borrador vacío? Un borrador que ya contiene horas, líneas o firmas se conserva — solo desaparece un borrador sin ningún contenido.",
+    "discardFailed": "No se pudo descartar el borrador.",
+    "discarded": "Borrador descartado."
   }
 }
