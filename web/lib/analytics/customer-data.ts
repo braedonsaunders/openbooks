@@ -1,6 +1,7 @@
 import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
+import { REVENUE_TYPES } from "../reports/statements";
 import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
@@ -11,14 +12,29 @@ import { englishCustomerStrings, type CustomerStrings } from "./customer-strings
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
-import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { add, mulDecimal, neg } from "@openbooks/engine/src/money.ts";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence.
  * Every subsystem and its exact parameters:
- *  - Base metrics: per-customer invoice count / revenue / avg value / first-last
- *    dates / recency / tenure from customer_invoice documents.
+ *  - Money (TWO measures, one definition each — fleet8 P3):
+ *     * revenue = RECOGNIZED (ASC 606): net income-account postings per
+ *       customer — the same universe the P&L reads (REVENUE_TYPES, statement
+ *       book, posted/reversed entries), net of credit memos, voids netting to
+ *       zero. Attribution is line party_id plus recognition schedules through
+ *       their contract customer (those legs carry no party).
+ *     * invoicedRevenue = BILLINGS: posted, non-voided customer-invoice
+ *       document totals at the document rate — gross of credits, includes
+ *       sales tax, blind to deferral. The reconciling column, never the
+ *       headline.
+ *     * recon bridges them per customer: invoiced − recognized =
+ *       tax + credits + (timingDeferred − timingRecognized) + voids + other.
+ *    Population, invoice counts, avg invoice value and first/last dates stay
+ *    document-based (billing activity); every `revenue` roll-up (rows, KPIs,
+ *    segments, tiers, monthly trend, cohorts) is recognized.
+ *  - Base metrics: per-customer invoice count / invoiced + recognized revenue /
+ *    avg invoice value / first-last dates / recency / tenure.
  *  - RFM: R from fixed day thresholds (≤30→5, ≤90→3, ≤180→2, else 1); F/M from
  *    33rd/66th percentile cuts ({1,3,5} scores); 8 behavioural segments
  *    (champions/loyal/new/potential/hibernating/lost/at-risk/regular).
@@ -77,12 +93,63 @@ export type Segment = "champions" | "loyal" | "potential" | "new" | "regular" | 
 export type RiskLevel = "critical" | "high" | "medium" | "low";
 export type Recommendation = "resolve-issues" | "reactivate" | "win-back" | "nurture" | "onboard" | "reprice" | "review" | "maintain";
 
+/**
+ * The bridge between the two customer money questions. All legs are signed
+ * contributions to (invoiced − recognized), so:
+ *   invoiced − recognized = tax + credits + (timingDeferred − timingRecognized) + voids + other
+ * Positive rows explain why invoiced exceeds recognized; negative rows (notably
+ * timingRecognized, and voids in the original period of a cross-period void)
+ * explain why recognized exceeds invoiced.
+ */
+export interface CustomerRevenueRecon {
+  /** Sales tax inside invoiced document totals: collected-tax postings on
+   *  invoice-sourced, non-reversed entries. Credit-memo tax relief is in NO
+   *  row — it touches neither invoiced nor recognized — and reversed entries
+   *  ride with voids. */
+  tax: number;
+  /** Credit memos: income-leg relief (debit postings to income accounts) on
+   *  credit-sourced, non-reversed entries. The sales-tax relief on those same
+   *  memos is deliberately NOT here — it touches neither invoiced nor
+   *  recognized, so including it would break the bridge identity. */
+  credits: number;
+  /** Billed but not yet earned: invoice net routed to a deferred-liability
+   *  account instead of income this period (ASC 606 timing). */
+  timingDeferred: number;
+  /** Earned but not billed this period: revenue-recognition schedule postings
+   *  attributed through the contract customer (those legs carry no party_id). */
+  timingRecognized: number;
+  /** Net income effect of reversed entries and their mirrors in this period.
+   *  Same-period voids net to zero here; a cross-period void reads positive in
+   *  the reversal period and negative in the original period. */
+  voids: number;
+  /** Residual: manual-journal income with a party tag and FX/rounding dust —
+   *  anything outside the buckets above. Persistently large `other` for a
+   *  customer means a posting path the recon does not model yet. */
+  other: number;
+}
+
 export interface CustomerRow {
   id: string;
   name: string;
   // base metrics
+  /**
+   * RECOGNIZED revenue (ASC 606): net income-account postings attributed to
+   * this customer in the period — the same universe the P&L reads
+   * (REVENUE_TYPES, statement book, posted/reversed entries), net of credit
+   * memos. Compare with `invoicedRevenue`; the `recon` bridge explains the gap.
+   */
   revenue: number;
+  /** Prior-period recognized revenue (YoY base for `revenue`). */
   priorRevenue: number;
+  /**
+   * INVOICED revenue (billings): posted, non-voided customer-invoice document
+   * totals translated at the document rate. Gross of credit memos, includes
+   * sales tax, blind to deferred recognition — the cash/AR/sales-comp question,
+   * kept as the explicitly labelled reconciling column, never the headline.
+   */
+  invoicedRevenue: number;
+  /** The invoiced→recognized bridge; see CustomerRevenueRecon. */
+  recon: CustomerRevenueRecon;
   yoyPct: number | null;
   invoices: number;
   avgInvoice: number;
@@ -141,14 +208,20 @@ export interface SegmentStat {
   segment: Segment;
   count: number;
   percentage: number;
+  /** Recognized revenue in the period (ledger, net of credit memos). */
   totalRevenue: number;
   avgRevenue: number;
+  /** Invoiced revenue in the period (billings, reconciling column). */
+  totalInvoiced: number;
 }
 
 export interface MonthlyGrowth {
   month: string;
   label: string;
+  /** Recognized revenue in the month (ledger, net of credit memos). */
   revenue: number;
+  /** Invoiced revenue in the month (billings, reconciling series). */
+  invoiced: number;
   uniqueCustomers: number;
   transactionCount: number;
   newCustomers: number;
@@ -161,8 +234,11 @@ export interface Cohort {
   totalCustomers: number;
   activeCustomers: number;
   retentionRate: number;
+  /** Lifetime recognized revenue (ledger, net of credit memos). */
   totalRevenue: number;
   avgRevenue: number;
+  /** Lifetime invoiced revenue (billings, reconciling column). */
+  totalInvoiced: number;
 }
 
 export interface Insight {
@@ -180,7 +256,10 @@ export interface CustomerData {
   intelligence: { score: number; label: string; grade: string };
   kpis: {
     totalCustomers: number;
+    /** Period recognized revenue across all customers (ties to P&L revenue). */
     totalRevenue: number;
+    /** Period invoiced revenue across all customers (reconciling total). */
+    totalInvoiced: number;
     avgCustomerValue: number;
     projectedClv: number;
     avgClv: number;
@@ -205,7 +284,7 @@ export interface CustomerData {
     fakeChampions: number;
   };
   segments: SegmentStat[];
-  tierBreakdown: { tier: Tier; count: number; revenue: number; threshold: number }[];
+  tierBreakdown: { tier: Tier; count: number; revenue: number; invoiced: number; threshold: number }[];
   growth: {
     monthly: MonthlyGrowth[];
     yoyGrowth: number | null;
@@ -288,10 +367,8 @@ interface CustomerBaseSqlRow {
   name: string;
   func: string | null;
   revenue: CustomerSqlNumeric;
-  prior_revenue: CustomerSqlNumeric;
   txn_count: CustomerSqlNumeric;
   late: string | null;
-  late_prior: string | null;
   first_txn: unknown;
   last_txn: unknown;
 }
@@ -509,32 +586,32 @@ export async function customerData(
   const hhiCritical = cfg.hhiCritical!;
   const clvYears = cfg.clvYears!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, profitData, dsoStats] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, profitData, dsoStats] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
-    // per-customer count / revenue / avg / first / last / recency / tenure.
-    // Prior-year revenue added for YoY context (openbooks extension).
+    // per-customer invoice count / INVOICED revenue / first-last dates /
+    // recency / tenure. This is the billing-activity population the ledger
+    // money (recognized + recon) merges onto; YoY context now reads prior
+    // recognized revenue from the ledger legs, so no prior-year doc legs.
     // documents.total is transaction currency: the first leg translates at
     // the posted document rate to the posting subsidiary's functional; the
     // second leg to presentation runs per (party, functional) below.
     (db.execute(sql`
       select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         sub.base_currency as func,
-        count(*) filter (where d.posting_date >= ${from}) as txn_count,
-        sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.posting_date >= ${from}) as revenue,
-        sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
-        max(d.posting_date) filter (where d.posting_date >= ${from})::text as late,
-        max(d.posting_date) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo})::text as late_prior,
-        min(d.posting_date) filter (where d.posting_date >= ${from}) as first_txn,
-        max(d.posting_date) filter (where d.posting_date >= ${from}) as last_txn
+        count(*) as txn_count,
+        sum(round(abs(d.total) * d.fx_rate, 4)) as revenue,
+        max(d.posting_date)::text as late,
+        min(d.posting_date) as first_txn,
+        max(d.posting_date) as last_txn
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${pFrom} and d.posting_date <= ${to}
+        and d.posting_date >= ${from} and d.posting_date <= ${to}
       group by d.party_id, p.display_name, sub.base_currency
-      having sum(abs(d.total)) filter (where d.posting_date >= ${from}) > 0
+      having sum(abs(d.total)) > 0
     `)),
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
@@ -664,6 +741,132 @@ export async function customerData(
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
       group by party_id, sub.base_currency
     `)),
+    // Recognized revenue + recon legs, per (customer, functional) — the SAME
+    // universe the P&L reads (REVENUE_TYPES legs on posted/reversed entries in
+    // the statement book), cut per customer. Attribution is direct through the
+    // line party (invoices, credit memos and party-tagged manuals all stamp
+    // it — credit memos carry the same dims as the sale, so no unallocated
+    // bucket) plus recognition schedules, whose legs carry no party and are
+    // attributed through the contract customer instead. Amounts are stored
+    // base (functional), translated to presentation per leg below — never
+    // re-derived from document rates, so this cannot drift from the P&L.
+    // Reversed entries and their mirrors stay IN (they net, exactly as the P&L
+    // nets them); the recon separates their period effect into `voids`.
+    (db.execute(sql`
+      with ew as materialized (
+        select id, posting_date, status, origin, source_document_id,
+               (reverses_entry_id is not null or status = 'reversed') as is_void
+          from journal_entries
+         where org_id = ${orgId}
+           and posting_date >= ${pFrom} and posting_date <= ${to}
+           and status in ('posted', 'reversed')
+           and book_id = ${statementBookExpr(orgId)}
+      )
+      select coalesce(l.party_id, rc.customer_id) as id,
+        sub.base_currency as func,
+        -sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES} and e.posting_date >= ${from}) as recognized,
+        -sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES}
+            and e.posting_date >= ${pFrom} and e.posting_date <= ${pTo}) as prior_recognized,
+        sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES} and not e.is_void and d.kind = 'customer_credit'
+            and e.posting_date >= ${from}) as credits,
+        -sum(l.amount) filter (
+          where l.tax_code_id is not null and not e.is_void and d.kind = 'customer_invoice'
+            and e.posting_date >= ${from}) as tax,
+        sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES} and not e.is_void and d.kind = 'customer_invoice'
+            and e.posting_date >= ${from}) as inv_income,
+        sum(l.amount) filter (
+          where a.type <> 'asset_receivable' and l.tax_code_id is null
+            and not e.is_void and d.kind = 'customer_invoice'
+            and e.posting_date >= ${from}) as inv_nonar,
+        -sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES} and not e.is_void
+            and e.origin = 'revenue_recognition'
+            and e.posting_date >= ${from}) as sched,
+        sum(l.amount) filter (
+          where a.type in ${REVENUE_TYPES} and e.is_void
+            and e.posting_date >= ${from}) as voids,
+        max(e.posting_date) filter (where e.posting_date >= ${from})::text as late,
+        max(e.posting_date) filter (
+          where e.posting_date >= ${pFrom} and e.posting_date <= ${pTo})::text as late_prior
+      from ew e
+      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
+      join accounts a on a.id = l.account_id and a.org_id = ${orgId}
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
+      left join documents d on d.id = e.source_document_id and d.org_id = ${orgId}
+      left join recognition_schedule_lines rsl
+        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+       and e.origin = 'revenue_recognition'
+      left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
+      left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
+      left join revenue_contracts rc on rc.id = po.contract_id and rc.org_id = ${orgId}
+      where (l.party_id is not null or rc.customer_id is not null)
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      group by 1, 2
+    `)),
+    // Recognized revenue per month (ledger posting month — recognition timing,
+    // not billing month; the gap between this and the invoiced series IS the
+    // timing story). Invoiced monthly stays on the document query above.
+    (db.execute(sql`
+      with ew as materialized (
+        select id, posting_date, origin
+          from journal_entries
+         where org_id = ${orgId}
+           and posting_date >= ${from} and posting_date <= ${to}
+           and status in ('posted', 'reversed')
+           and book_id = ${statementBookExpr(orgId)}
+      )
+      select to_char(e.posting_date, 'YYYY-MM') as month,
+        sub.base_currency as func,
+        -sum(l.amount) as recognized,
+        max(e.posting_date)::text as late
+      from ew e
+      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
+      join accounts a on a.id = l.account_id and a.org_id = ${orgId}
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
+      left join recognition_schedule_lines rsl
+        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+       and e.origin = 'revenue_recognition'
+      left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
+      left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
+      left join revenue_contracts rc on rc.id = po.contract_id and rc.org_id = ${orgId}
+      where a.type in ${REVENUE_TYPES}
+        and (l.party_id is not null or rc.customer_id is not null)
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      group by 1, 2 order by 1
+    `)),
+    // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
+    // on the document query above).
+    (db.execute(sql`
+      with ew as materialized (
+        select id, posting_date, origin
+          from journal_entries
+         where org_id = ${orgId}
+           and status in ('posted', 'reversed')
+           and book_id = ${statementBookExpr(orgId)}
+      )
+      select coalesce(l.party_id, rc.customer_id) as id,
+        sub.base_currency as func,
+        -sum(l.amount) as recognized,
+        max(e.posting_date)::text as late
+      from ew e
+      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
+      join accounts a on a.id = l.account_id and a.org_id = ${orgId}
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
+      left join recognition_schedule_lines rsl
+        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+       and e.origin = 'revenue_recognition'
+      left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
+      left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
+      left join revenue_contracts rc on rc.id = po.contract_id and rc.org_id = ${orgId}
+      where a.type in ${REVENUE_TYPES}
+        and (l.party_id is not null or rc.customer_id is not null)
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      group by 1, 2
+    `)),
     customerProfitability(period, orgId, allowed),
     // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
     // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
@@ -671,26 +874,76 @@ export async function customerData(
     paymentStats("ar", ref, allowed ? [...allowed] : undefined, orgId),
   ]);
 
+  /* ---- recognized revenue + recon (ledger universe, per party) ---- */
+  interface LedgerSqlRow {
+    id: string;
+    func: string | null;
+    recognized: CustomerSqlNumeric;
+    prior_recognized: CustomerSqlNumeric;
+    credits: CustomerSqlNumeric;
+    tax: CustomerSqlNumeric;
+    inv_income: CustomerSqlNumeric;
+    inv_nonar: CustomerSqlNumeric;
+    sched: CustomerSqlNumeric;
+    voids: CustomerSqlNumeric;
+    late: string | null;
+    late_prior: string | null;
+  }
+  interface LedgerParty {
+    recognized: string; priorRecognized: string; credits: string; tax: string;
+    parked: string; sched: string; voids: string;
+  }
+  // Legs arrive per (party, functional) in stored base amounts; translate each
+  // to presentation at its latest posting date, then merge per party — the
+  // same leg pattern the document measures use, so FX handling cannot diverge.
+  const ledgerLegs = ledgerRows.rows as unknown as LedgerSqlRow[];
+  const ledgerCtx = await flowRates(orgId, [
+    ...ledgerLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...ledgerLegs.filter((r) => r.prior_recognized != null)
+      .map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const ledgerByParty = new Map<string, LedgerParty>();
+  const zeroLedger = (): LedgerParty => ({
+    recognized: "0", priorRecognized: "0", credits: "0", tax: "0",
+    parked: "0", sched: "0", voids: "0",
+  });
+  for (const r of ledgerLegs) {
+    const cur = ledgerByParty.get(r.id) ?? zeroLedger();
+    const at = (v: CustomerSqlNumeric, d: string | null, fallback: string) =>
+      mulDecimal(String(v ?? 0), ledgerCtx.rateAt(r.func ?? null, String(d ?? fallback).slice(0, 10)));
+    cur.recognized = add(cur.recognized, at(r.recognized, r.late, to));
+    if (r.prior_recognized != null) {
+      cur.priorRecognized = add(cur.priorRecognized, at(r.prior_recognized, r.late_prior, pTo));
+    }
+    cur.credits = add(cur.credits, at(r.credits, r.late, to));
+    cur.tax = add(cur.tax, at(r.tax, r.late, to));
+    // Parked = invoice net routed to deferred liability: invoice income legs
+    // minus every non-AR ex-tax leg on the same invoice entries (income +
+    // deferred). Zero for a directly-earned invoice, the full net when parked.
+    cur.parked = add(cur.parked, at(add(String(r.inv_income ?? 0), neg(String(r.inv_nonar ?? 0))), r.late, to));
+    cur.sched = add(cur.sched, at(r.sched, r.late, to));
+    cur.voids = add(cur.voids, at(r.voids, r.late, to));
+    ledgerByParty.set(r.id, cur);
+  }
+
   /* ---- base metrics ---- */
   interface Base {
-    id: string; name: string; revenue: number; priorRevenue: number; txns: number;
-    avgValue: number; first: string | null; last: string | null; recency: number; tenure: number;
+    id: string; name: string; revenue: number; priorRevenue: number;
+    invoicedRevenue: number; recon: CustomerRevenueRecon;
+    txns: number; avgValue: number;
+    first: string | null; last: string | null; recency: number; tenure: number;
   }
-  // Revenue arrives per (party, functional) at the posted document rate;
-  // translate each leg to presentation at its latest posting date, then
-  // merge per party. Average = translated revenue per invoice.
+  // Invoiced revenue arrives per (party, functional) at the posted document
+  // rate; translate each leg to presentation at its latest posting date, then
+  // merge per party. Average = translated invoiced revenue per invoice.
   const baseLegs = baseRows.rows as unknown as CustomerBaseSqlRow[];
-  const baseCtx = await flowRates(orgId, [
-    ...baseLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
-    ...baseLegs.filter((r) => r.prior_revenue != null).map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
-  ]);
-  const baseByParty = new Map<string, { name: string; revenue: string; priorRevenue: string; txns: number; first: string | null; last: string | null }>();
+  const baseCtx = await flowRates(orgId, baseLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+  })));
+  const baseByParty = new Map<string, { name: string; revenue: string; txns: number; first: string | null; last: string | null }>();
   for (const r of baseLegs) {
-    const cur = baseByParty.get(r.id) ?? { name: String(r.name), revenue: "0", priorRevenue: "0", txns: 0, first: null as string | null, last: null as string | null };
+    const cur = baseByParty.get(r.id) ?? { name: String(r.name), revenue: "0", txns: 0, first: null as string | null, last: null as string | null };
     cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), baseCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
-    if (r.prior_revenue != null) {
-      cur.priorRevenue = add(cur.priorRevenue, mulDecimal(String(r.prior_revenue), baseCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
-    }
     cur.txns += Number(r.txn_count ?? 0);
     const first = r.first_txn ? String(r.first_txn).slice(0, 10) : null;
     const last = r.last_txn ? String(r.last_txn).slice(0, 10) : null;
@@ -699,14 +952,39 @@ export async function customerData(
     baseByParty.set(r.id, cur);
   }
   const base: Base[] = [...baseByParty.entries()].map(([id, c]) => {
-    const revenue = Number(c.revenue);
+    // Headline money is RECOGNIZED (ledger); invoiced stays alongside as the
+    // reconciling column. Population, counts and dates stay document-based:
+    // they describe billing activity, not earned value.
+    const invoicedRevenue = Number(c.revenue);
+    const led = ledgerByParty.get(id);
+    const revenue = led ? Number(led.recognized) : 0;
+    const tax = led ? Number(led.tax) : 0;
+    const credits = led ? Number(led.credits) : 0;
+    const timingDeferred = led ? Number(led.parked) : 0;
+    const timingRecognized = led ? Number(led.sched) : 0;
+    const voids = led ? Number(led.voids) : 0;
+    const explained = tax + credits + (timingDeferred - timingRecognized) + voids;
     return {
       id,
       name: c.name,
       revenue,
-      priorRevenue: Number(c.priorRevenue),
+      priorRevenue: led ? Number(led.priorRecognized) : 0,
+      invoicedRevenue,
+      recon: {
+        tax,
+        credits,
+        timingDeferred,
+        timingRecognized,
+        voids,
+        // Residual, not a plug target: manual-journal income with a party tag
+        // and FX/rounding dust land here. The durable recon test pins it to
+        // zero for pure document flows and to the manual amount when seeded.
+        other: (invoicedRevenue - revenue) - explained,
+      },
       txns: c.txns,
-      avgValue: c.txns > 0 ? revenue / c.txns : 0,
+      // Billing behavior (average invoice size), not earned value — pairs with
+      // invoice counts, which are document-based too.
+      avgValue: c.txns > 0 ? invoicedRevenue / c.txns : 0,
       first: c.first,
       last: c.last,
       recency: c.last ? Math.max(0, daysBetween(c.last, ref)) : 9999,
@@ -932,6 +1210,8 @@ export async function customerData(
       name: strings.displayCustomerName(c.name),
       revenue: c.revenue,
       priorRevenue: c.priorRevenue,
+      invoicedRevenue: c.invoicedRevenue,
+      recon: c.recon,
       yoyPct: c.priorRevenue > 0 ? (c.revenue - c.priorRevenue) / c.priorRevenue : null,
       invoices: c.txns,
       avgInvoice: c.avgValue,
@@ -990,13 +1270,15 @@ export async function customerData(
       percentage: rows.length ? Math.round((set.length / rows.length) * 100) : 0,
       totalRevenue: rev,
       avgRevenue: set.length ? rev / set.length : 0,
+      totalInvoiced: set.reduce((a, r) => a + r.invoicedRevenue, 0),
     };
   });
 
   /* ---- growth () ---- */
-  // Monthly revenue arrives per (month, functional): translate each leg at
-  // its latest posting date, then merge per month. Distinct counts ride the
-  // separate month-grain query (they never merge across functionals).
+  // Monthly INVOICED revenue arrives per (month, functional): translate each leg
+  // at its latest posting date, then merge per month. Distinct counts ride the
+  // separate month-grain query (they never merge across functionals). The
+  // recognized monthly series is built from the ledger legs just below.
   const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
   const gCtx = await flowRates(orgId, gLegs.map((r) => ({
     func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
@@ -1012,9 +1294,29 @@ export async function customerData(
   for (const r of growthCounts.rows as unknown as GrowthCountRow[]) {
     gCounts.set(String(r.month), r);
   }
-  const gRows = [...gRevenue.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, revenue]) => ({ month, revenue, counts: gCounts.get(month) }));
+  // Recognized monthly: same leg pattern over the ledger month query. Months
+  // present in only one universe still appear (the other reads zero) so the
+  // timing gap between billing and recognition stays visible month by month.
+  interface GrowthLedgerRow { month: string; func: string | null; recognized: CustomerSqlNumeric; late: string | null }
+  const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
+  const glCtx = await flowRates(orgId, glLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+  })));
+  const gRecognized = new Map<string, string>();
+  for (const r of glLegs) {
+    const key = String(r.month);
+    gRecognized.set(key, add(gRecognized.get(key) ?? "0",
+      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+  }
+  const gInvoiced = gRevenue;
+  const gRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
+    .sort((a, b) => a.localeCompare(b))
+    .map((month) => ({
+      month,
+      invoiced: gInvoiced.get(month) ?? "0",
+      revenue: gRecognized.get(month) ?? "0",
+      counts: gCounts.get(month),
+    }));
   const revenues = gRows.map((r) => Number(r.revenue)).sort((a, b) => a - b);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : 0;
   const minRevenueThreshold = medianRevenue * 0.1;
@@ -1036,6 +1338,7 @@ export async function customerData(
       month: r.month,
       label: strings.monthLabel(r.month),
       revenue: Math.round(revenue),
+      invoiced: Math.round(Number(r.invoiced)),
       uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
       transactionCount: Number(r.counts?.txn_count ?? 0),
       newCustomers: Number(r.counts?.new_customers ?? 0),
@@ -1071,24 +1374,39 @@ export async function customerData(
   const sixMonthsAgo = new Date(ref + "T00:00:00Z");
   sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 6);
   const activeCut = sixMonthsAgo.toISOString().slice(0, 10);
-  // Lifetime revenue arrives per (party, functional): translate each leg at
-  // its latest posting date, merge per party, then run the cohort logic on
-  // parties (never on legs).
+  // Lifetime INVOICED revenue arrives per (party, functional): translate each leg
+  // at its latest posting date, merge per party, then run the cohort logic on
+  // parties (never on legs). Lifetime recognized merges in from the ledger
+  // legs just below; cohort membership (first/last year) stays document-based.
   interface CohortLeg { id: string; func: string | null; first_order: unknown; last_order: unknown; late: string | null; lifetime_revenue: CustomerSqlNumeric }
   const cohortLegs = cohortRows.rows as unknown as CohortLeg[];
   const cohortCtx = await flowRates(orgId, cohortLegs.map((r) => ({
     func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
   })));
-  const cohortByParty = new Map<string, { first: string; last: string; revenue: string }>();
+  const cohortByParty = new Map<string, { first: string; last: string; revenue: string; invoiced: string }>();
   for (const r of cohortLegs) {
     const first = String(r.first_order).slice(0, 10);
     const last = String(r.last_order).slice(0, 10);
-    const cur = cohortByParty.get(r.id) ?? { first, last, revenue: "0" };
+    const cur = cohortByParty.get(r.id) ?? { first, last, revenue: "0", invoiced: "0" };
     if (first < cur.first) cur.first = first;
     if (last > cur.last) cur.last = last;
-    cur.revenue = add(cur.revenue, mulDecimal(String(r.lifetime_revenue ?? 0),
+    cur.invoiced = add(cur.invoiced, mulDecimal(String(r.lifetime_revenue ?? 0),
       cohortCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
     cohortByParty.set(r.id, cur);
+  }
+  interface CohortLedgerLeg { id: string; func: string | null; recognized: CustomerSqlNumeric; late: string | null }
+  const cohortLedgerLegs = cohortLedgerRows.rows as unknown as CohortLedgerLeg[];
+  const cohortLedgerCtx = await flowRates(orgId, cohortLedgerLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+  })));
+  for (const r of cohortLedgerLegs) {
+    const cur = cohortByParty.get(r.id);
+    // Recognition without any invoice history has no cohort to join (cohorts
+    // are billing relationships by first-order year) — the org-level P&L tie
+    // still counts it, so no money is lost, only uncohortable.
+    if (!cur) continue;
+    cur.revenue = add(cur.revenue, mulDecimal(String(r.recognized ?? 0),
+      cohortLedgerCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
   }
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
@@ -1098,10 +1416,11 @@ export async function customerData(
     lifetimeCustomers++;
     if (isActive) lifetimeActive++;
     let c = cohortMap.get(year);
-    if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: 0, avgRevenue: 0 }; cohortMap.set(year, c); }
+    if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: 0, avgRevenue: 0, totalInvoiced: 0 }; cohortMap.set(year, c); }
     c.totalCustomers++;
     if (isActive) c.activeCustomers++;
     c.totalRevenue += Number(p.revenue);
+    c.totalInvoiced += Number(p.invoiced);
   }
   const cohortList = [...cohortMap.values()]
     .map((c) => ({
@@ -1109,6 +1428,7 @@ export async function customerData(
       retentionRate: c.totalCustomers ? Math.round((c.activeCustomers / c.totalCustomers) * 100) : 0,
       avgRevenue: c.totalCustomers ? Math.round(c.totalRevenue / c.totalCustomers) : 0,
       totalRevenue: Math.round(c.totalRevenue),
+      totalInvoiced: Math.round(c.totalInvoiced),
     }))
     .sort((a, b) => a.year.localeCompare(b.year));
   const overallRetention = lifetimeCustomers ? Math.round((lifetimeActive / lifetimeCustomers) * 100) : 0;
@@ -1153,6 +1473,7 @@ export async function customerData(
     kpis: {
       totalCustomers: rows.length,
       totalRevenue: Math.round(totalRevenue),
+      totalInvoiced: Math.round(rows.reduce((a, r) => a + r.invoicedRevenue, 0)),
       avgCustomerValue: Math.round(totalRevenue / Math.max(1, rows.length)),
       projectedClv: Math.round(totalProjectedClv),
       avgClv: rows.length ? Math.round(totalProjectedClv / rows.length) : 0,
@@ -1179,7 +1500,7 @@ export async function customerData(
     segments,
     tierBreakdown: TIERS.map((tier) => {
       const set = rows.filter((r) => r.tier === tier);
-      return { tier, count: set.length, revenue: set.reduce((a, r) => a + r.revenue, 0), threshold: tierThresholds[tier] };
+      return { tier, count: set.length, revenue: set.reduce((a, r) => a + r.revenue, 0), invoiced: set.reduce((a, r) => a + r.invoicedRevenue, 0), threshold: tierThresholds[tier] };
     }),
     growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: Math.round(medianRevenue), totalNewCustomers, trend },
     cohorts: { list: cohortList, overallRetention },
