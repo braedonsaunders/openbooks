@@ -39,7 +39,8 @@
       "compliance": "Cumplimiento",
       "wages": "Tarifas salariales",
       "invoicing": "Facturación",
-      "pricing": "Precios"
+      "pricing": "Precios",
+      "payroll": "Nómina"
     },
     "wages": {
       "title": "Tarifas salariales",

@@ -57,3 +57,40 @@ test('the wage and payroll panels stay mounted once visited instead of unmountin
   assert.doesNotMatch(drawerSource, /\{tab === 'wages' &&/)
   assert.doesNotMatch(drawerSource, /\{tab === 'payroll' &&/)
 })
+
+// F-t02-015: the blank-name guard and the statement link rendered raw
+// `parties.drawer.drawer.*` keys in every locale, because the drawer called
+// t('drawer.nameRequired') / t('drawer.viewStatement') under the
+// parties.drawer namespace instead of the bare keys that exist in all 7
+// catalogs. Every static t('…') key in this file must resolve through the
+// real locale indexes — a locale-file grep cannot catch a wrong nesting.
+test('every static drawer key resolves in all locales (no doubled namespace)', async () => {
+  const { createTranslator } = await import('next-intl')
+  const keys = new Set<string>()
+  for (const match of drawerSource.matchAll(/(?<![A-Za-z])t\('([^']+)'\)/g)) keys.add(match[1]!)
+  assert.ok(keys.size > 0, 'expected static translation keys in the drawer')
+  assert.ok(
+    ![...keys].some((key) => key.startsWith('drawer.')),
+    `drawer-namespace keys must not re-prefix 'drawer.': ${[...keys].filter((key) => key.startsWith('drawer.')).join(', ')}`,
+  )
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const) {
+    const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
+    const t = createTranslator({ locale, namespace: 'parties.drawer', messages: messages as never } as never) as unknown as (
+      lookup: string,
+    ) => string
+    for (const key of keys) {
+      // A miss renders the full key path (parties.drawer.<key>), never throws.
+      const missPaths = new Set([key, `parties.drawer.${key}`])
+      let rendered: string | undefined
+      try {
+        rendered = t(key)
+      } catch {
+        assert.fail(`drawer key ${JSON.stringify(key)} misses in the ${locale} catalog`)
+      }
+      assert.ok(
+        typeof rendered === 'string' && rendered.length > 0 && !missPaths.has(rendered),
+        `drawer key ${JSON.stringify(key)} must render translated text in ${locale}, got ${JSON.stringify(rendered)}`,
+      )
+    }
+  }
+})
