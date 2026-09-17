@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { compareDecimal } from "../../../lib/exact-decimal";
 import { Empty, Small, Status } from "./workspace-ui";
@@ -36,6 +37,10 @@ export function CamTable({
   onEdit?: (pool: CamPool) => void;
   onReopen?: (pool: CamPool) => void;
 }) {
+  // A refused pool action pins the server's reason on that pool's card until
+  // the next attempt — the shared act() toast alone let a refused Finalize
+  // read as a dead button (F-t07-007).
+  const [poolError, setPoolError] = useState<{ poolId: string; message: string } | null>(null);
   const pools = propertyId
     ? data.camPools.filter((pool) => pool.propertyId === propertyId)
     : data.camPools;
@@ -109,12 +114,15 @@ export function CamTable({
                     size="sm"
                     variant="outline"
                     disabled={busy}
-                    onClick={() =>
-                      act(
+                    onClick={async () => {
+                      setPoolError(null);
+                      const result = await act(
                         { action: "finalizeCam", poolId: pool.id },
                         "CAM actuals finalized",
-                      )
-                    }
+                        (message) => setPoolError({ poolId: pool.id, message }),
+                      );
+                      if (result) setPoolError(null);
+                    }}
                   >
                     Finalize
                   </Button>
@@ -147,6 +155,11 @@ export function CamTable({
                 ) : null}
               </div>
             </div>
+            {poolError?.poolId === pool.id ? (
+              <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                {poolError.message}
+              </p>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-3">
               <Small
                 label="Budget"

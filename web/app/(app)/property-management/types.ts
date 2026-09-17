@@ -54,6 +54,10 @@ export type PropertyPermissions = {
 export type PropertyAction = (
   payload: Record<string, unknown>,
   success: string,
+  // A refused action still toasts, but the toast alone let the CAM Finalize
+  // refusal read as silence (F-t07-007): callers that own a record surface
+  // can pin the same reason there until the next attempt.
+  onError?: (message: string) => void,
 ) => Promise<Record<string, unknown> | null>;
 export type SaveAction = (
   payload: Record<string, unknown>,
