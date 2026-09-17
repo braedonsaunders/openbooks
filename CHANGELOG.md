@@ -101,19 +101,23 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 - Journal counts read one scope across the setup guide, header, and
   list.
 - Send-for-signature refusals pin as a dialog alert.
-- Banking, AP, close, continuous-close, projects, allocations,
-  entities, documents, compliance, and field-ticket catalogs are
-  translated in all six non-English locales and pinned with
-  placeholder-parity so English cannot be pasted back.
+- All six non-English locales now carry the full product. The
+  remaining keys are reviewed cognates, not gaps. Each namespace is
+  pinned with placeholder-parity so English cannot be pasted back.
 - All seven aging and statement precision suites now seed and read
   under the scratch org. That was test drift, not money: they had been
   asserting against zero rows because an imported web reader denied
   unscoped queries. Assertions are unchanged.
+- MFA and password-reset suites now seed and read under the scratch
+  org for the same resolver reason. Assertions are unchanged.
 - Lien-waiver project-required refusals pin on the record.
 - The setup rail stacks below phone width. Readiness points at the
   chart of accounts. A blank tax-code percent falls through with a
   spoken refusal. Rate-card lapse uses the shared invoicing label.
-  The book-policy custom-formula picker is labelled.
+  The book-policy custom-formula picker is labelled. Setup column,
+  field, and filter keys must resolve to English labels; four orphaned
+  keys are now labelled in every locale, and a dead allocations mode
+  column is gone.
 - Project list cells and filters resolve custom type names.
 
 ## [0.1.0-alpha.14] - 2026-09-17
