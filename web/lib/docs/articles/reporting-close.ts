@@ -214,7 +214,7 @@ export const periodClose: DocArticle = {
   title: 'Period Close',
   category: 'banking-close',
   order: 2,
-  summary: 'Prepare, execute, approve, lock, publish, and—when governed—reopen an accounting period.',
+  summary: 'Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.',
   updated: '2026-07-20',
   keywords: [
     'period close',
@@ -235,9 +235,9 @@ accounting lock. It is not only a date switch.
 ## Prepare the close
 
 Before starting, confirm the accounting book and period. Review the configured
-close blueprint, task owners, dependencies, target date, reporting package, and
-approval requirements. **Close Monitor** can help surface readiness issues
-before the formal run begins.
+close blueprint, task owners, dependencies, target date, reporting package
+(advanced close), and approval requirements. **Close Monitor** can help surface
+readiness issues before the formal run begins.
 
 Typical preparation includes bank reconciliation, AR and AP reconciliation,
 inventory and fixed-asset review, tax review, accruals, revenue recognition,
@@ -280,16 +280,26 @@ while review is pending or after final approval, open gates are cancelled, prior
 sign-off is invalidated, and the run returns to review. Revalidate the close,
 repeat affected work, and request a new approval round.
 
-## Lock and publish
+## Lock the period
 
-Module and accounting locks prevent new activity or amendments in the closed
-scope. Approval and publication should occur only after the reporting package is
-reproducible and named reviewers accept the result.
+The run moves through Scope, Readiness, Execute, Review, and Lock. Module and
+accounting locks prevent new activity or amendments in the closed scope.
 
 After the final configured gate approves, use **Lock period** to apply subledger
-locks before the GL lock. The **Publish package** button remains visible on the
-Publish stage throughout the run; it becomes available only after the period is
-locked, so the required next step is always clear.
+locks before the GL lock. Approval should occur only after named reviewers
+accept the result.
+
+## Publish the reporting package (advanced close only)
+
+With advanced close enabled, setup gains blueprint and package configuration
+and the run gains a sixth stage — **Publish** — after Lock. Without advanced
+close there is no Publish stage: the run ends at Lock.
+
+The **Publish package** button remains visible on the Publish stage throughout
+the run; it becomes available only after the period is locked, so the required
+next step is always clear. Publishing freezes the configured reporting package
+as the period binder. After a controlled reopen, publishing again records a
+restatement, and a note is required.
 
 ## Reopen carefully
 
