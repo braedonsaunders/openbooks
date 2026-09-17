@@ -61,6 +61,7 @@ type LockedOpportunityRow = {
   win_loss_reason: string | null
   projected_amount: string | number
   weighted_amount: string | number
+  is_active: boolean
 }
 
 async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false, allowed?: ReadonlySet<string> | null): Promise<boolean> {
@@ -325,7 +326,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (!CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
     if (!title) throw new OpportunityValidationError('title is required')
-    const willBeActive = body.isActive !== undefined ? body.isActive === true : (title !== 'New opportunity' && !!partyId)
+    // Activation means "a real record, not a creation stub" — the drawer has
+    // no active toggle, so this computation is the only path to list
+    // visibility (F-t03-014: a titled Closed-lost record saved without an
+    // account stayed inactive forever, invisible under Status=All while its
+    // drawer saved 200s). A titled opportunity activates with an account, on
+    // reaching a closed status (terminal records are complete), or while it
+    // is already active (reopening or unlinking the account must not vaporize
+    // a saved record from the list). The open-pipeline account check below
+    // still gates activation-with-account on a live account.
+    const willBeActive = body.isActive !== undefined
+      ? body.isActive === true
+      : (title !== 'New opportunity' && (!!partyId || nextStatus.is_closed || current.is_active))
     if (partyId && willBeActive && !nextStatus.is_closed) {
       // The account was locked above; a concurrent retirement cannot be
       // missed or race this activation. Legacy work may still be closed.

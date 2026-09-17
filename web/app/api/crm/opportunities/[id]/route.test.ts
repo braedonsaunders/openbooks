@@ -21,6 +21,7 @@ interface RouteState {
   releaseLockBarrier: (() => void) | null
   firstLockReady: (() => void) | null
   txStatusValid: boolean
+  txStatusClosed: boolean
   txInvalidReference: string | null
   loaded: Record<string, unknown> | null
   sequence: number
@@ -42,6 +43,7 @@ const routeState: RouteState = {
   releaseLockBarrier: null,
   firstLockReady: null,
   txStatusValid: true,
+  txStatusClosed: false,
   txInvalidReference: null,
   loaded: null,
   sequence: 0,
@@ -53,6 +55,10 @@ function sqlText(query: unknown): string {
   if (!Array.isArray(chunks)) return ''
   return chunks.map((chunk) => {
     if (typeof chunk === 'string') return chunk
+    // Interpolated scalars ride bare in the chunk list (not wrapped) —
+    // stringify them too, or writes like `is_active = true` read back as
+    // `is_active = ` and untestable.
+    if (typeof chunk === 'number' || typeof chunk === 'boolean' || typeof chunk === 'bigint') return String(chunk)
     const value = (chunk as { value?: unknown[] })?.value
     if (Array.isArray(value)) return value.map(String).join('')
     if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
@@ -152,7 +158,7 @@ const mockSources = new Map<string, string>([
             return { rows: matches ? [{ ok: 1 }] : [] }
           }
           if (text.includes('from crm_opportunity_statuses')) {
-            return { rows: state.txStatusValid ? [{ is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely' }] : [] }
+            return { rows: state.txStatusValid ? [state.txStatusClosed ? { is_closed: true, is_won: false, probability: 0, default_forecast_category: 'most_likely' } : { is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely' }] : [] }
           }
           if (text.includes('from parties') || text.includes('from contacts') || text.includes('from users') || text.includes('from crm_sales_teams') || text.includes('from crm_lead_sources') || text.includes('from currencies') || text.includes('from items')) {
             if (state.txInvalidReference && text.includes('from ' + state.txInvalidReference)) return { rows: [] }
@@ -304,6 +310,7 @@ function reset(lockedContactMatches: boolean[] = [true]): void {
   routeState.releaseLockBarrier = null
   routeState.firstLockReady = null
   routeState.txStatusValid = true
+  routeState.txStatusClosed = false
   routeState.txInvalidReference = null
   routeState.loaded = { id: OPPORTUNITY_ID, party_id: PARTY_B, primary_contact_id: CONTACT_ID }
   routeState.sequence = 0
@@ -485,4 +492,71 @@ test('deactivated account, team, and source references fail closed on the locked
     assert.equal(routeState.txWrites, 0)
     assert.equal(routeState.auditWrites, 0)
   }
+})
+
+/**
+ * F-t03-014: a titled opportunity saved without an account stayed inactive
+ * forever — invisible in the list under Status=All (and zeroing every facet
+ * count) while its drawer saved 200s, because activation required an
+ * account. Activation now means "a real record, not a creation stub".
+ */
+function updateActiveFlag(): boolean | null {
+  const update = routeState.calls.find(
+    (call) => call.kind === 'tx-execute' && call.text.includes('update crm_opportunities'),
+  )
+  const match = update?.text.match(/is_active = (true|false)/)
+  return match ? match[1] === 'true' : null
+}
+
+test('closing an account-less titled opportunity activates it for the list', async () => {
+  reset([true])
+  routeState.opportunity = {
+    ...staleOpportunity,
+    title: 'T03 Verify Opp',
+    party_id: null,
+    primary_contact_id: null,
+    is_active: false,
+  }
+  routeState.txStatusClosed = true
+
+  const response = await patch({
+    statusId: STATUS_B_ID,
+    winLossReason: 'Lost on price',
+    expectedUpdatedAt: REVISION,
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(updateActiveFlag(), true)
+})
+
+test('reopening keeps an active record visible without an account', async () => {
+  reset([true])
+  routeState.opportunity = {
+    ...staleOpportunity,
+    title: 'T03 Verify Opp',
+    party_id: null,
+    primary_contact_id: null,
+    is_active: true,
+  }
+
+  const response = await patch({ statusId: STATUS_ID, expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 200)
+  assert.equal(updateActiveFlag(), true)
+})
+
+test('an untitled stub without an account stays inactive', async () => {
+  reset([true])
+  routeState.opportunity = {
+    ...staleOpportunity,
+    title: 'New opportunity',
+    party_id: null,
+    primary_contact_id: null,
+    is_active: false,
+  }
+
+  const response = await patch({ expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 200)
+  assert.equal(updateActiveFlag(), false)
 })
