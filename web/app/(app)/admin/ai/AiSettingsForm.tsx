@@ -27,7 +27,7 @@ export type ProviderSpecLite = {
   modelHint?: string
 }
 
-type AiFormInitial = {
+export type AiFormInitial = {
   enabled: boolean
   provider: string
   modelFast: string
@@ -199,7 +199,18 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   function test() {
     startTest(async () => {
       try {
-        const res = await fetch('/api/admin/ai/test', { method: 'POST' })
+        // Verify what is in the form — the typed key, not just the saved
+        // config — so a key can be checked before it is persisted.
+        const res = await fetch('/api/admin/ai/test', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            provider,
+            baseUrl: baseUrl || undefined,
+            apiKey: apiKey || undefined,
+            modelFast: modelFast || undefined,
+          }),
+        })
         setTestResult((await res.json()) as { ok: boolean; message: string })
       } catch {
         setTestResult({ ok: false, message: t('testFailed') })
