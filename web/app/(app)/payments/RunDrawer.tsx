@@ -74,10 +74,11 @@ export interface PaymentFileClient {
 export interface PaymentEventClient { id: string; event_type: string; actor_name: string | null; created_at: string; details: Record<string, unknown> | null }
 
 /** Failure evidence stored on a posting event: the engine records the crash
- *  reason ({ error }) or the per-run tally ({ posted, failureCount,
+ *  reason ({ error }), the per-instruction reasons ({ failures: [{ payee,
+ *  error }] }), or the per-run tally ({ posted, failureCount,
  *  incompleteInstructions }). Rendered under the activity label so a failed
  *  posting names its reason instead of sitting as a bare key. */
-function postingEventReason(
+export function postingEventReason(
   event: PaymentEventClient,
   t: (
     key: 'runDrawer.eventsDetail.postingOutcome',
@@ -85,6 +86,22 @@ function postingEventReason(
   ) => string,
 ): string | null {
   const details = event.details ?? {}
+  // Per-instruction reasons first: a partially failed posting names who
+  // failed and why (the same "payee (reason)" shape as the post toast), so
+  // the clerk can fix and re-post after the toast dismisses (F-t03-005).
+  const failures = details.failures
+  if (Array.isArray(failures)) {
+    const named = failures
+      .filter(
+        (failure): failure is { payee: string; error: string } =>
+          !!failure &&
+          typeof failure === 'object' &&
+          typeof (failure as { payee?: unknown }).payee === 'string' &&
+          typeof (failure as { error?: unknown }).error === 'string',
+      )
+      .map((failure) => `${failure.payee} (${failure.error})`)
+    if (named.length > 0) return named.join('; ')
+  }
   const reason = details.error
   if (typeof reason === 'string' && reason.trim()) return reason
   if (event.event_type !== 'run_posting_failed' && event.event_type !== 'run_posting_completed') return null
