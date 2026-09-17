@@ -2022,6 +2022,9 @@
       "ghostName": "Lieferant „{vendor}“ stimmt mit Mitarbeiternamen „{employee}“ überein",
       "duplicateGroup": "{count, plural, one {# übereinstimmender Beleg} other {# übereinstimmende Belege}} — gleicher Lieferant, Art und Betrag ({currency} {amount}){sharedRef} (Spanne {daysSpan, plural, one {# Tag} other {# Tage}}): {others}",
       "duplicateSharedRef": ", gemeinsame Referenz {reference}",
+      "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
+      "auditFields": " ({fields})",
+      "auditVerb": { "created": "erstellt", "updated": "aktualisiert", "deleted": "gel\u00f6scht" },
       "riskGhosts": {
         "area": "Geisterlieferanten",
         "message": "{count, plural, one {# Lieferant} other {# Lieferanten}} stimmen mit Mitarbeitern überein"

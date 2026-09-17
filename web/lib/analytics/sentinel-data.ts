@@ -5,7 +5,7 @@ import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
 import { can, ForbiddenError, type Authz } from "../authz";
-import { englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
+import { auditEventArgs, englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
 
 /**
  * Sentinel — transaction integrity forensics re-engineered for scale.
@@ -922,9 +922,13 @@ export async function sentinelData(
   }).sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Audit trail ---------------------------------------------------------------------------------
+  // F-t09-006: every row renders a one-line human summary (who did what to
+  // which record) instead of the raw changes envelope. The verb/actor/field
+  // shaping is locale-free data; the sentence itself resolves through the
+  // strings bundle in the request locale.
   const auditEvents: AuditEvent[] = (auditRows.rows as AuditRow[]).map((r) => ({
     id: r.id, tableName: r.table_name, rowId: r.row_id, action: r.action, actorId: r.actor_id, at: r.at,
-    summary: r.changes || "",
+    summary: strings.auditEvent(auditEventArgs(r.action, r.actor_id, r.table_name, r.row_id, r.changes)),
   }));
   const auditTotal = Number(auditAgg.rows[0]?.total ?? 0);
   const auditDeletes = Number(auditAgg.rows[0]?.deletes ?? 0);

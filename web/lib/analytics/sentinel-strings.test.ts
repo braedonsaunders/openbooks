@@ -4,9 +4,34 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
 import {
+  auditEventArgs,
   englishSentinelStrings,
   sentinelStrings,
 } from './sentinel-strings.ts'
+
+test('audit summaries assemble from action, actor, resource and changed fields (F-t09-006)', () => {
+  assert.deepEqual(
+    auditEventArgs('update', 'a1b2c3d4-ffff', 'parties', '9f8e7d6c-ffff', '{"email":"a@b.c","phone":"1"}'),
+    { verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email, phone' },
+  )
+  assert.deepEqual(
+    auditEventArgs('DELETE', null, 'bank_accounts', '12345678-ffff', ''),
+    { verb: 'deleted', action: 'delete', actor: 'system', table: 'bank_accounts', row: '12345678', fields: '' },
+  )
+  // Truncated envelopes (the loader caps at 200 chars) name no fields
+  // rather than failing the row.
+  assert.equal(auditEventArgs('update', 'a1b2c3d4', 'parties', '9f8e7d6c', '{"email":').fields, '')
+  // Long field lists truncate with an ellipsis marker, never raw JSON.
+  assert.equal(
+    auditEventArgs('insert', 'a1b2c3d4', 'parties', '9f8e7d6c', '{"a":1,"b":2,"c":3,"d":4}').fields,
+    'a, b, c, …',
+  )
+  // Unmapped actions pass through as data under the stable `other` verb.
+  assert.deepEqual(
+    auditEventArgs('Void', 'a1b2c3d4', 'documents', '9f8e7d6c', null).verb,
+    'other',
+  )
+})
 
 /**
  * Sentinel forensic sentences resolve through the message catalogs.
@@ -49,6 +74,18 @@ test('the English default pins the exact legacy sentences', () => {
   assert.equal(s.displayPartyName('Unknown'), 'Unknown')
   assert.equal(s.displayPartyName(''), 'Unknown')
   assert.equal(s.displayPartyName('Acme'), 'Acme')
+  assert.equal(
+    s.auditEvent({ verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email, phone' }),
+    'a1b2c3d4 updated parties 9f8e7d6c (email, phone)',
+  )
+  assert.equal(
+    s.auditEvent({ verb: 'deleted', action: 'delete', actor: 'system', table: 'bank_accounts', row: '12345678', fields: '' }),
+    'system deleted bank_accounts 12345678',
+  )
+  assert.equal(
+    s.auditEvent({ verb: 'other', action: 'void', actor: 'a1b2c3d4', table: 'documents', row: '9f8e7d6c', fields: '' }),
+    'a1b2c3d4 void documents 9f8e7d6c',
+  )
 })
 
 test('the French catalog renders French forensics with ICU plurals', () => {
@@ -67,6 +104,10 @@ test('the French catalog renders French forensics with ICU plurals', () => {
   )
   assert.deepEqual(s.riskGhosts(2), { area: 'Fournisseurs fantômes', message: '2 fournisseurs correspondent à des salariés' })
   assert.equal(s.displayPartyName('Unknown'), 'Inconnu')
+  assert.equal(
+    s.auditEvent({ verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email, phone' }),
+    'a1b2c3d4 a mis à jour parties 9f8e7d6c (email, phone)',
+  )
 })
 
 test('the English default is byte-identical to the en catalog rendering', () => {
@@ -103,6 +144,9 @@ test('the English default is byte-identical to the en catalog rendering', () => 
     ['unknown', (s) => s.displayPartyName('Unknown')],
     ['blank', (s) => s.displayPartyName('')],
     ['named', (s) => s.displayPartyName('Acme')],
+    ['audit-updated', (s) => s.auditEvent({ verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email, phone' })],
+    ['audit-deleted-nofields', (s) => s.auditEvent({ verb: 'deleted', action: 'delete', actor: 'system', table: 'bank_accounts', row: '12345678', fields: '' })],
+    ['audit-other', (s) => s.auditEvent({ verb: 'other', action: 'void', actor: 'a1b2c3d4', table: 'documents', row: '9f8e7d6c', fields: '' })],
   ]
   for (const [name, run] of cases) {
     assert.deepEqual(run(def), run(en), `${name}: default must equal en catalog rendering`)
@@ -120,6 +164,7 @@ test('every locale renders the forensics without falling back to English', () =>
       ['sequential', s.sequentialReason(5, '100', '104', 12, true, 'CAD'), en.sequentialReason(5, '100', '104', 12, true, 'CAD')],
       ['duplicate', s.duplicateGroupReason({ count: 2, currency: 'CAD', amount: '5000', sharedReference: null, daysSpan: 2, others: 'DUP-2' }), en.duplicateGroupReason({ count: 2, currency: 'CAD', amount: '5000', sharedReference: null, daysSpan: 2, others: 'DUP-2' })],
       ['riskGhosts', s.riskGhosts(2).message, en.riskGhosts(2).message],
+      ['audit', s.auditEvent({ verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email' }), en.auditEvent({ verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email' })],
     ] as const) {
       assert.notEqual(got, want, `${locale} ${name} must not be English fallback`)
     }

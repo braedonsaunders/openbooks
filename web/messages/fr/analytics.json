@@ -2022,6 +2022,9 @@
       "ghostName": "Le fournisseur « {vendor} » correspond au nom du salarié « {employee} »",
       "duplicateGroup": "{count, plural, one {# document correspondant} other {# documents correspondants}} — même fournisseur, nature et montant ({currency} {amount}){sharedRef} (écart de {daysSpan, plural, one {# jour} other {# jours}}) : {others}",
       "duplicateSharedRef": ", référence partagée {reference}",
+      "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
+      "auditFields": " ({fields})",
+      "auditVerb": { "created": "a cr\u00e9\u00e9", "updated": "a mis \u00e0 jour", "deleted": "a supprim\u00e9" },
       "riskGhosts": {
         "area": "Fournisseurs fantômes",
         "message": "{count, plural, one {# fournisseur} other {# fournisseurs}} correspondent à des salariés"

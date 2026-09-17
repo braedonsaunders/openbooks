@@ -2022,6 +2022,9 @@
       "ghostName": "El proveedor «{vendor}» coincide con el nombre del empleado «{employee}»",
       "duplicateGroup": "{count, plural, one {# documento coincidente} other {# documentos coincidentes}} — mismo proveedor, tipo e importe ({currency} {amount}){sharedRef} (intervalo de {daysSpan, plural, one {# día} other {# días}}): {others}",
       "duplicateSharedRef": ", referencia compartida {reference}",
+      "auditEvent": "{actor} ha {verb} {table} {row}{fieldsFrag}",
+      "auditFields": " ({fields})",
+      "auditVerb": { "created": "creado", "updated": "actualizado", "deleted": "eliminado" },
       "riskGhosts": {
         "area": "Proveedores fantasma",
         "message": "{count, plural, one {# proveedor} other {# proveedores}} coinciden con empleados"

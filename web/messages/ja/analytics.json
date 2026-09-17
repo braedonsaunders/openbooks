@@ -2022,6 +2022,9 @@
       "ghostName": "仕入先「{vendor}」が従業員名「{employee}」と一致",
       "duplicateGroup": "一致する伝票{count, plural, one {# 件} other {# 件}} — 同一仕入先・種別・金額（{currency} {amount}）{sharedRef}（期間{daysSpan, plural, one {# 日} other {# 日}}）：{others}",
       "duplicateSharedRef": "、共通参照番号{reference}",
+      "auditEvent": "{actor}\u304c{table}\u306e\u30ec\u30b3\u30fc\u30c9{row}\u3092{verb}{fieldsFrag}",
+      "auditFields": "\uff08{fields}\uff09",
+      "auditVerb": { "created": "\u4f5c\u6210", "updated": "\u66f4\u65b0", "deleted": "\u524a\u9664" },
       "riskGhosts": {
         "area": "ゴースト仕入先",
         "message": "{count, plural, one {# 社} other {# 社}}が従業員と一致"

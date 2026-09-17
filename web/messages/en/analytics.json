@@ -2210,6 +2210,9 @@
       "ghostName": "Vendor \"{vendor}\" matches employee name \"{employee}\"",
       "duplicateGroup": "{count, plural, one {# matching document} other {# matching documents}} — same vendor, kind, amount ({currency} {amount}){sharedRef} ({daysSpan, plural, one {# day} other {# days}} span): {others}",
       "duplicateSharedRef": ", shared reference {reference}",
+      "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
+      "auditFields": " ({fields})",
+      "auditVerb": { "created": "created", "updated": "updated", "deleted": "deleted" },
       "riskGhosts": {
         "area": "Ghost Vendors",
         "message": "{count, plural, one {# vendor} other {# vendors}} match employee names"
