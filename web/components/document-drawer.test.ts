@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  applyQtyPriceToRows,
   clearedDistributionFields,
   computeDocumentDrawerTotals,
   distributionFieldsOf,
   isPricedDrawerLine,
+  lineAmountFromQtyPrice,
 } from './document-drawer'
 
 const row = (accountId: string, amount: string) => ({
@@ -76,4 +78,47 @@ test('the reviewed footer total is the booked total: save keeps every row the fo
   // the operator reviewed.
   const booked = computeDocumentDrawerTotals(rows.filter(isPricedDrawerLine), new Map(), false)
   assert.equal(booked.total, reviewed.total)
+})
+
+// F-t02-004: Quantity × Unit price drives the line Amount. Exact decimal
+// math, ledger scale, no Number hop.
+test('line amount derives exactly from quantity times unit price', () => {
+  assert.equal(lineAmountFromQtyPrice('1', '1000'), '1000.0000')
+  assert.equal(lineAmountFromQtyPrice('3', '1000'), '3000.0000')
+  assert.equal(lineAmountFromQtyPrice('1.5', '19.99'), '29.9850')
+  assert.equal(lineAmountFromQtyPrice('-2', '100'), '-200.0000')
+  assert.equal(lineAmountFromQtyPrice('3', '10.333'), '30.9990')
+})
+
+test('line amount derivation refuses to guess: blank or junk keeps the manual amount', () => {
+  assert.equal(lineAmountFromQtyPrice('', '1000'), null)
+  assert.equal(lineAmountFromQtyPrice('3', ''), null)
+  assert.equal(lineAmountFromQtyPrice('', ''), null)
+  assert.equal(lineAmountFromQtyPrice('abc', '1000'), null)
+  assert.equal(lineAmountFromQtyPrice('3', '1.23456789012'), null)
+})
+
+const qtyRow = (quantity: string, unitPrice: string, amount: string) => ({ quantity, unitPrice, amount })
+
+test('a fresh qty+price prices the line: the F-t02-004 invoice flow', () => {
+  const prev = [qtyRow('', '', '')]
+  const next = [qtyRow('1', '1000', '')]
+  assert.deepEqual(applyQtyPriceToRows(prev, next), [qtyRow('1', '1000', '1000.0000')])
+})
+
+test('editing quantity on a derived line re-derives the amount', () => {
+  const prev = [qtyRow('1', '1000', '1000.0000')]
+  const next = [qtyRow('3', '1000', '1000.0000')]
+  assert.deepEqual(applyQtyPriceToRows(prev, next), [qtyRow('3', '1000', '3000.0000')])
+})
+
+test('a hand-typed amount that diverges from qty x price is never overwritten', () => {
+  // Discount / reapportioned / tax-adjusted lines keep their manual figure
+  // even when the operator edits quantity afterwards.
+  const prev = [qtyRow('1', '1000', '850.0000')]
+  const next = [qtyRow('3', '1000', '850.0000')]
+  assert.deepEqual(applyQtyPriceToRows(prev, next), [qtyRow('3', '1000', '850.0000')])
+  // …and an unrelated edit leaves derived and manual rows alike untouched.
+  const same = [qtyRow('3', '1000', '3000.0000'), qtyRow('1', '100', '90.0000')]
+  assert.deepEqual(applyQtyPriceToRows(same, same.map((r) => ({ ...r }))), same)
 })

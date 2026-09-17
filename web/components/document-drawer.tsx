@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { documentDrawerHref } from '../lib/document-drawer-navigation'
@@ -34,7 +34,7 @@ import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
-import { add, cmp, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { promptDialog } from '../lib/prompt'
@@ -420,6 +420,59 @@ export function isPricedDrawerLine(row: { accountId: string; amount: string }): 
   return Boolean(row.accountId) && String(row.amount ?? '').trim() !== ''
 }
 
+const LINE_DECIMAL_RE = /^[-+]?(\d+(\.\d*)?|\.\d+)$/
+const MAX_LINE_DECIMAL_SCALE = 10
+
+function parseLineDecimal(value: string): { units: bigint; scale: number } | null {
+  const raw = String(value ?? '').trim()
+  if (!LINE_DECIMAL_RE.test(raw)) return null
+  const unsigned = raw.replace(/^[-+]/, '')
+  const [whole = '0', fraction = ''] = unsigned.split('.')
+  if (fraction.length > MAX_LINE_DECIMAL_SCALE) return null
+  const units = BigInt(`${whole === '' ? '0' : whole}${fraction}`)
+  return { units: raw.startsWith('-') ? -units : units, scale: fraction.length }
+}
+
+/**
+ * Quantity × Unit price as a canonical ledger amount (F-t02-004: the invoice
+ * line editor silently ignored qty/price, so totals followed only the
+ * hand-typed Amount). Exact bigint math, halves away from zero, no Number
+ * hop. Returns null when either side is blank or unparseable — a manual
+ * discount line or a hand-typed amount must never be guessed over.
+ */
+export function lineAmountFromQtyPrice(quantity: string, unitPrice: string): string | null {
+  const q = parseLineDecimal(quantity)
+  const p = parseLineDecimal(unitPrice)
+  if (!q || !p) return null
+  const product = q.units * p.units
+  const scale = q.scale + p.scale
+  if (scale <= 4) return fromUnits(product * 10n ** BigInt(4 - scale))
+  return fromUnits(roundDiv(product, 10n ** BigInt(scale - 4)))
+}
+
+type QtyPriceRow = { quantity: string; unitPrice: string; amount: string }
+
+/**
+ * Grid change handler companion: a row whose quantity or unit price just
+ * changed re-derives its amount when the stored amount is blank or still the
+ * product of the previous qty/price (i.e. it was derived, not hand-typed).
+ * A divergent hand-typed amount — discount, reapportioned split,
+ * tax-adjusted figure — is never overwritten.
+ */
+export function applyQtyPriceToRows<Row extends QtyPriceRow>(prev: Row[], next: Row[]): Row[] {
+  return next.map((row, i) => {
+    const old = prev[i]
+    if (!old || (old.quantity === row.quantity && old.unitPrice === row.unitPrice)) return row
+    const derived = lineAmountFromQtyPrice(row.quantity, row.unitPrice)
+    if (derived === null || row.amount === derived) return row
+    if (row.amount.trim() !== '') {
+      const wasDerived = lineAmountFromQtyPrice(old.quantity, old.unitPrice)
+      if (row.amount !== wasDerived) return row
+    }
+    return { ...row, amount: derived }
+  })
+}
+
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: l.account_id ?? '',
@@ -678,6 +731,11 @@ export function DocumentDrawer({
   const [rows, setRows] = useState<LineRow[]>(
     payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
   )
+  // F-t02-004: grid edits flow through here so a quantity/unit-price change
+  // re-derives the line amount (blank/manual-divergent amounts are kept).
+  const handleGridRowsChange = useCallback((next: LineRow[]) => {
+    setRows((prev) => applyQtyPriceToRows(prev, next))
+  }, [])
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const persistedPropRevision = persistedDocumentRevision(doc.updated_at)
   const [documentRevision, setDocumentRevision] = useState(persistedPropRevision)
@@ -2203,7 +2261,7 @@ export function DocumentDrawer({
             <LineGrid<LineRow>
               columns={useLayout ? columnsFromLayout : columns}
               rows={rows}
-              onRowsChange={setRows}
+              onRowsChange={handleGridRowsChange}
               emptyRow={emptyLine}
               readOnly={!editable || config.kind === 'project_charge'}
               formatAmount={(value) => money(value, { currency: doc.currency })}
