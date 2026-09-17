@@ -101,13 +101,17 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 - Journal counts read one scope across the setup guide, header, and
   list.
 - Send-for-signature refusals pin as a dialog alert.
-- Banking, AP, close, and continuous-close catalogs are translated in
-  all six non-English locales and pinned with placeholder-parity so
-  English cannot be pasted back.
+- Banking, AP, close, continuous-close, projects, allocations,
+  entities, documents, compliance, and field-ticket catalogs are
+  translated in all six non-English locales and pinned with
+  placeholder-parity so English cannot be pasted back.
 - Aging, statement, budget-drill, and book-selection precision suites
   now seed and read under the scratch org, so they verify arithmetic
   against real rows instead of an unscoped empty set.
 - Lien-waiver project-required refusals pin on the record.
+- The setup rail stacks below phone width. Readiness points at the
+  chart of accounts. A blank tax-code percent falls through with a
+  spoken refusal. Rate-card lapse uses the shared invoicing label.
 
 ## [0.1.0-alpha.14] - 2026-09-17
 
