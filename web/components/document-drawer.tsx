@@ -10,6 +10,9 @@ import { documentDrawerHref } from '../lib/document-drawer-navigation'
 import { displayDocumentNumber, displayFormName } from '../lib/document-display'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from './transaction-drawer'
 import { LineGrid, type LineGridColumn, type LineGridDistribution } from './line-grid'
@@ -851,12 +854,13 @@ export function DocumentDrawer({
   const rehydratingPersistedPayload = useRef(false)
   const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
   // A refused submit/post that only fires a transient toast reads as
   // "nothing happened" once it dismisses (the F-t06-018 precedent): the
   // typed refusal also persists as a record-level alert, cleared on the
-  // next action.
-  const [actionError, setActionError] = useState<string | null>(null)
+  // next action. Saves, lifecycle actions, deletes, voids and form
+  // preference writes all run on the shared action path, whose busy flag
+  // always releases through its own finally.
+  const { busy, refusal, execute, refuse } = useAppAction()
 
   const taxProfiles = useMemo(() => [
     ...(taxCodes ?? []).map((profile) => ({ ...profile, value: `code:${profile.id}` })),
@@ -1434,18 +1438,13 @@ export function DocumentDrawer({
       if (!reason) return
       amendmentReason = reason
     }
-    setBusy(true)
     setSaveState('saving')
-    // A fresh attempt clears the previous refusal: the alert pins until the
-    // next action, not past a successful save (F-t03-002).
-    setActionError(null)
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
     // explicit { abort } blocks; { warnings } toast and proceed; fail-open.
     const gate = await runClientScripts(config.kind, payload_)
     if (!gate.ok) {
-      toast.error(gate.reason ?? t('toasts.actionFailed'))
+      refuse(gate.reason, t('toasts.actionFailed'))
       setSaveState('error')
-      setBusy(false)
       return
     }
     for (const w of gate.warnings) toast.warning(w)
@@ -1453,7 +1452,6 @@ export function DocumentDrawer({
     // refuse the save up front with the account named (F-t06-002).
     if (blockCurrencyMismatch()) {
       setSaveState('error')
-      setBusy(false)
       return
     }
     const request = buildDocumentSaveRequest(
@@ -1463,49 +1461,54 @@ export function DocumentDrawer({
       isPosted,
       amendmentReason,
     )
-    const res = await fetch(request.path, {
-      method: request.method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request.body),
-    })
-    if (res.ok) {
-      const data = (await res.json()) as DocPayload & {
-        correctionId?: string
-        voidStatus?: 'voided' | 'pending_approval'
-      }
-      if (isPosted && data.correctionId) {
-        toast.success(
-          data.voidStatus === 'pending_approval'
-            ? t('toasts.submitted')
-            : tCommon('amendment.correctionCreated'),
-        )
-        setBusy(false)
-        router.push(hrefForDocument(data.correctionId))
-        router.refresh()
-        return
-      }
-      const savedRevision = revisionFromSuccessfulDocumentSave(data)
-      persistedBaseline.current = {
-        documentId: String(data.doc.id),
-        revision: savedRevision,
-        payload: data,
-      }
-      seenPersistedRevisions.current.add(savedRevision)
-      resetForm(data)
-      setDocumentRevision(savedRevision)
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      router.refresh()
-    } else {
-      const failure = await readDocumentSaveFailure(res, t('toasts.actionFailed'))
-      // A save refusal stays on the record, not only in a toast (F-t03-002):
-      // the typed reason pins as an alert until the next action or edit.
-      setActionError(failure.message)
-      setSaveState('error')
-      toast.error(failure.message)
-    }
-    setBusy(false)
+    await execute(
+      () =>
+        fetchAction(request.path, {
+          method: request.method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request.body),
+        }),
+      {
+        // A fresh attempt clears the previous refusal: the alert pins until
+        // the next action, not past a successful save (F-t03-002).
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (payload) => {
+          const data = payload as DocPayload & {
+            correctionId?: string
+            voidStatus?: 'voided' | 'pending_approval'
+          }
+          if (isPosted && data.correctionId) {
+            toast.success(
+              data.voidStatus === 'pending_approval'
+                ? t('toasts.submitted')
+                : tCommon('amendment.correctionCreated'),
+            )
+            router.push(hrefForDocument(data.correctionId))
+            router.refresh()
+            return
+          }
+          const savedRevision = revisionFromSuccessfulDocumentSave(data)
+          persistedBaseline.current = {
+            documentId: String(data.doc.id),
+            revision: savedRevision,
+            payload: data,
+          }
+          seenPersistedRevisions.current.add(savedRevision)
+          resetForm(data)
+          setDocumentRevision(savedRevision)
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+          router.refresh()
+        },
+        onRefused: () => {
+          // A save refusal stays on the record, not only in a toast
+          // (F-t03-002): the typed reason pins as an alert until the next
+          // action or edit.
+          setSaveState('error')
+        },
+      },
+    )
   }
 
   // A dirty editor never closes silently: the X button (via beforeClose) and
@@ -1552,42 +1555,37 @@ export function DocumentDrawer({
   }
 
   async function act(action: 'submit' | 'post') {
-    setBusy(true)
-    setActionError(null)
     // Same up-front refusal as save: posting a currency-mismatched record
     // is a certain 422, so name the account before the round trip (F-t06-002).
     if (blockCurrencyMismatch()) {
-      setBusy(false)
       return
     }
-    try {
-      const res = await fetch('/api/documents/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, documentId: doc.id }),
-      })
-      const result = await readDocumentActionResult(res)
-      // Lifecycle refusals (period locks, missing control accounts, kernel
-      // guards) must stay visible in the drawer: a transient toast alone is
-      // too easy to miss, so the message also pins as an inline banner until
-      // the next action or edit.
-      if (!result.ok) {
-        const message = result.message ?? t('toasts.actionFailed')
-        setActionError(message)
-        toast.error(message)
-      }
-      else if (result.pendingApproval) toast.success(t('toasts.submitted'))
-      else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-      router.refresh()
-    } catch {
-      const message = t('toasts.actionFailed')
-      setActionError(message)
-      toast.error(message)
-    } finally {
-      // A rejected transport must not wedge the button on: without this,
-      // every later click silently dies on the stuck disabled button.
-      setBusy(false)
-    }
+    await execute(
+      () =>
+        fetchAction('/api/documents/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, documentId: doc.id }),
+        }),
+      {
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (data) => {
+          const pendingApproval =
+            (data as { pendingApproval?: unknown } | null)?.pendingApproval === true
+          if (pendingApproval) toast.success(t('toasts.submitted'))
+          else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+          router.refresh()
+        },
+        onRefused: (error) => {
+          // Lifecycle refusals (period locks, missing control accounts,
+          // kernel guards) must stay visible in the drawer: a transient
+          // toast alone is too easy to miss, so the message also pins as an
+          // inline banner until the next action or edit. A rejected transport
+          // pins without refreshing — there is nothing new to show.
+          if (error.kind !== 'transport') router.refresh()
+        },
+      },
+    )
   }
 
   async function remove() {
@@ -1600,20 +1598,22 @@ export function DocumentDrawer({
       }))
     )
       return
-    setBusy(true)
-    const res = await fetch(`/api/documents/${doc.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
-    })
-    if (res.ok) {
-      toast.success(t('toasts.deleted'))
-      router.push(basePath)
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('toasts.deleteFailed'))
-      setBusy(false)
-    }
+    await execute(
+      () =>
+        fetchAction(`/api/documents/${doc.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
+        }),
+      {
+        fallbackMessage: t('toasts.deleteFailed'),
+        successMessage: t('toasts.deleted'),
+        onOk: () => {
+          router.push(basePath)
+          router.refresh()
+        },
+      },
+    )
   }
 
   async function voidDocument() {
@@ -1624,17 +1624,22 @@ export function DocumentDrawer({
       confirmLabel: tCommon('actions.void'),
     })
     if (!reason) return
-    setBusy(true)
-    const res = await fetch(`/api/documents/${doc.id}/void`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason, expectedUpdatedAt: documentRevision }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
-    else toast.success(tCommon('status.voided'))
-    setBusy(false)
+    await execute(
+      () =>
+        fetchAction(`/api/documents/${doc.id}/void`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason, expectedUpdatedAt: documentRevision }),
+        }),
+      {
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (data) => {
+          const status = (data as { status?: unknown } | null)?.status
+          if (status === 'pending_approval') toast.success(t('toasts.submitted'))
+          else toast.success(tCommon('status.voided'))
+        },
+      },
+    )
     router.refresh()
   }
 
@@ -1783,8 +1788,7 @@ export function DocumentDrawer({
     })
     // A refusal the operator can trigger stays on the record, not only in
     // a toast: the typed reason pins as an alert until the next action.
-    setActionError(message)
-    toast.error(message)
+    refuse(message, t('toasts.actionFailed'))
     return true
   }
   // Card-instrument fallback (F-t05-020): no UI creates payment_cards rows,
@@ -2205,12 +2209,17 @@ export function DocumentDrawer({
   // this record, optionally set it as the user's preferred form.
   async function setPreferredForm(layoutId: string | null) {
     if (!recordType) return
-    const res = await fetch('/api/customization/form-preferences', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordType, layoutId }),
-    })
-    if (res.ok) toast.success(layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'))
-    else toast.error((await res.json()).error ?? t('drawer.formPreferredFailed'))
+    await execute(
+      () =>
+        fetchAction('/api/customization/form-preferences', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordType, layoutId }),
+        }),
+      {
+        fallbackMessage: t('drawer.formPreferredFailed'),
+        successMessage: layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'),
+      },
+    )
   }
   const showFormPicker = !editable && !!availableLayouts && availableLayouts.length > 0 && !!recordType
 
@@ -2390,11 +2399,7 @@ export function DocumentDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {actionError ? (
-          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-            {actionError}
-          </p>
-        ) : null}
+        <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
         {isTransfer ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>

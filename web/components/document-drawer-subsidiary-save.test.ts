@@ -33,10 +33,25 @@ test('an unset subsidiary reads as unset in view mode, not as the root (F-t03-00
 // F-t03-002: the bill save 422 ("requires a subsidiary") never showed —
 // save() toasted and moved on. A save refusal must pin as a record-level
 // alert like submit/post refusals already do.
+// Fleet-8 m1: the pin moved onto the shared action path (execute +
+// ActionAlert) — the hand-rolled readDocumentSaveFailure/setActionError
+// branch is gone, but the contract is unchanged: refusal pins until the
+// next action, and document-drawer-save-refusal.test.tsx proves it
+// behaviourally for both a 422 and a transport failure.
 test('a save refusal pins as an alert, not only a toast (F-t03-002)', () => {
   assert.match(
     source,
-    /const failure = await readDocumentSaveFailure\(res, t\('toasts\.actionFailed'\)\)\s+[\s\S]*?setActionError\(failure\.message\)/,
+    /fallbackMessage: t\('toasts\.actionFailed'\)[\s\S]*?onRefused/,
+    'the save failure branch must run on the shared action path with a refusal handler',
+  )
+  assert.match(
+    source,
+    /<ActionAlert error=\{refusal\}/,
     'the save failure branch must pin the typed reason as an alert',
+  )
+  assert.doesNotMatch(
+    source,
+    /setActionError/,
+    'the hand-rolled save-error state must stay retired',
   )
 })
