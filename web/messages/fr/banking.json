@@ -140,7 +140,8 @@
     "description": "Réconciliations ouvertes et signées sur tous les comptes.",
     "search": "Rechercher par date ou compte…",
     "emptyTitle": "Aucune réconciliation pour l’instant",
-    "emptyDescription": "Démarrez une réconciliation depuis un compte bancaire ou de carte pour la voir ici."
+    "emptyDescription": "Démarrez une réconciliation depuis un compte bancaire ou de carte pour la voir ici.",
+    "chooseAccount": "Choisissez un compte"
   },
   "rules": {
     "title": "Règles de rapprochement",
@@ -193,7 +194,103 @@
       "amountRange": "{min}–{max}",
       "exclude": "Exclure",
       "categorize": "Catégoriser → {account}",
-      "anyLine": "Toute ligne"
+      "anyLine": "Toute ligne",
+      "categorizeSplit": "Catégoriser → {account} +{count} autres",
+      "and": "et",
+      "or": "ou"
+    },
+    "runSuggested": "{suggested, plural, one {# ligne proposée à vérifier} other {# lignes proposées à vérifier}}",
+    "modeSuggest": "Suggestion",
+    "modeAuto": "Comptabilisation auto",
+    "assignPayee": "Attribuer un bénéficiaire",
+    "payeePlaceholder": "Rechercher des tiers",
+    "noPayee": "Aucun bénéficiaire",
+    "memoLabel": "Mémo",
+    "memoPlaceholder": "Par défaut : le libellé de la ligne bancaire",
+    "suggestHint": "Les lignes correspondantes reçoivent une suggestion prête à valider dans Rapprochement bancaire — rien n'est comptabilisé avant votre validation.",
+    "autoHint": "Les lignes correspondantes sont comptabilisées et rapprochées automatiquement à l'exécution des règles.",
+    "fields": {
+      "description": "Description",
+      "payee": "Bénéficiaire",
+      "anyText": "Tout champ texte",
+      "reference": "Référence",
+      "amount": "Montant",
+      "flow": "Sens",
+      "date": "Date"
+    },
+    "ops": {
+      "contains": "contient",
+      "notContains": "ne contient pas",
+      "equals": "est exactement",
+      "startsWith": "commence par",
+      "endsWith": "se termine par",
+      "isBlank": "est vide",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "supérieur à",
+      "gte": "au moins",
+      "lt": "inférieur à",
+      "lte": "au plus",
+      "between": "compris entre",
+      "is": "est",
+      "on": "le",
+      "before": "avant",
+      "after": "après",
+      "withinDays": "dans les N derniers jours"
+    },
+    "cb": {
+      "match": "Correspondance",
+      "allOf": "toutes les conditions suivantes",
+      "anyOf": "l'une des conditions suivantes",
+      "addCondition": "Ajouter une condition",
+      "addGroup": "Ajouter un groupe",
+      "noConditions": "Aucune condition — correspond à toutes les lignes.",
+      "remove": "Supprimer la condition",
+      "valuePlaceholder": "Valeur",
+      "and": "et",
+      "to": "à"
+    },
+    "scope": {
+      "label": "S'applique à",
+      "allHint": "S'exécute sur tous les comptes à rapprocher.",
+      "someHint": "S'exécute sur {count, plural, one {# compte} other {# comptes}}.",
+      "useAll": "Utiliser tous les comptes",
+      "limit": "Limiter à des comptes précis",
+      "search": "Filtrer les comptes…",
+      "selected": "{count} sélectionné(s)",
+      "noneFound": "Aucun compte correspondant.",
+      "emptyWarn": "Sélectionnez au moins un compte, ou revenez à tous."
+    },
+    "split": {
+      "remainder": "Reste",
+      "percent": "Pourcentage",
+      "fixed": "Fixe",
+      "addLine": "Ajouter une ligne",
+      "removeLine": "Supprimer la ligne",
+      "accountPlaceholder": "Sélectionner un compte",
+      "descriptionPlaceholder": "Mémo de ligne",
+      "portion": "Part"
+    },
+    "coding": {
+      "department": "Service",
+      "location": "Site",
+      "class": "Classe",
+      "tax": "Code de taxe"
+    },
+    "preview": {
+      "title": "Aperçu en direct",
+      "pickAccount": "Compte",
+      "pickAccountHint": "Sélectionnez un compte pour prévisualiser les lignes correspondantes.",
+      "needCondition": "Ajoutez une condition pour prévisualiser les lignes bancaires correspondantes.",
+      "loading": "Vérification des lignes récentes…",
+      "error": "Aperçu indisponible",
+      "matched": "{count, plural, one {une ligne correspondrait} other {des lignes correspondraient}}",
+      "conflicts": "{count, plural, one {# conflit} other {# conflits}}",
+      "noConflicts": "aucun conflit",
+      "none": "Aucune ligne ne correspond pour l'instant sur les 90 derniers jours.",
+      "stolen": "la règle prioritaire l'emporte",
+      "split": "Aperçu de la ventilation",
+      "healthHint": "En direct sur les lignes importées des 90 derniers jours."
     }
   },
   "match": {
@@ -233,7 +330,10 @@
     "excludedHint": "Lignes mises de côté — elles sont ignorées lors du rapprochement.",
     "searchExcluded": "Rechercher des lignes exclues…",
     "noExcluded": "Aucune ligne exclue.",
-    "restore": "Restaurer"
+    "restore": "Restaurer",
+    "createRule": "Créer une règle depuis cette ligne",
+    "postAndMatch": "Comptabiliser et rapprocher",
+    "suggestedBy": "Suggestion : {rule}"
   },
   "transactionsSearch": "Rechercher frais de carte, chèques, virements…",
   "transactionsEmptyTitle": "Aucune transaction bancaire pour l’instant",
@@ -372,7 +472,10 @@
     "formSetPreferred": "Définir comme préféré",
     "formSetPreferredDone": "Formulaire préféré enregistré",
     "formPreferredCleared": "Formulaire préféré effacé",
-    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
+    "cardAccountHelp": "Aucune carte enregistrée — sélectionnez le compte de carte à rapprocher pour comptabiliser.",
+    "noCardAccounts": "Aucun compte de carte à rapprocher pour l'instant.",
+    "noCardAccountsCta": "Ajoutez-en un dans le plan comptable"
   },
   "reconcile": {
     "title": "Rapprochement jusqu’au {date}",
@@ -499,7 +602,9 @@
       "importedN": "{n} importés",
       "paused": "en pause",
       "pause": "Mettre en pause",
-      "resume": "Reprendre"
+      "resume": "Reprendre",
+      "needsLogin": "Ajoutez d'abord un accès ci-dessus — un programme surveille un dossier de l'un d'eux.",
+      "needsAccount": "Ajoutez d'abord un compte bancaire à rapprocher — les imports y sont versés."
     },
     "authorizedKeys": "Clés SSH autorisées (facultatif)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banque@hote",
@@ -508,7 +613,13 @@
       "endpoint": "Connexion et accès",
       "servers": "Accès partenaires",
       "schedules": "Programmes d'importation"
-    }
+    },
+    "endpointTitle": "Point de terminaison",
+    "endpointHint": "Là où les clients se connectent. Partagez ces informations avec votre banque ou votre partenaire, ainsi qu'un accès ci-dessous.",
+    "loginsTitle": "Accès",
+    "connectCommand": "Commande de connexion",
+    "copyField": "Copier {label}",
+    "copied": "{label} copié"
   },
   "cash": {
     "title": "Trésorerie",
@@ -585,13 +696,13 @@
   },
   "bankFeeds": {
     "title": "Bank Feeds",
-    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "description": "Connectez les comptes bancaires pour l'import automatisé des relevés — flux agrégateurs en direct ou point de terminaison SFTP intégré.",
     "navTitle": "Bank Feeds",
     "tabs": {
-      "connections": "Connections",
-      "sftp-endpoint": "SFTP endpoint",
-      "sftp-servers": "Partner logins",
-      "sftp-schedules": "Import schedules"
+      "connections": "Connexions",
+      "sftp-endpoint": "Point de terminaison SFTP",
+      "sftp-servers": "Accès partenaires",
+      "sftp-schedules": "Programmes d'importation"
     },
     "operational": {
       "title": "Connexions de flux bancaires",
@@ -604,7 +715,131 @@
     "client": {
       "configure": {
         "noEligibleAccounts": "Aucun compte bancaire rapprochable à connecter pour le moment. Marquez vos comptes bancaires et de carte comme rapprochables dans le Plan comptable, puis choisissez-en un ici.",
-        "noEligibleAccountsLink": "Ouvrir le Plan comptable"
+        "noEligibleAccountsLink": "Ouvrir le Plan comptable",
+        "back": "← Retour",
+        "newConnection": "Nouvelle connexion",
+        "kindLive": "Flux en direct",
+        "kindFileDrop": "Dépôt de fichiers",
+        "kindManual": "Manuel",
+        "providerQuestion": "Quel prestataire d'open banking ?",
+        "providerGocardless": "GoCardless — gratuit, Europe",
+        "providerPlaid": "Plaid — États-Unis / Canada / Royaume-Uni",
+        "providerTruelayer": "TrueLayer — Royaume-Uni / UE",
+        "explainerAutoFeed": "Flux automatique via {provider}",
+        "explainerSftp": "Dépôt de fichiers SFTP",
+        "explainerManual": "Téléversement manuel",
+        "stepAccount": "1 · Quel compte",
+        "connectionName": "Nom de la connexion",
+        "connectionNamePlaceholder": "ex. Compte courant — quotidien",
+        "bankGlAccount": "Compte bancaire / GL",
+        "credentialsStep": "2 · Identifiants {provider}",
+        "providerAccountId": "Identifiant du compte chez le prestataire",
+        "providerAccountIdPlaceholder": "l'identifiant du compte chez le prestataire",
+        "importHowOften": "Fréquence d'import ?",
+        "cadenceDaily": "Automatique, quotidien",
+        "cadenceHourly": "Automatique, horaire",
+        "cadenceManual": "Seulement quand je clique sur Synchroniser",
+        "sftpStepTitle": "2 · Créez l'accès SFTP",
+        "sftpStepHelp": "Nous créons un accès dédié et acheminons son dossier <inbound>/inbound</inbound> vers le compte ci-dessus. Vous recevrez l'hôte, l'identifiant et un mot de passe à usage unique à transmettre à votre banque. Gérez ensuite les dossiers supplémentaires sous la connexion.",
+        "createSftpLogin": "Créer l'accès SFTP",
+        "addConnection": "Ajouter la connexion",
+        "cancel": "Annuler"
+      },
+      "title": "Bank Feeds",
+      "description": "Connectez chaque compte bancaire pour l'import automatisé des relevés — flux en direct, dépôts de fichiers SFTP ou téléversement manuel. Tout est importé via le même pipeline de rapprochement.",
+      "addConnection": "+ Ajouter une connexion",
+      "empty": {
+        "none": "Aucune connexion bancaire pour l'instant.",
+        "connectFirst": "Connectez votre première banque"
+      },
+      "connection": {
+        "paused": "en pause",
+        "synced": "synchronisé {date}",
+        "attempted": "tentative {date}",
+        "test": "Tester",
+        "sync": "Synchroniser",
+        "pause": "Suspendre",
+        "resume": "Reprendre",
+        "remove": "Supprimer",
+        "removeConfirm": "Supprimer cette connexion ? Les imports planifiés s'arrêtent et le branchement ne pourra pas être rétabli."
+      },
+      "feedMessages": {
+        "verified": "Connexion vérifiée.",
+        "testFailed": "Échec du test : {detail}",
+        "unknownError": "erreur inconnue",
+        "syncFailed": "Échec de la synchronisation : {error}",
+        "imported": "{imported} nouveaux importés, {duplicates} doublons."
+      },
+      "sftpCard": {
+        "badge": "Dépôt de fichiers SFTP",
+        "login": "accès",
+        "routesTo": "achemine vers {count, plural, one {# compte} other {# comptes}}",
+        "routing": "Routage",
+        "done": "Terminé",
+        "remove": "Supprimer",
+        "routingTitle": "Routage des imports — quel dossier alimente quel compte",
+        "noRouting": "Aucun routage pour l'instant — ajoutez-en un ci-dessous.",
+        "folderPlaceholder": "dossier",
+        "addRoute": "Ajouter un routage"
+      },
+      "sftpEndpoint": {
+        "title": "Point de terminaison SFTP de réception",
+        "description": "Dirigez ici les envois de fichiers de votre banque. Chaque connexion SFTP ci-dessus est un accès sur ce point de terminaison.",
+        "host": "Hôte",
+        "port": "Port",
+        "status": "Statut",
+        "hostKey": "Clé d'hôte",
+        "enabled": "activé",
+        "disabled": "désactivé"
+      },
+      "chooseBank": {
+        "title": "Choisissez votre banque",
+        "cancel": "Annuler",
+        "searchPlaceholder": "Rechercher des banques…",
+        "allCountries": "Tous les pays",
+        "notListed": "Absente de la liste ? Choisissez comment arrivent les relevés",
+        "otherBank": "Autre banque (flux en direct)",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "Dépôt de fichiers SFTP",
+        "sftpDropHint": "La banque envoie les fichiers de relevés",
+        "manualUpload": "Téléversement manuel",
+        "manualUploadHint": "Téléversez vos fichiers OFX / CSV manuellement"
+      },
+      "errors": {
+        "couldNotCreateSftp": "Impossible de créer l'accès SFTP",
+        "couldNotCreateConnection": "Impossible de créer la connexion",
+        "failed": "Échec"
+      },
+      "sftpSecret": {
+        "title": "Accès SFTP créé",
+        "description": "Transmettez-les à votre banque. Le mot de passe n'est affiché qu'une fois — copiez-le maintenant.",
+        "hostLabel": "hôte :",
+        "portLabel": "port :",
+        "usernameLabel": "identifiant :",
+        "passwordLabel": "mot de passe :",
+        "done": "Terminé",
+        "createdToast": "Connexion SFTP créée.",
+        "addedToast": "{name} ajouté."
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooks récupère automatiquement les nouvelles transactions via Plaid, un agrégateur d'open banking. Connectez-vous une fois avec vos clés API Plaid ; aucun fichier à gérer.",
+          "docsLabel": "Obtenir les clés dans le tableau de bord Plaid"
+        },
+        "gocardless": {
+          "blurb": "openbooks récupère les transactions via GoCardless Bank Account Data (anciennement Nordigen) — un flux d'open banking européen gratuit. Créez un ID secret et une clé secrète dans leur tableau de bord.",
+          "docsLabel": "Obtenir les identifiants depuis GoCardless"
+        },
+        "truelayer": {
+          "blurb": "openbooks récupère les transactions via TrueLayer, un prestataire d'open banking Royaume-Uni/UE. Collez un jeton d'accès depuis votre console TrueLayer.",
+          "docsLabel": "Ouvrir la console TrueLayer"
+        },
+        "sftp": {
+          "blurb": "Votre banque envoie les fichiers de relevés (OFX/CSV/CAMT/BAI2/MT940) à openbooks via SFTP. Nous créons un accès dédié pour cette banque ; vous transmettez l'hôte, l'identifiant et le mot de passe à votre banque, et les fichiers reçus sont importés automatiquement."
+        },
+        "manual": {
+          "blurb": "Pas d'automatisation — téléversez manuellement les fichiers de relevés depuis la page du compte dans Banque quand vous les avez. Idéal pour les comptes que votre banque ne peut pas alimenter."
+        }
       }
     }
   },
@@ -648,5 +883,12 @@
     "colNet": "Net",
     "reverse": "Contrepasser",
     "empty": "Aucun règlement importé."
+  },
+  "docStatus": {
+    "draft": "Brouillon",
+    "pending_approval": "En attente d'approbation",
+    "approved": "Approuvé",
+    "posted": "Comptabilisé",
+    "voided": "Annulé"
   }
 }
