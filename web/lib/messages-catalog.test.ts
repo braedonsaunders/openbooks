@@ -557,6 +557,24 @@ test('the filed agreement key is pinned in every locale', () => {
   }
 })
 
+test('partyless-control post warning ships localized in every locale', () => {
+  // F-t08-007: the drawer pins this warning when a journal posts control
+  // legs with no party — absent outside en it falls back to English inside
+  // otherwise translated drawers. The {accounts} interpolation must survive
+  // in every locale.
+  const key = 'journal.drawer.partylessControlWarning'
+  const source = flattenCatalog('en')
+  assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    const value = catalog.get(key)
+    assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+    assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    assert.ok(value.includes('{accounts}'), `${locale} must keep the {accounts} interpolation`)
+  }
+})
+
 test('mark-filed refusal copy ships localized in every locale', () => {
   // F-x5-001: the period-not-closed remedy renders from these keys — absent
   // outside en it falls back to English inside otherwise translated drawers.

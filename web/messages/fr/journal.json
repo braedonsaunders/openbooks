@@ -61,6 +61,7 @@
     "balanced": "Équilibré",
     "referenceNumber": "N° de référence",
     "noParty": "Aucun tiers",
+    "partylessControlWarning": "Comptabilisé sans tiers sur {accounts}. Ces soldes restent hors de tout auxiliaire client ou fournisseur — voir la ligne (sans tiers) de la balance âgée.",
     "accountPlaceholder": "Compte…",
     "columns": {
       "debit": "Débit",

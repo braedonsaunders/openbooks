@@ -61,6 +61,7 @@
     "balanced": "Cuadrado",
     "referenceNumber": "N.º de referencia",
     "noParty": "Sin tercero",
+    "partylessControlWarning": "Contabilizado sin tercero en {accounts}. Estos saldos quedan fuera de cualquier submayor de clientes o proveedores — ver la fila (sin tercero) del informe de antigüedad.",
     "accountPlaceholder": "Cuenta…",
     "columns": {
       "debit": "Débito",

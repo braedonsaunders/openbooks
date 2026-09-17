@@ -61,6 +61,7 @@
     "balanced": "貸借一致",
     "referenceNumber": "参照番号",
     "noParty": "取引先なし",
+    "partylessControlWarning": "{accounts} に取引先なしで転記されました。これらの残高は得意先・仕入先の補助簿の対象外です — エイジングの（取引先なし）行を参照してください。",
     "accountPlaceholder": "勘定…",
     "columns": {
       "debit": "借方",

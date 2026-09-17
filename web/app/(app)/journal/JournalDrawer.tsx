@@ -208,6 +208,10 @@ export function JournalDrawer({
   // A refused post pins here (F-t06-006/F-t06-011): toasts expire, but the
   // drawer must keep showing why the entry did not post.
   const [postError, setPostError] = useState<string | null>(null)
+  // A posted-with-warnings post pins here (F-t08-007): the entry IS posted,
+  // but its party-less control legs sit outside every subledger, so the
+  // drawer keeps saying so until the next action (same rule as refusals).
+  const [postWarning, setPostWarning] = useState<string | null>(null)
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
   // The header subsidiary is the journal's home entity; the OPTIONAL per-line
@@ -447,12 +451,17 @@ export function JournalDrawer({
   async function post() {
     setBusy(true)
     setPostError(null)
+    setPostWarning(null)
     const res = await fetch('/api/journals/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'post', documentId: doc.id }),
     })
-    const data = (await res.json().catch(() => ({}))) as { error?: unknown; pendingApproval?: boolean }
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: unknown
+      pendingApproval?: boolean
+      warnings?: { code: string; accounts: { number: string | null; name: string }[] }[]
+    }
     if (!res.ok) {
       const message = typeof data.error === 'string' && data.error ? data.error : t('postFailed')
       setPostError(message)
@@ -466,6 +475,14 @@ export function JournalDrawer({
     await refreshFromServer(false).catch(() => {})
     if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
     else toast.success(t('postedToast'))
+    const partyless = (data.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
+    if (partyless && partyless.accounts.length > 0) {
+      setPostWarning(
+        t('partylessControlWarning', {
+          accounts: partyless.accounts.map((a) => `${a.number ?? ''} ${a.name}`.trim()).join(', '),
+        }),
+      )
+    }
     setBusy(false)
     router.refresh()
   }
@@ -741,6 +758,11 @@ export function JournalDrawer({
         {postError ? (
           <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             {postError}
+          </p>
+        ) : null}
+        {postWarning ? (
+          <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            {postWarning}
           </p>
         ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

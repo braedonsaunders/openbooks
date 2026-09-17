@@ -61,6 +61,7 @@
     "balanced": "已平衡",
     "referenceNumber": "参考编号",
     "noParty": "无往来单位",
+    "partylessControlWarning": "已过账到 {accounts}，但未指定往来方。这些余额不在任何客户或供应商明细账中 — 请查看账龄分析中的（无往来方）行。",
     "accountPlaceholder": "科目……",
     "columns": {
       "debit": "借方",

@@ -61,6 +61,7 @@
     "balanced": "Ausgeglichen",
     "referenceNumber": "Referenz-Nr.",
     "noParty": "Keine Partei",
+    "partylessControlWarning": "Ohne Partner auf {accounts} gebucht. Diese Salden stehen außerhalb aller Kunden- oder Lieferanten-Nebenbücher — siehe Zeile (kein Partner) in der Alterungsliste.",
     "accountPlaceholder": "Konto…",
     "columns": {
       "debit": "Soll",

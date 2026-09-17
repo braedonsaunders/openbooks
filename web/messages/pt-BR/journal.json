@@ -61,6 +61,7 @@
     "balanced": "Balanceado",
     "referenceNumber": "Nº de referência",
     "noParty": "Sem parte",
+    "partylessControlWarning": "Lançado sem contraparte em {accounts}. Esses saldos ficam fora de qualquer sub-razão de clientes ou fornecedores — ver a linha (sem contraparte) do aging.",
     "accountPlaceholder": "Conta…",
     "columns": {
       "debit": "Débito",
