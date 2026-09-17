@@ -58,6 +58,21 @@ test('the wage and payroll panels stay mounted once visited instead of unmountin
   assert.doesNotMatch(drawerSource, /\{tab === 'payroll' &&/)
 })
 
+// F-t05-002: the Kind control offered only company|person while parties store
+// customer/vendor/employee kinds, so the control misread the record and the
+// PATCH it echoed back 422'd. The control must offer the stored vocabulary,
+// the view label must render it, and a refused save must pin its reason on
+// the record (staying in edit mode) instead of reporting success.
+test('the kind control covers the stored vocabulary and save refusals stay visible', () => {
+  for (const kind of ['company', 'person', 'customer', 'vendor', 'employee']) {
+    assert.match(drawerSource, new RegExp(`<option value="${kind}">`))
+  }
+  assert.doesNotMatch(drawerSource, /kind === 'person' \? t\('kindPerson'\) : t\('kindCompany'\)/)
+  assert.match(drawerSource, /const \[saveError, setSaveError\] = useState<string \| null>\(null\)/)
+  assert.match(drawerSource, /<p role="alert"[\s\S]*?\{saveError/)
+  assert.match(drawerSource, /setSaveError\(null\)/)
+})
+
 // F-t02-015: the blank-name guard and the statement link rendered raw
 // `parties.drawer.drawer.*` keys in every locale, because the drawer called
 // t('drawer.nameRequired') / t('drawer.viewStatement') under the

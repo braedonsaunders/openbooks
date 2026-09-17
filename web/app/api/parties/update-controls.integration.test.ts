@@ -21,6 +21,12 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH, GET } = await import('./[id]/route')
 const { GET: transactions } = await import('./[id]/transactions/route')
+// The route import pulls in the web request-org resolver, which takes the
+// process-global resolver slot from the test bypass — plain node has no Next
+// request store, so fixture setup would lose its trusted boundary and every
+// seed would RLS-fail. Re-install the test boundary after the route imports;
+// per-call withOrgContext below still scopes every route invocation.
+await import('@openbooks/engine/src/test-database-bypass.ts')
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const patchRequest = (body: unknown) => new Request('http://audit.local', { method: 'PATCH', body: JSON.stringify(body) })
@@ -49,6 +55,30 @@ test('impossible hired-on dates are refused with 422 and store nothing', { skip:
       const good = await PATCH(patchRequest({ roles: { employee: { enabled: true, hiredOn: '2026-02-28' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(good.status, 200, await good.clone().text())
       assert.equal((await db.execute<{ hired_on: string }>(sql`select hired_on::text from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.hired_on, '2026-02-28')
+    })
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('an edit echoing a stored role kind persists instead of 422ing (F-t05-002)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // F-t05-002: the drawer echoes the stored kind back on every save, but
+  // PATCH only accepted company|person — so every edit of an employee-kind
+  // party failed while the UI reported success. Real route, real row.
+  const { org } = await fixture()
+  try {
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`update parties set kind = 'employee' where id = ${org.customerId} and org_id = ${org.orgId}`)
+      const res = await PATCH(
+        patchRequest({ kind: 'employee', shortCode: 'DE-001', expectedUpdatedAt: await revision(org.orgId, org.customerId) }),
+        params(org.customerId),
+      )
+      assert.equal(res.status, 200, await res.clone().text())
+      const stored = (await db.execute<{ kind: string; short_code: string }>(sql`
+        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`)).rows[0]!
+      assert.equal(stored.kind, 'employee')
+      assert.equal(stored.short_code, 'DE-001')
     })
   } finally {
     session.user = null

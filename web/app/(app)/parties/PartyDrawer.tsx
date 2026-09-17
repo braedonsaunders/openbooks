@@ -355,6 +355,18 @@ export function PartyDrawer({
 
   // -- identity --------------------------------------------------------------
   const [kind, setKind] = useState<string>(p.kind ?? 'company')
+  // The stored kind can be any of the five party kinds (role lists are that
+  // kind by construction) — the label must render what is stored, never fall
+  // through to Company for a customer/vendor/employee row (F-t05-002).
+  const kindLabel = kind === 'person'
+    ? t('kindPerson')
+    : kind === 'customer'
+      ? t('kindCustomer')
+      : kind === 'vendor'
+        ? t('kindVendor')
+        : kind === 'employee'
+          ? t('kindEmployee')
+          : t('kindCompany')
   const [displayName, setDisplayName] = useState<string>(isPlaceholderName ? '' : (p.display_name ?? ''))
   const [legalName, setLegalName] = useState<string>(p.legal_name ?? '')
   const [shortCode, setShortCode] = useState<string>(p.short_code ?? '')
@@ -421,6 +433,10 @@ export function PartyDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
   const [nameError, setNameError] = useState(false)
+  // A refused save pins its reason on the record until the next save attempt
+  // or cancel — a toast alone let F-t05-002 read as a successful save while
+  // the data was silently lost.
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Existing parties default to read-only; creation flows can explicitly
   // request edit mode. Permission checks remain authoritative.
@@ -636,6 +652,7 @@ export function PartyDrawer({
     }
     setBusy(true)
     setSaveState('saving')
+    setSaveError(null)
     const res = await fetch(`/api/parties/${p.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -649,8 +666,12 @@ export function PartyDrawer({
       setMode('view')
       router.refresh()
     } else {
+      // Stay in edit mode with the typed values intact and the refusal
+      // pinned: the form is still dirty, nothing was persisted.
+      const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('autosaveFailed')
       setSaveState('error')
-      toast.error(data.error ?? t('autosaveFailed'))
+      setSaveError(detail)
+      toast.error(detail)
     }
     setBusy(false)
   }
@@ -659,6 +680,7 @@ export function PartyDrawer({
     resetForm()
     setDirty(false)
     setSaveState('saved')
+    setSaveError(null)
     setMode('view')
   }
 
@@ -731,7 +753,7 @@ export function PartyDrawer({
       return definition ? <CustomFieldInput def={definition} value={customValues[definition.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} readOnly={ro} /> : null
     }
     switch (placement.key) {
-      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option></Select> : partyValue(kind === 'person' ? t('kindPerson') : t('kindCompany'))}</>
+      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option><option value="customer">{t('kindCustomer')}</option><option value="vendor">{t('kindVendor')}</option><option value="employee">{t('kindEmployee')}</option></Select> : partyValue(kindLabel)}</>
       case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
       case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label>{editable ? <Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} /> : partyValue(shortCode, 'font-mono')}</>
       case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label>{editable ? <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} /> : partyValue(legalName)}</>
@@ -879,6 +901,11 @@ export function PartyDrawer({
         </div>
       }
     >
+      {saveError ? (
+        <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {t('saveFailedRetry')}{saveError === t('saveFailedRetry') || saveError === t('autosaveFailed') ? null : `: ${saveError}`}
+        </p>
+      ) : null}
       <nav className="-mt-2 mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabs.ariaLabel')}>
         {tabs.map((item) => (
           <button
@@ -921,7 +948,10 @@ export function PartyDrawer({
             {editable ? <Select value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="company">{t('kindCompany')}</option>
               <option value="person">{t('kindPerson')}</option>
-            </Select> : partyValue(kind === 'person' ? t('kindPerson') : t('kindCompany'))}
+              <option value="customer">{t('kindCustomer')}</option>
+              <option value="vendor">{t('kindVendor')}</option>
+              <option value="employee">{t('kindEmployee')}</option>
+            </Select> : partyValue(kindLabel)}
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>

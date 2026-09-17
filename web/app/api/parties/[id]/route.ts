@@ -17,7 +17,12 @@ export const runtime = 'nodejs'
 
 class PartyLifecycleError extends Error {}
 
-const PARTY_KINDS = ['company', 'person'] as const
+// The stored party vocabulary: role lists (customers/vendors/employees) are
+// that kind by construction, and the drawer echoes the stored kind back on
+// every save — so PATCH must accept every kind the column actually holds.
+// Narrowing this to company|person 422'd every edit of a role-kind party
+// (F-t05-002) while the UI reported success.
+const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
 
@@ -304,7 +309,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   // -- identity ------------------------------------------------------------
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {
-    return bad('kind must be company or person')
+    return bad('kind must be company, person, customer, vendor, or employee')
   }
   const willBeActive = body.isActive ?? (completesPlaceholder ? true : existingParty.is_active)
   const effectiveName = displayName ?? existingParty.display_name.trim()

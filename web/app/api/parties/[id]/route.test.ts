@@ -274,3 +274,30 @@ test('valid hired-on dates reach the employee upsert', async () => {
   assert.ok(call, 'the employee role upsert should run')
   assert.ok(call.values.includes('2026-02-28'), 'the valid hired-on date is stored')
 })
+
+test('edits echoing a stored role kind persist instead of 422ing (F-t05-002)', async () => {
+  // F-t05-002: parties store customer/employee/vendor kinds (the drawer
+  // echoes the stored kind back), but PATCH only accepted company|person —
+  // so EVERY save of an employee-kind party failed while the UI reported
+  // success. The stored vocabulary must round-trip.
+  for (const kind of ['customer', 'vendor', 'employee']) {
+    reset()
+
+    const response = await patch({ kind, shortCode: 'DE-001' })
+
+    assert.equal(response.status, 200, `kind ${kind} must be accepted`)
+    const call = routeState.calls.find(({ text }) => text.includes('update parties set'))
+    assert.ok(call, `kind ${kind} must reach the party update`)
+    assert.ok(call.values.includes(kind), `kind ${kind} must be stored`)
+    assert.ok(call.values.includes('DE-001'), 'the short code must be stored alongside')
+  }
+})
+
+test('an unknown party kind is still refused before any write', async () => {
+  reset()
+
+  const response = await patch({ kind: 'syndicate' })
+
+  assert.equal(response.status, 422)
+  assert.equal(writeCalls().length, 0)
+})
