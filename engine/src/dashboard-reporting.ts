@@ -3,22 +3,20 @@ import { sql } from "drizzle-orm";
 export type DashboardFinancialMetricsRow = {
   base_currency: string;
   cash_balance: string;
-  open_receivables: string;
-  overdue_receivables: string;
-  open_payables: string;
-  overdue_payables: string;
 };
 
 /**
- * Exact base-currency dashboard balances. FX conversion is rounded per source
- * document to numeric(19,4), matching the posting engine, before totals are
- * summed. Summing transaction-currency open balances directly is forbidden.
+ * Dashboard cash balance in base currency. The AR/AP tiles do NOT come from
+ * here: summing the cached documents.open_balance diverged from the hubs
+ * both ways in production (F-t01-002, F-t07-010 — stale caches and unnetted
+ * credit memos), so the tiles read the shared openItems reader in
+ * web/lib/cash/open-items.ts, the same doorway as the /ar and /ap hubs and
+ * the aging report. One definition for same-labeled figures.
  */
 /** `today` is the org business day (YYYY-MM-DD) — never the database UTC date. */
 export function dashboardFinancialMetricsQuery(orgId: string, today: string) {
   // Cash reads the maintained gl_month_activity aggregate instead of summing
-  // every bank journal line to date; the four AR/AP tiles come from ONE pass
-  // over the open documents with filtered sums instead of four separate scans.
+  // every bank journal line to date.
   // The cash leg is scoped to exactly ONE accounting book — the org's primary
   // book resolved in-query — like every other journal reader (see
   // statementBookExpr in web/lib/gl-summary.ts). An unscoped read fuses
@@ -52,17 +50,6 @@ export function dashboardFinancialMetricsQuery(orgId: string, today: string) {
               and e.posting_date <= ${today}
              join accounts a on a.id = l.account_id and a.org_id = ${orgId} and a.type = 'asset_bank'
             where l.org_id = ${orgId}
-         ) x) as cash_balance,
-      o.open_receivables, o.overdue_receivables, o.open_payables, o.overdue_payables
-    from (
-      select
-        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'customer_invoice'), 0) as open_receivables,
-        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'customer_invoice' and d.due_date < ${today}), 0) as overdue_receivables,
-        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'vendor_bill'), 0) as open_payables,
-        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'vendor_bill' and d.due_date < ${today}), 0) as overdue_payables
-        from documents d
-       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'vendor_bill')
-         and d.status = 'posted' and d.open_balance > 0
-    ) o
+         ) x) as cash_balance
   `;
 }

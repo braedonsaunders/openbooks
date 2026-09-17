@@ -11,6 +11,15 @@ import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz } from '@/lib/application/approvals'
 import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
+import { openItems } from '@/lib/cash/open-items'
+import {
+  compareMoney,
+  parseISO,
+  subtractMoney,
+  summariseSide,
+  ZERO_MONEY,
+  type OpenItem,
+} from '@/lib/cash/core'
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -86,7 +95,11 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   // grant per pack) the readable set is empty and the tile counts zero.
   const agentPacks = readableContinuousCloseAgents(authz)
   const agentPackList = sql.join(agentPacks.map((pack) => sql`${pack}`), sql`, `)
-  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  // Same subsidiary doorway as the /ar and /ap hubs (arPosition/apPosition):
+  // a caller scoped to some subsidiaries tiles exactly what the hubs show
+  // them, never the org-wide total.
+  const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
+  const [totals, financials, arItems, apItems, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -98,6 +111,12 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
     db.execute(dashboardFinancialMetricsQuery(orgId, today)),
+    // The AR/AP tiles read the shared open-item reader — the same doorway as
+    // the /ar and /ap hubs and the aging report — so same-labeled figures tie
+    // by construction. Missing FX coverage fails closed inside (the hub
+    // contract), never a silently undercounted tile.
+    openItems(orgId, 'ar', today, subIds),
+    openItems(orgId, 'ap', today, subIds),
     // Top-N first, then aggregate the five entries' lines — grouping before
     // the limit aggregated every entry in the tenant.
     db.execute(sql`
@@ -154,6 +173,17 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
 
   const t = (totals as any).rows[0]
   const financial = (financials as unknown as { rows: DashboardFinancialMetricsRow[] }).rows[0]!
+  // Hub KPI arithmetic, exactly as arPosition/apPosition derive it from the
+  // same items: outstanding minus the Current bucket (null/future due),
+  // floored at zero.
+  const sideTile = (items: OpenItem[]): { open: string; overdue: string } => {
+    const summary = summariseSide(items, parseISO(today), ZERO_MONEY, 0)
+    const current = summary.buckets.find((b) => b.label === 'Current')?.amount ?? ZERO_MONEY
+    const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY
+    return { open: summary.outstanding, overdue }
+  }
+  const arTile = sideTile(arItems)
+  const apTile = sideTile(apItems)
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {
     baseCurrency: financial.base_currency,
@@ -166,10 +196,10 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     agentFindingsLastRun: agent.last_run ? new Date(agent.last_run).toISOString() : null,
     ledgerSum: t.ledger_sum,
     cashBalance: financial.cash_balance,
-    openReceivables: financial.open_receivables,
-    overdueReceivables: financial.overdue_receivables,
-    openPayables: financial.open_payables,
-    overduePayables: financial.overdue_payables,
+    openReceivables: arTile.open,
+    overdueReceivables: arTile.overdue,
+    openPayables: apTile.open,
+    overduePayables: apTile.overdue,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
       entryNumber: r.entry_number,
