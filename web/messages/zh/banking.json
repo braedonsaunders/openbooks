@@ -140,7 +140,8 @@
     "description": "所有账户中未结和已签核的对账。",
     "search": "按日期或账户搜索…",
     "emptyTitle": "暂无对账",
-    "emptyDescription": "从银行或信用卡账户开始对账即可在此查看。"
+    "emptyDescription": "从银行或信用卡账户开始对账即可在此查看。",
+    "chooseAccount": "选择账户"
   },
   "rules": {
     "title": "对账规则",
@@ -193,7 +194,103 @@
       "amountRange": "{min}–{max}",
       "exclude": "排除",
       "categorize": "分类 → {account}",
-      "anyLine": "任意明细"
+      "anyLine": "任意明细",
+      "categorizeSplit": "分类 → {account} 等+{count}",
+      "and": "且",
+      "or": "或"
+    },
+    "runSuggested": "{suggested, plural, one {有 # 条待复核建议} other {有 # 条待复核建议}}",
+    "modeSuggest": "建议",
+    "modeAuto": "自动过账",
+    "assignPayee": "指定收款方",
+    "payeePlaceholder": "搜索往来单位",
+    "noPayee": "无收款方",
+    "memoLabel": "备注",
+    "memoPlaceholder": "默认为银行明细摘要",
+    "suggestHint": "匹配的明细将在「匹配银行数据」中生成待确认建议 — 确认之前不会过账。",
+    "autoHint": "规则运行时，匹配的明细将自动过账并匹配。",
+    "fields": {
+      "description": "摘要",
+      "payee": "收款方",
+      "anyText": "任意文本字段",
+      "reference": "参考号",
+      "amount": "金额",
+      "flow": "方向",
+      "date": "日期"
+    },
+    "ops": {
+      "contains": "包含",
+      "notContains": "不包含",
+      "equals": "完全等于",
+      "startsWith": "开头为",
+      "endsWith": "结尾为",
+      "isBlank": "为空",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "大于",
+      "gte": "至少",
+      "lt": "小于",
+      "lte": "至多",
+      "between": "介于",
+      "is": "是",
+      "on": "在",
+      "before": "之前",
+      "after": "之后",
+      "withinDays": "过去N天内"
+    },
+    "cb": {
+      "match": "匹配条件",
+      "allOf": "满足以下全部条件",
+      "anyOf": "满足以下任一条件",
+      "addCondition": "添加条件",
+      "addGroup": "添加分组",
+      "noConditions": "无条件 — 匹配所有明细。",
+      "remove": "删除条件",
+      "valuePlaceholder": "值",
+      "and": "且",
+      "to": "至"
+    },
+    "scope": {
+      "label": "适用范围",
+      "allHint": "对所有可对账账户运行。",
+      "someHint": "对 {count, plural, one {# 个账户} other {# 个账户}}运行。",
+      "useAll": "使用全部账户",
+      "limit": "限定特定账户",
+      "search": "筛选账户…",
+      "selected": "已选 {count} 个",
+      "noneFound": "没有匹配的账户。",
+      "emptyWarn": "请至少选择一个账户，或切换回全部。"
+    },
+    "split": {
+      "remainder": "剩余",
+      "percent": "百分比",
+      "fixed": "固定金额",
+      "addLine": "添加明细",
+      "removeLine": "删除明细",
+      "accountPlaceholder": "选择账户",
+      "descriptionPlaceholder": "明细备注",
+      "portion": "分配"
+    },
+    "coding": {
+      "department": "部门",
+      "location": "地点",
+      "class": "类别",
+      "tax": "税码"
+    },
+    "preview": {
+      "title": "实时预览",
+      "pickAccount": "账户",
+      "pickAccountHint": "选择一个账户以预览匹配情况。",
+      "needCondition": "请添加条件，以预览匹配的银行明细。",
+      "loading": "正在检查近期明细…",
+      "error": "预览不可用",
+      "matched": "{count, plural, one {将有 1 条明细匹配} other {将有 # 条明细匹配}}",
+      "conflicts": "{count, plural, one {# 个冲突} other {# 个冲突}}",
+      "noConflicts": "无冲突",
+      "none": "过去90天暂无匹配的明细。",
+      "stolen": "优先级更高的规则获胜",
+      "split": "分配预览",
+      "healthHint": "基于过去90天已导入明细的实时统计。"
     }
   },
   "match": {
@@ -233,7 +330,10 @@
     "excludedHint": "您已搁置的明细 — 对账时将被跳过。",
     "searchExcluded": "搜索已排除明细…",
     "noExcluded": "无已排除明细。",
-    "restore": "还原"
+    "restore": "还原",
+    "createRule": "从本明细创建规则",
+    "postAndMatch": "过账并匹配",
+    "suggestedBy": "建议：{rule}"
   },
   "transactionsSearch": "搜索信用卡刷卡、支票、转账…",
   "transactionsEmptyTitle": "暂无银行交易",
@@ -372,7 +472,10 @@
     "formSetPreferred": "设为我的首选",
     "formSetPreferredDone": "首选表单已保存",
     "formPreferredCleared": "已清除首选表单",
-    "formPreferredFailed": "无法保存首选表单"
+    "formPreferredFailed": "无法保存首选表单",
+    "cardAccountHelp": "未登记卡 — 请选择用于过账的可对账卡账户。",
+    "noCardAccounts": "暂无可对账的卡账户。",
+    "noCardAccountsCta": "在会计科目表中添加"
   },
   "reconcile": {
     "title": "对账截至 {date}",
@@ -511,7 +614,12 @@
     },
     "authorizedKeys": "授权的 SSH 密钥（可选）",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
-    "authorizedKeysHint": "每行一个 OpenSSH 公钥。持有匹配私钥的客户端可免密码登录。"
+    "authorizedKeysHint": "每行一个 OpenSSH 公钥。持有匹配私钥的客户端可免密码登录。",
+    "tabs": {
+      "endpoint": "连接与登录",
+      "servers": "合作伙伴登录",
+      "schedules": "导入计划"
+    }
   },
   "cash": {
     "title": "现金",
@@ -588,13 +696,13 @@
   },
   "bankFeeds": {
     "title": "Bank Feeds",
-    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "description": "连接银行账户，实现对账单自动导入 — 实时聚合源或内置SFTP端点。",
     "navTitle": "Bank Feeds",
     "tabs": {
-      "connections": "Connections",
-      "sftp-endpoint": "SFTP endpoint",
-      "sftp-servers": "Partner logins",
-      "sftp-schedules": "Import schedules"
+      "connections": "连接",
+      "sftp-endpoint": "SFTP端点",
+      "sftp-servers": "合作伙伴登录",
+      "sftp-schedules": "导入计划"
     },
     "operational": {
       "title": "银行数据连接",
@@ -607,7 +715,131 @@
     "client": {
       "configure": {
         "noEligibleAccounts": "暂无可连接的可对账银行账户。请先在科目表中将银行和卡账户标记为可对账，然后在此选择。",
-        "noEligibleAccountsLink": "打开科目表"
+        "noEligibleAccountsLink": "打开科目表",
+        "back": "← 返回",
+        "newConnection": "新建连接",
+        "kindLive": "实时源",
+        "kindFileDrop": "文件投递",
+        "kindManual": "手动",
+        "providerQuestion": "使用哪家开放银行服务商？",
+        "providerGocardless": "GoCardless — 免费，欧洲",
+        "providerPlaid": "Plaid — 美国 / 加拿大 / 英国",
+        "providerTruelayer": "TrueLayer — 英国 / 欧盟",
+        "explainerAutoFeed": "经由 {provider} 的自动源",
+        "explainerSftp": "SFTP文件投递",
+        "explainerManual": "手动上传",
+        "stepAccount": "1 · 选择账户",
+        "connectionName": "连接名称",
+        "connectionNamePlaceholder": "例如：运营账户 — 每日",
+        "bankGlAccount": "银行 / 总账账户",
+        "credentialsStep": "2 · {provider} 凭证",
+        "providerAccountId": "服务商侧账户ID",
+        "providerAccountIdPlaceholder": "该账户在服务商侧的ID",
+        "importHowOften": "多久导入一次？",
+        "cadenceDaily": "自动，每日",
+        "cadenceHourly": "自动，每小时",
+        "cadenceManual": "仅当我点击「同步」时",
+        "sftpStepTitle": "2 · 创建SFTP登录账号",
+        "sftpStepHelp": "我们将创建一个专用登录账号，并将其 <inbound>/inbound</inbound> 文件夹路由至上述账户。您将获得主机、用户名和一次性密码以提供给银行。之后可在该连接下管理更多文件夹。",
+        "createSftpLogin": "创建SFTP登录账号",
+        "addConnection": "添加连接",
+        "cancel": "取消"
+      },
+      "title": "Bank Feeds",
+      "description": "连接每个银行账户，实现对账单自动导入 — 实时源、SFTP文件投递或手动上传。所有导入经由同一对账管道。",
+      "addConnection": "+ 添加连接",
+      "empty": {
+        "none": "暂无银行连接。",
+        "connectFirst": "连接您的第一家银行"
+      },
+      "connection": {
+        "paused": "已暂停",
+        "synced": "已同步 {date}",
+        "attempted": "已尝试 {date}",
+        "test": "测试",
+        "sync": "同步",
+        "pause": "暂停",
+        "resume": "恢复",
+        "remove": "删除",
+        "removeConfirm": "删除此连接？计划导入将停止，且该配置无法撤销。"
+      },
+      "feedMessages": {
+        "verified": "连接已验证。",
+        "testFailed": "测试失败：{detail}",
+        "unknownError": "未知错误",
+        "syncFailed": "同步失败：{error}",
+        "imported": "已导入新增 {imported} 条，重复 {duplicates} 条。"
+      },
+      "sftpCard": {
+        "badge": "SFTP文件投递",
+        "login": "登录账号",
+        "routesTo": "路由至 {count, plural, one {# 个账户} other {# 个账户}}",
+        "routing": "路由",
+        "done": "完成",
+        "remove": "删除",
+        "routingTitle": "导入路由 — 哪个文件夹对应哪个账户",
+        "noRouting": "暂无路由 — 请在下方添加。",
+        "folderPlaceholder": "文件夹",
+        "addRoute": "添加路由"
+      },
+      "sftpEndpoint": {
+        "title": "SFTP接收端点",
+        "description": "请将银行的文件投递指向此处。上方的每个SFTP连接都是此端点上的一个登录账号。",
+        "host": "主机",
+        "port": "端口",
+        "status": "状态",
+        "hostKey": "主机密钥",
+        "enabled": "已启用",
+        "disabled": "已禁用"
+      },
+      "chooseBank": {
+        "title": "选择您的银行",
+        "cancel": "取消",
+        "searchPlaceholder": "搜索银行…",
+        "allCountries": "所有国家",
+        "notListed": "未列出？请选择对账单送达方式",
+        "otherBank": "其他银行（实时源）",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "SFTP文件投递",
+        "sftpDropHint": "银行推送对账单文件",
+        "manualUpload": "手动上传",
+        "manualUploadHint": "手动上传OFX / CSV文件"
+      },
+      "errors": {
+        "couldNotCreateSftp": "无法创建SFTP登录账号",
+        "couldNotCreateConnection": "无法创建连接",
+        "failed": "失败"
+      },
+      "sftpSecret": {
+        "title": "SFTP登录账号已创建",
+        "description": "请将以下信息提供给银行。密码仅显示一次 — 请立即复制。",
+        "hostLabel": "主机：",
+        "portLabel": "端口：",
+        "usernameLabel": "用户名：",
+        "passwordLabel": "密码：",
+        "done": "完成",
+        "createdToast": "SFTP连接已创建。",
+        "addedToast": "已添加 {name}。"
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooks经由Plaid（开放银行聚合商）自动拉取新交易。使用Plaid API密钥连接一次即可，无需管理文件。",
+          "docsLabel": "在Plaid控制台获取密钥"
+        },
+        "gocardless": {
+          "blurb": "openbooks经由GoCardless银行账户数据（原Nordigen，免费的欧洲开放银行源）拉取交易。请在其控制台创建Secret ID和Secret Key。",
+          "docsLabel": "从GoCardless获取凭证"
+        },
+        "truelayer": {
+          "blurb": "openbooks经由TrueLayer（英国/欧盟开放银行服务商）拉取交易。请从TrueLayer控制台粘贴访问令牌。",
+          "docsLabel": "打开TrueLayer控制台"
+        },
+        "sftp": {
+          "blurb": "银行经由SFTP将对账单文件（OFX/CSV/CAMT/BAI2/MT940）推送至openbooks。我们将为该银行创建专用登录账号；您将主机、用户名和密码交给银行，送达的文件将自动导入。"
+        },
+        "manual": {
+          "blurb": "无自动化 — 请在收到对账单文件时，从「银行」中的账户页面手动上传。适用于银行无法提供数据源的账户。"
+        }
       }
     }
   },
@@ -651,5 +883,12 @@
     "colNet": "净额",
     "reverse": "冲销",
     "empty": "尚未导入任何结算。"
+  },
+  "docStatus": {
+    "draft": "草稿",
+    "pending_approval": "待审批",
+    "approved": "已审批",
+    "posted": "已过账",
+    "voided": "已作废"
   }
 }
