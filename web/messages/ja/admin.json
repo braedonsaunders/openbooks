@@ -2132,6 +2132,10 @@
         "title": "支払条件",
         "description": "仕入請求書および請求書のネットおよび早期支払割引条件。"
       },
+      "payment-cards": {
+        "title": "法人カード",
+        "description": "経費精算の明細に資金を供給する会社責任のカード。カードごとに1行。"
+      },
       "number-sequences": {
         "title": "番号シーケンス",
         "description": "各ドキュメントまたはカスタムレコードのプレフィックス、次の番号、桁数を管理します。カスタムレコードの採番ルールは、最初の番号を生成するときに自動作成されます。"
@@ -2615,6 +2619,7 @@
       "jurisdictionId": "管轄区域",
       "level": "レベル",
       "liabilityAccountId": "負債口座",
+      "holderPartyId": "カード名義人",
       "lienWaiverEnforcement": "留置権放棄書の管理",
       "localNumber": "支部番号",
       "minAggregateAmount": "通算下限額",
@@ -2703,6 +2708,8 @@
       "allocatedThrough": "割当済み番号",
       "dateBasis": "日付基準",
       "unitsTotal": "総単位数",
+      "network": "ネットワーク",
+      "lastFour": "下4桁",
       "depreciationMethodId": "減価償却方法"
     },
     "fieldHelp": {

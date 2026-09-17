@@ -2089,6 +2089,10 @@
         "title": "付款条款",
         "description": "账单和发票的净额及提前付款折扣条款。"
       },
+      "payment-cards": {
+        "title": "公司卡",
+        "description": "为费用报销行提供资金的公司责任卡。每张卡一行。"
+      },
       "number-sequences": {
         "title": "编号序列",
         "description": "控制每种文档或自定义记录的前缀、下一个编号和位数。自定义记录首次生成编号时会自动创建对应序列。"
@@ -2458,6 +2462,7 @@
       "taxTreatment": "税务处理",
       "expenseAccountId": "费用科目",
       "liabilityAccountId": "负债科目",
+      "holderPartyId": "持卡人",
       "remittancePartyId": "汇款供应商",
       "unionName": "工会",
       "localNumber": "地方分会编号",
@@ -2635,6 +2640,8 @@
       "allocatedThrough": "已分配至",
       "dateBasis": "日期基准",
       "unitsTotal": "总单位数",
+      "network": "卡组织",
+      "lastFour": "后四位",
       "depreciationMethodId": "折旧方法"
     },
     "fieldHelp": {

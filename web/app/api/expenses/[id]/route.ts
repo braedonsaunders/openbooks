@@ -145,7 +145,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           docId: id,
           orgId: user.orgId,
           userId: user.id,
-          body: { partyId: body.partyId, documentDate: body.documentDate, memo: body.memo },
+          body: { partyId: body.partyId, paymentCardId: body.paymentCardId, documentDate: body.documentDate, memo: body.memo },
           prepared,
         })
 

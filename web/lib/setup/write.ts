@@ -575,6 +575,33 @@ export async function validateEntityIntegrity(
          or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)))
     if (duplicate.rows.length) return 'An intercompany pair already exists for these subsidiaries'
   }
+  if (entity.key === 'payment-cards') {
+    // A card is a posting instrument: its holder must be an employee of this
+    // org and its liability account a postable liability (0171). Without this
+    // fence a card could point at another tenant's party or at an expense
+    // account, and the failure would surface only at posting time.
+    const current = rowId
+      ? (((await executor.execute(sql`
+          select * from payment_cards where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      : null
+    const holderId = String(body.holderPartyId ?? current?.holder_party_id ?? '')
+    const liabilityId = String(body.liabilityAccountId ?? current?.liability_account_id ?? '')
+    const holder = holderId && UUID_RE.test(holderId)
+      ? ((await executor.execute(sql`
+          select p.id from parties p
+           join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
+          where p.id = ${holderId} and p.org_id = ${orgId} and p.is_active`)))
+      : null
+    if (!holder?.rows.length) return 'Choose an active employee of this organization as the cardholder'
+    const liability = liabilityId && UUID_RE.test(liabilityId)
+      ? ((await executor.execute(sql`
+          select id, type from accounts
+           where id = ${liabilityId} and org_id = ${orgId} and is_active and not is_summary`)))
+      : null
+    const liabilityRow = (liability?.rows as { id: string; type: string }[] | undefined)?.[0]
+    if (!liabilityRow) return 'Choose an active posting account from this organization as the card liability'
+    if (!String(liabilityRow.type).startsWith('liability_')) return 'The card liability must be a liability account'
+  }
   if (entity.key === 'subsidiary-ownership-interests') {
     const current = rowId
       ? (((await executor.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)))).rows[0]

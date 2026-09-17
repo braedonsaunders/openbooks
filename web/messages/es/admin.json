@@ -2019,6 +2019,10 @@
         "title": "Condiciones de pago",
         "description": "Net and early-payment discount terms for bills and invoices."
       },
+      "payment-cards": {
+        "title": "Tarjetas corporativas",
+        "description": "Tarjetas de responsabilidad de la empresa que financian líneas de informes de gastos. Una fila por tarjeta."
+      },
       "number-sequences": {
         "title": "Secuencias de numeración",
         "description": "Controle el prefijo, el número siguiente y la longitud de cada documento o registro personalizado. Las secuencias personalizadas se crean automáticamente al generar su primer número."
@@ -2537,6 +2541,7 @@
       "key": "Clave",
       "level": "Nivel",
       "liabilityAccountId": "Cuenta de pasivo",
+      "holderPartyId": "Titular",
       "localNumber": "Número de sección local",
       "maxAssessable": "Máximo asegurable anual",
       "maxBalance": "Límite",
@@ -2590,6 +2595,8 @@
       "allocatedThrough": "Asignado hasta",
       "dateBasis": "Base de fecha",
       "unitsTotal": "Unidades totales",
+      "network": "Red",
+      "lastFour": "Últimos cuatro",
       "depreciationMethodId": "Método de depreciación"
     },
     "fieldHelp": {

@@ -27,9 +27,13 @@ import { isUuid } from './list-params'
  * and both callers change together.
  */
 
+export const EXPENSE_SETTLEMENT_TYPES = ['out_of_pocket', 'company_paid', 'personal'] as const
+export type ExpenseSettlementType = (typeof EXPENSE_SETTLEMENT_TYPES)[number]
+
 export interface ExpenseEditBody {
   expectedUpdatedAt?: string
   partyId?: string | null
+  paymentCardId?: string | null
   documentDate?: string
   memo?: string | null
   extraDims?: Record<string, string | null>
@@ -39,6 +43,9 @@ export interface ExpenseEditBody {
     projectId?: string | null
     extraDims?: Record<string, string | null>
     custom?: Record<string, unknown>
+    /** Who fronted the money (0171). Required on every submitted line: history
+     * may be honestly unclassified (NULL), but a newly written line states it. */
+    settlementType?: string | null
   })[]
 }
 
@@ -56,6 +63,7 @@ function exactMoney(v: unknown): string | 'invalid' {
 export interface PreparedExpenseLine {
   accountId: string
   description: string | null
+  settlementType: ExpenseSettlementType
   amount: string
   taxCodeId: string | null
   taxGroupId: string | null
@@ -109,6 +117,21 @@ export async function prepareExpenseEdit(
       sql`select id from parties where id = ${body.partyId} and org_id = ${orgId}`,
     ))
     if (!owner.rows[0]) throw new DocumentEditError(404, 'party not found in this organization')
+  }
+  // The funding card backs every company-paid and personal line (0171). The
+  // documents FK is global, so prove org ownership here like the party above;
+  // submit and post re-check before money moves. The picker offers active
+  // cards only, and so does this gate — posting stays booking-agnostic so a
+  // later deactivation cannot brick an in-flight report. A null body value
+  // keeps the current card, mirroring the party contract.
+  if (body.paymentCardId !== undefined && body.paymentCardId !== null) {
+    if (!isUuid(body.paymentCardId)) {
+      throw new DocumentEditError(404, 'corporate card not found in this organization')
+    }
+    const card = (await db.execute<{ id: string }>(
+      sql`select id from payment_cards where id = ${body.paymentCardId} and org_id = ${orgId} and is_active`,
+    ))
+    if (!card.rows[0]) throw new DocumentEditError(404, 'corporate card not found in this organization')
   }
   // Line accounts are the tenant's chart of accounts. The lines FK is
   // tenant-coherent, so a foreign account dies at the insert as a 500;
@@ -255,6 +278,16 @@ export async function prepareExpenseEdit(
         projectId?: string | null
         extraDims?: Record<string, string | null>
         custom?: Record<string, unknown>
+        settlementType?: string | null
+      }
+      // Settlement is required on every newly written line (0171): NULL is an
+      // honest state for pre-migration history, never for a line this API
+      // writes. Fail closed with the line number, like every other line gate.
+      if (!EXPENSE_SETTLEMENT_TYPES.includes(l.settlementType as ExpenseSettlementType)) {
+        throw new DocumentEditError(
+          422,
+          `Line ${i + 1}: settlement is required — out_of_pocket, company_paid, or personal`,
+        )
       }
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) {
@@ -285,6 +318,7 @@ export async function prepareExpenseEdit(
       preparedLines.push({
         accountId: l.accountId!,
         description: l.description ?? null,
+        settlementType: l.settlementType as ExpenseSettlementType,
         amount,
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
@@ -321,7 +355,7 @@ export async function persistExpenseEdit(
     docId: string
     orgId: string
     userId: string
-    body: Pick<ExpenseEditBody, 'partyId' | 'documentDate' | 'memo'>
+    body: Pick<ExpenseEditBody, 'partyId' | 'paymentCardId' | 'documentDate' | 'memo'>
     prepared: PreparedExpenseEdit
   },
 ): Promise<void> {
@@ -333,11 +367,11 @@ export async function persistExpenseEdit(
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-                                    tax_amount, tax_overridden,
+                                    tax_amount, tax_overridden, settlement_type,
                                     department_id, project_id, extra_dims, custom)
         values (${orgId}, ${docId}, ${i + 1}, ${l.accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
-                ${l.taxAmount}, ${l.taxOverridden},
+                ${l.taxAmount}, ${l.taxOverridden}, ${l.settlementType},
                 ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
         returning id
       `))
@@ -353,6 +387,7 @@ export async function persistExpenseEdit(
   await tx.execute(sql`
     update documents set
       party_id = coalesce(${args.body.partyId ?? null}, party_id),
+      payment_card_id = coalesce(${args.body.paymentCardId ?? null}, payment_card_id),
       document_date = coalesce(${args.body.documentDate ?? null}, document_date),
       memo = ${args.body.memo !== undefined ? args.body.memo : sql`memo`},
       extra_dims = ${prepared.extraDimsProvided ? JSON.stringify(prepared.extraDimsCleaned) : sql`extra_dims`}::jsonb,
@@ -405,6 +440,7 @@ export async function createExpenseCorrectionDraft(
       subsidiaryId: string | null
       currency: string | null
       partyId: string | null
+      paymentCardId: string | null
       memo: string | null
       extraDims: unknown
       custom: unknown
@@ -424,6 +460,7 @@ export async function createExpenseCorrectionDraft(
       subsidiaryId: string | null
       currency: string | null
       partyId: string | null
+      paymentCardId: string | null
       memo: string | null
       extraDims: unknown
       custom: unknown
@@ -432,7 +469,8 @@ export async function createExpenseCorrectionDraft(
       total: string
     }>(sql`
       select status, document_number as "documentNumber", document_date as "documentDate",
-             subsidiary_id as "subsidiaryId", currency, party_id as "partyId", memo,
+             subsidiary_id as "subsidiaryId", currency, party_id as "partyId",
+             payment_card_id as "paymentCardId", memo,
              extra_dims as "extraDims", custom,
              subtotal::text as "subtotal", tax_total::text as "taxTotal", total::text as "total",
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
@@ -465,11 +503,11 @@ export async function createExpenseCorrectionDraft(
       const created = (await tx.execute<{ id: string }>(sql`
         insert into documents
           (org_id, kind, status, document_number, document_date, subsidiary_id,
-           currency, party_id, memo, extra_dims, custom,
+           currency, party_id, payment_card_id, memo, extra_dims, custom,
            subtotal, tax_total, total, created_by, updated_by)
         values (${ctx.orgId}, 'expense_report', 'draft', ${documentNumber},
                 ${source.documentDate}, ${source.subsidiaryId}, ${source.currency},
-                ${source.partyId}, ${source.memo},
+                ${source.partyId}, ${source.paymentCardId}, ${source.memo},
                 ${JSON.stringify(source.extraDims ?? {})}::jsonb,
                 ${JSON.stringify(source.custom ?? {})}::jsonb,
                 ${source.subtotal}, ${source.taxTotal}, ${source.total},
@@ -492,6 +530,7 @@ export async function createExpenseCorrectionDraft(
         taxInputAmount: string
         taxAmount: string
         taxOverridden: boolean
+        settlementType: string | null
         departmentId: string | null
         projectId: string | null
         extraDims: unknown
@@ -501,6 +540,7 @@ export async function createExpenseCorrectionDraft(
                quantity::text as "quantity", unit_price::text as "unitPrice", amount::text as "amount",
                tax_code_id as "taxCodeId", tax_group_id as "taxGroupId",
                tax_input_amount::text as "taxInputAmount", tax_amount::text as "taxAmount", tax_overridden as "taxOverridden",
+               settlement_type as "settlementType",
                department_id as "departmentId", project_id as "projectId", extra_dims as "extraDims", custom
           from document_lines
          where document_id = ${sourceId} and org_id = ${ctx.orgId}
@@ -512,10 +552,10 @@ export async function createExpenseCorrectionDraft(
           insert into document_lines
             (org_id, document_id, line_number, account_id, description,
              quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-             tax_amount, tax_overridden, department_id, project_id, extra_dims, custom)
+             tax_amount, tax_overridden, settlement_type, department_id, project_id, extra_dims, custom)
           values (${ctx.orgId}, ${created.id}, ${line.lineNumber}, ${line.accountId}, ${line.description},
                   ${line.quantity}, ${line.unitPrice}, ${line.amount}, ${line.taxCodeId}, ${line.taxGroupId},
-                  ${line.taxInputAmount}, ${line.taxAmount}, ${line.taxOverridden},
+                  ${line.taxInputAmount}, ${line.taxAmount}, ${line.taxOverridden}, ${line.settlementType},
                   ${line.departmentId}, ${line.projectId},
                   ${JSON.stringify(line.extraDims ?? {})}::jsonb, ${JSON.stringify(line.custom ?? {})}::jsonb)
           returning id
@@ -579,7 +619,7 @@ export async function createExpenseCorrectionDraft(
         docId: created.id,
         orgId: ctx.orgId,
         userId: ctx.userId,
-        body: { partyId: body.partyId, documentDate: body.documentDate, memo: body.memo },
+        body: { partyId: body.partyId, paymentCardId: body.paymentCardId, documentDate: body.documentDate, memo: body.memo },
         prepared,
       })
       await tx.execute(sql`

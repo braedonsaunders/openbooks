@@ -18,7 +18,7 @@ import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expen
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
+import { cardOptions, taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
 import type { ExpenseDrawer } from '../ExpenseDrawer'
 
 /**
@@ -52,6 +52,7 @@ export interface ExpenseReportsDrawer {
   initialMode: 'edit' | 'view'
   employees: unknown
   accounts: unknown
+  cards: unknown
   taxCodes: unknown
   taxGroups: unknown
   departments: unknown
@@ -102,6 +103,7 @@ export async function loadExpenseReports(
              and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
            order by p.display_name limit 2000`) as any,
         db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
+        cardOptions(authz.user.orgId),
         taxCodeOptions(authz.user.orgId),
         taxGroupOptions(authz.user.orgId),
         db.execute(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`) as any,
@@ -118,8 +120,8 @@ export async function loadExpenseReports(
           userId: authz.user.id,
           recordType: 'expense_report',
           userRoles: authz.user.roles.map(({ key }) => key),
-          headerDefs: pickers[6],
-          lineDefs: pickers[7],
+          headerDefs: pickers[7],
+          lineDefs: pickers[8],
           explicitLayoutId: pickString(sp.form),
         })
       : null
@@ -140,13 +142,14 @@ export async function loadExpenseReports(
           initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           employees: (pickers[0] as { rows: unknown }).rows,
           accounts: (pickers[1] as { rows: unknown }).rows,
-          taxCodes: pickers[2],
-          taxGroups: pickers[3],
-          departments: (pickers[4] as { rows: unknown }).rows,
-          projects: (pickers[5] as { rows: unknown }).rows,
-          headerDefs: pickers[6] as unknown as ExpenseDrawerProps['headerDefs'],
-          lineDefs: pickers[7] as unknown as ExpenseDrawerProps['lineDefs'],
-          segments: pickers[8] as unknown as ExpenseDrawerProps['segments'],
+          cards: pickers[2] as unknown as ExpenseDrawerProps['cards'],
+          taxCodes: pickers[3],
+          taxGroups: pickers[4],
+          departments: (pickers[5] as { rows: unknown }).rows,
+          projects: (pickers[6] as { rows: unknown }).rows,
+          headerDefs: pickers[7] as unknown as ExpenseDrawerProps['headerDefs'],
+          lineDefs: pickers[8] as unknown as ExpenseDrawerProps['lineDefs'],
+          segments: pickers[9] as unknown as ExpenseDrawerProps['segments'],
           canSubmit,
           canPost,
           canRecall,

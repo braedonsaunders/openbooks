@@ -34,7 +34,17 @@
       "dirty": "Unsaved changes…",
       "error": "Save failed — fix and retry"
     },
-    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>"
+    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>",
+    "settlement": {
+      "label": "Paid by",
+      "outOfPocket": "Out of pocket",
+      "companyPaid": "Company card",
+      "personal": "Personal (do not reimburse)"
+    },
+    "cardLabel": "Corporate card",
+    "cardPlaceholder": "Select card…",
+    "noCard": "No card",
+    "splits": "Reimbursable {oop} · Company card {card} · Owed by employee {personal}"
   },
   "toasts": {
     "submitted": "Submitted for approval",

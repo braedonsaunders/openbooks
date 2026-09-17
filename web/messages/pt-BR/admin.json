@@ -2089,6 +2089,10 @@
         "title": "Prazos de Pagamento",
         "description": "Prazos líquidos e de desconto por pagamento antecipado para contas a pagar e faturas."
       },
+      "payment-cards": {
+        "title": "Cartões corporativos",
+        "description": "Cartões de responsabilidade da empresa que financiam linhas de relatórios de despesas. Uma linha por cartão."
+      },
       "number-sequences": {
         "title": "Sequências de Numeração",
         "description": "Controle o prefixo, o próximo número e o tamanho de cada documento ou registro personalizado. As sequências personalizadas são criadas automaticamente na primeira numeração."
@@ -2458,6 +2462,7 @@
       "taxTreatment": "Tratamento fiscal",
       "expenseAccountId": "Conta de despesa",
       "liabilityAccountId": "Conta de passivo",
+      "holderPartyId": "Titular",
       "remittancePartyId": "Fornecedor de recolhimento",
       "unionName": "Sindicato",
       "localNumber": "Número da seccional",
@@ -2635,6 +2640,8 @@
       "allocatedThrough": "Alocado até",
       "dateBasis": "Base de data",
       "unitsTotal": "Unidades totais",
+      "network": "Bandeira",
+      "lastFour": "Últimos quatro",
       "depreciationMethodId": "Método de depreciação"
     },
     "fieldHelp": {

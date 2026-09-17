@@ -158,6 +158,8 @@ const getExpenseReport: AssistantToolDef = {
         accountId: l.account_id,
         description: l.description == null ? null : truncateText(String(l.description), 200),
         amount: num(l.amount),
+        // Who fronted the money (0171); null = settlement not recorded (history).
+        settlementType: (l.settlement_type as string | null) ?? null,
         taxCodeId: l.tax_code_id,
         taxGroupId: l.tax_group_id,
         taxAmount: l.tax_amount == null ? null : num(l.tax_amount),
