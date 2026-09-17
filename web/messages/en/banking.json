@@ -453,6 +453,8 @@
     "toAccount": "To account",
     "fromAccount": "From account",
     "depositTo": "Deposit to",
+    "noBankAccounts": "No bank accounts yet.",
+    "noBankAccountsCta": "Add one in Banking",
     "transferAmount": "Amount",
     "accountColumn": "Account",
     "accountPlaceholder": "Account…",

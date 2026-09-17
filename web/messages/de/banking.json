@@ -346,6 +346,8 @@
     "toAccount": "An Konto",
     "fromAccount": "Von Konto",
     "depositTo": "Einzahlen auf",
+    "noBankAccounts": "Noch keine Bankkonten.",
+    "noBankAccountsCta": "In Banking hinzufügen",
     "transferAmount": "Betrag",
     "accountColumn": "Konto",
     "accountPlaceholder": "Konto…",

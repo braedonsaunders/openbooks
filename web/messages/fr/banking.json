@@ -346,6 +346,8 @@
     "toAccount": "Compte de destination",
     "fromAccount": "Compte source",
     "depositTo": "Déposer sur",
+    "noBankAccounts": "Aucun compte bancaire pour le moment.",
+    "noBankAccountsCta": "En ajouter un dans Banque",
     "transferAmount": "Montant",
     "accountColumn": "Compte",
     "accountPlaceholder": "Compte…",

@@ -346,6 +346,8 @@
     "toAccount": "振替先勘定",
     "fromAccount": "振替元勘定",
     "depositTo": "預入先",
+    "noBankAccounts": "銀行口座がまだ登録されていません。",
+    "noBankAccountsCta": "バンキングで追加する",
     "transferAmount": "金額",
     "accountColumn": "勘定",
     "accountPlaceholder": "勘定…",
