@@ -46,6 +46,36 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 export class IncomeTaxProvisionError extends Error {}
 
 /**
+ * Categories that are future-deductible by nature: a loss carryforward is an
+ * unused tax loss, and a provision (warranty, bonus, bad-debt allowance) is a
+ * book liability whose reversal is a future tax deduction. A positive amount
+ * in either category is a deferred tax ASSET — never a liability.
+ */
+const DEDUCTIBLE_SIDE_CATEGORIES: ReadonlySet<DifferenceInput["category"]> = new Set([
+  "loss_carryforward",
+  "provisions",
+]);
+
+/**
+ * Normalize inherently-deductible differences to the deductible (negative)
+ * side at the compute boundary (F-t10-003). Preparers enter the reserve or
+ * carryforward as the positive amount it is ("the warranty reserve is
+ * 20,000"); without this, that natural input books a deferred tax LIABILITY
+ * and gross DTA stays unreachable. Already-negative inputs and every other
+ * category pass through untouched — buildProvision keeps its uniform signed
+ * contract (positive = taxable/DTL, negative = deductible/DTA) underneath.
+ */
+export function toDeductibleSide(difference: DifferenceInput): DifferenceInput {
+  if (
+    DEDUCTIBLE_SIDE_CATEGORIES.has(difference.category) &&
+    cmp(difference.difference, "0") > 0
+  ) {
+    return { ...difference, difference: neg(difference.difference) };
+  }
+  return difference;
+}
+
+/**
  * Income-tax framework: ASC 740 (US GAAP) or IAS 12 (IFRS). The computation
  * is shared; the difference is recognition language and presentation — IAS 12
  * has no "valuation allowance" account concept, it recognizes deferred tax
@@ -1312,11 +1342,14 @@ export async function computeProvisionRun(
         ...(permanentByEntity.get(subsidiaryId) ?? []),
         ...(override?.permanentDifferences ?? []),
       ];
+      // Inherently-deductible categories normalize to the DTA side here, so
+      // every compute caller (dialog, per-entity overrides, API) shares the
+      // sign rule instead of each reimplementing it (F-t10-003).
       const differences = [
         ...(autoByEntity.get(subsidiaryId) ?? []),
         ...(manualByEntity.get(subsidiaryId) ?? []),
         ...(override?.additionalDifferences ?? []),
-      ];
+      ].map(toDeductibleSide);
       const lossCarryforwardUsed =
         override?.lossCarryforwardUsed ??
         (isRoot ? opts.lossCarryforwardUsed ?? "0" : "0");
