@@ -39,6 +39,16 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
   Equipment activation names the missing charge item.
 - Directly submitted budgets reach the approvals inbox.
 
+### Banking, retainage, and CAM
+
+- A first bank reconciliation counts the proven statement opening toward
+  cleared, so it can reach zero and be signed off.
+- Retainage Receivable has a Company Settings home; pay-application
+  invoices are no longer blocked by an invisible control-account
+  requirement.
+- CAM finalize refusals pin on the pool card instead of vanishing with
+  a toast.
+
 ## [0.1.0-alpha.14] - 2026-09-17
 
 Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
