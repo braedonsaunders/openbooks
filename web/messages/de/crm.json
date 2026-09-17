@@ -46,7 +46,8 @@
     "number": "Nummer",
     "projectedAmount": "Prognostizierter Betrag",
     "periodStart": "Periodenbeginn",
-    "periodEnd": "Periodenende"
+    "periodEnd": "Periodenende",
+    "weightedAmount": "Gewichteter Betrag"
   },
   "accounts": {
     "newFallback": "Neues Konto",
@@ -68,6 +69,17 @@
       "new": "Neuer Interessent",
       "emptyTitle": "Keine Interessenten",
       "emptyDescription": "Qualifizierte Leads und Verkaufschancen-Konten erscheinen hier."
+    },
+    "statuses": {
+      "new": "Neu",
+      "working": "In Bearbeitung",
+      "qualified": "Qualifiziert",
+      "disqualified": "Disqualifiziert",
+      "open": "Offen",
+      "nurturing": "In Pflege",
+      "closedLost": "Verloren",
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
     }
   },
   "activities": {
@@ -113,7 +125,15 @@
     "createEstimate": "Angebot erstellen",
     "estimateCreated": "Angebot erstellt",
     "estimateFailed": "Das Angebot konnte nicht erstellt werden.",
-    "estimateNeedsAccount": "Legen Sie vor der Angebotserstellung einen Kunden fest"
+    "estimateNeedsAccount": "Legen Sie vor der Angebotserstellung einen Kunden fest",
+    "statuses": {
+      "qualification": "Qualifizierung",
+      "discovery": "Bedarfsanalyse",
+      "proposal": "Angebot",
+      "negotiation": "Verhandlung",
+      "closedWon": "Gewonnen",
+      "closedLost": "Verloren"
+    }
   },
   "forecastCategories": {
     "omitted": "Ausgelassen",

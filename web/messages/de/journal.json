@@ -33,6 +33,13 @@
       "debit": "Soll",
       "credit": "Haben",
       "openItem": "Offener Posten"
+    },
+    "contributors": {
+      "standardLines": "Standardzeilen",
+      "locked": "gesperrt",
+      "ruleGroup": "Regel: {name}",
+      "scriptGroup": "Skript: {name}",
+      "otherGroup": "{kind}: {name}"
     }
   },
   "newButton": {

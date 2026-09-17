@@ -64,7 +64,24 @@
     "importAnother": "Weitere Datei importieren",
     "postMode": "Art des Imports",
     "postDraft": "Entwürfe erstellen (später prüfen und buchen)",
-    "postPost": "Erstellen und in das Hauptbuch buchen"
+    "postPost": "Erstellen und in das Hauptbuch buchen",
+    "resourcePlaceholder": "Importziel wählen…",
+    "truncatedWarning": "Nur die ersten {n} Zeilen wurden gelesen — der Rest der Datei wurde ausgelassen. Teilen Sie die Datei und importieren Sie den Rest separat.",
+    "warnings": "Warnungen",
+    "sample": {
+      "title": "Ein vollständiges Beispielunternehmen erkunden",
+      "description": "Öffnen Sie ein realistisches, branchentypisches Unternehmen mit Kunden, Lieferanten, Buchungen, Berichten, Projekten und geschlossenen Perioden.",
+      "industry": "Beispielunternehmen",
+      "create": "Beispielunternehmen erstellen",
+      "open": "Beispielunternehmen öffnen",
+      "preparing": "Unternehmen wird vorbereitet…",
+      "created": "Das Beispielunternehmen ist bereit",
+      "ready": "Ihr Beispielunternehmen wird geöffnet",
+      "error": "Das Beispielunternehmen konnte nicht vorbereitet werden",
+      "firstGeneration": "Die erste Kopie kann einige Minuten dauern, während ihre geprüfte Vorlage erzeugt wird",
+      "safety": "Beispieldaten werden in einen separaten, klar gekennzeichneten Arbeitsbereich kopiert. Sie gelangen nie in Ihre echten Bücher; E-Mail-, Zahlungs-, API- und Integrationswirkungen bleiben deaktiviert.",
+      "orFile": "oder eigene Datei importieren"
+    }
   },
   "history": {
     "title": "Importverlauf",
@@ -75,6 +92,10 @@
     "format": "Format",
     "status": "Status",
     "rows": "Datensätze",
-    "by": "Von"
+    "by": "Von",
+    "jobStatus": {
+      "committed": "Festgeschrieben",
+      "failed": "Fehlgeschlagen"
+    }
   }
 }

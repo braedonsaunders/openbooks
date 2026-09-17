@@ -10,7 +10,11 @@
     "badges": {
       "inactive": "inaktiv",
       "summary": "Sammelkonto"
-    }
+    },
+    "newAccount": "Neues Konto",
+    "viewRegister": "Kontoblatt anzeigen",
+    "expand": "Konto aufklappen",
+    "collapse": "Konto zuklappen"
   },
   "types": {
     "assetBank": "Bank",
@@ -72,12 +76,20 @@
       "invalid_dimensions": "Wählen Sie gültige erforderliche Dimensionen aus.",
       "invalid_custom_fields": "Überprüfen Sie die Werte der benutzerdefinierten Felder.",
       "number_in_use": "Diese Kontonummer wird bereits verwendet.",
-      "save_failed": "Das Konto konnte nicht gespeichert werden."
+      "save_failed": "Das Konto konnte nicht gespeichert werden.",
+      "parent_type_mismatch": "Ober- und Unterkonto müssen dieselbe Kontoart verwenden.",
+      "reconcilable_currency_required": "Abstimmbare Konten brauchen eine Abrechnungswährung — wählen Sie vor dem Speichern eine.",
+      "account_changed": "Dieses Konto wurde während der Bearbeitung geändert. Öffnen Sie es erneut und versuchen Sie es noch einmal.",
+      "invalid_idempotency_key": "Die Kontoanforderung konnte nicht sicher wiederholt werden."
     },
     "monetary": "Währungsumrechnung (monetärer Posten)",
     "monetaryDefault": "Nach Kontotyp",
     "monetaryAlways": "Immer umrechnen",
-    "monetaryNever": "Nie umrechnen"
+    "monetaryNever": "Nie umrechnen",
+    "created": "Konto angelegt",
+    "newTitle": "Neues Konto",
+    "newDescription": "Buchungs- oder Summenkonto anlegen. Anfangsbestände müssen über einen ausgeglichenen Buchungssatz erfasst werden.",
+    "create": "Konto anlegen"
   },
   "register": {
     "notFound": "Konto nicht gefunden",

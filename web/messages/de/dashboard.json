@@ -26,7 +26,8 @@
     "openReceivables": "Offene Forderungen",
     "overdueReceivables": "Überfällige Forderungen",
     "openPayables": "Offene Verbindlichkeiten",
-    "overduePayables": "Überfällige Verbindlichkeiten"
+    "overduePayables": "Überfällige Verbindlichkeiten",
+    "agentFindings": "Agentenfeststellungen"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -34,7 +35,10 @@
     "baseCurrency": "Basiswährung · {currency}",
     "outstanding": "Ausstehend",
     "pastDue": "Überfällig",
-    "asOf": "Stand {date}"
+    "asOf": "Stand {date}",
+    "agentProposals": "{count} mit Vorschlägen",
+    "agentLastRun": "letzter Lauf {date}",
+    "agentClear": "Alles in Ordnung"
   },
   "categories": {
     "kpi": "Kennzahlen",
@@ -59,7 +63,8 @@
     "openReceivables": "Unbezahlte Ausgangsrechnungen in Basiswährung.",
     "overdueReceivables": "Ausgangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
     "openPayables": "Unbezahlte Eingangsrechnungen in Basiswährung.",
-    "overduePayables": "Eingangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung."
+    "overduePayables": "Eingangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
+    "agentFindings": "Feststellungen der Hintergrundagenten öffnen — zur Workbench springen."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

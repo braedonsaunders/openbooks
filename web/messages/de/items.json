@@ -7,7 +7,10 @@
     "emptyTitle": "Noch keine Artikel",
     "emptyDescription": "Fügen Sie die erste Leistung, Arbeit oder Gebühr hinzu, um den Katalog zu beginnen.",
     "newButton": "Neuer Artikel",
-    "createDraftFailed": "Artikelentwurf konnte nicht erstellt werden"
+    "createDraftFailed": "Artikelentwurf konnte nicht erstellt werden",
+    "view": "Ansicht",
+    "viewCatalog": "Katalog",
+    "viewRateBooks": "Preislisten"
   },
   "labels": {
     "code": "Code",
@@ -102,7 +105,9 @@
     "saveFailed": "Sätze konnten nicht gespeichert werden",
     "saved": "Satzversion gespeichert",
     "empty": "Noch keine Satzversionen.",
-    "rates": "Sätze"
+    "rates": "Sätze",
+    "tierOverrides": "Stundensatz-Arten:",
+    "tierAuto": "auto"
   },
   "revrec": {
     "title": "Umsatzrealisierung",
@@ -125,5 +130,56 @@
       "exclude": "Ausschließen",
       "software": "Software (Residual)"
     }
+  },
+  "costing": {
+    "title": "Bestandsbewertung",
+    "description": "Wie der Bestand dieses Artikels bewertet und verfolgt wird — Methode, Konten und Meldebestände.",
+    "configure": "Bewertung konfigurieren",
+    "empty": "Noch kein Bewertungsprofil — konfigurieren Sie eines, bevor Sie Bestand einlagern.",
+    "method": "Bewertungsmethode",
+    "methods": {
+      "fifo": "FIFO",
+      "moving_average": "Gleitender Durchschnitt",
+      "standard": "Standardkosten"
+    },
+    "tracking": "Verfolgung",
+    "trackingOptions": {
+      "none": "Keine",
+      "lot": "Charge",
+      "serial": "Seriennummer"
+    },
+    "baseUnit": "Basiseinheit",
+    "assetAccount": "Bestandskonto",
+    "cogsAccount": "HK-Konto",
+    "adjustmentAccount": "Anpassungskonto",
+    "varianceAccount": "Abweichungskonto",
+    "receivedNotBilledAccount": "Konto für erhaltene, nicht fakturierte Ware",
+    "standardCost": "Standardkosten",
+    "reorderPoint": "Meldebestand",
+    "preferredStockLevel": "Wunschbestand",
+    "selectAccount": "Wählen Sie ein Konto",
+    "separationConflict": "Muss sich vom Bestandskonto unterscheiden",
+    "separationBlocked": "Korrigieren Sie die markierten Konten vor dem Speichern — Gegenkonten müssen sich vom Bestandskonto unterscheiden.",
+    "allowNegativeInventory": "Negative Bestände zulassen",
+    "negativeCostBasis": "Vorläufige Kostenbasis",
+    "provisionalUnitCost": "Konfigurierte vorläufige Stückkosten",
+    "negativeCostBasisOptions": {
+      "last_receipt": "Kosten des letzten Eingangs",
+      "standard": "Standardkosten",
+      "configured": "Konfigurierte Kosten"
+    }
+  },
+  "fairValue": {
+    "title": "Beizulegende Zeitwerte",
+    "description": "Datierte eigenständige Verkaufspreise (SSP) je Währung zur Verteilung von Bündelerlösen auf Verpflichtungen.",
+    "new": "Neuer Preis",
+    "currency": "Währung",
+    "unitPrice": "Stückpreis",
+    "lowValue": "Unterer Wert",
+    "highValue": "Oberer Wert",
+    "effectiveFrom": "Gültig ab",
+    "effectiveTo": "Gültig bis",
+    "empty": "Noch keine Zeitwerte — der einzelne SSP oben wird verwendet.",
+    "confirmDelete": "Diesen Zeitwert entfernen?"
   }
 }

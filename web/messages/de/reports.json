@@ -31,7 +31,8 @@
       "ordersTitle": "Auftragspipeline",
       "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion",
       "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
-      "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details"
+      "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details",
+      "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -40,7 +41,8 @@
       "budgeting": "Budgetierung",
       "custom": "Benutzerdefiniert & Gespeichert",
       "projects": "Projekte",
-      "orders": "Vertrieb & Aufträge"
+      "orders": "Vertrieb & Aufträge",
+      "payroll": "Lohnabrechnung"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
@@ -514,7 +516,9 @@
         "fri": "Freitag",
         "sat": "Samstag"
       }
-    }
+    },
+    "drawerDescription": "Diesen Bericht per E-Mail nach Zeitplan senden. Pläne laufen mit den Filtern, die beim Erstellen des Plans gespeichert waren.",
+    "loading": "Pläne werden geladen…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "Einkauf",
       "both": "Beide",
       "true": "Ja",
-      "false": "Nein"
+      "false": "Nein",
+      "earning": "Bezug",
+      "deduction": "Abzug",
+      "employer_contribution": "Arbeitgeberanteil",
+      "match": "Exakte Abstimmung",
+      "within_tolerance": "Innerhalb der Toleranz",
+      "difference": "Differenz",
+      "prior_only": "Nur im Altsystem",
+      "our_only": "Nur hier",
+      "employee_prior_only": "Mitarbeiter fehlt in unserer Abrechnung",
+      "employee_our_only": "Mitarbeiter fehlt im Register",
+      "unattributed": "Durch keine Komponente erklärt",
+      "clean": "Exakt abgestimmt",
+      "clean_within_tolerance": "Innerhalb der Toleranz abgestimmt",
+      "differences": "Zu klärende Differenzen",
+      "no_comparable_data": "Es wurde nichts verglichen"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "Geschäftsjahr"
     },
     "csvSection": "Abschnitt",
-    "exportTruncated": "Die ersten {shown} von {total} Zeilen werden angezeigt — grenzen Sie den Zeitraum ein oder fügen Sie Filter hinzu, um alles zu sehen."
+    "exportTruncated": "Die ersten {shown} von {total} Zeilen werden angezeigt — grenzen Sie den Zeitraum ein oder fügen Sie Filter hinzu, um alles zu sehen.",
+    "subtotal": "{level} — gesamt",
+    "grandTotals": "Gesamtsummen"
   },
   "export": {
     "pdf": "PDF",
@@ -1211,6 +1232,30 @@
     "lot-recall": {
       "name": "Chargenrückruf",
       "description": "Jede mit einer Charge verknüpfte Lagerbewegung mit Artikel, Verfallsdatum, Menge, Standort, Quelldokument und Geschäftspartner für Rückrufe und Rückverfolgbarkeit."
+    },
+    "payroll-journal": {
+      "name": "Lohnjournal",
+      "description": "Der vollständige Prüfbericht der Lohnperiode, ein Abschnitt je Mitarbeiter: jeder Bezug, Abzug und Arbeitgeberanteil mit Stunden, Satz, Periodenbetrag und Jahreswert. Wählen Sie im Periodenmenü eine einzelne Lohnperiode passend zum Lauf. Erfordert die Lohnabrechnungs-Berechtigung."
+    },
+    "payroll-deductions-register": {
+      "name": "Abzugs- und Beitragsregister",
+      "description": "Jeder Abzug und Arbeitgeberanteil, gegliedert nach Komponente: wer in Periode und Jahr was gezahlt hat. Der Detailnachweis für Abführungen und Versorgungsträger. Erfordert die Lohnabrechnungs-Berechtigung."
+    },
+    "payroll-cost-by-department": {
+      "name": "Lohnkosten nach Abteilung",
+      "description": "Arbeitsverteilung: Lohnbeträge nach Abteilung und Komponentenart (Bezüge, einbehaltene Abzüge, Arbeitgeberlast). Erfordert die Lohnabrechnungs-Berechtigung."
+    },
+    "payroll-employee-totals": {
+      "name": "Mitarbeitersummen (Jahr)",
+      "description": "Eine Zeile je Mitarbeiter: Brutto, einbehaltene Lohnsteuer, Netto und Arbeitgeberkostensummen mit Abrechnungszählern der gewählten Periode. Erfordert die Lohnabrechnungs-Berechtigung."
+    },
+    "payroll-parallel-run": {
+      "name": "Abstimmung des Parallellaufs",
+      "description": "Die Einführungskontrolle: für eine Lohnperiode jeder Mitarbeiter und jede Komponente im Vergleich zum früheren Lohnanbieter, nach Ergebnis gegliedert, sodass wesentliche Differenzen und einseitige Mitarbeiter zuerst und exakte Treffer zuletzt gelesen werden. Eine konfigurierte Toleranz steht in eigener Spalte."
+    },
+    "payroll-parallel-run-totals": {
+      "name": "Parallellauf-Summen je Komponente",
+      "description": "Dieselbe Abstimmung verdichtet: je Komponente, was der frühere Anbieter insgesamt gezahlt hat, was diese Abrechnung ermittelt, und die Differenz — sodass eine Periodenabweichung den verursachenden Komponenten zugeordnet wird."
     }
   },
   "generalLedger": {

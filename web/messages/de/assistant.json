@@ -66,5 +66,14 @@
     "placeholder": "Fragen Sie alles zu Ihrer Buchhaltung…",
     "submit": "Fragen",
     "hint": "Eingabe zum Fragen · Esc zum Schließen · öffnet den Assistenten"
-  }
+  },
+  "context": {
+    "attached": "Fundstellenkontext angehängt",
+    "remove": "Fundstellenkontext entfernen"
+  },
+  "responding": "Assistent antwortet",
+  "jumpToLatest": "Zur neuesten springen",
+  "loadEarlier": "Frühere Nachrichten laden",
+  "loadingEarlier": "Frühere Nachrichten werden geladen…",
+  "loadEarlierFailed": "Frühere Nachrichten konnten nicht geladen werden."
 }

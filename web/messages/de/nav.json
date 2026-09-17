@@ -61,7 +61,18 @@
     "crm-forecasts": "Prognosen & Ziele",
     "revenue": "Umsatzrealisierung",
     "inventory": "Lagerbestand",
-    "docs": "Dokumentation"
+    "docs": "Dokumentation",
+    "payroll": "Lohnabrechnung",
+    "wip-billing": "Unfertige Leistungen und Vorauszahlungen",
+    "property-management": "Immobilienverwaltung",
+    "subcontracts": "Nachunternehmer",
+    "admin-page-layouts": "Seitenlayouts",
+    "admin-extensions": "Apps",
+    "field-tickets": "Außendienstbelege",
+    "compliance": "Compliance",
+    "compliance-vendors": "Nachunternehmer",
+    "lien-waivers": "Verzichtserklärungen",
+    "information-returns": "Informationsmeldungen"
   },
   "groups": {
     "my-work": "Meine Arbeit",
@@ -93,6 +104,11 @@
     "customize": "Anpassen",
     "automate": "Automatisieren",
     "extend": "Erweitern",
-    "records": "Datensätze"
+    "records": "Datensätze",
+    "compliance": "Compliance"
+  },
+  "modulesShort": {
+    "ap": "Kreditoren",
+    "ar": "Debitoren"
   }
 }

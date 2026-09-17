@@ -26,7 +26,12 @@
     "label": "Export der Arbeitskopie",
     "pdf": "Arbeitskopie als PDF",
     "csv": "Arbeitskopie als CSV",
-    "xlsx": "Arbeitskopie als Excel"
+    "xlsx": "Arbeitskopie als Excel",
+    "menu": "Exportieren",
+    "groupForm": "Erklärungsformular",
+    "groupData": "Arbeitskopie-Daten",
+    "facsimile": "Formular-PDF",
+    "json": "Strukturiertes JSON"
   },
   "official": {
     "download": "Ausgefülltes amtliches Formular"
@@ -175,5 +180,9 @@
       "auto": "auto",
       "manual": "manuell"
     }
+  },
+  "tabs": {
+    "prepare": "Erklärung vorbereiten",
+    "history": "Frühere Einreichungen"
   }
 }
