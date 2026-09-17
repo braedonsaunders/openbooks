@@ -12,6 +12,7 @@ import {
   type FlowActors,
 } from "../test-fixtures.ts";
 import { submitForApproval } from "./submit.ts";
+import { retryFlowRun } from "./run.ts";
 import { decideGate, delegateGate, escalateDueGate, worklistGates } from "./gates.ts";
 import { createDelegation } from "./delegations.ts";
 
@@ -165,6 +166,68 @@ test("submit FAILS CLOSED when the approval flow resolves to zero approvers", { 
     assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
     // The document must NOT have been auto-approved — it stays draft.
     assert.equal(await docStatus(docId), "draft");
+  });
+});
+
+/** F-t04-004: a run that failed on a zero-assignee gate strands its subject
+ * with no path forward. Retrying the failed run after the gate becomes
+ * satisfiable must re-resolve assignees live and park the run at a gate —
+ * the same run row. Once the run leaves failed, further retries are refused
+ * (pinned by the test below), so a retry can never double-fan-out gates. */
+test("a failed run can be retried once its gate resolves", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "role", role: "nonexistent_role" }],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+
+    const submit = await submitForApproval("vendor_bill", docId);
+    assert.ok(submit.flowError, "the zero-assignee submit must fail its run");
+    const failedRun = (await db.execute<{ id: string }>(sql`
+      select id from flow_runs where subject_id = ${docId} and status = 'failed' order by started_at desc limit 1
+    `)).rows[0];
+    assert.ok(failedRun, "the failed run must be recorded");
+
+    // The tenant fixes the gate (the QA story: granting the Approver role).
+    await db.execute(sql`
+      update flows set graph = jsonb_set(graph, '{nodes,1,data,gate,assignees}',
+        ${JSON.stringify([{ type: "user", userId: actors.approver1Id }])}::jsonb)
+       where org_id = ${org.orgId} and subject_kind = 'vendor_bill'`);
+
+    const retried = await retryFlowRun(failedRun.id, { orgId: org.orgId, userId: actors.submitterId });
+    assert.equal(retried.runId, failedRun.id, "a retry re-drives the same run row");
+    assert.equal(retried.status, "waiting", "the retried run must park at the now-satisfiable gate");
+    assert.equal(retried.gatesCreated, 1);
+    const gates = await gateRows({ subjectId: docId });
+    assert.equal(gates.length, 1, "exactly one live gate must exist after the retry");
+    assert.equal(gates[0]!.assigneeUserId, actors.approver1Id);
+
+    // The approval now completes through the retried run.
+    const decision = await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });
+    assert.equal(decision.runStatus, "completed");
+    assert.equal(await docStatus(docId), "approved");
+  });
+});
+
+test("retrying a non-failed run is refused", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const waitingRun = (await db.execute<{ id: string }>(sql`
+      select id from flow_runs where subject_id = ${docId} and status = 'waiting' order by started_at desc limit 1
+    `)).rows[0];
+    assert.ok(waitingRun, "a waiting run must exist");
+    await assert.rejects(
+      retryFlowRun(waitingRun.id, { orgId: org.orgId, userId: actors.submitterId }),
+      /only a failed run can be retried/,
+    );
   });
 });
 

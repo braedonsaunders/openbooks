@@ -5,9 +5,12 @@
 
 export {
   runRecordFlows,
+  retryFlowRun,
+  FlowRetryError,
   emitStatusChange,
   parseFlowGraph,
   type RecordFlowsResult,
+  type RetryFlowRunResult,
 } from "./run.ts";
 export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
 export {

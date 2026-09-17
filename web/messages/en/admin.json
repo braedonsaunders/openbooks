@@ -4007,8 +4007,13 @@
         "subject": "Record",
         "started": "Started",
         "finished": "Finished",
-        "error": "Error"
-      }
+        "error": "Error",
+        "actions": "Actions"
+      },
+      "retry": "Retry",
+      "retrying": "Retrying…",
+      "retried": "Run re-driven",
+      "retryFailed": "Retry failed"
     }
   },
   "features": {

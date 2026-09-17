@@ -121,10 +121,49 @@ export function ApprovalActions({
     [state, router, t],
   )
 
+  const retryRun = useCallback(async () => {
+    const run = state?.failedRun
+    if (!run) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/flows/runs/${run.id}/retry`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(
+          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.retryFailed'),
+        )
+      } else {
+        toast.success(t('approvalFlow.retried'))
+      }
+    } catch {
+      toast.error(t('approvalFlow.retryFailed'))
+    } finally {
+      setBusy(false)
+    }
+    refreshApprovalState()
+    router.refresh()
+  }, [state, router, t])
+
+  const showRetry = !!state?.failedRun && !!state?.canRetry
   if (
     !state ||
-    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0)
+    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry)
   ) return null
+
+  // A failed run strands the record with no live gate (F-t04-004): offer a
+  // retry that re-drives the stored trigger through the current graph. It
+  // renders beside a stale pending chip when one lingers, never instead of
+  // live Approve/Reject buttons.
+  const retryButton = showRetry ? (
+    <Button
+      variant="outline"
+      disabled={busy}
+      onClick={retryRun}
+      title={state?.failedRun?.error ?? undefined}
+    >
+      {t('approvalFlow.retryRun')}
+    </Button>
+  ) : null
 
   if (state.approvalState.myActions) {
     return (
@@ -146,15 +185,18 @@ export function ApprovalActions({
   if (state.approvalState.pendingWith.length > 0) {
     const names = state.approvalState.pendingWith.map((p) => p.name).join(', ')
     return (
-      <span
-        className="inline-flex max-w-64 items-center gap-1.5 truncate rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
-        title={t('approvalFlow.pendingWith', { names })}
-      >
-        <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="truncate">{t('approvalFlow.pendingWith', { names })}</span>
-      </span>
+      <>
+        <span
+          className="inline-flex max-w-64 items-center gap-1.5 truncate rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+          title={t('approvalFlow.pendingWith', { names })}
+        >
+          <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{t('approvalFlow.pendingWith', { names })}</span>
+        </span>
+        {retryButton}
+      </>
     )
   }
 
-  return null
+  return <>{retryButton}</>
 }

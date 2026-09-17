@@ -1,9 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { History } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 import {
   Badge,
+  Button,
   EmptyState,
   Table,
   TableBody,
@@ -42,6 +46,31 @@ const KNOWN_STATUSES = new Set(['running', 'waiting', 'completed', 'failed', 'ca
 
 export function RunsPanel({ runs }: { runs: FlowRunRow[] }) {
   const t = useTranslations('admin.flows.runs')
+  const router = useRouter()
+  const [busyRunId, setBusyRunId] = useState<string | null>(null)
+
+  // A failed run strands its subject with no live gate (F-t04-004): re-drive
+  // it through the current graph. Refusals (superseded, unplannable) surface
+  // as typed toasts from the retry endpoint.
+  async function retryRun(runId: string) {
+    setBusyRunId(runId)
+    try {
+      const res = await fetch(`/api/flows/runs/${runId}/retry`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(
+          typeof data.error === 'string' && data.error ? data.error : t('retryFailed'),
+        )
+      } else {
+        toast.success(t('retried'))
+      }
+    } catch {
+      toast.error(t('retryFailed'))
+    } finally {
+      setBusyRunId(null)
+    }
+    router.refresh()
+  }
 
   if (runs.length === 0) {
     return (
@@ -63,6 +92,7 @@ export function RunsPanel({ runs }: { runs: FlowRunRow[] }) {
           <TableHead>{t('table.started')}</TableHead>
           <TableHead>{t('table.finished')}</TableHead>
           <TableHead>{t('table.error')}</TableHead>
+          <TableHead>{t('table.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -93,6 +123,18 @@ export function RunsPanel({ runs }: { runs: FlowRunRow[] }) {
                 <span className="block truncate text-xs text-red-600 dark:text-red-400" title={r.error}>
                   {r.error}
                 </span>
+              ) : null}
+            </TableCell>
+            <TableCell>
+              {r.status === 'failed' ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busyRunId !== null}
+                  onClick={() => retryRun(r.id)}
+                >
+                  {busyRunId === r.id ? t('retrying') : t('retry')}
+                </Button>
               ) : null}
             </TableCell>
           </TableRow>

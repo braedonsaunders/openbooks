@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
 import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
-import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { can, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -68,6 +68,15 @@ export interface RecordApprovalState {
     } | null
   }
   history: ApprovalHistoryEntry[]
+  /**
+   * The latest run when it failed (F-t04-004): a run that died (e.g. its
+   * gate resolved to zero assignees) strands the record with no live gate
+   * and no path forward. Surfaces the run id + engine error so the row can
+   * offer a retry; null when the latest run did not fail.
+   */
+  failedRun: { id: string; error: string | null; at: string } | null
+  /** Whether the caller may retry a failed run (flows.manage). */
+  canRetry: boolean
 }
 
 type Rows<T> = { rows: T[] }
@@ -121,7 +130,8 @@ export async function GET(req: Request) {
        order by g.created_at
     `),
     db.execute<Record<string, unknown>>(sql`
-      select r.id, r.started_at as "startedAt", u.name as "submitterName"
+      select r.id, r.status, r.error, r.finished_at as "finishedAt",
+             r.started_at as "startedAt", u.name as "submitterName"
         from flow_runs r
         left join users u on u.id = r.created_by
        where r.org_id = ${orgId} and r.subject_kind = ${subjectKind}
@@ -219,6 +229,7 @@ export async function GET(req: Request) {
 
   history.sort((a, b) => a.at.localeCompare(b.at))
 
+  const latestRun = runs.rows.length > 0 ? runs.rows[runs.rows.length - 1]! : null
   const body: RecordApprovalState = {
     approvalState: {
       status,
@@ -226,6 +237,15 @@ export async function GET(req: Request) {
       myActions: myActions.gateId ? myActions : null,
     },
     history,
+    failedRun:
+      latestRun && latestRun.status === 'failed'
+        ? {
+            id: String(latestRun.id),
+            error: (latestRun.error as string | null) ?? null,
+            at: iso(latestRun.finishedAt),
+          }
+        : null,
+    canRetry: can(authz, 'flows.manage'),
   }
   return NextResponse.json(body)
 }
