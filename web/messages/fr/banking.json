@@ -509,6 +509,79 @@
       "schedules": "Programmes d'importation"
     }
   },
+  "cash": {
+    "title": "Trésorerie",
+    "description": "Votre centre de contrôle des liquidités — trésorerie disponible, autonomie et semaines à venir.",
+    "weeks": "{n} sem.",
+    "status": {
+      "healthy": "Sain",
+      "caution": "Vigilance",
+      "critical": "Critique"
+    },
+    "stats": {
+      "currentCash": "Trésorerie disponible",
+      "projectedEnd": "Fin projetée",
+      "netSub": "{amount} net",
+      "runway": "Autonomie de trésorerie",
+      "lowest": "Point le plus bas",
+      "lowestSub": "semaine du {date}",
+      "netFlow": "Flux net de la période",
+      "inflows": "Entrées",
+      "outflows": "Sorties"
+    },
+    "panels": {
+      "timeline": "Prévision de trésorerie",
+      "timelineHint": "Cliquez sur une semaine pour voir les entrées et sorties · {weeks} semaines",
+      "accounts": "Comptes bancaires",
+      "timelineHintScheduled": "Cliquez sur une semaine pour ses transactions · Fournisseurs planifiés du plus ancien au plus récent selon la capacité",
+      "bridge": "Pont de trésorerie",
+      "forecast": "Prévision de trésorerie",
+      "forecastHint": "Trésorerie finale par semaine · point le plus bas signalé"
+    },
+    "cols": {
+      "week": "Semaine",
+      "in": "Entrées",
+      "out": "Sorties",
+      "net": "Net",
+      "ending": "Trésorerie finale"
+    },
+    "totalCash": "Trésorerie totale",
+    "noAccounts": "Aucun compte bancaire trouvé.",
+    "negativeAlert": "Passage en trésorerie négative prévu — creux de {amount} la semaine du {date}. <ap>Ralentir les paiements fournisseurs</ap> ou <ar>accélérer les recouvrements</ar>.",
+    "deferralNote": "{amount} de dettes fournisseurs ne peuvent pas être payées dans l’horizon avec les paramètres actuels de capacité FA — l’arriéré déborde au-delà de la dernière semaine.",
+    "configure": "Configurer la prévision",
+    "configTitle": "Configuration de la prévision de trésorerie",
+    "configDescription": "Le modèle derrière la chronologie des liquidités — flux récurrents (paie, loyer, prêts) et la façon dont les dates d’encaissement et de paiement sont prédites. La règle de paiement FA se configure dans le cockpit FA.",
+    "vitals": {
+      "burnRate": "Taux de consommation de trésorerie",
+      "burnRateHint": "Sorties hebdomadaires moyennes",
+      "weekly": "Hebdomadaire",
+      "arCoverage": "Couverture créances",
+      "arCoverageHint": "(Trésorerie + Créances) / Dettes",
+      "cashCycle": "Cycle de trésorerie",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Flux net de la période",
+      "netFlowHint": "Entrées − Sorties",
+      "runway": "Autonomie de trésorerie"
+    },
+    "layout": {
+      "customize": "Disposition",
+      "title": "Personnaliser la disposition",
+      "reset": "Réinitialiser",
+      "stats": "Bandeau des indicateurs",
+      "health": "Indicateurs de santé",
+      "empty": "Tous les panneaux sont masqués — utilisez Disposition pour les réafficher.",
+      "timeline": "Chronologie hebdomadaire",
+      "forecast": "Graphique de prévision"
+    },
+    "timeline": {
+      "otherIn": "Autres entrées",
+      "otherOut": "Autres sorties",
+      "deferred": "Reportées",
+      "txns": "{count} transactions",
+      "spillBanner": "<strong>{amount} de dettes fournisseurs ne peuvent pas être payées dans l’horizon</strong> avec les paramètres actuels de capacité FA — l’arriéré déborde au-delà de la dernière semaine."
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",

@@ -512,6 +512,79 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "Ein öffentlicher OpenSSH-Schlüssel pro Zeile. Clients mit passendem privaten Schlüssel können sich ohne Passwort anmelden."
   },
+  "cash": {
+    "title": "Liquidität",
+    "description": "Ihre Liquiditätszentrale — verfügbares Geld, Reichweite und die kommenden Wochen.",
+    "weeks": "{n} W",
+    "status": {
+      "healthy": "Gesund",
+      "caution": "Achtung",
+      "critical": "Kritisch"
+    },
+    "stats": {
+      "currentCash": "Verfügbares Geld",
+      "projectedEnd": "Prognostizierter Endstand",
+      "netSub": "{amount} netto",
+      "runway": "Liquiditätsreichweite",
+      "lowest": "Tiefststand",
+      "lowestSub": "Woche vom {date}",
+      "netFlow": "Perioden-Cashflow",
+      "inflows": "Einzahlungen",
+      "outflows": "Auszahlungen"
+    },
+    "panels": {
+      "timeline": "Liquiditätsprognose",
+      "timelineHint": "Klicken Sie auf eine Woche für Zu- und Abflüsse · {weeks} Wochen",
+      "accounts": "Bankkonten",
+      "timelineHintScheduled": "Klicken Sie auf eine Woche für ihre Transaktionen · Lieferanten nach Fälligkeit im Rahmen der Kapazität geplant",
+      "bridge": "Cashflow-Brücke",
+      "forecast": "Liquiditätsprognose",
+      "forecastHint": "Endbestand pro Woche · Tiefststand markiert"
+    },
+    "cols": {
+      "week": "Woche",
+      "in": "Einzahlungen",
+      "out": "Auszahlungen",
+      "net": "Netto",
+      "ending": "Endbestand"
+    },
+    "totalCash": "Geld gesamt",
+    "noAccounts": "Keine Bankkonten gefunden.",
+    "negativeAlert": "Negativer Kontostand prognostiziert — Tiefststand von {amount} in der Woche vom {date}. <ap>Lieferanten langsamer zahlen</ap> oder <ar>Forderungen schneller einziehen</ar>.",
+    "deferralNote": "{amount} an Verbindlichkeiten können im Horizont mit den aktuellen Kapazitätseinstellungen nicht gezahlt werden — der Rückstand reicht über die letzte Woche hinaus.",
+    "configure": "Prognose konfigurieren",
+    "configTitle": "Konfiguration der Liquiditätsprognose",
+    "configDescription": "Das Modell hinter der Liquiditätszeitachse — wiederkehrende Flüsse (Gehälter, Miete, Kredite) und wie Einzugs- und Zahlungstermine prognostiziert werden. Die Kreditoren-Zahlungsregel wird im Kreditoren-Cockpit konfiguriert.",
+    "vitals": {
+      "burnRate": "Liquiditätsverbrauch",
+      "burnRateHint": "Ø wöchentlicher Abfluss",
+      "weekly": "Wöchentlich",
+      "arCoverage": "Forderungsdeckung",
+      "arCoverageHint": "(Geld + Ford.) / Verb.",
+      "cashCycle": "Cash-Zyklus",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Perioden-Cashflow",
+      "netFlowHint": "Zuflüsse − Abflüsse",
+      "runway": "Liquiditätsreichweite"
+    },
+    "layout": {
+      "customize": "Layout",
+      "title": "Layout anpassen",
+      "reset": "Zurücksetzen",
+      "stats": "Kennzahlenleiste",
+      "health": "Gesundheitskennzahlen",
+      "empty": "Alle Panels sind ausgeblendet — über Layout wieder einblenden.",
+      "timeline": "Wochenzeitachse",
+      "forecast": "Prognosediagramm"
+    },
+    "timeline": {
+      "otherIn": "Weitere Zuflüsse",
+      "otherOut": "Weitere Abflüsse",
+      "deferred": "Zurückgestellt",
+      "txns": "{count} Buchungen",
+      "spillBanner": "<strong>{amount} an Verbindlichkeiten können im Horizont nicht gezahlt werden</strong> mit den aktuellen Kapazitätseinstellungen — der Rückstand reicht über die letzte Woche hinaus."
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",

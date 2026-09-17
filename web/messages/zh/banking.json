@@ -512,6 +512,79 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "每行一个 OpenSSH 公钥。持有匹配私钥的客户端可免密码登录。"
   },
+  "cash": {
+    "title": "现金",
+    "description": "流动性控制中心 — 手头现金、资金可维持时间以及未来几周。",
+    "weeks": "{n}周",
+    "status": {
+      "healthy": "健康",
+      "caution": "注意",
+      "critical": "危急"
+    },
+    "stats": {
+      "currentCash": "手头现金",
+      "projectedEnd": "预计期末",
+      "netSub": "{amount} 净额",
+      "runway": "现金可维持",
+      "lowest": "最低点",
+      "lowestSub": "{date} 当周",
+      "netFlow": "期间净流量",
+      "inflows": "流入",
+      "outflows": "流出"
+    },
+    "panels": {
+      "timeline": "现金头寸预测",
+      "timelineHint": "点击某一周查看流入与流出 · {weeks} 周",
+      "accounts": "银行账户",
+      "timelineHintScheduled": "点击某一周查看其交易 · 在额度内按到期先后安排应付账款",
+      "bridge": "现金流量桥",
+      "forecast": "现金头寸预测",
+      "forecastHint": "按周显示期末现金 · 标出最低点"
+    },
+    "cols": {
+      "week": "周",
+      "in": "流入",
+      "out": "流出",
+      "net": "净额",
+      "ending": "期末现金"
+    },
+    "totalCash": "现金总额",
+    "noAccounts": "未找到银行账户。",
+    "negativeAlert": "预计将出现现金短缺 — {date} 当周低至 {amount}。<ap>放缓应付账款支付</ap>或<ar>加快应收账款回收</ar>。",
+    "deferralNote": "按当前付款能力设置，{amount} 的应付账款无法在预测期内支付 — 积压将延续到最后一周之后。",
+    "configure": "配置预测",
+    "configTitle": "现金预测配置",
+    "configDescription": "流动性时间线背后的模型 — 经常性收支（工资、房租、贷款）以及收款/付款日期的预测方式。应付账款付款规则在应付账款工作台中配置。",
+    "vitals": {
+      "burnRate": "现金消耗率",
+      "burnRateHint": "周均流出",
+      "weekly": "每周",
+      "arCoverage": "应收覆盖率",
+      "arCoverageHint": "（现金＋应收）/ 应付",
+      "cashCycle": "现金周期",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "期间净流量",
+      "netFlowHint": "流入 − 流出",
+      "runway": "现金可维持"
+    },
+    "layout": {
+      "customize": "布局",
+      "title": "自定义布局",
+      "reset": "重置",
+      "stats": "指标条",
+      "health": "健康指标",
+      "empty": "所有面板均已隐藏 — 请使用“布局”将其恢复。",
+      "timeline": "每周时间线",
+      "forecast": "预测图表"
+    },
+    "timeline": {
+      "otherIn": "其他流入",
+      "otherOut": "其他流出",
+      "deferred": "递延",
+      "txns": "{count} 笔",
+      "spillBanner": "<strong>{amount} 的应付账款无法在预测期内支付</strong>（按当前付款能力设置）— 积压将延续到最后一周之后。"
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",

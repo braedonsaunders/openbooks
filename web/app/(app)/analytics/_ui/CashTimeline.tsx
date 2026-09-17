@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 import { ListOrdered } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
@@ -35,6 +36,7 @@ export function CashTimeline({
 }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
+  const t = useTranslations('banking.cash')
   const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
   const hasCats = categories.length > 0
   const scheduling = compareMoney(weeklyCap, '0.0000') > 0 || restrictToSafe
@@ -49,20 +51,20 @@ export function CashTimeline({
       {scheduling && compareMoney(deferredBeyondHorizon, '0.0000') > 0 ? (
         <p className="flex items-start gap-2 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <ListOrdered size={14} className="mt-0.5 shrink-0" />
-          <span><span className="font-semibold">{money(deferredBeyondHorizon)} of payables can&apos;t be paid within the horizon</span> under the current AP capacity settings — the backlog spills past the last week.</span>
+          <span>{t.rich('timeline.spillBanner', { amount: money(deferredBeyondHorizon), strong: (chunks: ReactNode) => <span className="font-semibold">{chunks}</span> })}</span>
         </p>
       ) : null}
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
           <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">Week</th>
-            <th className="px-3 py-2 text-right font-medium">Inflows</th>
-            <th className="px-3 py-2 text-right font-medium">Outflows</th>
-            {hasCats ? <th className="px-3 py-2 text-right font-medium">Other In</th> : null}
-            {hasCats ? <th className="px-3 py-2 text-right font-medium">Other Out</th> : null}
-            {scheduling ? <th className="px-3 py-2 text-right font-medium">Deferred</th> : null}
-            <th className="px-3 py-2 text-right font-medium">Net</th>
-            <th className="px-4 py-2 text-right font-medium">Ending Cash</th>
+            <th className="px-4 py-2 text-left font-medium">{t('cols.week')}</th>
+            <th className="px-3 py-2 text-right font-medium">{t('cols.in')}</th>
+            <th className="px-3 py-2 text-right font-medium">{t('cols.out')}</th>
+            {hasCats ? <th className="px-3 py-2 text-right font-medium">{t('timeline.otherIn')}</th> : null}
+            {hasCats ? <th className="px-3 py-2 text-right font-medium">{t('timeline.otherOut')}</th> : null}
+            {scheduling ? <th className="px-3 py-2 text-right font-medium">{t('timeline.deferred')}</th> : null}
+            <th className="px-3 py-2 text-right font-medium">{t('cols.net')}</th>
+            <th className="px-4 py-2 text-right font-medium">{t('cols.ending')}</th>
           </tr>
         </thead>
         <tbody>
@@ -75,7 +77,7 @@ export function CashTimeline({
               <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 {w.label}
                 <span className="ml-2 text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                  {w.arCount + w.apCount > 0 ? `${w.arCount + w.apCount} txns` : ''}
+                  {w.arCount + w.apCount > 0 ? t('timeline.txns', { count: w.arCount + w.apCount }) : ''}
                 </span>
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{compareMoney(w.inflow, '0.0000') > 0 ? money(w.inflow) : '—'}</td>

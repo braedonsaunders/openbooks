@@ -688,6 +688,13 @@
       "empty": "All panels are hidden — use Layout to bring them back.",
       "timeline": "Weekly timeline",
       "forecast": "Forecast chart"
+    },
+    "timeline": {
+      "otherIn": "Other In",
+      "otherOut": "Other Out",
+      "deferred": "Deferred",
+      "txns": "{count} txns",
+      "spillBanner": "<strong>{amount} of payables can't be paid within the horizon</strong> under the current AP capacity settings — the backlog spills past the last week."
     }
   },
   "bankFeeds": {

@@ -985,6 +985,24 @@
       }
     }
   },
+  "charts": {
+    "history": "历史",
+    "forecast": "预测",
+    "bridge": {
+      "start": "期初",
+      "inflows": "流入",
+      "outflows": "流出",
+      "projectedEnd": "预计期末"
+    },
+    "weekly": {
+      "endingCash": "期末现金",
+      "lowest": "最低",
+      "in": "入",
+      "out": "出",
+      "net": "净额",
+      "ending": "期末"
+    }
+  },
   "common": {
     "monthsShort": {
       "jan": "1月",

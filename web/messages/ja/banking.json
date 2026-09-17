@@ -512,6 +512,79 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "1行につき1つの OpenSSH 公開キー。対応する秘密キーを持つクライアントはパスワードなしでログインできます。"
   },
+  "cash": {
+    "title": "キャッシュ",
+    "description": "流動性コントロールセンター — 手元資金、資金繰り、そして今後数週間。",
+    "weeks": "{n}週",
+    "status": {
+      "healthy": "健全",
+      "caution": "注意",
+      "critical": "危険"
+    },
+    "stats": {
+      "currentCash": "手元資金",
+      "projectedEnd": "期末予測残高",
+      "netSub": "{amount}（純額）",
+      "runway": "資金繰り期間",
+      "lowest": "最低残高",
+      "lowestSub": "{date}の週",
+      "netFlow": "期間純キャッシュフロー",
+      "inflows": "入金",
+      "outflows": "出金"
+    },
+    "panels": {
+      "timeline": "資金繰り予測",
+      "timelineHint": "週をクリックすると入出金の内訳を表示 · {weeks}週間",
+      "accounts": "銀行口座",
+      "timelineHintScheduled": "週をクリックすると取引を表示 · 支払能力の範囲内で期日順に買掛金をスケジュール",
+      "bridge": "キャッシュフロー・ブリッジ",
+      "forecast": "資金繰り予測",
+      "forecastHint": "週別期末残高 · 最低点をフラグ表示"
+    },
+    "cols": {
+      "week": "週",
+      "in": "入金",
+      "out": "出金",
+      "net": "純額",
+      "ending": "期末残高"
+    },
+    "totalCash": "資金合計",
+    "noAccounts": "銀行口座が見つかりません。",
+    "negativeAlert": "資金ショートの見込み — {date}の週に最低 {amount}。<ap>買掛金の支払いを遅らせる</ap>か<ar>売掛金の回収を早める</ar>。",
+    "deferralNote": "現在の支払能力設定では、{amount} の買掛金を期間内に支払えません — 未払い分は最終週を超えて繰り延べられます。",
+    "configure": "予測を設定",
+    "configTitle": "資金繰り予測の設定",
+    "configDescription": "流動性タイムラインの背後にあるモデル — 定期的フロー（給与、家賃、借入）と回収・支払日の予測方法。買掛金の支払ルールは買掛金コックピットで設定します。",
+    "vitals": {
+      "burnRate": "資金消費率",
+      "burnRateHint": "週平均出金",
+      "weekly": "週次",
+      "arCoverage": "売掛金カバー率",
+      "arCoverageHint": "（資金＋売掛金）÷ 買掛金",
+      "cashCycle": "キャッシュサイクル",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "期間純キャッシュフロー",
+      "netFlowHint": "入金 − 出金",
+      "runway": "資金繰り期間"
+    },
+    "layout": {
+      "customize": "レイアウト",
+      "title": "レイアウトをカスタマイズ",
+      "reset": "リセット",
+      "stats": "指標ストリップ",
+      "health": "健全性指標",
+      "empty": "すべてのパネルが非表示です — レイアウトから戻してください。",
+      "timeline": "週間タイムライン",
+      "forecast": "予測チャート"
+    },
+    "timeline": {
+      "otherIn": "その他入金",
+      "otherOut": "その他出金",
+      "deferred": "繰延",
+      "txns": "{count}件",
+      "spillBanner": "<strong>{amount} の買掛金は期間内に支払えません</strong>（現在の支払能力設定） — 未払い分は最終週を超えて繰り延べられます。"
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",

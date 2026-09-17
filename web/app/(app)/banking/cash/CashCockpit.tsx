@@ -4,7 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   Landmark,
   Wallet,
@@ -90,7 +90,8 @@ export function CashCockpit({
   const railKeys = visible.slice(1)
   const statsHidden = hidden.has(STATS_KEY)
 
-  const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const locale = useLocale()
+  const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
   const scheduling = compareMoney(data.apSettings.weeklyCap, '0.0000') > 0 || data.apSettings.restrictToSafe
   const runwayTone = data.runwayStatus === 'critical' ? 'negative' : data.runwayStatus === 'caution' ? 'warning' : 'positive'
   const bridgeLabels = {

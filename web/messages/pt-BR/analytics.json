@@ -985,6 +985,24 @@
       }
     }
   },
+  "charts": {
+    "history": "Histórico",
+    "forecast": "Previsão",
+    "bridge": {
+      "start": "Início",
+      "inflows": "Entradas",
+      "outflows": "Saídas",
+      "projectedEnd": "Saldo final projetado"
+    },
+    "weekly": {
+      "endingCash": "Caixa final",
+      "lowest": "Mínimo",
+      "in": "Entradas",
+      "out": "Saídas",
+      "net": "Líquido",
+      "ending": "Final"
+    }
+  },
   "common": {
     "monthsShort": {
       "jan": "jan",
