@@ -236,6 +236,7 @@ export function ApplicationsBillingWorkspace({
               canCreate={canCreate}
               canApprove={canApprove}
               busy={busy}
+              approvalBlocked={data.payApplications.some((app) => app.status === "draft" || app.status === "submitted" || app.status === "approved")}
             />
           ) : null}
           {tab === "retainage" ? (
@@ -478,6 +479,7 @@ function ChangeOrdersSection({
   canCreate,
   canApprove,
   busy,
+  approvalBlocked,
 }: {
   projectId: string;
   orders: ChangeOrder[];
@@ -486,6 +488,8 @@ function ChangeOrdersSection({
   canCreate: boolean;
   canApprove: boolean;
   busy: boolean;
+  /** An open application blocks change-order approval server-side. */
+  approvalBlocked: boolean;
 }) {
   const { money } = useMoney();
   const t = useTranslations("applications.changeOrders");
@@ -535,7 +539,14 @@ function ChangeOrdersSection({
                 <TableCell><Badge variant={order.status === "approved" ? "success" : "secondary"}>{t(`status.${order.status}`)}</Badge></TableCell>
                 <TableCell className="text-right">
                   {order.status === "draft" && canApprove && order.independentApprovalAllowed ? (
-                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}>{t("approve")}</Button>
+                    approvalBlocked ? (
+                      <span className="inline-flex flex-col items-end gap-1">
+                        <Button size="sm" variant="ghost" disabled title={t("approvalBlockedHint")}>{t("approve")}</Button>
+                        <span className="max-w-36 text-xs font-normal text-slate-500 dark:text-slate-400">{t("approvalBlockedHint")}</span>
+                      </span>
+                    ) : (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}>{t("approve")}</Button>
+                    )
                   ) : null}
                   {order.status === "draft" && canCreate ? (
                     <Button
