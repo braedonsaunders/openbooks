@@ -154,6 +154,7 @@ export function ListViewDesigner({
   }
   async function remove() {
     if (!def?.id) return
+    if (!confirm(t('designer.list.deleteConfirm'))) return
     setBusy(true)
     const res = await fetch(`/api/customization/list-views/${def.id}`, { method: 'DELETE' })
     if (res.ok) { toast.success(t('designer.list.deleted')); router.push(`/admin/customization?recordType=${recordType}&tab=views`); router.refresh() }
