@@ -11,5 +11,8 @@
   "verify": "Verificar",
   "or": "o",
   "sso": "Inicio de sesión único",
-  "ssoFailed": "No se pudo completar el inicio de sesión único"
+  "ssoFailed": "No se pudo completar el inicio de sesión único",
+  "reset": {
+    "requestFailed": "No se pudo solicitar el enlace de restablecimiento — compruebe su conexión e inténtelo de nuevo."
+  }
 }

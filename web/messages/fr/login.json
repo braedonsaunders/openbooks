@@ -11,5 +11,8 @@
   "verify": "Vérifier",
   "or": "ou",
   "sso": "Authentification unique",
-  "ssoFailed": "L’authentification unique n’a pas pu être terminée"
+  "ssoFailed": "L’authentification unique n’a pas pu être terminée",
+  "reset": {
+    "requestFailed": "Le lien de réinitialisation n’a pas pu être demandé — vérifiez votre connexion et réessayez."
+  }
 }

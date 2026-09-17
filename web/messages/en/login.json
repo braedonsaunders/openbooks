@@ -22,6 +22,7 @@
     "sendLink": "Send reset link",
     "sending": "Sending…",
     "sent": "If that email matches an account, a reset link is on its way. The link works once and expires in 30 minutes.",
+    "requestFailed": "The reset link could not be requested — check your connection and try again.",
     "newPassword": "New password",
     "confirmPassword": "Confirm new password",
     "passwordHelp": "At least 10 characters.",

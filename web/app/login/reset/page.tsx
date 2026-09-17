@@ -28,13 +28,21 @@ function ResetForm() {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    await fetch('/api/password-reset', {
+    const res = await fetch('/api/password-reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
-    }).catch(() => undefined)
-    setDone(true)
+    }).catch(() => null)
     setBusy(false)
+    // Anti-enumeration stays: a reached server always answers 200 whether
+    // the address matched or mail could go out. Only a failed request
+    // (network, gateway, origin gate) may say so — never claim the link is
+    // on its way when nothing was asked.
+    if (!res || !res.ok) {
+      setError(t('reset.requestFailed'))
+      return
+    }
+    setDone(true)
   }
 
   async function submitConfirm(e: React.FormEvent) {
