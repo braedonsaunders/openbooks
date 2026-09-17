@@ -2744,3 +2744,115 @@ test('admin namespace ships translated in zh and pt-BR', () => {
     assert.deepEqual(drift, [], `${locale} admin translations drop or rename ICU placeholders`)
   }
 })
+
+test('analytics copy ships translated in ja, zh and pt-BR', () => {
+  // i5: the cashWeek/categoryManager/customer/sentinel/spendVelocity/
+  // utilization/vendor subtrees (1251 keys) were missing wholesale in
+  // ja/zh/pt-BR, which rendered English inside otherwise translated
+  // analytics screens. Every leaf under those subtrees must exist, keep
+  // its ICU placeholders and plural/select arms, and differ from English
+  // except for reviewed cognates/codes/formats, pinned to the exact term.
+  const identicalByFact = new Set([
+    'ja:analytics.cashWeek.table.id|ID',
+    'ja:analytics.categoryManager.form.memoKeywordsPlaceholder|payroll, lease, hydro…',
+    'ja:analytics.customer.table.f|F',
+    'ja:analytics.customer.table.m|M',
+    'ja:analytics.customer.table.r|R',
+    'ja:analytics.sentinel.flag.rsf|RSF',
+    'ja:analytics.sentinel.table.z|Z',
+    'ja:analytics.sentinel.title|Sentinel',
+    'ja:analytics.utilization.whatif.na|N/A',
+    'zh:analytics.cashWeek.table.id|ID',
+    'zh:analytics.categoryManager.form.memoKeywordsPlaceholder|payroll, lease, hydro…',
+    'zh:analytics.customer.table.f|F',
+    'zh:analytics.customer.table.m|M',
+    'zh:analytics.customer.table.r|R',
+    'zh:analytics.sentinel.flag.rsf|RSF',
+    'zh:analytics.sentinel.table.z|Z',
+    'zh:analytics.sentinel.title|Sentinel',
+    'zh:analytics.utilization.whatif.na|N/A',
+    'pt-BR:analytics.cashWeek.actionBar.summary|{count} {kind} · {total}',
+    'pt-BR:analytics.cashWeek.table.id|ID',
+    'pt-BR:analytics.cashWeek.table.status|Status',
+    'pt-BR:analytics.categoryManager.form.memoKeywordsPlaceholder|payroll, lease, hydro…',
+    'pt-BR:analytics.customer.csv.churn|Churn',
+    'pt-BR:analytics.customer.panels.segmentCustomers|{segment} ({count})',
+    'pt-BR:analytics.customer.profitTier.marginal|Marginal',
+    'pt-BR:analytics.customer.table.churn|Churn',
+    'pt-BR:analytics.customer.table.f|F',
+    'pt-BR:analytics.customer.table.m|M',
+    'pt-BR:analytics.customer.table.r|R',
+    'pt-BR:analytics.customer.tier.bronze|Bronze',
+    'pt-BR:analytics.sentinel.analysis.zscoreWord|Z-score',
+    'pt-BR:analytics.sentinel.coverage.benfordBold|Benford',
+    'pt-BR:analytics.sentinel.drill.top|top {count}',
+    'pt-BR:analytics.sentinel.flag.rsf|RSF',
+    'pt-BR:analytics.sentinel.kpi.benford|Benford',
+    'pt-BR:analytics.sentinel.sub.twoD|2D: {value}',
+    'pt-BR:analytics.sentinel.table.doc1|Doc 1',
+    'pt-BR:analytics.sentinel.table.doc2|Doc 2',
+    'pt-BR:analytics.sentinel.table.z|Z',
+    'pt-BR:analytics.sentinel.tabs.benford|Benford',
+    'pt-BR:analytics.sentinel.title|Sentinel',
+    'pt-BR:analytics.spendVelocity.panels.insights|Insights',
+    'pt-BR:analytics.spendVelocity.table.detector|Detector',
+    'pt-BR:analytics.spendVelocity.table.item|Item',
+    'pt-BR:analytics.utilization.entries.item|Item',
+    'pt-BR:analytics.utilization.sources.introTail|:',
+    'pt-BR:analytics.utilization.whatif.na|N/A',
+    'pt-BR:analytics.vendor.quadrant.commodity.label|Commodity',
+  ])
+  const pinnedLocales = ['ja', 'pt-BR', 'zh']
+  const prefixes = [
+    'analytics.cashWeek.',
+    'analytics.categoryManager.',
+    'analytics.customer.',
+    'analytics.sentinel.',
+    'analytics.spendVelocity.',
+    'analytics.utilization.',
+    'analytics.vendor.',
+  ]
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+  assert.equal(wanted.length, 1251, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const arms = (value: string): string[] =>
+    [...(value.match(/(one|other|few|many|zero|two)\s*\{/g) ?? [])].map((arm) => arm.replace(/\s*\{$/, ''))
+  for (const locale of pinnedLocales) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = wanted.filter((key) => {
+      const english = source.get(key) ?? ''
+      const expected = tokens(english)
+      const actual = tokens(catalog.get(key) ?? '')
+      // `{s}` in `other {s}` is plural morphology, not a data placeholder:
+      // pt keeps it (outro/outros), ja/zh empty the arm (no plural marking).
+      if (english.includes('other {s}')) {
+        expected.delete('{s')
+        actual.delete('{s')
+      }
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} analytics translations drop or rename ICU placeholders`)
+    const armDrift = wanted.filter((key) => {
+      const expected = [...new Set(arms(source.get(key) ?? ''))].sort()
+      const actual = [...new Set(arms(catalog.get(key) ?? ''))].sort()
+      return expected.join(',') !== actual.join(',')
+    })
+    assert.deepEqual(armDrift, [], `${locale} analytics translations drop ICU plural/select arms`)
+  }
+})
