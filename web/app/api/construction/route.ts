@@ -57,6 +57,9 @@ export async function GET(req: Request) {
   `));
   const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
+  // The org project-revenue default backing the CO income picker (F-t03-002
+  // residual); resolved alongside the page reads, not inside a write tx.
+  const defaultIncomeAccount = projectDefaultIncomeAccount(db, orgId);
   const [sov, cos, apps, held, committed] = await Promise.all([
     db.execute(sql`
       select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
@@ -68,6 +71,7 @@ export async function GET(req: Request) {
     db.execute(sql`
       select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
              co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
+             co.income_account_id as "incomeAccountId",
              co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
         from change_orders co
         left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
@@ -92,6 +96,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     sovLines: sov.rows,
     changeOrders: cos.rows,
+    defaultIncomeAccountId: await defaultIncomeAccount,
     payApplications: apps.rows,
     contractSum,
     retainageHeld: String(held.rows[0]?.held ?? "0"),
@@ -117,6 +122,44 @@ async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unk
   `));
   if (!owned.rows.length) throw new ConstructionBillingError("Income account not found");
   return id;
+}
+
+/**
+ * The org's project-revenue control account (F-t03-002 residual): the
+ * project/type default income account for owner-change-order schedule
+ * lines — the same default project billing falls back to
+ * (web/lib/billing.ts `defaultIncomeId`). Validated like a pinned account;
+ * null when unconfigured or retired, in which case the approval leaves the
+ * line without an account exactly like a hand-added SOV line.
+ */
+async function projectDefaultIncomeAccount(exec: SqlExecutor, orgId: string): Promise<string | null> {
+  const row = (await exec.execute(sql`
+    select a.id
+      from orgs o
+      join accounts a
+        on a.id = nullif(o.settings->'controlAccounts'->>'projectRevenue', '')::uuid
+       and a.org_id = o.id
+     where o.id = ${orgId} and a.is_active and not a.is_summary`)).rows[0] as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+/**
+ * The income account an approval carries onto its created SOV line: the
+ * CO's pinned account, or the org default when the CO predates the column
+ * or was saved without one. A stored account retired since creation cannot
+ * be credited, and stranding the approval is worse than substituting the
+ * current default — so a pin failure falls through to the default (which
+ * itself validates, else null). Anything unexpected still throws.
+ */
+async function resolveCarriedIncomeAccount(tx: SqlExecutor, orgId: string, stored: string | null): Promise<string | null> {
+  if (stored) {
+    try {
+      return await pinIncomeAccount(tx, orgId, stored);
+    } catch (error) {
+      if (!(error instanceof ConstructionBillingError)) throw error;
+    }
+  }
+  return pinIncomeAccount(tx, orgId, await projectDefaultIncomeAccount(tx, orgId));
 }
 
 /** The project a request targets, with the subsidiary that scopes it. */
@@ -337,6 +380,11 @@ export async function POST(req: Request) {
         if (targetSovLineId && !isUuid(targetSovLineId)) {
           throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
         }
+        // The income account the approval lands on the created SOV line
+        // (F-t03-002 residual). Targeted orders reprice the line's own
+        // account, so the writer only reads this for untargeted ones;
+        // pinned like a hand-added SOV line either way.
+        const incomeAccountId = await pinIncomeAccount(db, orgId, body.incomeAccountId);
         if (!number || cmp(amount, "0") === 0) throw new ConstructionBillingError("Change-order number and a non-zero amount are required");
         if (cmp(amount, "0") < 0 && !targetSovLineId) throw new ConstructionBillingError("A deductive change order must identify the schedule line it reduces");
         const id = await db.transaction(async (tx) => {
@@ -357,12 +405,12 @@ export async function POST(req: Request) {
             if (!target.rows.length) throw new ConstructionBillingError("The target schedule line does not belong to this project");
           }
           const created = (await tx.execute<{ id: string }>(sql`
-            insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, created_by, updated_by)
-            values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${userId}, ${userId}) returning id
+            insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, income_account_id, created_by, updated_by)
+            values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${incomeAccountId}, ${userId}, ${userId}) returning id
           `));
           const createdId = created.rows[0]!.id;
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'change_orders', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, number, description: body.description ?? null, amount, targetSovLineId, status: "draft" } })}::jsonb, ${userId})`);
+            values (${orgId}, 'change_orders', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, number, description: body.description ?? null, amount, targetSovLineId, incomeAccountId, status: "draft" } })}::jsonb, ${userId})`);
           return createdId;
         });
         return NextResponse.json({ id }, { status: 201 });
@@ -376,7 +424,7 @@ export async function POST(req: Request) {
           : requireIsoDate(body.approvedOn, "Approval date");
         await db.transaction(async (tx) => {
           const co = (await tx.execute<any>(sql`
-            select project_id, number, description, amount, target_sov_line_id, created_by from change_orders
+            select project_id, number, description, amount, target_sov_line_id, income_account_id, created_by from change_orders
              where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
           `));
           const row = co.rows[0];
@@ -455,11 +503,14 @@ export async function POST(req: Request) {
                       ${userId})`);
           } else {
             if (cmp(effect, "0") <= 0) throw new ConstructionBillingError("An unallocated change order must be additive");
+            // Carry the pinned account (or the org default for COs saved
+            // without one) so the line bills without a manual edit.
+            const carriedIncomeAccountId = await resolveCarriedIncomeAccount(tx, orgId, row.income_account_id ?? null);
             const sov = (await tx.execute<{ id: string }>(sql`
-              insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id,
+              insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id, income_account_id,
                                      sort_order, created_by, updated_by)
               values (${orgId}, ${row.project_id}, ${"CO-" + row.number}, ${row.description ?? "Change order " + row.number},
-                      ${effect}, ${body.id},
+                      ${effect}, ${body.id}, ${carriedIncomeAccountId},
                       (select coalesce(max(sort_order), 0) + 1 from sov_lines where org_id = ${orgId} and project_id = ${row.project_id}),
                       ${userId}, ${userId})
               returning id
@@ -468,7 +519,8 @@ export async function POST(req: Request) {
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${orgId}, 'sov_lines', ${sovLineId}, 'insert',
                       jsonb_build_object('source', 'approved_change_order', 'changeOrderId', ${body.id}::text,
-                        'after', jsonb_build_object('projectId', ${row.project_id}::text, 'scheduledValue', ${String(row.amount)}::text)),
+                        'after', jsonb_build_object('projectId', ${row.project_id}::text, 'scheduledValue', ${String(row.amount)}::text,
+                          'incomeAccountId', ${carriedIncomeAccountId}::text)),
                       ${userId})`);
           }
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
