@@ -58,7 +58,8 @@
     "reasonLabel": "Motivo da rejeição (aplicado a cada item selecionado)",
     "approvedCount": "{count} aprovados",
     "rejectedCount": "{count} rejeitados",
-    "failedCount": "{count} com falha ({error})"
+    "failedCount": "{count} com falha ({error})",
+    "signatureBlocked": "Algumas aprovações selecionadas exigem assinatura — aprove uma por vez."
   },
   "ooo": {
     "button": "Ausente do escritório",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "Todos os aprovadores",
       "reminder": "Lembrete {date}",
-      "escalates": "Escala {date}"
-    }
+      "escalates": "Escala {date}",
+      "signature": "Assinatura obrigatória"
+    },
+    "signTitle": "Assinar para aprovar",
+    "signLabel": "Digite seu nome completo para assinar esta aprovação"
   }
 }

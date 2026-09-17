@@ -36,7 +36,12 @@
     "bank_rule": "Regra bancária",
     "project_charge": "Apropriação de projeto",
     "fixed_asset": "Ativo imobilizado",
-    "property": "Imóvel"
+    "property": "Imóvel",
+    "customer": "Cliente",
+    "vendor": "Fornecedor",
+    "employee": "Funcionário",
+    "pay_run": "Folha de pagamento",
+    "field_ticket": "Boletim de campo"
   },
   "property": {
     "tabs": {
@@ -161,7 +166,12 @@
         "text": "Texto"
       },
       "customFields": "Campos personalizados",
-      "noCustomFields": "Nenhum campo personalizado definido para este tipo de registro ainda."
+      "noCustomFields": "Nenhum campo personalizado definido para este tipo de registro ainda.",
+      "tabsSection": "Abas",
+      "tabsHelp": "As abas que o painel deste registro mostra. Oculte as que você não usa, reordene conforme seu trabalho, renomeie com seu vocabulário ou adicione uma aba própria para seus campos personalizados.",
+      "addTab": "Adicionar aba",
+      "customTab": "Personalizada",
+      "tabLocked": "Esta aba mostra os campos próprios do registro e não pode ser ocultada."
     },
     "list": {
       "new": "Nova visualização",
@@ -195,7 +205,9 @@
       "sortDir": "Direção",
       "asc": "Crescente",
       "desc": "Decrescente",
-      "perPage": "Linhas por página"
-    }
+      "perPage": "Linhas por página",
+      "deleteConfirm": "Excluir esta visão? As listas que a usam voltam à visão padrão. Não há como desfazer."
+    },
+    "documentation": "Documentação"
   }
 }

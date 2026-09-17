@@ -61,7 +61,18 @@
     "crm-forecasts": "Previsões e Metas",
     "revenue": "Reconhecimento de Receita",
     "inventory": "Estoque",
-    "docs": "Documentação"
+    "docs": "Documentação",
+    "payroll": "Folha de pagamento",
+    "wip-billing": "Trabalhos em curso e pré-faturamento",
+    "property-management": "Gestão imobiliária",
+    "subcontracts": "Subcontratos",
+    "admin-page-layouts": "Layouts de página",
+    "admin-extensions": "Apps",
+    "field-tickets": "Boletins de campo",
+    "compliance": "Conformidade",
+    "compliance-vendors": "Subcontratados",
+    "lien-waivers": "Quitações",
+    "information-returns": "Declarações informativas"
   },
   "groups": {
     "my-work": "Meu Trabalho",
@@ -93,6 +104,11 @@
     "customize": "Personalizar",
     "automate": "Automatizar",
     "extend": "Estender",
-    "records": "Registros"
+    "records": "Registros",
+    "compliance": "Conformidade"
+  },
+  "modulesShort": {
+    "ap": "Contas a pagar",
+    "ar": "Contas a receber"
   }
 }

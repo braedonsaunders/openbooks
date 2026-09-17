@@ -33,6 +33,13 @@
       "debit": "Débito",
       "credit": "Crédito",
       "openItem": "Item em aberto"
+    },
+    "contributors": {
+      "standardLines": "Linhas padrão",
+      "locked": "bloqueado",
+      "ruleGroup": "Regra: {name}",
+      "scriptGroup": "Script: {name}",
+      "otherGroup": "{kind}: {name}"
     }
   },
   "newButton": {

@@ -7,7 +7,10 @@
     "emptyTitle": "Nenhum item ainda",
     "emptyDescription": "Adicione o primeiro serviço, mão de obra ou encargo para iniciar o catálogo.",
     "newButton": "Novo item",
-    "createDraftFailed": "Não foi possível criar um item rascunho"
+    "createDraftFailed": "Não foi possível criar um item rascunho",
+    "view": "Visão",
+    "viewCatalog": "Catálogo",
+    "viewRateBooks": "Tabelas de preços"
   },
   "labels": {
     "code": "Código",
@@ -102,7 +105,9 @@
     "saveFailed": "Não foi possível salvar as tarifas",
     "saved": "Versão de tarifas salva",
     "empty": "Ainda não há versões de tarifas.",
-    "rates": "Tarifas"
+    "rates": "Tarifas",
+    "tierOverrides": "Taxas por tipo de hora:",
+    "tierAuto": "auto"
   },
   "revrec": {
     "title": "Reconhecimento de receita",
@@ -125,5 +130,56 @@
       "exclude": "Excluir",
       "software": "Software (residual)"
     }
+  },
+  "costing": {
+    "title": "Custeio de estoque",
+    "description": "Como o estoque deste item é avaliado e controlado — método, contas e pontos de pedido.",
+    "configure": "Configurar custeio",
+    "empty": "Ainda sem perfil de custo — configure um antes de receber estoque.",
+    "method": "Método de custeio",
+    "methods": {
+      "fifo": "FIFO",
+      "moving_average": "Custo médio",
+      "standard": "Custo padrão"
+    },
+    "tracking": "Rastreamento",
+    "trackingOptions": {
+      "none": "Nenhum",
+      "lot": "Lote",
+      "serial": "Número de série"
+    },
+    "baseUnit": "Unidade base",
+    "assetAccount": "Conta de estoque",
+    "cogsAccount": "Conta de CMV",
+    "adjustmentAccount": "Conta de ajustes",
+    "varianceAccount": "Conta de variações",
+    "receivedNotBilledAccount": "Conta de recebido não faturado",
+    "standardCost": "Custo padrão",
+    "reorderPoint": "Ponto de pedido",
+    "preferredStockLevel": "Nível de estoque desejado",
+    "selectAccount": "Selecione uma conta",
+    "separationConflict": "Deve ser diferente da conta de estoque",
+    "separationBlocked": "Corrija as contas destacadas antes de salvar — as contrapartidas devem ser diferentes da conta de estoque.",
+    "allowNegativeInventory": "Permitir estoque negativo",
+    "negativeCostBasis": "Base de custo provisória",
+    "provisionalUnitCost": "Custo unitário provisório configurado",
+    "negativeCostBasisOptions": {
+      "last_receipt": "Custo do último recebimento",
+      "standard": "Custo padrão",
+      "configured": "Custo configurado"
+    }
+  },
+  "fairValue": {
+    "title": "Preços de valor justo",
+    "description": "Preços de venda independentes (SSP) datados por moeda, usados para alocar a receita de pacotes entre obrigações.",
+    "new": "Novo preço",
+    "currency": "Moeda",
+    "unitPrice": "Preço unitário",
+    "lowValue": "Valor mínimo",
+    "highValue": "Valor máximo",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente até",
+    "empty": "Ainda sem preços de valor justo — o SSP único acima é usado.",
+    "confirmDelete": "Remover este preço de valor justo?"
   }
 }

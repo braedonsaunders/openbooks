@@ -16,7 +16,18 @@
       "unconfigured": "Não configurada"
     },
     "mirrorBadge": "Espelhamento: {schedule}",
-    "lastRun": "Última execução: {lastRun} · Sincronizado até: {cursor}"
+    "lastRun": "Última execução: {lastRun} · Sincronizado até: {cursor}",
+    "schedule": "Agenda do espelhamento",
+    "mirrorHealth": "Espelhamento",
+    "attachmentHealth": "Anexos",
+    "sourceDeletions": "Transações excluídas na origem",
+    "sourceDeletionHint": "Escolha se o OpenBooks deve manter a transação auditada ou revertê-la e anulá-la. Documentos lançados com aplicações de pagamento precisam ser desapropriados primeiro.",
+    "schedules": {
+      "hourly": "A cada hora",
+      "every_6_hours": "A cada 6 horas",
+      "daily": "Diariamente",
+      "weekly": "Semanalmente"
+    }
   },
   "actions": {
     "connect": "Conectar",
@@ -30,7 +41,9 @@
     "pauseMirror": "Pausar espelhamento",
     "enableMirror": "Ativar espelhamento",
     "edit": "Editar",
-    "downloadQwc": "Baixar Web Connector"
+    "downloadQwc": "Baixar Web Connector",
+    "retainDeletion": "Manter com evidência",
+    "voidDeletion": "Reverter e anular"
   },
   "runs": {
     "heading": "Execuções recentes",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "Adicione credenciais antes de executar esta conexão.",
       "INVALID_MODE": "Escolha uma ação de migração válida.",
       "ATTACHMENTS_UNSUPPORTED": "Esta conexão não oferece migração de anexos.",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "Esta conexão não oferece sincronização de dados financeiros dos projetos."
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Esta conexão não oferece sincronização de dados financeiros dos projetos.",
+      "RUN_ALREADY_ACTIVE": "Já há uma execução deste tipo ativa para esta conexão."
     },
     "testing": "Testando conexão…",
     "connected": "Conectado",
@@ -108,7 +122,9 @@
     "created": "Conexão criada",
     "updated": "Conexão atualizada",
     "copied": "URI de redirecionamento copiado",
-    "copyFailed": "Não foi possível copiar — selecione e copie o texto manualmente"
+    "copyFailed": "Não foi possível copiar — selecione e copie o texto manualmente",
+    "deletionRetained": "Exclusão na origem mantida com evidência do controller",
+    "deletionVoided": "Transação excluída na origem revertida e anulada"
   },
   "confirmDelete": "Excluir a conexão \"{name}\"? Os dados migrados permanecem; apenas o vínculo é removido.",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "Nome da conexão",
     "select": "Selecionar…",
     "credentials": "Credenciais (criptografadas em repouso, nunca exibidas novamente)",
-    "keepCurrent": "Deixe em branco para manter as atuais"
+    "keepCurrent": "Deixe em branco para manter as atuais",
+    "postedChanges": {
+      "label": "Alterações em transações lançadas na origem",
+      "review": "Parar e exigir revisão",
+      "automatic": "Anexar reversão e substituição automaticamente",
+      "help": "Correções automáticas nunca reescrevem o histórico lançado. O OpenBooks mantém o original, lança uma reversão e uma substituição vinculadas, transfere as aplicações elegíveis e ainda para diante de conciliações, períodos fechados, estoque, reconhecimento de receita ou documentos derivados."
+    }
   },
   "oauth": {
     "title": "Configuração única do app no <link>{portal}</link>",
@@ -192,5 +214,7 @@
         "Copie o Client ID, gere um Client Secret, cole ambos neste formulário, salve e clique em Conectar."
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "Manter no OpenBooks a transação {ref} excluída na origem e registrar como decisão do controller?",
+  "confirmVoidSourceDeletion": "Reverter e anular a transação {ref} excluída na origem? Isso lança uma reversão contábil e não pode ser desfeito nesta tela."
 }

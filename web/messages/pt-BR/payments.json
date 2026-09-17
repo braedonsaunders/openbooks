@@ -89,7 +89,12 @@
       "autosaveFailed": "Falha no salvamento automático",
       "postFailed": "O lançamento falhou",
       "posted": "{side, select, ap {Pagamento lançado e aplicado} other {Recebimento lançado e aplicado}}"
-    }
+    },
+    "deleteConfirmTitle": "Excluir este pagamento?",
+    "deleteConfirmBody": "Isso exclui definitivamente o pagamento em rascunho. Não há como desfazer.",
+    "deleteConfirmAction": "Excluir",
+    "deleted": "Pagamento excluído",
+    "deleteFailed": "Falha ao excluir"
   },
   "eft": {
     "notConfiguredTitle": "A originação de EFT não está configurada",

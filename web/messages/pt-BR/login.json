@@ -13,6 +13,25 @@
   "sso": "Login único",
   "ssoFailed": "Não foi possível concluir o login único",
   "reset": {
-    "requestFailed": "Não foi possível solicitar o link de redefinição — verifique sua conexão e tente novamente."
-  }
+    "requestFailed": "Não foi possível solicitar o link de redefinição — verifique sua conexão e tente novamente.",
+    "requestTitle": "Redefina sua senha",
+    "chooseTitle": "Escolha uma nova senha",
+    "requestHelp": "Digite o e-mail da conta e enviaremos um link de redefinição se ele corresponder a uma conta.",
+    "sendLink": "Enviar link",
+    "sending": "Enviando…",
+    "sent": "Se esse e-mail corresponder a uma conta, um link de redefinição está a caminho. O link é de uso único e expira em 30 minutos.",
+    "newPassword": "Nova senha",
+    "confirmPassword": "Confirmar nova senha",
+    "passwordHelp": "Pelo menos 10 caracteres.",
+    "mismatch": "Essas senhas não conferem",
+    "weakPassword": "A senha deve ter pelo menos 10 caracteres",
+    "invalidToken": "Este link de redefinição é inválido ou expirou — peça um novo",
+    "setPassword": "Definir nova senha",
+    "saving": "Salvando…",
+    "changed": "Sua senha foi alterada. Entre com ela agora — as outras sessões foram encerradas.",
+    "backToSignIn": "Voltar ao login"
+  },
+  "forgotPassword": "Esqueceu a senha?",
+  "tooManyAttempts": "Tentativas demais — tente de novo em {seconds} segundos",
+  "busyTryAgain": "O serviço de login está ocupado — tente em instantes"
 }
