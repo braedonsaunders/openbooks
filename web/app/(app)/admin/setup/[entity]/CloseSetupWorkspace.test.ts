@@ -21,6 +21,22 @@ test('period generation failure keeps the drawer open and renders the server rea
   )
 })
 
+test('period drawer surfaces pending reopen requests for its period and book', () => {
+  // F-t06-012: submitted requests were invisible in the requester's drawer,
+  // so testers re-submitted blindly (two identical outstanding requests).
+  // The drawer derives pending rows from the already-loaded reopen list.
+  assert.match(
+    source,
+    /pendingReopen/,
+    'PeriodDrawer must surface the pending reopen requests for its period+book instead of only a blank request form',
+  )
+  assert.match(
+    source,
+    /reopenStates/,
+    'pending rows carry their workflow status like the setup-page list does',
+  )
+})
+
 test('period generation navigates away only on success', () => {
   // The drawer must stay mounted on failure so the alert above is readable;
   // the only generate-path navigation is the success redirect.
