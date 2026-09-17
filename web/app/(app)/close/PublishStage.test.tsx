@@ -38,7 +38,7 @@ registerHooks({
     if (specifier === "next-intl") {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,export function useTranslations() { return (key) => key }`,
+        url: `data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => true; return t }`,
       };
     }
     if (specifier === "../../../components/page-layout") {
@@ -111,4 +111,31 @@ test("re-publication requires a restatement note before enabling publish", () =>
     publishDisabled(html),
     "re-publish without a restatement note must stay disabled",
   );
+});
+
+// F-t01-001: reporting packages store reports as { slug } objects. The
+// publish list must resolve each slug to its report name — never
+// interpolate the object into a translation key.
+test("publish package resolves report slugs to human-readable names", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      PublishStage,
+      propsFor({
+        ...closedRun,
+        package_reports: [
+          { slug: "balance-sheet" },
+          { slug: "pnl" },
+          { slug: "cash-flow" },
+          { slug: "trial-balance" },
+          { slug: "general-ledger" },
+        ],
+      }) as never,
+    ),
+  );
+  assert.ok(!html.includes("[object Object]"), "report rows must not render raw object keys");
+  for (const slug of ["balance-sheet", "pnl", "cash-flow", "trial-balance", "general-ledger"]) {
+    assert.ok(html.includes(slug), `package must list ${slug}`);
+  }
+  assert.ok(html.includes("/reports/balance-sheet"), "balance-sheet must link to its report");
+  assert.ok(html.includes("/reports/pnl"), "pnl must link to its report");
 });
