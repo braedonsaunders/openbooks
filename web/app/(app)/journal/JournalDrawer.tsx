@@ -205,6 +205,9 @@ export function JournalDrawer({
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  // A refused post pins here (F-t06-006/F-t06-011): toasts expire, but the
+  // drawer must keep showing why the entry did not post.
+  const [postError, setPostError] = useState<string | null>(null)
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
   // The header subsidiary is the journal's home entity; the OPTIONAL per-line
@@ -443,14 +446,17 @@ export function JournalDrawer({
 
   async function post() {
     setBusy(true)
+    setPostError(null)
     const res = await fetch('/api/journals/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'post', documentId: doc.id }),
     })
-    const data = await res.json()
+    const data = (await res.json().catch(() => ({}))) as { error?: unknown; pendingApproval?: boolean }
     if (!res.ok) {
-      toast.error(data.error ?? t('postFailed'))
+      const message = typeof data.error === 'string' && data.error ? data.error : t('postFailed')
+      setPostError(message)
+      toast.error(message)
       setBusy(false)
       return
     }
@@ -732,6 +738,11 @@ export function JournalDrawer({
       }
     >
       <div className="space-y-6 p-1">
+        {postError ? (
+          <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {postError}
+          </p>
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

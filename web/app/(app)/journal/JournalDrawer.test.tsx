@@ -17,6 +17,22 @@ test('journal voids carry the revision token required by the void API', () => {
 // same drawer session always 409s ("changed after you opened it"), and the
 // keyless widget never refires its mount read, so close/reopen cannot heal it
 // either. A successful post must re-pin the canonical revision.
+// F-t06-006/F-t06-011: posting outside any period (or into a locked one)
+// 422s, but the drawer showed nothing durable — a transient toast at best.
+// A refused post pins a persistent in-drawer alert with the server reason.
+test('a refused post pins a persistent alert with the server reason', () => {
+  assert.match(
+    source,
+    /setPostError/,
+    'post() must pin the refusal into drawer state: toasts alone expire and the findings show the failure reads as silent',
+  )
+  assert.match(
+    source,
+    /role="alert"/,
+    'the pinned refusal must render as an alert the tester can still read after the toast expires',
+  )
+})
+
 // F-t06-010: detaching from a posted record always 409s (evidence is
 // retained), so posted journals must not offer Remove — uploading stays on.
 test('posted journals lock attachment removal while keeping uploads', () => {
