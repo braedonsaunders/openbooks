@@ -134,5 +134,15 @@
     "term": "Vervollständigen Sie jede Bedingung mit eindeutigem Code.",
     "custom": "Füllen Sie die erforderlichen benutzerdefinierten Felder aus.",
     "save": "Die Satzkarte konnte nicht gespeichert werden."
+  },
+  "filters": {
+    "time": "Wirksamer Zeitraum",
+    "active": "Jetzt aktiv",
+    "scheduled": "Geplant",
+    "expired": "Abgelaufen",
+    "allTime": "Alle Zeiträume",
+    "dimension": "Dimension",
+    "allDimensions": "Alle Dimensionen",
+    "unscoped": "Organisationsstandard"
   }
 }

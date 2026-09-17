@@ -51,7 +51,8 @@
     "submitForApproval": "Zur Genehmigung einreichen",
     "glImpact": "Hauptbuch-Auswirkung",
     "done": "Fertig",
-    "sending": "Wird gesendet…"
+    "sending": "Wird gesendet…",
+    "retire": "Stilllegen"
   },
   "transactionTypes": {
     "vendorBill": "Eingangsrechnung", "bill": "Eingangsrechnung",
@@ -156,7 +157,10 @@
     "active": "Aktiv",
     "inactive": "Inaktiv",
     "error": "Fehler",
-    "ok": "OK"
+    "ok": "OK",
+    "pending_approval": "Eingereicht",
+    "calculated": "Berechnet",
+    "committed": "Festgeschrieben"
   },
   "filters": {
     "showInactive": "Inaktive anzeigen"
@@ -217,14 +221,18 @@
     "loadFailedTitle": "Prüfprotokoll nicht verfügbar",
     "loadFailedDescription": "Das Prüfprotokoll konnte nicht geladen werden. Versuchen Sie es in Kürze erneut.",
     "retry": "Erneut versuchen",
-    "actions": { "insert": "Erstellt", "update": "Aktualisiert", "delete": "Gelöscht", "post": "Gebucht", "void": "Storniert", "approve": "Genehmigt", "reject": "Abgelehnt" }
+    "actions": { "insert": "Erstellt", "update": "Aktualisiert", "delete": "Gelöscht", "post": "Gebucht", "void": "Storniert", "approve": "Genehmigt", "reject": "Abgelehnt",
+      "retired": "Stillgelegt" }
   },
   "amendment": {
     "title": "Änderung am gebuchten Beleg begründen",
     "deleteTitle": "Begründen Sie die Löschung des gebuchten Belegs",
     "reason": "Änderungsgrund",
     "placeholder": "Beschreiben Sie, was geändert wurde und warum",
-    "deletePlaceholder": "Beschreiben Sie, warum die gebuchte Transaktion gelöscht werden muss"
+    "deletePlaceholder": "Beschreiben Sie, warum die gebuchte Transaktion gelöscht werden muss",
+    "voidTitle": "Diese Buchung ungültig machen?",
+    "correctionCreated": "Korrekturentwurf erstellt",
+    "voidPlaceholder": "Beschreiben Sie, warum die Buchung storniert werden muss"
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",
@@ -250,6 +258,11 @@
     "badges": {
       "delegated": "Delegiert",
       "escalated": "Eskaliert"
-    }
+    },
+    "signTitle": "Diese Freigabe unterschreiben",
+    "signLabel": "Geben Sie Ihren Namen als Freigabebestätigung ein",
+    "retryRun": "Freigabe erneut anstoßen",
+    "retried": "Freigabe neu angestoßen — der neue Schritt liegt auf der Arbeitsliste",
+    "retryFailed": "Erneutes Anstoßen fehlgeschlagen"
   }
 }

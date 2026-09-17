@@ -76,5 +76,65 @@
       "value": "Nach Wert",
       "quantity": "Nach Menge"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "Fehlgeschlagen"
+    },
+    "toasts": {
+      "saved": "Gespeichert"
+    },
+    "transfers": {
+      "newOrder": "Neue Umlagerung",
+      "from": "Von",
+      "to": "Nach",
+      "item": "Artikel",
+      "qty": "Menge",
+      "inTransitAccount": "Transitkonto (optionale Überschreibung)",
+      "useControlAccount": "Kontrollkonto verwenden",
+      "createDraft": "Entwurf erstellen",
+      "help": "Versand bucht Soll Transit / Haben Bestand. Empfang löst den Transit am Ziel auf. Pflegen Sie controlAccounts.inventoryInTransit, wenn Sie nicht überschreiben.",
+      "table": {
+        "number": "Nummer",
+        "fromTo": "Von → Nach",
+        "status": "Status",
+        "ordered": "Beauftragt"
+      },
+      "ship": "Versenden",
+      "receive": "Empfangen",
+      "noneYet": "Noch keine Umlagerungen."
+    },
+    "landed": {
+      "newVoucher": "Bezugskostenbeleg über mehrere Eingänge",
+      "amount": "Betrag",
+      "basis": "Basis",
+      "basisValue": "Nach Wert",
+      "basisQuantity": "Nach Menge",
+      "basisWeight": "Nach Gewicht",
+      "freightAccount": "Frachtkonto",
+      "targetItem": "Zielartikel",
+      "location": "Standort",
+      "addTarget": "Ziel hinzufügen",
+      "remove": "entfernen",
+      "postVoucher": "Beleg verbuchen",
+      "table": {
+        "number": "Nummer",
+        "date": "Datum",
+        "basis": "Basis",
+        "amount": "Betrag",
+        "status": "Status"
+      },
+      "noneYet": "Noch keine Bezugskostenbelege."
+    },
+    "lots": {
+      "lotNumber": "Chargennummer",
+      "openRecallReport": "Rückrufbericht öffnen",
+      "table": {
+        "lot": "Charge",
+        "item": "Artikel",
+        "expiry": "Verfallsdatum"
+      },
+      "noneYet": "Noch keine Chargen — lagern Sie Bestand mit Chargennummer ein."
+    }
   }
 }

@@ -10,7 +10,13 @@
     "builtIn": "Integriert",
     "starterHint": "Wird gedruckt, wenn keine benutzerdefinierte Vorlage vorhanden ist — duplizieren, um sie anzupassen",
     "duplicate": "Duplizieren",
-    "isDefault": "Standard"
+    "isDefault": "Standard",
+    "type": "Datensatztyp",
+    "allTypes": "Alle Datensatztypen",
+    "previewNote": "Schreibgeschützte Vorschau des integrierten Starterdesigns, mit Beispieldaten gerendert. Duplizieren Sie es, um eine bearbeitbare Vorlage zu erstellen.",
+    "previewFailed": "Die Vorschau konnte nicht gerendert werden",
+    "empty": "Keine Vorlagen gefunden.",
+    "starterNamed": "{type}-Starter"
   },
   "editor": {
     "back": "PDF-Vorlagen",

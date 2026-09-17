@@ -20,7 +20,9 @@
     "organizationWorkspace": "Organisations-Arbeitsbereich",
     "organizationWorkspaceDescription": "Module der aktuellen Organisation",
     "platformDescription": "Installationsweite Operator-Werkzeuge",
-    "security": "Anmeldesicherheit"
+    "security": "Anmeldesicherheit",
+    "sandbox": "sandbox",
+    "sampleCompany": "Beispielunternehmen"
   },
   "language": {
     "label": "Sprache",
@@ -141,6 +143,13 @@
     "askAdministrator": "Wenn Sie diese Änderung nicht vornehmen können, wenden Sie sich an Ihren Administrator.",
     "deniedTitle": "Kein Zugriff",
     "deniedDescription": "Dieser Bereich erfordert die Berechtigung {permission}.",
-    "operatorDescription": "Die Plattformkonsole ist Plattformbetreibern vorbehalten. Die Einstellungen Ihrer Organisation finden Sie unter Administration."
+    "operatorDescription": "Die Plattformkonsole ist Plattformbetreibern vorbehalten. Die Einstellungen Ihrer Organisation finden Sie unter Administration.",
+    "errorTitle": "Etwas ist schiefgelaufen",
+    "errorDescription": "Diese Seite konnte nicht geladen werden. Versuchen Sie es erneut oder kehren Sie zum Dashboard zurück, wenn das Problem besteht.",
+    "errorReference": "Referenz {id}",
+    "notFoundTitle": "Seite nicht gefunden",
+    "notFoundDescription": "Die gesuchte Seite existiert nicht oder Sie haben keinen Zugriff darauf.",
+    "backToDashboard": "Zum Dashboard",
+    "backToSignIn": "Zur Anmeldung"
   }
 }

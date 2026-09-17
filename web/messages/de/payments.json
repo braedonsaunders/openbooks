@@ -89,7 +89,12 @@
       "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
       "postFailed": "Buchung fehlgeschlagen",
       "posted": "{side, select, ap {Zahlung gebucht und zugeordnet} other {Kundenzahlung gebucht und zugeordnet}}"
-    }
+    },
+    "deleteConfirmTitle": "Diese Zahlung löschen?",
+    "deleteConfirmBody": "Dies löscht die Entwurfszahlung endgültig. Dies kann nicht rückgängig gemacht werden.",
+    "deleteConfirmAction": "Löschen",
+    "deleted": "Zahlung gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen"
   },
   "eft": {
     "notConfiguredTitle": "EFT-Erstellung ist nicht konfiguriert",

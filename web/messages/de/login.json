@@ -13,6 +13,25 @@
   "sso": "Einmalanmeldung",
   "ssoFailed": "Die Einmalanmeldung konnte nicht abgeschlossen werden",
   "reset": {
-    "requestFailed": "Der Link zum Zurücksetzen konnte nicht angefordert werden — prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
-  }
+    "requestFailed": "Der Link zum Zurücksetzen konnte nicht angefordert werden — prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "requestTitle": "Passwort zurücksetzen",
+    "chooseTitle": "Neues Passwort wählen",
+    "requestHelp": "Geben Sie Ihre E-Mail-Adresse ein; wir senden Ihnen einen Rücksetzlink, falls sie zu einem Konto gehört.",
+    "sendLink": "Link senden",
+    "sending": "Wird gesendet…",
+    "sent": "Falls diese E-Mail-Adresse zu einem Konto gehört, ist ein Rücksetzlink unterwegs. Der Link gilt einmalig und läuft in 30 Minuten ab.",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Neues Passwort bestätigen",
+    "passwordHelp": "Mindestens 10 Zeichen.",
+    "mismatch": "Diese Passwörter stimmen nicht überein",
+    "weakPassword": "Das Passwort muss mindestens 10 Zeichen haben",
+    "invalidToken": "Dieser Rücksetzlink ist ungültig oder abgelaufen — fordern Sie einen neuen an",
+    "setPassword": "Neues Passwort festlegen",
+    "saving": "Wird gespeichert…",
+    "changed": "Ihr Passwort wurde geändert. Melden Sie sich jetzt damit an — alle anderen Sitzungen wurden abgemeldet.",
+    "backToSignIn": "Zurück zur Anmeldung"
+  },
+  "forgotPassword": "Passwort vergessen?",
+  "tooManyAttempts": "Zu viele Versuche — versuchen Sie es in {seconds} Sekunden erneut",
+  "busyTryAgain": "Der Anmeldedienst ist ausgelastet — versuchen Sie es gleich erneut"
 }

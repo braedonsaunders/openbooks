@@ -16,7 +16,18 @@
       "unconfigured": "Nicht konfiguriert"
     },
     "mirrorBadge": "Spiegelung: {schedule}",
-    "lastRun": "Letzter Lauf: {lastRun} · Synchronisiert bis: {cursor}"
+    "lastRun": "Letzter Lauf: {lastRun} · Synchronisiert bis: {cursor}",
+    "schedule": "Spiegel-Zeitplan",
+    "mirrorHealth": "Spiegel",
+    "attachmentHealth": "Anhänge",
+    "sourceDeletions": "An der Quelle gelöschte Buchungen",
+    "sourceDeletionHint": "Wählen Sie, ob OpenBooks die geprüfte Buchung behalten oder stornieren und ungültig machen soll. Gebuchte Belege mit Zahlungsverrechnungen müssen zuerst entkoppelt werden.",
+    "schedules": {
+      "hourly": "Stündlich",
+      "every_6_hours": "Alle 6 Stunden",
+      "daily": "Täglich",
+      "weekly": "Wöchentlich"
+    }
   },
   "actions": {
     "connect": "Verbinden",
@@ -30,7 +41,9 @@
     "pauseMirror": "Spiegelung pausieren",
     "enableMirror": "Spiegelung aktivieren",
     "edit": "Bearbeiten",
-    "downloadQwc": "Web Connector herunterladen"
+    "downloadQwc": "Web Connector herunterladen",
+    "retainDeletion": "Mit Nachweis behalten",
+    "voidDeletion": "Stornieren und ungültig machen"
   },
   "runs": {
     "heading": "Letzte Läufe",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "Fügen Sie Anmeldedaten hinzu, bevor Sie diese Verbindung ausführen.",
       "INVALID_MODE": "Wählen Sie eine gültige Migrationsaktion.",
       "ATTACHMENTS_UNSUPPORTED": "Diese Verbindung unterstützt keine Anhangsmigration.",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "Diese Verbindung unterstützt keine Synchronisierung der Projektfinanz-Eingaben."
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Diese Verbindung unterstützt keine Synchronisierung der Projektfinanz-Eingaben.",
+      "RUN_ALREADY_ACTIVE": "Für diese Verbindung läuft bereits ein Durchlauf dieses Typs."
     },
     "testing": "Verbindung wird getestet…",
     "connected": "Verbunden",
@@ -108,7 +122,9 @@
     "created": "Verbindung erstellt",
     "updated": "Verbindung aktualisiert",
     "copied": "Redirect-URI kopiert",
-    "copyFailed": "Kopieren nicht möglich — markieren und kopieren Sie den Text manuell"
+    "copyFailed": "Kopieren nicht möglich — markieren und kopieren Sie den Text manuell",
+    "deletionRetained": "Quellseitige Löschung mit Nachweis des Controllers behalten",
+    "deletionVoided": "Quellseitig gelöschte Buchung storniert und ungültig gemacht"
   },
   "confirmDelete": "Verbindung \"{name}\" löschen? Migrierte Daten bleiben erhalten; nur die Verknüpfung wird entfernt.",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "Verbindungsname",
     "select": "Auswählen…",
     "credentials": "Zugangsdaten (ruhend verschlüsselt, nie wieder angezeigt)",
-    "keepCurrent": "Leer lassen, um aktuelle beizubehalten"
+    "keepCurrent": "Leer lassen, um aktuelle beizubehalten",
+    "postedChanges": {
+      "label": "Änderungen an gebuchten Quellbuchungen",
+      "review": "Anhalten und Prüfung verlangen",
+      "automatic": "Storno und Ersatz automatisch anhängen",
+      "help": "Automatische Korrekturen schreiben gebuchte Historie nie um. OpenBooks behält das Original, bucht ein verknüpftes Storno mit Ersatz, überträgt anrechenbare Verrechnungen und hält dennoch an bei Abstimmungen, geschlossenen Perioden, Bestand, Umsatzrealisierung oder nachgelagerten Belegen."
+    }
   },
   "oauth": {
     "title": "Einmalige App-Einrichtung im <link>{portal}</link>",
@@ -192,5 +214,7 @@
         "Kopieren Sie die Client-ID, generieren Sie ein Client-Secret, fügen Sie beide in dieses Formular ein, speichern Sie und klicken Sie dann auf Verbinden."
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "Quellseitig gelöschte Buchung {ref} in OpenBooks behalten und als Controller-Entscheidung protokollieren?",
+  "confirmVoidSourceDeletion": "Quellseitig gelöschte Buchung {ref} stornieren und ungültig machen? Dies bucht eine Gegenbuchung und kann von diesem Bildschirm aus nicht rückgängig gemacht werden."
 }

@@ -18,7 +18,7 @@
     "sales_order": "Kundenauftrag",
     "purchase_order": "Bestellung",
     "project": "Projekt",
-    "opportunity": "Opportunity",
+    "opportunity": "Verkaufschance",
     "lead": "Lead",
     "prospect": "Prospect",
     "activity": "Aktivität",
@@ -36,7 +36,12 @@
     "bank_rule": "Bankregel",
     "project_charge": "Projektbelastung",
     "fixed_asset": "Anlagevermögen",
-    "property": "Immobilie"
+    "property": "Immobilie",
+    "customer": "Kunde",
+    "vendor": "Lieferant",
+    "employee": "Mitarbeiter",
+    "pay_run": "Lohnlauf",
+    "field_ticket": "Außendienstbeleg"
   },
   "property": {
     "tabs": {
@@ -161,7 +166,12 @@
         "text": "Text"
       },
       "customFields": "Benutzerdefinierte Felder",
-      "noCustomFields": "Für diesen Datensatztyp sind noch keine benutzerdefinierten Felder definiert."
+      "noCustomFields": "Für diesen Datensatztyp sind noch keine benutzerdefinierten Felder definiert.",
+      "tabsSection": "Registerkarten",
+      "tabsHelp": "Die Registerkarten, die das Seitenfenster dieses Datensatzes zeigt. Blenden Sie ungenutzte aus, sortieren Sie sie nach Ihrer Arbeitsweise, benennen Sie sie in Ihrem Wortschatz um oder fügen Sie eine eigene Registerkarte für Ihre benutzerdefinierten Felder hinzu.",
+      "addTab": "Registerkarte hinzufügen",
+      "customTab": "Benutzerdefiniert",
+      "tabLocked": "Diese Registerkarte zeigt die eigenen Felder des Datensatzes und kann nicht ausgeblendet werden."
     },
     "list": {
       "new": "Neue Ansicht",
@@ -195,7 +205,9 @@
       "sortDir": "Richtung",
       "asc": "Aufsteigend",
       "desc": "Absteigend",
-      "perPage": "Zeilen pro Seite"
-    }
+      "perPage": "Zeilen pro Seite",
+      "deleteConfirm": "Diese Ansicht löschen? Listen, die sie nutzen, fallen auf die Standardansicht zurück. Dies kann nicht rückgängig gemacht werden."
+    },
+    "documentation": "Dokumentation"
   }
 }

@@ -58,7 +58,8 @@
     "reasonLabel": "Ablehnungsgrund (wird auf jedes ausgewählte Element angewendet)",
     "approvedCount": "{count} genehmigt",
     "rejectedCount": "{count} abgelehnt",
-    "failedCount": "{count} fehlgeschlagen ({error})"
+    "failedCount": "{count} fehlgeschlagen ({error})",
+    "signatureBlocked": "Für einzelne gewählte Freigaben ist eine Unterschrift nötig — geben Sie diese einzeln frei."
   },
   "ooo": {
     "button": "Abwesend",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "Alle Genehmiger",
       "reminder": "Erinnerung {date}",
-      "escalates": "Eskaliert {date}"
-    }
+      "escalates": "Eskaliert {date}",
+      "signature": "Unterschrift erforderlich"
+    },
+    "signTitle": "Zur Freigabe unterschreiben",
+    "signLabel": "Geben Sie Ihren vollständigen Namen ein, um diese Freigabe zu unterschreiben"
   }
 }

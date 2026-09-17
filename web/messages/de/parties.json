@@ -220,6 +220,25 @@
     "noBooks": "Erstellen Sie zuerst ein Satzbuch.",
     "rateBookRequired": "Satzbuch auswählen",
     "created": "Satzbuch zugeordnet",
-    "confirmDelete": "Diese Zuordnung entfernen?"
+    "confirmDelete": "Diese Zuordnung entfernen?",
+    "search": "Zugeordnete Preislisten suchen…",
+    "statusFilter": "Zuordnungsstatus",
+    "status": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "all": "Alle Status"
+    },
+    "openPricing": "Preisgestaltung öffnen",
+    "count": "{count, plural, one {# Zuordnung} other {# Zuordnungen}}",
+    "errors": {
+      "invalidRecord": "Wählen Sie einen gültigen Datensatz.",
+      "scope": "Wählen Sie genau einen Kunden oder ein Projekt.",
+      "dates": "Wählen Sie gültige Gültigkeitsdaten.",
+      "dateOrder": "Das Enddatum darf nicht vor dem Startdatum liegen.",
+      "dateBasis": "Wählen Sie ein gültiges Termindatum.",
+      "references": "Wählen Sie Datensätze dieser Organisation.",
+      "overlap": "Dieser Datensatz hat für einen Teil des Zeitraums bereits aktive Lohntarife.",
+      "save": "Die Lohntarifzuordnung konnte nicht gespeichert werden."
+    }
   }
 }
