@@ -17,22 +17,30 @@ registerHooks({resolve(specifier,context,next){
   return next(specifier,context);
 }});
 const {sql}=await import('drizzle-orm');
-const {db}=await import('@openbooks/engine/src/db.ts');
+const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/src/db.ts');
 const {createScratchOrg,dropScratchOrg,createScratchUser}=await import('@openbooks/engine/src/test-fixtures.ts');
 const {assembleInvoiceBackup}=await import('./invoice-backup');
 const {createMoneyFormatter}=await import('./money-format');
 test('costed invoice backup preserves cents in large exact cost totals',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg();
+  const org=await withBypassContext(()=>createScratchOrg());
   try{
-    const actor=await createScratchUser(org.orgId,'Backup controller','reviewer');
-    const invoice=randomUUID(),line=randomUUID(),employee=randomUUID();
-    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Backup worker',${org.subsidiaryId})`);
-    await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,currency) values (${invoice},${org.orgId},'customer_invoice',${invoice},${org.date},${org.subsidiaryId},${org.customerId},'CAD')`);
-    await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount) values (${line},${org.orgId},${invoice},1,${org.accounts.revenue},2,1,2)`);
-    for(const cost of ['999999999999999.9000','0.0400']) await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,cost_rate,cost_rate_currency,cost_rate_subsidiary_id,bill_rate,invoiced_by_line_id,billing_status,is_billable,status) values (${org.orgId},${employee},${org.date},1,${cost},'CAD',${org.subsidiaryId},1,${line},'billed',true,'approved')`);
-    await assert.rejects(assembleInvoiceBackup(org.orgId,actor,invoice,'costed_timesheets',null),/captured timesheet HTML/);
+    // Fixture seeds under explicit bypass: importing ./invoice-backup above
+    // pulls in the web request-org resolver, which denies every unscoped query
+    // under pooled RLS (bare setup dies with 42501). The assembly issues bare
+    // queries with explicit org predicates, so it runs in the scratch org's
+    // scope (reads see zero rows outside it).
+    const {actor,invoice}=await withBypassContext(async ()=>{
+      const actor=await createScratchUser(org.orgId,'Backup controller','reviewer');
+      const invoice=randomUUID(),line=randomUUID(),employee=randomUUID();
+      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Backup worker',${org.subsidiaryId})`);
+      await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,currency) values (${invoice},${org.orgId},'customer_invoice',${invoice},${org.date},${org.subsidiaryId},${org.customerId},'CAD')`);
+      await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount) values (${line},${org.orgId},${invoice},1,${org.accounts.revenue},2,1,2)`);
+      for(const cost of ['999999999999999.9000','0.0400']) await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,cost_rate,cost_rate_currency,cost_rate_subsidiary_id,bill_rate,invoiced_by_line_id,billing_status,is_billable,status) values (${org.orgId},${employee},${org.date},1,${cost},'CAD',${org.subsidiaryId},1,${line},'billed',true,'approved')`);
+      return {actor,invoice};
+    });
+    await assert.rejects(withOrgContext(org.orgId,()=>assembleInvoiceBackup(org.orgId,actor,invoice,'costed_timesheets',null)),/captured timesheet HTML/);
     const footer=capture.html.split('<tfoot>')[1];
     assert.ok(footer,'the actual timesheet renderer received a totals footer');
     assert.ok(footer.includes(createMoneyFormatter('en-CA','CAD').money('999999999999999.9400')),footer);
-  }finally{await dropScratchOrg(org.orgId);}
+  }finally{await withBypassContext(()=>dropScratchOrg(org.orgId));}
 });
