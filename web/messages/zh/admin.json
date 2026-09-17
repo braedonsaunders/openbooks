@@ -730,7 +730,15 @@
     "inviteEmailRequired": "请输入电子邮件地址",
     "inviteSend": "发送邀请",
     "inviteSent": "已向 {email} 发送邀请",
-    "inviteCreatedWithoutEmail": "用户已创建，但邀请邮件未能发送。请检查邮件设置，并让对方从登录页面重置密码。"
+    "inviteCreatedWithoutEmail": "用户已创建，但邀请邮件发送失败。请复制密码设置链接并自行发送给对方。",
+    "inviteResend": "重新发送邀请",
+    "inviteResent": "已将邀请重新发送至 {email}",
+    "inviteLinkTitle": "密码设置链接",
+    "inviteLinkOneTime": "未配置邮件发送，请复制此链接并自行发送给对方。该链接仅显示一次，30分钟后过期。",
+    "inviteCopyLink": "复制链接",
+    "inviteCopied": "链接已复制",
+    "inviteCopyFailed": "复制失败 — 请手动选择链接",
+    "inviteTooManyAttempts": "邀请过于频繁 — 请稍后再试"
   },
   "permissions": {
     "groups": {

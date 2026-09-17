@@ -695,6 +695,14 @@ test('admin user invite copy is present in every locale and translated', () => {
     'admin.users.inviteSend',
     'admin.users.inviteSent',
     'admin.users.inviteCreatedWithoutEmail',
+    'admin.users.inviteResend',
+    'admin.users.inviteResent',
+    'admin.users.inviteLinkTitle',
+    'admin.users.inviteLinkOneTime',
+    'admin.users.inviteCopyLink',
+    'admin.users.inviteCopied',
+    'admin.users.inviteCopyFailed',
+    'admin.users.inviteTooManyAttempts',
   ] as const
   const source = flattenCatalog('en')
   for (const key of keys) {

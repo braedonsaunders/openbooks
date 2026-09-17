@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Check, UserCog } from 'lucide-react'
 import { Badge, Button, cn, Popover } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { InviteLinkDrawer } from './InviteLinkDrawer'
 
 async function post(body: Record<string, unknown>, failedMessage: string): Promise<boolean> {
   const res = await fetch('/api/admin/users', {
@@ -116,6 +117,68 @@ export function RoleAssignmentButton({
         )}
       </div>
     </Popover>
+  )
+}
+
+/**
+ * Re-issue the set-password link for a still-pending invite. Renders only on
+ * pending rows: when email delivery is unconfigured the response carries the
+ * one-time link and it opens in the copy drawer; otherwise a sent toast.
+ */
+export function ResendInviteButton({
+  userId,
+  userEmail,
+  isPending,
+}: {
+  userId: string
+  userEmail: string
+  isPending: boolean
+}) {
+  const t = useTranslations('admin.users')
+  const [busy, setBusy] = useState(false)
+  const [link, setLink] = useState<string | null>(null)
+  const router = useRouter()
+
+  if (!isPending) return null
+
+  async function resend() {
+    setBusy(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resend-invite', userId }),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
+      return
+    }
+    const payload = await res.json().catch(() => ({}))
+    if (typeof payload.setPasswordUrl === 'string') {
+      setLink(payload.setPasswordUrl)
+      return
+    }
+    toast.success(t('inviteResent', { email: userEmail }))
+    router.refresh()
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" disabled={busy} onClick={resend}>
+        {t('inviteResend')}
+      </Button>
+      {link ? (
+        <InviteLinkDrawer
+          email={userEmail}
+          url={link}
+          onClose={() => {
+            setLink(null)
+            router.refresh()
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 

@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/src/db.ts";
-import { deriveEmailDeliveryKey, passwordResetEmail, sendVia } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, passwordResetEmail, sendVia, type EmailTransport } from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
@@ -33,6 +33,93 @@ function tokenHash(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
+/** Absolute set-password URL for a raw token — the same link the email carries. */
+export function setPasswordUrl(rawToken: string): string {
+  return `${appBaseUrl()}/login/reset?token=${rawToken}`;
+}
+
+/**
+ * Mint a fresh single-use reset token, superseding outstanding links.
+ * Returns null when the per-user hourly cap is reached. Callers must run
+ * this under bypass (withBypass): issuance is authorized by the caller (the
+ * self-service lookup or an authenticated admin), never by row visibility.
+ */
+async function mintResetToken(
+  userId: string,
+  networkHash: string | null,
+  userAgentHash: string | null,
+): Promise<string | null> {
+  const recent = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from auth_password_resets
+     where user_id = ${userId} and created_at > now() - interval '1 hour'
+  `));
+  if (recent.rows[0]!.n >= REQUESTS_PER_HOUR) return null;
+
+  // A fresh issuance supersedes outstanding links.
+  await db.execute(sql`
+    update auth_password_resets set expires_at = now()
+     where user_id = ${userId} and used_at is null and expires_at > now()
+  `);
+
+  const raw = randomBytes(32).toString("base64url");
+  await db.execute(sql`
+    insert into auth_password_resets (user_id, token_hash, network_hash, user_agent_hash, expires_at)
+    values (${userId}, ${tokenHash(raw)}, ${networkHash}, ${userAgentHash},
+            now() + make_interval(mins => ${RESET_TOKEN_TTL_MIN}))
+  `);
+  return raw;
+}
+
+type ResetRecipient = { id: string; org_id: string; name: string | null; email: string };
+
+/**
+ * Deliver a minted token through the org's email transport. Returns true
+ * when the message was handed to a transport (the email_log row records the
+ * eventual provider outcome); false when there is no transport to hand to.
+ */
+async function deliverResetEmail(
+  user: ResetRecipient,
+  transport: EmailTransport,
+  raw: string,
+): Promise<boolean> {
+  const message = passwordResetEmail({
+    recipientName: user.name,
+    resetUrl: setPasswordUrl(raw),
+    expiresMinutes: RESET_TOKEN_TTL_MIN,
+  });
+  const logId = await withBypass(async () => insertEmailLog({
+    orgId: user.org_id,
+    recipients: [user.email],
+    subject: message.subject,
+    status: "queued",
+    categoryKey: "password_reset",
+  }));
+  // Commit the credential and release the user lock before provider I/O. A
+  // slow mail server must not hold password login or reset completion hostage.
+  await withBypass(async () => {
+    try {
+      const outcome = await sendVia(transport, {
+        to: user.email,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+      }, { deliveryKey: deriveEmailDeliveryKey({ orgId: user.org_id, scope: `direct:${logId}`, to: user.email }) });
+      if (outcome.kind === "sent") {
+        await markEmailSent(user.org_id, logId, outcome.providerMessageId);
+      } else {
+        // Acceptance state unknown: the reset link may or may not be in the
+        // mailbox. Record uncertainty instead of inventing an outcome; the
+        // issued token's own expiry bounds any attacker window.
+        await markEmailUncertain(user.org_id, logId, outcome.reason);
+        console.warn(`[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`);
+      }
+    } catch (error) {
+      await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
+    }
+  });
+  return true;
+}
+
 export async function requestPasswordReset(
   rawEmail: string,
   context: AuthRequestContext,
@@ -56,12 +143,6 @@ export async function requestPasswordReset(
     const user = users.rows.length === 1 ? users.rows[0]! : null;
     if (!user) return;
 
-    const recent = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from auth_password_resets
-       where user_id = ${user.id} and created_at > now() - interval '1 hour'
-    `));
-    if (recent.rows[0]!.n >= REQUESTS_PER_HOUR) return;
-
     // Fail closed before superseding an existing link or minting a new bearer
     // credential. Without a controlled delivery path, there is nothing safe
     // to hand to either the requester or the server logs.
@@ -71,60 +152,35 @@ export async function requestPasswordReset(
       return;
     }
 
-    // A fresh request supersedes outstanding links.
-    await db.execute(sql`
-      update auth_password_resets set expires_at = now()
-       where user_id = ${user.id} and used_at is null and expires_at > now()
-    `);
-
-    const raw = randomBytes(32).toString("base64url");
-    await db.execute(sql`
-      insert into auth_password_resets (user_id, token_hash, network_hash, user_agent_hash, expires_at)
-      values (${user.id}, ${tokenHash(raw)}, ${networkHash}, ${userAgentHash},
-              now() + make_interval(mins => ${RESET_TOKEN_TTL_MIN}))
-    `);
-
-    const resetUrl = `${appBaseUrl()}/login/reset?token=${raw}`;
-    const message = passwordResetEmail({
-      recipientName: user.name,
-      resetUrl,
-      expiresMinutes: RESET_TOKEN_TTL_MIN,
-    });
-
-    const logId = await insertEmailLog({
-      orgId: user.org_id,
-      recipients: [user.email],
-      subject: message.subject,
-      status: "queued",
-      categoryKey: "password_reset",
-    });
-    return { user, transport, message, logId };
+    const raw = await mintResetToken(user.id, networkHash, userAgentHash);
+    if (!raw) return;
+    return { user, transport, raw };
   });
   if (!delivery) return;
+  await deliverResetEmail(delivery.user, delivery.transport, delivery.raw);
+}
 
-  // Commit the credential and release the user lock before provider I/O. A
-  // slow mail server must not hold password login or reset completion hostage.
-  const { user, transport, message, logId } = delivery;
-  await withBypass(async () => {
-    try {
-      const outcome = await sendVia(transport, {
-        to: user.email,
-        subject: message.subject,
-        html: message.html,
-        text: message.text,
-      }, { deliveryKey: deriveEmailDeliveryKey({ orgId: user.org_id, scope: `direct:${logId}`, to: user.email }) });
-      if (outcome.kind === "sent") {
-        await markEmailSent(user.org_id, logId, outcome.providerMessageId);
-      } else {
-        // Acceptance state unknown: the reset link may or may not be in the
-        // mailbox. Record uncertainty instead of inventing an outcome; the
-        // issued token's own expiry bounds any attacker window.
-        await markEmailUncertain(user.org_id, logId, outcome.reason);
-        console.warn(`[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`);
-      }
-    } catch (error) {
-      await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
-    }
+export type InviteLinkIssuance = { raw: string; emailQueued: boolean };
+
+/**
+ * Admin-issued set-password link for an invited (pending) user. Unlike the
+ * anonymous self-service path this ALWAYS mints: the authenticated admin is
+ * a controlled delivery path — when email is unconfigured they copy the
+ * one-time link to the person out of band. The raw token is returned to the
+ * admin caller only, never persisted; only its SHA-256 is stored.
+ */
+export async function issueInviteSetPasswordLink(input: {
+  user: ResetRecipient;
+  context: AuthRequestContext;
+}): Promise<InviteLinkIssuance | null> {
+  const { networkHash, userAgentHash } = authContextHashes(input.context);
+  return withBypass(async () => {
+    const raw = await mintResetToken(input.user.id, networkHash, userAgentHash);
+    if (!raw) return null;
+    const transport = await resolveOrgEmailTransport(input.user.org_id);
+    if (!transport) return { raw, emailQueued: false };
+    await deliverResetEmail(input.user, transport, raw);
+    return { raw, emailQueued: true };
   });
 }
 

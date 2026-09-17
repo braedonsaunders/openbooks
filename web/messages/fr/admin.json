@@ -757,7 +757,15 @@
     "inviteEmailRequired": "Saisissez une adresse courriel",
     "inviteSend": "Envoyer l’invitation",
     "inviteSent": "Invitation envoyée à {email}",
-    "inviteCreatedWithoutEmail": "Utilisateur créé, mais le courriel d’invitation n’a pas pu être envoyé. Vérifiez la configuration du courriel, puis demandez à la personne de réinitialiser son mot de passe depuis la page de connexion."
+    "inviteCreatedWithoutEmail": "Utilisateur créé, mais le courriel d’invitation n’a pas pu être envoyé. Copiez le lien de mot de passe et envoyez-le vous-même.",
+    "inviteResend": "Renvoyer l’invitation",
+    "inviteResent": "Invitation renvoyée à {email}",
+    "inviteLinkTitle": "Lien de mot de passe",
+    "inviteLinkOneTime": "L’envoi de courriels n’est pas configuré : copiez ce lien et envoyez-le vous-même. Il n’est affiché qu’une fois et expire dans 30 minutes.",
+    "inviteCopyLink": "Copier le lien",
+    "inviteCopied": "Lien copié",
+    "inviteCopyFailed": "Copie impossible — sélectionnez le lien manuellement",
+    "inviteTooManyAttempts": "Trop d’invitations — réessayez plus tard"
   },
   "permissions": {
     "groups": {

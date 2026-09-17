@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { InviteLinkDrawer } from './InviteLinkDrawer'
 
 /**
  * Invite-user entry point for the Users page header. Mirrors the roles
@@ -42,6 +43,23 @@ function InviteDrawer({
   const [email, setEmail] = useState('')
   const [roleId, setRoleId] = useState(allRoles[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
+  const [link, setLink] = useState<string | null>(null)
+
+  // The one-time link replaces the form: it is shown once and never stored,
+  // so navigating away before copying loses it.
+  if (link) {
+    return (
+      <InviteLinkDrawer
+        email={email.trim()}
+        url={link}
+        onClose={() => {
+          setLink(null)
+          onClose()
+          router.refresh()
+        }}
+      />
+    )
+  }
 
   async function send() {
     if (!email.trim()) {
@@ -61,15 +79,15 @@ function InviteDrawer({
     setBusy(false)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      toast.error(data.error ?? t('requestFailed'))
+      toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
       return
     }
     const payload = await res.json().catch(() => ({}))
-    if (payload.emailQueued === false) {
-      toast.warning(t('inviteCreatedWithoutEmail', { email: email.trim() }))
-    } else {
-      toast.success(t('inviteSent', { email: email.trim() }))
+    if (typeof payload.setPasswordUrl === 'string') {
+      setLink(payload.setPasswordUrl)
+      return
     }
+    toast.success(t('inviteSent', { email: email.trim() }))
     onClose()
     router.refresh()
   }

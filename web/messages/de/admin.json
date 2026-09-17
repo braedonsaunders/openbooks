@@ -730,7 +730,15 @@
     "inviteEmailRequired": "Geben Sie eine E-Mail-Adresse ein",
     "inviteSend": "Einladung senden",
     "inviteSent": "Einladung an {email} gesendet",
-    "inviteCreatedWithoutEmail": "Benutzer erstellt, aber die Einladungs-E-Mail konnte nicht gesendet werden. Prüfen Sie die E-Mail-Einstellungen und bitten Sie die Person, ihr Passwort über die Anmeldeseite zurückzusetzen."
+    "inviteCreatedWithoutEmail": "Benutzer erstellt, aber die Einladungs-E-Mail konnte nicht gesendet werden. Kopieren Sie den Passwort-Link und senden Sie ihn selbst.",
+    "inviteResend": "Einladung erneut senden",
+    "inviteResent": "Einladung erneut an {email} gesendet",
+    "inviteLinkTitle": "Passwort-Link",
+    "inviteLinkOneTime": "Der E-Mail-Versand ist nicht konfiguriert – kopieren Sie diesen Link und senden Sie ihn selbst. Er wird nur einmal angezeigt und läuft in 30 Minuten ab.",
+    "inviteCopyLink": "Link kopieren",
+    "inviteCopied": "Link kopiert",
+    "inviteCopyFailed": "Link konnte nicht kopiert werden – bitte manuell auswählen",
+    "inviteTooManyAttempts": "Zu viele Einladungen – versuchen Sie es später erneut"
   },
   "permissions": {
     "groups": {
