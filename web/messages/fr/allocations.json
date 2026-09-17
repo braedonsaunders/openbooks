@@ -47,6 +47,7 @@
     "list": {
       "heading": "Règles de répartition",
       "new": "Nouvelle règle",
+      "emptyTitle": "Aucune règle de répartition pour l’instant",
       "empty": "Aucune règle de répartition pour l'instant. Créez la première pour commencer à répartir les coûts.",
       "columns": {
         "name": "Nom",
@@ -60,7 +61,9 @@
       "noVersion": "Aucune version publiée",
       "inactive": "Inactive",
       "active": "Active",
-      "searchPlaceholder": "Rechercher des règles…"
+      "searchPlaceholder": "Rechercher des règles…",
+      "emptyDescription": "Créez la première règle pour commencer à répartir les coûts.",
+      "blurb": "Des règles versionnées qui se déclenchent à la saisie, à la comptabilisation ou en balai de période. Une nouvelle règle ouvre une configuration guidée."
     },
     "modes": {
       "entry": "À la saisie",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "Quelles lignes la règle retient",
       "documentKinds": "Types de document (vide signifie tous)",
+      "documentKindAdd": "Ajouter",
+      "noOptions": "Rien ici pour l’instant.",
       "accountScope": "Périmètre de comptes",
       "accountScopes": {
         "any": "Tout compte",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "Modèle de description de ligne",
       "approvalFlow": "Circuit d'approbation",
       "approvalFlowHint": "UUID de circuit facultatif, exigé avant la comptabilisation d'une exécution.",
+      "approvalFlowNone": "Aucun circuit d’approbation",
       "driverAsOfs": {
         "period": "Période",
         "document_date": "Date du document",
@@ -283,6 +289,7 @@
       "basisNote": "Les quotes-parts se résolvent à l'exécution depuis le vecteur de la clé.",
       "periodHeading": "Aperçu d'un balai de période",
       "period": "Période",
+      "book": "Livre",
       "openRuns": "Ouvrir dans Exécutions",
       "noVersion": "Cette règle n'a pas encore de version à tester.",
       "version": "Version",
@@ -316,12 +323,15 @@
     "key": "Clé",
     "keyHint": "Nom court en minuscules, unique par organisation",
     "name": "Nom",
+    "fieldDescription": "Description",
     "dimension": "Dimension",
     "sourceKind": "Source",
     "unit": "Unité",
     "active": "Active",
+    "inactive": "Inactive",
     "showInactive": "Afficher les inactives",
     "empty": "Aucune clé pour l'instant.",
+    "emptyTitle": "Aucune clé pour l’instant",
     "deleteConfirm": "Supprimer la clé {name} ? Ses valeurs manuelles suivront.",
     "sourceKinds": {
       "statistical_journal": "Journal statistique",
@@ -372,6 +382,7 @@
     "note": "Note",
     "addValue": "Ajouter une valeur",
     "noValues": "Aucune valeur pour cette clé pour l'instant.",
+    "noDimensionValues": "Aucune valeur active de {dimension} pour l’instant — créez-en une avant d’ajouter des valeurs de clé.",
     "endValue": "Dater la fin",
     "deleteValueConfirm": "Supprimer cette valeur ?",
     "preview": "Aperçu du vecteur",
@@ -385,7 +396,10 @@
     "loadFailed": "Impossible de charger les clés.",
     "saveFailed": "Impossible d'enregistrer la clé.",
     "deleteFailed": "Impossible de supprimer la clé.",
-    "previewFailed": "Impossible de prévisualiser le vecteur."
+    "previewFailed": "Impossible de prévisualiser le vecteur.",
+    "manualCreateHint": "Enregistrez d’abord la clé — ses valeurs datées deviennent modifiables ici juste après.",
+    "valuesAfterSave": "Clé enregistrée. Ajoutez ses valeurs datées ci-dessous.",
+    "emptyDescription": "Créez la première clé pour commencer à ventiler les coûts."
   },
   "runs": {
     "title": "Exécutions",
@@ -395,6 +409,7 @@
     "filterStatus": "Statut",
     "all": "Tous",
     "empty": "Aucune exécution pour l'instant. Prévisualisez une règle pour en calculer une.",
+    "emptyTitle": "Aucune exécution pour l’instant",
     "columns": {
       "rule": "Règle",
       "period": "Période",
@@ -419,6 +434,7 @@
     },
     "previewRun": "Prévisualiser une exécution",
     "runDetail": "Détail de l'exécution",
+    "summary": "Synthèse",
     "sources": "Sources",
     "driverVector": "Vecteur de la clé",
     "targets": "Destinataires",
@@ -450,7 +466,125 @@
     "journalEntry": "Écriture",
     "reversalEntry": "Écriture de contre-passation",
     "loadFailed": "Impossible de charger les exécutions.",
-    "detailFailed": "Impossible de charger l'exécution."
+    "detailFailed": "Impossible de charger l'exécution.",
+    "pendingApprovalNotice": "Cette exécution est en attente d’approbation et ne peut pas être comptabilisée depuis ici.",
+    "viewApproval": "Ouvrir l’approbation",
+    "emptyDescription": "Prévisualisez une règle pour en calculer une."
+  },
+  "wizard": {
+    "untitled": "Répartition sans titre",
+    "loadFailed": "Impossible de charger les départements et les clés pour le guide de configuration.",
+    "createFailed": "Impossible de créer la règle de répartition.",
+    "publishFailed": "La règle a été enregistrée en brouillon — publiez-la après avoir terminé la définition.",
+    "created": "Règle de répartition enregistrée en brouillon. Publiez-la depuis Versions quand vous êtes prêt.",
+    "published": "La règle de répartition est publiée et en vigueur.",
+    "creating": "Création…",
+    "finish": "Créer la règle",
+    "skipGuide": "Passer le guide — ouvrir une règle vierge",
+    "publishNow": "Publier maintenant pour que la règle puisse se déclencher",
+    "publishNowHint": "Un brouillon ne retient jamais une ligne ni une exécution de période. Laissez activé sauf si vous voulez d’abord revoir la définition.",
+    "advancedAfter": "Après la création, la règle conserve tous les champs avancés — livres, segments personnalisés, contreparties et test.",
+    "when": {
+      "title": "Quand doit-elle se déclencher ?",
+      "description": "Même modèle de règle, trois moments. Choisissez celui qui correspond au moment où la ventilation doit se produire.",
+      "advanced": "Avancé",
+      "entry": {
+        "title": "À la saisie d’une ligne",
+        "description": "L’enregistrement d’une facture, dépense ou ligne de journal correspondante la remplace par les lignes ventilées.",
+        "example": "Une facture de frais généraux de 1 000,00 devient quatre lignes de département à un ratio de 1 : 2 : 3 : 4."
+      },
+      "period": {
+        "title": "En fin de mois",
+        "description": "Un balai de période lit un pool, le ventile et comptabilise son propre journal de répartition.",
+        "example": "Les dépenses IT non affectées sont reclassées sur chaque département par effectifs après la clôture."
+      },
+      "post": {
+        "title": "À la comptabilisation du document",
+        "description": "Des lignes de journal supplémentaires arrivent sur la même écriture, estampillées de cette règle comme contributrice.",
+        "example": "Utilisez ceci quand le document source doit rester entier et que la répartition est limitée au grand livre."
+      }
+    },
+    "source": {
+      "title": "Quelles lignes doit-elle retenir ?",
+      "description": "Nommez la règle, puis filtrez par type de transaction et dimensions de correspondance. Des types vides signifient tous les types.",
+      "kinds": "Types de transaction",
+      "kindsHint": "Ce sont des types de document. Laissez-les tous éteints pour retenir tous les types.",
+      "anyKind": "Rien de sélectionné signifie tous les types de transaction.",
+      "filters": "Dimensions sources",
+      "filtersHint": "Combinés par ET avec les types de transaction. Laissez une dimension sur N’importe pour l’ignorer. Les balais de période collectent souvent le pool non affecté.",
+      "filtersAny": "Chaque dimension commence à N’importe. Basculez à Celles-ci uniquement pour les classificateurs qui doivent contraindre la correspondance.",
+      "modeAny": "N’importe",
+      "modeUntagged": "Non affecté",
+      "modeSpecific": "Celles-ci",
+      "pickValue": "Ajouter une valeur…",
+      "noValues": "Aucune valeur active pour cette dimension pour l’instant."
+    },
+    "split": {
+      "title": "Comment le montant doit-il se ventiler ?",
+      "description": "Un ratio fixe est une ventilation nommée (1, 2, 3, 4). Une clé est une mesure réutilisable que vous joignez ici — les clés ne sont pas des règles.",
+      "ratio": {
+        "title": "Ratio fixe",
+        "description": "Des poids relatifs comme 1 : 2 : 3 : 4. Stockés comme pourcentages totalisant toujours 100.",
+        "example": "1 + 2 + 3 + 4 = 10 parts, donc les quotes-parts sont 10 %, 20 %, 30 % et 40 %."
+      },
+      "percent": {
+        "title": "Pourcentage fixe",
+        "description": "Saisissez vous-même les pourcentages. Ils doivent totaliser 100."
+      },
+      "driver": {
+        "title": "Clé existante",
+        "description": "Effectifs, heures, table manuelle ou rapport enregistré. Créez la clé dans l’onglet Clés, puis choisissez-la ici."
+      },
+      "driverEmpty": "Aucune clé pour l’instant. Un ratio fixe n’en a pas besoin. Créez une clé uniquement quand les poids doivent changer chaque période.",
+      "driverHint": "La clé mesure une dimension. Les destinataires dynamiques suivent cette dimension à l’exécution."
+    },
+    "targets": {
+      "title": "Où va l’argent ?",
+      "description": "Choisissez la dimension destinataire et donnez une quote-part à chaque valeur. Un compte vide conserve le compte source.",
+      "dimension": "Ventiler sur",
+      "value": "Destinataire",
+      "weight": "Ratio",
+      "percent": "Pourcentage",
+      "pickValue": "Choisir une valeur…",
+      "add": "Ajouter un destinataire",
+      "noValues": "Aucune valeur active pour cette dimension pour l’instant.",
+      "needOne": "Choisissez au moins deux destinataires avec une quote-part positive.",
+      "example": "Une ligne de 1 000,00 deviendrait {amounts}.",
+      "driverDynamic": "{driver} ventilera sur chaque {dimension} avec un poids.",
+      "driverDynamicHint": "Inutile de lister les destinataires — le vecteur de la clé est l’ensemble cible."
+    },
+    "policy": {
+      "title": "Que doivent faire les livres ?",
+      "description": "Si la ventilation est automatique, et si le coût est déplacé ou si seule une imputation analytique est ajoutée.",
+      "applyAutomatic": "Automatique",
+      "applyAutomaticHint": "Les lignes correspondantes éclatent à l’enregistrement.",
+      "applySuggest": "Suggérer",
+      "applySuggestHint": "La grille des lignes propose une pastille ; la ventilation s’applique au clic.",
+      "applyManual": "Manuel",
+      "applyManualHint": "La ventilation n’apparaît que dans le sélecteur de ventilation de la ligne.",
+      "impactReclass": "Déplacer le coût",
+      "impactReclassHint": "Créditez la coordonnée source et débitez chaque destinataire. Le total de la balance est inchangé.",
+      "impactNetZero": "Imputer sans déplacer le résultat",
+      "impactNetZeroHint": "Paire à somme nulle : le bénéfice de l’entreprise ne change pas ; les dimensions, si.",
+      "periodActivityHint": "Ventilez les mouvements comptabilisés de cette période, hors lignes propres de cette règle.",
+      "periodBalanceHint": "Ventilez le solde de fin de période du pool source.",
+      "runManualHint": "Vous prévisualisez et comptabilisez depuis l’onglet Exécutions.",
+      "runAutoPreviewHint": "Après la fin de période, calculez un aperçu automatiquement. Vous le comptabiliserez ensuite."
+    },
+    "review": {
+      "title": "Créer cette règle ?",
+      "description": "Ceci écrit la même règle versionnée que le tiroir modifie. Vous pouvez tout changer après.",
+      "when": "Se déclenche {mode}",
+      "sourceAnyKind": "Retient tous les types de transaction",
+      "sourceKinds": "Retient {kinds}",
+      "sourceAnyDims": "Aucun filtre de dimension source supplémentaire",
+      "sourceUntagged": "Seulement les {dimension} non affectés",
+      "sourceValues": "{dimension} : {values}",
+      "splitRatio": "Ventilation {weights} → {percents}",
+      "splitPercent": "Ventilation {percents}",
+      "splitDriver": "Ventilation par clé {driver}",
+      "targets": "Vers {dimension} : {names}"
+    }
   },
   "lineage": {
     "title": "Traçabilité des répartitions",
