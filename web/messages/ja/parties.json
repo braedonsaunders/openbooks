@@ -75,7 +75,7 @@
     "summary": {
       "transactions": "取引",
       "openTransactions": "未決済の取引",
-      "openBalance": "未決済残高",
+      "openBalance": "未決済残高（全期間）",
       "lastTransaction": "最終取引",
       "multipleCurrencies": "複数通貨"
     },

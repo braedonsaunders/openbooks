@@ -75,7 +75,7 @@
     "summary": {
       "transactions": "交易",
       "openTransactions": "未结交易",
-      "openBalance": "未结余额",
+      "openBalance": "未结余额（所有期间）",
       "lastTransaction": "最近交易",
       "multipleCurrencies": "多种币种"
     },

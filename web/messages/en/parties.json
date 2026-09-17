@@ -72,7 +72,7 @@
     "summary": {
       "transactions": "Transactions",
       "openTransactions": "Open transactions",
-      "openBalance": "Open balance",
+      "openBalance": "Open balance (all time)",
       "lastTransaction": "Last transaction",
       "multipleCurrencies": "Multiple currencies"
     },
