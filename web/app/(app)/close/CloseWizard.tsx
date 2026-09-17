@@ -76,7 +76,9 @@ async function call(url: string, body: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
+  // The error body may not be JSON (proxy 5xx pages): never let the read
+  // itself throw a raw SyntaxError, or the failure surfaces as gibberish.
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error ?? "request failed");
   return data;
 }
@@ -600,8 +602,13 @@ function TaskCard(props: Props & { task: Row }) {
       setBusy(false);
     }
   }
+  // A refused consolidation that only fires a transient toast reads as
+  // "nothing happened" once it dismisses (F-t06-026): the refusal reason
+  // also persists inline on the task, cleared on the next attempt.
+  const [taskError, setTaskError] = useState<string | null>(null);
   async function runConsolidation() {
     setBusy(true);
+    setTaskError(null);
     try {
       await call("/api/consolidation", {
         action: "consolidate",
@@ -610,7 +617,9 @@ function TaskCard(props: Props & { task: Row }) {
       toast.success(t("messages.consolidationPosted"));
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
+      const message = error instanceof Error ? error.message : t("errors.actionFailed");
+      setTaskError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -699,10 +708,20 @@ function TaskCard(props: Props & { task: Row }) {
         props.subsidiaryEnabled &&
         props.task.key === "consolidation" &&
         !["complete", "waived"].includes(props.task.status) ? (
-          <Button size="sm" disabled={busy} onClick={runConsolidation}>
-            <Play size={14} />
-            {t("actions.runConsolidation")}
-          </Button>
+          <div className="flex w-full flex-col gap-2">
+            <Button size="sm" disabled={busy} onClick={runConsolidation}>
+              <Play size={14} />
+              {t("actions.runConsolidation")}
+            </Button>
+            {taskError ? (
+              <p
+                role="alert"
+                className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+              >
+                {taskError}
+              </p>
+            ) : null}
+          </div>
         ) : null}
         {actionHref &&
         !["complete", "waived"].includes(props.task.status) &&
