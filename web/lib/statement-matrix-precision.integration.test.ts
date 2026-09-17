@@ -101,10 +101,13 @@ test('cash-basis matrix columns round fractional settled shares to 4dp', { skip:
         values (${scratch.orgId}, ${payArLine}, ${arLine}, '10', ${scratch.date}, '10', '10', 'CAD', '10', 'CAD',
           '1', 'same_currency', 'MATRIX-TEST')`)
     })
-    const matrix = await statementMatrix({
+    // Scoped like the translated case above: the web request-org resolver
+    // denies unscoped reads under pooled RLS, so a bare call returns zero
+    // rows instead of the settled share.
+    const matrix = await withBypass(() => withOrgContext(scratch.orgId, async () => statementMatrix({
       orgId: scratch.orgId, types: ['income'], mode: 'flow', basis: 'cash',
       period: { from: '2026-07-01', to: '2026-07-31' }, periodLabel: 'July 2026',
-    })
+    })))
     const revenue = matrix.rows.find((r) => r.id === scratch.accounts.revenue)
     assert.ok(revenue)
     // 30 recognized at a 1/3 share = 10.0000, reader-signed positive.
