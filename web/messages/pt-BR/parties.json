@@ -24,6 +24,7 @@
     "unsavedChanges": "Alterações não salvas…",
     "autosaveFailed": "Falha no salvamento automático",
     "updateFailed": "Falha ao atualizar",
+    "nameRequired": "Digite um nome para salvar esta parte",
     "viewStatement": "Ver extrato",
     "activated": "Parte ativada",
     "deactivated": "Parte desativada",

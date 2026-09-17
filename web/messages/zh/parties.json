@@ -24,6 +24,7 @@
     "unsavedChanges": "有未保存的更改…",
     "autosaveFailed": "自动保存失败",
     "updateFailed": "更新失败",
+    "nameRequired": "输入名称以保存该往来单位",
     "viewStatement": "查看对账单",
     "activated": "往来单位已启用",
     "deactivated": "往来单位已停用",

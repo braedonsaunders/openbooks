@@ -24,6 +24,7 @@
     "unsavedChanges": "Modifications non enregistrées…",
     "autosaveFailed": "Échec de l’enregistrement automatique",
     "updateFailed": "Échec de la mise à jour",
+    "nameRequired": "Saisissez un nom pour enregistrer ce tiers",
     "viewStatement": "Voir le relevé",
     "activated": "Tiers activé",
     "deactivated": "Tiers désactivé",

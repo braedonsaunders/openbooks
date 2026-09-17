@@ -24,6 +24,7 @@
     "unsavedChanges": "Nicht gespeicherte Änderungen…",
     "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
     "updateFailed": "Aktualisierung fehlgeschlagen",
+    "nameRequired": "Benennen Sie den Geschäftspartner, um ihn zu speichern",
     "viewStatement": "Kontoauszug anzeigen",
     "activated": "Geschäftspartner aktiviert",
     "deactivated": "Geschäftspartner deaktiviert",
