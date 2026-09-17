@@ -8,6 +8,7 @@ import {
   type AccretionPeriod,
 } from "./present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "./close.ts";
 
 /**
  * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.
@@ -1377,7 +1378,7 @@ function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readon
 type RecognitionPostingRow = {
   line_id: string; planned: string; period_id: string; sequence: number;
   book_id: string; period_name: string; period_ends_on: string;
-  method: RecognitionMethod; period_closed: boolean;
+  method: RecognitionMethod;
   obligation_id: string; obligation_desc: string; contract_number: string;
   obl_deferred: string | null; obl_recognized: string | null;
   item_deferred: string | null; item_income: string | null;
@@ -1410,11 +1411,6 @@ async function recognitionPostingRows(
            p.name           as period_name,
            p.ends_on        as period_ends_on,
            r.method         as method,
-           period_module_is_closed(
-             ${orgId}, p.id, s.book_id,
-             coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id),
-             'gl'
-           ) as period_closed,
            o.id             as obligation_id,
            o.description    as obligation_desc,
            o.deferred_account_id    as obl_deferred,
@@ -1503,7 +1499,17 @@ export async function runRevenueRecognition(
           candidate.line_id, true,
         ))[0];
         if (!row) return { status: "already_posted" as const };
-        if (row.period_closed) return { status: "period_closed" as const };
+        // One period gate: the shared GL check replaces the raw
+        // period_module_is_closed projection. Discovery stays advisory — a
+        // closed line is skipped, not fatal — and source-owned imported
+        // locks skip exactly like user locks.
+        if (!(await arePeriodModulesOpen(tx, {
+          orgId,
+          periodId: row.period_id,
+          bookId: row.book_id,
+          subsidiaryIds: row.subsidiary_id ? [row.subsidiary_id] : [],
+          modules: ["gl"],
+        }))) return { status: "period_closed" as const };
         const planned = row.planned;
         if (isZero(planned)) {
           await tx.execute(sql`
@@ -1844,12 +1850,8 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
           );
         }
-        const period = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
-          select period.id,
-                 period_module_is_closed(
-                   ${input.orgId}, period.id, ${source.book_id},
-                   ${source.subsidiary_id}, 'gl'
-                 ) as is_closed
+        const period = (await tx.execute<{ id: string }>(sql`
+          select period.id
             from accounting_periods period
            where period.org_id = ${input.orgId}
              and period.starts_on <= ${reversalDate}
@@ -1862,10 +1864,25 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             `no accounting period covers ${reversalDate}`,
           );
         }
-        if (period.rows[0].is_closed) {
-          throw new RevenueRecognitionCancellationError(
-            `the GL period covering ${reversalDate} is closed`,
-          );
+        // One period gate: the shared GL check replaces the raw
+        // period_module_is_closed predicate. A reversal is new activity, not
+        // historical replay, so source-owned imported locks refuse exactly
+        // like user locks.
+        try {
+          await assertPeriodModulesOpen(tx, {
+            orgId: input.orgId,
+            periodId: period.rows[0].id,
+            bookId: source.book_id,
+            subsidiaryIds: [source.subsidiary_id],
+            modules: ["gl"],
+          });
+        } catch (error) {
+          if (error instanceof CloseError) {
+            throw new RevenueRecognitionCancellationError(
+              `the GL period covering ${reversalDate} is closed`,
+            );
+          }
+          throw error;
         }
 
         const inserted = (await tx.execute<{ id: string }>(sql`
