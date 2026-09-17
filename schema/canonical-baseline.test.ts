@@ -49,6 +49,8 @@ const sftpRootPrefixTenantContainmentMigrationPath =
   "schema/migrations/generated/0030_sftp_root_prefix_tenant_containment.sql";
 const apiKeyExplicitScopesMigrationPath =
   "schema/migrations/generated/0031_api_key_explicit_scopes.sql";
+const forecastSnapshotOrgTargetMigrationPath =
+  "schema/migrations/generated/0170_forecast_snapshot_org_target.sql";
 const documentNumberSequenceGlobalityMigrationPath =
   "schema/migrations/generated/0032_document_number_sequence_globality.sql";
 const reportingFrameworkPolicyMigrationPath =
@@ -353,6 +355,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0167_document_revision_counter.sql",
     "0168_close_posting_module_recheck.sql",
     "0169_change_orders_income_account.sql",
+    "0170_forecast_snapshot_org_target.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1787,5 +1790,29 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
   assert.match(
     schemaSource,
     /check\(\s*"api_keys_scopes_non_empty",\s*sql`jsonb_typeof\(\$\{t\.scopes\}\) = 'array' AND jsonb_array_length\(\$\{t\.scopes\}\) > 0`,?\s*\)/,
+  );
+});
+
+test("forecast snapshots admit an organization target: neither owner nor team", () => {
+  const migration = readFileSync(forecastSnapshotOrgTargetMigrationPath, "utf8");
+  const schemaSource = readFileSync("schema/src/crm-sales.ts", "utf8");
+
+  // F-t02-002: the unfiltered forecasts page files an organization snapshot.
+  // The target stays at most one of owner/team — both set is still refused —
+  // and the migration only relaxes the CHECK, touching nothing else.
+  assert.match(
+    migration,
+    /ADD CONSTRAINT crm_forecast_snapshot_target\s+CHECK \(num_nonnulls\(owner_user_id, sales_team_id\) <= 1\)/,
+  );
+  assert.match(
+    migration,
+    /COMMENT ON CONSTRAINT crm_forecast_snapshot_target ON public\.crm_forecast_snapshots IS/,
+  );
+  assert.doesNotMatch(migration, /0001_baseline/);
+
+  // The drizzle mirror matches the published migration exactly.
+  assert.match(
+    schemaSource,
+    /check\("crm_forecast_snapshot_target", sql`num_nonnulls\(\$\{t\.ownerUserId\}, \$\{t\.salesTeamId\}\) <= 1`\)/,
   );
 });

@@ -242,7 +242,7 @@ export const crmForecastSnapshots = pgTable(
   },
   (t) => [
     index("crm_forecast_snapshots_owner_period").on(t.orgId, t.ownerUserId, t.periodStart, t.periodEnd, t.asOf),
-    check("crm_forecast_snapshot_target", sql`num_nonnulls(${t.ownerUserId}, ${t.salesTeamId}) = 1`),
+    check("crm_forecast_snapshot_target", sql`num_nonnulls(${t.ownerUserId}, ${t.salesTeamId}) <= 1`),
     check("crm_forecast_snapshot_dates", sql`${t.periodEnd} >= ${t.periodStart}`),
   ],
 );
