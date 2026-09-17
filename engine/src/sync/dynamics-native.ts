@@ -94,6 +94,9 @@ export function buildNativeFromBC(
   if (!docDate) return { skip: "missing date" };
   const base = {
     sourceRef,
+    // F-t12-004: without this the writer falls back to sourceRef, so the
+    // invoice list renders the internal "salesInvoice:<uuid>" as the number.
+    documentNumber: t.number ?? null,
     posting: true,
     documentDate: docDate,
     dueDate: isoDay(t.dueDate),
