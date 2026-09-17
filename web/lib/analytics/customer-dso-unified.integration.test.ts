@@ -15,7 +15,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { customerData } = await import('./customer-data.ts');
 const { paymentStats } = await import('../cash/core.ts');
@@ -30,11 +30,13 @@ async function party(orgId: string, name: string) {
 }
 
 test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, 'DSO Controller', 'admin');
-    const slow = await party(org.orgId, 'Slow Whale');
-    const fast = await party(org.orgId, 'Fast Minnow');
+    const actor = await withBypass(() => createScratchUser(org.orgId, 'DSO Controller', 'admin'));
+    const { slow, fast } = await withBypass(async () => ({
+      slow: await party(org.orgId, 'Slow Whale'),
+      fast: await party(org.orgId, 'Fast Minnow'),
+    }));
 
     async function invoice(partyId: string, total: string, invoicedOn: string) {
       const id = randomUUID(), entryId = randomUUID(), lineId = randomUUID();
@@ -63,11 +65,13 @@ test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { ski
     }
 
     // One slow whale: $10,000 collected in 30 days.
-    await pay(slow, await invoice(slow, '10000', '2026-07-01'), '10000', '2026-07-31');
     // Twenty fast minnows: $100 each collected in 2 days.
-    for (let i = 0; i < 20; i++) {
-      await pay(fast, await invoice(fast, '100', '2026-07-01'), '100', '2026-07-03');
-    }
+    await withBypass(async () => {
+      await pay(slow, await invoice(slow, '10000', '2026-07-01'), '10000', '2026-07-31');
+      for (let i = 0; i < 20; i++) {
+        await pay(fast, await invoice(fast, '100', '2026-07-01'), '100', '2026-07-03');
+      }
+    });
 
     const { header, engine } = await withOrgContext(org.orgId, async () => {
       const data = await customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, org.orgId, null);
@@ -79,6 +83,6 @@ test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { ski
     assert.equal(engine, 3, 'engine DSO is settlement-weighted');
     assert.equal(header, engine, 'customer-intelligence Avg DSO must equal the cash DSO');
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
