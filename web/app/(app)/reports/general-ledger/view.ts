@@ -28,7 +28,7 @@ import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { isReportUuidParam, parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -105,6 +105,11 @@ export interface GeneralLedgerData {
   columnDebits: string
   columnCredits: string
   columnBalance: string
+  /** Set when underived consolidated rates block the report (F-t06-027):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   accounts: LedgerAccount[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
@@ -131,17 +136,36 @@ export async function loadGeneralLedger(
   // and every query below carries it — the same contract as the export path.
   const orgId = await resolveOrgId()
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [gl, opts, org] = await Promise.all([
-    generalLedger(period.from, period.to, {
-      accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
-      dims,
-      bookId: selectedBook?.id,
-    }),
-    dimensionOptions(undefined, dims.projectId),
-    orgInfo(),
-  ])
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws. The ledger
+  // runs only with a resolved subsidiary scope — never scope-less.
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const [gl, opts, org] = subView
+    ? await Promise.all([
+        generalLedger(period.from, period.to, {
+          accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
+          dims,
+          bookId: selectedBook?.id,
+        }),
+        dimensionOptions(undefined, dims.projectId),
+        orgInfo(),
+      ])
+    : [null, await dimensionOptions(undefined, dims.projectId), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -157,7 +181,7 @@ export async function loadGeneralLedger(
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     periodFrom: period.from,
     periodTo: period.to,
-    truncated: gl.truncated,
+    truncated: gl?.truncated ?? false,
     truncatedLabel: t('generalLedger.truncated'),
     emptyLabel: t('generalLedger.empty'),
     openingLabel,
@@ -168,7 +192,9 @@ export async function loadGeneralLedger(
     columnDebits: t('trialBalance.columns.debits'),
     columnCredits: t('trialBalance.columns.credits'),
     columnBalance: tc('labels.balance'),
-    accounts: gl.accounts.map((a) => ({
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
+    accounts: (gl?.accounts ?? []).map((a) => ({
       id: a.id,
       number: a.number,
       name: a.name,
@@ -209,7 +235,7 @@ export async function loadGeneralLedger(
       })),
     })),
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter:
       books.length > 1
         ? {
@@ -291,11 +317,24 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
       textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         wide: true,
+        when: f('ratesReady'),
         blocks: [
           repeat({
             items: f('accounts'),

@@ -25,7 +25,7 @@ import { dimensionOptions, journalReport } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -96,6 +96,11 @@ export interface JournalData {
   columnDetail: string
   columnDebits: string
   columnCredits: string
+  /** Set when underived consolidated rates block the report (F-t06-027):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   entries: JournalEntry[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
@@ -120,13 +125,32 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   // and every query below carries it — the same contract as the export path.
   const orgId = await resolveOrgId()
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [journal, opts, org] = await Promise.all([
-    journalReport(period.from, period.to, { dims, bookId: selectedBook?.id }),
-    dimensionOptions(),
-    orgInfo(),
-  ])
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws. The report
+  // runs only with a resolved subsidiary scope — never scope-less.
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const [journal, opts, org] = subView
+    ? await Promise.all([
+        journalReport(period.from, period.to, { dims, bookId: selectedBook?.id }),
+        dimensionOptions(),
+        orgInfo(),
+      ])
+    : [null, await dimensionOptions(), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
 
   return {
@@ -135,14 +159,16 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     backLabel: t('hub.title'),
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
-    truncated: journal.truncated,
+    truncated: journal?.truncated ?? false,
     truncatedLabel: t('journal.truncated'),
     emptyLabel: t('journal.empty'),
     columnAccount: tc('labels.account'),
     columnDetail: t('journal.columns.detail'),
     columnDebits: t('trialBalance.columns.debits'),
     columnCredits: t('trialBalance.columns.credits'),
-    entries: journal.entries.map((e) => {
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
+    entries: (journal?.entries ?? []).map((e) => {
       const target: TxnTarget = { kind: 'transaction', entryId: e.id, docKind: e.docKind, docId: e.docId }
       return {
         id: e.id,
@@ -166,7 +192,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
       }
     }),
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter:
       books.length > 1
         ? {
@@ -228,11 +254,24 @@ export function journalSpec(data: JournalData): PageSpec {
       textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         wide: true,
+        when: f('ratesReady'),
         blocks: [
           repeat({
             items: f('entries'),

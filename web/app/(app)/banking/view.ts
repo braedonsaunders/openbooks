@@ -17,7 +17,8 @@ import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { bankingHome, type BankingAccountRow, type BankingHome } from '../../../lib/module-home/banking'
+import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { userPageLayout } from '../../../lib/page-layout'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -65,9 +66,35 @@ const STALE_STATEMENT_DAYS = 30
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
+/**
+ * Fail-closed home figures for a rates-blocked workspace (F-t06-027): every
+ * vital reads empty/zero, so nothing presents a scoped number beside the
+ * banner. Navigation keeps working — switching to a single-subsidiary view
+ * loads real figures.
+ */
+const BLOCKED_HOME: BankingHome = {
+  accounts: [],
+  totalCash: 0,
+  totalCards: 0,
+  unmatchedLines: 0,
+  openRecons: 0,
+  netFlow7d: 0,
+  trend: [],
+  badges: {
+    activeRules: 0,
+    totalRules: 0,
+    statements: 0,
+    lastImportedAt: null,
+    txns7d: 0,
+  },
+}
+
 export interface BankingData {
   title: string
   description: string
+  /** Set when underived consolidated rates block the workspace (F-t06-027):
+   * the page renders a typed banner with a derive link above empty vitals. */
+  ratesBlocked: RatesBlockedNotice | null
   layoutPrefs: Record<string, unknown>
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
@@ -122,17 +149,35 @@ export async function loadBanking(
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
   const tNav = await getTranslations('nav')
+  const tr = await getTranslations('reports')
 
-  // Subsidiary context — multi-subsidiary orgs get a switcher; the whole page
-  // (roster, balances, trend, badges) scopes to the selected view.
-  const subView = await reportSubsidiaryView(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link above empty vitals.
+  // Anything else is a real defect and still throws. Home figures load only
+  // with a resolved subsidiary scope — BLOCKED_HOME otherwise (fail-closed).
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: tr('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: tr('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
 
   const [data, rosterPrefs, navGroups] = await Promise.all([
-    bankingHome(
-      authz.user.orgId,
-      subView.subsidiary?.ids,
-      subView.subsidiary?.includeNullSubsidiary,
-    ),
+    subView
+      ? bankingHome(
+          authz.user.orgId,
+          subView.subsidiary?.ids,
+          subView.subsidiary?.includeNullSubsidiary,
+        )
+      : BLOCKED_HOME,
     userPageLayout(authz.user.id, 'banking-accounts'),
     resolveNav(
       authz.user.orgId,
@@ -198,8 +243,9 @@ export async function loadBanking(
     title: t('home.title'),
     description: t('home.description'),
     layoutPrefs: rosterPrefs as unknown as Record<string, unknown>,
-    subsidiaryPicker: subView.picker,
-    subsidiaryValue: subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? '',
+    subsidiaryPicker: subView?.picker ?? [],
+    subsidiaryValue: subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? '',
+    ratesBlocked,
     subsidiaryLabel: t('home.subsidiary'),
     tabs,
     canReconcile,
@@ -330,6 +376,15 @@ export function bankingSpec(data: BankingData): PageSpec {
       }),
     ],
     body: [
+      widgetBlock('empty-state', {
+        title: data.ratesBlocked?.title ?? '',
+        description: data.ratesBlocked?.description,
+        action: 'link-button',
+        actionProps: {
+          href: data.ratesBlocked?.deriveHref ?? '/close',
+          label: data.ratesBlocked?.deriveLabel ?? '',
+        },
+      }, f('ratesBlocked')),
       grid('flex h-full min-h-0 flex-col gap-4', [
         // Vitals strip. Every tile renders the same HomeStatTile the native
         // page renders; every tone and accent is a loader-resolved string.

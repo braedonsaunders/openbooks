@@ -17,7 +17,8 @@ import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
+import { purchasingHome, type PurchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
+import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -42,12 +43,43 @@ import type { AttentionItem } from './sections'
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
+/**
+ * Fail-closed home figures for a rates-blocked workspace (F-t06-027): every
+ * vital reads empty/zero and feature tiles hide, so nothing presents a
+ * scoped number beside the banner. Navigation keeps working — switching to
+ * a single-subsidiary view loads real figures.
+ */
+const BLOCKED_HOME: PurchasingHome = {
+  apOutstanding: 0,
+  apOverdue: 0,
+  openBills: 0,
+  dueNext7: 0,
+  openPoValue: 0,
+  openPos: 0,
+  spend30d: 0,
+  topExposure: [],
+  trend: [],
+  badges: {
+    openPos: 0,
+    openBills: 0,
+    payments7d: 0,
+    paid7dValue: 0,
+    unpostedExpenses: 0,
+    vendors: 0,
+  },
+  ordersEnabled: false,
+  expensesEnabled: false,
+}
+
 export interface PurchasingData {
   title: string
   description: string
   subsidiaryLabel: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
+  /** Set when underived consolidated rates block the workspace (F-t06-027):
+   * the page renders a typed banner with a derive link above empty vitals. */
+  ratesBlocked: RatesBlockedNotice | null
   tabs: Tabs
   vendorsLabel: string
   vendorsValue: string
@@ -98,14 +130,34 @@ export async function loadPurchasing(
   if (!['ap.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
   const t = await getTranslations('purchasing')
   const tNav = await getTranslations('nav')
+  const tr = await getTranslations('reports')
 
-  const subView = await reportSubsidiaryView(sp.sub, await resolveAsOf(authz.user.orgId))
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link above empty vitals.
+  // Anything else is a real defect and still throws. Home figures load only
+  // with a resolved subsidiary scope — BLOCKED_HOME otherwise (fail-closed).
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(sp.sub, await resolveAsOf(authz.user.orgId))
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: tr('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: tr('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
   const [data, navGroups] = await Promise.all([
-    purchasingHome(
-      authz.user.orgId,
-      subView.subsidiary?.ids,
-      subView.subsidiary?.includeNullSubsidiary,
-    ),
+    subView
+      ? purchasingHome(
+          authz.user.orgId,
+          subView.subsidiary?.ids,
+          subView.subsidiary?.includeNullSubsidiary,
+        )
+      : BLOCKED_HOME,
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
@@ -164,8 +216,9 @@ export async function loadPurchasing(
     title: t('home.title'),
     description: t('home.description'),
     subsidiaryLabel: t('home.subsidiary'),
-    subsidiaryPicker: subView.picker,
-    subsidiaryValue: subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? '',
+    subsidiaryPicker: subView?.picker ?? [],
+    subsidiaryValue: subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? '',
+    ratesBlocked,
     tabs,
     vendorsLabel: t('home.vitals.activeVendors'),
     vendorsValue: String(data.badges.vendors),
@@ -268,6 +321,15 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
       }),
     ],
     body: [
+      widgetBlock('empty-state', {
+        title: data.ratesBlocked?.title ?? '',
+        description: data.ratesBlocked?.description,
+        action: 'link-button',
+        actionProps: {
+          href: data.ratesBlocked?.deriveHref ?? '/close',
+          label: data.ratesBlocked?.deriveLabel ?? '',
+        },
+      }, f('ratesBlocked')),
       grid('flex h-full min-h-0 flex-col gap-4', [
         // Vitals strip. Two tiles are feature-gated; `when` expresses that
         // without the spec gaining a conditional.

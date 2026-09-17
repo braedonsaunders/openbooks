@@ -16,6 +16,7 @@ import {
   text,
   txn,
   widget,
+  widgetBlock,
   widgetCell,
   type PageSpec,
   type TableSpanRow,
@@ -23,7 +24,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -105,6 +106,11 @@ export interface AgingData {
   labelTotals: string
   bucketLabels: Record<(typeof BUCKETS)[number], string>
   dashPlaceholder: string
+  /** Set when underived consolidated rates block the report (F-t06-027):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   summaryRows: AgingSummaryRow[]
   detailRows: AgingDetailRow[]
   totals: Record<(typeof BUCKETS)[number], string> & { total: string }
@@ -136,20 +142,39 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  const subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws. Builders run
+  // only with a resolved subsidiary scope — never scope-less (fail-closed).
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: tr('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: tr('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
   const dims = {
     ...q.dims,
-    subsidiaryIds: subView.subsidiary?.ids,
+    subsidiaryIds: subView?.subsidiary?.ids,
     // Unrestricted root-covering views read root-owned (null subsidiary)
     // documents alongside attributed ones; restricted views stay fail-closed.
-    includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
+    includeNullSubsidiary: subView?.subsidiary?.includeNullSubsidiary === true,
   }
-  const [summary, detailResult, opts, org] = await Promise.all([
-    agingByParty(side, asOf, dims),
-    detail ? agingDetail(side, asOf, dims) : null,
-    dimensionOptions(),
-    orgInfo(),
-  ])
+  const [summary, detailResult, opts, org] = subView
+    ? await Promise.all([
+        agingByParty(side, asOf, dims),
+        detail ? agingDetail(side, asOf, dims) : null,
+        dimensionOptions(),
+        orgInfo(),
+      ])
+    : [null, null, await dimensionOptions(), await orgInfo()]
   const m = (v: string | number) => formatMoney(v, { currency: org?.base_currency })
   const noParty = t('noParty')
 
@@ -196,7 +221,9 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     periodPhrase: t('asOf', { date: asOf }),
     isDetail: Boolean(detailResult),
     isSummary: !detailResult,
-    hasSummaryRows: summary.rows.length > 0,
+    hasSummaryRows: (summary?.rows.length ?? 0) > 0,
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
     emptyLabel: t('empty'),
     labelParty: tc('labels.party'),
     labelEntry: tr('generalLedger.columns.entry'),
@@ -207,7 +234,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     labelTotals: tr('trialBalance.totals'),
     bucketLabels,
     dashPlaceholder: '—',
-    summaryRows: summary.rows.map((r, i) => {
+    summaryRows: (summary?.rows ?? []).map((r, i) => {
       const name = r.partyName ?? noParty
       const row = r as unknown as Record<string, string>
       return {
@@ -237,12 +264,12 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       txn: { kind: 'transaction', entryId: r.docId, docKind: r.docKind, docId: r.docId },
     })),
     totals: {
-      current: m(summary.totals.current),
-      b1: m(summary.totals.b1),
-      b2: m(summary.totals.b2),
-      b3: m(summary.totals.b3),
-      b4: m(summary.totals.b4),
-      total: m(summary.totals.total),
+      current: m(summary?.totals.current ?? '0'),
+      b1: m(summary?.totals.b1 ?? '0'),
+      b2: m(summary?.totals.b2 ?? '0'),
+      b3: m(summary?.totals.b3 ?? '0'),
+      b4: m(summary?.totals.b4 ?? '0'),
+      total: m(summary?.totals.total ?? '0'),
     },
     totalsDrill: {
       current: bucketDrill(bucketLabels.current, undefined, 'current'),
@@ -253,7 +280,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       total: bucketDrill(tr('trialBalance.totals')),
     },
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     periodPresets: AS_OF_PERIOD_PRESETS,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom({ ...sp, period: requestedPeriod }),
@@ -347,11 +374,24 @@ export function agingSpec(data: AgingData): PageSpec {
       ),
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         wide: true,
+        when: f('ratesReady'),
         blocks: [
           // Two independent presence flags, not a negation.
           {
