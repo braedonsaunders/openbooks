@@ -182,7 +182,7 @@ export async function loadPayroll(
     showChecklist: canManage && home.missingSettings.length > 0,
     checklist: {
       text: t('checklist.incomplete', { count: home.missingSettings.length }),
-      settings: home.missingSettings.map((key) => t(`settingsPage.fields.${key}`)).join(', '),
+      settings: home.missingSettings.map((item) => t(`settingsPage.${item.labelKey}`)).join(', '),
       openSettingsLabel: t('checklist.openSettings'),
     },
     employeesLabel: t('home.vitals.employees'),
