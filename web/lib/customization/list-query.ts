@@ -54,9 +54,24 @@ export const DOCUMENT_SORTS: Record<string, SQL> = {
   status: sql`d.status`,
 }
 
+/**
+ * Human document number for display (F-t12-004). Mirrored rows can carry
+ * the sync source handle (e.g. 'salesInvoice:<uuid>') in document_number
+ * when the source never supplied a number. A handle is never
+ * customer-facing: fall back to the reference, and only then to the
+ * stored value. The client twin is displayDocumentNumber in
+ * web/lib/document-display.ts — keep the predicate in sync.
+ */
+export const DISPLAY_DOCUMENT_NUMBER_EXPR = sql`
+  case
+    when d.document_number ~ '^[A-Za-z][A-Za-z0-9]*:[0-9a-fA-F-]{36}$'
+      then coalesce(nullif(d.reference_number, ''), d.document_number)
+    else d.document_number
+  end`
+
 /** Built-in column key → select expression, shared by documents-backed lists. */
 export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
-  document_number: sql`d.document_number`,
+  document_number: DISPLAY_DOCUMENT_NUMBER_EXPR,
   party_name: sql`p.display_name`,
   document_date: sql`d.document_date`,
   reference_number: sql`d.reference_number`,
@@ -182,7 +197,7 @@ export const PAYMENT_BANK_ID_EXPR = sql`coalesce(
 )`
 
 export const PAYMENT_BUILT_IN_EXPR: Record<string, SQL> = {
-  document_number: sql`d.document_number`,
+  document_number: DISPLAY_DOCUMENT_NUMBER_EXPR,
   party_name: sql`p.display_name`,
   document_date: sql`d.document_date`,
   bank_account: PAYMENT_BANK_EXPR,

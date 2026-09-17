@@ -23,6 +23,7 @@ import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import type { DocumentDrawer } from '../../../../components/document-drawer'
 import type { AppliedPayment } from '../../../../components/applied-payments-panel'
+import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -181,7 +182,7 @@ export async function loadArInvoices(
     ? (await db.execute<{
         id: string; number: string; kind: string; date: string | null; amount: string; appliedOn: string | null
       }>(sql`
-        select ap.id::text as id, d.document_number as number, d.kind as kind,
+        select ap.id::text as id, ${DISPLAY_DOCUMENT_NUMBER_EXPR} as number, d.kind as kind,
                d.document_date::text as date, ap.amount::text as amount,
                ap.applied_on::text as "appliedOn"
           from applications ap

@@ -7,6 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { documentDrawerHref } from '../lib/document-drawer-navigation'
+import { displayDocumentNumber } from '../lib/document-display'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
@@ -2062,7 +2063,7 @@ export function DocumentDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={config.kind} />
-          <span className="font-mono">{doc.document_number}</span>
+          <span className="font-mono">{displayDocumentNumber(doc.document_number, (doc as { reference_number?: unknown }).reference_number)}</span>
           <Badge variant={STATUS_VARIANT[displayStatus] ?? 'secondary'}>
             {STATUS_KEYS[displayStatus]
               ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
