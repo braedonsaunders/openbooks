@@ -14,6 +14,7 @@ import {
 } from '@openbooks/engine/src/control-accounts.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { parseJsonBody, uuidId } from '../../../../lib/api/json'
+import { partylessControlLines } from '../../../../lib/journal-warnings'
 
 export const runtime = 'nodejs'
 
@@ -76,7 +77,15 @@ export async function POST(req: Request) {
             deferEffects: true,
             audit: { actorId: gate.user.id, source: 'ui' },
           })
-          return { kind: 'posted' as const, entryId, previousStatus }
+          // A party-less AR/AP-control leg posts legitimately but sits
+          // outside every subledger: report it on the response instead of
+          // accepting the journal silently (F-t08-007). The drawer pins the
+          // warning on the record; the aging carries the balance explicitly.
+          const partyless = await partylessControlLines(gate.user.orgId, entryId)
+          const warnings = partyless.length > 0
+            ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
+            : []
+          return { kind: 'posted' as const, entryId, previousStatus, warnings }
         })
 
         if (outcome.kind === 'not_found') {
@@ -104,7 +113,7 @@ export async function POST(req: Request) {
           )
         }
         await runPostDocumentEffects(documentId, outcome.previousStatus)
-        return NextResponse.json({ ok: true, entryId: outcome.entryId })
+        return NextResponse.json({ ok: true, entryId: outcome.entryId, warnings: outcome.warnings })
       }
       default:
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })

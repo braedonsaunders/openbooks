@@ -65,3 +65,32 @@ test('a successful post re-pins the canonical revision so a later void cannot 40
     'post() must refresh the canonical snapshot after success: the post commits a new revision_seq and the drawer still holds the pre-post token',
   )
 })
+
+// F-t08-007: a journal that posts control legs with no party (JE-00005) went
+// through with no warning at all. The post response carries the warning and
+// the drawer pins it as a persistent alert until the next action — the same
+// rule as post refusals (F-t06-006): toasts expire, the record must not.
+test('a post with partyless control legs pins a persistent warning alert', () => {
+  const postBlock = source.slice(source.indexOf('async function post()'), source.indexOf('async function remove()'))
+  assert.ok(postBlock.includes('async function post()'), 'post() must exist')
+  assert.match(
+    postBlock,
+    /partyless_control_lines/,
+    'post() must branch on the typed warning code: only control legs with no party warn, never every post',
+  )
+  assert.match(
+    postBlock,
+    /setPostWarning/,
+    'post() must pin the warning into drawer state: a toast alone expires and the finding shows the acceptance reads as silent',
+  )
+  assert.match(
+    postBlock,
+    /partylessControlWarning/,
+    'the pinned warning must render localized copy through the drawer catalog, not raw server text',
+  )
+  assert.match(
+    source,
+    /\{postWarning \? \(\s*<p role="alert"/,
+    'the pinned warning must render as an alert the reader still sees after the posted toast expires',
+  )
+})
