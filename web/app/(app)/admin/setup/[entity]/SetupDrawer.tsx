@@ -112,11 +112,18 @@ export function SetupDrawer({
   })
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
+  // A blocked save that only fires a transient toast reads as "nothing
+  // happened" once it dismisses (F-t06-018): the failure also persists as a
+  // form-level alert naming the field, cleared on the next edit.
+  const [fieldError, setFieldError] = useState<string | null>(null)
 
   const entityTitle = entity.singularTitleKey
     ? t(entity.singularTitleKey)
     : t(`entities.${entity.key}.title`)
-  const set = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }))
+  const set = (key: string, value: any) => {
+    setFieldError(null)
+    setForm((f) => ({ ...f, [key]: value }))
+  }
   const nestedTabActive = !creating && nestedTab != null && searchParams.get('setupTab') === nestedTab.key
 
   function selectTab(key: 'details' | string) {
@@ -153,38 +160,45 @@ export function SetupDrawer({
   async function save() {
     const err = validate()
     if (err) {
+      setFieldError(err)
       toast.error(err)
       return
     }
     setBusy(true)
-    const body: Record<string, unknown> = { ...form, ...fixedValues }
-    // A field the form stopped showing must not persist behind the UI: a pay
-    // component switched from a deduction to an earning gives its protection
-    // settings back to their defaults, exactly as the CHECK constraint expects.
-    for (const field of entity.fields) {
-      if (field.showWhen && !setupFieldVisible(field, form)) {
-        body[field.key] = field.defaultValue ?? ''
+    try {
+      const body: Record<string, unknown> = { ...form, ...fixedValues }
+      // A field the form stopped showing must not persist behind the UI: a pay
+      // component switched from a deduction to an earning gives its protection
+      // settings back to their defaults, exactly as the CHECK constraint expects.
+      for (const field of entity.fields) {
+        if (field.showWhen && !setupFieldVisible(field, form)) {
+          body[field.key] = field.defaultValue ?? ''
+        }
       }
+      if (!creating) body.id = row![idColumn]
+      if (!creating && entity.dataSource === 'extension-settings') {
+        body.expectedValue = row!.value
+        body.expectedExtensionVersionId = row!.extension_version_id
+      }
+      const res = await fetch(`/api/admin/setup/${entity.key}`, {
+        method: creating ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFieldError(errorMessage(data?.error))
+        toast.error(errorMessage(data?.error))
+        return
+      }
+      toast.success(creating ? t('created') : t('updated'))
+      router.push(closeHref)
+      router.refresh()
+    } finally {
+      // A rejected transport must not wedge the button on: without this,
+      // every later click silently dies on the stuck disabled button.
+      setBusy(false)
     }
-    if (!creating) body.id = row![idColumn]
-    if (!creating && entity.dataSource === 'extension-settings') {
-      body.expectedValue = row!.value
-      body.expectedExtensionVersionId = row!.extension_version_id
-    }
-    const res = await fetch(`/api/admin/setup/${entity.key}`, {
-      method: creating ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(errorMessage(data?.error))
-      return
-    }
-    toast.success(creating ? t('created') : t('updated'))
-    router.push(closeHref)
-    router.refresh()
   }
 
   async function remove() {
@@ -271,7 +285,13 @@ export function SetupDrawer({
         )
       }
     >
-      {nestedTabActive ? nestedTab?.content : <div className="grid gap-4 p-1 sm:grid-cols-2">
+      {nestedTabActive ? nestedTab?.content : <>
+      {fieldError ? (
+        <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {fieldError}
+        </p>
+      ) : null}
+      <div className="grid gap-4 p-1 sm:grid-cols-2">
         {visibleFields.map((field, index) => (
           <Fragment key={field.key}>
             {field.sectionKey && field.sectionKey !== visibleFields[index - 1]?.sectionKey ? (
@@ -352,7 +372,7 @@ export function SetupDrawer({
             </div>
           </div>
         ) : null}
-      </div>}
+      </div></>}
     </UrlDrawer>
   )
 }
@@ -382,6 +402,12 @@ function FieldControl({
   // below a control is reserved for validation/state messages only.
   const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
+  // Registry-required fields show a marker (F-t06-018) — exactly the set
+  // validate() enforces (booleans/multirefs/locked keys are never required),
+  // so the mark cannot lie about what blocks saving.
+  const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref'
+    ? <span className="text-red-500" aria-hidden="true"> *</span>
+    : null
   const full =
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
@@ -463,7 +489,7 @@ function FieldControl({
     const selected: string[] = Array.isArray(value) ? value.map(String) : []
     return (
       <div className={wrap}>
-        <Label help={help}>{label}</Label>
+        <Label help={help}>{label}{requiredMark}</Label>
         <TagInput
           value={selected}
           onChange={onChange}
@@ -478,7 +504,7 @@ function FieldControl({
     const options: SelectOption[] = refOptions.map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
-        <Label help={help}>{label}</Label>
+        <Label help={help}>{label}{requiredMark}</Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -496,7 +522,7 @@ function FieldControl({
   if (field.kind === 'country') {
     return (
       <div className={wrap}>
-        <Label help={help}>{label}</Label>
+        <Label help={help}>{label}{requiredMark}</Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -514,7 +540,7 @@ function FieldControl({
   if (field.kind === 'select') {
     return (
       <div className={wrap}>
-        <Label help={help}>{label}</Label>
+        <Label help={help}>{label}{requiredMark}</Label>
         <Select aria-label={label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           {!field.required ? <option value="">—</option> : null}
           {field.options?.map((o) => (
@@ -530,7 +556,7 @@ function FieldControl({
   if (field.kind === 'textarea' || field.kind === 'json') {
     return (
       <div className={wrap}>
-        <Label help={help}>{label}</Label>
+        <Label help={help}>{label}{requiredMark}</Label>
         <Textarea aria-label={label} className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
       </div>
     )
@@ -539,7 +565,7 @@ function FieldControl({
   const numeric = field.kind === 'integer' || field.kind === 'decimal' || field.kind === 'percent'
   return (
     <div className={wrap}>
-      <Label help={help}>{label}</Label>
+      <Label help={help}>{label}{requiredMark}</Label>
       <Input
         aria-label={label}
         type={field.kind === 'date' ? 'date' : 'text'}
