@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "Contribuições CPP2 sobre bônus",
-      "qcCsbYtd": "Contribuições QPP adicionais sobre bônus",
-      "ficaWithheldYtd": "Imposto FICA retido",
-      "qpipEmployerYtd": "Contribuições QPIP do empregador",
-      "wcbAssessableYtd": "Rendimentos avaliáveis WCB"
-    }
-  },
-  "checklist": {
-    "incomplete": "{count, plural, one {# conta de controle da folha está} other {# contas de controle da folha estão}} sem configurar:",
-    "openSettings": "Abrir configuração da folha"
-  },
-  "columns": {
-    "employees": "Funcionários",
-    "gross": "Bruto",
-    "net": "Líquido",
-    "number": "Número",
-    "payDate": "Data de pagamento",
-    "period": "Período",
-    "schedule": "Cronograma",
-    "status": "Status"
-  },
+  "title": "Folha de pagamento",
   "description": "Folhas, perfis de funcionários e retenções obrigatórias.",
-  "empty": {
-    "profiles": "Nenhum perfil de folha ainda. Adicione um para incluir um funcionário nas folhas.",
-    "runs": "Nenhuma folha ainda. Crie uma a partir de um cronograma de folha para começar."
+  "tabs": {
+    "runs": "Folhas",
+    "employees": "Funcionários ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "Recolhimentos",
-      "resume": "Retomar folha",
-      "reviewPost": "Revisar e lançar",
-      "startRun": "Processar folha",
-      "viewRuns": "Folhas",
-      "yearEnd": "Fechamento anual"
-    },
-    "current": {
-      "noSchedules": "Sem cronogramas de folha ativos. Crie um cronograma para começar a processar a folha.",
-      "title": "Período de folha atual"
-    },
-    "directory": {
-      "employees": "Funcionários",
-      "employeesHint": "perfis de folha ativos",
-      "openingBalances": "Saldos iniciais",
-      "parallelRun": "Folha paralela",
-      "retro": "Pagamento retroativo",
-      "runs": "Folhas",
-      "runsHint": "em andamento · {total} no total",
-      "setup": "Configuração da folha",
-      "setupHint": "contas de controle ausentes",
-      "title": "Explorar a folha"
-    },
-    "exceptions": {
-      "allClear": "Todos os funcionários estão prontos para a folha.",
-      "missingProfile": "{name} não tem perfil de folha",
-      "missingWage": "{name} não tem salário vigente hoje",
-      "moreMissingProfiles": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem perfil de folha",
-      "moreMissingWages": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem salário",
-      "title": "Precisa de atenção"
-    },
-    "frequency": {
-      "biweekly": "Quinzenal",
-      "monthly": "Mensal",
-      "semi_monthly": "Duas vezes ao mês",
-      "weekly": "Semanal"
-    },
-    "previous": {
-      "none": "Nenhuma folha concluída ainda.",
-      "title": "Período de folha anterior"
-    },
     "tabs": {
       "overview": "Folha de pagamento",
-      "remittances": "Recolhimentos",
       "runs": "Folhas",
+      "remittances": "Recolhimentos",
       "separations": "Desligamentos",
+      "yearEnd": "Fechamento anual"
+    },
+    "actions": {
+      "viewRuns": "Folhas",
+      "startRun": "Processar folha",
+      "resume": "Retomar folha",
+      "reviewPost": "Revisar e lançar",
+      "remittances": "Recolhimentos",
       "yearEnd": "Fechamento anual"
     },
     "vitals": {
       "employees": "Na folha",
       "employeesSub": "perfis de folha ativos",
-      "nextPayDate": "Próxima data de pagamento",
-      "noSchedule": "sem cronograma ativo",
-      "periodsOf": "{ran} de {total}",
       "periodsRan": "Períodos de folha {year}",
+      "periodsOf": "{ran} de {total}",
       "periodsRanSub": "lançados neste ano fiscal",
-      "ytdEmployerCost": "+{amount} custo do empregador",
       "ytdGross": "Bruto acumulado",
+      "ytdEmployerCost": "+{amount} custo do empregador",
       "ytdNet": "Líquido acumulado",
-      "ytdNetSub": "de folhas lançadas"
+      "ytdNetSub": "de folhas lançadas",
+      "nextPayDate": "Próxima data de pagamento",
+      "noSchedule": "sem cronograma ativo"
+    },
+    "current": {
+      "title": "Período de folha atual",
+      "noSchedules": "Sem cronogramas de folha ativos. Crie um cronograma para começar a processar a folha."
+    },
+    "frequency": {
+      "weekly": "Semanal",
+      "biweekly": "Quinzenal",
+      "semi_monthly": "Duas vezes ao mês",
+      "monthly": "Mensal"
+    },
+    "previous": {
+      "title": "Período de folha anterior",
+      "none": "Nenhuma folha concluída ainda."
+    },
+    "exceptions": {
+      "title": "Precisa de atenção",
+      "allClear": "Todos os funcionários estão prontos para a folha.",
+      "missingProfile": "{name} não tem perfil de folha",
+      "moreMissingProfiles": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem perfil de folha",
+      "missingWage": "{name} não tem salário vigente hoje",
+      "moreMissingWages": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem salário"
+    },
+    "directory": {
+      "title": "Explorar a folha",
+      "runs": "Folhas",
+      "runsHint": "em andamento · {total} no total",
+      "employees": "Funcionários",
+      "employeesHint": "perfis de folha ativos",
+      "setup": "Configuração da folha",
+      "setupHint": "contas de controle ausentes",
+      "openingBalances": "Saldos iniciais",
+      "parallelRun": "Folha paralela",
+      "retro": "Pagamento retroativo"
     }
   },
   "list": {
+    "title": "Folhas",
     "description": "Todas as folhas. Pesquise e filtre por etapa ou cronograma, depois abra uma folha para processá-la.",
     "open": "Abrir folha",
-    "stageFilter": "Etapa",
-    "title": "Folhas"
+    "stageFilter": "Etapa"
   },
-  "newRun": {
-    "create": "Nova folha",
-    "description": "Confirme o período desta folha. O próximo período do cronograma já vem preenchido; altere as datas para uma folha fora do ciclo ou retroativa.",
-    "employees": "Funcionários pagos",
-    "employeesHint": "Uma folha final paga e zera todos os bancos acumulados, por isso abrange apenas os funcionários indicados aqui.",
-    "invalidWindow": "O fim do período deve ser igual ou posterior ao início, e a data de pagamento igual ou posterior ao fim do período.",
-    "noSchedules": "Sem cronogramas de folha ativos",
-    "noTerminated": "Nenhum funcionário deste cronograma tem data de desligamento registrada. Registre-a primeiro no funcionário — sem ela não há como calcular um acerto final.",
-    "notBegun": "Este período começa em {date} e ainda não começou. Escolha um período em curso ou concluído.",
-    "payDateHint": "A data em que os funcionários são pagos. As alíquotas obrigatórias são apuradas a partir desta data.",
-    "periodEnd": "Fim do período",
-    "periodStart": "Início do período",
-    "runType": "Tipo de folha",
-    "runTypeHint": {
-      "bonus": "Pagamento fora do ciclo para bônus e comissões. Sem salário, horas ou descontos recorrentes; os proventos são tributados pelo método de bônus.",
-      "regular": "A folha normal do cronograma: salário, horas aprovadas, componentes e descontos recorrentes.",
-      "termination": "Pagamento final para funcionários desligados. Inclui o pagamento do saldo de férias acumulado."
-    },
-    "schedule": "Cronograma de folha"
-  },
-  "register": {
-    "cppFica": "CPP / FICA",
-    "otherDeductions": "Outros descontos",
-    "print": "Imprimir",
-    "title": "Livro de folha",
-    "totals": "Totais ({count, plural, one {# funcionário} other {# funcionários}})"
-  },
-  "remittances": {
-    "apLink": "abrir faturas de fornecedor",
-    "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
-    "apply": "Aplicar",
-    "assignVendor": "Atribua um fornecedor nos componentes",
-    "back": "Folha de pagamento",
-    "billCreated": "Rascunho de fatura {number} criado. Revise e contabilize no contas a pagar.",
-    "context": "Folha bruta {gross} · {employees, plural, one {# funcionário} other {# funcionários}} no período",
-    "createAnother": "Criar outra fatura",
-    "createBill": "Criar fatura de recolhimento",
-    "description": "Retenções acumuladas e encargos patronais por destino em um período. Criar uma fatura debita as contas de passivo e entrega o pagamento ao contas a pagar.",
-    "dueOn": "Vence em {dueDate} · {authority}",
-    "employer": "Empregador",
-    "empty": "Sem folhas lançadas com valores recolhíveis neste período.",
-    "from": "De",
-    "noAccount": "Sem conta de passivo",
-    "title": "Recolhimentos da folha",
-    "to": "Até",
-    "total": "Total a recolher",
-    "unassigned": "Sem fornecedor de recolhimento atribuído",
-    "withheld": "Retido"
-  },
-  "run": {
-    "approvalNotRequired": "Nenhuma política de aprovação se aplica às folhas",
-    "approvalPending": "Aguardando aprovação ({count} pendentes) — lançamento e contabilização bloqueados",
-    "approvalSubmitted": "Enviada para aprovação com o dossiê de evidências",
-    "calculate": "Calcular",
-    "calculateDone": "Folha calculada.",
-    "commit": "Lançar",
-    "commitDone": "Folha lançada.",
-    "employerCost": "Custo do empregador",
-    "empty": "Sem holerites. Calcule a folha para gerá-los.",
-    "lineKind": {
-      "deduction": "Desconto",
-      "earning": "Provento",
-      "employer_contribution": "Empregador"
-    },
-    "post": "Contabilizar",
-    "postDone": "Folha contabilizada.",
-    "printSet": "Jogo de impressão (somente impressão)",
-    "stub": {
-      "employee": "Funcionário",
-      "lines": "Linhas da folha",
-      "tax": "Imposto",
-      "trace": "trilha {engine}"
-    },
-    "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail",
-    "submitApproval": "Enviar para aprovação",
-    "title": "Folha"
-  },
-  "runType": {
-    "bonus": "Bônus fora do ciclo",
-    "regular": "Normal",
-    "termination": "Acerto final"
-  },
-  "status": {
-    "calculated": "Calculada",
-    "committed": "Lançada",
-    "draft": "Rascunho",
-    "posted": "Contabilizada",
-    "void": "Anulada"
-  },
-  "tabs": {
-    "employees": "Funcionários ({count})",
-    "runs": "Folhas"
-  },
-  "title": "Folha de pagamento",
   "wizard": {
+    "stepsAria": "Etapas da folha",
+    "steps": {
+      "period": "Escopo",
+      "readiness": "Preparo",
+      "review": "Revisar holerites",
+      "gl": "Prévia contábil e lançamento",
+      "finish": "Lançar e concluir"
+    },
+    "voided": "Esta folha está anulada e é somente leitura.",
+    "stale": {
+      "title": "As entradas mudaram desde o cálculo desta folha ({reasons}). Recalcule antes de lançar.",
+      "reason": {
+        "adjustments": "ajustes",
+        "time": "horas aprovadas",
+        "wages": "salários",
+        "roster": "cadastros de funcionários",
+        "missing": "a própria folha",
+        "components": "componentes de remuneração dos funcionários",
+        "componentDefinitions": "cadastro de componentes de remuneração",
+        "derivedRules": "regras de proventos derivados",
+        "entitlements": "bancos da folha",
+        "workerComp": "alíquotas do seguro de acidentes de trabalho",
+        "timeTypes": "cadastro de tipos de hora",
+        "settings": "configurações da folha",
+        "ytd": "acumulado de outra folha",
+        "openingBalances": "saldos iniciais (valores trazidos)"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# item bloqueia esta folha} other {# itens bloqueiam esta folha}}",
+      "blockedHint": "Resolva cada item antes de calcular. Cada um leva ao local de correção.",
+      "readyTitle": "Pronta para calcular · {count, plural, one {# funcionário} other {# funcionários}}",
+      "readyHint": "Configuração, controle do período e cadastros dos funcionários concluídos.",
+      "warningsHint": "{count, plural, one {# item precisa} other {# itens precisam}} de revisão. Confirme para continuar.",
+      "blockersTitle": "Bloqueios",
+      "warningsTitle": "Revise antes de continuar",
+      "acknowledge": "Revisei estes itens e quero continuar",
+      "allClear": "Sem bloqueios nem avisos. Esta folha está pronta para calcular.",
+      "fix": "Resolver",
+      "andMore": "+{count} outros",
+      "dryRun": "Cálculo de teste",
+      "dryRunTitle": "Resultados do cálculo de teste",
+      "dryRunHint": "Nada foi salvo. Use Calcular para gerar os holerites de verdade.",
+      "codes": {
+        "retro": {
+          "sourceVoided": "Um período de origem que esta folha quita foi anulado ({detail}).",
+          "crossTaxYear": "Um período de origem está fora do ano fiscal de {detail} — envie uma declaração retificadora.",
+          "stale": "As entradas de um período de origem mudaram após a quantificação desta folha. Recrie a folha retroativa.",
+          "doubleSettled": "Outra folha retroativa aberta já quita o mesmo período deste funcionário.",
+          "componentRetired": "Um componente de remuneração pago nesta folha foi desativado.",
+          "zeroDelta": "Esta folha nada paga ao funcionário; a diferença do período é zero."
+        },
+        "setup": {
+          "pack": "Nenhum pacote de país da folha está instalado.",
+          "wageExpense": "Nenhuma conta de despesa com salários configurada.",
+          "netPay": "Nenhuma conta de salários líquidos a pagar configurada.",
+          "laborClearing": "Os salários lançam em compensação de mão de obra, mas nenhuma conta de compensação está configurada.",
+          "slot": "Conta obrigatória sem mapeamento: {detail}",
+          "schedule": "Não há cronograma de folha ativo.",
+          "remittanceVendor": "Fornecedor de recolhimento obrigatório não definido: {detail}",
+          "paymentRail": "Sem perfil de origem EFT configurado e com o pagamento em cheque desativado — não há como pagar ninguém.",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "Nenhum período contábil cobre a data de pagamento {detail}.",
+          "closed": "O período contábil {detail} está fechado para lançamentos no razão."
+        },
+        "scope": {
+          "empty": "Nenhum funcionário incluído nesta folha."
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# funcionário está} other {# funcionários estão}} sem salário vigente para este período.",
+          "zeroHours": "{count, plural, one {# horista está} other {# horistas estão}} sem horas aprovadas neste período.",
+          "paidInPeriod": "{count, plural, one {# funcionário já foi pago} other {# funcionários já foram pagos}} em período sobreposto.",
+          "terminated": "{count, plural, one {# funcionário foi desligado} other {# funcionários foram desligados}} até o fim do período.",
+          "noBankDetails": "{count, plural, one {# funcionário} other {# funcionários}} com depósito direto configurado, mas sem dados bancários aprovados — nesta folha o pagamento será em cheque.",
+          "noSin": "{count, plural, one {# funcionário} other {# funcionários}} sem SIN/SSN registrado para a declaração de fechamento anual.",
+          "eftNoBankDetails": "{count, plural, one {# funcionário} other {# funcionários}} com depósito direto configurado, mas sem dados bancários aprovados, e com o pagamento em cheque desativado — não há como efetuar o pagamento.",
+          "noOpeningBalance": "{count, plural, one {# funcionário} other {# funcionários}} sem saldo inicial de {detail} do sistema de folha anterior; os tetos anuais obrigatórios recomeçam do zero nesta folha.",
+          "noOpeningComponentYtd": "{count, plural, one {# funcionário} other {# funcionários}} sem acumulado inicial de {detail}, que tem teto anual — o teto recomeça do zero nesta folha, permitindo uma segunda contribuição integral do limite anual.",
+          "noOpeningEntitlement": "{count, plural, one {# funcionário traz} other {# funcionários trazem}} saldo do sistema de folha anterior, mas sem saldo inicial de {detail}. Esta é a primeira folha que o movimenta, por isso o banco começa do zero."
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "O pagamento de feriado legal não pode ser calculado: {detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# funcionário tem} other {# funcionários têm}} jurisdição trabalhista que esta folha não atende: {detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "Financiamento",
+      "netPay": "Caixa necessário",
+      "liabilities": "Passivos registrados",
+      "totalCost": "Custo total do empregador",
+      "accounts": "Contas bancárias",
+      "leadTime": "{days, plural, =0 {A data de pagamento é hoje} one {# dia útil até a data de pagamento} other {# dias úteis até a data de pagamento}} · {date}",
+      "payDatePast": "A data de pagamento {date} já passou",
+      "short": "Nenhuma conta bancária cobre os {amount} necessários.",
+      "rail": {
+        "eft": "Depósito direto ({count, plural, one {# funcionário} other {# funcionários}})",
+        "cheque": "Cheques ({count, plural, one {# funcionário} other {# funcionários}})"
+      }
+    },
+    "period": {
+      "taxYear": "Ano fiscal",
+      "employeesTitle": "Funcionários incluídos ({count})",
+      "hint": "Todos com perfil de folha ativo neste cronograma.",
+      "calculatedNote": "Horas e bruto vêm dos holerites calculados.",
+      "approvedHours": "Horas aprovadas",
+      "recalculate": "Recalcular",
+      "empty": "Nenhum funcionário tem perfil de folha ativo neste cronograma ainda.",
+      "wageMissing": "Sem salário",
+      "zeroHours": "Sem horas",
+      "ready": "Pronto",
+      "scopeSaved": "Escopo da folha salvo: {count, plural, one {# funcionário} other {# funcionários}}.",
+      "allBases": "Todas as bases",
+      "onlyWithHours": "Somente com horas",
+      "hideIneligible": "Ocultar inelegíveis",
+      "department": "Departamento",
+      "selectAll": "Selecionar todos os funcionários exibidos",
+      "selectEmployee": "Selecionar {name}",
+      "selectedCount": "{selected} de {total} funcionários selecionados",
+      "selectedHours": "{hours} horas",
+      "selectedBlocked": "{count, plural, one {# funcionário selecionado sem salário} other {# funcionários selecionados sem salário}}",
+      "applyScope": "Aplicar seleção",
+      "noneMatch": "Nenhum funcionário corresponde a estes filtros.",
+      "noWage": "Sem salário",
+      "paidInPeriod": "Já pago",
+      "terminated": "Desligado",
+      "excluded": "Excluído",
+      "included": "Incluído",
+      "runType": "Tipo de folha",
+      "continue": "Continuar para o preparo",
+      "dimension": {
+        "all": "Todos",
+        "department": "Departamento",
+        "trade": "Ofício",
+        "job_title": "Cargo",
+        "subsidiary": "Entidade",
+        "payment_method": "Pago por"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# exceção de cálculo} other {# exceções de cálculo}}",
+      "varianceFlag": "{count, plural, one {# holerite variou} other {# holerites variaram}} mais de ±{percent}% no líquido em relação ao holerite anterior. Revise antes de lançar.",
+      "varianceColumn": "Δ líq.",
+      "newEmployee": "primeiro holerite",
+      "needsCalculation": "Calcule a folha para gerar os holerites. Os valores seguem editáveis até o lançamento da folha.",
+      "drawerDescription": "Rubricas e trilha de cálculo obrigatório deste holerite.",
+      "drawerVariance": "O líquido variou {percent}% em relação ao holerite anterior deste funcionário.",
+      "downloadPdf": "Baixar PDF",
+      "close": "Fechar",
+      "registerTitle": "Prévia do livro",
+      "selectAll": "Selecionar todos os holerites",
+      "selectedCount": "{count, plural, one {# selecionado} other {# selecionados}}",
+      "bulkEdit": "Editar selecionados",
+      "bulkDescription": "Aplica um valor de componente a {count, plural, one {# funcionário} other {# funcionários}} nesta folha.",
+      "bulkApply": "Aplicar a {count, plural, one {# funcionário} other {# funcionários}}",
+      "changedColumn": "Alterado",
+      "noChange": "sem alteração",
+      "changedTitle": "Alterações desde {date}",
+      "noChangeDetail": "Nada mudou em relação ao holerite anterior.",
+      "changedTotals": "Líquido {net} · horas {hours} em relação ao holerite anterior.",
+      "changeKind": {
+        "added": "Novo",
+        "removed": "Removido",
+        "changed": "Alterado"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# holerite não suportou um desconto protegido integral} other {# holerites não suportaram um desconto protegido integral}}",
+      "protectionShortfallHint": "Os ganhos protegidos limitaram estes descontos. O saldo não pago continua devido — avise o credor ou transfira para a próxima folha."
+    },
+    "gl": {
+      "needsCalculation": "Calcule a folha para ver o impacto no razão.",
+      "setupIncomplete": "Configuração da folha incompleta",
+      "openSetup": "Abrir Contas e lançamentos",
+      "retry": "Tentar novamente",
+      "loading": "Montando a prévia contábil…",
+      "hint": "O lançamento que o commit vai gravar. Débitos primeiro, depois créditos. Nada é contabilizado nesta etapa.",
+      "account": "Conta",
+      "description": "Descrição",
+      "debits": "Débito",
+      "credits": "Crédito",
+      "balanced": "Balanceado",
+      "staleBlocked": "Recalcule a folha antes de lançar.",
+      "commitHint": "O lançamento congela os holerites e grava estas linhas no documento da folha. A folha segue revisável até ser contabilizada."
+    },
     "finish": {
       "notCommitted": "Confirme a execução na etapa do razão antes de lançar.",
       "postTitle": "Pronto para lançar",
@@ -218,19 +292,22 @@
       "stubsEmailedPartial": "{sent} enviados; ignorados (sem e-mail ou falha): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}"
     },
-    "funding": {
-      "title": "Financiamento",
-      "netPay": "Caixa necessário",
-      "liabilities": "Passivos registrados",
-      "totalCost": "Custo total do empregador",
-      "accounts": "Contas bancárias",
-      "leadTime": "{days, plural, =0 {A data de pagamento é hoje} one {# dia útil até a data de pagamento} other {# dias úteis até a data de pagamento}} · {date}",
-      "payDatePast": "A data de pagamento {date} já passou",
-      "short": "Nenhuma conta bancária cobre os {amount} necessários.",
-      "rail": {
-        "eft": "Depósito direto ({count, plural, one {# funcionário} other {# funcionários}})",
-        "cheque": "Cheques ({count, plural, one {# funcionário} other {# funcionários}})"
-      }
+    "adjust": {
+      "title": "Ajustes",
+      "applied": "Ajuste aplicado. Holerites recalculados.",
+      "excludedLabel": "Excluídos desta folha:",
+      "include": "Incluir",
+      "exclude": "Excluir desta folha",
+      "component": "Componente",
+      "amount": "Valor",
+      "note": "Motivo / observação (opcional)",
+      "replace": "Substituir linhas calculadas",
+      "replaceHelp": "Substitui as linhas calculadas deste componente em vez de somar a elas",
+      "add": "Adicionar ajuste",
+      "remove": "Remover",
+      "replaces": "substitui o calculado",
+      "earnings": "Proventos",
+      "deductions": "Descontos"
     },
     "bankFile": {
       "title": "Depósito direto",
@@ -277,24 +354,1001 @@
         "default": "Sem dados bancários registrados — pago com cheque",
         "eftFallback": "Configurado como EFT, mas sem dados bancários aprovados — pago com cheque"
       }
-    },
-    "steps": {
-      "finish": "Lançar e concluir",
-      "gl": "Prévia contábil e lançamento",
-      "period": "Escopo",
-      "readiness": "Preparo",
-      "review": "Revisar holerites"
     }
   },
+  "links": {
+    "paySchedules": "Cronogramas de folha",
+    "payComponents": "Componentes"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# conta de controle da folha está} other {# contas de controle da folha estão}} sem configurar:",
+    "openSettings": "Abrir configuração da folha"
+  },
+  "runType": {
+    "regular": "Normal",
+    "bonus": "Bônus fora do ciclo",
+    "termination": "Acerto final"
+  },
+  "newRun": {
+    "runType": "Tipo de folha",
+    "runTypeHint": {
+      "regular": "A folha normal do cronograma: salário, horas aprovadas, componentes e descontos recorrentes.",
+      "bonus": "Pagamento fora do ciclo para bônus e comissões. Sem salário, horas ou descontos recorrentes; os proventos são tributados pelo método de bônus.",
+      "termination": "Pagamento final para funcionários desligados. Inclui o pagamento do saldo de férias acumulado."
+    },
+    "employees": "Funcionários pagos",
+    "employeesHint": "Uma folha final paga e zera todos os bancos acumulados, por isso abrange apenas os funcionários indicados aqui.",
+    "noTerminated": "Nenhum funcionário deste cronograma tem data de desligamento registrada. Registre-a primeiro no funcionário — sem ela não há como calcular um acerto final.",
+    "schedule": "Cronograma de folha",
+    "noSchedules": "Sem cronogramas de folha ativos",
+    "create": "Nova folha",
+    "description": "Confirme o período desta folha. O próximo período do cronograma já vem preenchido; altere as datas para uma folha fora do ciclo ou retroativa.",
+    "periodStart": "Início do período",
+    "periodEnd": "Fim do período",
+    "payDateHint": "A data em que os funcionários são pagos. As alíquotas obrigatórias são apuradas a partir desta data.",
+    "invalidWindow": "O fim do período deve ser igual ou posterior ao início, e a data de pagamento igual ou posterior ao fim do período.",
+    "notBegun": "Este período começa em {date} e ainda não começou. Escolha um período em curso ou concluído."
+  },
+  "columns": {
+    "number": "Número",
+    "schedule": "Cronograma",
+    "period": "Período",
+    "payDate": "Data de pagamento",
+    "status": "Status",
+    "gross": "Bruto",
+    "net": "Líquido",
+    "employees": "Funcionários"
+  },
+  "status": {
+    "draft": "Rascunho",
+    "calculated": "Calculada",
+    "committed": "Lançada",
+    "posted": "Contabilizada",
+    "void": "Anulada"
+  },
+  "empty": {
+    "runs": "Nenhuma folha ainda. Crie uma a partir de um cronograma de folha para começar.",
+    "profiles": "Nenhum perfil de folha ainda. Adicione um para incluir um funcionário nas folhas."
+  },
+  "run": {
+    "title": "Folha",
+    "employerCost": "Custo do empregador",
+    "calculate": "Calcular",
+    "commit": "Lançar",
+    "post": "Contabilizar",
+    "calculateDone": "Folha calculada.",
+    "commitDone": "Folha lançada.",
+    "postDone": "Folha contabilizada.",
+    "empty": "Sem holerites. Calcule a folha para gerá-los.",
+    "lineKind": {
+      "earning": "Provento",
+      "deduction": "Desconto",
+      "employer_contribution": "Empregador"
+    },
+    "stub": {
+      "employee": "Funcionário",
+      "tax": "Imposto",
+      "lines": "Linhas da folha",
+      "trace": "trilha {engine}"
+    },
+    "submitApproval": "Enviar para aprovação",
+    "approvalSubmitted": "Enviada para aprovação com o dossiê de evidências",
+    "approvalNotRequired": "Nenhuma política de aprovação se aplica às folhas",
+    "approvalPending": "Aguardando aprovação ({count} pendentes) — lançamento e contabilização bloqueados",
+    "printSet": "Jogo de impressão (somente impressão)",
+    "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail"
+  },
+  "profiles": {
+    "addEmployee": "Funcionário sem perfil",
+    "new": "Adicionar perfil",
+    "saved": "Perfil salvo.",
+    "editorDescription": "Dados da TD1, cronograma, isenções e política de férias deste funcionário.",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "columns": {
+      "employee": "Funcionário",
+      "schedule": "Cronograma",
+      "province": "Província",
+      "basis": "Base",
+      "claims": "Deduções (fed./prov.)",
+      "vacation": "Férias",
+      "status": "Status"
+    },
+    "basis": {
+      "hourly": "Horista",
+      "salary": "Mensalista"
+    },
+    "vacation": {
+      "accrue": "Acumular",
+      "pay_each_period": "Pagar a cada período"
+    },
+    "fields": {
+      "schedule": "Cronograma de folha",
+      "province": "Província do emprego",
+      "labourJurisdiction": "Jurisdição trabalhista",
+      "payBasis": "Base de pagamento",
+      "additionalTax": "Imposto adicional por período",
+      "federalClaimCode": "Código de dedução federal",
+      "federalClaimAmount": "Valor de dedução federal",
+      "provincialClaimCode": "Código de dedução provincial",
+      "provincialClaimAmount": "Valor de dedução provincial",
+      "claimAmountHint": "Substitui o código de dedução",
+      "vacationPercent": "Percentual de férias",
+      "vacationMethod": "Método de férias",
+      "cppExempt": "Isento de CPP",
+      "eiExempt": "Isento de EI",
+      "taxExempt": "Isento de imposto de renda",
+      "isActive": "Ativo",
+      "country": "País",
+      "state": "Estado do emprego",
+      "filingStatus": "Estado civil fiscal (W-4, etapa 1c)",
+      "dependentCredits": "Créditos por dependentes e outros, anual (W-4, etapa 3)",
+      "otherIncomeAnnual": "Outras rendas, anual (W-4, etapa 4a)",
+      "deductionsAnnual": "Deduções, anual (W-4, etapa 4b)",
+      "multipleJobs": "Múltiplos empregos / cônjuge trabalha (W-4, etapa 2)",
+      "w4Pre2020": "W-4 arquivada é de 2019 ou anterior",
+      "w4Allowances": "Cotas de retenção (W-4 pré-2020)",
+      "ficaExempt": "Isento de FICA",
+      "futaExempt": "Isento de FUTA/SUI",
+      "fitExempt": "Isento de imposto de renda federal (W-4 \"Isento\")",
+      "sin": "SIN / SSN",
+      "sinPlaceholder": "9 dígitos. Armazenado sob sigilo e nunca mais exibido.",
+      "filingAccount": "Conta de declaração",
+      "stubDelivery": "Entrega do holerite",
+      "paymentMethod": "Pago por"
+    },
+    "country": {
+      "CA": "Canadá",
+      "US": "Estados Unidos"
+    },
+    "filingStatus": {
+      "single": "Solteiro ou casado com declaração separada",
+      "married_joint": "Casado com declaração conjunta",
+      "head_household": "Chefe de família"
+    },
+    "loading": "Carregando perfil da folha…",
+    "loadFailed": "Não foi possível carregar o perfil da folha.",
+    "noSchedules": "Crie um cronograma de folha antes de configurar os perfis.",
+    "openSchedules": "Abrir cronogramas de folha",
+    "filingAccountDefault": "Conta padrão",
+    "stubDelivery": {
+      "email": "E-mail",
+      "print": "Impresso",
+      "both": "E-mail e impresso"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "Da província do emprego",
+      "help": "A jurisdição trabalhista cujas normas regem este vínculo — seu calendário de feriados legais e sua fórmula de pagamento de feriados. Mantenha “da província do emprego”, que vale para quase todos os vínculos; altere apenas quando outra jurisdição trabalhista regular o empregador de registro, como um empregador sob regulação federal. Não muda a retenção, que segue sempre a província do emprego."
+    },
+    "paymentMethod": {
+      "eft": "Depósito direto",
+      "cheque": "Cheque",
+      "help": "Como este funcionário é pago. Mantenha o padrão do funcionário, salvo se esta pessoa for paga de forma diferente das demais — em cheque para quem não tem dados bancários registrados, por exemplo. A folha divide o dia de pagamento entre os dois meios e financia cada um separadamente.",
+      "inherit": "Usar o padrão do funcionário"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "Configurar a folha",
+      "description": "Uma primeira execução guiada: pacotes de país, contas de controle, um cronograma de folha, fornecedores de recolhimento e meios de pagamento — as mesmas verificações que a folha exige antes de calcular.",
+      "start": "Configurar a folha",
+      "relaunch": "Assistente de configuração",
+      "missing": "{count, plural, one {# item obrigatório} other {# itens obrigatórios}} ainda por configurar."
+    },
+    "back": "Voltar",
+    "next": "Próximo",
+    "close": "Fechar",
+    "finish": "Concluir configuração",
+    "packs": {
+      "title": "Instale seus pacotes de país",
+      "description": "Um pacote é o motor obrigatório de uma jurisdição: seu cálculo de retenções, componentes de remuneração, feriados e declarações.",
+      "note": "Instalar um pacote cria seus componentes obrigatórios de remuneração e ativa o motor de retenção da jurisdição. Componentes existentes nunca são sobrescritos, e um pacote pode ser adicionado depois executando este assistente de novo."
+    },
+    "accounts": {
+      "title": "Contas de controle",
+      "description": "Onde salários e líquido lançam, e a conta de passivo por trás de cada retenção obrigatória declarada pelos pacotes instalados.",
+      "wageExpenseHelp": "A conta de despesa a debitar pelo salário bruto ao lançar a folha.",
+      "netPayHelp": "A conta de passivo a creditar pelo líquido até que os valores saiam do banco no dia de pagamento.",
+      "slotHelp": "A conta de passivo onde esta retenção obrigatória acumula até ser recolhida."
+    },
+    "schedule": {
+      "title": "Cronograma de folha",
+      "description": "O calendário de pagamentos: com que frequência se paga e quais fins de período ancoram o ciclo.",
+      "addAnother": "Criar outro cronograma",
+      "created": "Cronograma de folha “{name}” criado.",
+      "name": "Nome",
+      "nameHelp": "Como este calendário aparece nas folhas e nos perfis — ex.: “Quinzenal — toda a equipe”.",
+      "namePlaceholder": "Quinzenal — toda a equipe",
+      "frequency": "Frequência",
+      "frequencyHelp": "Com que frequência este calendário paga. Períodos por ano segue a tabela oficial da frequência.",
+      "periods": "Períodos por ano",
+      "periodsHelp": "A quantidade oficial de períodos com que o motor de retenção anualiza — 52 semanal, 26 quinzenal, 24 duas vezes ao mês, 12 mensal.",
+      "anchor": "Fim de período âncora",
+      "anchorHelp": "Qualquer data real de fim de período neste calendário; todos os demais períodos são projetados para frente e para trás a partir dela.",
+      "noPermission": "Criar cronogramas de folha exige a permissão de Configuração. Peça a um administrador para adicionar um na aba Cronogramas de folha e continue."
+    },
+    "vendors": {
+      "title": "Fornecedores de recolhimento",
+      "description": "O fornecedor para o qual cada órgão é recolhido, conforme declarado pelos pacotes instalados.",
+      "help": "Os valores retidos acumulam neste fornecedor, de modo que o recolhimento gera um contas a pagar normal ao órgão.",
+      "note": "Fornecedores são cadastros comuns — crie o órgão em Entidades → Fornecedores primeiro, se ainda não existir, e selecione-o aqui."
+    },
+    "rails": {
+      "title": "Meios de pagamento",
+      "description": "Como o líquido sai do banco no dia de pagamento: arquivos de depósito direto e o que acontece quando um funcionário em EFT não tem dados bancários.",
+      "eftTitle": "Perfis de origem EFT",
+      "eftNone": "Ainda não há perfil de origem apto para folha. Arquivos de depósito direto exigem um; até lá, os funcionários recebem em cheque.",
+      "needsConfig": "dados de origem ausentes",
+      "manageProfiles": "Gerencie os perfis de origem em Operações de pagamento"
+    },
+    "review": {
+      "title": "Revisar e concluir",
+      "description": "Como está a folha desta organização e o que ainda impediria uma folha.",
+      "packsLabel": "Pacotes de país",
+      "scheduleLabel": "Cronogramas de folha",
+      "remainingTitle": "Ainda por resolver",
+      "allClear": "Toda a configuração obrigatória está pronta. A folha já pode calcular.",
+      "seedNote": "Concluir reexecuta a criação dos componentes obrigatórios de cada pacote instalado — idempotente, e componentes existentes nunca são sobrescritos."
+    },
+    "applying": {
+      "title": "Concluindo a configuração da folha…",
+      "description": "Criando componentes obrigatórios."
+    },
+    "done": {
+      "title": "Folha pronta",
+      "description": "Adicione funcionários e seus perfis de folha e inicie a primeira folha."
+    }
+  },
+  "settingsPage": {
+    "title": "Folha de pagamento",
+    "description": "Instale pacotes de país, configure as contas de lançamento e gerencie cronogramas, componentes e acordos sindicais.",
+    "saved": "Salvo.",
+    "save": "Salvar",
+    "accounts": {
+      "title": "Contas de controle",
+      "description": "Onde salários, encargos patronais e líquido lançam. As contas de retenção obrigatória são configuradas por pacote de país abaixo."
+    },
+    "posting": {
+      "title": "Lançamentos",
+      "description": "Como os salários por hora chegam ao razão e a quem as retenções obrigatórias são recolhidas."
+    },
+    "wagesTo": {
+      "expense": "Despesa com salários (com rateio por projeto)",
+      "laborClearing": "Compensação de mão de obra (zera custo-padrão)",
+      "help": "A compensação de mão de obra zera o custo-padrão lançado na aprovação das horas; exige a conta de controle de compensação de mão de obra do Custeio de mão de obra."
+    },
+    "fields": {
+      "wageExpenseAccountId": "Despesa com salários",
+      "burdenExpenseAccountId": "Despesa com encargos patronais",
+      "netPayAccountId": "Salários líquidos a pagar",
+      "cppPayableAccountId": "CPP a recolher",
+      "eiPayableAccountId": "EI a recolher",
+      "taxPayableAccountId": "Imposto de renda a recolher",
+      "vacationPayableAccountId": "Férias a pagar",
+      "wagesTo": "Salários lançam em",
+      "craRemittancePartyId": "Fornecedor de recolhimento (CRA)",
+      "rqRemittancePartyId": "Fornecedor de recolhimento (Revenu Québec)",
+      "rqRemittancePartyIdHelp": "Fornecedor faturado pelos descontos na fonte de Quebec recolhidos no formulário TPZ-1015.R — QPP, QPP2 e QPIP de funcionário de QC vêm para cá, nunca para o fornecedor da CRA."
+    },
+    "tabsAria": "Seções da configuração da folha",
+    "groups": {
+      "foundations": "Bases",
+      "earnings": "Pagamento e proventos",
+      "entitlements": "Bancos e direitos",
+      "payday": "Dia de pagamento"
+    },
+    "payday": {
+      "eftTitle": "EFT e arquivos bancários",
+      "eftDescription": "Arquivos de depósito direto partem de um perfil de origem apto para folha. Perfis são gerenciados em Operações de pagamento; este painel mostra a situação.",
+      "eftNone": "Ainda não há perfil de origem apto para folha. Até configurar um, funcionários em depósito direto dependem do pagamento em cheque.",
+      "eftManage": "Gerencie os perfis de origem em Operações de pagamento",
+      "eftNeedsConfig": "dados de origem ausentes"
+    },
+    "tabs": {
+      "packs": "Pacotes de país",
+      "accounts": "Contas e lançamentos",
+      "schedules": "Cronogramas de folha",
+      "components": "Componentes",
+      "union": "Sindicato",
+      "filing": "Contas de declaração",
+      "entitlements": "Planos de direitos",
+      "limits": "Limites de banco",
+      "service": "Cronogramas de tempo de serviço",
+      "derived": "Proventos derivados",
+      "derivedPreview": "Prévia da regra",
+      "holidays": "Feriados",
+      "holidayCalendar": "Calendário de feriados",
+      "payday": "Dia de pagamento",
+      "rates": "Alíquotas oficiais",
+      "workSchedules": "Escalas de trabalho"
+    },
+    "packs": {
+      "installed": "Instalado",
+      "install": "Instalar pacote",
+      "reinstall": "Recriar componentes",
+      "installSuccess": "Pacote de país instalado.",
+      "componentCount": "{count, plural, one {# componente obrigatório instalado} other {# componentes obrigatórios instalados}}",
+      "hint": "Instalar um pacote cria os componentes obrigatórios de remuneração e ativa o motor de retenção da jurisdição. Componentes existentes nunca são sobrescritos.",
+      "canada": {
+        "title": "Canadá",
+        "description": "Retenção obrigatória para folhas canadenses, recolhimentos e fechamento anual.",
+        "edition": "{edition, selectordinal, one {#ª} two {#ª} few {#ª} other {#ª}} edição (em vigor desde {effective})",
+        "engine": "Motor oficial CRA T4127 —",
+        "coverage": "Todas as províncias e territórios. Quebec: retenção de QPP, QPIP e imposto de renda federal e provincial incluída; o imposto provincial é administrado pela Revenu Québec.",
+        "components": "Componentes obrigatórios: salário-base, hora extra, bônus, férias, imposto de renda, CPP, EI, QPIP.",
+        "verified": "Conferido centavo a centavo com o PDOC da CRA."
+      },
+      "us": {
+        "title": "Estados Unidos",
+        "description": "Retenção federal obrigatória para folhas dos EUA: imposto de renda, Seguridade Social, Medicare e seguro-desemprego.",
+        "engine": "Motor do método percentual IRS Pub 15-T (2026) com W-4, etapas 2–4, e cotas pré-2020.",
+        "coverage": "49 estados atendidos: 40 motores de tributação mais os nove estados sem imposto (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC e NM recusados até saírem os gabaritos oficiais.",
+        "components": "Componentes obrigatórios: imposto de renda federal, Seguridade Social, Medicare (incl. Medicare adicional), FUTA e SUI.",
+        "config": "Alíquotas e bases do SUI variam por empregador conforme histórico. Informe as suas em Contas e lançamentos."
+      },
+      "uninstall": "Desinstalar",
+      "uninstallTitle": "Desinstalar pacote de país",
+      "uninstallConfirm": "Remover os componentes obrigatórios deste pacote e desligar seu motor de retenção? A desinstalação é bloqueada enquanto funcionários ou registros da folha dependerem do pacote.",
+      "uninstallSuccess": "Pacote de país desinstalado.",
+      "taxYears": "Tabelas oficiais carregadas para",
+      "taxYearDraft": "{year} · esboçado, não transcrito",
+      "taxYearNone": "nenhuma tabela oficial carregada"
+    },
+    "packAccounts": {
+      "none": "Nenhum pacote de país instalado ainda; não há contas de retenção obrigatória para configurar.",
+      "installLink": "Instalar um pacote de país",
+      "CA": {
+        "title": "Canadá — contas oficiais (CRA)",
+        "description": "Contas de passivo para os valores que o pacote CRA retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "income_tax": "Imposto de renda a recolher",
+          "qc_income_tax": "Imposto de renda de Quebec a recolher (Revenu Québec)",
+          "cpp": "CPP a recolher (inclui CPP2)",
+          "ei": "EI a recolher",
+          "qpip": "QPIP a recolher (Quebec)",
+          "vacation": "Férias a pagar",
+          "wcb": "Seguro de acidentes de trabalho a pagar (WCB/WSIB)",
+          "eht": "Imposto de saúde do empregador a recolher"
+        }
+      },
+      "US": {
+        "title": "Estados Unidos — contas federais oficiais",
+        "description": "Contas de passivo para os valores que o pacote dos EUA retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "fit": "Imposto de renda federal a recolher",
+          "fica": "FICA a recolher (Seguridade Social + Medicare)",
+          "futa": "FUTA a recolher",
+          "suta": "Seguro-desemprego estadual a recolher",
+          "state_income_tax": "Imposto de renda estadual a recolher",
+          "local_income_tax": "Imposto de renda local a recolher"
+        }
+      },
+      "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
+    },
+    "usConfig": {
+      "title": "Alíquotas de desemprego",
+      "description": "FUTA e seguro-desemprego estadual são pagos pelo empregador. As alíquotas do SUI variam por empregador conforme histórico; informe-as aqui, nunca se presume valor.",
+      "futaRate": "Alíquota efetiva do FUTA",
+      "futaRateHelp": "Em decimal: 0,006 é o padrão de 0,6% após o crédito estadual integral. Aumente para estados com redução de crédito.",
+      "suiTitle": "Seguro-desemprego estadual (SUI)",
+      "suiHelp": "Uma linha por estado onde emprega: sua alíquota fixada em decimal (0,027 = 2,7%) e a base salarial tributável do estado.",
+      "suiState": "Estado",
+      "suiRate": "Alíquota",
+      "suiWageBase": "Base salarial",
+      "addState": "Adicionar estado",
+      "removeState": "Remover"
+    },
+    "caConfig": {
+      "title": "Encargos patronais da folha",
+      "description": "Tributos pagos pelo empregador que o pacote do CA apropria a cada folha: prêmios do seguro de acidentes de trabalho e o Imposto de Saúde do Empregador de Ontário.",
+      "ehtEnabled": "Apropriar o Imposto de Saúde do Empregador de Ontário (EHT)",
+      "ehtRate": "Alíquota do EHT (%)",
+      "ehtRateHelp": "Em percentual: 1,95 é a alíquota máxima de Ontário. Sua alíquota depende da folha total de Ontário.",
+      "ehtExemption": "Isenção anual",
+      "ehtExemptionHelp": "Remuneração de Ontário isenta a cada ano ($1.000.000 para a maioria dos empregadores privados elegíveis; empregadores associados dividem uma isenção).",
+      "wcbNote": "Alíquotas do seguro de acidentes de trabalho (WCB/WSIB) e o máximo avaliável anual são definidos por classe de alíquota nos grupos de seguro, em Pessoas."
+    },
+    "stubPassword": {
+      "title": "Senha do holerite por e-mail",
+      "description": "Criptografe os holerites enviados por e-mail e derive a senha de cada funcionário de uma regra que você divulga à equipe.",
+      "enabled": "Criptografar holerites enviados por e-mail",
+      "unavailable": "Criptografia de PDF indisponível neste servidor — a ferramenta qpdf não está instalada.",
+      "expression": "Regra de senha",
+      "expressionHelp": "Elementos: {surname}, {givenName}, {employeeNumber} (adicione :3 para os três primeiros caracteres) e {dob} com um formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Adicione |upper ou |lower para mudar maiúsculas/minúsculas. Exemplo: {surname:3|upper}{dob:MMDDYYYY}."
+    },
+    "derivedPreview": {
+      "title": "Prévia de regra de proventos derivados",
+      "description": "Veja quais funcionários e dias uma regra atingiria, e quanto pagaria, antes de ativá-la.",
+      "rule": "Regra",
+      "selectRule": "Selecione uma regra…",
+      "from": "Início do período",
+      "to": "Fim do período",
+      "noRules": "Nenhuma regra de proventos derivados configurada ainda.",
+      "pickRule": "Escolha uma regra para ver a prévia do período.",
+      "enabled": "Ativada",
+      "disabled": "Ainda não ativada",
+      "employeesPaid": "Funcionários pagos",
+      "employee": "Funcionário",
+      "jobTitle": "Cargo",
+      "day": "Dia",
+      "project": "Projeto",
+      "quantity": "Unidades",
+      "amount": "Valor",
+      "total": "Total",
+      "empty": "Esta regra nada paga no período selecionado.",
+      "grossEstimated": "Esta regra paga um percentual do bruto. A prévia estima o bruto a partir das horas aprovadas e do salário vigente; o cálculo da folha é que vale.",
+      "excludedTitle": "Excluídos por cargo",
+      "excludedDescription": "Estes funcionários ficam de fora pela lista de exclusão da regra — a exclusão que ninguém mais precisa lembrar.",
+      "coverageTitle": "Esta regra ainda não consegue fechar o mês",
+      "coverageBody": "Algumas apropriações de equipamento do mês fechado não registram qual operador usou a unidade, então o incentivo não sabe a quem é devido. Ele se recusa a pagar pelas apropriações atribuídas por acaso, o que pagaria a menor. Registre o operador nessas apropriações ou restrinja esta regra para deixá-las de fora.",
+      "coverageUnattributed": "apropriações sem operador"
+    },
+    "paymentMethods": {
+      "title": "Como os salários são pagos",
+      "description": "Funcionário sem dados bancários aprovados recebe em cheque. Isto decide o que acontece quando alguém em depósito direto não tem dados.",
+      "fallback": "Pagar em cheque quando faltarem dados de depósito direto",
+      "fallbackOn": "A folha continua e o funcionário entra no lote de cheques, com um aviso na etapa de preparo.",
+      "fallbackOff": "A folha é bloqueada até o funcionário ter dados bancários aprovados ou migrar para cheque."
+    },
+    "holidayCalendar": {
+      "title": "Calendário de feriados legais",
+      "description": "Os dias que esta jurisdição observa, com suas escolhas aplicadas. Dias legais vêm do pacote de país e não podem ser desligados; dias opcionais e da empresa configuram-se na aba Feriados.",
+      "jurisdiction": "Jurisdição",
+      "year": "Ano",
+      "citation": "Fonte",
+      "date": "Observado",
+      "holiday": "Feriado",
+      "statutoryDate": "Cai em",
+      "source": "Fonte",
+      "paid": "Pago",
+      "statutory": "Legal",
+      "elected": "Opcional — escolhido",
+      "company": "Empresa",
+      "yes": "Sim",
+      "unpaid": "Fechamento não remunerado",
+      "empty": "Nenhum feriado observado neste ano.",
+      "noMandate": "Esta jurisdição não exige pagamento de feriados legais; o calendário orienta só fechamentos e contagem de dias úteis. Folgas ainda podem ser remuneradas pela sua política.",
+      "payRule": "Como se calcula o pagamento de um feriado",
+      "regularWages": "salário normal",
+      "overtime": "hora extra",
+      "vacationPay": "pagamento de férias",
+      "priorHolidayPay": "pagamento de feriado anterior",
+      "workSchedules": "Escalas de trabalho",
+      "normalDay": "o salário de um dia normal de trabalho, pela escala registrada do funcionário",
+      "normalDayStandardHours": "para funcionários com ao menos a jornada padrão da jurisdição, ",
+      "normalDayOtherwise": "Caso contrário",
+      "beforeTheDay": "antes do feriado",
+      "beforeTheWeek": "antes da semana do feriado",
+      "daysWorked": "dias trabalhados nele",
+      "daysWorkedOrEarned": "dias trabalhados ou com salário ganho",
+      "daysEntitledToPay": "dias em que o funcionário foi pago ou tinha direito a pagamento"
+    },
+    "statHolidayPay": {
+      "title": "Pagamento de feriados legais",
+      "description": "Calcula o pagamento de feriados legais e adicionais de feriado trabalhado a cada folha, pela fórmula declarada pela jurisdição do funcionário. Funcionários de jurisdição sem fórmula declarada são recusados nominalmente quando há feriado no período.",
+      "enabled": "Calcular pagamento de feriados legais"
+    },
+    "rates": {
+      "title": "Alíquotas oficiais",
+      "description": "Alíquotas que nenhuma publicação fornece ou que órgãos publicam por região ou conta registrada. Todo o resto — faixas, máximos de contribuição, valores de crédito — vem do pacote de país e não se edita aqui.",
+      "noPacks": "Nenhum pacote instalado prevê alíquota oficial informada pelo empregador. Instale um pacote na aba Pacotes de país.",
+      "tablesLoaded": "Tabelas oficiais carregadas para",
+      "draftEdition": "esboçado, não transcrito",
+      "notLoaded": "não carregado",
+      "year": "Ano fiscal",
+      "yearHelp": "Alíquotas oficiais valem para um ano fiscal — um aviso de alíquota estadual, uma determinação de redução de crédito, uma isenção provincial. Alíquotas de um ano nunca reinterpretam a folha de outro ano.",
+      "add": "Adicionar alíquota",
+      "remove": "Remover",
+      "empty": "Nenhuma alíquota oficial informada para este ano.",
+      "gapsTitle": "Não configurado para este ano",
+      "allAccounts": "Todas as contas",
+      "regionHelp": "A região a que a alíquota se aplica. Alíquota de uma região nunca se aplica a outra.",
+      "accountHelp": "Esta alíquota pertence a uma conta registrada: um empregador com duas contas numa região tem duas alíquotas. Deixe em Todas as contas para usar um valor em todas as contas da região.",
+      "scope": {
+        "org": "Empregador inteiro",
+        "region": "Por região",
+        "subRegion": "Por jurisdição tributária",
+        "account": "Por conta de declaração"
+      },
+      "columns": {
+        "levy": "Alíquota",
+        "scope": "Abrangência",
+        "region": "Região",
+        "subRegion": "Jurisdição tributária",
+        "account": "Conta de declaração",
+        "values": "Valores",
+        "country": "Pacote de país"
+      },
+      "subRegionHelp": "A jurisdição tributária dentro da região — um código PSD da Pensilvânia, um município de Ohio, uma cidade de Michigan. Cada uma fixa sua alíquota, então cada uma se informa separada; jurisdição sem alíquota registrada recusa a folha nominalmente em vez de reter zero."
+    },
+    "workSchedules": {
+      "title": "Escalas de trabalho",
+      "description": "As horas e os dias que cada funcionário normalmente trabalha. Várias jurisdições calculam o pagamento de feriados legais a partir disto — o salário de um dia normal de trabalho — e se recusam a calcular em vez de presumir um dia de oito horas para quem não tem escala registrada.",
+      "add": "Nova escala",
+      "editTitle": "Escala de trabalho",
+      "drawerDescription": "Vale da data inicial até ser substituída ou encerrada. O pagamento de feriado de um período passado resolve-se sempre pela escala vigente então, nunca pela de hoje.",
+      "empty": "Nenhuma escala de trabalho ainda.",
+      "columns": {
+        "appliesTo": "Aplica-se a",
+        "pattern": "Padrão",
+        "effectiveFrom": "Em vigor",
+        "status": "Status"
+      },
+      "scope": {
+        "organization": "Todos",
+        "employee": "Um funcionário",
+        "jobTitle": "Cargo",
+        "trade": "Ofício",
+        "department": "Departamento",
+        "subsidiary": "Subsidiária"
+      },
+      "pattern": {
+        "cycle": "Um padrão repetitivo",
+        "cycleHint": "Um ciclo de dias que se repete — sete dias para uma semana comum, catorze para uma quinzena comprimida, oito para um rodízio de quatro por quatro.",
+        "varies": "Horário variável",
+        "variesHint": "Sem jornada regular; as horas são definidas período a período. É uma resposta real, não uma lacuna — várias jurisdições pagam o funcionário de horário variável por fórmula diferente, e registrá-lo é o que permite calcular."
+      },
+      "summary": {
+        "cycle": "{hours} horas em {days} dias por {cycle}",
+        "week": "semana",
+        "cycleDays": "ciclo de {count} dias",
+        "total": "{hours} horas em {days} dias úteis por ciclo."
+      },
+      "fields": {
+        "name": "Nome",
+        "namePlaceholder": "Tempo integral, segunda a sexta",
+        "appliesTo": "Aplica-se a",
+        "selectEmployee": "Escolha um funcionário",
+        "selectScope": "Escolha um",
+        "effectiveFrom": "Em vigor desde",
+        "effectiveTo": "Em vigor até",
+        "pattern": "Padrão",
+        "cycleDays": "Duração do ciclo (dias)",
+        "cycleAnchor": "Primeiro dia do ciclo",
+        "hours": "Horas por dia"
+      },
+      "help": {
+        "scope": "A escala mais específica vence: um funcionário supera um cargo, que supera um ofício, depois departamento, subsidiária e todos. É a mesma ordem de salários e limites de direitos.",
+        "effectiveFrom": "Comparado com a DATA DE TRABALHO, nunca com hoje. Quem passa de tempo integral para parcial em março segue com o feriado de janeiro calculado pela escala integral.",
+        "pattern": "Se o funcionário tem padrão repetitivo ou nenhuma jornada regular. A diferença decide qual fórmula várias jurisdições usam.",
+        "cycleDays": "Em quantos dias o padrão se repete. Sete é a semana comum. Catorze expressa uma quinzena de nove dias; oito expressa um rodízio de quatro por quatro que deliberadamente nunca coincide com a semana.",
+        "cycleAnchor": "O dia a partir do qual o ciclo começa a contar. Para padrão semanal é um domingo, então os campos abaixo vão de domingo a sábado.",
+        "hours": "As horas normalmente trabalhadas em cada posição do ciclo. Deixe o dia em branco para folga. É destas horas que se calcula o pagamento do dia normal de trabalho em feriado: uma semana de quatro dias de dez horas vale dez horas por feriado, não oito."
+      },
+      "grid": {
+        "sunday": "Domingo",
+        "monday": "Segunda-feira",
+        "tuesday": "Terça-feira",
+        "wednesday": "Quarta-feira",
+        "thursday": "Quinta-feira",
+        "friday": "Sexta-feira",
+        "saturday": "Sábado",
+        "day": "Dia {n}",
+        "weekDay": "Semana {week} · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "Recolhimentos da folha",
+    "description": "Retenções acumuladas e encargos patronais por destino em um período. Criar uma fatura debita as contas de passivo e entrega o pagamento ao contas a pagar.",
+    "back": "Folha de pagamento",
+    "from": "De",
+    "to": "Até",
+    "apply": "Aplicar",
+    "empty": "Sem folhas lançadas com valores recolhíveis neste período.",
+    "unassigned": "Sem fornecedor de recolhimento atribuído",
+    "assignVendor": "Atribua um fornecedor nos componentes",
+    "context": "Folha bruta {gross} · {employees, plural, one {# funcionário} other {# funcionários}} no período",
+    "withheld": "Retido",
+    "employer": "Empregador",
+    "noAccount": "Sem conta de passivo",
+    "total": "Total a recolher",
+    "createBill": "Criar fatura de recolhimento",
+    "createAnother": "Criar outra fatura",
+    "billCreated": "Rascunho de fatura {number} criado. Revise e contabilize no contas a pagar.",
+    "dueOn": "Vence em {dueDate} · {authority}",
+    "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
+    "apLink": "abrir faturas de fornecedor"
+  },
   "yearEnd": {
+    "title": "Fechamento anual",
+    "description": "Toda declaração anual e trimestral prevista pelos pacotes de folha instalados, apurada a partir de holerites lançados — cada campo confere com as trilhas dos holerites.",
+    "noFilings": "Nenhuma declaração de fechamento de folha prevista para esta organização.",
     "cadence": {
       "annual": "Declarações anuais",
       "annualHelp": "Entregues uma vez por ano fiscal (T4, W-2, RL-1). O seletor de ano fiscal acima escolhe a população exibida.",
       "quarterly": "Declarações trimestrais",
       "quarterlyHelp": "Entregues uma vez por trimestre civil (formulário 941) — a tabela de população mostra uma linha por trimestre do ano fiscal selecionado."
+    }
+  },
+  "filings": {
+    "yearLabel": "Ano fiscal",
+    "rowCount": "{count, plural, =0 {Nenhuma linha} one {# linha} other {# linhas}}",
+    "notInstalled": "Pacote não instalado",
+    "emptyDefault": "Sem linhas para este ano.",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "Baixar PDF"
     },
-    "description": "Toda declaração anual e trimestral prevista pelos pacotes de folha instalados, apurada a partir de holerites lançados — cada campo confere com as trilhas dos holerites.",
-    "noFilings": "Nenhuma declaração de fechamento de folha prevista para esta organização.",
-    "title": "Fechamento anual"
+    "issue": {
+      "reason": "Motivo da emissão",
+      "reasonHelp": "O bloco 16 é a declaração do empregador do motivo da interrupção dos ganhos. Escolher um motivo inclui este funcionário no arquivo ROE Web; deixar em branco o mantém fora.",
+      "comment": "Comentário",
+      "notIncluded": "Fora do arquivo",
+      "included": "No arquivo — motivo {code}",
+      "commentRequired": "Comentário obrigatório para este código de motivo."
+    },
+    "lifecycle": {
+      "title": "Situação da declaração",
+      "statusColumn": "Situação",
+      "help": "Declaração emitida é prova do que se declarou ao órgão; nunca se sobrescreve: a correção é um novo artefato que a substitui, e o arquivo original segue baixável. Valores sempre se reapura dos holerites lançados — corrija os dados da folha e retifique.",
+      "history": "Histórico de declarações",
+      "recordOriginal": "Registrar como entregue",
+      "note": "Nota de entrega",
+      "notePlaceholder": "Como foi entregue (opcional)",
+      "notIssued": "Ainda não registrada como entregue.",
+      "issuedCount": "Artefatos emitidos",
+      "latest": "Mais recente",
+      "changedCount": "Alterados desde a entrega",
+      "absentCount": "Fora do razão",
+      "resurrectedCount": "Cancelados mas ainda no razão",
+      "slipsCovered": "Comprovantes cobertos",
+      "supersedes": "substitui",
+      "noArtifact": "Sem arquivo eletrônico — o retrato do comprovante abaixo é o registro.",
+      "correction": "Retificação",
+      "correctionForm": "Formulário de retificação",
+      "correctionHelp": "Retificar reafirma um comprovante que deveria existir; cancelar declara que ele nunca deveria ter existido. Valores se reapura dos holerites lançados — nunca se digitam por cima — então corrija os dados da folha e a retificação segue.",
+      "unfiledHelp": "Este comprovante não foi registrado como entregue; não há o que corrigir.",
+      "addedHelp": "Este comprovante surgiu após a entrega da declaração. Comprovante descoberto depois se entrega como original adicional, não como retificação, e isso não se produz aqui — entregue pelo serviço do próprio órgão.",
+      "absentHelp": "O razão da folha não produz mais este comprovante; não há o que reafirmar. Cancele-o para o órgão parar de cobrá-lo.",
+      "resurrectedHelp": "Este comprovante foi cancelado, mas o razão ainda o produz. Anule ou ajuste a folha de origem, ou a próxima declaração vai entregá-lo de novo.",
+      "box": "Quadro",
+      "field": "Campo",
+      "asFiled": "Como entregue",
+      "now": "Atual",
+      "redacted": "Alterado — valor não exibido",
+      "previewAmended": "Ver prévia da retificação",
+      "issueAmended": "Emitir retificação",
+      "previewCancelled": "Ver prévia do cancelamento",
+      "issueCancelled": "Cancelar este comprovante",
+      "status": {
+        "unfiled": "Não entregue",
+        "unchanged": "Entregue",
+        "changed": "Alterado desde a entrega",
+        "absent": "Fora do razão",
+        "withdrawn": "Cancelado",
+        "resurrected": "Cancelado mas ainda no razão"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "Todos que esta declaração cobre, com os valores que vai levar. Gere o arquivo só quando as linhas estiverem certas — declaração emitida é prova, e corrigi-la exige retificação em vez de edição.",
+      "issue": "Registrar como entregue",
+      "viewAll": "Ver tudo"
+    }
+  },
+  "separations": {
+    "title": "Desligamentos",
+    "description": "Declarações de desligamento previstas pelos pacotes instalados — devidas em dias após a interrupção dos ganhos, por evento de funcionário, não no fechamento anual.",
+    "noFilings": "Nenhuma declaração de desligamento prevista para esta organização.",
+    "run": {
+      "title": "Emitir {label}",
+      "help": "A declaração de desligamento vence em dias após a interrupção dos ganhos — emita-a por aqui, por funcionário, sem esperar o fechamento anual.",
+      "issue": "Revisar e emitir",
+      "viewAll": "Todos os desligamentos"
+    }
+  },
+  "register": {
+    "title": "Livro de folha",
+    "print": "Imprimir",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Outros descontos",
+    "totals": "Totais ({count, plural, one {# funcionário} other {# funcionários}})"
+  },
+  "entitlements": {
+    "title": "Bancos",
+    "hint": "Tempo bancado, férias e qualquer saldo que este funcionário deva de volta. Saldos são o razão de direitos — movem-se pela folha, nunca editando um número.",
+    "managePlans": "Gerenciar planos",
+    "noPlans": "Nenhum plano de direitos configurado nesta organização ainda.",
+    "noMovements": "Sem movimentações ainda.",
+    "overLimit": "Acima do limite",
+    "nearLimit": "Perto do limite",
+    "hoursSuffix": "h",
+    "hoursAtWage": "{hours} horas ao salário vigente de {wage}/h",
+    "worthToday": "Vale {amount} ao salário de hoje",
+    "owedBack": "Devido de volta ao empregador — recuperado dos próximos pagamentos.",
+    "limitLine": "Limite {limit} (definido por {scope})",
+    "plan": "Plano",
+    "amount": "Valor",
+    "source": "Origem",
+    "movementDate": "Data",
+    "movementKind": "Tipo",
+    "scope": {
+      "employee": "este funcionário",
+      "job_title": "cargo",
+      "trade": "ofício",
+      "department": "departamento",
+      "subsidiary": "pessoa jurídica",
+      "plan": "padrão do plano"
+    },
+    "kind": {
+      "opening": "Abertura",
+      "accrual": "Apropriação",
+      "bank_in": "Bancado",
+      "payout": "Pagamento",
+      "repayment": "Devolução",
+      "adjustment": "Ajuste"
+    }
+  },
+  "paymentMethod": {
+    "eft": "Depósito direto",
+    "cheque": "Cheque",
+    "inherit": "Usar o padrão do funcionário",
+    "help": "Mantenha o padrão para seguir o cadastro do funcionário: depósito direto quando houver dados bancários aprovados; caso contrário, cheque impresso."
+  },
+  "openingBalances": {
+    "title": "Saldos iniciais",
+    "description": "Tudo que cada funcionário traz do sistema de folha anterior: acumulado oficial do ano, os tetos anuais parcialmente usados e os saldos de férias e horas bancárias. Nada mais fornece isso; sem eles, todo teto e todo banco recomeçam do zero.",
+    "hint": "Copie do relatório de acumulados do provedor anterior na véspera do seu primeiro período aqui. Deixe em branco quem não teve pagamento seu neste ano.",
+    "yearLabel": "Ano fiscal",
+    "employee": "Funcionário",
+    "onlyMissing": "Somente funcionários sem valores trazidos",
+    "bulkImport": "Carga em lote de arquivo",
+    "export": "Exportar",
+    "entered": "Trazido",
+    "locked": "Bloqueado",
+    "lockedShort": "bloqueado",
+    "lockedBy": "Folha lançada",
+    "none": "nenhum",
+    "save": "Salvar",
+    "saving": "Salvando…",
+    "saved": "Saldos iniciais salvos.",
+    "saveFailed": "Nada foi salvo.",
+    "rejected": "Nada foi salvo — corrija estes primeiro.",
+    "empty": "Nenhum funcionário tem perfil de folha ativo ainda.",
+    "fields": {
+      "pensionableYtd": "Salários previdenciários / FICA",
+      "insurableYtd": "Salários seguráveis / desemprego",
+      "cppYtd": "Contribuições ao CPP",
+      "cpp2Ytd": "Contribuições ao CPP2",
+      "eiYtd": "Contribuições ao EI",
+      "qpipYtd": "Contribuições ao QPIP",
+      "taxableYtd": "Rendimentos tributáveis",
+      "taxYtd": "Imposto de renda retido",
+      "nonPeriodicYtd": "Bônus / rendimentos complementares",
+      "cpp2BonusYtd": "Contribuições CPP2 sobre bônus",
+      "qcCsbYtd": "Contribuições QPP adicionais sobre bônus",
+      "ficaWithheldYtd": "Imposto FICA retido",
+      "qpipEmployerYtd": "Contribuições QPIP do empregador",
+      "wcbAssessableYtd": "Rendimentos avaliáveis WCB"
+    },
+    "componentHelp": "Quanto do teto anual deste componente o funcionário já usou neste ano, no sistema de folha anterior. Sem isso, o teto recomeça do zero e o funcionário pode contribuir um segundo limite anual integral.",
+    "componentCap": "Teto anual",
+    "componentInertHelp": "Este componente não tem mais teto anual, então o valor abaixo não muda nada e não pode ser editado. Ele é mantido porque alguém o informou e um teto pode ser definido de novo.",
+    "entitlements": {
+      "title": "Saldos de bancos trazidos (férias, horas bancárias)",
+      "employee": "Funcionário",
+      "asOf": "Trazido em",
+      "asOfHelp": "A data de adoção do valor trazido. A folha só conta movimentações datadas até sua data de pagamento, então isto deve ser anterior à sua primeira folha aqui. Não é um ano fiscal: um banco tem um único saldo vitalício.",
+      "entered": "Trazido",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "saved": "Saldos de bancos salvos.",
+      "saveFailed": "Nada foi salvo.",
+      "rejected": "Nada foi salvo — corrija estes primeiro.",
+      "bulkImport": "Carga em lote de arquivo",
+      "export": "Exportar",
+      "empty": "Nenhum funcionário tem perfil de folha ativo ainda.",
+      "noPlans": "Nenhum plano de direitos configurado; não há banco para receber saldo.",
+      "configurePlans": "Configurar planos de direitos",
+      "lockedBy": "Folha lançada",
+      "blocked": "Pago em",
+      "blockedHint": "date o valor trazido após isso",
+      "legacyShort": "legado",
+      "legacyTitle": "Saldos de férias não migrados encontrados",
+      "legacyBody": "Estes funcionários têm saldo de férias na coluna antiga de saldos iniciais que nenhum banco mostra. É um passivo sem controle. Carregue-o aqui ou execute scripts/migrate-vacation-to-entitlements.ts para reconstituir todo o histórico.",
+      "legacyPrefill": "Copiá-los para a coluna Férias",
+      "moneyHelp": "O saldo trazido, em dinheiro. Bancos guardam o dinheiro da época em que foi ganho e exibem em horas ao salário vigente do funcionário.",
+      "hoursHelp": "O saldo trazido, em horas.",
+      "oweHelp": "Saldo que o FUNCIONÁRIO deve ao empregador, portanto negativo — informe −1200 para 1.200 pendentes. É recuperado dos próximos pagamentos até zerar exatamente."
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "Pessoa jurídica não pode processar folha",
+    "jurisdictionEmployee": "Jurisdição do funcionário diverge da entidade pagadora"
+  },
+  "parallelRun": {
+    "title": "Folha paralela",
+    "description": "Confira um período contra o sistema de folha que você está deixando, centavo a centavo. Importe o livro do provedor antigo, escolha a folha do mesmo período e compare.",
+    "compare": "Comparar",
+    "comparing": "Comparando…",
+    "compareFailed": "Não foi possível executar a comparação.",
+    "cleanToast": "Todos os valores conciliados exatamente.",
+    "toleranceToast": "Conciliado, com tolerância aplicada.",
+    "differencesToast": "Diferenças encontradas — abra a comparação.",
+    "importRegister": "Importar um livro",
+    "export": "Exportar",
+    "tolerances": "Tolerâncias",
+    "tolerancesDescription": "Cada componente compara exato por padrão. Adicione uma margem apenas onde o sistema antigo realmente arredonda diferente — ela aparece em toda comparação que a usar.",
+    "addTolerance": "Adicionar tolerância",
+    "toleranceSaved": "Tolerância salva.",
+    "noTolerances": "Nenhuma tolerância configurada — cada componente compara exato.",
+    "comparisonsTitle": "Comparações",
+    "noComparisons": "Nenhuma comparação executada ainda.",
+    "registersTitle": "Livros importados",
+    "noRegisters": "Nenhum livro anterior importado ainda. Comece em Importar um livro.",
+    "noRegistersRow": "Nada importado ainda.",
+    "registerDiscarded": "O livro importado foi descartado.",
+    "discard": "Descartar",
+    "openReport": "Abrir o relatório de conciliação",
+    "periodMismatch": "Estes dois lados cobrem datas de pagamento diferentes. Compará-los vai apontar diferenças que na verdade são divergência de período.",
+    "emptyRegister": "Este livro não tem funcionários. Comparar com ele resulta em “Nada foi comparado”, não em conciliação limpa.",
+    "unmappedWarning": "Colunas deste livro nunca mapeadas:",
+    "unmappedTitle": "Colunas de origem sem mapeamento",
+    "nothingCompared": "Nada foi comparado",
+    "toleranceTitle": "Tolerâncias em vigor",
+    "showMatches": "Mostrar iguais exatos",
+    "clearEmployee": "Todos os funcionários",
+    "cleanNote": "Todo valor comparado bateu no centavo, sem tolerância e sem coluna sem mapeamento.",
+    "noFindings": "Esta comparação não tem nenhum apontamento.",
+    "noExceptions": "Sem exceções — cada célula bateu exatamente.",
+    "loading": "Carregando…",
+    "saving": "Salvando…",
+    "exact": "exato",
+    "notPresent": "ausente",
+    "allMapped": "Tudo mapeado",
+    "matched": "bateu",
+    "differ": "diverge",
+    "oneSidedShort": "só de um lado",
+    "toleratedShort": "tolerado",
+    "employeesShort": "funcionários",
+    "amountsShort": "valores",
+    "rowsShort": "linha(s)",
+    "valuedRows": "tinha valor em",
+    "comparedOf": "comparados de",
+    "onRegister": "no livro",
+    "inRun": "na folha",
+    "fromColumn": "de",
+    "paid": "pago",
+    "vsOurs": "nosso",
+    "columns": {
+      "outcome": "Resultado",
+      "register": "Livro anterior",
+      "payRun": "Folha",
+      "compared": "Comparados",
+      "differences": "Diferenças",
+      "netDifference": "Diferença líquida",
+      "comparedAt": "Comparado em",
+      "loaded": "Carregado",
+      "stated": "Bruto / líquido informado",
+      "unmapped": "Colunas sem mapeamento",
+      "employee": "Funcionário",
+      "component": "Componente",
+      "priorSystem": "Sistema anterior",
+      "thisSystem": "Este sistema",
+      "difference": "Diferença",
+      "tolerance": "Tolerância",
+      "result": "Resultado"
+    },
+    "fields": {
+      "register": "Livro anterior",
+      "registerPlaceholder": "Selecione um livro…",
+      "payRun": "Nossa folha",
+      "payRunPlaceholder": "Selecione uma folha…",
+      "component": "Componente",
+      "componentPlaceholder": "Selecione…",
+      "tolerance": "Margem",
+      "reason": "Motivo"
+    },
+    "kinds": {
+      "earning": "Provento",
+      "deduction": "Desconto",
+      "employer_contribution": "Contribuição patronal",
+      "total": "Total informado"
+    },
+    "statuses": {
+      "clean": "Conciliado exatamente",
+      "clean_within_tolerance": "Conciliado dentro da tolerância",
+      "differences": "Diferenças a resolver",
+      "no_comparable_data": "Nada foi comparado"
+    },
+    "classes": {
+      "match": "Igual exato",
+      "within_tolerance": "Dentro da tolerância",
+      "difference": "Diferença",
+      "prior_only": "Só no sistema anterior",
+      "our_only": "Só aqui",
+      "employee_prior_only": "Funcionário fora da nossa folha",
+      "employee_our_only": "Funcionário fora do livro",
+      "unattributed": "Sem componente que explique"
+    },
+    "tiles": {
+      "gross": "Bruto",
+      "net": "Líquido",
+      "unattributed": "Líquido sem explicação",
+      "cells": "Células"
+    },
+    "help": {
+      "register": "Um livro importado do sistema de folha que você está deixando — um período, uma linha por funcionário. Carregue em Importação e exportação, recurso “Livro de folha anterior”, onde você mapeia os nomes de coluna do sistema antigo para os componentes desta folha.",
+      "payRun": "A folha de referência. Folhas calculadas valem: a folha paralela serve para provar os números antes de o dinheiro sair. Folha em rascunho não tem holerites e não pode ser comparada.",
+      "compared": "Funcionários presentes NOS DOIS lados, sobre o total de cada lado. Comparação que não comparou ninguém resulta em “Nada foi comparado”, nunca em acordo.",
+      "unmapped": "Colunas do seu arquivo que nenhum componente assumiu. Nada nelas é comparado, então um valor pode estar ali sem contar. Reimporte com elas mapeadas ou confirme que não têm dinheiro.",
+      "tolerance": "Cada componente compara exato salvo margem configurada por alguém. Toda margem em vigor aparece aqui e na comparação, porque uma tolerância invisível anularia o exercício.",
+      "unattributed": "A parte da diferença líquida que os componentes comparados não explicam. Qualquer valor diferente de zero significa que um montante moveu um total sem componente comparável por trás — quase sempre uma coluna de origem sem mapeamento.",
+      "toleranceSlot": "O componente ou um dos totais informados do livro. A tolerância é por funcionário, por período.",
+      "toleranceAmount": "Um valor absoluto, nunca percentual: percentual sobre base móvel é como a tolerância cresce sem se notar. Zero remove a margem.",
+      "toleranceReason": "Obrigatório. Aceitar parar de investigar uma diferença é uma decisão atribuível a alguém e a um motivo."
+    }
+  },
+  "workSchedules": {
+    "title": "Escalas de trabalho",
+    "description": "As horas e os dias que cada funcionário normalmente trabalha. Várias jurisdições calculam o pagamento de feriados legais a partir disto — o salário de um dia normal de trabalho — e se recusam a calcular em vez de presumir um dia de oito horas para quem não tem escala registrada.",
+    "add": "Nova escala",
+    "editTitle": "Escala de trabalho",
+    "drawerDescription": "Vale da data inicial até ser substituída ou encerrada. O pagamento de feriado de um período passado resolve-se sempre pela escala vigente então, nunca pela de hoje.",
+    "empty": "Nenhuma escala de trabalho ainda.",
+    "columns": {
+      "appliesTo": "Aplica-se a",
+      "pattern": "Padrão",
+      "effectiveFrom": "Em vigor",
+      "status": "Status"
+    },
+    "scope": {
+      "organization": "Todos",
+      "employee": "Um funcionário",
+      "jobTitle": "Cargo",
+      "trade": "Ofício",
+      "department": "Departamento",
+      "subsidiary": "Subsidiária"
+    },
+    "pattern": {
+      "cycle": "Um padrão repetitivo",
+      "cycleHint": "Um ciclo de dias que se repete — sete dias para uma semana comum, catorze para uma quinzena comprimida, oito para um rodízio de quatro por quatro.",
+      "varies": "Horário variável",
+      "variesHint": "Sem jornada regular; as horas são definidas período a período. É uma resposta real, não uma lacuna — várias jurisdições pagam o funcionário de horário variável por fórmula diferente, e registrá-lo é o que permite calcular."
+    },
+    "summary": {
+      "cycle": "{hours} horas em {days} dias por {cycle}",
+      "week": "semana",
+      "cycleDays": "ciclo de {count} dias",
+      "total": "{hours} horas em {days} dias úteis por ciclo."
+    },
+    "fields": {
+      "name": "Nome",
+      "namePlaceholder": "Tempo integral, segunda a sexta",
+      "appliesTo": "Aplica-se a",
+      "selectEmployee": "Escolha um funcionário",
+      "selectScope": "Escolha um",
+      "effectiveFrom": "Em vigor desde",
+      "effectiveTo": "Em vigor até",
+      "pattern": "Padrão",
+      "cycleDays": "Duração do ciclo (dias)",
+      "cycleAnchor": "Primeiro dia do ciclo",
+      "hours": "Horas por dia"
+    },
+    "help": {
+      "scope": "A escala mais específica vence: um funcionário supera um cargo, que supera um ofício, depois departamento, subsidiária e todos. É a mesma ordem de salários e limites de direitos.",
+      "effectiveFrom": "Comparado com a DATA DE TRABALHO, nunca com hoje. Quem passa de tempo integral para parcial em março segue com o feriado de janeiro calculado pela escala integral.",
+      "pattern": "Se o funcionário tem padrão repetitivo ou nenhuma jornada regular. A diferença decide qual fórmula várias jurisdições usam.",
+      "cycleDays": "Em quantos dias o padrão se repete. Sete é a semana comum. Catorze expressa uma quinzena de nove dias; oito expressa um rodízio de quatro por quatro que deliberadamente nunca coincide com a semana.",
+      "cycleAnchor": "O dia a partir do qual o ciclo começa a contar. Para padrão semanal é um domingo, então os campos abaixo vão de domingo a sábado.",
+      "hours": "As horas normalmente trabalhadas em cada posição do ciclo. Deixe o dia em branco para folga. É destas horas que se calcula o pagamento do dia normal de trabalho em feriado: uma semana de quatro dias de dez horas vale dez horas por feriado, não oito."
+    },
+    "grid": {
+      "sunday": "Domingo",
+      "monday": "Segunda-feira",
+      "tuesday": "Terça-feira",
+      "wednesday": "Quarta-feira",
+      "thursday": "Quinta-feira",
+      "friday": "Sexta-feira",
+      "saturday": "Sábado",
+      "day": "Dia {n}",
+      "weekDay": "Semana {week} · {day}"
+    }
+  },
+  "retro": {
+    "title": "Pagamento retroativo"
   }
 }
