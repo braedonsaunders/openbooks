@@ -239,7 +239,9 @@
       "total": "Total",
       "due": "Vence",
       "age": "Antigüedad (días)",
-      "bucket": "Rango"
+      "bucket": "Rango",
+      "currency": "Mon.",
+      "txnOpen": "Abierto (transacción)"
     },
     "buckets": {
       "current": "Corriente",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "Resumen",
-    "detail": "Detalle"
+    "detail": "Detalle",
+    "fromBase": "desde moneda base",
+    "fromTransaction": "desde moneda de transacción",
+    "inCurrency": "en {currency}",
+    "currency": "Moneda",
+    "convertFrom": "Convertir desde",
+    "baseOption": "Moneda base",
+    "transactionOption": "Moneda de transacción"
   },
   "cashFlow": {
     "title": "Estado de flujo de efectivo",

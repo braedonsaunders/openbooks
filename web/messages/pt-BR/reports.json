@@ -239,7 +239,9 @@
       "total": "Total",
       "due": "Vencimento",
       "age": "Idade (dias)",
-      "bucket": "Faixa"
+      "bucket": "Faixa",
+      "currency": "Moeda",
+      "txnOpen": "Em aberto (transação)"
     },
     "buckets": {
       "current": "A vencer",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "Resumo",
-    "detail": "Detalhe"
+    "detail": "Detalhe",
+    "fromBase": "a partir da moeda base",
+    "fromTransaction": "a partir da moeda da transação",
+    "inCurrency": "em {currency}",
+    "currency": "Moeda",
+    "convertFrom": "Converter de",
+    "baseOption": "Moeda base",
+    "transactionOption": "Moeda da transação"
   },
   "cashFlow": {
     "title": "Demonstração de Fluxo de Caixa",

@@ -239,7 +239,9 @@
       "total": "Total",
       "due": "Échéance",
       "age": "Ancienneté (jours)",
-      "bucket": "Tranche"
+      "bucket": "Tranche",
+      "currency": "Dev.",
+      "txnOpen": "Ouvert (transaction)"
     },
     "buckets": {
       "current": "Courant",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "Résumé",
-    "detail": "Détail"
+    "detail": "Détail",
+    "fromBase": "depuis la devise de base",
+    "fromTransaction": "depuis la devise de transaction",
+    "inCurrency": "en {currency}",
+    "currency": "Devise",
+    "convertFrom": "Convertir depuis",
+    "baseOption": "Devise de base",
+    "transactionOption": "Devise de transaction"
   },
   "cashFlow": {
     "title": "Tableau des flux de trésorerie",
