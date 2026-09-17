@@ -2089,6 +2089,10 @@
         "title": "Payment Terms",
         "description": "Net and early-payment discount terms for bills and invoices."
       },
+      "payment-cards": {
+        "title": "Corporate Cards",
+        "description": "Company-liability cards that fund expense-report lines. One row per card."
+      },
       "number-sequences": {
         "title": "Number Sequences",
         "description": "Control the prefix, next number, and length for each document or custom record. Custom-record sequences are created automatically. Gapless numbering means every number is accounted for with no skipped values."
@@ -2458,6 +2462,7 @@
       "taxTreatment": "Tax treatment",
       "expenseAccountId": "Expense account",
       "liabilityAccountId": "Liability account",
+      "holderPartyId": "Cardholder",
       "remittancePartyId": "Remittance vendor",
       "unionName": "Union",
       "localNumber": "Local number",
@@ -2635,6 +2640,8 @@
       "allocatedThrough": "Allocated through",
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
+      "network": "Network",
+      "lastFour": "Last four",
       "depreciationMethodId": "Depreciation method"
     },
     "fieldHelp": {

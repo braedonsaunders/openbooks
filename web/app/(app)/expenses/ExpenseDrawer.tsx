@@ -15,7 +15,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { add, cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import {
   DOCUMENT_CHANGED_AFTER_OPEN,
@@ -62,6 +62,11 @@ interface LineRow extends Record<string, unknown> {
   amount: string
   taxOverridden: boolean
   taxAmount: string
+  /** Who fronted the money (0171). Never empty in the editor: historical NULL
+   * lines display as out_of_pocket — the legacy behavior they posted under —
+   * and the clerk sees the value and can change it before saving, which is
+   * exactly the reclassification moment. The save API still requires it. */
+  settlementType: string
 }
 interface ExpensePayload {
   doc: Record<string, any>
@@ -95,6 +100,7 @@ const emptyLine = (): LineRow => ({
   amount: '',
   taxOverridden: false,
   taxAmount: '',
+  settlementType: 'out_of_pocket',
 })
 
 function positiveAmount(value: unknown): boolean {
@@ -111,6 +117,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     amount: l.amount != null ? String(l.amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
+    settlementType: l.settlement_type ?? 'out_of_pocket',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
@@ -153,6 +160,7 @@ export function ExpenseDrawer({
   initialMode = 'view',
   employees,
   accounts,
+  cards = [],
   taxCodes,
   taxGroups,
   departments,
@@ -170,6 +178,8 @@ export function ExpenseDrawer({
   initialMode?: DrawerMode
   employees: Opt[]
   accounts: Opt[]
+  /** Active corporate cards backing company-paid/personal lines (0171). */
+  cards?: Opt[]
   taxCodes: Opt[]
   taxGroups: Opt[]
   departments: Opt[]
@@ -212,6 +222,7 @@ export function ExpenseDrawer({
   const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
+  const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
@@ -233,10 +244,33 @@ export function ExpenseDrawer({
     catch { return '0.0000' }
   }
 
+  // Settlement split (0171, owner Q4): the clerk sees what the company owes
+  // the employee (reimbursable) beside what the employee owes the company
+  // (personal) even though the two settle separately — no auto-netting. Gross
+  // of tax, like the posted legs. Unparseable rows contribute nothing until
+  // fixed; the save-time validators still name them.
+  const splits = useMemo(() => {
+    let oop = '0'
+    let card = '0'
+    let personal = '0'
+    for (const row of rows) {
+      try {
+        if (!row.accountId || cmp(String(row.amount || '0'), '0') <= 0) continue
+        const gross = add(String(row.amount || '0'), lineTax(row))
+        if (row.settlementType === 'company_paid') card = add(card, gross)
+        else if (row.settlementType === 'personal') personal = add(personal, gross)
+        else oop = add(oop, gross)
+      } catch { /* contributes nothing until the row parses */ }
+    }
+    return { oop, card, personal }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
+
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
+      paymentCardId: paymentCardId || null,
       documentDate: documentDate || undefined,
       memo,
       extraDims,
@@ -253,6 +287,7 @@ export function ExpenseDrawer({
           taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
           taxOverridden: r.taxOverridden,
           taxAmount: r.taxOverridden ? r.taxAmount : null,
+          settlementType: r.settlementType,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
           extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
@@ -261,7 +296,7 @@ export function ExpenseDrawer({
           ),
         })),
     }),
-    [partyId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments],
+    [partyId, paymentCardId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -302,6 +337,7 @@ export function ExpenseDrawer({
   function resetForm(source: ExpensePayload) {
     const sourceDoc = source.doc
     setPartyId(sourceDoc.party_id ?? '')
+    setPaymentCardId(sourceDoc.payment_card_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
     setMemo(sourceDoc.memo ?? '')
     setCustomValues(sourceDoc.custom ?? {})
@@ -657,6 +693,21 @@ export function ExpenseDrawer({
         options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
       amount: { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
+      // Who fronted the money (0171). Required on every line: the save API
+      // refuses a line without one, so an unsettled line can never be saved
+      // by leaving the cell alone.
+      settlement_type: {
+        key: 'settlementType',
+        label: t('drawer.settlement.label'),
+        width: '150px',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'out_of_pocket', label: t('drawer.settlement.outOfPocket') },
+          { value: 'company_paid', label: t('drawer.settlement.companyPaid') },
+          { value: 'personal', label: t('drawer.settlement.personal') },
+        ],
+      },
       tax_amount: {
         key: 'taxAmount',
         label: t('drawer.columns.taxAmount'),
@@ -712,6 +763,10 @@ export function ExpenseDrawer({
     switch (placement.key) {
       case 'party_id':
         return <><Label>{override || tCommon('labels.employee')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={employees.map((employee) => ({ value: employee.id, label: employee.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('drawer.selectEmployeePlaceholder')} /> : <p className="text-sm">{doc.employee_name}</p>}</>
+      case 'payment_card_id': {
+        const cardLabel = cards.find((card) => card.id === (paymentCardId || doc.payment_card_id))?.display_name
+        return <><Label>{override || t('drawer.cardLabel')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: t('drawer.noCard') }, ...cards.map((card) => ({ value: card.id, label: card.display_name ?? '' }))]} value={paymentCardId} onChange={(value) => setPaymentCardId(value ?? '')} placeholder={t('drawer.cardPlaceholder')} /> : <p className="text-sm">{cardLabel ?? '—'}</p>}</>
+      }
       case 'document_date':
         return <><Label>{override || t('drawer.reportDate')}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'memo':
@@ -812,6 +867,15 @@ export function ExpenseDrawer({
               : null}
           </span>
           <span className="flex-1" />
+          {(cmp(splits.card, '0') !== 0 || cmp(splits.personal, '0') !== 0) && (
+            <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
+              {t('drawer.splits', {
+                oop: money(splits.oop),
+                card: money(splits.card),
+                personal: money(splits.personal),
+              })}
+            </span>
+          )}
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
             {t.rich('drawer.totals', {
               subtotal: money(totals.subtotal),
@@ -838,6 +902,19 @@ export function ExpenseDrawer({
               />
             ) : (
               <p className="text-sm">{doc.employee_name}</p>
+            )}
+          </div>
+          <div className={`${field} lg:col-span-2`}>
+            <Label>{t('drawer.cardLabel')}</Label>
+            {editable ? (
+              <SearchSelect
+                options={[{ value: '', label: t('drawer.noCard') }, ...cards.map((c) => ({ value: c.id, label: c.display_name ?? '' }))]}
+                value={paymentCardId}
+                onChange={(v) => setPaymentCardId(v ?? '')}
+                placeholder={t('drawer.cardPlaceholder')}
+              />
+            ) : (
+              <p className="text-sm">{cards.find((c) => c.id === (paymentCardId || doc.payment_card_id))?.display_name ?? '—'}</p>
             )}
           </div>
           <div className={field}>

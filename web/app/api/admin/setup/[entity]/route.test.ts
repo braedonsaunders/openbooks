@@ -707,3 +707,66 @@ test("intercompany pairs missing elimination flags answer a typed message, never
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+test("payment cards name an active employee and a liability account (0171)", { skip: !DB }, async () => {
+  // A card is a posting instrument: a holder who is not an employee, or a
+  // liability that is not a liability, must be refused at the Setup boundary
+  // — not discovered at posting time when the reimbursement is due.
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Card Setup Admin", "admin");
+  try {
+    const employeeId = randomUUID();
+    const vendorId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employeeId}, ${org.orgId}, 'employee', 'Card Holder', true, '{}'::jsonb),
+             (${vendorId}, ${org.orgId}, 'vendor', 'Card Vendor', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`);
+    const cardLiability = randomUUID();
+    const expenseAccount = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${cardLiability}, ${org.orgId}, '2050', 'Corporate Card Clearing', 'liability_card', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true),
+             (${expenseAccount}, ${org.orgId}, '6100', 'Travel', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    authenticate({ orgId: org.orgId, actorId });
+
+    const created = await POST(
+      postRequest("payment-cards", {
+        label: "Field card",
+        holderPartyId: employeeId,
+        liabilityAccountId: cardLiability,
+        isActive: true,
+      }),
+      call("payment-cards", {}),
+    );
+    assert.equal(created.status, 200);
+
+    const notEmployee = await POST(
+      postRequest("payment-cards", {
+        label: "Vendor card",
+        holderPartyId: vendorId,
+        liabilityAccountId: cardLiability,
+        isActive: true,
+      }),
+      call("payment-cards", {}),
+    );
+    assert.equal(notEmployee.status, 400);
+    assert.match(((await notEmployee.json()) as { error: string }).error, /active employee/);
+
+    const notLiability = await POST(
+      postRequest("payment-cards", {
+        label: "Expense card",
+        holderPartyId: employeeId,
+        liabilityAccountId: expenseAccount,
+        isActive: true,
+      }),
+      call("payment-cards", {}),
+    );
+    assert.equal(notLiability.status, 400);
+    assert.match(((await notLiability.json()) as { error: string }).error, /must be a liability account/);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

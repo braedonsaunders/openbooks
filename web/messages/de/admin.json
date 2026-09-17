@@ -2132,6 +2132,10 @@
         "title": "Zahlungsbedingungen",
         "description": "Netto- und Skontobedingungen für Eingangs- und Ausgangsrechnungen."
       },
+      "payment-cards": {
+        "title": "Firmenkarten",
+        "description": "Vom Unternehmen gehaftete Karten zur Finanzierung von Spesenzeilen. Eine Zeile pro Karte."
+      },
       "number-sequences": {
         "title": "Nummernkreise",
         "description": "Steuern Sie Präfix, nächste Nummer und Länge für jeden Beleg oder benutzerdefinierten Datensatz. Folgen für benutzerdefinierte Datensätze werden bei der ersten Nummernvergabe automatisch erstellt."
@@ -2615,6 +2619,7 @@
       "jurisdictionId": "Jurisdiktion",
       "level": "Ebene",
       "liabilityAccountId": "Verbindlichkeitskonto",
+      "holderPartyId": "Karteninhaber",
       "lienWaiverEnforcement": "Verzichtserklärungskontrolle",
       "localNumber": "Ortsgruppennummer",
       "minAggregateAmount": "Mindestgesamtgrenze",
@@ -2703,6 +2708,8 @@
       "allocatedThrough": "Zugeteilt bis",
       "dateBasis": "Datumsbasis",
       "unitsTotal": "Gesamteinheiten",
+      "network": "Netzwerk",
+      "lastFour": "Letzte vier",
       "depreciationMethodId": "Abschreibungsmethode"
     },
     "fieldHelp": {

@@ -1256,6 +1256,38 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // Corporate cards as first-class instruments (0171): each card names its
+    // holder and the single liability account it posts to, so expense reports
+    // can fund company-paid and personal lines through the header
+    // payment_card_id instead of hand-routing overrides per report. One row
+    // per physical card — including one row per employee when (as observed at
+    // a production tenant) the chart carries a liability account per cardholder. The network and
+    // last-four are free-text card detail, never an allow-list: no brand or
+    // product gets built-in treatment.
+    key: 'payment-cards',
+    table: 'payment_cards',
+    groupKey: 'accounting',
+    iconKey: 'payments',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'label',
+    hasActive: true,
+    columns: [
+      { key: 'label', kind: 'text' },
+      { key: 'holderPartyId', kind: 'ref', ref: 'employees' },
+      { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'label', kind: 'text', required: true },
+      { key: 'holderPartyId', kind: 'ref', ref: 'employees', required: true },
+      { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'network', kind: 'text' },
+      { key: 'lastFour', kind: 'text' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
     key: 'number-sequences',
     table: 'number_sequences',
     actorCols: true,
