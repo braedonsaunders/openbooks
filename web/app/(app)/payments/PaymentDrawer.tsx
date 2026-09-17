@@ -14,6 +14,7 @@ import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
+import { readDocumentActionResult } from '../../../components/document-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -167,6 +168,10 @@ export function PaymentDrawer({
   const [settlementRates, setSettlementRates] = useState<SettlementRateOption[]>([])
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  // A refused post must stay visible past its toast (F-t02-006): the typed
+  // refusal pins as a record-level alert until the next post, like the
+  // document drawer's action banner.
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // -- open items follow the selected party --------------------------------
   const firstParty = useRef(true)
@@ -326,18 +331,35 @@ export function PaymentDrawer({
 
   async function post() {
     setBusy(true)
-    const res = await fetch('/api/payments/post-with-applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Same revision evidence as the draft save: the route fences its
-      // final allocation write on this token and 409s a stale drawer.
-      body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))
-    else if (data.pendingApproval) toast.success(tCommon('actions.submitForApproval'))
-    else toast.success(t('toasts.posted', { side }))
-    setBusy(false)
+    setActionError(null)
+    try {
+      const res = await fetch('/api/payments/post-with-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Same revision evidence as the draft save: the route fences its
+        // final allocation write on this token and 409s a stale drawer.
+        body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
+      })
+      // A non-JSON refusal body must not throw past the toast and wedge the
+      // button busy: read through the shared action-result reader (F-t02-006
+      // posted a 422 with zero UI feedback from the bare res.json() here).
+      const result = await readDocumentActionResult(res)
+      if (!result.ok) {
+        const message = result.message ?? t('toasts.postFailed')
+        setActionError(message)
+        toast.error(message)
+      }
+      else if (result.pendingApproval) toast.success(tCommon('actions.submitForApproval'))
+      else toast.success(t('toasts.posted', { side }))
+    } catch {
+      const message = t('toasts.postFailed')
+      setActionError(message)
+      toast.error(message)
+    } finally {
+      // A rejected transport must not wedge the button on: without this,
+      // every later click silently dies on the stuck disabled button.
+      setBusy(false)
+    }
     router.refresh()
   }
 
@@ -594,6 +616,11 @@ export function PaymentDrawer({
       }
     >
       <div className="space-y-6 p-1">
+        {actionError ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {actionError}
+          </p>
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
