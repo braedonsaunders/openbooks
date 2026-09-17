@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
+import { confirmDialog } from "../../../lib/confirm";
 
 interface Schedule {
   id: string;
@@ -199,7 +200,15 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                           : s.status === "paused"
                             ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>{t("resume")}</Button>
                             : null}
-                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>{t("cancelSub")}</Button>}
+                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={async () => {
+                          const confirmed = await confirmDialog({
+                            title: t("cancelConfirmTitle"),
+                            message: t("cancelConfirmBody"),
+                            confirmLabel: t("cancelSub"),
+                            tone: "danger",
+                          })
+                          if (confirmed) post({ action: "updateSubscription", id: s.id, status: "canceled" })
+                        }}>{t("cancelSub")}</Button>}
                       </>
                     )}
                   </td>
