@@ -22,7 +22,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('./authz');
 const { customerData, customerProfitability } = await import('./analytics/customer-data');
@@ -44,39 +44,41 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {
     for (const mode of ['all', 'restricted', 'empty'] as const) {
       test(`Analytics subsidiary access ${surface} ${boundary}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-        const org = await createScratchOrg();
+        const org = await withBypass(() => createScratchOrg());
         try {
-          const actor = await createScratchUser(org.orgId, 'Analytics reviewer', 'analytics_reviewer');
-          const restriction = mode === 'all' ? { mode: 'all' } : { mode: 'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] };
-          await db.execute(sql`update app_roles set permissions='["reports.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='analytics_reviewer'`);
-          state.user = { id: actor, orgId: org.orgId, name: 'Analytics reviewer', email: 'analytics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-          const hidden = randomUUID();
-          await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Private entity','CAD','CA')`);
-          for (const [sub, amount, name] of [[org.subsidiaryId, '100', 'Visible'], [hidden, '999', 'PRIVATE-ANALYTICS-EVIDENCE']]) {
-            const party = randomUUID(), project = randomUUID();
-            await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${party},${org.orgId},'organization',${name},${sub})`);
-            await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${sub},${project},${name},${party},'active',true)`);
-            for (const kind of ['vendor_bill', 'customer_invoice', 'expense_report'] as const) {
-              const entry = randomUUID(), doc = randomUUID();
-              const total = kind === 'expense_report' ? sub === org.subsidiaryId ? '2' : '20' : amount;
-              const signed = kind === 'customer_invoice' ? '-'+total : total;
-              const account = kind === 'customer_invoice' ? org.accounts.revenue : org.accounts.cogs;
-              await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,due_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
-                values (${doc},${org.orgId},${kind},${doc},${org.date},${org.date},${org.date},${party},${sub},'CAD',${total},0,${total})`);
-              await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id)
-                values (${entry},${org.orgId},${org.bookId},${sub},${entry},${org.date},${org.periodId},'draft','manual',${doc})`);
-              await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,party_id,amount,currency,txn_amount,fx_rate)
-                values (${org.orgId},${entry},1,${account},${sub},${project},${party},${signed},'CAD',${signed},1),
-                (${org.orgId},${entry},2,${org.accounts.bank},${sub},${project},${party},-${signed}::numeric,'CAD',-${signed}::numeric,1)`);
-              await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
-              await db.execute(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`);
+          const actor = await withBypass(() => createScratchUser(org.orgId, 'Analytics reviewer', 'analytics_reviewer'));
+          await withBypass(async () => {
+            const restriction = mode === 'all' ? { mode: 'all' } : { mode: 'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] };
+            await db.execute(sql`update app_roles set permissions='["reports.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='analytics_reviewer'`);
+            state.user = { id: actor, orgId: org.orgId, name: 'Analytics reviewer', email: 'analytics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
+            const hidden = randomUUID();
+            await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Private entity','CAD','CA')`);
+            for (const [sub, amount, name] of [[org.subsidiaryId, '100', 'Visible'], [hidden, '999', 'PRIVATE-ANALYTICS-EVIDENCE']]) {
+              const party = randomUUID(), project = randomUUID();
+              await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${party},${org.orgId},'organization',${name},${sub})`);
+              await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${sub},${project},${name},${party},'active',true)`);
+              for (const kind of ['vendor_bill', 'customer_invoice', 'expense_report'] as const) {
+                const entry = randomUUID(), doc = randomUUID();
+                const total = kind === 'expense_report' ? sub === org.subsidiaryId ? '2' : '20' : amount;
+                const signed = kind === 'customer_invoice' ? '-'+total : total;
+                const account = kind === 'customer_invoice' ? org.accounts.revenue : org.accounts.cogs;
+                await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,due_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
+                  values (${doc},${org.orgId},${kind},${doc},${org.date},${org.date},${org.date},${party},${sub},'CAD',${total},0,${total})`);
+                await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id)
+                  values (${entry},${org.orgId},${org.bookId},${sub},${entry},${org.date},${org.periodId},'draft','manual',${doc})`);
+                await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,party_id,amount,currency,txn_amount,fx_rate)
+                  values (${org.orgId},${entry},1,${account},${sub},${project},${party},${signed},'CAD',${signed},1),
+                  (${org.orgId},${entry},2,${org.accounts.bank},${sub},${project},${party},-${signed}::numeric,'CAD',-${signed}::numeric,1)`);
+                await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+                await db.execute(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`);
+              }
+              for (const kind of ['purchase_order','sales_order']) {
+                const doc = randomUUID();
+                await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
+                  values (${doc},${org.orgId},${kind},${doc},${org.date},${org.date},${party},${sub},'CAD',${amount},0,${amount})`);
+              }
             }
-            for (const kind of ['purchase_order','sales_order']) {
-              const doc = randomUUID();
-              await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
-                values (${doc},${org.orgId},${kind},${doc},${org.date},${org.date},${party},${sub},'CAD',${amount},0,${amount})`);
-            }
-          }
+          });
           await withOrgContext(org.orgId, async () => {
             const authz = await getAuthz(); assert.ok(authz);
             let data: Summary;
@@ -114,7 +116,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
               assert.equal(JSON.stringify(profitability).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             }
           });
-        } finally { state.user = null; await dropScratchOrg(org.orgId); }
+        } finally { state.user = null; await withBypass(() => dropScratchOrg(org.orgId)); }
       });
     }
   }

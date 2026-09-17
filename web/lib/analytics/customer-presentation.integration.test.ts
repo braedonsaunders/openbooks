@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
@@ -69,7 +69,7 @@ test('customer intelligence translates every revenue functional to presentation'
       await invoice(scratch.orgId, actor, usSub, usCustomer, '100', 'USD', '1', '2025-07-15', accts)
     })
     await pinClock('2026-07-15', async () => {
-      const data = await customerData(P, scratch.orgId, null)
+      const data = await withOrgContext(scratch.orgId, () => customerData(P, scratch.orgId, null))
       const byName = new Map(data.rows.map((r) => [r.name, r]))
       assert.equal(byName.get('US Customer')?.revenue, 270)
       assert.equal(byName.get('US Customer')?.priorRevenue, 130)
@@ -97,7 +97,7 @@ test('customer revenue rounds a non-terminating document rate instead of throwin
       await invoice(scratch.orgId, actor, scratch.subsidiaryId, scratch.customerId, '100', 'USD', '1.3333333333', scratch.date, accts)
     })
     await pinClock('2026-07-15', async () => {
-      const data = await customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null)
+      const data = await withOrgContext(scratch.orgId, () => customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null))
       const byName = new Map(data.rows.map((r) => [r.name, r]))
       assert.equal(byName.get('Acme Customer')?.revenue, 133.3333)
     })
@@ -122,7 +122,7 @@ test('customer intelligence fails closed when a functional has no spot coverage'
     })
     await pinClock('2026-07-15', async () => {
       await assert.rejects(
-        customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null),
+        withOrgContext(scratch.orgId, () => customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null)),
         /no spot rate for USD/,
       )
     })

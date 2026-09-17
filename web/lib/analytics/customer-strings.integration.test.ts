@@ -12,7 +12,7 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
@@ -52,13 +52,13 @@ test('customer insights and churn factors render in the request locale', { skip:
     })
     const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
     await pinClock('2026-07-15', async () => {
-      const fallback = await customerData(P, scratch.orgId, null)
+      const fallback = await withOrgContext(scratch.orgId, () => customerData(P, scratch.orgId, null))
       const concentration = fallback.insights.find((i) => i.category === 'concentration')
       assert.equal(concentration?.title, 'Revenue Concentration Risk')
       assert.ok(fallback.rows[0]?.churnFactors.includes('Single transaction customer'))
       assert.equal(fallback.intelligence.label, 'Needs Attention')
 
-      const fr = await customerData(P, scratch.orgId, null, customerStrings(catalogTranslator('fr'), 'fr'))
+      const fr = await withOrgContext(scratch.orgId, () => customerData(P, scratch.orgId, null, customerStrings(catalogTranslator('fr'), 'fr')))
       const frConcentration = fr.insights.find((i) => i.category === 'concentration')
       assert.equal(frConcentration?.title, "Risque de concentration du chiffre d'affaires")
       assert.ok(fr.rows[0]?.churnFactors.includes('Client à transaction unique'))
