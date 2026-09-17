@@ -1063,6 +1063,21 @@ test('banking feed operational panel copy is present in every locale and transla
   }
 })
 
+test('feeds empty-state trail uses the sidebar translated labels in fr and es', () => {
+  // F-t05-015 residual: the sentence body was translated but its navigation
+  // tail stayed 'Company Settings → Bank Feeds' in fr/es. The trail must
+  // reuse the sidebar's own labels (setup area + bank-feeds rail entry).
+  const trails: Record<string, string> = {
+    fr: 'Configuration → Flux bancaires',
+    es: 'Configuración → Feeds bancarios',
+  }
+  for (const [locale, trail] of Object.entries(trails)) {
+    const value = flattenCatalog(locale).get('banking.bankFeeds.operational.none')
+    assert.ok(value?.includes(trail), `${locale} feeds empty state must point at ${trail}`)
+    assert.ok(!value?.includes('Company Settings'), `${locale} feeds empty state must not keep the English trail`)
+  }
+})
+
 test('cash cockpit and chart copy are present in every locale and translated', () => {
   // The cash cockpit (F-t05-016) reads banking.cash.* with English fallback
   // and labels its charts from analytics.charts.* — both subtrees were
