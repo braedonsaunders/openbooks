@@ -256,6 +256,7 @@ export function SetupDrawer({
     if (code === 'archive-only') return t('errors.archiveOnly')
     if (code === 'invalid-url') return t('errors.invalidUrl')
     if (code === 'invalid-depreciation-formula') return t('errors.invalidDepreciationFormula')
+    if (code === 'invalid' && message === 'invalid-recoverable-percent') return t('errors.invalidRecoverablePercent')
     // A server-side required-field refusal still names the registry key
     // (F-t06-022 follow-up): render it through the field label — exactly as
     // client-side validate() does — instead of leaking camelCase into the

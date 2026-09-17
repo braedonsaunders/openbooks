@@ -1488,6 +1488,7 @@
       "archiveOnly": "Los libros contables se conservan para el historial del mayor y solo se pueden archivar.",
       "invalidUrl": "Introduzca una URL gubernamental válida que comience por http:// o https://.",
       "invalidDepreciationFormula": "Introduzca una fórmula de depreciación válida con las variables y los operadores documentados.",
+      "invalidRecoverablePercent": "Introduzca un número entre 0 y 100 para el % recuperable.",
       "overlap": "Una tarifa activa ya cubre esta jurisdicción para este período.",
       "saveTimedOut": "Se agotó el tiempo de guardado. Revise la tabla antes de reintentar — es posible que el registro ya exista."
     },
