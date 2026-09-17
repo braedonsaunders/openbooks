@@ -23,7 +23,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 )
 
 const OPENED_REVISION = '2026-08-24T12:34:56.123456Z'
-const EXACT_REVISION = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
+const EXACT_REVISION = /^\d{1,20}$/
 
 type PlatformList = {
   records: Record<string, unknown>[]
@@ -125,7 +125,7 @@ test(
         assert.equal(listed.total, 1)
         const record = listed.records[0]
         assert.equal(record?.id, documentId)
-        assert.equal(record?.updated_at, OPENED_REVISION)
+        assert.equal(record?.updated_at, '0')
         assert.match(String(record?.updated_at), EXACT_REVISION)
         assert.equal('__documentRevision' in (record ?? {}), false)
 
@@ -144,7 +144,7 @@ test(
         const revision = current.updated_at
         assert.equal(typeof revision, 'string')
         assert.match(String(revision), EXACT_REVISION)
-        assert.notEqual(revision, OPENED_REVISION)
+        assert.notEqual(revision, '0')
 
         await inOrg(() => platform.update('bills', documentId, {
           expectedUpdatedAt: revision,

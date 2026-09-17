@@ -22,7 +22,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { postDocument } = await import("@openbooks/engine/src/posting.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
 const { correctPostedDocument } = await import("./documents.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
@@ -42,7 +42,7 @@ async function postedBill(org: Awaited<ReturnType<typeof createScratchOrg>>, act
 
 async function revisionOf(orgId: string, id: string): Promise<string> {
   const r = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionSql(sql.raw("updated_at"))} as revision from documents where id = ${id} and org_id = ${orgId}`));
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`));
   return r.rows[0]!.revision;
 }
 

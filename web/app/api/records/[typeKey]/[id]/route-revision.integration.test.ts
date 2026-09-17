@@ -123,7 +123,7 @@ test(
 
         // Both tabs read the same revision.
         const stale = (await read()).updated_at
-        assert.match(stale, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.match(stale, /^\d{1,20}$/)
 
         // Tab A saves with the fresh token.
         const tabA = await save({ data: { title: 'tab A' }, expectedUpdatedAt: stale })

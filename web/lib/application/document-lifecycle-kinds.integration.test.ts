@@ -23,7 +23,7 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
@@ -56,7 +56,7 @@ function ctxFor(orgId: string, userId: string, permissions: string[]): Applicati
 
 async function revisionOf(orgId: string, id: string): Promise<string> {
   const rows = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionSql(sql.raw("updated_at"))} as revision from documents where id = ${id} and org_id = ${orgId}`)).rows;
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`)).rows;
   return rows[0]!.revision;
 }
 

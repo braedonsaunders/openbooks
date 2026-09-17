@@ -34,7 +34,7 @@ registerHooks({
 const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { documentRevisionSql } = await import('../../../../lib/documents.ts')
+const { documentRevisionCounterSql } = await import('../../../../lib/documents.ts')
 const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
@@ -46,7 +46,7 @@ async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: s
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {

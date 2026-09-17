@@ -98,7 +98,7 @@ test('a stale opportunity revision refuses instead of replacing a newer save', {
   try {
     // Both tabs read the same revision.
     const stale = (await read(oppId)).opportunity.updated_at
-    assert.match(stale, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+    assert.match(stale, /^\d{1,20}$/)
 
     // Tab A saves a full-replace payload (header + lines) with the fresh token.
     const tabA = await patch(oppId, {
