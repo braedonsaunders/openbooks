@@ -140,7 +140,8 @@
     "description": "Conciliaciones abiertas y firmadas en todas las cuentas.",
     "search": "Buscar por fecha o cuenta…",
     "emptyTitle": "Aún no hay conciliaciones",
-    "emptyDescription": "Inicia una conciliación desde una cuenta bancaria o de tarjeta para verla aquí."
+    "emptyDescription": "Inicia una conciliación desde una cuenta bancaria o de tarjeta para verla aquí.",
+    "chooseAccount": "Elige una cuenta"
   },
   "rules": {
     "title": "Reglas de conciliación",
@@ -193,7 +194,103 @@
       "amountRange": "{min}–{max}",
       "exclude": "Excluir",
       "categorize": "Categorizar → {account}",
-      "anyLine": "Cualquier línea"
+      "anyLine": "Cualquier línea",
+      "categorizeSplit": "Categorizar → {account} +{count} más",
+      "and": "y",
+      "or": "o"
+    },
+    "runSuggested": "{suggested, plural, one {# línea sugerida para revisar} other {# líneas sugeridas para revisar}}",
+    "modeSuggest": "Sugerencia",
+    "modeAuto": "Contabilización auto",
+    "assignPayee": "Asignar beneficiario",
+    "payeePlaceholder": "Buscar terceros",
+    "noPayee": "Sin beneficiario",
+    "memoLabel": "Memo",
+    "memoPlaceholder": "Por defecto: la descripción de la línea bancaria",
+    "suggestHint": "Las líneas coincidentes reciben una sugerencia lista para confirmar en Conciliar datos bancarios — nada se contabiliza hasta que la confirmes.",
+    "autoHint": "Las líneas coincidentes se contabilizan y concilian automáticamente al ejecutar las reglas.",
+    "fields": {
+      "description": "Descripción",
+      "payee": "Beneficiario",
+      "anyText": "Cualquier campo de texto",
+      "reference": "Referencia",
+      "amount": "Importe",
+      "flow": "Sentido",
+      "date": "Fecha"
+    },
+    "ops": {
+      "contains": "contiene",
+      "notContains": "no contiene",
+      "equals": "es exactamente",
+      "startsWith": "empieza por",
+      "endsWith": "termina en",
+      "isBlank": "está vacío",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "mayor que",
+      "gte": "al menos",
+      "lt": "menor que",
+      "lte": "como máximo",
+      "between": "entre",
+      "is": "es",
+      "on": "el",
+      "before": "antes de",
+      "after": "después de",
+      "withinDays": "en los últimos N días"
+    },
+    "cb": {
+      "match": "Coincidencia",
+      "allOf": "todas las condiciones siguientes",
+      "anyOf": "cualquiera de las condiciones siguientes",
+      "addCondition": "Añadir condición",
+      "addGroup": "Añadir grupo",
+      "noConditions": "Sin condiciones — coincide con todas las líneas.",
+      "remove": "Eliminar condición",
+      "valuePlaceholder": "Valor",
+      "and": "y",
+      "to": "a"
+    },
+    "scope": {
+      "label": "Se aplica a",
+      "allHint": "Se ejecuta en todas las cuentas conciliables.",
+      "someHint": "Se ejecuta en {count, plural, one {# cuenta} other {# cuentas}}.",
+      "useAll": "Usar todas las cuentas",
+      "limit": "Limitar a cuentas específicas",
+      "search": "Filtrar cuentas…",
+      "selected": "{count} seleccionadas",
+      "noneFound": "Sin cuentas coincidentes.",
+      "emptyWarn": "Selecciona al menos una cuenta o vuelve a todas."
+    },
+    "split": {
+      "remainder": "Resto",
+      "percent": "Porcentaje",
+      "fixed": "Fijo",
+      "addLine": "Añadir línea",
+      "removeLine": "Eliminar línea",
+      "accountPlaceholder": "Seleccionar cuenta",
+      "descriptionPlaceholder": "Memo de línea",
+      "portion": "Parte"
+    },
+    "coding": {
+      "department": "Departamento",
+      "location": "Ubicación",
+      "class": "Clase",
+      "tax": "Código fiscal"
+    },
+    "preview": {
+      "title": "Vista previa en directo",
+      "pickAccount": "Cuenta",
+      "pickAccountHint": "Selecciona una cuenta para previsualizar las líneas coincidentes.",
+      "needCondition": "Añade una condición para previsualizar qué líneas bancarias coinciden.",
+      "loading": "Comprobando líneas recientes…",
+      "error": "Vista previa no disponible",
+      "matched": "{count, plural, one {una línea coincidiría} other {varias líneas coincidirían}}",
+      "conflicts": "{count, plural, one {# conflicto} other {# conflictos}}",
+      "noConflicts": "sin conflictos",
+      "none": "Aún ninguna línea coincide en los últimos 90 días.",
+      "stolen": "gana la regla de mayor prioridad",
+      "split": "Vista previa del desglose",
+      "healthHint": "En directo sobre las líneas importadas de los últimos 90 días."
     }
   },
   "match": {
@@ -233,7 +330,10 @@
     "excludedHint": "Líneas apartadas — se omiten al conciliar.",
     "searchExcluded": "Buscar líneas excluidas…",
     "noExcluded": "No hay líneas excluidas.",
-    "restore": "Restaurar"
+    "restore": "Restaurar",
+    "createRule": "Crear regla desde esta línea",
+    "postAndMatch": "Contabilizar y conciliar",
+    "suggestedBy": "Sugerencia: {rule}"
   },
   "transactionsSearch": "Buscar cargos de tarjeta, cheques, transferencias…",
   "transactionsEmptyTitle": "Aún no hay transacciones bancarias",
@@ -372,7 +472,10 @@
     "formSetPreferred": "Definir como preferido",
     "formSetPreferredDone": "Formulario preferido guardado",
     "formPreferredCleared": "Formulario preferido borrado",
-    "formPreferredFailed": "No se pudo guardar el formulario preferido"
+    "formPreferredFailed": "No se pudo guardar el formulario preferido",
+    "cardAccountHelp": "Sin tarjetas registradas — selecciona la cuenta de tarjeta conciliable para contabilizar.",
+    "noCardAccounts": "Aún no hay cuentas de tarjeta conciliables.",
+    "noCardAccountsCta": "Añade una en el plan de cuentas"
   },
   "reconcile": {
     "title": "Conciliar hasta {date}",
@@ -499,7 +602,9 @@
       "importedN": "{n} importados",
       "paused": "en pausa",
       "pause": "Pausar",
-      "resume": "Reanudar"
+      "resume": "Reanudar",
+      "needsLogin": "Añade primero un acceso arriba — un programa vigila una carpeta de uno de ellos.",
+      "needsAccount": "Añade primero una cuenta bancaria conciliable — las importaciones llegan a una de ellas."
     },
     "authorizedKeys": "Claves SSH autorizadas (opcional)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banco@host",
@@ -508,7 +613,13 @@
       "endpoint": "Conexión y acceso",
       "servers": "Accesos de socios",
       "schedules": "Programas de importación"
-    }
+    },
+    "endpointTitle": "Endpoint",
+    "endpointHint": "Dónde se conectan los clientes. Comparte estos datos con tu banco o socio, junto con un acceso a continuación.",
+    "loginsTitle": "Accesos",
+    "connectCommand": "Comando de conexión",
+    "copyField": "Copiar {label}",
+    "copied": "{label} copiado"
   },
   "cash": {
     "title": "Efectivo",
@@ -585,13 +696,13 @@
   },
   "bankFeeds": {
     "title": "Bank Feeds",
-    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "description": "Conecta cuentas bancarias para la importación automatizada de extractos — feeds agregadores en directo o el endpoint SFTP integrado.",
     "navTitle": "Bank Feeds",
     "tabs": {
-      "connections": "Connections",
-      "sftp-endpoint": "SFTP endpoint",
-      "sftp-servers": "Partner logins",
-      "sftp-schedules": "Import schedules"
+      "connections": "Conexiones",
+      "sftp-endpoint": "Punto SFTP",
+      "sftp-servers": "Accesos de socios",
+      "sftp-schedules": "Programas de importación"
     },
     "operational": {
       "title": "Conexiones bancarias",
@@ -604,7 +715,131 @@
     "client": {
       "configure": {
         "noEligibleAccounts": "Aún no hay cuentas bancarias conciliables para conectar. Marque sus cuentas bancarias y de tarjeta como conciliables en el Plan de cuentas y luego elija una aquí.",
-        "noEligibleAccountsLink": "Abrir el Plan de cuentas"
+        "noEligibleAccountsLink": "Abrir el Plan de cuentas",
+        "back": "← Atrás",
+        "newConnection": "Nueva conexión",
+        "kindLive": "Feed en directo",
+        "kindFileDrop": "Depósito de archivos",
+        "kindManual": "Manual",
+        "providerQuestion": "¿Qué proveedor de open banking?",
+        "providerGocardless": "GoCardless — gratis, Europa",
+        "providerPlaid": "Plaid — EE. UU. / Canadá / Reino Unido",
+        "providerTruelayer": "TrueLayer — Reino Unido / UE",
+        "explainerAutoFeed": "Feed automático vía {provider}",
+        "explainerSftp": "Depósito de archivos SFTP",
+        "explainerManual": "Subida manual",
+        "stepAccount": "1 · Qué cuenta",
+        "connectionName": "Nombre de la conexión",
+        "connectionNamePlaceholder": "p. ej. Cuenta operativa — diaria",
+        "bankGlAccount": "Cuenta bancaria / libro mayor",
+        "credentialsStep": "2 · Credenciales de {provider}",
+        "providerAccountId": "ID de cuenta en el proveedor",
+        "providerAccountIdPlaceholder": "el ID de la cuenta en el proveedor",
+        "importHowOften": "¿Cada cuánto importar?",
+        "cadenceDaily": "Automático, diario",
+        "cadenceHourly": "Automático, cada hora",
+        "cadenceManual": "Solo cuando pulse Sincronizar",
+        "sftpStepTitle": "2 · Crea el acceso SFTP",
+        "sftpStepHelp": "Crearemos un acceso dedicado y dirigiremos su carpeta <inbound>/inbound</inbound> a la cuenta de arriba. Recibirás el host, el usuario y una contraseña de un solo uso para entregar a tu banco. Gestiona después las carpetas adicionales bajo la conexión.",
+        "createSftpLogin": "Crear acceso SFTP",
+        "addConnection": "Añadir conexión",
+        "cancel": "Cancelar"
+      },
+      "title": "Bank Feeds",
+      "description": "Conecta cada cuenta bancaria para la importación automatizada de extractos — feeds en directo, depósitos de archivos SFTP o subida manual. Todo se importa por el mismo proceso de conciliación.",
+      "addConnection": "+ Añadir conexión",
+      "empty": {
+        "none": "Aún no hay conexiones bancarias.",
+        "connectFirst": "Conecta tu primer banco"
+      },
+      "connection": {
+        "paused": "en pausa",
+        "synced": "sincronizado {date}",
+        "attempted": "intento {date}",
+        "test": "Probar",
+        "sync": "Sincronizar",
+        "pause": "Pausar",
+        "resume": "Reanudar",
+        "remove": "Eliminar",
+        "removeConfirm": "¿Eliminar esta conexión? Las importaciones programadas se detienen y la configuración no se puede deshacer."
+      },
+      "feedMessages": {
+        "verified": "Conexión verificada.",
+        "testFailed": "La prueba falló: {detail}",
+        "unknownError": "error desconocido",
+        "syncFailed": "Falló la sincronización: {error}",
+        "imported": "Importados {imported} nuevos, {duplicates} duplicados."
+      },
+      "sftpCard": {
+        "badge": "Depósito de archivos SFTP",
+        "login": "acceso",
+        "routesTo": "dirige a {count, plural, one {# cuenta} other {# cuentas}}",
+        "routing": "Enrutamiento",
+        "done": "Listo",
+        "remove": "Eliminar",
+        "routingTitle": "Enrutamiento de importación — qué carpeta alimenta qué cuenta",
+        "noRouting": "Aún sin enrutamiento — añade uno abajo.",
+        "folderPlaceholder": "carpeta",
+        "addRoute": "Añadir enrutamiento"
+      },
+      "sftpEndpoint": {
+        "title": "Endpoint SFTP de recepción",
+        "description": "Dirige aquí la entrega de archivos de tu banco. Cada conexión SFTP de arriba es un acceso en este endpoint.",
+        "host": "Host",
+        "port": "Puerto",
+        "status": "Estado",
+        "hostKey": "Clave del host",
+        "enabled": "activado",
+        "disabled": "desactivado"
+      },
+      "chooseBank": {
+        "title": "Elige tu banco",
+        "cancel": "Cancelar",
+        "searchPlaceholder": "Buscar bancos…",
+        "allCountries": "Todos los países",
+        "notListed": "¿No está en la lista? Elige cómo llegan los extractos",
+        "otherBank": "Otro banco (feed en directo)",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "Depósito de archivos SFTP",
+        "sftpDropHint": "El banco envía los archivos de extractos",
+        "manualUpload": "Subida manual",
+        "manualUploadHint": "Sube los archivos OFX / CSV a mano"
+      },
+      "errors": {
+        "couldNotCreateSftp": "No se pudo crear el acceso SFTP",
+        "couldNotCreateConnection": "No se pudo crear la conexión",
+        "failed": "Falló"
+      },
+      "sftpSecret": {
+        "title": "Acceso SFTP creado",
+        "description": "Entrégalos a tu banco. La contraseña se muestra una sola vez — cópiala ahora.",
+        "hostLabel": "host:",
+        "portLabel": "puerto:",
+        "usernameLabel": "usuario:",
+        "passwordLabel": "contraseña:",
+        "done": "Listo",
+        "createdToast": "Conexión SFTP creada.",
+        "addedToast": "{name} añadido."
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooks obtiene automáticamente las nuevas transacciones a través de Plaid, un agregador de open banking. Te conectas una vez con tus claves API de Plaid; no hay archivos que gestionar.",
+          "docsLabel": "Obtén las claves en el panel de Plaid"
+        },
+        "gocardless": {
+          "blurb": "openbooks obtiene las transacciones a través de GoCardless Bank Account Data (antes Nordigen) — un feed gratuito europeo de open banking. Crea un ID secreto y una clave secreta en su panel.",
+          "docsLabel": "Obtén las credenciales de GoCardless"
+        },
+        "truelayer": {
+          "blurb": "openbooks obtiene las transacciones a través de TrueLayer, un proveedor de open banking de Reino Unido/UE. Pega un token de acceso desde tu consola TrueLayer.",
+          "docsLabel": "Abre la consola TrueLayer"
+        },
+        "sftp": {
+          "blurb": "Tu banco envía los archivos de extractos (OFX/CSV/CAMT/BAI2/MT940) a openbooks por SFTP. Creamos un acceso dedicado para este banco; entregas el host, el usuario y la contraseña a tu banco, y los archivos que lleguen se importan automáticamente."
+        },
+        "manual": {
+          "blurb": "Sin automatización — subirás los archivos de extractos a mano desde la página de la cuenta en Bancos cuando los tengas. Ideal para cuentas que tu banco no puede alimentar."
+        }
       }
     }
   },
@@ -648,5 +883,12 @@
     "colNet": "Neto",
     "reverse": "Revertir",
     "empty": "Aún no se han importado liquidaciones."
+  },
+  "docStatus": {
+    "draft": "Borrador",
+    "pending_approval": "Pendiente de aprobación",
+    "approved": "Aprobado",
+    "posted": "Contabilizado",
+    "voided": "Anulado"
   }
 }
