@@ -33,6 +33,45 @@ const TRACKING = ['none', 'lot', 'serial'] as const
 const NEGATIVE_COST_BASIS = ['last_receipt', 'standard', 'configured'] as const
 const field = 'space-y-1.5'
 
+export type CostingOffsetField =
+  | 'cogsAccountId'
+  | 'adjustmentAccountId'
+  | 'varianceAccountId'
+  | 'receivedNotBilledAccountId'
+
+export interface CostingAccountSelection {
+  assetAccountId: string
+  cogsAccountId: string
+  adjustmentAccountId: string
+  varianceAccountId: string
+  receivedNotBilledAccountId: string
+}
+
+const OFFSET_FIELDS: readonly CostingOffsetField[] = [
+  'cogsAccountId',
+  'adjustmentAccountId',
+  'varianceAccountId',
+  'receivedNotBilledAccountId',
+]
+
+/**
+ * Client mirror of the server's inventoryOffsetAccountProblem rule
+ * (engine/src/inventory.ts): every offset account must differ from the
+ * inventory asset account, or PUT /api/items/[id]/costing answers 422.
+ * Checked inline before any submit (F-t09-002) so the form can refuse the
+ * combination itself instead of surfacing it as a transient toast.
+ */
+export function costingOffsetConflicts(selection: CostingAccountSelection): CostingOffsetField[] {
+  const asset = selection.assetAccountId.trim().toLowerCase()
+  if (!asset) return []
+  const out: CostingOffsetField[] = []
+  for (const key of OFFSET_FIELDS) {
+    const value = selection[key].trim().toLowerCase()
+    if (value && value === asset) out.push(key)
+  }
+  return out
+}
+
 /**
  * Per-item costing profile (item_inventory_profiles), re-homed from Setup onto
  * the item record. Only shown for item kinds that carry stock. Loads the profile
@@ -58,6 +97,8 @@ export function ItemCostingEditor({
     if (!canManage) setEditing(false)
   }, [canManage])
   const [busy, setBusy] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
 
   const [costingMethod, setCostingMethod] = useState('moving_average')
   const [tracking, setTracking] = useState('none')
@@ -80,6 +121,25 @@ export function ItemCostingEditor({
   )
   const accountLabel = (id: string | null) =>
     id ? (accountOptions.find((a) => a.value === id)?.label ?? id) : '—'
+
+  const conflicts = useMemo(
+    () =>
+      costingOffsetConflicts({
+        assetAccountId,
+        cogsAccountId,
+        adjustmentAccountId,
+        varianceAccountId,
+        receivedNotBilledAccountId,
+      }),
+    [assetAccountId, cogsAccountId, adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId],
+  )
+  const conflicted = useMemo(() => new Set<CostingOffsetField>(conflicts), [conflicts])
+  const conflictNote = (key: CostingOffsetField) =>
+    conflicted.has(key) ? (
+      <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+        {t('separationConflict')}
+      </p>
+    ) : null
 
   function hydrate(p: Profile | null) {
     setCostingMethod(p?.costing_method ?? 'moving_average')
@@ -120,6 +180,14 @@ export function ItemCostingEditor({
   }, [itemId])
 
   async function save() {
+    // Refuse the combination inline: the server answers 422 for any offset
+    // account equal to the asset account, so never issue that PUT.
+    if (conflicts.length > 0) {
+      setBlocked(true)
+      return
+    }
+    setBlocked(false)
+    setServerError(null)
     setBusy(true)
     try {
       const res = await fetch(`/api/items/${itemId}/costing`, {
@@ -133,15 +201,21 @@ export function ItemCostingEditor({
           allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
         }),
       })
-      const result = await res.json().catch(() => ({}))
-      if (!res.ok) toast.error(result.error ?? common('feedback.saveFailed'))
-      else {
+      const result = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        const message = result.error ?? common('feedback.saveFailed')
+        // A rejected save must persist as an inline error, not only a toast.
+        setServerError(message)
+        toast.error(message)
+      } else {
         toast.success(common('feedback.saved'))
         setEditing(false)
         await load()
       }
     } catch {
-      toast.error(common('feedback.saveFailed'))
+      const message = common('feedback.saveFailed')
+      setServerError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -149,6 +223,8 @@ export function ItemCostingEditor({
 
   function cancel() {
     hydrate(profile)
+    setBlocked(false)
+    setServerError(null)
     setEditing(false)
   }
 
@@ -200,22 +276,30 @@ export function ItemCostingEditor({
             <div className={field}>
               <Label>{t('cogsAccount')}<span className="text-red-500"> *</span></Label>
               <SearchSelect value={cogsAccountId} onChange={setCogsAccountId} options={accountOptions}
-                placeholder={t('selectAccount')} sheetTitle={t('cogsAccount')} ariaLabel={t('cogsAccount')} />
+                placeholder={t('selectAccount')} sheetTitle={t('cogsAccount')} ariaLabel={t('cogsAccount')}
+                invalid={conflicted.has('cogsAccountId')} />
+              {conflictNote('cogsAccountId')}
             </div>
             <div className={field}>
               <Label>{t('adjustmentAccount')}</Label>
               <SearchSelect value={adjustmentAccountId} onChange={setAdjustmentAccountId} options={accountOptions}
-                clearable placeholder={t('selectAccount')} sheetTitle={t('adjustmentAccount')} ariaLabel={t('adjustmentAccount')} />
+                clearable placeholder={t('selectAccount')} sheetTitle={t('adjustmentAccount')} ariaLabel={t('adjustmentAccount')}
+                invalid={conflicted.has('adjustmentAccountId')} />
+              {conflictNote('adjustmentAccountId')}
             </div>
             <div className={field}>
               <Label>{t('varianceAccount')}</Label>
               <SearchSelect value={varianceAccountId} onChange={setVarianceAccountId} options={accountOptions}
-                clearable placeholder={t('selectAccount')} sheetTitle={t('varianceAccount')} ariaLabel={t('varianceAccount')} />
+                clearable placeholder={t('selectAccount')} sheetTitle={t('varianceAccount')} ariaLabel={t('varianceAccount')}
+                invalid={conflicted.has('varianceAccountId')} />
+              {conflictNote('varianceAccountId')}
             </div>
             <div className={field}>
               <Label>{t('receivedNotBilledAccount')}</Label>
               <SearchSelect value={receivedNotBilledAccountId} onChange={setReceivedNotBilledAccountId} options={accountOptions}
-                clearable placeholder={t('selectAccount')} sheetTitle={t('receivedNotBilledAccount')} ariaLabel={t('receivedNotBilledAccount')} />
+                clearable placeholder={t('selectAccount')} sheetTitle={t('receivedNotBilledAccount')} ariaLabel={t('receivedNotBilledAccount')}
+                invalid={conflicted.has('receivedNotBilledAccountId')} />
+              {conflictNote('receivedNotBilledAccountId')}
             </div>
             <div className={field}>
               <Label>{t('standardCost')}</Label>
@@ -248,6 +332,16 @@ export function ItemCostingEditor({
                   </div>
                 ) : null}
               </>
+            ) : null}
+            {blocked && conflicts.length > 0 ? (
+              <p role="alert" className="text-sm text-red-600 sm:col-span-2 lg:col-span-3 dark:text-red-400">
+                {t('separationBlocked')}
+              </p>
+            ) : null}
+            {serverError ? (
+              <p role="alert" className="text-sm text-red-600 sm:col-span-2 lg:col-span-3 dark:text-red-400">
+                {serverError}
+              </p>
             ) : null}
             <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
