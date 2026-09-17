@@ -29,6 +29,7 @@ import {
 import { Popover, cn } from '@openbooks/ui'
 import { ThemeToggle } from './theme-toggle'
 import { EnvironmentPicker } from './environment-picker'
+import { PlatformWorkspacePicker, useOnPlatform } from './platform-menu'
 import { LOCALES, type Locale } from '../i18n/config'
 import { NAV_MODES, type NavMode } from '../lib/nav-mode'
 import type { WorkspaceEnvironments } from '../lib/environments'
@@ -45,7 +46,7 @@ function initialsFrom(name: string, email: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
-type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout'
+type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout' | 'platform'
 
 async function signOut() {
   await fetch('/api/login', { method: 'DELETE' })
@@ -90,6 +91,7 @@ export function AccountMenu({
     : inSandbox
       ? 'text-amber-600 dark:text-amber-400'
       : 'text-slate-600 dark:text-slate-400'
+  const onPlatform = useOnPlatform()
   const showTenants =
     environments.tenants.length > 1 ||
     environments.tenants.some((tn) => tn.sandboxes.length > 0) ||
@@ -236,18 +238,14 @@ export function AccountMenu({
               </span>
             </Link>
             {environments.isSuperAdmin && (
-              <Link
-                href="/platform"
-                onClick={close}
-                className="group relative flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                  <ShieldAlert size={18} />
-                </span>
-                <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t('superAdmin')}
-                </span>
-              </Link>
+              <Card
+                icon={ShieldAlert}
+                tint="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+                label={t('platform')}
+                sub={onPlatform ? t('platform') : t('organizationWorkspace')}
+                subTone={onPlatform ? 'text-rose-600 dark:text-rose-400' : undefined}
+                onClick={() => setView('platform')}
+              />
             )}
           </div>
 
@@ -280,13 +278,16 @@ export function AccountMenu({
                   ? t('language')
                   : view === 'theme'
                     ? t('theme')
-                    : t('menuLayout')
+                    : view === 'platform'
+                      ? t('platform')
+                      : t('menuLayout')
             }
             onBack={() => setView('home')}
           />
           {view === 'tenants' && (
             <EnvironmentPicker env={environments} hideHeading onNavigate={close} />
           )}
+          {view === 'platform' && <PlatformWorkspacePicker onNavigate={close} />}
           {view === 'language' && (
             <div className="max-h-72 overflow-y-auto p-1">
               <OptionRow label={tLang('orgDefault')} active={locale === ''} disabled={saving} onClick={() => pickLocale('')} />

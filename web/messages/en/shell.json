@@ -18,6 +18,10 @@
     "sandbox": "sandbox",
     "sampleCompany": "sample company",
     "superAdmin": "Super admin",
+    "platform": "Platform",
+    "organizationWorkspace": "Organization workspace",
+    "organizationWorkspaceDescription": "Modules for the current organization",
+    "platformDescription": "Deployment-wide operator tools",
     "security": "Sign-in security"
   },
   "language": {

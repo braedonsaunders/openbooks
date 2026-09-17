@@ -16,6 +16,10 @@
     },
     "organizations": "组织",
     "superAdmin": "超级管理员",
+    "platform": "平台",
+    "organizationWorkspace": "组织工作区",
+    "organizationWorkspaceDescription": "当前组织的模块",
+    "platformDescription": "部署级运维工具",
     "security": "登录安全"
   },
   "language": {
