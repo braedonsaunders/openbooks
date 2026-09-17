@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Badge } from '@openbooks/ui'
 import { StartCloseButton } from './StartCloseButton'
 
 /**
@@ -29,6 +30,31 @@ export function CloseReadinessCell({ readiness }: { readiness: number }) {
         <div className="h-full bg-teal-500" style={{ width: `${readiness}%` }} />
       </div>
       <span className="text-xs tabular-nums text-slate-500">{readiness}%</span>
+    </div>
+  )
+}
+
+/**
+ * The run badge with the enforcement truth beneath it: when the selected
+ * book holds closed locks for the period — with or without a run — the lock
+ * line names exactly which modules on which book are locked (F-t02-005). The
+ * LOADER resolves both strings; the component only stacks them.
+ */
+export function CloseStatusCell({
+  statusLabel,
+  statusVariant,
+  lockLabel,
+}: {
+  statusLabel: string
+  statusVariant: 'success' | 'warning' | 'outline'
+  lockLabel: string | null
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Badge variant={statusVariant}>{statusLabel}</Badge>
+      {lockLabel ? (
+        <span className="text-xs text-slate-500 dark:text-slate-400">{lockLabel}</span>
+      ) : null}
     </div>
   )
 }

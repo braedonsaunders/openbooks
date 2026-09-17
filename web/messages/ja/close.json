@@ -22,7 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "ステータス",
     "readiness": "準備状況",
-    "action": "アクション"
+    "action": "アクション",
+    "lockedDetail": "{modules}ロック中 · {book}"
   },
   "modules": {
     "ar": "売掛金",
