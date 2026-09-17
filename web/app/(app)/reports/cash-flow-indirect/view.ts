@@ -25,7 +25,7 @@ import { reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 import type { StatementRow } from '../StatementRows'
 import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { PNL_TYPES } from './pnl-types'
+import { PNL_TYPES } from '@/lib/account-types'
 
 /**
  * Indirect cash flow, split into a loader and a spec.
