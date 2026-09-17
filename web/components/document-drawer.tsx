@@ -774,6 +774,11 @@ export function DocumentDrawer({
   const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  // A refused submit/post that only fires a transient toast reads as
+  // "nothing happened" once it dismisses (the F-t06-018 precedent): the
+  // typed refusal also persists as a record-level alert, cleared on the
+  // next action.
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const taxProfiles = useMemo(() => [
     ...(taxCodes ?? []).map((profile) => ({ ...profile, value: `code:${profile.id}` })),
@@ -1438,7 +1443,6 @@ export function DocumentDrawer({
     setMode('view')
   }
 
-  const [actionError, setActionError] = useState<string | null>(null)
   async function act(action: 'submit' | 'post') {
     setBusy(true)
     setActionError(null)
@@ -1462,7 +1466,9 @@ export function DocumentDrawer({
       else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
       router.refresh()
     } catch {
-      toast.error(t('toasts.actionFailed'))
+      const message = t('toasts.actionFailed')
+      setActionError(message)
+      toast.error(message)
     } finally {
       // A rejected transport must not wedge the button on: without this,
       // every later click silently dies on the stuck disabled button.
