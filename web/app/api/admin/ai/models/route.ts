@@ -4,6 +4,7 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../../lib/assistant/ai-config";
 import { listModelsCached } from "../../../../../lib/assistant/models";
+import { classifyModelsError } from "../../../../../lib/assistant/models-error";
 
 export const runtime = "nodejs";
 
@@ -34,27 +35,18 @@ export async function POST(req: Request) {
     }
   }
   if (!apiKey) {
-    return NextResponse.json({
-      ok: false,
-      models: [],
-      message: "Enter an API key for this provider to load its models.",
-    });
+    return NextResponse.json({ ok: false, models: [], code: "missingKey" });
   }
   try {
     const models = await listModelsCached({ provider, apiKey, baseUrl: baseUrl || null }, body.refresh === true);
     if (!models.length) {
-      return NextResponse.json({
-        ok: false,
-        models: [],
-        message: "The provider returned no models — enter the id manually.",
-      });
+      return NextResponse.json({ ok: false, models: [], code: "empty" });
     }
     return NextResponse.json({ ok: true, models });
   } catch (e) {
-    return NextResponse.json({
-      ok: false,
-      models: [],
-      message: e instanceof Error ? e.message.slice(0, 180) : "Could not load models.",
-    });
+    // Never forward the raw upstream body (a `401 … — {…}` JSON blob): the
+    // form renders a localized message from the code instead (F-t11-004).
+    const classified = classifyModelsError(e);
+    return NextResponse.json({ ok: false, models: [], ...classified });
   }
 }

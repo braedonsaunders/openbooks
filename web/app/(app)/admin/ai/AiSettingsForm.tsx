@@ -76,6 +76,22 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   } | null>(null)
   const modelRequestId = useRef(0)
 
+  const modelsErrorMessage = useCallback(
+    (code: string | undefined, status: number | null): string => {
+      switch (code) {
+        case 'missingKey':
+          return t('models.result.missingKey')
+        case 'empty':
+          return t('models.result.empty')
+        case 'unauthorized':
+          return typeof status === 'number' ? t('models.result.unauthorized', { status }) : t('models.loadError')
+        default:
+          return t('models.loadError')
+      }
+    },
+    [t],
+  )
+
   const requestModels = useCallback(
     (requestedProvider: string, key: string, requestedBaseUrl: string) => {
       const requestId = ++modelRequestId.current
@@ -93,7 +109,8 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           const result = (await res.json()) as {
             ok: boolean
             models: ModelListItem[]
-            message?: string
+            code?: string
+            status?: number | null
           }
           if (requestId !== modelRequestId.current) return
           if (result.ok) {
@@ -101,7 +118,9 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
             setModelsError(null)
           } else {
             setModels([])
-            setModelsError(result.message ?? t('models.loadError'))
+            // The route returns a code, never the raw upstream body: render
+            // the localized message (F-t11-004).
+            setModelsError(modelsErrorMessage(result.code, result.status ?? null))
           }
         } catch {
           if (requestId !== modelRequestId.current) return
@@ -111,7 +130,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
       })
       return requestId
     },
-    [t],
+    [modelsErrorMessage, t],
   )
 
   // Auto-load the saved provider's models on first render (a key is on file).
