@@ -114,9 +114,6 @@ export function recordNumberPrefix(typeKey: string): string {
 
 // --- Section normalization ----------------------------------------------------
 
-/** A record type's definition is an ordered list of forms-core sections. */
-export type RecordSection = FormSection
-
 /** Ceilings for a record type's definition (belt-and-braces around forms-core). */
 export const MAX_RECORD_SECTIONS = 50
 export const MAX_RECORD_FIELDS = 200

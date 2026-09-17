@@ -13,7 +13,7 @@
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, cmp, fromUnits, mulPercent, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money.ts'
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {
@@ -318,11 +318,6 @@ export function splitPortionsToAmounts(
     amounts[rowIndex] = base + (BigInt(slot) < extra ? 1n : 0n)
   })
   return amounts.map((units) => fromUnits(units))
-}
-
-/** Line-amount delta helper (money.ts exposes add/neg, not sub). */
-export function moneyDelta(before: string, after: string): string {
-  return add(after, neg(before))
 }
 
 /** True when two ledger amounts differ — drives the dirty/re-explode checks. */

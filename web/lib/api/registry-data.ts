@@ -46,18 +46,6 @@ export interface ApiRecordType {
 export const RW: ApiOperation[] = ["list", "get", "create", "update", "delete"];
 export const RO: ApiOperation[] = ["list", "get"];
 
-/**
- * Search column per table. `custom_records` has a precomputed haystack;
- * `documents`/`journal_entries` have no `name` column, and `parties` calls it
- * `display_name`. Everything else searches `name`.
- */
-export const SEARCH_COLUMNS: Record<string, string> = {
-  custom_records: "search_text",
-  documents: "document_number",
-  journal_entries: "entry_number",
-  parties: "display_name",
-};
-
 /** Built-in record types exposed through the API. */
 export const API_RECORD_TYPES: ApiRecordType[] = [
   {

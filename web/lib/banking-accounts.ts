@@ -18,8 +18,6 @@ import { db } from '@openbooks/engine/src/db.ts'
  * read org-wide — so only membership is unified here, never visibility.
  */
 
-export const BANK_ACCOUNT_TYPES = ['asset_bank', 'liability_card'] as const
-
 export interface ReconcilableBankAccount {
   id: string
   number: string | null

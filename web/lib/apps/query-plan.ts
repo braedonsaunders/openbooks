@@ -12,7 +12,6 @@ export const appQueryPlanSchema = z.object({
   sorts: z.array(z.object({ column: z.string().max(182), direction: z.enum(['asc','desc']) }).strict()).max(3).optional(),
   limit: z.number().int().min(1).max(1000).default(100),
 }).strict()
-export type AppQueryPlan = z.infer<typeof appQueryPlanSchema>
 export interface AppQuerySource { from: string; columns: ReportEntityColumn[]; predicates: string[]; orgColumn: string }
 
 /** Sources are server-generated and independently scoped BEFORE a left join. */

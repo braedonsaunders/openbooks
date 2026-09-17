@@ -8,10 +8,8 @@ import {
   getRecordType,
   mergeRegisteredFieldsIntoLayout,
   type FormLayoutConfig,
-  type HeaderFieldPlacement,
   type LineColumnPlacement,
   type ListViewConfig,
-  type ListColumnPlacement,
   type RecordTypeKey,
   isCustomFieldKey,
   customFieldDefKey,
@@ -312,29 +310,5 @@ export const resolveListView = cache(
     };
   },
 );
-
-/** Translate a resolved header field's effective label (override or default i18n key). */
-export function effectiveHeaderFieldLabel(
-  placement: HeaderFieldPlacement,
-  defLabel: string,
-): string {
-  return placement.labelOverride?.trim() ? placement.labelOverride.trim() : defLabel;
-}
-
-/** Translate a resolved line column's effective label. */
-export function effectiveLineColumnLabel(
-  placement: LineColumnPlacement | undefined,
-  defLabel: string,
-): string {
-  return placement?.labelOverride?.trim() ? placement.labelOverride.trim() : defLabel;
-}
-
-/** Translate a resolved list column's effective label. */
-export function effectiveListColumnLabel(
-  placement: ListColumnPlacement | undefined,
-  defLabel: string,
-): string {
-  return placement?.labelOverride?.trim() ? placement.labelOverride.trim() : defLabel;
-}
 
 export { customFieldDefKey, isCustomFieldKey };

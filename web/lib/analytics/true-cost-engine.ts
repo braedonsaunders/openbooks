@@ -28,7 +28,6 @@ export type AllocationBase =
 export type AllocationMethod = "simple" | "weighted" | "stepped";
 export type RateFormat = "per_hour" | "percent_labor" | "percent_cost" | "per_fte" | "per_unit";
 export type CompositeMethod = "sum" | "weighted" | "cascading";
-export type CategoryType = "expense" | "time" | "manual" | "derived" | "formula";
 
 export const ALLOCATION_BASES: Record<AllocationBase, { label: string; unit: string; format: "number" | "currency" }> = {
   billed_hours: { label: "Billed Hours", unit: "hrs", format: "number" },

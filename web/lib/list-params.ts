@@ -133,19 +133,4 @@ export function buildListDrawerHref(
   })
 }
 
-/**
- * Build an export URL that carries the current list filters but drops
- * pagination params (export is always "all visible rows that match").
- *
- * Returned as `any` so callers can drop it directly into Next's typed-routes
- * `<Link href>` (typed-routes refuses string template literals at the type
- * level even though the runtime is fine with them).
- */
-export function buildExportHref(base: string, current: Search): unknown {
-  const merged: Record<string, string | number | undefined | null> = {}
-  for (const [k, v] of Object.entries(current)) {
-    if (k === 'page' || k === 'perPage') continue
-    merged[k] = pickString(v) ?? undefined
-  }
-  return buildHref(base, merged)
-}
+

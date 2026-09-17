@@ -49,7 +49,6 @@ export const APP_PLATFORM_PERMISSIONS = [
 ].sort()
 
 export const HTTP_METHODS = ['GET', 'POST', 'ANY'] as const
-export type AppHttpMethod = (typeof HTTP_METHODS)[number]
 
 export const endpointSchema = z.object({
   /** Endpoint name — the frontend calls openbooks.callBackend(name, payload). */
@@ -267,7 +266,6 @@ export const manifestSchema = z.object({
 })
 
 export type AppManifest = z.infer<typeof manifestSchema>
-export type AppEndpoint = z.infer<typeof endpointSchema>
 
 export interface ManifestResult {
   ok: boolean

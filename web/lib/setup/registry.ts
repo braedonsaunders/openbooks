@@ -2402,7 +2402,4 @@ export function toSnake(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 }
 
-/** snake_case db column → camelCase. */
-export function toCamel(key: string): string {
-  return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
-}
+
