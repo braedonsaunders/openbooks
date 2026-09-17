@@ -8,6 +8,8 @@
 // together with their first rows. Footers are stamped after all content via
 // pdfkit's buffered-page range so the total page count is known.
 
+import { PassThrough } from 'node:stream'
+import { finished } from 'node:stream/promises'
 import PDFDocument from 'pdfkit'
 import {
   DEFAULT_PRIMARY_COLOR,
@@ -116,8 +118,10 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
     },
   })
 
+  const sink = new PassThrough()
   const chunks: Buffer[] = []
-  doc.on('data', (c: Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+  sink.on('data', (c: Buffer | Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+  doc.pipe(sink)
 
   let y = page.contentTop
   y = drawCover(doc, page, input, theme, s)
@@ -130,12 +134,9 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
   }
 
   stampFooters(doc, page, input)
-
-  return new Promise<Buffer>((resolve, reject) => {
-    doc.on('error', reject)
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.end()
-  })
+  doc.end()
+  await finished(sink)
+  return Buffer.concat(chunks)
 }
 
 function drawCover(
