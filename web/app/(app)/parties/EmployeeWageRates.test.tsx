@@ -109,6 +109,18 @@ test('employee wage edits keep decimal text and submit canonical exact strings',
   }
 })
 
+test('wage mutation refusals pin to the record until the next attempt (F-t05-001)', () => {
+  // F-t05-001 read as a silent no-op: the refused save toasted a generic
+  // failure for 4 seconds and left nothing on the record. The refusal must
+  // render as a persistent alert carrying the server's reason, and clear
+  // only when the next mutation starts.
+  assert.match(componentSource, /const \[actionError, setActionError\] = useState<string \| null>\(null\)/)
+  assert.match(componentSource, /<p role="alert"[\s\S]*?\{actionError/)
+  assert.match(componentSource, /async function mutate[\s\S]*?setActionError\(null\)/)
+  assert.match(componentSource, /body\.error/)
+  assert.match(componentSource, /setActionError\(\(current\) => current \?\? t\('saveFailed'\)\)/)
+})
+
 test('employee wage validation rejects exponent, NaN, and infinite input before submit', async () => {
   for (const invalid of ['1e3', 'NaN', 'Infinity', '-Infinity']) {
     const invalidRate = await runAddRate({ rate: invalid, annualHours: '2080' })
