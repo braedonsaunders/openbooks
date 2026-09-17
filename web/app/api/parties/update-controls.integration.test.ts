@@ -17,24 +17,23 @@ registerHooks({ resolve(specifier, context, next) {
 }})
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH, GET } = await import('./[id]/route')
 const { GET: transactions } = await import('./[id]/transactions/route')
-// The route import pulls in the web request-org resolver, which takes the
-// process-global resolver slot from the test bypass — plain node has no Next
-// request store, so fixture setup would lose its trusted boundary and every
-// seed would RLS-fail. Re-install the test boundary after the route imports;
-// per-call withOrgContext below still scopes every route invocation.
-await import('@openbooks/engine/src/test-database-bypass.ts')
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const patchRequest = (body: unknown) => new Request('http://audit.local', { method: 'PATCH', body: JSON.stringify(body) })
 
 async function fixture() {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'Party auditor', 'reviewer')
-  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  // Explicit withOrg/withBypass blocks take precedence over the
+  // request-org resolver the route import registers, so this holds no
+  // matter which module the test runner preloads first.
+  const org = await withBypassContext(() => createScratchOrg())
+  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Party auditor', 'reviewer'))
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
   session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   return { org, actor }
 }
