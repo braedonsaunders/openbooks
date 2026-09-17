@@ -2046,6 +2046,11 @@
       "copied": "Kopiert",
       "testConnection": "Verbindung testen",
       "testing": "Teste…"
+    },
+    "agents": {
+      "overview": {
+        "scanAlreadyRunning": "Es läuft bereits ein Scan."
+      }
     }
   },
   "flows": {

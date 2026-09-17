@@ -1560,6 +1560,7 @@
         "toggleFailed": "Couldn't save the pack setting.",
         "scanComplete": "{count, plural, one {# finding} other {# findings}} detected",
         "scanFailed": "The scan failed to start.",
+        "scanAlreadyRunning": "A scan is already running.",
         "guideLink": "Setup guide",
         "columns": {
           "pack": "Pack",

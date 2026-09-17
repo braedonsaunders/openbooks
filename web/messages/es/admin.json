@@ -1420,6 +1420,7 @@
         "toggleFailed": "No se pudo guardar el ajuste del paquete.",
         "scanComplete": "{count, plural, one {# hallazgo detectado} other {# hallazgos detectados}}",
         "scanFailed": "No se pudo iniciar el análisis.",
+        "scanAlreadyRunning": "Ya hay un análisis en ejecución.",
         "guideLink": "Guía de configuración",
         "columns": {
           "pack": "Paquete",

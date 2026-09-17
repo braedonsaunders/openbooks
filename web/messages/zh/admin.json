@@ -2046,6 +2046,11 @@
       "copied": "已复制",
       "testConnection": "测试连接",
       "testing": "测试中…"
+    },
+    "agents": {
+      "overview": {
+        "scanAlreadyRunning": "扫描已在运行。"
+      }
     }
   },
   "flows": {

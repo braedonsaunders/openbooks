@@ -2046,6 +2046,11 @@
       "copied": "Copiado",
       "testConnection": "Testar conexão",
       "testing": "Testando…"
+    },
+    "agents": {
+      "overview": {
+        "scanAlreadyRunning": "Já há uma varredura em execução."
+      }
     }
   },
   "flows": {

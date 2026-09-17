@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Loader2, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { postAgentScan } from '../run-agent-scan'
 
 /**
  * One run's row actions for the Agents activity spec table: the findings link
@@ -31,10 +32,16 @@ export function AgentsRunActions({
     if (running) return
     setRunning(true)
     try {
-      const res = await fetch(`/api/admin/setup/agents/${agentKey}/run`, { method: 'POST' })
-      const payload = (await res.json().catch(() => ({}))) as { detected?: number }
-      if (!res.ok) throw new Error(t('setup.agents.overview.scanFailed'))
-      toast.success(t('setup.agents.overview.scanComplete', { count: payload.detected ?? 0 }))
+      const outcome = await postAgentScan(agentKey)
+      if (!outcome.ok) {
+        if (outcome.alreadyRunning) {
+          toast.error(t('setup.agents.overview.scanAlreadyRunning'))
+          router.refresh()
+          return
+        }
+        throw new Error(t('setup.agents.overview.scanFailed'))
+      }
+      toast.success(t('setup.agents.overview.scanComplete', { count: outcome.detected }))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
