@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
@@ -150,11 +151,10 @@ export async function loadPropertyManagement(
       sql`select d.id,d.party_id as "partyId",concat_ws(' · ',d.document_number,d.document_date::text) as name,d.open_balance as "openBalance" from documents d where d.org_id=${orgId} and d.kind='customer_invoice' and d.status='posted' and coalesce(d.open_balance,0)>0 ${documentSubsidiaryScope} order by d.document_date desc`,
     ),
   ])
+  const t = await getTranslations('entities.propertyManagement.workspace')
   return {
-    // Hard-coded in the native PageHeader, not a message key.
-    title: 'Property Management',
-    description:
-      'Operate properties, leases, rent, CAM reconciliations, and tenant security deposits.',
+    title: t('title'),
+    description: t('description'),
     customization: {
       layout: resolvedForm.layout,
       forms: resolvedForm.available.map(({ id, name }) => ({ id, name })),

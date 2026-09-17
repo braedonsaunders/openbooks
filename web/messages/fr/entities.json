@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "Gestion immobilière",
+      "description": "Gérez les immeubles, les baux, les loyers, les régularisations de charges et les dépôts de garantie.",
+      "healthAria": "État du portefeuille",
+      "tabs": {
+        "properties": "Immeubles",
+        "rentRoll": "Rôle des loyers",
+        "cam": "Charges communes",
+        "depositReconciliation": "Rapprochement des dépôts"
+      },
+      "metrics": {
+        "occupiedUnits": "Logements occupés",
+        "activeLeasesHint": "{count} baux actifs",
+        "monthlyBaseRent": "Loyer de base mensuel",
+        "currentChargesHint": "Charges actives en cours",
+        "rentPastDue": "Loyers facturés en retard",
+        "agingHint": "Ancienneté des échéanciers",
+        "depositsHeld": "Dépôts de garantie détenus",
+        "depositLiabilityHint": "Dette des dépôts des locataires"
+      },
+      "sectionsAria": "Sections de la gestion immobilière",
+      "newProperty": "Nouvel immeuble",
+      "newCamPool": "Nouveau groupe de charges",
+      "assessLateFees": "Appliquer les frais de retard",
+      "billDueRent": "Facturer les loyers dus",
+      "loading": "Chargement du portefeuille…",
+      "toasts": {
+        "lateFeesAssessed": "Frais de retard du portefeuille appliqués",
+        "rentBilled": "Loyers du portefeuille facturés",
+        "propertyCreated": "Immeuble créé",
+        "propertyUpdated": "Immeuble mis à jour",
+        "propertyDeleted": "Immeuble supprimé",
+        "unitAdded": "Logement ajouté",
+        "unitUpdated": "Logement mis à jour",
+        "unitDeleted": "Logement supprimé",
+        "leaseCreated": "Bail créé",
+        "leaseUpdated": "Bail mis à jour",
+        "camPoolCreated": "Groupe de charges créé",
+        "camPoolUpdated": "Groupe de charges mis à jour",
+        "camPoolReopened": "Groupe de charges rouvert pour correction",
+        "couldNotLoad": "Impossible de charger les immeubles",
+        "actionFailed": "L'action a échoué"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "Clients",

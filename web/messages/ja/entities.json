@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "不動産管理",
+      "description": "物件、リース、家賃、共益費精算、敷金を管理します。",
+      "healthAria": "ポートフォリオの状態",
+      "tabs": {
+        "properties": "物件",
+        "rentRoll": "家賃台帳",
+        "cam": "共益費",
+        "depositReconciliation": "敷金照合"
+      },
+      "metrics": {
+        "occupiedUnits": "入居中ユニット",
+        "activeLeasesHint": "{count}件の有効なリース",
+        "monthlyBaseRent": "月額基本家賃",
+        "currentChargesHint": "現在の有効な請求",
+        "rentPastDue": "滞納家賃",
+        "agingHint": "請求スケジュールの経過",
+        "depositsHeld": "預かり敷金",
+        "depositLiabilityHint": "敷金負債"
+      },
+      "sectionsAria": "不動産管理セクション",
+      "newProperty": "新規物件",
+      "newCamPool": "新規共益費プール",
+      "assessLateFees": "遅延料金を適用",
+      "billDueRent": "期限の家賃を請求",
+      "loading": "ポートフォリオを読み込み中…",
+      "toasts": {
+        "lateFeesAssessed": "遅延料金を適用しました",
+        "rentBilled": "家賃を請求しました",
+        "propertyCreated": "物件を作成しました",
+        "propertyUpdated": "物件を更新しました",
+        "propertyDeleted": "物件を削除しました",
+        "unitAdded": "ユニットを追加しました",
+        "unitUpdated": "ユニットを更新しました",
+        "unitDeleted": "ユニットを削除しました",
+        "leaseCreated": "リースを作成しました",
+        "leaseUpdated": "リースを更新しました",
+        "camPoolCreated": "共益費プールを作成しました",
+        "camPoolUpdated": "共益費プールを更新しました",
+        "camPoolReopened": "共益費プールを修正のため再開しました",
+        "couldNotLoad": "物件を読み込めませんでした",
+        "actionFailed": "操作に失敗しました"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "得意先",

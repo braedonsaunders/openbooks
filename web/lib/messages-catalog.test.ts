@@ -370,6 +370,34 @@ test('inventory workspace tabs are translated in every locale', () => {
   }
 })
 
+test('property-management workspace chrome ships in every locale', () => {
+  // F-t09-015: /property-management rendered fully English under fr/es —
+  // the whole workspace block (heading, KPIs, tabs, actions, toasts) was
+  // absent outside en and fell back to English. Every leaf must exist, be
+  // localized, and keep its ICU placeholders.
+  const source = flattenCatalog('en')
+  const prefix = 'entities.propertyManagement.workspace.'
+  const sourceKeys = [...source.keys()].filter((key) => key.startsWith(prefix)).sort()
+  assert.ok(sourceKeys.length > 0, 'no workspace source keys')
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of sourceKeys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+    const tokens = (value: string): Set<string> =>
+      new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+    const drift = sourceKeys.filter((key) => {
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} property-management translations drop ICU placeholders`)
+  }
+})
+
 test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {
   const source = flattenCatalog('en')
   const manifest = readFallbackManifest()
@@ -380,7 +408,7 @@ test('the generated fallback manifest exactly identifies untranslated property-m
 
   assert.equal(manifest.sourceLocale, 'en')
   assert.deepEqual(Object.keys(manifest.fallbacks).sort(), translatedLocales)
-  assert.equal(propertyKeys.length, 198, 'the property-management source inventory changed')
+  assert.equal(propertyKeys.length, 200, 'the property-management source inventory changed')
   assert.deepEqual(manifest, generateFallbackManifest(), 'fallback manifest must be regenerated')
 
   for (const locale of translatedLocales) {
@@ -509,7 +537,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     }
     assert.equal(
       declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,
-      198,
+      164,
       `${row.locale} must report all property-management values as untranslated fallbacks`,
     )
     t.diagnostic(

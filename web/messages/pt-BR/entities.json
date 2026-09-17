@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "Gestão de imóveis",
+      "description": "Opere imóveis, locações, aluguéis, conciliações de despesas comuns e cauções.",
+      "healthAria": "Saúde da carteira",
+      "tabs": {
+        "properties": "Imóveis",
+        "rentRoll": "Mapa de aluguéis",
+        "cam": "Despesas comuns",
+        "depositReconciliation": "Conciliação de cauções"
+      },
+      "metrics": {
+        "occupiedUnits": "Unidades ocupadas",
+        "activeLeasesHint": "{count} locações ativas",
+        "monthlyBaseRent": "Aluguel base mensal",
+        "currentChargesHint": "Cobranças ativas vigentes",
+        "rentPastDue": "Aluguéis faturados em atraso",
+        "agingHint": "Antiguidade do cronograma de faturas",
+        "depositsHeld": "Cauções retidas",
+        "depositLiabilityHint": "Passivo de cauções de inquilinos"
+      },
+      "sectionsAria": "Seções da gestão de imóveis",
+      "newProperty": "Novo imóvel",
+      "newCamPool": "Novo grupo de despesas",
+      "assessLateFees": "Aplicar multas por atraso",
+      "billDueRent": "Faturar aluguéis vencidos",
+      "loading": "Carregando a carteira de imóveis…",
+      "toasts": {
+        "lateFeesAssessed": "Multas por atraso da carteira aplicadas",
+        "rentBilled": "Aluguéis da carteira faturados",
+        "propertyCreated": "Imóvel criado",
+        "propertyUpdated": "Imóvel atualizado",
+        "propertyDeleted": "Imóvel excluído",
+        "unitAdded": "Unidade adicionada",
+        "unitUpdated": "Unidade atualizada",
+        "unitDeleted": "Unidade excluída",
+        "leaseCreated": "Locação criada",
+        "leaseUpdated": "Locação atualizada",
+        "camPoolCreated": "Grupo de despesas criado",
+        "camPoolUpdated": "Grupo de despesas atualizado",
+        "camPoolReopened": "Grupo de despesas reaberto para correção",
+        "couldNotLoad": "Não foi possível carregar os imóveis",
+        "actionFailed": "A ação falhou"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "Clientes",
