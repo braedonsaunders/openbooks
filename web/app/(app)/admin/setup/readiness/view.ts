@@ -198,8 +198,6 @@ export function setupReadinessSpec(data: SetupReadinessData): PageSpec {
           badgeReady: f('hero.badgeReady'),
           progressLabel: f('hero.progressLabel'),
           progressOf: f('hero.progressOf'),
-          progressCount: f('hero.progressCount'),
-          progressTotal: f('hero.progressTotal'),
           progressPercent: f('hero.progressPercent'),
           progressMin: f('hero.progressMin'),
           progressMax: f('hero.progressMax'),
