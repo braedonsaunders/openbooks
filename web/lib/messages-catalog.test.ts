@@ -1614,6 +1614,77 @@ const PAYROLL_CHROME_COGNATES = new Set([
   'zh:payroll.register.cppFica',
 ])
 
+test('ar collections copy ships translated in every locale', () => {
+  // F-x6-002: the recurring/subscriptions/dunning block (104 keys) existed
+  // only in en/fr/es — de/ja/zh/pt-BR rendered English inside otherwise
+  // translated AR screens. Every leaf must exist, keep its ICU
+  // placeholders, and differ from English except for reviewed cognates,
+  // which are pinned to their exact identical term.
+  const identicalByFact = new Set([
+    'de:ar.collections.dunning.stageLabels.name|Name',
+    'de:ar.collections.subscriptions.planPlaceholder|Plan…',
+    'de:ar.collections.subscriptions.plansTable.plan|Plan',
+    'de:ar.collections.subscriptions.subsTable.plan|Plan',
+    'de:ar.collections.subscriptions.subsTable.mrr|MRR',
+    'de:ar.collections.subscriptions.subsTable.status|Status',
+    'de:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'de:ar.collections.recurring.cronLabel|Cron',
+    'de:ar.collections.recurring.table.status|Status',
+    'ja:ar.collections.subscriptions.subsTable.mrr|MRR',
+    'ja:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'ja:ar.collections.recurring.cronLabel|Cron',
+    'zh:ar.collections.subscriptions.subsTable.mrr|MRR',
+    'zh:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'zh:ar.collections.recurring.cronLabel|Cron',
+    'pt-BR:ar.collections.subscriptions.subsTable.mrr|MRR',
+    'pt-BR:ar.collections.subscriptions.subsTable.status|Status',
+    'pt-BR:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'pt-BR:ar.collections.recurring.cronLabel|Cron',
+    'pt-BR:ar.collections.recurring.table.status|Status',
+    'pt-BR:ar.collections.dunning.tokensHint|Tokens:',
+    'fr:ar.collections.recurring.cadenceLabel|Cadence',
+    'fr:ar.collections.recurring.table.cadence|Cadence',
+    'fr:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'fr:ar.collections.recurring.cronLabel|Cron',
+    'es:ar.collections.subscriptions.planPlaceholder|Plan…',
+    'es:ar.collections.subscriptions.plansTable.plan|Plan',
+    'es:ar.collections.subscriptions.subsTable.plan|Plan',
+    'es:ar.collections.subscriptions.subsTable.mrr|MRR',
+    'es:ar.collections.recurring.no|No',
+    'es:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+    'es:ar.collections.recurring.cronLabel|Cron',
+    'es:ar.collections.dunning.tokensHint|Tokens:',
+  ])
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter((key) => key.startsWith('ar.collections.'))
+  assert.equal(wanted.length, 104, 'ar.collections source inventory changed; translate the new keys everywhere and re-pin')
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = wanted.filter((key) => {
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} ar.collections translations drop or rename ICU placeholders`)
+  }
+})
+
 test('payroll navigation chrome is translated in every locale', () => {
   // F-t08-018: the payroll module rendered fully English under fr while the
   // shell translated — the namespace had 5 keys per locale against 1077 in

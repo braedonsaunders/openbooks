@@ -168,5 +168,133 @@
       "void": "無効",
       "expired": "期限切れ"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "定期請求書",
+      "subscriptions": "サブスクリプション",
+      "advanced": "高度なライフサイクル",
+      "dunning": "督促"
+    },
+    "errors": {
+      "actionFailed": "アクションに失敗しました",
+      "couldNotCreate": "作成できませんでした"
+    },
+    "subscriptions": {
+      "mrr": "月次経常収益",
+      "summary": "{active} 件が有効 · {plans, plural, one {# プラン} other {# プラン}}",
+      "plansTitle": "プラン",
+      "plansTable": {
+        "plan": "プラン",
+        "price": "価格",
+        "billing": "請求"
+      },
+      "archived": "（アーカイブ済み）",
+      "every": "{count}{unit}ごと",
+      "delete": "削除",
+      "noPlans": "プランはまだありません。",
+      "planNamePlaceholder": "プラン名",
+      "pricePlaceholder": "価格",
+      "everyNPlaceholder": "N ごと",
+      "defaultIncomeAccount": "既定の収益勘定",
+      "addPlan": "プランを追加",
+      "subsTitle": "サブスクリプション",
+      "subsTable": {
+        "customer": "顧客",
+        "plan": "プラン",
+        "qty": "数量",
+        "mrr": "MRR",
+        "nextBill": "次回請求",
+        "status": "ステータス"
+      },
+      "noSubs": "サブスクリプションはまだありません。",
+      "customerPlaceholder": "顧客…",
+      "planPlaceholder": "プラン…",
+      "qtyPlaceholder": "数量",
+      "priceOverridePlaceholder": "価格の上書き（任意）",
+      "firstFullBill": "初回の全額請求",
+      "prorateFirstPeriod": "初回期間を日割りする",
+      "autoPostInvoices": "請求書を自動記帳する",
+      "addSubscription": "サブスクリプションを追加",
+      "prorateHint": "開始日より後の初回請求日を設定し「日割り」にチェックすると、初回の部分期間のみを今回請求します。",
+      "apply": "適用",
+      "billNow": "今すぐ請求",
+      "changeQty": "数量を変更",
+      "pause": "一時停止",
+      "resume": "再開",
+      "cancelSub": "解約",
+      "cancelConfirmTitle": "サブスクリプションを解約しますか?",
+      "cancelConfirmBody": "解約すると、このサブスクリプションの定期請求が終了します。この操作は取り消せません。",
+      "toasts": {
+        "prorated": "日割り調整 {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "数量を更新しました（日割りなし）",
+        "billed": "{documentNumber} を請求しました",
+        "firstInvoiceProrated": "初回の日割り請求書 {documentNumber}（{amount}）"
+      }
+    },
+    "recurring": {
+      "newSchedule": "新しい定期スケジュール",
+      "templateDocLabel": "テンプレート書類 #",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "請求サイクル",
+      "cadences": {
+        "weekly": "毎週",
+        "biweekly": "隔週",
+        "monthly": "毎月",
+        "quarterly": "四半期ごと",
+        "annually": "毎年",
+        "custom_cron": "カスタム cron"
+      },
+      "cronLabel": "Cron",
+      "firstRunLabel": "初回実行",
+      "autoPostCheckbox": "生成書類を自動記帳する",
+      "createSchedule": "スケジュールを作成",
+      "table": {
+        "template": "テンプレート",
+        "customer": "顧客",
+        "cadence": "請求サイクル",
+        "nextRun": "次回実行",
+        "runs": "実行回数",
+        "autoPost": "自動記帳",
+        "status": "ステータス"
+      },
+      "yes": "はい",
+      "no": "いいえ",
+      "active": "有効",
+      "paused": "一時停止中",
+      "runNow": "今すぐ実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "delete": "削除",
+      "actionFailed": "定期スケジュールのアクションを完了できませんでした。",
+      "generatedDocumentsDeleteConflict": "この定期スケジュールは書類を生成済みのため削除できません。生成元の履歴を保持する必要があります。",
+      "noneYet": "定期スケジュールはまだありません。"
+    },
+    "dunning": {
+      "blankStageName": "初回リマインダー",
+      "newPolicy": "新しい督促ポリシー",
+      "policyNameLabel": "ポリシー名",
+      "policyNamePlaceholder": "標準のネット30督促",
+      "gracePeriodLabel": "猶予期間（延滞日数）",
+      "reminderLadder": "リマインダーフロー",
+      "addStage": "+ ステージを追加",
+      "newStageName": "リマインダー {n}",
+      "stageLabels": {
+        "name": "名前",
+        "daysPastDue": "延滞日数",
+        "sequence": "順序"
+      },
+      "subjectLabel": "件名",
+      "bodyLabel": "本文",
+      "removeStage": "ステージを削除",
+      "tokensHint": "トークン:",
+      "createPolicy": "ポリシーを作成",
+      "policySummary": "{count, plural, one {# ステージ} other {# ステージ}} · 猶予 {grace}日",
+      "off": "オフ",
+      "delete": "削除",
+      "stageDay": "· {day}日目: {name}",
+      "noneYet": "督促ポリシーはまだありません。",
+      "activeBadge": "有効"
+    }
   }
 }

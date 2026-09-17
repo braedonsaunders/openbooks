@@ -168,5 +168,133 @@
       "void": "anulado",
       "expired": "expirado"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "Faturas recorrentes",
+      "subscriptions": "Assinaturas",
+      "advanced": "Ciclo de vida avançado",
+      "dunning": "Cobrança"
+    },
+    "errors": {
+      "actionFailed": "Falha na ação",
+      "couldNotCreate": "Não foi possível criar"
+    },
+    "subscriptions": {
+      "mrr": "Receita recorrente mensal",
+      "summary": "{active} ativas · {plans, plural, one {# plano} other {# planos}}",
+      "plansTitle": "Planos",
+      "plansTable": {
+        "plan": "Plano",
+        "price": "Preço",
+        "billing": "Faturamento"
+      },
+      "archived": "(arquivado)",
+      "every": "a cada {count}{unit}",
+      "delete": "Excluir",
+      "noPlans": "Ainda não há planos.",
+      "planNamePlaceholder": "Nome do plano",
+      "pricePlaceholder": "Preço",
+      "everyNPlaceholder": "a cada N",
+      "defaultIncomeAccount": "Conta de receita padrão",
+      "addPlan": "Adicionar plano",
+      "subsTitle": "Assinaturas",
+      "subsTable": {
+        "customer": "Cliente",
+        "plan": "Plano",
+        "qty": "Qtd.",
+        "mrr": "MRR",
+        "nextBill": "Próxima fatura",
+        "status": "Status"
+      },
+      "noSubs": "Ainda não há assinaturas.",
+      "customerPlaceholder": "Cliente…",
+      "planPlaceholder": "Plano…",
+      "qtyPlaceholder": "Qtd.",
+      "priceOverridePlaceholder": "Preço manual (opcional)",
+      "firstFullBill": "Primeira fatura completa",
+      "prorateFirstPeriod": "Ratear o primeiro período",
+      "autoPostInvoices": "Lançar faturas automaticamente",
+      "addSubscription": "Adicionar assinatura",
+      "prorateHint": "Informe uma data de primeira fatura após o início e marque “rateio” para faturar agora só o primeiro período parcial.",
+      "apply": "Aplicar",
+      "billNow": "Faturar agora",
+      "changeQty": "Alterar quantidade",
+      "pause": "Pausar",
+      "resume": "Retomar",
+      "cancelSub": "Cancelar",
+      "cancelConfirmTitle": "Cancelar a assinatura?",
+      "cancelConfirmBody": "Cancelar encerra o faturamento recorrente desta assinatura. Isso não pode ser desfeito.",
+      "toasts": {
+        "prorated": "Rateio {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "Quantidade atualizada (sem rateio)",
+        "billed": "Faturado {documentNumber}",
+        "firstInvoiceProrated": "Primeira fatura com rateio {documentNumber} de {amount}"
+      }
+    },
+    "recurring": {
+      "newSchedule": "Nova programação recorrente",
+      "templateDocLabel": "Documento modelo nº",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "Periodicidade",
+      "cadences": {
+        "weekly": "Semanal",
+        "biweekly": "Quinzenal",
+        "monthly": "Mensal",
+        "quarterly": "Trimestral",
+        "annually": "Anual",
+        "custom_cron": "Cron personalizado"
+      },
+      "cronLabel": "Cron",
+      "firstRunLabel": "Primeira execução",
+      "autoPostCheckbox": "Lançar automaticamente os documentos gerados",
+      "createSchedule": "Criar programação",
+      "table": {
+        "template": "Modelo",
+        "customer": "Cliente",
+        "cadence": "Periodicidade",
+        "nextRun": "Próxima execução",
+        "runs": "Execuções",
+        "autoPost": "Lanç. auto",
+        "status": "Status"
+      },
+      "yes": "Sim",
+      "no": "Não",
+      "active": "Ativo",
+      "paused": "Em pausa",
+      "runNow": "Executar agora",
+      "pause": "Pausar",
+      "resume": "Retomar",
+      "delete": "Excluir",
+      "actionFailed": "Não foi possível concluir a ação da programação recorrente.",
+      "generatedDocumentsDeleteConflict": "Esta programação recorrente não pode ser excluída porque já gerou documentos. O histórico de origem deve ser preservado.",
+      "noneYet": "Ainda não há programações recorrentes."
+    },
+    "dunning": {
+      "blankStageName": "Primeiro lembrete",
+      "newPolicy": "Nova política de cobrança",
+      "policyNameLabel": "Nome da política",
+      "policyNamePlaceholder": "Cobrança padrão net 30",
+      "gracePeriodLabel": "Período de carência (dias em atraso)",
+      "reminderLadder": "Escada de lembretes",
+      "addStage": "+ Adicionar etapa",
+      "newStageName": "Lembrete {n}",
+      "stageLabels": {
+        "name": "Nome",
+        "daysPastDue": "Dias em atraso",
+        "sequence": "Ordem"
+      },
+      "subjectLabel": "Assunto",
+      "bodyLabel": "Corpo",
+      "removeStage": "Remover etapa",
+      "tokensHint": "Tokens:",
+      "createPolicy": "Criar política",
+      "policySummary": "{count, plural, one {# etapa} other {# etapas}} · carência {grace} d",
+      "off": "Desativado",
+      "delete": "Excluir",
+      "stageDay": "· Dia {day}: {name}",
+      "noneYet": "Ainda não há políticas de cobrança.",
+      "activeBadge": "Ativo"
+    }
   }
 }
