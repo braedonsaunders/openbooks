@@ -659,7 +659,11 @@ export function AssistantApp({
     if (!key) return
     const runId = runIdsRef.current.get(key)
     if (runId) {
-      void fetch(`/api/assistant/runs/${runId}/abort`, { method: 'POST' }).catch(() => {})
+      void fetch(`/api/assistant/runs/${runId}/abort`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }).catch(() => {})
     }
     abortTurn(key)
   }, [])

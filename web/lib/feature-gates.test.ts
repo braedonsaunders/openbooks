@@ -1834,7 +1834,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/setup/write.ts'),
-    /integrityError === 'not found' \? 404/,
+    /if \(integrityError === 'not found'\) return \{ status: 404/,
     'derived-rule setup POST must 404 — not persist — equipment_unit_id when Equipment is off',
   )
   assert.match(
