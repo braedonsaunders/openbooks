@@ -983,6 +983,99 @@ async function auditTicketLifecycle(
 }
 
 /**
+ * Discard an untouched draft (F-t04-005). New ticket persists an empty
+ * server-side draft on click, so closing the drawer without entering
+ * anything must not orphan a shell row: an empty draft deletes cleanly,
+ * anything with content, signatures, links, or status refuses with the
+ * blocker named. The deletion itself is audited; the number is burned like
+ * every other discarded draft document.
+ */
+export async function discardEmptyTicketDraft(
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  expectedRevision: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<void> {
+  await runDocumentVersionedTransaction<
+    TicketTransaction,
+    { status: string; updatedAt: string },
+    void
+  >({
+    expectedRevision,
+    transaction: (work) => db.transaction(work),
+    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+      select d.status,
+             ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
+        from documents d
+        join field_tickets ft
+          on ft.document_id = d.id and ft.org_id = d.org_id
+       where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
+       for update of d, ft
+    `)).rows[0] ?? null,
+    mutate: async (tx) => {
+      await assertFieldTicketsEnabledTx(tx, orgId)
+      const doc = await loadHeader(orgId, ticketId)
+      if (doc.status !== 'draft') {
+        throw new FieldTicketError(`Only an untouched draft can be discarded — this ticket is ${doc.status}`)
+      }
+      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
+        throw new FieldTicketNotFoundError('Ticket not found')
+      }
+      const usage = (await tx.execute<{
+        lines: string
+        hours: string
+        laborLines: string
+        snapshots: string
+        signatures: string
+        signatureRequests: string
+        links: string
+        billingRefs: string
+        total: string
+      }>(sql`
+        select (select count(*)::text from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines,
+               (select count(*)::text from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
+               (select count(*)::text from field_ticket_labor_lines where org_id = ${orgId} and field_ticket_id = ${ticketId}) as "laborLines",
+               (select count(*)::text from field_ticket_labor_snapshots where org_id = ${orgId} and field_ticket_id = ${ticketId}) as snapshots,
+               (select count(*)::text from field_ticket_signatures where org_id = ${orgId} and field_ticket_id = ${ticketId}) as signatures,
+               (select count(*)::text from field_ticket_signature_requests where org_id = ${orgId} and field_ticket_id = ${ticketId}) as "signatureRequests",
+               (select count(*)::text from document_links where org_id = ${orgId} and (from_document_id = ${ticketId} or to_document_id = ${ticketId})) as links,
+               (select count(*)::text from billing_request_field_tickets where org_id = ${orgId} and field_ticket_id = ${ticketId}) as "billingRefs",
+               (select coalesce(total, 0)::text from documents where id = ${ticketId} and org_id = ${orgId}) as total
+      `)).rows[0]!
+      const blockers: Array<[string, string]> = [
+        [usage.lines, 'item lines'],
+        [usage.hours, 'crew hours'],
+        [usage.laborLines, 'crew rows'],
+        [usage.snapshots, 'labor evidence'],
+        [usage.signatures, 'signatures'],
+        [usage.signatureRequests, 'signature requests'],
+        [usage.links, 'document links'],
+        [usage.billingRefs, 'billing-request selections'],
+      ]
+      const held = blockers.filter(([count]) => Number(count) > 0).map(([, label]) => label)
+      if (held.length > 0) {
+        throw new FieldTicketError(
+          `This draft already carries ${held.join(', ')} — only an empty draft can be discarded`,
+        )
+      }
+      if (!isZero(usage.total)) {
+        throw new FieldTicketError('This draft already carries a non-zero total — only an empty draft can be discarded')
+      }
+      // field_tickets, signature requests, and signatures cascade off the
+      // document row; the gate above guarantees there is nothing for the
+      // remaining RESTRICT references to hold.
+      await tx.execute(sql`delete from documents where id = ${ticketId} and org_id = ${orgId}`)
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'documents', ${ticketId}, 'delete',
+                ${JSON.stringify({ event: 'draft_discarded', documentNumber: doc.document_number })}::jsonb, ${userId})
+      `)
+    },
+  })
+}
+
+/**
  * Submit through Flows. An enabled tenant-authored on_submit flow may create
  * gates; when none does, the ticket approves immediately. There is no default
  * approver, hardcoded threshold, or parallel approval path.

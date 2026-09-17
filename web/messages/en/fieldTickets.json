@@ -149,6 +149,10 @@
     "sendMessage": "Message (optional)",
     "send": "Send",
     "signatureSent": "Signing link sent to {to}",
-    "pdf": "PDF"
+    "pdf": "PDF",
+    "discard": "Discard draft",
+    "discardConfirm": "Discard this empty draft? A draft that already carries hours, lines, or signatures is kept — only a draft with nothing on it goes away.",
+    "discardFailed": "Could not discard the draft.",
+    "discarded": "Draft discarded."
   }
 }
