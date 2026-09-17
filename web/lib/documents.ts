@@ -1394,10 +1394,49 @@ export async function applyDocumentEdit(
       `))).rows
 
       if (preparedLines) {
+        // Billed-time/cost provenance the editor's column set cannot express
+        // (F-t04-003): a billing-generated invoice's lines are referenced by
+        // time_entries.invoiced_by_line_id and by source cost lines'
+        // billed_by_line_id, so a blind delete dies on those FKs as a raw
+        // 500 — and would strand the provenance even if it did not. Snapshot
+        // the per-line identity; the replacement below carries it forward
+        // positionally (the same convention the editor already addresses
+        // lines by) and re-points the references onto the new rows.
+        const provenance = (await tx.execute<{
+          id: string
+          timeEntryId: string | null
+          employeeId: string | null
+          timeTypeId: string | null
+          equipmentUnitId: string | null
+          rateVersionId: string | null
+          billRate: string | null
+          billAmount: string | null
+        }>(sql`
+          select id, time_entry_id as "timeEntryId", employee_id as "employeeId",
+                 time_type_id as "timeTypeId", equipment_unit_id as "equipmentUnitId",
+                 rate_version_id as "rateVersionId",
+                 bill_rate::text as "billRate", bill_amount::text as "billAmount"
+            from document_lines
+           where document_id = ${id} and org_id = ${orgId}
+           order by line_number
+        `)).rows
+        // Every FK around document lines is deferrable: hold inbound
+        // provenance checks until commit, when the re-point below has
+        // restored them onto the replacement rows. Any other inbound
+        // reference still fails the commit — fail closed, never dangling.
+        await tx.execute(sql`set constraints all deferred`)
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
         const insertedLineIds: string[] = []
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
+          const carry = i < provenance.length ? provenance[i]! : undefined
+          // A carried billable-value snapshot follows the edit: the snapshot
+          // columns mirror the commercial price (as generation writes them),
+          // so leaving a stale zero behind would corrupt the earned views
+          // that prefer bill_amount over amount. Lines that never carried a
+          // snapshot keep null rather than inventing one.
+          const billRate = carry?.billRate != null ? (l.unitPrice ?? l.amount) : null
+          const billAmount = carry?.billAmount != null ? l.amount : null
           const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
@@ -1405,14 +1444,18 @@ export async function applyDocumentEdit(
                                         party_id, department_id, project_id, location_id, class_id,
                                         stock_location_id, extra_dims, custom,
                                         distribution_group_id, distribution_rule_id, distribution_version_id,
-                                        distribution_locked)
+                                        distribution_locked,
+                                        time_entry_id, employee_id, time_type_id,
+                                        equipment_unit_id, rate_version_id, bill_rate, bill_amount)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)},
                     ${l.distributionGroupId}, ${l.distributionRuleId}, ${l.distributionVersionId},
-                    ${l.distributionLocked})
+                    ${l.distributionLocked},
+                    ${carry?.timeEntryId ?? null}, ${carry?.employeeId ?? null}, ${carry?.timeTypeId ?? null},
+                    ${carry?.equipmentUnitId ?? null}, ${carry?.rateVersionId ?? null}, ${billRate}, ${billAmount})
             returning id
           `))
           insertedLineIds.push(inserted.rows[0]!.id)
@@ -1462,6 +1505,57 @@ export async function applyDocumentEdit(
                       ${row.driverValue ?? null}, ${row.driverTotal ?? null}, ${row.share ?? null},
                       ${row.amount}, ${row.residual})
             `)
+          }
+        }
+        // Re-home the billed references the snapshot carried (F-t04-003): the
+        // new rows replaced the old ids, so time entries and source cost
+        // lines that pointed at the old rows must follow positionally.
+        // References off lines the edit removed are released — the work
+        // becomes billable again — instead of dangling at deleted rows.
+        // Ordinary edits reference nothing and skip both moves entirely, so
+        // the paired replay authority below is never raised for them.
+        const moves = provenance.map((oldLine, index) => ({
+          oldId: oldLine.id,
+          newId: index < insertedLineIds.length ? insertedLineIds[index]! : null,
+        }))
+        if (moves.length > 0) {
+          const oldIds = `{${moves.map((move) => move.oldId).join(',')}}`
+          const hasTimeRefs = (await tx.execute(sql`select 1 from time_entries
+            where org_id = ${orgId} and invoiced_by_line_id = any(${oldIds}::uuid[]) limit 1`)).rows.length > 0
+          const hasCostRefs = (await tx.execute(sql`select 1 from document_lines
+            where org_id = ${orgId} and billed_by_line_id = any(${oldIds}::uuid[]) limit 1`)).rows.length > 0
+          if (hasTimeRefs) {
+            for (const move of moves) {
+              if (move.newId) {
+                await tx.execute(sql`update time_entries set invoiced_by_line_id = ${move.newId}
+                  where org_id = ${orgId} and invoiced_by_line_id = ${move.oldId}`)
+              } else {
+                await tx.execute(sql`update time_entries set invoiced_by_line_id = null, billing_status = 'unbilled'
+                  where org_id = ${orgId} and invoiced_by_line_id = ${move.oldId}`)
+              }
+            }
+          }
+          if (hasCostRefs) {
+            // Source cost lines live on (often non-draft) source documents,
+            // so their billed_by links move under the same paired replay
+            // authority the generator uses to stamp them — provenance
+            // metadata, never a financial edit — cleared before continuing.
+            await tx.execute(sql`set local openbooks.migration = on`)
+            await tx.execute(sql`set local openbooks.amend = on`)
+            try {
+              for (const move of moves) {
+                if (move.newId) {
+                  await tx.execute(sql`update document_lines set billed_by_line_id = ${move.newId}
+                    where org_id = ${orgId} and billed_by_line_id = ${move.oldId}`)
+                } else {
+                  await tx.execute(sql`update document_lines set billed_by_line_id = null
+                    where org_id = ${orgId} and billed_by_line_id = ${move.oldId}`)
+                }
+              }
+            } finally {
+              await tx.execute(sql`set local openbooks.migration = off`)
+              await tx.execute(sql`set local openbooks.amend = off`)
+            }
           }
         }
       }
