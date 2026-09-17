@@ -1079,7 +1079,8 @@
       "assignTo": "Affecter à…",
       "assignAria": "Affecter {name}",
       "addUnassigned": "Ajouter des comptes non affectés",
-      "add": "+ Ajouter"
+      "add": "+ Ajouter",
+      "noCategories": "Aucune catégorie de frais généraux pour le moment. Les catégories sont des groupes de comptes dans la dimension `burden` — créez-en une, puis assignez-lui ces comptes."
     },
     "deptFlyout": {
       "description": "Ventilation des charges indirectes du service · {billed, plural, one {# heure facturée} other {# heures facturées}} ({total, plural, one {# heure au total} other {# heures au total}})",

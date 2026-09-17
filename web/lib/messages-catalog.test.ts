@@ -2627,7 +2627,7 @@ test('analytics copy ships translated in fr, es and de', () => {
   ]
   const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
   assert.equal(icuWanted.length, 1251, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
-  assert.equal(wanted.length, 1883, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1884, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)

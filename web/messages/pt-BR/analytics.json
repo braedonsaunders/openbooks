@@ -1079,7 +1079,8 @@
       "assignTo": "Atribuir a…",
       "assignAria": "Atribuir {name}",
       "addUnassigned": "Adicionar contas não atribuídas",
-      "add": "+ Adicionar"
+      "add": "+ Adicionar",
+      "noCategories": "Ainda não há categorias de overhead. Categorias são grupos de contas na dimensão `burden` — crie uma e atribua estas contas a ela."
     },
     "deptFlyout": {
       "description": "Detalhamento dos custos indiretos do departamento · {billed, plural, one {# hora faturada} other {# horas faturadas}} ({total, plural, one {# hora total} other {# horas totais}})",

@@ -1079,7 +1079,8 @@
       "assignTo": "Asignar a…",
       "assignAria": "Asignar {name}",
       "addUnassigned": "Agregar cuentas sin asignar",
-      "add": "+ Agregar"
+      "add": "+ Agregar",
+      "noCategories": "Aún no hay categorías de gastos generales. Las categorías son grupos de cuentas en la dimensión `burden`: cree uno y asígnele estas cuentas."
     },
     "deptFlyout": {
       "description": "Desglose de carga del departamento · {billed, plural, one {# hora facturada} other {# horas facturadas}} ({total, plural, one {# hora total} other {# horas totales}})",

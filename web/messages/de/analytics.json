@@ -1079,7 +1079,8 @@
       "assignTo": "Zuordnen zu…",
       "assignAria": "{name} zuordnen",
       "addUnassigned": "Nicht zugeordnete Konten hinzufügen",
-      "add": "+ Hinzufügen"
+      "add": "+ Hinzufügen",
+      "noCategories": "Noch keine Gemeinkosten-Kategorien. Kategorien sind Kontengruppen in der Dimension `burden` — erstellen Sie eine und ordnen Sie ihr diese Konten zu."
     },
     "deptFlyout": {
       "description": "Gemeinkostenaufschlüsselung der Abteilung · {billed, plural, one {# verrechnete Std.} other {# verrechnete Std.}} ({total, plural, one {# Gesamtstunde} other {# Gesamtstunden}})",

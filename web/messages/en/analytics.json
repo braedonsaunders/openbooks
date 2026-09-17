@@ -1093,7 +1093,8 @@
       "assignTo": "Assign to…",
       "assignAria": "Assign {name}",
       "addUnassigned": "Add unassigned accounts",
-      "add": "+ Add"
+      "add": "+ Add",
+      "noCategories": "No overhead categories yet. Categories are account groups in the `burden` dimension — create one, then assign these accounts to it."
     },
     "deptFlyout": {
       "description": "Department burden breakdown · {billed, plural, one {# billed hr} other {# billed hrs}} ({total, plural, one {# total hr} other {# total hrs}})",
