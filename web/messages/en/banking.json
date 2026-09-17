@@ -154,7 +154,7 @@
     "title": "Reconciliation rules",
     "description": "Automatically clear recurring bank lines — match by description or amount, then exclude them or post a categorizing entry.",
     "search": "Search rules…",
-    "inactive": "inactive",
+    "inactive": "Inactive",
     "priority": "Priority",
     "whenLabel": "When",
     "thenLabel": "Then",
