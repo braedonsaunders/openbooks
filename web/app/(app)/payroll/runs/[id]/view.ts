@@ -25,6 +25,8 @@ import {
   resolvedPaymentMethodSql,
 } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -86,6 +88,12 @@ export interface PayRunWizardData {
   changes: StubChange[]
   separationSections: YearEndFilingSection[]
   registerReportId: string | null
+  /** Pack-declared withholding buckets for the review grid and stub header. */
+  registerBuckets: RegisterBucket[]
+  /** Pack-language region column header ("Province" / "State" / "Region"). */
+  regionLabel: string
+  /** Statutory engine names by stub country for the trace heading. */
+  traceEngines: Record<string, string>
   canRun: boolean
   initialStep: WizardStep
 }
@@ -131,10 +139,13 @@ export async function loadPayRunWizard(
     const [stubsRes, linesRes, rosterRes, prevRes, remitRes] = (await Promise.all([
       db.execute<StubRow>(sql`
         select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
+               prof.country as country,
                st.gross, st.net_pay, st.employer_cost, st.vacation_accrued,
                st.pensionable_earnings, st.insurable_earnings, st.factors
           from pay_stubs st
           join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
+          left join employee_payroll_profiles prof
+            on prof.employee_party_id = st.employee_party_id and prof.org_id = st.org_id
          where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
          order by p.display_name`),
       db.execute<(StubRow['lines'])[number]>(sql`
@@ -229,6 +240,47 @@ export async function loadPayRunWizard(
       else linesByStub.set(line.stub_id, [line])
     }
     const stubs = stubsRes.rows.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
+
+    // Register buckets (F-t08-012): the review grid and stub header columns
+    // come from the installed packs' declared statutory components — labels
+    // and order from the declarations, presence from the run's own nonzero
+    // deduction lines — never from hardcoded CA factor keys. A run whose
+    // stubs carry no determinable country falls back to every installable
+    // pack rather than to any one country's buckets.
+    const countriesInRun = [...new Set(stubs.map((stub) => stub.country).filter((c): c is string => !!c))]
+    const packsInRun = Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) =>
+      countriesInRun.length > 0 ? countriesInRun.includes(pack.country) : pack.installable,
+    )
+    const seenBucketCodes = new Set<string>()
+    const declaredBuckets = packsInRun.flatMap((pack) =>
+      pack.statutorySlots.flatMap((slot) =>
+        slot.components
+          .filter((component) => component.kind === 'deduction')
+          .filter((component) => {
+            const key = component.code.toUpperCase()
+            if (seenBucketCodes.has(key)) return false
+            seenBucketCodes.add(key)
+            return true
+          })
+          .map((component) => ({ code: component.code, label: component.name, sequence: component.sequence })),
+      ),
+    )
+    const registerBuckets: RegisterBucket[] = buildRegisterBuckets(
+      linesRes.rows.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
+      declaredBuckets,
+    )
+    // The region column speaks the pack's language ("Province" for CA,
+    // "State" for US); a mixed-country run falls back to neutral "Region".
+    // Non-English locales fall back to English for the whole run.stub
+    // namespace, so a server-composed label here is no worse than before.
+    const regionLabel = packsInRun.length === 1
+      ? packsInRun[0]!.regions.label.slice(0, 1).toUpperCase() + packsInRun[0]!.regions.label.slice(1)
+      : 'Region'
+    // Trace-engine names by stub country ("T4127" / "Pub 15-T"), so the stub
+    // calculation trace heads the filing regime the numbers came from.
+    const traceEngines: Record<string, string> = Object.fromEntries(
+      packsInRun.map((pack) => [pack.country, pack.statutoryEngineLabel]),
+    )
 
     const previousNet: Record<string, string> = {}
     for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
@@ -325,6 +377,9 @@ export async function loadPayRunWizard(
       changes,
       separationSections,
       registerReportId: registerReport?.id ?? null,
+      registerBuckets,
+      regionLabel,
+      traceEngines,
       canRun: can(authz, 'payroll.run'),
       initialStep,
     }
@@ -366,6 +421,9 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         changes: data.changes,
         separationSections: data.separationSections,
         registerReportId: data.registerReportId,
+        registerBuckets: data.registerBuckets,
+        regionLabel: data.regionLabel,
+        traceEngines: data.traceEngines,
         canRun: data.canRun,
         initialStep: data.initialStep,
       }),

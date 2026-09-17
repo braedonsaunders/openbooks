@@ -135,6 +135,7 @@ const FREEDONIA: PayrollCountryPack = {
   computeStatutory: async () => {
     throw new PayrollPackError("Freedonia statutory compute is not implemented");
   },
+  statutoryEngineLabel: "PAYG tables",
   statutorySlots: [
     {
       key: "payg",

@@ -39,7 +39,8 @@ import { PagedTable, type PagedColumn } from '../../../../../components/paged-ta
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
-import { decimalAbs, decimalAdd, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
+import { decimalAbs, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
+import { bucketAmounts, type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
 
 export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
 
@@ -140,6 +141,8 @@ export type StubRow = {
   employee_party_id: string
   employee_name: string
   province: string
+  /** Employee payroll-profile country (CA/US), for pack-driven presentation. */
+  country: string | null
   gross: string
   net_pay: string
   employer_cost: string
@@ -304,15 +307,19 @@ const FACTOR_LABELS: Record<string, string> = {
   TWP: 'Projected annual taxable wages',
 }
 
-/** Statutory splits surfaced as stub-roster columns, read off the factors trace. */
-function statutory(stub: StubRow) {
-  const f = stub.factors ?? {}
-  // C/C2 = employee CPP, EI = employee EI, T/TB = periodic + bonus tax.
-  return { cpp: add(f.C, f.C2), ei: f.EI ?? '0', tax: add(f.T, f.TB) }
-}
-
-function add(a?: string, b?: string): string {
-  return decimalAdd(a ?? '0', b ?? '0')
+/**
+ * Withholding splits surfaced as stub-roster columns, read off the stub's
+ * own deduction lines through the pack-declared buckets (F-t08-012) — never
+ * off hardcoded CA factor keys, which read zero on a US run while the money
+ * hides in the pay lines. Returns per-bucket amounts plus their total, the
+ * TAX column: total withholding for the stub.
+ */
+function withholding(stub: StubRow, buckets: readonly RegisterBucket[]) {
+  const amounts = bucketAmounts(
+    stub.lines.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
+    buckets,
+  )
+  return { amounts, total: decimalSum(amounts) }
 }
 
 /**
@@ -350,6 +357,12 @@ export function RunWizard(props: {
   bankAccounts: { id: string; label: string }[]
   /** The seeded 'payroll-register' report definition (full report engine). */
   registerReportId: string | null
+  /** Pack-declared withholding buckets for the review grid and stub header. */
+  registerBuckets: RegisterBucket[]
+  /** Pack-language region column header ("Province" / "State" / "Region"). */
+  regionLabel: string
+  /** Statutory engine names by stub country for the trace heading. */
+  traceEngines: Record<string, string>
   /** Engine-computed pre-flight: what blocks the run, what to look at. */
   readiness: Readiness
   /** Whether the stubs still reflect the inputs they were built from. */
@@ -756,6 +769,9 @@ export function RunWizard(props: {
           calcErrors={calcErrors}
           calculated={calculated}
           registerReportId={props.registerReportId}
+          registerBuckets={props.registerBuckets}
+          regionLabel={props.regionLabel}
+          traceEngines={props.traceEngines}
           fmt={fmt}
         />
       )}
@@ -1319,6 +1335,9 @@ function ReviewStep({
   calcErrors,
   calculated,
   registerReportId,
+  registerBuckets,
+  regionLabel,
+  traceEngines,
   fmt,
   adjustments,
   components,
@@ -1331,6 +1350,9 @@ function ReviewStep({
   calcErrors: { employee: string; message: string }[]
   calculated: boolean
   registerReportId: string | null
+  registerBuckets: RegisterBucket[]
+  regionLabel: string
+  traceEngines: Record<string, string>
   fmt: (v: string | number | null | undefined) => string
   adjustments: AdjustmentRow[]
   components: ComponentOption[]
@@ -1489,11 +1511,15 @@ function ReviewStep({
                   <span className="font-medium text-teal-700 dark:text-teal-300">{stub.employee_name}</span>
                 ),
               },
-              { key: 'province', header: t('run.stub.province'), cell: (stub) => stub.province },
+              { key: 'region', header: regionLabel, cell: (stub) => stub.province },
               { key: 'gross', header: t('columns.gross'), align: 'right', cell: (stub) => fmt(stub.gross) },
-              { key: 'cpp', header: t('run.stub.cpp'), align: 'right', cell: (stub) => fmt(statutory(stub).cpp) },
-              { key: 'ei', header: t('run.stub.ei'), align: 'right', cell: (stub) => fmt(statutory(stub).ei) },
-              { key: 'tax', header: t('run.stub.tax'), align: 'right', cell: (stub) => fmt(statutory(stub).tax) },
+              ...registerBuckets.map((bucket, index) => ({
+                key: `withholding-${bucket.code}`,
+                header: bucket.label,
+                align: 'right' as const,
+                cell: (stub: StubRow) => fmt(withholding(stub, registerBuckets).amounts[index] ?? '0'),
+              })),
+              { key: 'tax', header: t('run.stub.tax'), align: 'right', cell: (stub) => fmt(withholding(stub, registerBuckets).total) },
               {
                 key: 'net', header: t('columns.net'), align: 'right',
                 cell: (stub) => <span className="font-medium">{fmt(stub.net_pay)}</span>,
@@ -1580,6 +1606,9 @@ function ReviewStep({
           components={components}
           canAdjust={canAdjust}
           onAdjust={onAdjust}
+          buckets={registerBuckets}
+          regionLabel={regionLabel}
+          traceEngines={traceEngines}
         />
       )}
 
@@ -1695,6 +1724,9 @@ function StubDrawer({
   components,
   canAdjust,
   onAdjust,
+  buckets,
+  regionLabel,
+  traceEngines,
 }: {
   stub: StubRow
   variance: { percent: number; flagged: boolean } | null
@@ -1705,9 +1737,15 @@ function StubDrawer({
   components: ComponentOption[]
   canAdjust: boolean
   onAdjust: (body: Record<string, unknown>) => Promise<void>
+  buckets: RegisterBucket[]
+  regionLabel: string
+  traceEngines: Record<string, string>
 }) {
   const t = useTranslations('payroll')
-  const s = statutory(stub)
+  const held = withholding(stub, buckets)
+  // The trace heads the filing regime the numbers were computed under
+  // (T4127 for CA, Pub 15-T for US) — never a hardcoded country (F-t08-012).
+  const traceEngine = traceEngines[stub.country ?? ''] ?? Object.values(traceEngines)[0] ?? ''
   const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
   const factorLabel = (key: string) => FACTOR_LABELS[key] ?? key
   const [adjComponent, setAdjComponent] = useState('')
@@ -1755,12 +1793,13 @@ function StubDrawer({
         )}
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-          <HeaderFact label={t('run.stub.province')}>{stub.province}</HeaderFact>
+          <HeaderFact label={regionLabel}>{stub.province}</HeaderFact>
           <HeaderFact label={t('columns.gross')}>{fmt(stub.gross)}</HeaderFact>
           <HeaderFact label={t('columns.net')}>{fmt(stub.net_pay)}</HeaderFact>
-          <HeaderFact label={t('run.stub.cpp')}>{fmt(s.cpp)}</HeaderFact>
-          <HeaderFact label={t('run.stub.ei')}>{fmt(s.ei)}</HeaderFact>
-          <HeaderFact label={t('run.stub.tax')}>{fmt(s.tax)}</HeaderFact>
+          {buckets.map((bucket, index) => (
+            <HeaderFact key={bucket.code} label={bucket.label}>{fmt(held.amounts[index] ?? '0')}</HeaderFact>
+          ))}
+          <HeaderFact label={t('run.stub.tax')}>{fmt(held.total)}</HeaderFact>
           {variance !== null && (
             <HeaderFact label={t('wizard.review.varianceColumn')}>
               {`${variance.percent > 0 ? '+' : ''}${variance.percent.toFixed(1)}%`}
@@ -1843,7 +1882,7 @@ function StubDrawer({
 
         <div>
           <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-            {t('run.stub.trace')}
+            {t('run.stub.trace', { engine: traceEngine })}
           </h4>
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-sm">
             {factorEntries.map(([key, value]) => (

@@ -246,3 +246,29 @@ test("another country's labour jurisdiction is refused", () => {
 test("a country no pack declares refuses rather than answering", () => {
   assert.throws(() => labourJurisdictionProblem("ZZ", "ZZ"), PayrollPackError);
 });
+
+test("every installable pack names its statutory engine and declares withholding buckets", () => {
+  // F-t08-012: the stub register and stub header summarized every run into
+  // hardcoded CA buckets because nothing forced the packs to declare their
+  // own. The review UI reads these declarations, so a pack that stays silent
+  // about its engine label or its employee withholding components renders
+  // another country's columns.
+  const packs = Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) => pack.installable)
+  assert.ok(packs.length >= 2, "expected at least the CA and US packs")
+  for (const pack of packs) {
+    assert.ok(
+      typeof pack.statutoryEngineLabel === "string" && pack.statutoryEngineLabel.length > 0,
+      `${pack.country} declares no statutory engine label for the trace heading`,
+    )
+    const withholding = pack.statutorySlots.flatMap((slot) =>
+      slot.components.filter((component) => component.kind === "deduction"),
+    )
+    assert.ok(
+      withholding.length > 0,
+      `${pack.country} declares no employee withholding components for the register buckets`,
+    )
+    for (const component of withholding) {
+      assert.ok(component.name.length > 0, `${pack.country}/${component.code} has no bucket label`)
+    }
+  }
+});

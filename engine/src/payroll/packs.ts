@@ -380,6 +380,13 @@ export interface PayrollCountryPack {
   computeStatutory: (
     ctx: PayrollStatutoryComputeContext,
   ) => Promise<Record<string, string>>;
+  /**
+   * The statutory engine's published name, for the stub calculation trace
+   * heading (F-t08-012): "T4127" for the CRA pack, "Pub 15-T" for the IRS
+   * pack. REQUIRED: the trace heading names the filing regime the numbers
+   * were computed under, and a hardcoded heading names the wrong country.
+   */
+  statutoryEngineLabel: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,6 +1028,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     ],
     applyEmployerLevies: applyCaEmployerLevies,
     computeStatutory: computeCaStatutory,
+    statutoryEngineLabel: "T4127",
   },
   US: {
     country: "US",
@@ -1118,6 +1126,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
       },
     ],
     computeStatutory: computeUsStatutory,
+    statutoryEngineLabel: "Pub 15-T",
   },
 };
 
