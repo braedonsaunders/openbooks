@@ -72,7 +72,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, entryId, lineCount })
   } catch (e) {
     if (e instanceof ConsolidationError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      // Typed refusal (F-t06-026): the close task persists the message
+      // inline and maps the code, instead of swallowing a bare 422.
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 422 })
     }
     throw e
   }

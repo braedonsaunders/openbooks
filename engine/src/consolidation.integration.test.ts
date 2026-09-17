@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
 import { refreshCloseRun, setPeriodLockState, startCloseRun } from "./close.ts";
-import { deriveConsolidatedRates, runAutoElimination, runCombinedConsolidation, runOwnershipConsolidation } from "./consolidation.ts";
+import { ConsolidationError, deriveConsolidatedRates, runAutoElimination, runCombinedConsolidation, runOwnershipConsolidation } from "./consolidation.ts";
 import { db, pool, withOrgTransaction } from "./db.ts";
 import { reverseProjectGlEntry } from "./project-recognition.ts";
 import {
@@ -1753,6 +1753,13 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
       withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)),
       /GL is closed for this period/,
     );
+    // F-t06-026: the refusal carries the typed code the close task persists.
+    const closedErr = await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(closedErr instanceof ConsolidationError);
+    assert.equal(closedErr.code, "period-closed");
     const pinned = (await db.execute<{ current_rate: string }>(sql`
       select current_rate::text as current_rate from consolidated_fx_rates
        where org_id = ${org.orgId} and period_id = ${org.periodId}`));
@@ -2044,5 +2051,40 @@ test("ownership preserves cutoff balances across a later reversal and restoratio
     await assert.rejects(runOwnershipConsolidation(org.orgId,augustId,actorId),/acquisition.*later period/);
     await runOwnershipConsolidation(org.orgId,septemberId,actorId);
     assert.deepEqual(await cutoffBalances(),expected,'reruns preserve all three cutoffs and refuse the ambiguous August replay');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("consolidation without an elimination subsidiary refuses typed not-configured (F-t06-026)", { skip: !DB }, async () => {
+  // The t06 close-run shape: subsidiaries exist but no elimination
+  // subsidiary and no ownership chain — "Run consolidation" must refuse
+  // with a typed reason the task persists, never a bare message.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const err = await runAutoElimination(org.orgId, org.periodId, actorId).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(err instanceof ConsolidationError);
+    assert.equal(err.code, "not-configured");
+    assert.match(err.message, /elimination subsidiary/);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("rate derivation without a spot rate refuses typed rates-missing (F-t06-026)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const usdId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usdId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const err = await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(err instanceof ConsolidationError);
+    assert.equal(err.code, "rates-missing");
   } finally { await dropScratchOrg(org.orgId); }
 });
