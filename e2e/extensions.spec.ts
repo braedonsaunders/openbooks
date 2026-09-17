@@ -173,6 +173,8 @@ test('app management authors files, preserves drafts, exports, imports, versions
     await expect(page).toHaveURL(/draft=/)
     await expect(page.getByRole('tab',{name:'Package',exact:true})).toBeVisible()
     await page.getByRole('button',{name:'Discard draft',exact:true}).click()
+    // F-t10-007: discard always confirms, even on an unedited imported draft.
+    await page.getByRole('button',{name:'Confirm',exact:true}).click()
     await expect(page).toHaveURL('/admin/apps')
   } finally {
     try { await page.request.post('/api/apps/marketplace',{headers,data:{action:'unpublish',key}}); await page.request.delete(`/api/apps/${key}`,{headers}) } finally { await context.close() }
