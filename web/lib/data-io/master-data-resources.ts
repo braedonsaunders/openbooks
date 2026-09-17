@@ -117,8 +117,14 @@ export const MASTER_ENTITIES: MasterEntity[] = [
     cols: [
       { key: 'shortCode', column: 'short_code', kind: 'text', lockedOnEdit: true },
       { key: 'displayName', column: 'display_name', kind: 'text', required: true },
+      // parties.kind is unconstrained text and the product stores
+      // role-denormalized values (customer/vendor/employee) that export
+      // emits — the importer must accept the vocabulary export produces,
+      // or no exported parties file re-imports.
       { key: 'kind', column: 'kind', kind: 'select', required: true, options: [
-        { value: 'company', label: 'company' }, { value: 'person', label: 'person' }] },
+        { value: 'company', label: 'company' }, { value: 'person', label: 'person' },
+        { value: 'customer', label: 'customer' }, { value: 'vendor', label: 'vendor' },
+        { value: 'employee', label: 'employee' }] },
       { key: 'legalName', column: 'legal_name', kind: 'text' },
       { key: 'email', column: 'email', kind: 'text' },
       { key: 'phone', column: 'phone', kind: 'text' },
@@ -306,6 +312,20 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
   }
 }
 
+/**
+ * Synthesize a stable, human-readable shortCode from a display name.
+ * Deterministic for a given name and taken-set, so re-importing the same
+ * export resolves to the same code and stays idempotent. Suffixed on
+ * collision, and registered in `taken` so one file never mints a dup.
+ */
+function nextPartyShortCode(displayName: string, taken: Set<string>): string {
+  const base = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 20) || 'PARTY'
+  let code = base
+  for (let n = 2; taken.has(code); n++) code = `${base}-${n}`
+  taken.add(code)
+  return code
+}
+
 async function writeMaster(
   m: MasterEntity,
   rows: Record<string, unknown>[],
@@ -320,6 +340,18 @@ async function writeMaster(
   const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'inventory'))
   const equipmentOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'equipment'))
   const multiCurrencyOn = m.key !== 'accounts' || (await orgFeatureEnabled(ctx.orgId, 'multiCurrency'))
+  // Codeless parties resolve against the codes already taken in this org
+  // (plus codes minted earlier in this file), so a synthesized shortCode is
+  // unique on insert and stable on re-import. One narrow query per import —
+  // never a query per row beyond the name-match below.
+  const needsPartyCodes = m.key === 'parties' &&
+    rows.some((r) => String(r[m.naturalKey] ?? '').trim() === '')
+  const takenPartyCodes = needsPartyCodes
+    ? new Set((((await db.execute(sql`
+        select short_code from parties where org_id = ${ctx.orgId}`)) as {
+        rows: { short_code: string | null }[]
+      }).rows.map((r) => String(r.short_code ?? '').trim()).filter((s) => s !== '')))
+    : new Set<string>()
   // Bank-typed hygiene needs to know which accounts already back real bank
   // activity. One set per import — never a query per row.
   const statementAccountIds = m.key === 'accounts'
@@ -436,22 +468,64 @@ async function writeMaster(
         outcome.errors.push({ row: rowNo, message: err })
         continue
       }
-      const nkVal = String(src[m.naturalKey] ?? '').trim()
+      let nkVal = String(src[m.naturalKey] ?? '').trim()
       // A master row without its natural key has no identity: it can never
       // match on re-import, so every import would duplicate it. Refuse it in
-      // every mode with the key named.
+      // every mode with the key named — except a parties shortCode, which the
+      // product itself leaves blank (CRM drafts, role populations) and which
+      // export emits empty. A blank code resolves instead: adopt the code of
+      // the uniquely name-matched party, or synthesize a stable one, so an
+      // exported file re-imports losslessly.
+      let codeFill: string | null = null
+      let adoptedParty: { row: Record<string, unknown> } | null = null
+      let identityLabel: string | null = null
+      if (!nkVal && m.key === 'parties') {
+        const displayName = String(src.displayName ?? '').trim()
+        const matches = displayName ? ((await db.execute(sql`
+          select * from parties
+           where org_id = ${ctx.orgId} and display_name = ${displayName} limit 2`)) as {
+          rows: Record<string, unknown>[]
+        }).rows : []
+        if (matches.length > 1) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: `multiple parties named "${displayName}": supply shortCode to disambiguate` })
+          continue
+        }
+        const matched = matches[0]
+        const matchedCode = String(matched?.short_code ?? '').trim()
+        if (matched && matchedCode !== '' && typeof matched.id === 'string') {
+          nkVal = matchedCode
+          adoptedParty = { row: matched }
+        } else if (matched && typeof matched.id === 'string') {
+          codeFill = nextPartyShortCode(displayName, takenPartyCodes)
+          nkVal = codeFill
+          adoptedParty = { row: matched }
+          identityLabel = `displayName="${displayName}"`
+        } else {
+          codeFill = nextPartyShortCode(displayName, takenPartyCodes)
+          nkVal = codeFill
+        }
+      }
       if (!nkVal) {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `${m.naturalKey} is required` })
         continue
       }
-      let existingId: string | null = null
-      let existingCustom: Record<string, unknown> = {}
-      let storedKind: string | undefined
+      // A codeless row that adopted a generated code still needs it stored:
+      // inserts carry it as a column, updates fill the empty stored key
+      // (the update below never rewrites a populated natural key).
+      if (codeFill && !adoptedParty) setCols.push({ column: 'short_code', value: codeFill })
+      const adoptedRow = adoptedParty?.row
+      let existingId: string | null =
+        typeof adoptedRow?.id === 'string' ? adoptedRow.id : null
+      let existingCustom: Record<string, unknown> =
+        (adoptedRow?.custom as Record<string, unknown> | undefined) ?? {}
+      let storedKind: string | undefined =
+        typeof adoptedRow?.kind === 'string' ? adoptedRow.kind : undefined
       let storedAccount: { type?: string; name?: string; reconcilable?: boolean; is_summary?: boolean } | undefined
       // The full stored row doubles as the update's audit before-image.
-      let beforeRow: Record<string, unknown> | null = null
-      if (nkVal) {
+      let beforeRow: Record<string, unknown> | null = adoptedRow ?? null
+      if (nkVal && !adoptedParty) {
         const found = (await db.execute(sql`
           select * from ${sql.raw(m.table)}
            where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`)) as {
@@ -523,7 +597,9 @@ async function writeMaster(
 
       if (existingId && mode === 'insert') {
         outcome.failed++
-        outcome.errors.push({ row: rowNo, message: `already exists (${m.naturalKey}=${nkVal})` })
+        outcome.errors.push({ row: rowNo, message: identityLabel
+          ? `already exists (${identityLabel})`
+          : `already exists (${m.naturalKey}=${nkVal})` })
         continue
       }
 
@@ -533,6 +609,12 @@ async function writeMaster(
           const parts = setCols
             .filter((c) => c.column !== nkColumn) // don't rewrite the natural key
             .map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+          // ...unless the key itself was just synthesized for a codeless
+          // row: filling an empty stored key gives the row its identity
+          // for the next re-import.
+          if (codeFill && String(adoptedRow?.short_code ?? '').trim() === '') {
+            parts.push(sql`short_code = ${codeFill}`)
+          }
           parts.push(sql`custom = ${JSON.stringify(mergedCustom)}::jsonb`)
           parts.push(sql`updated_by = ${ctx.actorId}`)
           parts.push(sql`updated_at = now()`)

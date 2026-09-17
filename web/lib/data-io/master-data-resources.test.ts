@@ -446,6 +446,92 @@ test('master-data updates validate omitted required custom fields from the store
   assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
 })
 
+// F-t10-006: export emits the role-denormalized kinds the product stores
+// (customer/vendor/employee) — import must accept them so the round trip
+// is lossless.
+test('parties import accepts the role kinds export emits', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'CUS-1', displayName: 'Customer One', kind: 'customer' },
+    { shortCode: 'VEN-1', displayName: 'Vendor One', kind: 'vendor' },
+    { shortCode: 'EMP-1', displayName: 'Employee One', kind: 'employee' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
+})
+
+// F-t10-006: SIM/CRM parties carry no short_code and export emits them
+// codeless — import must synthesize a stable code instead of refusing.
+test('parties import synthesizes a stable shortCode for codeless export rows', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: '', displayName: 'Acme Co', kind: 'vendor' },
+    { displayName: 'Beta LLC', kind: 'customer' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
+  assert.equal(importState.masterInserts.length, 2)
+  assert.match(importState.masterInserts[0]!, /short_code/)
+  assert.match(importState.masterInserts[0]!, /ACMECO/)
+  assert.match(importState.masterInserts[1]!, /BETALLC/)
+})
+
+test('parties import disambiguates synthesized shortCodes within one file', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { displayName: 'Acme Co', kind: 'vendor' },
+    { displayName: 'Acme Co', kind: 'customer' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
+  assert.match(importState.masterInserts[0]!, /ACMECO/)
+  assert.match(importState.masterInserts[1]!, /ACMECO-2/)
+})
+
+test('parties import matches a codeless export row to its coded party by name', async () => {
+  resetImportState(false)
+  importState.readRows.parties = [{
+    id: 'party-9',
+    short_code: 'ACME',
+    display_name: 'Acme Co',
+    kind: 'vendor',
+    custom: {},
+  }]
+
+  const outcome = await resource('parties').write([
+    { displayName: 'Acme Co', kind: 'vendor' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [{ row: 1, message: 'already exists (shortCode=ACME)' }],
+  })
+})
+
+test('parties import refuses a codeless row matching several parties by name', async () => {
+  resetImportState(false)
+  importState.readRows.parties = [
+    { id: 'party-9', short_code: null, display_name: 'Acme Co', kind: 'vendor', custom: {} },
+    { id: 'party-10', short_code: null, display_name: 'Acme Co', kind: 'customer', custom: {} },
+  ]
+
+  const outcome = await resource('parties').write([
+    { displayName: 'Acme Co', kind: 'vendor' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [{ row: 1, message: 'multiple parties named "Acme Co": supply shortCode to disambiguate' }],
+  })
+})
+
 test('master-data exports do not resolve account labels through an unscoped lookup', async () => {
   resetImportState(false)
   const foreignAccountId = '22222222-2222-4222-8222-222222222222'
