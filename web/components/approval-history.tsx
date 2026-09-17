@@ -62,12 +62,37 @@ function relativeTime(iso: string, locale: string): string {
   return rtf.format(Math.round(seconds), 'second')
 }
 
+export type ApprovalTabBodyKind = 'loading' | 'pending' | 'empty' | 'history'
+
+/**
+ * Which body the Approvals surface shows (F-t02-003: the tab rendered a
+ * completely blank panel while loading and when no flow applied). History
+ * wins over a concurrent pending gate; a pending flow with no events yet
+ * still names who holds it.
+ */
+export function approvalTabBody(state: {
+  history: unknown[]
+  approvalState: { pendingWith: unknown[] }
+} | null): ApprovalTabBodyKind {
+  if (!state) return 'loading'
+  if (state.history.length > 0) return 'history'
+  if (state.approvalState.pendingWith.length > 0) return 'pending'
+  return 'empty'
+}
+
 export function ApprovalHistory({
   subjectKind,
   subjectId,
+  showEmptyState = false,
 }: {
   subjectKind: string
   subjectId: string
+  /**
+   * Render loading / pending / empty bodies instead of nothing. Set for tab
+   * surfaces (a blank tab looks broken); inline Details sections keep the
+   * default so records without a flow stay compact.
+   */
+  showEmptyState?: boolean
 }) {
   const t = useTranslations('common')
   const locale = useLocale()
@@ -75,7 +100,34 @@ export function ApprovalHistory({
   const [open, setOpen] = useState(true)
 
   const history = state?.history ?? []
-  if (history.length === 0) return null
+  if (history.length === 0) {
+    if (!showEmptyState) return null
+    const kind = approvalTabBody(state)
+    if (kind === 'loading') {
+      return (
+        <div role="status" className="flex items-center gap-2 px-1 py-6 text-sm text-slate-500 dark:text-slate-400">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-teal-600 dark:border-slate-600 dark:border-t-teal-400" aria-hidden />
+          {t('feedback.loading')}
+        </div>
+      )
+    }
+    if (kind === 'pending' && state) {
+      const names = state.approvalState.pendingWith
+        .map((entry) => entry.name)
+        .filter((name) => name.length > 0)
+        .join(', ')
+      return (
+        <p className="px-1 py-6 text-sm text-slate-600 dark:text-slate-300">
+          {t('approvalFlow.pendingWith', { names: names || '—' })}
+        </p>
+      )
+    }
+    return (
+      <p className="px-1 py-6 text-sm text-slate-500 dark:text-slate-400">
+        {t('approvalFlow.historyEmpty')}
+      </p>
+    )
+  }
 
   const Chevron = open ? ChevronDown : ChevronRight
 

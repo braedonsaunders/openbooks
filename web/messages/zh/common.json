@@ -230,6 +230,7 @@
     "alreadyDecided": "此审批已作出决定——正在刷新",
     "decisionFailed": "决定失败",
     "historyTitle": "审批",
+    "historyEmpty": "此记录无需审批。",
     "events": {
       "submitted": "已提交审批",
       "requested": "已请求审批",

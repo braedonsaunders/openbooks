@@ -230,6 +230,7 @@
     "alreadyDecided": "Über diese Genehmigung wurde bereits entschieden — wird aktualisiert",
     "decisionFailed": "Entscheidung fehlgeschlagen",
     "historyTitle": "Genehmigungen",
+    "historyEmpty": "Für diesen Datensatz sind keine Genehmigungen erforderlich.",
     "events": {
       "submitted": "Zur Genehmigung eingereicht",
       "requested": "Genehmigung angefordert",

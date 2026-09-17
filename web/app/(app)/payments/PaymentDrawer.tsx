@@ -553,7 +553,7 @@ export function PaymentDrawer({
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />,
+          content: <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} showEmptyState />,
         },
       ]}
       footer={

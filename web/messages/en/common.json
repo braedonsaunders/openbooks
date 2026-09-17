@@ -270,6 +270,7 @@
     "alreadyDecided": "This approval was already decided — refreshing",
     "decisionFailed": "Decision failed",
     "historyTitle": "Approvals",
+    "historyEmpty": "No approvals required for this record.",
     "events": {
       "submitted": "Submitted for approval",
       "requested": "Approval requested",
