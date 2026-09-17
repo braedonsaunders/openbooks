@@ -178,6 +178,26 @@ export type DrillColumn = {
   segmentKey?: string
 }
 
+// P&L profit rows (gross profit, net income, accumulated earnings, and the
+// equity subtotals that roll them up) mix credit-normal revenue with
+// debit-normal costs. Their drill dialog must net as Revenue − Costs — the
+// same sign convention the statement cell uses — so the dialog ties to the
+// cell. A reader-signed net would sum them into Debits + Credits (F-t07-001).
+// Single-section rows (revenue, COGS, expenses alone) and asset-inclusive
+// rows (whose residual cannot tie either way) keep the reader-signed net.
+// Kept as literal lists: this module ships to the client filter bar and must
+// not pull in the server-only matrix engine for its type constants.
+const PROFIT_CREDIT_TYPES = new Set(['income', 'income_other'])
+const PROFIT_DEBIT_TYPES = new Set(['cogs', 'expense', 'expense_other', 'expense_deferred'])
+const DRILL_ASSET_TYPES = new Set(['asset_bank', 'asset_receivable', 'asset_current_other', 'asset_fixed', 'asset_other'])
+
+function isProfitDrill(types: string[] | undefined): boolean {
+  if (!types || types.length === 0) return false
+  return types.some((type) => PROFIT_CREDIT_TYPES.has(type))
+    && types.some((type) => PROFIT_DEBIT_TYPES.has(type))
+    && !types.some((type) => DRILL_ASSET_TYPES.has(type))
+}
+
 /** Build the typed supporting-detail target for one statement cell. */
 export function buildDrillTarget(args: {
   accountId?: string
@@ -210,6 +230,7 @@ export function buildDrillTarget(args: {
       scope: column.kind === 'amount' ? (column.to ? 'actual' : 'budget') : 'variance',
       accountIds: args.accountId ? [args.accountId] : undefined,
       accountTypes: args.drillTypes,
+      ...(isProfitDrill(args.drillTypes) && !args.accountId ? { profitSigned: true as const } : {}),
       dims: args.reportDims,
       from: windowFroms.length ? windowFroms.reduce((a, b) => (a < b ? a : b)) : undefined,
       to: windowTos.length ? windowTos.reduce((a, b) => (a > b ? a : b)) : undefined,
@@ -245,6 +266,7 @@ export function buildDrillTarget(args: {
     label: args.label,
     accountIds: args.accountId ? [args.accountId] : undefined,
     accountTypes: args.accountId ? undefined : args.drillTypes,
+    ...(isProfitDrill(args.drillTypes) && !args.accountId ? { profitSigned: true as const } : {}),
     mode: args.mode,
     from: args.mode === 'flow' ? from : undefined,
     to,

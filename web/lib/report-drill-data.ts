@@ -476,7 +476,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   const from = target.from ?? row.from_date
   const to = target.to ?? row.to_date
   if (target.scope === 'actual') {
-    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from, to, mode: 'flow', dims: target.dims }, authz, page, row.book_id)
+    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from, to, mode: 'flow', dims: target.dims, profitSigned: target.profitSigned }, authz, page, row.book_id)
   }
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE

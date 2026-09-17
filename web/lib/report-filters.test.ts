@@ -6,7 +6,8 @@ import {
   type ReportRule,
   type ReportRuleGroup,
 } from '@openbooks/reports'
-import { isReportUuidParam, parseReportQuery, toSearchParams } from './report-filters'
+import { buildDrillTarget, isReportUuidParam, parseReportQuery, toSearchParams } from './report-filters'
+import { encodeReportDrillTarget, parseReportDrillTarget } from './report-drill'
 
 const CUSTOMER_ID = '018f47aa-7c11-7a12-8bc3-1234567890ad'
 
@@ -65,6 +66,37 @@ test('lot recall saved-view params resolve to the same filters while viewer/expo
     { field: 'expires_on', op: 'lte', value: '2027-01-31' },
     { field: 'expires_on', op: 'is_not_null' },
   ])
+})
+
+test('profit-subtotal drills are profit-signed so the dialog net ties to the P&L cell (F-t07-001)', () => {
+  // Net income mixes credit-normal revenue with debit-normal costs. A
+  // reader-signed net sums them (Debits + Credits); the P&L cell is
+  // Revenue − Costs, so the drill must carry profitSigned for its net to tie.
+  const column = { kind: 'amount' as const, from: '2026-01-01', to: '2026-12-31' }
+  const base = { column, mode: 'flow' as const, reportDims: {}, basis: 'accrual' as const, label: 'Net income · FY 2026' }
+  const pnlTypes = ['income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred']
+  const net = buildDrillTarget({ ...base, drillTypes: pnlTypes })
+  assert.equal(net?.kind, 'ledger')
+  assert.equal(net?.kind === 'ledger' && net.profitSigned, true)
+  // The flag must survive the URL round-trip or the drawer still sums.
+  const roundTripped = parseReportDrillTarget(encodeReportDrillTarget(net!))
+  assert.equal(roundTripped?.kind === 'ledger' && roundTripped.profitSigned, true)
+
+  const gross = buildDrillTarget({ ...base, drillTypes: ['income', 'income_other', 'cogs'] })
+  assert.equal(gross?.kind === 'ledger' && gross.profitSigned, true)
+
+  // Single-section totals keep reader-signed nets (revenue/COGS/expenses as shown).
+  for (const types of [['income', 'income_other'], ['cogs'], ['expense', 'expense_other', 'expense_deferred']]) {
+    const section = buildDrillTarget({ ...base, drillTypes: types })
+    assert.equal(section?.kind === 'ledger' && section.profitSigned, undefined)
+  }
+
+  // Balance-sheet rows: asset-only stays reader-signed; accumulated earnings
+  // (pure P&L, balance mode) is a profit row too.
+  const assets = buildDrillTarget({ ...base, mode: 'balance', drillTypes: ['asset_bank', 'asset_receivable'] })
+  assert.equal(assets?.kind === 'ledger' && assets.profitSigned, undefined)
+  const accumulated = buildDrillTarget({ ...base, mode: 'balance', drillTypes: pnlTypes })
+  assert.equal(accumulated?.kind === 'ledger' && accumulated.profitSigned, true)
 })
 
 test('dimension filter params must be uuids — malformed values are dropped, never bound', () => {
