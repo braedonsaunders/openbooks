@@ -15,7 +15,7 @@ test('draft payment saves carry the exact document revision token required by th
 test('final payment posting carries the revision token fenced by post-with-applications', () => {
   assert.match(
     source,
-    /fetch\('\/api\/payments\/post-with-applications'[\s\S]*?expectedUpdatedAt:\s*doc\.updated_at/,
+    /fetchAction\('\/api\/payments\/post-with-applications'[\s\S]*?expectedUpdatedAt:\s*doc\.updated_at/,
     'the Pay & post action must send the loaded revision so a stale drawer 409s instead of overwriting the allocation set',
   )
 })
@@ -29,28 +29,44 @@ test('payment voids carry the revision token required by the void API', () => {
 })
 
 test('a refused Receive & post surfaces the typed message and pins it past the toast', () => {
+  // Fleet-8 m1: post() runs on the shared action path — the pin, the toast
+  // and the never-throwing read live in the package now, not in hand-rolled
+  // reader/finally blocks. Contract unchanged (F-t02-006): a non-JSON 422
+  // body must still surface the typed message past its toast.
   assert.match(
     source,
-    /async function post\(\)[\s\S]*?readDocumentActionResult\(res\)/,
-    'the post action must read through the shared action-result reader: a non-JSON 422 body makes a bare res.json() throw past the toast and wedges the button busy (F-t02-006)',
+    /async function post\(\)[\s\S]*?fetchAction\('\/api\/payments\/post-with-applications'/,
+    'the post action must read through the never-throwing shared fetch: a non-JSON 422 body makes a bare res.json() throw past the toast and wedges the button busy (F-t02-006)',
   )
   assert.match(
     source,
-    /async function post\(\)[\s\S]*?setActionError\(message\)[\s\S]*?toast\.error\(message\)/,
-    'a refused post must toast the typed message AND pin it as a record-level alert',
+    /async function post\(\)[\s\S]*?await execute\(/,
+    'a refused post must run through the shared action path, which pins the typed refusal AND toasts it',
   )
   assert.match(
     source,
-    /\{actionError \? \(\s*<p role="alert"/,
+    /<ActionAlert error=\{refusal\}/,
     'the pinned refusal must render as a persistent alert at the top of the drawer body',
+  )
+  assert.doesNotMatch(
+    source,
+    /setActionError/,
+    'the hand-rolled post-error state must stay retired',
   )
 })
 
 test('a failed post never wedges the Receive & post button busy', () => {
+  // Fleet-8 m1: the busy reset moved into the package's executeAction
+  // finally — post() owns no reset anymore because it cannot skip one.
   assert.match(
     source,
-    /async function post\(\)[\s\S]*?finally\s*\{[\s\S]*?setBusy\(false\)/,
-    'the post action must release busy in a finally: a rejected transport must not wedge the button on',
+    /async function post\(\)[\s\S]*?await execute\(/,
+    'the post action must run through the shared action path, whose finally always releases busy: a rejected transport must not wedge the button on',
+  )
+  assert.doesNotMatch(
+    source,
+    /async function post\(\)[\s\S]*?setBusy\(/,
+    'post() must not hand-roll its own busy lifecycle anymore',
   )
 })
 
@@ -68,23 +84,27 @@ test('the drawer title never renders a sync source handle (F-t12-004 remainder)'
 })
 
 test('save and void share the surfaced-refusal pattern (no bare res.json, no wedged busy)', () => {
+  // Fleet-8 m1: save/voidPayment run on the shared action path — the
+  // never-throwing read, the pin and the finally-owned busy reset live in
+  // the package. Same contract: no bare res.json, refusal pinned past its
+  // toast, busy always released.
   for (const fn of ['save', 'voidPayment'] as const) {
     assert.match(
       source,
-      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?readDocumentActionResult\\(res\\)`),
-      `${fn} must read through the shared action-result reader instead of a bare res.json()`,
+      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?fetchAction\\(`),
+      `${fn} must read through the never-throwing shared fetch instead of a bare res.json()`,
     )
     assert.match(
       source,
-      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?setActionError\\(message\\)`),
-      `${fn} must pin a typed refusal past its toast`,
-    )
-    assert.match(
-      source,
-      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?finally\\s*\\{[\\s\\S]*?setBusy\\(false\\)`),
-      `${fn} must release busy in a finally`,
+      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?await execute\\(`),
+      `${fn} must run through the shared action path (pin past the toast, busy released in its finally)`,
     )
   }
+  assert.doesNotMatch(
+    source,
+    /setActionError/,
+    'the hand-rolled refusal state must stay retired',
+  )
 })
 
 test('the delete-payment confirm resolves through the real catalogs in every locale (F-t04-011)', async () => {
