@@ -14,7 +14,9 @@ import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
-import { readDocumentActionResult } from '../../../components/document-drawer'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 import { displayDocumentNumber } from '../../../lib/document-display'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
@@ -168,11 +170,10 @@ export function PaymentDrawer({
   )
   const [settlementRates, setSettlementRates] = useState<SettlementRateOption[]>([])
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
-  // A refused post must stay visible past its toast (F-t02-006): the typed
-  // refusal pins as a record-level alert until the next post, like the
-  // document drawer's action banner.
-  const [actionError, setActionError] = useState<string | null>(null)
+  // A refused save/post must stay visible past its toast (F-t02-006): the
+  // typed refusal pins as a record-level alert until the next action, and
+  // busy always releases through the shared path's finally.
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
 
   // -- open items follow the selected party --------------------------------
   const firstParty = useRef(true)
@@ -304,75 +305,61 @@ export function PaymentDrawer({
   }
 
   async function save() {
-    setBusy(true)
     setSaveState('saving')
-    setActionError(null)
-    try {
-      const res = await fetch(`/api/payments/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const result = await readDocumentActionResult(res)
-      if (result.ok) {
-        setSaveState('saved')
-        setDirty(false)
-        setMode('view')
-        router.refresh()
-      } else {
-        const message = result.message ?? t('toasts.postFailed')
-        setSaveState('error')
-        setActionError(message)
-        toast.error(message)
-      }
-    } catch {
-      const message = t('toasts.postFailed')
-      setSaveState('error')
-      setActionError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/payments/${doc.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }),
+      {
+        fallbackMessage: t('toasts.postFailed'),
+        onOk: () => {
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+        },
+        onRefused: () => {
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
   }
 
   function cancel() {
     resetForm()
     setDirty(false)
     setSaveState('saved')
+    clearRefusal()
     setMode('view')
   }
 
   async function post() {
-    setBusy(true)
-    setActionError(null)
-    try {
-      const res = await fetch('/api/payments/post-with-applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Same revision evidence as the draft save: the route fences its
-        // final allocation write on this token and 409s a stale drawer.
-        body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
-      })
-      // A non-JSON refusal body must not throw past the toast and wedge the
-      // button busy: read through the shared action-result reader (F-t02-006
-      // posted a 422 with zero UI feedback from the bare res.json() here).
-      const result = await readDocumentActionResult(res)
-      if (!result.ok) {
-        const message = result.message ?? t('toasts.postFailed')
-        setActionError(message)
-        toast.error(message)
-      }
-      else if (result.pendingApproval) toast.success(tCommon('actions.submitForApproval'))
-      else toast.success(t('toasts.posted', { side }))
-    } catch {
-      const message = t('toasts.postFailed')
-      setActionError(message)
-      toast.error(message)
-    } finally {
-      // A rejected transport must not wedge the button on: without this,
-      // every later click silently dies on the stuck disabled button.
-      setBusy(false)
-    }
+    // A non-JSON refusal body must not throw past the toast and wedge the
+    // button busy (F-t02-006 posted a 422 with zero UI feedback from the
+    // bare res.json() here): the shared read cannot throw, and the busy
+    // reset lives in its finally.
+    await execute(
+      () =>
+        fetchAction('/api/payments/post-with-applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Same revision evidence as the draft save: the route fences its
+          // final allocation write on this token and 409s a stale drawer.
+          body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
+        }),
+      {
+        fallbackMessage: t('toasts.postFailed'),
+        onOk: (data) => {
+          const pendingApproval =
+            (data as { pendingApproval?: unknown } | null)?.pendingApproval === true
+          if (pendingApproval) toast.success(tCommon('actions.submitForApproval'))
+          else toast.success(t('toasts.posted', { side }))
+        },
+      },
+    )
     router.refresh()
   }
 
@@ -386,16 +373,17 @@ export function PaymentDrawer({
       }))
     )
       return
-    setBusy(true)
-    const res = await fetch(`/api/payments/${doc.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success(t('deleted'))
-      router.push(basePath)
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('deleteFailed'))
-      setBusy(false)
-    }
+    await execute(
+      () => fetchAction(`/api/payments/${doc.id}`, { method: 'DELETE' }),
+      {
+        fallbackMessage: t('deleteFailed'),
+        successMessage: t('deleted'),
+        onOk: () => {
+          router.push(basePath)
+          router.refresh()
+        },
+      },
+    )
   }
 
   async function voidPayment() {
@@ -406,35 +394,27 @@ export function PaymentDrawer({
       confirmLabel: tCommon('actions.void'),
     })
     if (!reason) return
-    setBusy(true)
-    setActionError(null)
-    try {
-      const res = await fetch(`/api/documents/${doc.id}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // The void API fences on the exact revision like every other document
-        // write: without it every void answers 409 and the button is dead.
-        body: JSON.stringify({ reason, expectedUpdatedAt: doc.updated_at }),
-      })
-      // The void API answers 202 with a status string (not pendingApproval)
-      // when the void lands as pending approval: read the code first, since
-      // the shared reader only parses the typed error shape.
-      const accepted = res.status === 202
-      const result = await readDocumentActionResult(res)
-      if (!result.ok) {
-        const message = result.message ?? t('toasts.postFailed')
-        setActionError(message)
-        toast.error(message)
-      }
-      else if (accepted) toast.success(tCommon('actions.submitForApproval'))
-      else toast.success(tCommon('status.voided'))
-    } catch {
-      const message = t('toasts.postFailed')
-      setActionError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
+    await execute(
+      () =>
+        fetchAction(`/api/documents/${doc.id}/void`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // The void API fences on the exact revision like every other document
+          // write: without it every void answers 409 and the button is dead.
+          body: JSON.stringify({ reason, expectedUpdatedAt: doc.updated_at }),
+        }),
+      {
+        fallbackMessage: t('toasts.postFailed'),
+        onOk: (data) => {
+          // The void answers 202 with a status string when it lands as
+          // pending approval — the body carries the same status, so branch
+          // on the data, never on the transport.
+          const status = (data as { status?: unknown } | null)?.status
+          if (status === 'pending_approval') toast.success(tCommon('actions.submitForApproval'))
+          else toast.success(tCommon('status.voided'))
+        },
+      },
+    )
     router.refresh()
   }
 
@@ -482,27 +462,26 @@ export function PaymentDrawer({
     if (!partyId) return
     const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency)
     const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), 2)
-    setBusy(true)
-    try {
-      const res = await fetch('/api/payments/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partyId, amount, side, currency: doc.currency, reference: referenceNumber || null }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('autoApplyFailed'))
-        return
-      }
-      if (!data.allocations?.length) {
-        toast.info(t('autoApplyNone'))
-        return
-      }
-      setAllocs(Object.fromEntries(data.allocations.map((a: AllocationClient) => [a.openLineId, a])))
-      toast.success(t('autoApplyDone', { count: data.allocations.length, strategy: t(`autoApplyStrategy.${data.strategy}`) }))
-    } finally {
-      setBusy(false)
-    }
+    await execute(
+      () =>
+        fetchAction('/api/payments/suggest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partyId, amount, side, currency: doc.currency, reference: referenceNumber || null }),
+        }),
+      {
+        fallbackMessage: t('autoApplyFailed'),
+        onOk: (data) => {
+          const suggestion = data as { allocations?: AllocationClient[]; strategy?: unknown } | null
+          if (!suggestion?.allocations?.length) {
+            toast.info(t('autoApplyNone'))
+            return
+          }
+          setAllocs(Object.fromEntries(suggestion.allocations.map((a: AllocationClient) => [a.openLineId, a])))
+          toast.success(t('autoApplyDone', { count: suggestion.allocations.length, strategy: t(`autoApplyStrategy.${String(suggestion.strategy)}`) }))
+        },
+      },
+    )
   }
 
   const field = 'space-y-1.5'
@@ -645,11 +624,7 @@ export function PaymentDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {actionError ? (
-          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-            {actionError}
-          </p>
-        ) : null}
+        <ActionAlert error={refusal} fallbackMessage={t('toasts.postFailed')} />
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
