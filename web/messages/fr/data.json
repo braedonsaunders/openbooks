@@ -1,6 +1,6 @@
 {
   "nav": {
-    "group": "Import & Export",
+    "group": "Importer et exporter",
     "export": "Exporter",
     "import": "Importer",
     "history": "Historique des imports"

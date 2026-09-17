@@ -42,7 +42,10 @@ const hooks = registerHooks({
       `);
     }
     if (specifier === "next-intl/server") {
-      return virtual("export async function getTranslations() { return (key) => key; }");
+      return virtual(`
+        export async function getTranslations() { return (key) => key; }
+        export async function getLocale() { return 'en'; }
+      `);
     }
     if (specifier === "./request-org" && parent.includes("/web/lib/auth.ts")) {
       // web/lib/auth.ts registers the production request-org resolver as an
@@ -196,6 +199,9 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
     const settledRow = settled.users.find((row) => row.email === NEW_EMAIL);
     assert.equal(settledRow!.isPending, false);
     assert.equal(settledRow!.statusLabel, "statusActive");
+    // The sign-in timestamp flows through the locale-aware formatter.
+    assert.notEqual(settledRow!.lastSignIn, "—");
+    assert.match(settledRow!.lastSignIn, /202\d/);
   } finally {
     state.authz = null;
     await dropScratchOrg(f.orgId);

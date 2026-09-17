@@ -939,7 +939,6 @@
         "duplicateDays": "Ventana de duplicados",
         "dueWithinDays": "Vence en",
         "unbilledDays": "Sin facturar después de",
-        "dueWithinDays": "Vence en",
         "forecastWeeks": "Horizonte de previsión",
         "minimumVariancePercent": "Desviación desfavorable mínima",
         "criticalVariancePercent": "Desviación desfavorable crítica",
@@ -1238,8 +1237,8 @@
     }
   },
   "setup": {
-    "title": "Setup",
-    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "title": "Configuración",
+    "description": "Configure los impuestos, las dimensiones, los plazos y los datos de referencia sobre los que opera su contabilidad.",
     "taxLibrary": {
       "title": "Biblioteca de declaraciones fiscales",
       "open": "Biblioteca",
@@ -1262,7 +1261,7 @@
       "usNotice": "Estados Unidos no tiene una declaración federal de impuesto sobre ventas. Esta hoja debe adaptarse a cada jurisdicción estatal y local."
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "Depreciación contable",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1386,14 +1385,14 @@
       "saveTimedOut": "Se agotó el tiempo de guardado. Revise la tabla antes de reintentar — es posible que el registro ya exista."
     },
     "groups": {
-      "company": "Company",
+      "company": "Empresa",
       "accounting": "Contabilidad",
-      "taxes": "Taxes",
-      "dimensions": "Dimensions",
-      "billing": "Billing & numbering",
-      "workforce": "Workforce",
-      "assets": "Assets",
-      "currency": "Currency",
+      "taxes": "Impuestos",
+      "dimensions": "Dimensiones",
+      "billing": "Facturación y numeración",
+      "workforce": "Personal",
+      "assets": "Activos",
+      "currency": "Moneda",
       "revenue": "Ingresos",
       "inventory": "Inventario",
       "projects": "Proyectos",
@@ -1855,7 +1854,7 @@
     },
     "entities": {
       "company": {
-        "title": "Company & Accounting",
+        "title": "Empresa y contabilidad",
         "description": "Organization identity, base currency, fiscal year, and control accounts."
       },
       "tax-codes": {
@@ -1869,7 +1868,7 @@
         "description": "Historial de tasas con fecha de vigencia para cada código de impuesto."
       },
       "tax-groups": {
-        "title": "Tax Groups",
+        "title": "Grupos de impuestos",
         "description": "Bundle several tax codes to apply together on a line."
       },
       "tax-return-forms": {
@@ -1882,7 +1881,7 @@
         "description": "Asigne códigos de impuesto a las casillas de una declaración, o calcule una casilla a partir de otras."
       },
       "classes": {
-        "title": "Classes",
+        "title": "Clases",
         "description": "A reporting dimension for slicing transactions."
       },
       "segment-definitions": {
@@ -1894,31 +1893,31 @@
         "description": "Administra los valores seleccionables y las jerarquías de los segmentos personalizados."
       },
       "departments": {
-        "title": "Departments",
+        "title": "Departamentos",
         "description": "A reporting dimension for slicing transactions."
       },
       "locations": {
-        "title": "Locations",
+        "title": "Ubicaciones",
         "description": "A reporting dimension for slicing transactions."
       },
       "payment-terms": {
-        "title": "Payment Terms",
+        "title": "Condiciones de pago",
         "description": "Net and early-payment discount terms for bills and invoices."
       },
       "number-sequences": {
-        "title": "Number Sequences",
+        "title": "Secuencias de numeración",
         "description": "Controle el prefijo, el número siguiente y la longitud de cada documento o registro personalizado. Las secuencias personalizadas se crean automáticamente al generar su primer número."
       },
       "time-types": {
-        "title": "Time Types",
+        "title": "Tipos de hora",
         "description": "Cost multipliers and billable defaults for timesheets."
       },
       "worker-comp-groups": {
-        "title": "Worker Comp Groups",
+        "title": "Grupos de compensación laboral",
         "description": "Workers' compensation rate groups for labor costing."
       },
       "asset-categories": {
-        "title": "Asset Categories",
+        "title": "Categorías de activos",
         "description": "Default depreciation method and accounts for fixed assets."
       },
       "depreciation-methods": {
@@ -1930,7 +1929,7 @@
         "description": "Método por libro y categoría para la depreciación multilibro."
       },
       "currencies": {
-        "title": "Currencies",
+        "title": "Monedas",
         "description": "Currency codes and their minor-unit precision."
       },
       "sftp": {
@@ -1941,7 +1940,7 @@
         "description": "Formatos de pago, perfiles bancarios, programaciones y mandatos de débito."
       },
       "subsidiaries": {
-        "title": "Subsidiaries",
+        "title": "Subsidiarias",
         "description": "The legal entities inside your organization — a consolidation tree with one root."
       },
       "intercompany-pairs": {
@@ -2066,7 +2065,10 @@
           "autoHint": "Los gastos generales se aplican automáticamente: al aprobar horas, la parte de cada registro (horas × la tarifa publicada del departamento en el día trabajado) se contabiliza con la misma aprobación — sin paso de fin de mes, y sin esperar a la nómina.",
           "backfillPrompt": "{entries} registros aprobados (~{hours}h) son anteriores a este modo y aún no llevan gastos generales.",
           "backfill": "Aplicar a horas pasadas",
-          "backfilled": "Aplicados ${total} de gastos generales en {entries} registros pasados"
+          "backfilled": "Aplicados ${total} de gastos generales en {entries} registros pasados",
+          "systemRule": {
+            "title": "Regla de distribución del núcleo"
+          }
         },
         "lifecycle": {
           "title": "Ciclo de vida de tarifas",
@@ -2119,6 +2121,63 @@
         "title": "Tasas de impuesto sobre beneficios",
         "singularTitle": "Tasa de impuesto",
         "description": "Tasas promulgadas por jurisdicción, con vigencia — alimentan la provisión ASC 740."
+      },
+      "tax-jurisdictions": {
+        "title": "Jurisdicciones de impuesto"
+      },
+      "tax-registrations": {
+        "title": "Nexo de impuesto"
+      },
+      "tax-regimes": {
+        "title": "Regímenes de depreciación fiscal"
+      },
+      "tax-pool-classes": {
+        "title": "Clases de depreciación fiscal"
+      },
+      "tax-first-year-rules": {
+        "title": "Reglas del primer año"
+      },
+      "pay-schedules": {
+        "title": "Calendarios de nómina"
+      },
+      "pay-components": {
+        "title": "Componentes de nómina"
+      },
+      "union-agreements": {
+        "title": "Convenios colectivos"
+      },
+      "account-groups": {
+        "title": "Grupos de cuentas"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "Participación en subsidiarias"
+      },
+      "allocations": {
+        "title": "Asignaciones"
+      },
+      "payroll-filing-accounts": {
+        "title": "Cuentas de declaración"
+      },
+      "entitlement-plans": {
+        "title": "Planes de derechos"
+      },
+      "entitlement-plan-limits": {
+        "title": "Límites de los bancos"
+      },
+      "entitlement-service-tiers": {
+        "title": "Escalas de antigüedad"
+      },
+      "pay-derived-rules": {
+        "title": "Percepciones calculadas"
+      },
+      "trades": {
+        "title": "Oficios"
+      },
+      "payroll-holidays": {
+        "title": "Días festivos"
+      },
+      "extension-settings": {
+        "title": "Configuración de aplicaciones"
       }
     },
     "fields": {
@@ -2824,10 +2883,11 @@
         "openLienWaivers": "{count, plural, one {# renuncia pendiente de firma} other {# renuncias pendientes de firma}}",
         "draftInformationReturns": "{count, plural, one {# declaración informativa en curso} other {# declaraciones informativas en curso}}",
         "unfiledInformationReturns": "{count, plural, one {# declaración finalizada sin presentar} other {# declaraciones finalizadas sin presentar}}"
-      }
+      },
+      "runWizard": "Ejecutar el asistente de configuración"
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "Feeds bancarios"
     },
     "paymentProviders": {
       "title": "Proveedores de pago",
@@ -2870,7 +2930,20 @@
       "copy": "Copiar",
       "copied": "Copiado",
       "testConnection": "Probar conexión",
-      "testing": "Probando…"
+      "testing": "Probando…",
+      "navTitle": "Proveedores de pago"
+    },
+    "readiness": {
+      "navTitle": "Guía de puesta en marcha"
+    },
+    "invoicing": {
+      "navTitle": "Facturación"
+    },
+    "taxSetup": {
+      "navTitle": "Configuración fiscal"
+    },
+    "payroll": {
+      "navTitle": "Nómina"
     }
   },
   "flows": {

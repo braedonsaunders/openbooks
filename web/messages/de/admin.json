@@ -1164,7 +1164,8 @@
       },
       "tabs": {
         "billing": "Abrechnungssätze"
-      }
+      },
+      "navTitle": "Lohnkosten"
     },
     "taxLibrary": {
       "title": "Bibliothek für Steuererklärungen",
@@ -1188,7 +1189,7 @@
       "usNotice": "Die Vereinigten Staaten haben keine bundesweite Umsatzsteuererklärung. Dieses Arbeitsblatt muss für jede bundesstaatliche und kommunale Meldezuständigkeit angepasst werden."
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "Buch-Abschreibung",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1321,7 +1322,10 @@
       "assets": "Anlagen",
       "currency": "Währung",
       "revenue": "Umsatz",
-      "inventory": "Lagerbestand"
+      "inventory": "Lagerbestand",
+      "projects": "Projekte",
+      "agents": "Agenten",
+      "compliance": "Compliance"
     },
     "fxProvider": {
       "title": "Wechselkursanbieter",
@@ -1728,6 +1732,77 @@
         "title": "Ertragsteuersätze",
         "singularTitle": "Ertragsteuersatz",
         "description": "Verabschiedete Ertragsteuersätze je Jurisdiktion, gültigkeitsdatiert — Grundlage der ASC-740-Abgrenzung."
+      },
+      "tax-jurisdictions": {
+        "title": "Steuerjurisdiktionen"
+      },
+      "tax-registrations": {
+        "title": "Steuernexus"
+      },
+      "tax-regimes": {
+        "title": "Steuerregime"
+      },
+      "tax-pool-classes": {
+        "title": "Steuerklassen"
+      },
+      "tax-first-year-rules": {
+        "title": "Erstjahresregeln"
+      },
+      "pay-schedules": {
+        "title": "Lohnpläne"
+      },
+      "pay-components": {
+        "title": "Lohnbestandteile"
+      },
+      "union-agreements": {
+        "title": "Tarifverträge"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "Beteiligungen an Tochtergesellschaften"
+      },
+      "allocations": {
+        "title": "Umlagen"
+      },
+      "overhead-model": {
+        "title": "Gemeinkosten",
+        "application": {
+          "systemRule": {
+            "title": "Kern-Umlageregel"
+          }
+        }
+      },
+      "compliance-classes": {
+        "title": "Kontrahentenklassen"
+      },
+      "compliance-requirements": {
+        "title": "Compliance-Anforderungen"
+      },
+      "information-return-box-rules": {
+        "title": "Felder für Informationsmeldungen"
+      },
+      "payroll-filing-accounts": {
+        "title": "Anmeldekonten"
+      },
+      "entitlement-plans": {
+        "title": "Anspruchspläne"
+      },
+      "entitlement-plan-limits": {
+        "title": "Kontolimits"
+      },
+      "entitlement-service-tiers": {
+        "title": "Dienstjahrstaffeln"
+      },
+      "pay-derived-rules": {
+        "title": "Berechnete Bezüge"
+      },
+      "trades": {
+        "title": "Gewerke"
+      },
+      "payroll-holidays": {
+        "title": "Feiertage"
+      },
+      "extension-settings": {
+        "title": "App-Einstellungen"
       }
     },
     "fields": {
@@ -2015,7 +2090,7 @@
       }
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "Bankfeeds"
     },
     "paymentProviders": {
       "title": "Zahlungsanbieter",
@@ -2058,12 +2133,34 @@
       "copy": "Kopieren",
       "copied": "Kopiert",
       "testConnection": "Verbindung testen",
-      "testing": "Teste…"
+      "testing": "Teste…",
+      "navTitle": "Zahlungsanbieter"
     },
     "agents": {
       "overview": {
         "scanAlreadyRunning": "Es läuft bereits ein Scan."
+      },
+      "nav": {
+        "overview": "Übersicht",
+        "library": "Bibliothek",
+        "activity": "Aktivität"
       }
+    },
+    "readiness": {
+      "navTitle": "Go-live-Leitfaden"
+    },
+    "features": {
+      "runWizard": "Einrichtungsassistenten starten",
+      "navTitle": "Funktionen"
+    },
+    "invoicing": {
+      "navTitle": "Rechnungsstellung"
+    },
+    "taxSetup": {
+      "navTitle": "Steuer-Einrichtung"
+    },
+    "payroll": {
+      "navTitle": "Lohnabrechnung"
     }
   },
   "flows": {

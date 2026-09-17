@@ -1164,7 +1164,8 @@
       },
       "tabs": {
         "billing": "請求レート表"
-      }
+      },
+      "navTitle": "労務費"
     },
     "taxLibrary": {
       "title": "税務申告ライブラリ",
@@ -1188,7 +1189,7 @@
       "usNotice": "米国には連邦の売上税申告書がありません。このワークペーパーは、州および地方の申告管轄区域ごとにカスタマイズする必要があります。"
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "帳簿減価償却",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1321,7 +1322,10 @@
       "assets": "資産",
       "currency": "通貨",
       "revenue": "収益",
-      "inventory": "在庫"
+      "inventory": "在庫",
+      "projects": "プロジェクト",
+      "compliance": "コンプライアンス",
+      "agents": "エージェント"
     },
     "fxProvider": {
       "title": "為替レートプロバイダー",
@@ -1728,6 +1732,77 @@
         "title": "所得税率",
         "singularTitle": "所得税率",
         "description": "管轄区別の制定所得税率（効力日付き）— ASC 740 税金計算の基礎。"
+      },
+      "tax-jurisdictions": {
+        "title": "税務管轄"
+      },
+      "tax-registrations": {
+        "title": "ネクサス"
+      },
+      "tax-regimes": {
+        "title": "税務減価償却制度"
+      },
+      "tax-pool-classes": {
+        "title": "税務減価償却クラス"
+      },
+      "tax-first-year-rules": {
+        "title": "初年度ルール"
+      },
+      "pay-schedules": {
+        "title": "給与スケジュール"
+      },
+      "pay-components": {
+        "title": "給与項目"
+      },
+      "union-agreements": {
+        "title": "労働協約"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "子会社持分"
+      },
+      "allocations": {
+        "title": "配賦"
+      },
+      "overhead-model": {
+        "title": "間接費",
+        "application": {
+          "systemRule": {
+            "title": "エンジン配賦ルール"
+          }
+        }
+      },
+      "compliance-classes": {
+        "title": "取引先クラス"
+      },
+      "compliance-requirements": {
+        "title": "コンプライアンス要件"
+      },
+      "information-return-box-rules": {
+        "title": "情報申告欄"
+      },
+      "payroll-filing-accounts": {
+        "title": "申告口座"
+      },
+      "entitlement-plans": {
+        "title": "休暇付与プラン"
+      },
+      "entitlement-plan-limits": {
+        "title": "バンク上限"
+      },
+      "entitlement-service-tiers": {
+        "title": "勤続スケジュール"
+      },
+      "pay-derived-rules": {
+        "title": "計算支給"
+      },
+      "trades": {
+        "title": "職種"
+      },
+      "payroll-holidays": {
+        "title": "祝日"
+      },
+      "extension-settings": {
+        "title": "アプリ設定"
       }
     },
     "fields": {
@@ -2018,7 +2093,7 @@
       "navTitle": "請求書"
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "銀行フィード"
     },
     "paymentProviders": {
       "title": "決済プロバイダー",
@@ -2061,12 +2136,31 @@
       "copy": "コピー",
       "copied": "コピー済み",
       "testConnection": "接続テスト",
-      "testing": "テスト中…"
+      "testing": "テスト中…",
+      "navTitle": "決済プロバイダー"
     },
     "agents": {
       "overview": {
         "scanAlreadyRunning": "スキャンは既に実行中です。"
+      },
+      "nav": {
+        "overview": "概要",
+        "library": "ライブラリ",
+        "activity": "アクティビティ"
       }
+    },
+    "readiness": {
+      "navTitle": "本番稼働ガイド"
+    },
+    "features": {
+      "runWizard": "セットアップウィザードを実行",
+      "navTitle": "機能"
+    },
+    "taxSetup": {
+      "navTitle": "税務設定"
+    },
+    "payroll": {
+      "navTitle": "給与"
     }
   },
   "flows": {

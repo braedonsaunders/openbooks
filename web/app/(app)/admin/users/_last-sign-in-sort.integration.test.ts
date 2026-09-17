@@ -18,6 +18,7 @@ const mockAuthz = `
 `;
 const mockIntl = `
   export async function getTranslations() { return (key) => key }
+  export async function getLocale() { return 'en' }
 `;
 
 registerHooks({

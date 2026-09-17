@@ -1164,7 +1164,8 @@
       },
       "tabs": {
         "billing": "对外费率卡"
-      }
+      },
+      "navTitle": "人工成本"
     },
     "taxLibrary": {
       "title": "纳税申报库",
@@ -1188,7 +1189,7 @@
       "usNotice": "美国没有联邦销售税申报。此工作底稿必须为每个州和地方申报辖区进行定制。"
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "账面折旧",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1321,7 +1322,10 @@
       "assets": "资产",
       "currency": "货币",
       "revenue": "收入",
-      "inventory": "库存"
+      "inventory": "库存",
+      "projects": "项目",
+      "compliance": "合规",
+      "agents": "智能体"
     },
     "fxProvider": {
       "title": "汇率服务商",
@@ -1728,6 +1732,77 @@
         "title": "所得税税率",
         "singularTitle": "所得税税率",
         "description": "按辖区划分的法定所得税税率，带生效日期 — 用于 ASC 740 所得税计提。"
+      },
+      "tax-jurisdictions": {
+        "title": "税务管辖区"
+      },
+      "tax-registrations": {
+        "title": "税务关联"
+      },
+      "tax-regimes": {
+        "title": "税务折旧制度"
+      },
+      "tax-pool-classes": {
+        "title": "税务折旧类别"
+      },
+      "tax-first-year-rules": {
+        "title": "首年规则"
+      },
+      "pay-schedules": {
+        "title": "发薪计划"
+      },
+      "pay-components": {
+        "title": "工资项"
+      },
+      "union-agreements": {
+        "title": "工会协议"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "子公司股权"
+      },
+      "allocations": {
+        "title": "分摊"
+      },
+      "overhead-model": {
+        "title": "间接费用",
+        "application": {
+          "systemRule": {
+            "title": "分摊核心规则"
+          }
+        }
+      },
+      "compliance-classes": {
+        "title": "交易对手类别"
+      },
+      "compliance-requirements": {
+        "title": "合规要求"
+      },
+      "information-return-box-rules": {
+        "title": "信息申报栏"
+      },
+      "payroll-filing-accounts": {
+        "title": "申报账户"
+      },
+      "entitlement-plans": {
+        "title": "假期权益计划"
+      },
+      "entitlement-plan-limits": {
+        "title": "额度上限"
+      },
+      "entitlement-service-tiers": {
+        "title": "工龄计划"
+      },
+      "pay-derived-rules": {
+        "title": "计算应发项"
+      },
+      "trades": {
+        "title": "工种"
+      },
+      "payroll-holidays": {
+        "title": "节假日"
+      },
+      "extension-settings": {
+        "title": "应用设置"
       }
     },
     "fields": {
@@ -2015,7 +2090,7 @@
       }
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "银行数据"
     },
     "paymentProviders": {
       "title": "支付服务商",
@@ -2058,12 +2133,34 @@
       "copy": "复制",
       "copied": "已复制",
       "testConnection": "测试连接",
-      "testing": "测试中…"
+      "testing": "测试中…",
+      "navTitle": "支付服务商"
     },
     "agents": {
       "overview": {
         "scanAlreadyRunning": "扫描已在运行。"
+      },
+      "nav": {
+        "overview": "概览",
+        "library": "库",
+        "activity": "活动"
       }
+    },
+    "readiness": {
+      "navTitle": "上线指南"
+    },
+    "features": {
+      "runWizard": "运行设置向导",
+      "navTitle": "功能"
+    },
+    "invoicing": {
+      "navTitle": "开票"
+    },
+    "taxSetup": {
+      "navTitle": "税务设置"
+    },
+    "payroll": {
+      "navTitle": "工资"
     }
   },
   "flows": {
