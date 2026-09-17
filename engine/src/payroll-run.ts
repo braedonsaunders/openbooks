@@ -3532,17 +3532,20 @@ async function payRunGlLegs(
     `));
     if (stubLines.rows.length === 0) throw new PayrollError("pay run has no calculated stubs");
 
-    // Aggregate GL legs: key = account|project|department|party (party only on net pay)
+    // Aggregate GL legs: key = account|project|department|party (party only on
+    // net pay). Employer burden debits additionally split per component
+    // description: several shares ride one expense account, and merging them
+    // under the first share's name mislabels the aggregate.
     const legs = new Map<string, {
       accountId: string; amount: string; partyId: string | null;
       projectId: string | null; departmentId: string | null; description: string;
     }>();
     const accumulate = (
       accountId: string, amount: string, description: string,
-      opts: { partyId?: string | null; projectId?: string | null; departmentId?: string | null } = {},
+      opts: { partyId?: string | null; projectId?: string | null; departmentId?: string | null; split?: string } = {},
     ) => {
       if (cmp(amount, "0") === 0) return;
-      const key = [accountId, opts.partyId ?? "", opts.projectId ?? "", opts.departmentId ?? ""].join("|");
+      const key = [accountId, opts.partyId ?? "", opts.projectId ?? "", opts.departmentId ?? "", opts.split ?? ""].join("|");
       const existing = legs.get(key);
       if (existing) existing.amount = add(existing.amount, amount);
       else legs.set(key, {
@@ -3587,8 +3590,12 @@ async function payRunGlLegs(
           );
         }
         // Job-costed burdens (union fringes) carry the line's project split.
+        // Each component keeps its own debit: the shares ride one expense
+        // account, so without the split the whole aggregate wears the first
+        // share's name.
         accumulate(line.expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
           projectId: line.project_id, departmentId: line.department_id,
+          split: line.description ?? "Employer burden",
         });
         accumulate(liability, neg(amount), line.description ?? "Employer burden");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
