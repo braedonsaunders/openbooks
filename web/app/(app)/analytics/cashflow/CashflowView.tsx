@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   University,
   Wallet,
@@ -91,16 +91,16 @@ export function CashflowView({ data }: { data: CashflowData }) {
 function OverviewTab({ data }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
+  const money = useCallback((n: string | number) => fmtMoney(n, { compact: true }), [fmtMoney])
   const tCharts = useTranslations('analytics.charts')
   const s = data.summary
-  const bridgeLabels = {
+  const bridgeLabels = useMemo(() => ({
     start: tCharts('bridge.start'),
     inflows: tCharts('bridge.inflows'),
     outflows: tCharts('bridge.outflows'),
     projectedEnd: tCharts('bridge.projectedEnd'),
-  }
-  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money, bridgeLabels), [s, money])
+  }), [tCharts])
+  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money, bridgeLabels), [s, money, bridgeLabels])
 
   return (
     <div className="space-y-5">

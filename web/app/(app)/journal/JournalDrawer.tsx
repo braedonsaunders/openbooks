@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -298,13 +298,18 @@ export function JournalDrawer({
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
+  // Ref-mirrored like dirtyRef below: subscribing the tracker to `editable`
+  // would mark the form dirty on merely entering edit mode.
+  const editableRef = useRef(editable)
+  useEffect(() => {
+    editableRef.current = editable
+  }, [editable])
   useEffect(() => {
     if (first.current) {
       first.current = false
       return
     }
-    if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (editableRef.current) setDirty(true)
   }, [payload])
 
   // -- optimistic-concurrency fence -----------------------------------------
@@ -382,6 +387,14 @@ export function JournalDrawer({
     }
   }
 
+  // Effect-only bridge: the mount fetch must rerun on doc change, not on
+  // every render (applyCanonicalRead closes over per-render props like
+  // lineDefs), while save/void paths keep calling the plain function from
+  // their event handlers.
+  const applyCanonicalReadOnMount = useEffectEvent(
+    (incoming: PersistedDocumentSnapshot<JournalPayload>) => applyCanonicalRead(incoming),
+  )
+
   async function refreshFromServer(notifyOnConflict = true): Promise<void> {
     applyCanonicalRead(
       await loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed')),
@@ -393,7 +406,7 @@ export function JournalDrawer({
     let active = true
     loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
       .then((incoming) => {
-        if (active) applyCanonicalRead(incoming)
+        if (active) applyCanonicalReadOnMount(incoming)
       })
       .catch(() => {
         // Saves stay fenced off until a canonical read lands; the next save
@@ -402,8 +415,7 @@ export function JournalDrawer({
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.id])
+  }, [doc.id, t])
 
   async function save() {
     setSaveState('saving')
@@ -644,7 +656,7 @@ export function JournalDrawer({
       })
       return [...configured, ...segmentColumns]
     },
-    [accounts, departments, projects, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc],
+    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc],
   )
 
   const field = 'space-y-1.5'

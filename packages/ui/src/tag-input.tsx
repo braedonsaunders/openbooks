@@ -19,7 +19,7 @@
 // Values are plain strings (what gets stored); options may carry a separate
 // display label but usually value === label.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -68,7 +68,7 @@ export function TagInput({
   const wrapRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
-  const listId = `${useMemo(() => Math.random().toString(36).slice(2, 9), [])}-taglist`
+  const listId = `${useId()}-taglist`
 
   // Portaled dropdown anchored to the control (floats above drawer overflow).
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)

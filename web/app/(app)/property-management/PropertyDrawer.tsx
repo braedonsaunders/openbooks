@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import type { Option } from "./workspace-ui";
@@ -8,23 +8,26 @@ import { Field, PROPERTY_TYPE_OPTIONS } from "./workspace-ui";
 import type { SaveAction, WorkspaceOptions } from "./types";
 
 export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false }: { open: boolean; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean }) {
-  const initial = {
-    code: "",
-    name: "",
-    propertyType: "residential",
-    subsidiaryId: options.subsidiaries[0]?.id ?? "",
-    currency: options.subsidiaries[0]?.currency ?? "CAD",
-    locationId: "",
-    fixedAssetId: "",
-    rentIncomeAccountId: "",
-    camIncomeAccountId: "",
-    depositLiabilityAccountId: "",
-    defaultBankAccountId: "",
-    street: "",
-    city: "",
-    region: "",
-    postalCode: "",
-  };
+  const initial = useMemo(
+    () => ({
+      code: "",
+      name: "",
+      propertyType: "residential",
+      subsidiaryId: options.subsidiaries[0]?.id ?? "",
+      currency: options.subsidiaries[0]?.currency ?? "CAD",
+      locationId: "",
+      fixedAssetId: "",
+      rentIncomeAccountId: "",
+      camIncomeAccountId: "",
+      depositLiabilityAccountId: "",
+      defaultBankAccountId: "",
+      street: "",
+      city: "",
+      region: "",
+      postalCode: "",
+    }),
+    [options],
+  );
   const [form, setForm] = useState(initial);
   const t = useTranslations("entities.propertyManagement.propertyDrawer");
   const tCommon = useTranslations("common");
@@ -32,7 +35,7 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
   const tTypes = useTranslations("entities.propertyManagement.propertyTypes");
   useEffect(() => {
     if (open) setForm(initial);
-  }, [open]);
+  }, [open, initial]);
   const submit = () => {
     const { currency, ...fields } = form;
     onSave({

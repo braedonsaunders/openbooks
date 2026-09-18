@@ -127,7 +127,7 @@ export function PropertyManagementWorkspace({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
   useEffect(() => {
     void load();
   }, [load]);

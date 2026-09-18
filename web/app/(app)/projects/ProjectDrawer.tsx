@@ -183,7 +183,6 @@ export function ProjectDrawer({
     payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '',
   )
   const [notes, setNotes] = useState<string>(pr.notes ?? '')
-  const customFieldDefs = payload.customFieldDefs ?? []
   const [custom, setCustom] = useState<Record<string, unknown>>(
     (pr.custom as Record<string, unknown> | null) ?? {},
   )
@@ -244,13 +243,18 @@ export function ProjectDrawer({
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
+  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
+  // dirty on merely entering edit mode.
+  const editableRef = useRef(editable)
+  useEffect(() => {
+    editableRef.current = editable
+  }, [editable])
   useEffect(() => {
     if (first.current) {
       first.current = false
       return
     }
-    if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (editableRef.current) setDirty(true)
   }, [savePayload])
 
   function resetForm() {
@@ -340,8 +344,10 @@ export function ProjectDrawer({
     }
   }, [effectiveLayout])
   const cfByKey = useMemo(
-    () => new Map(customFieldDefs.map((d) => [`cf_${d.key}`, d])),
-    [customFieldDefs],
+    // Inside the memo: a `?? []` fallback outside would hand the dep array a
+    // fresh empty-array identity on every render, defeating the memo.
+    () => new Map((payload.customFieldDefs ?? []).map((d) => [`cf_${d.key}`, d])),
+    [payload.customFieldDefs],
   )
 
   function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
@@ -527,8 +533,10 @@ export function ProjectDrawer({
   }, [tab, tabs])
 
   const activeTab = tabs.find((item) => item.key === tab) ?? null
-  const managementTabs =
-    tabs.find((item) => item.key === 'project_management')?.subtabs ?? []
+  const managementTabs = useMemo(
+    () => tabs.find((item) => item.key === 'project_management')?.subtabs ?? [],
+    [tabs],
+  )
 
   useEffect(() => {
     if (

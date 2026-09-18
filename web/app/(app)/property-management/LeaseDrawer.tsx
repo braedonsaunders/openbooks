@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
@@ -19,34 +19,32 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
   onSave: SaveAction;
 }) {
   const today = useBusinessToday();
-  const initial = {
-    propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
-    unitId: initialUnitId ?? "",
-    tenantId: "",
-    leaseNumber: "",
-    startsOn: today,
-    endsOn: "",
-    baseRent: "",
-    billingDay: "1",
-    paymentTermsDays: "0",
-    securityDepositRequired: "0",
-    camMethod: "none",
-    camSharePercent: "",
-    lateFeeType: "none",
-    lateFeeValue: "0",
-    graceDays: "0",
-    autoInvoice: true,
-    autoPost: false,
-  };
+  const initial = useMemo(
+    () => ({
+      propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
+      unitId: initialUnitId ?? "",
+      tenantId: "",
+      leaseNumber: "",
+      startsOn: today,
+      endsOn: "",
+      baseRent: "",
+      billingDay: "1",
+      paymentTermsDays: "0",
+      securityDepositRequired: "0",
+      camMethod: "none",
+      camSharePercent: "",
+      lateFeeType: "none",
+      lateFeeValue: "0",
+      graceDays: "0",
+      autoInvoice: true,
+      autoPost: false,
+    }),
+    [initialPropertyId, initialUnitId, data.properties, today],
+  );
   const [form, setForm] = useState(initial);
   useEffect(() => {
-    if (open)
-      setForm({
-        ...initial,
-        propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
-        unitId: initialUnitId ?? "",
-      });
-  }, [open, initialPropertyId, initialUnitId, data.properties.length]);
+    if (open) setForm(initial);
+  }, [open, initial]);
   const units = data.units.filter(
     (unit) => unit.propertyId === form.propertyId && unit.status === "vacant",
   );

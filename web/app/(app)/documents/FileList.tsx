@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -113,7 +113,10 @@ export function FileList({
   const menu = useContextMenu()
   const [target, setTarget] = useState<Target | null>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
-  const replaceTargetId = useRef<string | null>(null)
+  // Pending file-replace request (fresh object per click, so retrying after a
+  // cancelled picker still reopens it). The input click lives in the effect
+  // below: refs stay out of render-created closures.
+  const [replaceReq, setReplaceReq] = useState<{ id: string; n: number } | null>(null)
 
   // --- multi-select ---------------------------------------------------------
   // Selection is keyed by "file:<id>" / "folder:<id>". Only rows the caller can
@@ -322,13 +325,14 @@ export function FileList({
   }
 
   function startReplace(id: string) {
-    replaceTargetId.current = id
-    replaceInputRef.current?.click()
+    setReplaceReq((prev) => ({ id, n: (prev?.n ?? 0) + 1 }))
   }
 
-  async function handleReplace(fileInput: File) {
-    const id = replaceTargetId.current
-    if (!id) return
+  useEffect(() => {
+    if (replaceReq) replaceInputRef.current?.click()
+  }, [replaceReq])
+
+  async function handleReplace(id: string, fileInput: File) {
     const form = new FormData()
     form.append('file', fileInput)
     const res = await fetch(`/api/file-cabinet/files/${id}/replace`, { method: 'POST', body: form })
@@ -582,8 +586,9 @@ export function FileList({
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) void handleReplace(f)
+          if (f && replaceReq) void handleReplace(replaceReq.id, f)
           e.target.value = ''
+          setReplaceReq(null)
         }}
       />
     </>

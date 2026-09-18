@@ -37,8 +37,10 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const [seasonality, setSeasonality] = useState<Seasonality>('auto')
   const [adjustment, setAdjustment] = useState(0)
 
-  const hist = data.monthly.filter((p) => p.revenue !== 0 || p.cogs !== 0)
-  const series = hist.map((p) => p[METRIC_KEY[metric]])
+  // Memoized chain: `result` below can only be compiled when its `series`
+  // dep holds a stable identity across renders.
+  const hist = useMemo(() => data.monthly.filter((p) => p.revenue !== 0 || p.cogs !== 0), [data.monthly])
+  const series = useMemo(() => hist.map((p) => p[METRIC_KEY[metric]]), [hist, metric])
 
   const result = useMemo(() => {
     if (series.length < 3) return null

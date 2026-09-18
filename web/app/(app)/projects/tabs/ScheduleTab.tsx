@@ -115,7 +115,7 @@ export function ScheduleTab({
         description: t('schedule.leveling.description'),
       },
     }),
-    [t, tCommon],
+    [t],
   )
 
   if (!data) {

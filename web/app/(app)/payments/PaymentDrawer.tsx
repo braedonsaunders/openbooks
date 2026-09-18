@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -203,8 +203,7 @@ export function PaymentDrawer({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyId, side, isDraft])
+  }, [partyId, side, isDraft, t])
 
   useEffect(() => {
     const targets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
@@ -230,7 +229,9 @@ export function PaymentDrawer({
     }
   }, [doc.currency, documentDate, openItems, side])
 
-  const rowValid = (item: OpenItemClient) => {
+  // useCallback: validAllocations below depends on this; a bare closure would be
+  // a fresh identity every render and defeat that memo.
+  const rowValid = useCallback((item: OpenItemClient) => {
     const allocation = allocs[item.lineId]
     if (allocation === undefined) return true
     try {
@@ -247,7 +248,7 @@ export function PaymentDrawer({
     } catch {
       return false
     }
-  }
+  }, [allocs, doc.currency])
   const validAllocations = useMemo(
     () =>
       openItems
@@ -260,8 +261,7 @@ export function PaymentDrawer({
             targetTransactionAmount: normalizeMoney(allocation.targetTransactionAmount),
           }
         }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allocs, openItems],
+    [allocs, openItems, rowValid],
   )
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
   const displayedOpenItems = editable
@@ -280,18 +280,23 @@ export function PaymentDrawer({
       memo,
       allocations: validAllocations,
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, doc.updated_at],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
+  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
+  // dirty on merely entering edit mode.
+  const editableRef = useRef(editable)
+  useEffect(() => {
+    editableRef.current = editable
+  }, [editable])
   useEffect(() => {
     if (first.current) {
       first.current = false
       return
     }
-    if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (editableRef.current) setDirty(true)
   }, [payload])
 
   /** Reset every field back to the loaded document (used by Cancel). */

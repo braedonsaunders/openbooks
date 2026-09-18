@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Drawer, Button, Input, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
@@ -30,21 +30,24 @@ export function CamDrawer({
 }) {
   const today = useBusinessToday();
   const year = Number(today.slice(0, 4));
-  const initial = {
-    propertyId:
-      pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",
-    name: pool?.name ?? "Operating expenses",
-    fiscalYear: String(pool?.fiscalYear ?? year),
-    periodStartsOn: pool?.periodStartsOn ?? `${year}-01-01`,
-    periodEndsOn: pool?.periodEndsOn ?? `${year}-12-31`,
-    allocationBasis: pool?.allocationBasis ?? "rentable_area",
-    budgetAmount: pool?.budgetAmount ?? "",
-    expenseAccountIds: (pool?.expenseAccountIds ?? []) as string[],
-  };
+  const initial = useMemo(
+    () => ({
+      propertyId:
+        pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",
+      name: pool?.name ?? "Operating expenses",
+      fiscalYear: String(pool?.fiscalYear ?? year),
+      periodStartsOn: pool?.periodStartsOn ?? `${year}-01-01`,
+      periodEndsOn: pool?.periodEndsOn ?? `${year}-12-31`,
+      allocationBasis: pool?.allocationBasis ?? "rentable_area",
+      budgetAmount: pool?.budgetAmount ?? "",
+      expenseAccountIds: (pool?.expenseAccountIds ?? []) as string[],
+    }),
+    [pool, initialPropertyId, data.properties, year],
+  );
   const [form, setForm] = useState(initial);
   useEffect(() => {
     if (open) setForm(initial);
-  }, [open, pool?.id, initialPropertyId, data.properties.length]);
+  }, [open, initial]);
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
   return (
     <Drawer

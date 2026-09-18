@@ -37,6 +37,26 @@ const QUADRANT_COLOR: Record<Quadrant, string> = {
   transactional: '#94a3b8',
 }
 
+/** Sortable table header cell (module scope: defining it inside a tab remounts
+ *  every header — and drops button focus — on each render). */
+function SortHeaderCell<K extends string>({
+  label,
+  k,
+  sort,
+  onSort,
+}: {
+  label: string
+  k?: K
+  sort: K
+  onSort: (k: K) => void
+}) {
+  return (
+    <th className="px-4 py-2 text-right font-medium">
+      {k ? <button type="button" onClick={() => onSort(k)} className={cn('hover:text-slate-700 dark:hover:text-slate-300', sort === k && 'text-teal-600 dark:text-teal-400')}>{label}</button> : label}
+    </th>
+  )
+}
+
 export function VendorView({ data }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
@@ -134,12 +154,6 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
   })
   const worst = [...paid].filter((r) => r.lateSpend > 0).sort((a, b) => b.lateSpend - a.lateSpend).slice(0, 10)
 
-  const Th = ({ label, k }: { label: string; k?: typeof sort }) => (
-    <th className="px-4 py-2 text-right font-medium">
-      {k ? <button type="button" onClick={() => setSort(k)} className={cn('hover:text-slate-700 dark:hover:text-slate-300', sort === k && 'text-teal-600 dark:text-teal-400')}>{label}</button> : label}
-    </th>
-  )
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -156,11 +170,11 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                     <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                    <Th label={t('table.spend')} k="spend" />
-                    <Th label={t('table.paid')} />
-                    <Th label={t('table.avgDays')} k="avgDaysToPay" />
-                    <Th label={t('table.onTime')} k="onTimePct" />
-                    <Th label={t('table.lateSpend')} k="lateSpend" />
+                    <SortHeaderCell label={t('table.spend')} k="spend" sort={sort} onSort={setSort} />
+                    <SortHeaderCell label={t('table.paid')} sort={sort} onSort={setSort} />
+                    <SortHeaderCell label={t('table.avgDays')} k="avgDaysToPay" sort={sort} onSort={setSort} />
+                    <SortHeaderCell label={t('table.onTime')} k="onTimePct" sort={sort} onSort={setSort} />
+                    <SortHeaderCell label={t('table.lateSpend')} k="lateSpend" sort={sort} onSort={setSort} />
                   </tr>
                 </thead>
                 <tbody>
@@ -245,7 +259,7 @@ function MatrixTab({ data }: { data: VendorData }) {
   const t = useTranslations('analytics.vendor')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const option = useMemo(() => matrixOption(data.rows, money, t), [data, fmtMoney, t])
+  const option = useMemo(() => matrixOption(data.rows, (n) => fmtMoney(n, { compact: true }), t), [data, fmtMoney, t])
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -303,11 +317,6 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
     const bv = b[sort] ?? -1
     return sort === 'recencyDays' ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
-  const Th = ({ label, k }: { label: string; k?: typeof sort }) => (
-    <th className="px-4 py-2 text-right font-medium">
-      {k ? <button type="button" onClick={() => setSort(k)} className={cn('hover:text-slate-700 dark:hover:text-slate-300', sort === k && 'text-teal-600 dark:text-teal-400')}>{label}</button> : label}
-    </th>
-  )
   return (
     <Panel
       title={t('panels.allVendors', { count: data.rows.length })}
@@ -328,12 +337,12 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
               <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-              <Th label={t('table.spend')} k="spend" />
-              <Th label={t('table.share')} />
-              <Th label={t('table.bills')} k="bills" />
-              <Th label={t('kpi.avgBill')} k="avgBill" />
-              <Th label={t('table.onTime')} />
-              <Th label={t('table.score')} k="score" />
+              <SortHeaderCell label={t('table.spend')} k="spend" sort={sort} onSort={setSort} />
+              <SortHeaderCell label={t('table.share')} sort={sort} onSort={setSort} />
+              <SortHeaderCell label={t('table.bills')} k="bills" sort={sort} onSort={setSort} />
+              <SortHeaderCell label={t('kpi.avgBill')} k="avgBill" sort={sort} onSort={setSort} />
+              <SortHeaderCell label={t('table.onTime')} sort={sort} onSort={setSort} />
+              <SortHeaderCell label={t('table.score')} k="score" sort={sort} onSort={setSort} />
               <th className="px-4 py-2 text-center font-medium">{t('table.tier')}</th>
             </tr>
           </thead>

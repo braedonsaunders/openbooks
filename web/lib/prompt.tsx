@@ -84,7 +84,7 @@ export function PromptRoot() {
       cancelAnimationFrame(id)
       document.body.style.overflow = prev
     }
-  }, [req?.id])
+  }, [req])
 
   if (typeof document === 'undefined') return null
 

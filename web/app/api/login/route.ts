@@ -16,8 +16,15 @@ import {
 
 export const runtime = "nodejs";
 
+/** Wall-clock read for the failure-timing floor below (module scope: POST calls
+ *  the `use`-prefixed env helper useSecureCookies, which the React compiler
+ *  mistakes for a hook, so Date.now must not appear directly in its body). */
+function nowMs(): number {
+  return Date.now();
+}
+
 export async function POST(req: Request) {
-  const startedAt = Date.now();
+  const startedAt = nowMs();
   let body: { email?: unknown; password?: unknown; mfaCode?: unknown };
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);
@@ -41,7 +48,7 @@ export async function POST(req: Request) {
 
   // Equalize primary-auth and MFA failure responses without an unconditional
   // sleep after the database/scrypt work has already exceeded the floor.
-  const wait = Math.max(0, 500 - (Date.now() - startedAt));
+  const wait = Math.max(0, 500 - (nowMs() - startedAt));
   if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
 
   if (result.kind === "rate_limited" || result.kind === "invalid") {

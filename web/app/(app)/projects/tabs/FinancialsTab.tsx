@@ -208,7 +208,7 @@ export function FinancialsTab({ data }: {
       <div className="space-y-3">
         <nav className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('cockpit.costBreakdownAria')}>
           {innerTabs.map((tab) => (
-            <button key={tab.key} type="button" onClick={() => setInner(tab.key)} aria-selected={inner === tab.key}
+            <button key={tab.key} type="button" onClick={() => setInner(tab.key)} aria-current={inner === tab.key}
               className={cn('border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                 inner === tab.key ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>

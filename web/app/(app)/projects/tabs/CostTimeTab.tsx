@@ -110,7 +110,7 @@ export function CostTimeTab({ data, projectId }: { data: CostTimeData; projectId
               key={tab.key}
               type="button"
               onClick={() => setInner(tab.key)}
-              aria-selected={inner === tab.key}
+              aria-current={inner === tab.key}
               className={cn(
                 'border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                 inner === tab.key

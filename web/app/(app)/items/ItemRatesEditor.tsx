@@ -2,7 +2,7 @@
 
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -47,7 +47,9 @@ export function ItemRatesEditor({
     { unitCode: 'month', unitName: t('defaults.month'), baseQuantity: '12', costRate: '0', billRate: '0', timeTypeBillRates: {} },
   ])
 
-  async function load() {
+  // useCallback, not a bare closure: the effect below depends on it, and a bare
+  // `load` would be a fresh identity every render (refetch loop).
+  const load = useCallback(async () => {
     const res = await fetch(`/api/items/${itemId}/rates`)
     if (!res.ok) return
     const next = await res.json() as RateData
@@ -58,8 +60,8 @@ export function ItemRatesEditor({
       setPricingPolicy(next.profile.pricing_policy)
       setInvoicePresentation(next.profile.invoice_presentation)
     }
-  }
-  useEffect(() => { void load() }, [itemId])
+  }, [itemId])
+  useEffect(() => { void load() }, [load])
 
   function updateTier(index: number, key: keyof Tier, value: string) {
     setTiers((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row))
