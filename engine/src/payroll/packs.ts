@@ -182,12 +182,18 @@ export interface PayrollStatutorySlot {
 /**
  * The countries a payroll pack exists for.
  *
+ * OPEN on purpose: it is exactly the registry's keys, so declaring a pack is
+ * what makes its country expressible and no generic-layer edit is needed for
+ * the ninth pack. (The registry is annotated `Record<string, ...>`, so this
+ * resolves to `string`; narrowing a stored value to a pack is the runtime
+ * job of `payrollPack`, which refuses by name.)
+ *
  * Widening this is a PACK, not a cast: `emp.country === "US" ? "US" : "CA"`
  * (what `calculateStub` used to do) turns every unrecognised value — including
  * a country whose pack was never written — into Canada, and Canadian
  * withholding on a foreign employee is silent, unrecoverable, wrong money.
  */
-export type PayrollCountry = "CA" | "US";
+export type PayrollCountry = keyof typeof PAYROLL_COUNTRY_PACKS;
 
 /**
  * What the two generic contributory earning FLAGS mean under this pack.

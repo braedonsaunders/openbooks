@@ -238,7 +238,7 @@ export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): 
 async function openingYearEndYtdByEmployee(
   orgId: string,
   taxYear: number,
-  country: "CA" | "US",
+  country: string,
 ): Promise<Map<string, OpeningYearEndYtd>> {
   const rows = (await db.execute<{
     employee_party_id: string;
@@ -278,7 +278,7 @@ async function openingYearEndYtdByEmployee(
 async function openingEmployeeProfiles(
   orgId: string,
   employeeIds: readonly string[],
-  country: "CA" | "US",
+  country: string,
 ): Promise<Map<string, { name: string; province: string; filingAccountId: string | null }>> {
   if (employeeIds.length === 0) return new Map();
   const rows = (await db.execute<{
