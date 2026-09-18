@@ -68,7 +68,7 @@ const ES_REGIONS: readonly PayrollRegionWithholding[] = ES_REGION_CODES.map(
   (region): PayrollRegionWithholding => ({
     region,
     label: `IRPF (${ES_REGION_NAMES[region]})`,
-    implemented: false,
+    implemented: FORAL_REASONS[region] === undefined,
     unimplementedReason: FORAL_REASONS[region] ?? AEAT_UNIMPLEMENTED,
     // Rendimientos del trabajo de no residentes tributan por el IRNR
     // (RD Legislativo 5/2004), no por el IRPF.

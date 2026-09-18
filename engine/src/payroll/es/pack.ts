@@ -1,12 +1,13 @@
 /**
- * The España payroll pack (SKELETON — `installable: false`).
+ * The España payroll pack (`installable: false` — the statutory-account-label
+ * gate needs the labels shard; see the ledger).
  *
  * Declares IRPF withholding (AEAT) and Seguridad Social employee + employer
  * contributions (TGSS) as statutory slots, the Modelo 145 certificate, the
  * 19-community region coverage with foral refusals, and the national holiday
- * calendar. No 2026 table is transcribed — the AEAT algorithm and the TGSS
- * Orden de cotización were fetched and cited per module, and the pack refuses
- * every calculation until a sourced-table pass lands them in ./rates.ts.
+ * calendar. Calendar 2026 is transcribed — the AEAT retention algorithm (both
+ * September editions) and the TGSS Orden de cotización live in ./rates.ts and
+ * computeStatutory prices a monthly AEAT-territory payslip through them.
  *
  * REGISTRATION is blocked on the generic layer: `PayrollCountry` is still
  * `"CA" | "US"` (packs.ts:190), so this object is typed WITHOUT the union —
@@ -32,14 +33,21 @@ export type EsPayrollPack = Omit<PayrollCountryPack, "country"> & {
   country: "ES";
 };
 
+/** AEAT-territory communities: every known code except the foral NC/PV. */
+const ES_AEAT_SUPPORTED = [
+  "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
+  "IB", "RI", "MD", "MC", "VC", "CE", "ML",
+];
+
 const ES_REGIONS: PayrollRegionCoverage = {
   label: "autonomous community",
   known: [
     "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
     "IB", "RI", "MD", "MC", "NC", "PV", "VC", "CE", "ML",
   ],
-  // Nothing transcribed (see ./rates.ts) — not even AEAT territory.
-  supported: [],
+  // The 2026 AEAT algorithm is transcribed (see ./rates.ts) and the engine
+  // computes AEAT-territory IRPF end to end — only the foral NC/PV stay out.
+  supported: ES_AEAT_SUPPORTED,
   unsupportedReason:
     "IRPF withholding for {region} is not implemented by the ES payroll pack — the AEAT "
     + "retention algorithm for the year is not transcribed into engine/src/payroll/es/rates.ts",
