@@ -11,7 +11,6 @@ import {
   deleteStatutoryRate,
   listStatutoryRates,
   packRates,
-  packsMissingRateDeclarations,
   resolveStatutoryRates,
   statutoryRateProblem,
   statutoryRateSlot,
@@ -19,6 +18,7 @@ import {
   upsertStatutoryRate,
   type StatutoryRateRow,
 } from "./payroll/statutory-rates.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./payroll/packs.ts";
 import { US_PACK_RATES } from "./payroll/us/rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -49,11 +49,14 @@ function errorChainMatches(error: unknown, pattern: RegExp): boolean {
 /* ------------------------------------------------------------------ */
 
 test("every installable pack declares its tenant-entered rates and their scope", () => {
-  assert.deepEqual(
-    packsMissingRateDeclarations(), [],
-    "a pack must declare which statutory rates the employer supplies, and at what scope — "
-    + "inheriting another jurisdiction's answer is how an org-level blob happened",
-  );
+  // The registry reads the declaration off the pack (no second list), so
+  // reachability by country IS the assertion — a pack must declare which
+  // statutory rates the employer supplies, and at what scope. Inheriting
+  // another jurisdiction's answer is how an org-level blob happened.
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS).filter((p) => p.installable)) {
+    assert.equal(packRates(pack.country).country, pack.country);
+  }
+  assert.throws(() => packRates("XX"), /declares no statutory rate slots/);
 });
 
 test("the SUI rate is declared per FILING ACCOUNT, and FUTA per region", () => {

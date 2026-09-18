@@ -1,6 +1,4 @@
 import { PAYROLL_COUNTRY_PACKS, PayrollPackError, payrollPack, taxYearFor } from "./packs.ts";
-import { CA_TAX_YEARS } from "./canada/rates.ts";
-import { US_TAX_YEARS } from "./us/rates.ts";
 
 /**
  * Which TAX YEARS a payroll pack's statutory tables are actually loaded for.
@@ -130,19 +128,20 @@ export interface PayrollTaxYearSupport {
 // ---------------------------------------------------------------------------
 
 /**
- * The built-in declarations, authored in each pack's own rate module. Reached
- * as a list keyed by `country`, never as a hand-maintained map — the same shape
- * `declaredPayrollFilings()` uses, and destined for the same home
- * (`PayrollCountryPack.taxYears`).
+ * Declarations registered beyond the packs (tests, an out-of-tree pack).
+ * Everything else is read off the pack registry below.
  */
-const BUILT_INS: readonly PayrollTaxYearSupport[] = [CA_TAX_YEARS, US_TAX_YEARS];
-
-/** Declarations registered beyond the built-ins (an out-of-tree pack). */
 const EXTRA = new Map<string, PayrollTaxYearSupport>();
 
-/** Every pack's tax-year declaration, built-ins first. */
+/**
+ * Every pack's tax-year declaration, registry packs first. The declarations
+ * are authored in each pack's own rate module and carried on
+ * `PayrollCountryPack.taxYears` — the same shape `declaredPayrollFilings()`
+ * uses. A closed built-ins list here would be a second registry a new pack
+ * has to edit after declaring itself.
+ */
 export function declaredPayrollTaxYears(): PayrollTaxYearSupport[] {
-  return [...BUILT_INS, ...EXTRA.values()];
+  return [...Object.values(PAYROLL_COUNTRY_PACKS).map((pack) => pack.taxYears), ...EXTRA.values()];
 }
 
 /** Register a pack's tax-year declaration. Refuses a second one per country. */
@@ -177,16 +176,12 @@ export function payrollTaxYearSupport(country: string): PayrollTaxYearSupport {
   return declared;
 }
 
-/**
- * Every installable pack must answer the question. Asserted by the pack test
- * suite rather than by a type, because the registry is deliberately open.
+/*
+ * No `packsMissingTaxYearDeclarations` probe remains: the declaration is a
+ * required `PayrollCountryPack` field read off the pack above, so every
+ * installable pack answers by construction and there is no list to fall
+ * behind. The third-country pack test asserts the derivation.
  */
-export function packsMissingTaxYearDeclarations(): string[] {
-  return Object.values(PAYROLL_COUNTRY_PACKS)
-    .filter((pack) => pack.installable)
-    .map((pack) => pack.country)
-    .filter((country) => !declaredPayrollTaxYears().some((entry) => entry.country === country));
-}
 
 // ---------------------------------------------------------------------------
 // Coverage

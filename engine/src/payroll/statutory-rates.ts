@@ -3,8 +3,6 @@ import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "../db.ts";
 import { cmp, mulDecimal, normalizeDecimal } from "../money.ts";
 import { PAYROLL_COUNTRY_PACKS, PayrollPackError, payrollPack } from "./packs.ts";
-import { CA_PACK_RATES } from "./canada/rates.ts";
-import { US_PACK_RATES } from "./us/rates.ts";
 
 /**
  * Statutory rates that are NOT constants — and where each one lives.
@@ -145,14 +143,14 @@ export interface PayrollPackRates {
 // ---------------------------------------------------------------------------
 
 /**
- * The built-in declarations, authored in each pack's own rate module beside the
- * constants they sit next to — the same arrangement as `{us,canada}/filings.ts`
- * and destined for `PayrollCountryPack.statutoryRates`.
+ * Every pack's rate declaration, read off the pack registry — the same shape
+ * as `declaredPayrollFilings()`. The declarations are authored in each pack's
+ * own rate module beside the constants they sit next to and carried on
+ * `PayrollCountryPack.statutoryRates`; a closed list here would be a second
+ * registry a new pack has to edit after declaring itself.
  */
-const BUILT_INS: readonly PayrollPackRates[] = [CA_PACK_RATES, US_PACK_RATES];
-
 export function declaredPackRates(): PayrollPackRates[] {
-  return [...BUILT_INS];
+  return Object.values(PAYROLL_COUNTRY_PACKS).map((pack) => pack.statutoryRates);
 }
 
 /** A pack's rate declaration, or a refusal naming the packs that have one. */
@@ -181,13 +179,12 @@ export function statutoryRateSlot(country: string, slotKey: string): PayrollStat
   return slot;
 }
 
-/** Every installable pack must answer the question. Asserted by the tests. */
-export function packsMissingRateDeclarations(): string[] {
-  return Object.values(PAYROLL_COUNTRY_PACKS)
-    .filter((pack) => pack.installable)
-    .map((pack) => pack.country)
-    .filter((country) => !declaredPackRates().some((entry) => entry.country === country));
-}
+/*
+ * No `packsMissingRateDeclarations` probe remains: the declaration is a
+ * required `PayrollCountryPack` field read off the pack above, so every
+ * installable pack answers by construction and there is no list to fall
+ * behind. The third-country pack test asserts the derivation.
+ */
 
 // ---------------------------------------------------------------------------
 // Values: canonicalization and refusal

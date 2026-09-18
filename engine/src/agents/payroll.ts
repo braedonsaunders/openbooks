@@ -343,7 +343,11 @@ export async function payrollFindings(
          where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
            and prof.sin_encrypted is null
       `));
-      if (Number(noSin.rows[0]?.employees ?? 0) > 0 && (country === "CA" || country === "US")) {
+      // No country gate: this loop already runs once per INSTALLED pack, and
+      // the run-readiness screen warns `employee.noSin` for every country.
+      // Gating here on CA/US would silently exempt the ninth pack's
+      // employees from the year-end identifier check.
+      if (Number(noSin.rows[0]?.employees ?? 0) > 0) {
         const people = (await db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as name
             from employee_payroll_profiles prof

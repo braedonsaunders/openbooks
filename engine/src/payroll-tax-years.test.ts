@@ -10,16 +10,17 @@ import { qcRatesForPayDate } from "./payroll/canada/quebec/rates.ts";
 import { ratesForPayDate as usRatesForPayDate } from "./payroll/us/rates.ts";
 import {
   assertPayrollTaxYearSupported,
-  packsMissingTaxYearDeclarations,
   payrollDraftTaxYears,
   payrollSupportedTaxYears,
   payrollTaxYearCoverage,
   payrollTaxYearForDate,
   payrollTaxYearProblem,
+  payrollTaxYearSupport,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
   type PayrollTaxYearSupport,
 } from "./payroll/tax-years.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./payroll/packs.ts";
 import { unfilledPaths, UNFILLED } from "./payroll/unfilled.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -35,7 +36,13 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./tes
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("every installable pack declares which tax years its tables are loaded for", () => {
-  assert.deepEqual(packsMissingTaxYearDeclarations(), []);
+  // The registry reads the declaration off the pack (no second list), so
+  // reachability by country IS the assertion — an undeclared pack refuses by
+  // name instead of returning a neighbour's years.
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS).filter((p) => p.installable)) {
+    assert.equal(payrollTaxYearSupport(pack.country).country, pack.country);
+  }
+  assert.throws(() => payrollTaxYearSupport("XX"), /declares no statutory tax years/);
 });
 
 test("the declaration agrees with what the engines will actually calculate", () => {
