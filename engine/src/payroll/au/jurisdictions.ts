@@ -128,17 +128,13 @@ export const AU_CERTIFICATES: PayrollPackCertificates = {
 // Withholding
 // ===========================================================================
 
-const PAYG_UNIMPLEMENTED =
-  "PAYG withholding is administered federally by the ATO and the AU pack has "
-  + "not transcribed the PAYG withholding schedules (Schedule 1), so income "
-  + "tax is not computed for any state or territory yet";
-
 function auRegion(code: string): PayrollRegionWithholding {
   return {
     region: code,
     label: `${AU_STATE_NAMES[code] ?? code} PAYG withholding`,
-    implemented: false,
-    unimplementedReason: PAYG_UNIMPLEMENTED,
+    // PAYG withholding is federal and uniform: the engine computes the same
+    // Schedule 1 withholding for every state and territory.
+    implemented: true,
     // States and territories levy no income tax on wages: there is nothing
     // to withhold for nonresidents and no resident out-of-region rule to
     // implement. PAYG is federal and follows the work payment.
@@ -149,8 +145,10 @@ function auRegion(code: string): PayrollRegionWithholding {
     subRegions: [],
     subRegionConflictRule: "work_only",
     citation:
-      "ATO PAYG withholding — "
-      + "https://www.ato.gov.au/tax-rates-and-codes/tax-tables-overview",
+      "Taxation Administration (Withholding Schedules) Instrument 2026 "
+      + "(F2026L00716), Schedule 1 — "
+      + "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/"
+      + "text/original/epub/OEBPS/document_1/document_1.html",
   };
 }
 
