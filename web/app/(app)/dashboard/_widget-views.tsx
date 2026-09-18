@@ -17,6 +17,7 @@ import {
   Landmark,
   Layers,
   ListChecks,
+  Wallet,
   NotebookPen,
   Percent,
   Receipt,
@@ -25,7 +26,6 @@ import {
   Store,
   TrendingUp,
   Users,
-  Wallet,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import { metricTilePack, packsEqual } from './_metric-tile-density'
@@ -166,6 +166,17 @@ export function WidgetCard({
           href="/banking/match"
           tone={data.unreconciledItems > 0 ? 'amber' : 'emerald'}
           hint={data.unreconciledItems > 0 ? t('metricContext.toReconcile') : t('metricContext.allMatched')}
+        />
+      )
+    case 'kpi-expenses-awaiting-approval':
+      return (
+        <MetricTile
+          icon={<Wallet size={15} />}
+          label={t('widgets.expensesAwaitingApproval')}
+          value={String(data.pendingExpenses)}
+          href="/expenses"
+          tone={data.pendingExpenses > 0 ? 'amber' : 'emerald'}
+          hint={data.pendingExpenses > 0 ? t('metricContext.awaitingDecision') : t('metricContext.nonePending')}
         />
       )
     case 'list-recent-entries':

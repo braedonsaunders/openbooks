@@ -34,6 +34,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // tile never shows a projection to a caller denied the cockpit.
   'kpi-cash-runway': ['banking.read'],
   'kpi-items-to-reconcile': BANKING,
+  'kpi-expenses-awaiting-approval': ['expenses.read'],
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,
