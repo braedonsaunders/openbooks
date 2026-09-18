@@ -178,23 +178,27 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
     `));
     const writer = appCtx(org.orgId, actors.adminId, ['budgets.manage']);
     const cell = { accountId: org.accounts.revenue, periodId: org.periodId, amount: '10.0000' };
+    // The tool reads through the pooled handle like the route does: without
+    // the request's org scope its feature-flag and root-entity reads deny by
+    // default, so run every subject call inside the caller's org boundary.
+    const asOrg = (orgId: string, call: () => Promise<unknown>) => withOrgContext(orgId, call);
     // Approved scenarios are locked by the service and its trigger.
     await assert.rejects(
-      executeApplicationTool(applicationTool('update_budget_cells')!, writer, {
+      asOrg(org.orgId, () => executeApplicationTool(applicationTool('update_budget_cells')!, writer, {
         scenarioId: approvedId, expectedRevision: 1, cells: [cell], idempotencyKey: 'a05-budget-locked-1',
-      }),
+      })),
       /budget_is_locked/,
     );
     // No budgets.manage permission.
     await assert.rejects(
-      executeApplicationTool(applicationTool('update_budget_cells')!, appCtx(org.orgId, actors.adminId, []), {
+      asOrg(org.orgId, () => executeApplicationTool(applicationTool('update_budget_cells')!, appCtx(org.orgId, actors.adminId, []), {
         scenarioId: draftId, expectedRevision: 1, cells: [cell], idempotencyKey: 'a05-budget-noperm-1',
-      }),
+      })),
       /forbidden/,
     );
     // Explicit entity outside the caller's scope.
     await assert.rejects(
-      executeApplicationTool(
+      asOrg(org.orgId, () => executeApplicationTool(
         applicationTool('update_budget_cells')!,
         appCtx(org.orgId, actors.adminId, ['budgets.manage'], new Set([stranger])),
         {
@@ -202,26 +206,26 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
           cells: [{ ...cell, subsidiaryId: org.subsidiaryId }],
           idempotencyKey: 'a05-budget-scope-1',
         },
-      ),
+      )),
       /forbidden/,
     );
     // Omitted entity resolves to the root, which is outside this scope.
     await assert.rejects(
-      executeApplicationTool(
+      asOrg(org.orgId, () => executeApplicationTool(
         applicationTool('update_budget_cells')!,
         appCtx(org.orgId, actors.adminId, ['budgets.manage'], new Set([stranger])),
         { scenarioId: draftId, expectedRevision: 1, cells: [cell], idempotencyKey: 'a05-budget-scope-2' },
-      ),
+      )),
       /forbidden/,
     );
     // Another org's scenario reads as missing.
     const otherActors = await withBypassContext(() => seedFlowActors(other.orgId));
     await assert.rejects(
-      executeApplicationTool(
+      asOrg(other.orgId, () => executeApplicationTool(
         applicationTool('update_budget_cells')!,
         appCtx(other.orgId, otherActors.adminId, ['budgets.manage']),
         { scenarioId: draftId, expectedRevision: 1, cells: [cell], idempotencyKey: 'a05-budget-cross-1' },
-      ),
+      )),
       /not_found/,
     );
     // Module off matches the routes' fence.
@@ -232,9 +236,9 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
     `));
     try {
       await assert.rejects(
-        executeApplicationTool(applicationTool('update_budget_cells')!, writer, {
+        asOrg(org.orgId, () => executeApplicationTool(applicationTool('update_budget_cells')!, writer, {
           scenarioId: draftId, expectedRevision: 1, cells: [cell], idempotencyKey: 'a05-budget-off-1',
-        }),
+        })),
         /budget not found/,
       );
       const reader = {
