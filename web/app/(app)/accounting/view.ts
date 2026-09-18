@@ -81,9 +81,7 @@ export interface AccountingData {
   attention: AttentionItem[]
 }
 
-export async function loadAccounting(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<AccountingData> {
+export async function loadAccounting(): Promise<AccountingData> {
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')

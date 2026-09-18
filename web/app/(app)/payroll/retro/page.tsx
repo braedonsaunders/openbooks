@@ -33,6 +33,6 @@ export default async function PayrollRetroPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadPayrollRetro(sp)
+  const data = await loadPayrollRetro()
   return <ModuleView spec={payrollRetroSpec(data)} data={data} searchParams={sp} trusted />
 }

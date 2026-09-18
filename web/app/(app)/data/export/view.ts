@@ -29,15 +29,13 @@ import { requirePermission } from '../../../../lib/authz'
 /** No server-rendered content: the loader runs the gate and binds nothing. */
 export type DataExportData = Record<string, unknown>
 
-export async function loadDataExport(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<DataExportData> {
+export async function loadDataExport(): Promise<DataExportData> {
   // page.tsx gate, verbatim.
   await requirePermission('data.export')
   return {}
 }
 
-export function dataExportSpec(_data: DataExportData): PageSpec {
+export function dataExportSpec(): PageSpec {
   return page({
     route: '/data/export',
     // Bare with the `page-container` frame: the native page wraps the

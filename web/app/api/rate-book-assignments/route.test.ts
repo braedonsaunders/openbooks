@@ -40,12 +40,6 @@ function sqlText(query: unknown): string {
     .join('')
 }
 
-function primitiveChunks(query: unknown): string[] {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return []
-  return chunks.filter((chunk): chunk is string => typeof chunk === 'string')
-}
-
 ;(globalThis as typeof globalThis & { openbooksRateBookSqlText?: typeof sqlText }).openbooksRateBookSqlText = sqlText
 
 const mockSources = new Map<string, string>([

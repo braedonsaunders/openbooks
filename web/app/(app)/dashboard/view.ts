@@ -35,9 +35,7 @@ export interface DashboardData {
   name: string | null
 }
 
-export async function loadDashboard(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<DashboardData | null> {
+export async function loadDashboard(): Promise<DashboardData | null> {
   const t = await getTranslations('dashboard')
   const authz = await getAuthz()
   if (!authz) return null

@@ -23,5 +23,5 @@ export default async function PaymentProvidersPage({
 } = {}) {
   const sp = (await searchParams) ?? {};
   const data = await loadPaymentProviders();
-  return <ModuleView spec={paymentProvidersSpec(data)} data={data} searchParams={sp} trusted />;
+  return <ModuleView spec={paymentProvidersSpec()} data={data} searchParams={sp} trusted />;
 }

@@ -9,7 +9,7 @@ import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
 import { starterTemplate } from "../../../lib/pdf-templates/starters";
-import { listPdfTemplates } from "../../../lib/pdf-templates/store";
+import { listPdfTemplates, type PdfTemplateRow } from "../../../lib/pdf-templates/store";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,20 @@ export async function GET(req: Request) {
     .filter((row) => !hidden.has(row.recordType));
   // The list payload doesn't need the (potentially large) HTML bodies.
   return NextResponse.json({
-    rows: rows.map(({ sourceHtml: _s, compiledHtml: _c, ...row }) => row),
+    rows: rows.map((row): Omit<PdfTemplateRow, "sourceHtml" | "compiledHtml"> => ({
+      id: row.id,
+      recordType: row.recordType,
+      name: row.name,
+      description: row.description,
+      paperSize: row.paperSize,
+      orientation: row.orientation,
+      marginMm: row.marginMm,
+      headerHtml: row.headerHtml,
+      footerHtml: row.footerHtml,
+      isDefault: row.isDefault,
+      isActive: row.isActive,
+      updatedAt: row.updatedAt,
+    })),
   });
 }
 

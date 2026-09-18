@@ -55,11 +55,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/': {
     route: '/',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/view')
       return {
-        load: (input) => m.loadRootDashboard(input.searchParams ?? {}),
+        load: () => m.loadRootDashboard(),
         spec: (data) => m.rootDashboardSpec(data as never),
       }
     },
@@ -67,11 +67,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/accounting': {
     route: '/accounting',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/accounting/view')
       return {
-        load: (input) => m.loadAccounting(input.searchParams ?? {}),
+        load: () => m.loadAccounting(),
         spec: (data) => m.accountingSpec(data as never),
       }
     },
@@ -235,11 +235,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/navigation': {
     route: '/admin/navigation',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/admin/navigation/view')
       return {
-        load: (input) => m.loadNavigationAdmin(input.searchParams ?? {}),
+        load: () => m.loadNavigationAdmin(),
         spec: (data) => m.navigationAdminSpec(data as never),
       }
     },
@@ -516,7 +516,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/admin/setup/payment-providers/view')
       return {
         load: () => m.loadPaymentProviders(),
-        spec: (data) => m.paymentProvidersSpec(data as never),
+        spec: () => m.paymentProvidersSpec(),
       }
     },
   },
@@ -775,11 +775,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/api-docs': {
     route: '/api-docs',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/api-docs/view')
       return {
-        load: (input) => m.loadApiDocs(input.searchParams ?? {}),
+        load: () => m.loadApiDocs(),
         spec: (data) => m.apiDocsSpec(data as never),
       }
     },
@@ -1219,11 +1219,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/dashboard': {
     route: '/dashboard',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/dashboard/view')
       return {
-        load: (input) => m.loadDashboard(input.searchParams ?? {}),
+        load: () => m.loadDashboard(),
         spec: (data) => m.dashboardSpec(data as never),
       }
     },
@@ -1243,12 +1243,12 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/data/export': {
     route: '/data/export',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/data/export/view')
       return {
-        load: (input) => m.loadDataExport(input.searchParams ?? {}),
-        spec: (data) => m.dataExportSpec(data as never),
+        load: () => m.loadDataExport(),
+        spec: () => m.dataExportSpec(),
       }
     },
   },
@@ -1351,11 +1351,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/expenses': {
     route: '/expenses',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/expenses/view')
       return {
-        load: (input) => m.loadExpenses(input.searchParams ?? {}),
+        load: () => m.loadExpenses(),
         spec: (data) => m.expensesSpec(data as never),
       }
     },
@@ -1543,11 +1543,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/payroll/parallel-run': {
     route: '/payroll/parallel-run',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/payroll/parallel-run/view')
       return {
-        load: (input) => m.loadParallelRun(input.searchParams ?? {}),
+        load: () => m.loadParallelRun(),
         spec: (data) => m.parallelRunSpec(data as never),
       }
     },
@@ -1567,11 +1567,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/payroll/retro': {
     route: '/payroll/retro',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/payroll/retro/view')
       return {
-        load: (input) => m.loadPayrollRetro(input.searchParams ?? {}),
+        load: () => m.loadPayrollRetro(),
         spec: (data) => m.payrollRetroSpec(data as never),
       }
     },
@@ -1687,12 +1687,12 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/query': {
     route: '/query',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/query/view')
       return {
-        load: (input) => m.loadQuery(input.searchParams ?? {}),
-        spec: (data) => m.querySpec(data as never),
+        load: () => m.loadQuery(),
+        spec: () => m.querySpec(),
       }
     },
   },
@@ -1999,23 +1999,23 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/settings/security': {
     route: '/settings/security',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/settings/security/view')
       return {
-        load: (input) => m.loadSecurity(input.searchParams ?? {}),
-        spec: (data) => m.securitySpec(data as never),
+        load: () => m.loadSecurity(),
+        spec: () => m.securitySpec(),
       }
     },
   },
   '/subcontracts': {
     route: '/subcontracts',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/subcontracts/view')
       return {
-        load: (input) => m.loadSubcontracts(input.searchParams ?? {}),
+        load: () => m.loadSubcontracts(),
         spec: (data) => m.subcontractsSpec(data as never),
       }
     },
@@ -2028,7 +2028,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/sync/view')
       return {
         load: () => m.loadSync(),
-        spec: (data) => m.syncSpec(data as never),
+        spec: () => m.syncSpec(),
       }
     },
   },
@@ -2047,11 +2047,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/tax/provisions': {
     route: '/tax/provisions',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/tax/provisions/view')
       return {
-        load: (input) => m.loadTaxProvisions(input.searchParams ?? {}),
+        load: () => m.loadTaxProvisions(),
         spec: (data) => m.taxProvisionsSpec(data as never),
       }
     },

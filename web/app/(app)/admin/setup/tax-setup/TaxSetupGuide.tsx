@@ -86,7 +86,7 @@ export function TaxSetupGuide({
       if (c.subs.length) {
         setExpanded((cur) => {
           const next = new Set(cur)
-          next.has(c.country) ? next.delete(c.country) : next.add(c.country)
+          if (next.has(c.country)) next.delete(c.country); else next.add(c.country)
           return next
         })
       }
@@ -210,7 +210,7 @@ export function TaxSetupGuide({
                     {c.subs.length ? (
                       <button
                         type="button"
-                        onClick={() => setExpanded((cur) => { const n = new Set(cur); n.has(c.country) ? n.delete(c.country) : n.add(c.country); return n })}
+                        onClick={() => setExpanded((cur) => { const n = new Set(cur); if (n.has(c.country)) n.delete(c.country); else n.add(c.country); return n })}
                         className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                         aria-label={t('toggleStates', { country: label(c) })}
                       >

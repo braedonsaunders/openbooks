@@ -10,6 +10,6 @@ export default async function TaxProvisions({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadTaxProvisions(sp)
+  const data = await loadTaxProvisions()
   return <ModuleView spec={taxProvisionsSpec(data)} data={data} searchParams={sp} trusted />
 }

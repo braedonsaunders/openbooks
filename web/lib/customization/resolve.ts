@@ -158,7 +158,14 @@ export const resolveFormLayout = cache(
     `));
 
     const accessible = rows.rows.filter((r) => rowIsAccessible(r, userRoles) || userRoles.includes("admin"));
-    const available = accessible.map(({ layout: _layout, ...r }) => r);
+    const available: FormLayoutRow[] = accessible.map((r) => ({
+      id: r.id,
+      name: r.name,
+      recordType: r.recordType,
+      isDefault: r.isDefault,
+      isActive: r.isActive,
+      allowedRoles: r.allowedRoles,
+    }));
 
     // user preference
     const pref = (await db.execute<{ layoutId: string | null }>(sql`
@@ -269,7 +276,15 @@ export const resolveListView = cache(
        order by scope asc, is_default desc, name
     `));
 
-    const available = rows.rows.map(({ config: _config, ...r }) => r);
+    const available: ListViewRow[] = rows.rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      recordType: r.recordType,
+      scope: r.scope,
+      ownerId: r.ownerId,
+      isDefault: r.isDefault,
+      isActive: r.isActive,
+    }));
 
     const byId = (id: string) => rows.rows.find((r) => r.id === id);
 

@@ -202,17 +202,25 @@ const contactFromApi = (contact: ContactApiRecord): ContactRow => ({
   isActive: contact.is_active === false ? 'false' : 'true',
 })
 
-const serializeAddresses = (rows: AddressRow[]) => rows.map(({ id: _id, ...address }) => ({
-  ...address,
-  isDefaultBilling: address.isDefaultBilling === 'true',
-  isDefaultShipping: address.isDefaultShipping === 'true',
-}))
+const serializeAddresses = (rows: AddressRow[]) => rows.map((row) => {
+  const address: Record<string, unknown> = { ...row };
+  delete address.id;
+  return {
+    ...address,
+    isDefaultBilling: address.isDefaultBilling === 'true',
+    isDefaultShipping: address.isDefaultShipping === 'true',
+  };
+})
 
-const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contact }) => ({
-  ...contact,
-  isPrimary: contact.isPrimary === 'true',
-  isActive: contact.isActive === 'true',
-}))
+const serializeContacts = (rows: ContactRow[]) => rows.map((row) => {
+  const contact: Record<string, unknown> = { ...row };
+  delete contact.id;
+  return {
+    ...contact,
+    isPrimary: contact.isPrimary === 'true',
+    isActive: contact.isActive === 'true',
+  };
+})
 
 import { PartyCustomer360Section } from './PartyCustomer360Section'
 

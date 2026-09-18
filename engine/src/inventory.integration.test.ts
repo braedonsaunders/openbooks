@@ -26,7 +26,6 @@ import {
   queryLotRecall,
   receiveInventory,
   reverseAssemblyBuild,
-  receiveTransferOrder,
   reverseInventoryMovement,
   reverseLandedCostVoucher,
   revalueOpenLayersToStandardCost,

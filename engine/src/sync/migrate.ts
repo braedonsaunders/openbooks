@@ -638,7 +638,8 @@ async function loadAccountingPeriods(
         s.skipped++;
         return;
       }
-      existing.rows[0] ? s.updated++ : s.created++;
+      if (existing.rows[0]) s.updated++;
+      else s.created++;
 
       const fullyClosed = f.closed === true || f.allLocked === true;
       const moduleStates = f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)

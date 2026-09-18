@@ -48,7 +48,7 @@ function exactUnits(value: DecimalInput): bigint {
     exponent = Number.parseInt(exponentMatch[1]!, 10);
     raw = raw.slice(0, exponentMatch.index);
   }
-  let [whole = "0", fraction = ""] = raw.split(".");
+  const [whole = "0", fraction = ""] = raw.split(".");
   const digits = `${whole}${fraction}` || "0";
   const decimalPosition = whole.length + exponent;
   let normalizedWhole: string;

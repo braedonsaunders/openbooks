@@ -437,13 +437,11 @@ export async function PUT(req: Request) {
 
     // Onboarding mark
     const curOnboarding = onboardingRecord(nextSettings)
-    const {
-      deferredAt: _deferredAt,
-      deferredBy: _deferredBy,
-      skippedAt: _skippedAt,
-      skippedBy: _skippedBy,
-      ...retainedOnboarding
-    } = curOnboarding
+    const retainedOnboarding = { ...curOnboarding }
+    delete retainedOnboarding.deferredAt
+    delete retainedOnboarding.deferredBy
+    delete retainedOnboarding.skippedAt
+    delete retainedOnboarding.skippedBy
     const nextOnboarding = {
       ...retainedOnboarding,
       schemaVersion: ONBOARDING_SCHEMA_VERSION,
@@ -572,7 +570,7 @@ export async function PUT(req: Request) {
  * overlay closes, while Company Settings → Setup wizard remains the explicit
  * resume path. The before/after state and actor are recorded atomically.
  */
-export async function POST(req: Request) {
+export async function POST() {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user

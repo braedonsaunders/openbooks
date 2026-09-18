@@ -135,7 +135,7 @@ function propertyResource(orgId: string): DataResource {
             if (src[key] && !id) throw new Error(`${key} "${String(src[key])}" not found`)
           }
           if (ctx.dryRun) {
-            existing.rows[0] ? outcome.updated++ : outcome.created++
+            if (existing.rows[0]) outcome.updated++; else outcome.created++
             continue
           }
           const currentAddress = current?.address ?? {}
@@ -204,7 +204,7 @@ function unitResource(orgId: string): DataResource {
             if (src.status === 'offline') await updatePropertyUnit({ ...values, unitId: created.id, status: 'offline' })
           }
         }
-        found.rows[0] ? outcome.updated++ : outcome.created++
+        if (found.rows[0]) outcome.updated++; else outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
       return outcome
     },
@@ -265,7 +265,7 @@ function leaseResource(orgId: string): DataResource {
             if (String(src.status ?? 'draft') === 'active') await activatePropertyLease(ctx.orgId, ctx.actorId, created.id)
           }
         }
-        current ? outcome.updated++ : outcome.created++
+        if (current) outcome.updated++; else outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
       return outcome
     },

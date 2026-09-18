@@ -7,6 +7,6 @@ export default async function DataExportPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadDataExport(sp)
-  return <ModuleView spec={dataExportSpec(data)} data={data} searchParams={sp} trusted />
+  const data = await loadDataExport()
+  return <ModuleView spec={dataExportSpec()} data={data} searchParams={sp} trusted />
 }

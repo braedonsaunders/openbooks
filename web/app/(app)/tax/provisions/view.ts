@@ -50,9 +50,7 @@ export interface TaxProvisionsData {
   rows: ProvisionRunListRow[]
 }
 
-export async function loadTaxProvisions(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<TaxProvisionsData> {
+export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
   const authz = await requirePermission('reports.read')
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')

@@ -100,15 +100,14 @@ export interface ProjectCockpitData {
  * add tabs; this list is only the fallback and the source of the panel each
  * built-in key draws.
  */
-const TAB_KEYS = [
-  'overview',
-  'financials',
-  'project_management',
-  'cost_time',
-  'billing',
-  'transactions',
-] as const
-type TabKey = (typeof TAB_KEYS)[number] | string
+type TabKey =
+  | 'overview'
+  | 'financials'
+  | 'project_management'
+  | 'cost_time'
+  | 'billing'
+  | 'transactions'
+  | string
 
 export function ProjectDrawer({
   payload,

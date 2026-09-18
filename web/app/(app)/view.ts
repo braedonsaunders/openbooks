@@ -32,9 +32,7 @@ export interface RootDashboardData {
   name: string | null
 }
 
-export async function loadRootDashboard(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<RootDashboardData | null> {
+export async function loadRootDashboard(): Promise<RootDashboardData | null> {
   const t = await getTranslations('dashboard')
   const authz = await getAuthz()
   if (!authz) return null

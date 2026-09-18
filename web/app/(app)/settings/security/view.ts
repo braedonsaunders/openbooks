@@ -30,16 +30,14 @@ import { currentUser } from '../../../../lib/auth'
 /** No server-rendered content: the loader runs the gate and binds nothing. */
 export type SecurityData = Record<string, unknown>
 
-export async function loadSecurity(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<SecurityData> {
+export async function loadSecurity(): Promise<SecurityData> {
   // Native page.tsx, verbatim: unauthenticated readers bounce to /login.
   const user = await currentUser()
   if (!user) redirect('/login')
   return {}
 }
 
-export function securitySpec(_data: SecurityData): PageSpec {
+export function securitySpec(): PageSpec {
   return page({
     route: '/settings/security',
     layout: 'bare',

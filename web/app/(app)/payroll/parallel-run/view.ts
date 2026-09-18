@@ -58,9 +58,7 @@ export interface ParallelRunData {
   }
 }
 
-export async function loadParallelRun(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<ParallelRunData> {
+export async function loadParallelRun(): Promise<ParallelRunData> {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

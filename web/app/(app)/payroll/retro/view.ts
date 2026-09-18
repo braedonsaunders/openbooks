@@ -46,9 +46,7 @@ export interface PayrollRetroData {
   }
 }
 
-export async function loadPayrollRetro(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<PayrollRetroData> {
+export async function loadPayrollRetro(): Promise<PayrollRetroData> {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')

@@ -224,7 +224,7 @@ async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<void> 
 
 function railLoader(method: RailBankMethod): (runId: string, orgId: string) => Promise<{ content: string; filename: string }> {
   if (method === "ach") return (runId, orgId) => loadNachaRunFile(runId, orgId);
-  if (method === "sepa") return (runId, orgId) => loadSepaRunFile(runId, orgId, new Date());
+  if (method === "sepa") return (runId, orgId) => loadSepaRunFile(runId, orgId);
   return (runId, orgId) => loadCpa005RunFile(runId, orgId);
 }
 

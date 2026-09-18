@@ -453,7 +453,7 @@ function shapeSummarizeResult(
         }
         bucket.rows.forEach((row, i) => {
           const value = String(bucket.raw[i]![`d${levelIndex}`] ?? (labels.none?.() ?? '(none)'))
-          if (levelValue !== null && value !== levelValue) emit(), (levelRaw = [])
+          if (levelValue !== null && value !== levelValue) { emit(); levelRaw = []; }
           levelValue = value
           // The DISPLAY value (humanized enum, formatted date) titles the row.
           levelDisplay = row[levelPos] == null ? null : String(row[levelPos])

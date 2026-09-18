@@ -89,7 +89,8 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           }
         }
       } catch { config = null; }
-      config ? ctx.accept() : ctx.reject(["password", "publickey"]);
+      if (config) ctx.accept();
+      else ctx.reject(["password", "publickey"]);
     });
 
     client.on("ready", () => {

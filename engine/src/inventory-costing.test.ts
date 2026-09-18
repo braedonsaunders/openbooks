@@ -111,7 +111,7 @@ test("moving average blends receipts by value", () => {
 });
 
 test("moving average drains to exactly zero value when the last unit ships", () => {
-  let s = { quantity: "3", value: "10" }; // avg 3.3333…
+  const s = { quantity: "3", value: "10" }; // avg 3.3333…
   const iss = issueMovingAverage(s, "3");
   assert.equal(iss.cost, "10.0000"); // takes ALL remaining value, no rounding residue
   assert.equal(iss.state.quantity, "0.0000");

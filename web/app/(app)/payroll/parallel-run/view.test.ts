@@ -60,7 +60,7 @@ registerHooks({
 const { loadParallelRun } = await import('./view.ts')
 
 test('parallel-run page loader scopes every server-rendered payroll dataset', async () => {
-  const data = await loadParallelRun({})
+  const data = await loadParallelRun()
   assert.deepEqual(data.workspace.registers.map((row) => row.id), ['VISIBLE'])
   assert.deepEqual(data.workspace.runs.map((row) => row.documentId), ['VISIBLE'])
   assert.deepEqual(data.workspace.comparisons.map((row) => row.id), ['VISIBLE'])

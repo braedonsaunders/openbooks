@@ -21,7 +21,6 @@ const React = await import('react')
 const {
   DOCUMENT_CHANGED_AFTER_OPEN,
   buildDocumentSaveRequest,
-  executeDocumentSave,
   loadDraftDocumentSnapshot,
   persistedDocumentRevision,
   readDocumentSaveFailure,

@@ -29,16 +29,14 @@ import { isFeatureEnabled } from '../../../lib/features'
 /** No server-rendered content: the loader runs the gates and binds nothing. */
 export type QueryData = Record<string, unknown>
 
-export async function loadQuery(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<QueryData> {
+export async function loadQuery(): Promise<QueryData> {
   // layout.tsx gates, verbatim: permission first, then feature flag.
   const authz = await requirePermission('sql.execute')
   if (!(await isFeatureEnabled(authz.user.orgId, 'queryConsole'))) notFound()
   return {}
 }
 
-export function querySpec(_data: QueryData): PageSpec {
+export function querySpec(): PageSpec {
   return page({
     route: '/query',
     // Bare: the console owns its own full-height flex column (the native root

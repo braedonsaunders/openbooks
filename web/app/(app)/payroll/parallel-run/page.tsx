@@ -34,6 +34,6 @@ export default async function PayrollParallelRunPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadParallelRun(sp)
+  const data = await loadParallelRun()
   return <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -9,7 +9,7 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadRootDashboard(sp)
+  const data = await loadRootDashboard()
   if (!data) return null
   return <ModuleView spec={rootDashboardSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -16,7 +16,8 @@ export function normalizeTaxReturnFormInput(
   body: Record<string, unknown>,
 ): Record<string, unknown> {
   if (entityKey !== 'tax-return-forms') return body
-  const { governmentFormat: _ignored, ...normalized } = body
+  const normalized: Record<string, unknown> = { ...body }
+  delete normalized.governmentFormat
   const governmentFormat = governmentFormatForSubmissionChannel(body.submissionChannel)
   return governmentFormat ? { ...normalized, governmentFormat } : normalized
 }

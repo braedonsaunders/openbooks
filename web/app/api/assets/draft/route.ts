@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * edits it in place; placing it in service requires real fields. A category is
  * required by the schema, so a default one is ensured up front.
  */
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const gate = await guardFeaturePermission("assets.manage", "fixedAssets");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;

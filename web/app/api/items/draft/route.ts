@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 
@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
  * Instant-into-draft: create an inactive placeholder item and return its id.
  * The flyout edits it in place; activation requires a real name.
  */
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user

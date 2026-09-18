@@ -719,7 +719,7 @@ export function nextPeriodAfter(
   }
   // monthly: end on the anchor's day-of-month, clamped to month end.
   const anchorDay = anchor.getUTCDate();
-  let cursor = lastPeriodEnd ? at(lastPeriodEnd) : new Date(anchor.getTime() - DAY);
+  const cursor = lastPeriodEnd ? at(lastPeriodEnd) : new Date(anchor.getTime() - DAY);
   for (let m = 0; m < 14; m++) {
     const y = cursor.getUTCFullYear();
     const mo = cursor.getUTCMonth() + m;

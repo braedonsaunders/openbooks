@@ -38,7 +38,7 @@ export function computeColumnWidths(
     natural[i] = Math.min(Math.max(Math.ceil(w), MIN_COL_W), maxColW)
   }
 
-  let total = natural.reduce((a, b) => a + b, 0)
+  const total = natural.reduce((a, b) => a + b, 0)
   if (total <= contentWidth) {
     // Fill the page width by distributing slack evenly.
     const extra = contentWidth - total

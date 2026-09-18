@@ -17,5 +17,5 @@ export default async function PlatformPage({
 }) {
   const sp = await searchParams
   const data = await loadSync()
-  return <ModuleView spec={syncSpec(data)} data={data} searchParams={sp} trusted />
+  return <ModuleView spec={syncSpec()} data={data} searchParams={sp} trusted />
 }

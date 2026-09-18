@@ -2661,7 +2661,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <DocumentsActions
       trashHref={str(props, 'trashHref') ?? '/documents/trash'}
       trashLabel={str(props, 'trashLabel') ?? ''}
-      newFolder={<NewFolderButton parentId={str(props, 'newFolderParentId') ?? undefined} />}
+      newFolder={<NewFolderButton />}
       upload={<UploadButton folderId={str(props, 'newFolderParentId') ?? undefined} />}
     />
   ),

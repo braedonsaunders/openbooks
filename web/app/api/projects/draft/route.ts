@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
@@ -16,7 +16,7 @@ export const runtime = 'nodejs'
  * insert. Creation and activation must serialize against feature toggles the
  * same way, or a disable and a create could both apply.
  */
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user

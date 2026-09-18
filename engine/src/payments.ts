@@ -1336,9 +1336,23 @@ export async function postPaymentWithApplications(
       await db.update(schema.journalEntries).set({ status: "posted", postedAt: new Date(), postedBy: userId ?? doc.createdBy }).where(and(eq(schema.journalEntries.id, fxEntryId!), eq(schema.journalEntries.orgId, doc.orgId)));
     }
 
-    await db.insert(schema.applications).values(applicationsToWrite.map(({ controlAdjustment: _adjustment, ...application }) => ({
-      ...application,
+    // `controlAdjustment` clears in the FX entry above; the applications table
+    // has no such column, so the insert lists the persisted fields explicitly.
+    await db.insert(schema.applications).values(applicationsToWrite.map((a) => ({
       orgId: doc.orgId,
+      fromLineId: a.fromLineId,
+      toLineId: a.toLineId,
+      amount: a.amount,
+      sourceAmount: a.sourceAmount,
+      sourceTransactionAmount: a.sourceTransactionAmount,
+      sourceTransactionCurrency: a.sourceTransactionCurrency,
+      targetTransactionAmount: a.targetTransactionAmount,
+      targetTransactionCurrency: a.targetTransactionCurrency,
+      settlementRate: a.settlementRate,
+      settlementRateSource: a.settlementRateSource,
+      settlementRateReference: a.settlementRateReference,
+      settlementFxRateId: a.settlementFxRateId,
+      appliedOn: a.appliedOn,
       fxGainLossEntryId: fxEntryId,
       createdBy: userId ?? doc.createdBy,
     })));
@@ -3860,7 +3874,7 @@ ${tx}
 `;
 }
 
-export async function loadSepaRunFile(runId: string, orgId: string, _now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
+export async function loadSepaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate SEPA payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -3894,10 +3908,10 @@ export async function loadSepaRunFile(runId: string, orgId: string, _now: Date):
 }
 
 /** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
-export async function loadRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
+export async function loadRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
-  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, now)), contentType: "application/xml" };
+  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId)), contentType: "application/xml" };
   return { ...(await loadCpa005RunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
 }

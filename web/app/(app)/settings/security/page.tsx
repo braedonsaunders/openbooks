@@ -9,6 +9,6 @@ export default async function SecurityPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams
-  const data = await loadSecurity(sp)
-  return <ModuleView spec={securitySpec(data)} data={data} searchParams={sp} trusted />
+  const data = await loadSecurity()
+  return <ModuleView spec={securitySpec()} data={data} searchParams={sp} trusted />
 }

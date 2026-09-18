@@ -55,7 +55,7 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
       // documents carry no book, so both count, exactly like the /journal
       // draft list.
       let n = 0
-      for (const label of ['primary-draft', 'secondary-draft']) {
+      for (let i = 0; i < 2; i++) {
         n += 1
         await db.execute(sql`
           insert into documents
