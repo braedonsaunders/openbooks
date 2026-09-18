@@ -17,6 +17,20 @@ import {
   type OpenItem,
 } from '@/lib/cash/core'
 import { presentationCurrency } from '@/lib/fx-presentation'
+import { WIDGETS } from './_widget-registry'
+
+/**
+ * The money readers the dashboard loads through, injectable so tests can
+ * prove the denial path: a widget the caller cannot see must not merely
+ * render absent — its reader must never run. Production always passes the
+ * canonical readers (the default); tests pass spies.
+ */
+export type DashboardMoneyReaders = {
+  bankBalances: typeof bankBalances
+  openItems: typeof openItems
+}
+
+const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems }
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -79,10 +93,29 @@ export type DashboardMetrics = {
   }>
 }
 
-export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetrics> {
+export async function loadDashboardMetrics(
+  authz: Authz,
+  /**
+   * Widget ids the caller may see (already passed through canSeeWidget by
+   * loadDashboardView / loadDashboardEditCanvas). Only the metric fields
+   * those widgets render are queried — a denied widget's reader never runs,
+   * so absence on screen means absence from the query log too. Defaults to
+   * every built-in widget, which is exactly what the loader did before the
+   * filter existed.
+   */
+  widgetIds: readonly string[] = Object.keys(WIDGETS),
+  readers: DashboardMoneyReaders = canonicalMoneyReaders,
+): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
   const userId = authz.user.id
   const today = await businessToday(orgId)
+  const needed = new Set<keyof DashboardMetrics>()
+  for (const id of widgetIds) {
+    for (const field of WIDGET_METRIC_FIELDS[id] ?? []) needed.add(field)
+  }
+  // One predicate per reader group below: no needed field, no query.
+  const need = (...fields: (keyof DashboardMetrics)[]): boolean =>
+    fields.some((f) => needed.has(f))
 
   // The tile links to /approvals?tab=all, so its number is the unified
   // worklist (Flows gates + gateless document approvals + pending pay runs),
@@ -98,17 +131,24 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   // a caller scoped to some subsidiaries tiles exactly what the hubs show
   // them, never the org-wide total.
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
+  const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
+  const wantCash = need('cashBalance')
+  const wantMoney = wantCash || need('openReceivables', 'overdueReceivables', 'openPayables', 'overduePayables')
+  const wantAr = need('openReceivables', 'overdueReceivables')
+  const wantAp = need('openPayables', 'overduePayables')
   const [totals, banks, baseCurrency, arItems, apItems, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
-    db.execute(sql`
+    wantTotals
+      ? db.execute(sql`
       select
         (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
-    `),
+    `)
+      : Promise.resolve({ rows: [{ journal_lines: 0, accounts: 0, entries_today: 0, ledger_sum: '0' }] }),
     // Cash at bank is the cockpit's per-account reader, summed — the same
     // doorway as the /banking cockpit and the forecast's startingCash, so
     // same-labeled figures tie by construction. It is subsidiary-scoped,
@@ -116,17 +156,18 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     // closing spot; the previous org-wide asset_bank sum counted those
     // accounts and added mixed functionals raw (F-u1-P4). Missing FX coverage
     // fails closed inside (the hub contract), never a silently mixed tile.
-    bankBalances(today, subIds, orgId),
-    presentationCurrency(orgId),
+    wantCash ? readers.bankBalances(today, subIds, orgId) : Promise.resolve([]),
+    wantMoney ? presentationCurrency(orgId) : Promise.resolve(EMPTY_METRICS.baseCurrency),
     // The AR/AP tiles read the shared open-item reader — the same doorway as
     // the /ar and /ap hubs and the aging report — so same-labeled figures tie
     // by construction. Missing FX coverage fails closed inside (the hub
     // contract), never a silently undercounted tile.
-    openItems(orgId, 'ar', today, subIds),
-    openItems(orgId, 'ap', today, subIds),
+    wantAr ? readers.openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
+    wantAp ? readers.openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
     // Top-N first, then aggregate the five entries' lines — grouping before
     // the limit aggregated every entry in the tenant.
-    db.execute(sql`
+    need('recentEntries')
+      ? db.execute(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status,
              lt.line_count, lt.total_debits
         from (
@@ -142,19 +183,24 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
             from journal_lines l where l.entry_id = e.id and l.org_id = ${orgId}
         ) lt on true
        order by e.created_at desc, e.entry_number desc
-    `),
-    db.execute(sql`
+    `)
+      : Promise.resolve({ rows: [] }),
+    need('draftDocuments')
+      ? db.execute(sql`
       select id, kind, document_number, document_date, total, status
         from documents
        where org_id = ${orgId} and status = 'draft' and created_by = ${userId}
        order by updated_at desc
        limit 5
-    `),
-    mayApprove ? approvalWorklistForAuthz(authz) : Promise.resolve([]),
+    `)
+      : Promise.resolve({ rows: [] }),
+    mayApprove && need('pendingApprovals', 'pendingApprovalList', 'myApprovalList')
+      ? approvalWorklistForAuthz(authz)
+      : Promise.resolve([]),
     // One row, three numbers: open findings, open findings with a proposal,
     // and the latest detection across readable packs. Same scope as the
     // workbench inbox, never a parallel count.
-    agentPacks.length > 0
+    agentPacks.length > 0 && need('agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun')
       ? db.execute(sql`
           select (count(*) filter (where status in ('open', 'in_review')))::int as open,
                  (count(*) filter (where status in ('open', 'in_review') and summary ? 'proposedCommand'))::int as proposals,
