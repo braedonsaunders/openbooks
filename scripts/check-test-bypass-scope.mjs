@@ -631,7 +631,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/crm-forecast-snapshots.integration.test.ts", { writes: 5, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-party-lifecycle.integration.test.ts", { writes: 9, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-write-validation.integration.test.ts", { writes: 1, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/custom-field-creation.integration.test.ts", { writes: 3, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/import-scope.integration.test.ts", { writes: 3, via: "route.ts -> resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/resource-roundtrip-matrix.integration.test.ts", { writes: 3, via: "resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/transaction-roundtrip.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
