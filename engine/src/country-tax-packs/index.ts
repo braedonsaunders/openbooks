@@ -14,9 +14,9 @@ import { NEW_ZEALAND_TAX_PACK } from "./nz.ts";
 import { SINGAPORE_TAX_PACK } from "./sg.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
-import type { CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
+import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
-export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
+export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxCodeRole, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
 
 export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   CANADA_TAX_PACK,
@@ -52,6 +52,48 @@ export function countryTaxPackForReturn(returnPackCode: string): CountryTaxPackD
   return COUNTRY_TAX_PACKS.find((pack) =>
     pack.parentReturnPackCode === returnPackCode || pack.jurisdictions.some((item) => item.returnPackCode === returnPackCode),
   );
+}
+
+/**
+ * THE only reader of CountryTaxPackDefinition.returnPackTaxCodes. Collapses
+ * the single-or-set union to an always-array set (empty when the return
+ * declares nothing), so no call site ever re-handles both shapes. A
+ * structural test enforces that no other production module reads the field.
+ */
+export function packTaxCodesForReturn(
+  pack: CountryTaxPackDefinition,
+  returnPackCode: string,
+): readonly CountryTaxCodeDefinition[] {
+  const entry = pack.returnPackTaxCodes[returnPackCode];
+  if (entry === undefined) return [];
+  if (isTaxCodeSet(entry)) return entry;
+  return [entry];
+}
+
+function isTaxCodeSet(
+  entry: CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[],
+): entry is readonly CountryTaxCodeDefinition[] {
+  return Array.isArray(entry);
+}
+
+/** Return-pack codes of this pack that declare at least a key (possibly an empty set, which guards reject). */
+export function packReturnCodesWithTaxCodes(pack: CountryTaxPackDefinition): readonly string[] {
+  return Object.keys(pack.returnPackTaxCodes);
+}
+
+/**
+ * Headline code per return for readers that predate multi-code sets: the
+ * sole definition, else the standard-role one, else the first declared.
+ * Provisioning installs the FULL set and never uses this; it exists so
+ * single-code packs keep their exact historical primary.
+ */
+export function primaryPackTaxCode(
+  pack: CountryTaxPackDefinition,
+  returnPackCode: string,
+): CountryTaxCodeDefinition | undefined {
+  const definitions = packTaxCodesForReturn(pack, returnPackCode);
+  if (definitions.length <= 1) return definitions[0];
+  return definitions.find((definition) => definition.role === "standard") ?? definitions[0];
 }
 
 /**

@@ -59,11 +59,22 @@ export interface TaxReturnPack {
   boxes: readonly TaxReturnPackBox[];
 }
 
+/**
+ * Rate-band role of one code within its return's set. Declarative metadata,
+ * not an enforced partition: real returns break every tidy rule (one return
+ * can carry several reduced bands, or several codes none of which is a
+ * "reduced" rate), so packs declare a role when it is meaningful and omit it
+ * otherwise. Reserved as the key a future rate-specific return-box mapping
+ * will match on; nothing today branches on it.
+ */
+export type CountryTaxCodeRole = "standard" | "reduced" | "zero" | "exempt";
+
 export interface CountryTaxCodeDefinition {
   code: string;
   name: string;
   ratePercent: number;
   rates?: readonly EffectiveTaxRate[];
+  role?: CountryTaxCodeRole;
 }
 
 export type CountryPackCoverage = "detailed_pack" | "country_tax_setup" | "jurisdiction_setup";
@@ -118,5 +129,14 @@ export interface CountryTaxPackDefinition {
   sources: readonly CountryTaxPackSource[];
   jurisdictions: readonly CountryTaxJurisdictionDefinition[];
   returnPacks: readonly TaxReturnPack[];
-  returnPackTaxCodes: Readonly<Record<string, CountryTaxCodeDefinition>>;
+  /**
+   * Tax code SET per return pack code. A single definition (the common case
+   * today) or a non-empty array when one return carries several codes, each
+   * with its own effective-dated schedule. Keys must be return-pack codes of
+   * this same pack — anything else is uninstallable and a structural test
+   * rejects it. Read this field ONLY through packTaxCodesForReturn: it is the
+   * sole normalizer of the two shapes, and a second inline reader is the bug
+   * this union would otherwise become.
+   */
+  returnPackTaxCodes: Readonly<Record<string, CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[]>>;
 }
