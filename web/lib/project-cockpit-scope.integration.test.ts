@@ -54,6 +54,9 @@ test('the projects cockpit page and every WIP billing surface carry the caller s
     ['app/api/wip-billing/analytics/route.ts', ['wipAnalytics']],
   ]
   for (const [route, calls] of routes) {
+    // Each table row names the scoped calls it pins: an empty row would
+    // make the per-call scope check below vacuously true.
+    assert.ok(calls.length > 0, `${route} must name its scoped calls`);
     const src = source(route)
     for (const call of calls) {
       assert.match(src, new RegExp(`${call}\\([\\s\\S]*?gate\\.allowedSubsidiaryIds`), `${route}: ${call} must receive the route caller scope`)

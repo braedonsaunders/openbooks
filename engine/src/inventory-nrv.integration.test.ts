@@ -92,6 +92,9 @@ function valuesBySource(layers: NrvLayerAudit[]): Map<string, bigint> {
 }
 
 function assertLayerOriginalCostCeilings(layers: NrvLayerAudit[]): void {
+  // Every caller passes a post-receipt audit that must carry layers: an
+  // empty audit would make the ceiling check below vacuously true.
+  assert.ok(layers.length > 0, "layer audit must return layers");
   for (const layer of layers) {
     assert.ok(layer.sourceUnitCost != null, `layer ${layer.id} is missing source cost provenance`);
     assert.ok(

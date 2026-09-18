@@ -304,6 +304,9 @@ test("legacy province/state snapshots identify supported countries without consu
   {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
     const seen=new Set<string>();
     for (const country of ['CA','US']) {
+      // Registry packs pin 14 provinces / 51 states-and-DC: the
+      // disjointness check below cannot pass over an empty region set.
+      assert.ok(PAYROLL_COUNTRY_PACKS[country]!.regions.known.length > 0, `${country} pack must publish regions`);
       for (const region of PAYROLL_COUNTRY_PACKS[country]!.regions.known) {
         assert.ok(!seen.has(region),'legacy region sets must remain disjoint');seen.add(region);
         assert.equal((await db.execute(sql`select payroll_legacy_region_country(${region}) as country`)).rows[0]?.country,country);

@@ -55,6 +55,9 @@ test("assign-posting-period previews, commits with audit, and is idempotent", { 
     assert.equal(first.skipped.length, 0);
     const stored = await db.execute<{ id: string; posting_period_id: string }>(sql`
       select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${sales}, ${purchase})`);
+    // Both seeded documents round-trip: the per-row period check below
+    // cannot pass over an empty set.
+    assert.equal(stored.rows.length, 2);
     for (const row of stored.rows) assert.equal(row.posting_period_id, org.periodId);
     const audit = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log

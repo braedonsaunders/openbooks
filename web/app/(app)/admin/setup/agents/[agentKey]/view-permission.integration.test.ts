@@ -103,6 +103,9 @@ test("a setup manager gets the pack policy, specs and routing targets", { skip: 
       data.specs.map((spec) => spec.detectorKey),
       detectorSpecsForAgent("accounting").map((spec) => spec.detectorKey),
     );
+    // The accounting pack registers three detector specs: the per-spec
+    // parameter check below cannot pass over an empty spec list.
+    assert.ok(data.specs.length > 0, "accounting pack must publish detector specs");
     for (const spec of data.specs) {
       assert.ok(Array.isArray(spec.parameters), `${spec.detectorKey} must carry its parameter specs`);
     }

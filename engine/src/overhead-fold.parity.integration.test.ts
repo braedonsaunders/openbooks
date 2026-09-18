@@ -250,6 +250,9 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
     const versionId = (await db.execute<{ id: string }>(sql`select v.id from allocation_rule_versions v
       join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
       where r.org_id = ${f.orgId} and r.key = ${OVERHEAD_SYSTEM_RULE_KEY} and v.status = 'published'`)).rows[0]!.id;
+    // The folded journal carries exactly the three projected lines: the
+    // per-line stamp check below cannot pass over an empty set.
+    assert.equal(stamps.rows.length, foldedLines.length);
     for (const stamp of stamps.rows) {
       assert.equal(stamp.contributor_kind, "rule");
       assert.equal(stamp.contributor_ref, versionId);
@@ -257,6 +260,9 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
     const oracleStamps = await db.execute<{ contributor_kind: string | null }>(sql`
       select contributor_kind from journal_lines
        where org_id = ${f.orgId} and entry_id = ${oracle.entryId}`);
+    // The oracle journal carries exactly the three projected lines: the
+    // per-line null-stamp check below cannot pass over an empty set.
+    assert.equal(oracleStamps.rows.length, oracleLines.length);
     for (const stamp of oracleStamps.rows) assert.equal(stamp.contributor_kind, null);
 
     // Idempotency stamps: carried entries claim their journal, the opt-out
@@ -264,6 +270,9 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
     for (const [set, entryId] of [[f.setA, folded.entryId], [f.setB, oracle.entryId]] as const) {
       const claimed = await db.execute<{ id: string; overhead_journal_entry_id: string | null }>(sql`
         select id, overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = any(${`{${set.join(",")}}`}::uuid[])`);
+      // All six seeded entries of the set round-trip through the claim
+      // query: the per-row claim check below cannot pass over an empty set.
+      assert.equal(claimed.rows.length, set.length);
       for (const row of claimed.rows) {
         const excluded = f.excluded.includes(row.id);
         assert.equal(row.overhead_journal_entry_id, excluded ? null : entryId);
