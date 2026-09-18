@@ -57,11 +57,13 @@ export const IRELAND_TAX_PACK: CountryTaxPackDefinition = {
   jurisdictions: [],
   returnPacks: [IE_VAT3_2026],
   returnPackTaxCodes: {
-    IE_VAT3: {
-      code: "IE-VAT-STD",
-      name: "Ireland standard VAT",
-      ratePercent: 23,
-      rates: [
+    IE_VAT3: [
+      {
+        code: "IE-VAT-STD",
+        name: "Ireland standard VAT",
+        ratePercent: 23,
+        role: "standard",
+        rates: [
         { ratePercent: 16.37, effectiveFrom: "1972-11-01", effectiveTo: "1973-09-02", sourceId: "revenue_historical_vat_rates_2026" },
         { ratePercent: 19.5, effectiveFrom: "1973-09-03", effectiveTo: "1976-02-29", sourceId: "revenue_historical_vat_rates_2026" },
         { ratePercent: 20, effectiveFrom: "1976-03-01", effectiveTo: "1980-04-30", sourceId: "revenue_historical_vat_rates_2026" },
@@ -79,7 +81,42 @@ export const IRELAND_TAX_PACK: CountryTaxPackDefinition = {
         { ratePercent: 23, effectiveFrom: "2012-01-01", effectiveTo: "2020-08-31", sourceId: "revenue_historical_vat_rates_2026" },
         { ratePercent: 21, effectiveFrom: "2020-09-01", effectiveTo: "2021-02-28", sourceId: "revenue_historical_vat_rates_2026" },
         { ratePercent: 23, effectiveFrom: "2021-03-01", sourceId: "revenue_historical_vat_rates_2026" },
-      ],
-    },
+        ],
+      },
+      {
+        code: "IE-VAT-RED",
+        name: "Ireland reduced VAT",
+        ratePercent: 13.5,
+        role: "reduced",
+        rates: [
+          { ratePercent: 5.26, effectiveFrom: "1972-11-01", effectiveTo: "1973-09-02", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 6.75, effectiveFrom: "1973-09-03", effectiveTo: "1976-02-29", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 10, effectiveFrom: "1976-03-01", effectiveTo: "1981-08-31", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 15, effectiveFrom: "1981-09-01", effectiveTo: "1982-04-30", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 18, effectiveFrom: "1982-05-01", effectiveTo: "1983-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 23, effectiveFrom: "1983-03-01", effectiveTo: "1985-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 10, effectiveFrom: "1985-03-01", effectiveTo: "1991-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 12.5, effectiveFrom: "1991-03-01", effectiveTo: "1992-02-29", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 16, effectiveFrom: "1992-03-01", effectiveTo: "1993-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 12.5, effectiveFrom: "1993-03-01", effectiveTo: "2002-12-31", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 13.5, effectiveFrom: "2003-01-01", sourceId: "revenue_historical_vat_rates_2026" },
+        ],
+      },
+      // Second-reduced band, single-value eras only. The table lists several
+      // simultaneous rates for 1983-03-01 through 1985-02-28 ("5,18" then
+      // "5,8,18") with no single second-reduced rate to point at, so those
+      // eras are refused here rather than guessed. Blank eras had no band.
+      {
+        code: "IE-VAT-RED2",
+        name: "Ireland second reduced VAT",
+        ratePercent: 9,
+        role: "reduced",
+        rates: [
+          { ratePercent: 5, effectiveFrom: "1988-03-01", effectiveTo: "1990-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 12.5, effectiveFrom: "1992-03-01", effectiveTo: "1993-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+          { ratePercent: 9, effectiveFrom: "2011-07-01", sourceId: "revenue_historical_vat_rates_2026" },
+        ],
+      },
+    ],
   },
 };
