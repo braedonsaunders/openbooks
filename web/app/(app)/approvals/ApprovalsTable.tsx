@@ -64,9 +64,14 @@ export interface ApprovalRow {
 
 const DAY_MS = 86_400_000
 
+/** Whole days an approval has been pending (module scope, like `daysSince` in AccountsRoster). */
+function daysPending(requestedAt: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(requestedAt).getTime()) / DAY_MS))
+}
+
 /** Days pending — amber past 2, red past 5, otherwise muted. */
 function Aging({ requestedAt, label }: { requestedAt: string; label: (days: number) => string }) {
-  const days = Math.max(0, Math.floor((Date.now() - new Date(requestedAt).getTime()) / DAY_MS))
+  const days = daysPending(requestedAt)
   const tone =
     days > 5
       ? 'text-red-600 dark:text-red-400'

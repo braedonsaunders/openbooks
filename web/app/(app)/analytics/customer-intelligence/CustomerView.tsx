@@ -355,7 +355,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
       map.get(key)!.push(r)
     }
     return [...map.entries()]
-  }, [rows, groupBy])
+  }, [rows, groupBy, t])
 
   const totalPages = Math.max(1, Math.ceil(rows.length / HEALTH_PAGE))
   const pageNo = Math.min(page, totalPages)
@@ -473,6 +473,33 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
 
 function GroupRows({ children }: { children: React.ReactNode }) {
   return <>{children}</>
+}
+
+/** Sortable profitability-table header (module scope: defining it inside
+ *  ProfitabilityTab remounts every header — and drops button focus — on each render). */
+function ProfitSortTh({
+  label,
+  col,
+  align = 'right',
+  sortCol,
+  sortDir,
+  onToggle,
+}: {
+  label: string
+  col: ProfitSort
+  align?: 'left' | 'right'
+  sortCol: ProfitSort
+  sortDir: 'asc' | 'desc'
+  onToggle: (col: ProfitSort) => void
+}) {
+  return (
+    <th className={cn('px-3 py-2 font-medium', align === 'right' ? 'text-right' : 'text-left')}>
+      <button type="button" onClick={() => onToggle(col)} className={cn('inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300', sortCol === col && 'text-teal-600 dark:text-teal-400')}>
+        {label}
+        {sortCol === col && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+      </button>
+    </th>
+  )
 }
 
 function Pager({ page, totalPages, total, pageSize, onPage, noun }: { page: number; totalPages: number; total: number; pageSize: number; onPage: (p: number) => void; noun: string }) {
@@ -991,15 +1018,6 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
       return next
     })
 
-  const SortTh = ({ label, col, align = 'right' }: { label: string; col: ProfitSort; align?: 'left' | 'right' }) => (
-    <th className={cn('px-3 py-2 font-medium', align === 'right' ? 'text-right' : 'text-left')}>
-      <button type="button" onClick={() => toggleSort(col)} className={cn('inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300', sortCol === col && 'text-teal-600 dark:text-teal-400')}>
-        {label}
-        {sortCol === col && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
-      </button>
-    </th>
-  )
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1020,11 +1038,11 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                   <th className="w-8 px-2 py-2" />
-                  <SortTh label={t('table.customerJob')} col="customerName" align="left" />
-                  <SortTh label={t('table.revenue')} col="totalRevenue" />
-                  <SortTh label={t('table.costs')} col="totalCost" />
-                  <SortTh label={t('table.profit')} col="grossProfit" />
-                  <SortTh label={t('table.margin')} col="marginPct" />
+                  <ProfitSortTh label={t('table.customerJob')} col="customerName" align="left" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
+                  <ProfitSortTh label={t('table.revenue')} col="totalRevenue" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
+                  <ProfitSortTh label={t('table.costs')} col="totalCost" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
+                  <ProfitSortTh label={t('table.profit')} col="grossProfit" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
+                  <ProfitSortTh label={t('table.margin')} col="marginPct" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
                   <th className="px-3 py-2 text-center font-medium">{t('table.tier')}</th>
                 </tr>
               </thead>

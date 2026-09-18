@@ -181,7 +181,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       xAxis: { type: 'value' as const, name: t('scatter.xAxis'), nameLocation: 'middle' as const, nameGap: 24, min: vMin - vPad, max: vMax + vPad },
       yAxis: { type: 'value' as const, name: t('scatter.yAxis'), min: aMin - aPad, max: aMax + aPad },
       tooltip: {
-        formatter: (p: any) => `<b>${p.data[3]}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: money(p.data[2]) })}`,
+        formatter: (p: any) => `<b>${p.data[3]}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
       },
       series: [{
         type: 'scatter' as const,
@@ -196,7 +196,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         },
       }],
     }
-  }, [accounts])
+  }, [accounts, fmtMoney, t])
 
   return (
     <div className="space-y-5">
@@ -422,16 +422,16 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
     const want = (k: string) => selected === 'all' || selected === k
     if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > 20 ? 'High' : 'Medium', impact: v.annualizedCreep, details: t('details.frog', { rate: v.avgMonthlyIncrease.toFixed(1), months: v.monthCount }), accountId: v.accountId })
     if (want('anomaly')) for (const a of data.anomalies.items) out.push({ detector: 'anomaly', label: t('detectors.anomaly.label'), item: a.accountName, severity: a.zScore > 3 ? 'Critical' : 'High', impact: a.amount, details: t('details.anomaly', { sigma: a.zScore.toFixed(1), month: a.month }), accountId: a.accountId })
-    if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: money0(z.amount), months: z.monthCount }), vendorId: z.vendorId })
+    if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
     if (want('concentration')) for (const c of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: c.name, severity: c.spendShare > 30 ? 'High' : 'Medium', impact: c.totalSpend, details: t('details.concentration', { share: c.spendShare.toFixed(1), trend: c.trend }), accountId: c.id })
-    if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > 50 ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: money0(f.avgTransactionSize) }), accountId: f.accountId })
+    if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > 50 ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: fmtMoney(f.avgTransactionSize) }), accountId: f.accountId })
     if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > 50 ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { deviation: `${p.deviation > 0 ? '+' : ''}${p.deviation}` }) })
     if (want('cliff') && data.commitmentCliff.summary.status !== 'healthy') {
       const c = data.commitmentCliff.summary
       out.push({ detector: 'cliff', label: t('detectors.cliff.label'), item: t('details.cliffItem'), severity: c.status === 'critical' ? 'Critical' : 'High', impact: c.totalPO, details: t('details.cliff', { gap: c.velocityGap, ratio: c.ratio }) })
     }
     return out.sort((a, b) => b.impact - a.impact)
-  }, [data, selected])
+  }, [data, selected, fmtMoney, t])
 
   const total = data.summary.totalAlerts
   return (

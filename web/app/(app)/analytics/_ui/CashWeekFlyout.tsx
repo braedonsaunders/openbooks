@@ -149,12 +149,14 @@ export function CashWeekFlyout({
 
   const side: 'ar' | 'ap' = tab === 'ar' ? 'ar' : 'ap'
   const activeCat = tab.startsWith('cat:') ? weekCats.find((c) => c.id === tab.slice(4)) : undefined
-  const entries = side === 'ar' ? (fetched?.ar ?? []) : (fetched?.ap ?? [])
   const filtered = useMemo(() => {
+    // Inside the memo: a `?? []` fallback outside would hand the dep array a
+    // fresh empty-array identity on every render, defeating the memo.
+    const entries = side === 'ar' ? (fetched?.ar ?? []) : (fetched?.ap ?? [])
     const q = search.trim().toLowerCase()
     if (!q) return entries
     return entries.filter((e) => e.partyName.toLowerCase().includes(q) || (e.docNumber ?? '').toLowerCase().includes(q))
-  }, [entries, search])
+  }, [fetched, search, side])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -598,10 +600,15 @@ function MethodPill({ method }: { method: string }) {
   )
 }
 
+/** Whole days between now and a due date (module scope, like `daysSince` in AccountsRoster). */
+function daysVsDue(dueDate: string): number {
+  return Math.round((Date.now() - new Date(dueDate + 'T00:00:00Z').getTime()) / 86_400_000)
+}
+
 /** Days-vs-due pill: overdue red (+Nd), due within a week amber, comfortable green. */
 function DaysPill({ entry }: { entry: ForecastEntry }) {
   if (!entry.dueDate) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
-  const days = Math.round((Date.now() - new Date(entry.dueDate + 'T00:00:00Z').getTime()) / 86_400_000)
+  const days = daysVsDue(entry.dueDate)
   const cls = days > 0
     ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300'
     : days >= -7

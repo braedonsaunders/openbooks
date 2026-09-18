@@ -600,7 +600,7 @@ function useAnomalies(data: UtilizationData, t: ReturnType<typeof useTranslation
       .slice(0, 5)
 
     return { suddenDrops, overtimeNoValue, titleDrift, total: suddenDrops.length + overtimeNoValue.length + titleDrift.length }
-  }, [data])
+  }, [data, t])
 }
 
 function AnomalyList({ items, empty }: { items: React.ReactNode[]; empty: string }) {
@@ -686,7 +686,7 @@ function usePeers(data: UtilizationData, t: ReturnType<typeof useTranslations>) 
         return { title, count: pcts.length, avg, min, max, spread: max - min, outliers }
       })
       .sort((a, b) => b.count - a.count)
-  }, [data])
+  }, [data, t])
 }
 
 function PeersSub({ data }: { data: UtilizationData }) {
@@ -820,7 +820,7 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
       reallocations: reallocations.slice(0, 4),
       be: { costPerEmployee, requiredBillable, recommendation, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, capacityHeadroom, efficiencyScore, hiringOutlook, totalEmployees },
     }
-  }, [data])
+  }, [data, t])
 }
 
 function WhatIfSub({ data }: { data: UtilizationData }) {
@@ -974,7 +974,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
           }),
         }
       })
-  }, [depts, employees])
+  }, [depts, employees, t])
 
   return (
     <div className="space-y-3">
@@ -1237,7 +1237,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
     }
     return [...groups.values()]
       .map((g) => ({ ...g, percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0, employeeCount: g.employees.length }))
-  }, [data.employees])
+  }, [data.employees, t])
   const { sorted: sortedTitles, SortTh } = useSort(titles, { key: 'nonBillableCost', dir: 'desc' })
 
   const sortedByPct = [...titles].sort((a, b) => b.percentBilled - a.percentBilled)

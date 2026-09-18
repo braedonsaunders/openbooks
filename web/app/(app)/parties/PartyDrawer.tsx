@@ -517,12 +517,18 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   const skipDirty = useRef(false)
+  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
+  // dirty on merely entering edit mode.
+  const editableRef = useRef(editable)
+  useEffect(() => {
+    editableRef.current = editable
+  }, [editable])
   useEffect(() => {
     if (first.current) {
       first.current = false
@@ -532,8 +538,7 @@ export function PartyDrawer({
       skipDirty.current = false
       return
     }
-    if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (editableRef.current) setDirty(true)
   }, [savePayload])
 
   /** Reset every field back to the loaded party (used by Cancel). */

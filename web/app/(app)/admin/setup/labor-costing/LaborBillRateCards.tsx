@@ -348,10 +348,13 @@ function RateCardDrawer(
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(() => cloneCard(card));
   const layout = props.layout ?? defaultFormLayout("labor_rate_card");
-  const itemOptions = props.items.map((x) => ({ id: x.id, name: x.name }));
+  const itemOptions = useMemo(
+    () => props.items.map((x) => ({ id: x.id, name: x.name })),
+    [props.items],
+  );
   const optionMap = useMemo(
     () => ({ ...props.options, item: itemOptions }),
-    [props.options, props.items],
+    [props.options, itemOptions],
   );
 
 

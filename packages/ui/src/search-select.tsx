@@ -243,15 +243,6 @@ export function SearchSelect({
   const optionList = (
     <>
       <ul role="listbox" className="py-1">
-        {filtered.length === 0 && !loading ? (
-          <li
-            role="option"
-            aria-disabled="true"
-            className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500"
-          >
-            {t('noMatches')}
-          </li>
-        ) : null}
         {filtered.map((o, i) => {
           const active = o.value === value
           const prevGroup = i > 0 ? filtered[i - 1]?.group : undefined
@@ -297,6 +288,14 @@ export function SearchSelect({
           )
         })}
       </ul>
+      {filtered.length === 0 && !loading ? (
+        <div
+          role="status"
+          className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500"
+        >
+          {t('noMatches')}
+        </div>
+      ) : null}
       {loading || statusMessage ? (
         <div
           role={statusTone === 'error' ? 'alert' : 'status'}
@@ -351,7 +350,6 @@ export function SearchSelect({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-invalid={invalid || undefined}
         className={cn(
           'flex h-10 w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-left text-sm shadow-sm transition dark:border-slate-700 dark:bg-slate-900',
           'focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 focus:outline-none',

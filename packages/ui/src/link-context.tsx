@@ -8,6 +8,7 @@
 
 import {
   createContext,
+  createElement,
   useContext,
   type AnchorHTMLAttributes,
   type ComponentType,
@@ -28,8 +29,10 @@ export function UiLink({
   href,
   ...rest
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
-  const Link = useContext(UiLinkContext) ?? 'a'
-  return <Link href={href} {...rest} />
+  // createElement, not a <Link>-style JSX alias: a capitalised alias created
+  // during render gets a fresh identity every render (remounting children).
+  const link = useContext(UiLinkContext) ?? 'a'
+  return createElement(link, { href, ...rest })
 }
 
 // ---------------------------------------------------------------------------
@@ -65,8 +68,9 @@ export function UiBackLinkProvider({
  * component that reads context at render time).
  */
 export function UiBackLink({ href, label, className }: BackLinkProps) {
-  const Impl = useContext(UiBackLinkContext)
-  if (Impl) return <Impl href={href} label={label} className={className} />
+  const impl = useContext(UiBackLinkContext)
+  // createElement, not a <Impl>-style JSX alias (see UiLink above).
+  if (impl) return createElement(impl, { href, label, className })
   return (
     <UiLink href={href} className={className}>
       ← {label}

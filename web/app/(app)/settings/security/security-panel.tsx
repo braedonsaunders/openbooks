@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button, Card, CardContent, Input, Label } from "@openbooks/ui";
 
 type MfaStatus = { enabled: boolean; recoveryCodesRemaining: number };
@@ -25,6 +26,7 @@ async function jsonRequest(url: string, init?: RequestInit) {
 }
 
 export function SecurityPanel() {
+  const router = useRouter();
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [setup, setSetup] = useState<{ secret: string; provisioningUri: string } | null>(null);
@@ -179,7 +181,7 @@ export function SecurityPanel() {
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
                   await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" });
-                  if (session.current) window.location.assign("/login");
+                  if (session.current) router.push("/login");
                   else await reload();
                 })}>
                   Revoke
