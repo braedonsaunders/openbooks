@@ -27,7 +27,7 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption, calculatedRun } =
   await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
@@ -46,13 +46,15 @@ test(
   "remittance history remains scoped to the original pay-run entity after employee transfer",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const fx = await seedAdoption();
+    const fx = await withBypassContext(() => seedAdoption());
     try {
-      await db.execute(
-        sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+        ),
       );
-      const { input } = await calculatedRun(fx);
-      await commitPayRun(input);
+      const { input } = await withBypassContext(() => calculatedRun(fx));
+      await withOrgContext(fx.orgId, () => commitPayRun(input));
       const range = { from: "2026-07-01", to: "2026-07-31" };
       const gate = {
         user: { orgId: fx.orgId, id: fx.actorId },
@@ -60,68 +62,82 @@ test(
         allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
       } as Authz;
       assert.equal(
-        await guardRemittancePeriod(gate, range.from, range.to),
+        await withOrgContext(fx.orgId, () => guardRemittancePeriod(gate, range.from, range.to)),
         null,
       );
-      const before = await payrollRemittanceSummary(
-        fx.orgId,
-        range,
-        gate.allowedSubsidiaryIds,
+      const before = await withOrgContext(fx.orgId, () =>
+        payrollRemittanceSummary(
+          fx.orgId,
+          range,
+          gate.allowedSubsidiaryIds,
+        ),
       );
       assert.ok(before.length);
       const hidden = randomUUID();
-      await db.execute(
-        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Transferred employee entity','CAD','CA')`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Transferred employee entity','CAD','CA')`,
+        ),
       );
-      await db.execute(
-        sql`update parties set subsidiary_id=${hidden} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`update parties set subsidiary_id=${hidden} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+        ),
       );
       assert.equal(
-        await guardRemittancePeriod(gate, range.from, range.to),
+        await withOrgContext(fx.orgId, () => guardRemittancePeriod(gate, range.from, range.to)),
         null,
         "original employer retains its history",
       );
       assert.deepEqual(
-        await payrollRemittanceSummary(
-          fx.orgId,
-          range,
-          gate.allowedSubsidiaryIds,
+        await withOrgContext(fx.orgId, () =>
+          payrollRemittanceSummary(
+            fx.orgId,
+            range,
+            gate.allowedSubsidiaryIds,
+          ),
         ),
         before,
       );
       const moved = { ...gate, allowedSubsidiaryIds: new Set([hidden]) };
       assert.equal(
-        (await guardRemittancePeriod(moved, range.from, range.to))?.status,
+        (await withOrgContext(fx.orgId, () => guardRemittancePeriod(moved, range.from, range.to)))?.status,
         404,
         "new employer cannot read the earlier employer payroll",
       );
       assert.deepEqual(
-        await payrollRemittanceSummary(
-          fx.orgId,
-          range,
-          moved.allowedSubsidiaryIds,
+        await withOrgContext(fx.orgId, () =>
+          payrollRemittanceSummary(
+            fx.orgId,
+            range,
+            moved.allowedSubsidiaryIds,
+          ),
         ),
         [],
       );
       assert.equal(
         (
-          await guardRemittancePeriod(
-            { ...gate, allowedSubsidiaryIds: new Set() },
-            range.from,
-            range.to,
+          await withOrgContext(fx.orgId, () =>
+            guardRemittancePeriod(
+              { ...gate, allowedSubsidiaryIds: new Set() },
+              range.from,
+              range.to,
+            ),
           )
         )?.status,
         404,
       );
       assert.deepEqual(
-        await payrollRemittanceSummary(fx.orgId, range, new Set()),
+        await withOrgContext(fx.orgId, () => payrollRemittanceSummary(fx.orgId, range, new Set())),
         [],
       );
       assert.equal(
-        await guardRemittancePeriod(
-          { ...gate, allowedSubsidiaryIds: null },
-          range.from,
-          range.to,
+        await withOrgContext(fx.orgId, () =>
+          guardRemittancePeriod(
+            { ...gate, allowedSubsidiaryIds: null },
+            range.from,
+            range.to,
+          ),
         ),
         null,
       );
@@ -135,54 +151,76 @@ test(
   "scoped remittance history excludes matching bill artifacts owned by another legal entity",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const fx = await seedAdoption();
+    const fx = await withBypassContext(() => seedAdoption());
     try {
       const vendor = randomUUID(),
         hidden = randomUUID(),
         invoice = randomUUID();
-      await db.execute(
-        sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${fx.orgId},'organization','Shared remittance authority',true)`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${fx.orgId},'organization','Shared remittance authority',true)`,
+        ),
       );
-      await db.execute(
-        sql`insert into vendor_roles(org_id,party_id,is_active) values(${fx.orgId},${vendor},true)`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into vendor_roles(org_id,party_id,is_active) values(${fx.orgId},${vendor},true)`,
+        ),
       );
-      await db.execute(
-        sql`update pay_components set remittance_party_id=${vendor} where org_id=${fx.orgId}`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`update pay_components set remittance_party_id=${vendor} where org_id=${fx.orgId}`,
+        ),
       );
-      await db.execute(
-        sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
+        ),
       );
-      const { input } = await calculatedRun(fx);
-      await commitPayRun(input);
+      const { input } = await withBypassContext(() => calculatedRun(fx));
+      await withOrgContext(fx.orgId, () => commitPayRun(input));
       const range = { from: "2026-07-01", to: "2026-07-31" };
-      const group = (await payrollRemittanceSummary(fx.orgId, range))[0]!;
+      const group = (await withOrgContext(fx.orgId, () => payrollRemittanceSummary(fx.orgId, range)))[0]!;
       assert.equal(group.partyId, vendor);
-      await db.execute(
-        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Other bill owner','CAD','CA')`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Other bill owner','CAD','CA')`,
+        ),
       );
-      await db.execute(
-        sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom) values(${invoice},${fx.orgId},'vendor_bill','HIDDEN-REMIT',${vendor},${hidden},'2026-07-31','CAD','draft',${JSON.stringify({ payrollRemittance: { ...range, partyId: vendor, filingAccountId: group.filingAccount.id } })}::jsonb)`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom) values(${invoice},${fx.orgId},'vendor_bill','HIDDEN-REMIT',${vendor},${hidden},'2026-07-31','CAD','draft',${JSON.stringify({ payrollRemittance: { ...range, partyId: vendor, filingAccountId: group.filingAccount.id } })}::jsonb)`,
+        ),
       );
       const expense = (
-        await db.execute<{ id: string }>(
-          sql`select id from accounts where org_id=${fx.orgId} and type='expense' and not is_summary limit 1`,
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`select id from accounts where org_id=${fx.orgId} and type='expense' and not is_summary limit 1`,
+          ),
         )
       ).rows[0]!.id;
-      await db.execute(
-        sql`insert into document_lines(org_id,document_id,line_number,account_id,subsidiary_id,description,quantity,unit_price,amount,tax_amount) values(${fx.orgId},${invoice},1,${expense},${hidden},'Other entity remittance',1,999,999,0)`,
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into document_lines(org_id,document_id,line_number,account_id,subsidiary_id,description,quantity,unit_price,amount,tax_amount) values(${fx.orgId},${invoice},1,${expense},${hidden},'Other entity remittance',1,999,999,0)`,
+        ),
       );
       assert.ok(
-        (await payrollRemittanceSummary(fx.orgId, range))
+        (
+          await withOrgContext(fx.orgId, () =>
+            payrollRemittanceSummary(fx.orgId, range),
+          )
+        )
           .flatMap((g) => g.existingBills)
           .some((b) => b.documentId === invoice),
         "the unfiltered fixture actually contains the matching bill",
       );
       assert.equal(
         (
-          await payrollRemittanceSummary(
-            fx.orgId,
-            range,
-            new Set([fx.subsidiaryId]),
+          await withOrgContext(fx.orgId, () =>
+            payrollRemittanceSummary(
+              fx.orgId,
+              range,
+              new Set([fx.subsidiaryId]),
+            ),
           )
         )
           .flatMap((g) => g.existingBills)
@@ -195,10 +233,12 @@ test(
         allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
       } as Authz;
       routeState.gate = gate;
-      const loaded = await scopedRemittanceSummary(gate, range);
-      const response = await remittanceGet(
-        new Request(
-          `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
+      const loaded = await withOrgContext(fx.orgId, () => scopedRemittanceSummary(gate, range));
+      const response = await withOrgContext(fx.orgId, () =>
+        remittanceGet(
+          new Request(
+            `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
+          ),
         ),
       );
       assert.equal(response.status, 200);
@@ -215,36 +255,42 @@ test(
         "both real transports must exclude the hidden bill",
       );
       await assert.rejects(
-        createRemittanceBill(fx.orgId, fx.actorId, {
-          partyId: vendor,
-          ...range,
-          filingAccountId: group.filingAccount.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        }),
+        withOrgContext(fx.orgId, () =>
+          createRemittanceBill(fx.orgId, fx.actorId, {
+            partyId: vendor,
+            ...range,
+            filingAccountId: group.filingAccount.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          }),
+        ),
         (error) =>
           error instanceof Error &&
           error.message === "nothing to remit to this vendor for the period",
         "duplicate prevention must not reveal a hidden bill number",
       );
-      const refused = await remittancePost(
-        new Request("http://localhost/api/payroll/remittances", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "create-bill",
-            partyId: vendor,
-            ...range,
-            filingAccountId: group.filingAccount.id,
+      const refused = await withOrgContext(fx.orgId, () =>
+        remittancePost(
+          new Request("http://localhost/api/payroll/remittances", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "create-bill",
+              partyId: vendor,
+              ...range,
+              filingAccountId: group.filingAccount.id,
+            }),
           }),
-        }),
+        ),
       );
       assert.equal(refused.status, 422);
       assert.deepEqual(await refused.json(), {
         error: "nothing to remit to this vendor for the period",
       });
       const bills = (
-        await db.execute<{ count: number }>(
-          sql`select count(*)::int as count from documents where org_id=${fx.orgId} and kind='vendor_bill'`,
+        await withOrgContext(fx.orgId, () =>
+          db.execute<{ count: number }>(
+            sql`select count(*)::int as count from documents where org_id=${fx.orgId} and kind='vendor_bill'`,
+          ),
         )
       ).rows[0]!.count;
       assert.equal(
@@ -253,9 +299,11 @@ test(
         "a hidden overlap still prevents another liability bill",
       );
       routeState.gate = { ...gate, allowedSubsidiaryIds: null };
-      const unrestricted = await remittanceGet(
-        new Request(
-          `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
+      const unrestricted = await withOrgContext(fx.orgId, () =>
+        remittanceGet(
+          new Request(
+            `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
+          ),
         ),
       );
       assert.ok(

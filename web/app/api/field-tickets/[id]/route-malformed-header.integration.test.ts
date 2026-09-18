@@ -62,7 +62,7 @@ const patchRouteUrl = "./route.ts?fieldticket-malformed-header-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
@@ -82,40 +82,42 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 }
 
 async function makeTicket(org: { orgId: string; subsidiaryId: string; customerId: string }, adminId: string) {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`);
-  const projectId = randomUUID();
-  await db.execute(sql`insert into projects
-    (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
-    values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'FT-HDR', 'Header contract job',
-            ${org.customerId}, 'active', true, '{}'::jsonb)`);
-  return createFieldTicket(org.orgId, adminId, { projectId });
+  return withBypassContext(async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`);
+    const projectId = randomUUID();
+    await db.execute(sql`insert into projects
+      (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'FT-HDR', 'Header contract job',
+              ${org.customerId}, 'active', true, '{}'::jsonb)`);
+    return createFieldTicket(org.orgId, adminId, { projectId });
+  });
 }
 
 test(
   "field-ticket PATCH refuses a malformed header document date instead of silently keeping the old one",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const created = await makeTicket(org, adminId);
-      const loaded = await loadFieldTicket(org.orgId, created.id);
+      const loaded = await withOrgContext(org.orgId, () => loadFieldTicket(org.orgId, created.id));
 
       const attempt = patchRequest(created.id, {
         expectedRevision: loaded.revision,
         documentDate: "not-a-date",
       });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.ok(
         refused.status === 400 || refused.status === 422,
         `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(await refused.json())}`,
       );
-      const after = await loadFieldTicket(org.orgId, created.id);
+      const after = await withOrgContext(org.orgId, () => loadFieldTicket(org.orgId, created.id));
       assert.equal(after.documentDate, loaded.documentDate, "refused date writes nothing");
       assert.equal(after.revision, loaded.revision, "refused date leaves the revision untouched");
     } finally {
@@ -129,9 +131,9 @@ test(
   "field-ticket PATCH refuses a malformed foreman reference instead of silently clearing the foreman",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
@@ -139,23 +141,23 @@ test(
       };
       const created = await makeTicket(org, adminId);
       const foreman = randomUUID();
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
-        values (${foreman}, ${org.orgId}, 'person', 'Crew Chief', true)`);
-      await db.execute(sql`update field_tickets set foreman_party_id = ${foreman}
-        where document_id = ${created.id} and org_id = ${org.orgId}`);
-      const loaded = await loadFieldTicket(org.orgId, created.id);
+      await withBypassContext(() => db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
+        values (${foreman}, ${org.orgId}, 'person', 'Crew Chief', true)`));
+      await withBypassContext(() => db.execute(sql`update field_tickets set foreman_party_id = ${foreman}
+        where document_id = ${created.id} and org_id = ${org.orgId}`));
+      const loaded = await withOrgContext(org.orgId, () => loadFieldTicket(org.orgId, created.id));
       assert.equal(loaded.fieldTicket.foremanPartyId, foreman, "seed sets the foreman");
 
       const attempt = patchRequest(created.id, {
         expectedRevision: loaded.revision,
         foremanPartyId: "not-a-uuid",
       });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.ok(
         refused.status === 400 || refused.status === 422,
         `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(await refused.json())}`,
       );
-      const after = await loadFieldTicket(org.orgId, created.id);
+      const after = await withOrgContext(org.orgId, () => loadFieldTicket(org.orgId, created.id));
       assert.equal(after.fieldTicket.foremanPartyId, foreman, "refused foreman writes nothing");
     } finally {
       routeState.authz = null;
@@ -168,22 +170,22 @@ test(
   "field-ticket PATCH still saves a well-formed header under the exact revision",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const created = await makeTicket(org, adminId);
-      const loaded = await loadFieldTicket(org.orgId, created.id);
+      const loaded = await withOrgContext(org.orgId, () => loadFieldTicket(org.orgId, created.id));
 
       const attempt = patchRequest(created.id, {
         expectedRevision: loaded.revision,
         memo: "header contract control",
       });
-      const saved = await PATCH(attempt.req, attempt.ctx);
+      const saved = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.equal(saved.status, 200, `control save must stay green: ${JSON.stringify(await saved.json())}`);
     } finally {
       routeState.authz = null;
