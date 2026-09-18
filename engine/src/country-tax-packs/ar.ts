@@ -40,10 +40,28 @@ const AR_F2002_2026: TaxReturnPack = {
  * (standard/reduced/zero/exempt) has no term for a surcharge band, and
  * labelling it `standard` to fill the field would be false.
  *
- * Rate history is left-truncated to applicability: the consolidated text
- * states the current structure with no origin date, so each schedule opens
- * at the fetch date as applicability, not origin. Argentina's rate history
- * is long and heavily amended; no origin is claimed.
+ * Rate history runs back to 1992-03-01 on the standard band, one row per
+ * rate change, all drawn from Infoleg's own EVOLUCION DE LAS ALICUOTAS table
+ * on the texto ordenado: 18% under Ley 23.966 from 1/3/92 (restored with the
+ * 27% differential by the table's note 2) to 31/3/95; 21% under Ley 24.468
+ * from 1/04/95 to 31/3/96 (art. 3 raised the rate three points for one year,
+ * corroborated on that law's Infoleg page, BO 23/3/95); 21% under Ley 24.631
+ * from 01/04/96 (VAT modification, BO 27/3/96 — the restoration that picked
+ * up exactly where the one-year grant expired, so there is no gap); 19%
+ * under Decreto 2312/2002 from 18/11/02 to 17/01/03 (temporary cut recorded
+ * in Infoleg's art-28 note); 21% again from 18/01/03, open. The 1996 and
+ * 2002 boundaries are distinct-temporary-instrument boundaries — the 1995
+ * grant expired and a separate law restored the rate; the 2002 cut was a
+ * temporary decree — so equal 21% values on either side do NOT collapse;
+ * the 2003 reversion is the same continuing law and collapses into the open
+ * row. The 10.5% band is 50% of the general rate by art. 28's own rule, so
+ * it tracks the 2002 window as 9.5% and reverts with it; pre-2002 10.5%
+ * history is refused (the 50%-rule origin and any 9% era under the 18%
+ * general rate are unsourced). The 27% band stays left-truncated: the table
+ * shows a 27% differential restored alongside the 18% in 1992, but its scope
+ * continuity into today's utilities band is unverified, so no origin is
+ * claimed for it. Pre-1992 decree-era bands are refused: the table's
+ * 1988–1992 columns cannot be mapped unambiguously.
  *
  * Fetch refusals, named so the next person can finish the history: Infoleg
  * returned 403 to a bare client and loaded only with a browser user agent;
@@ -86,7 +104,7 @@ export const ARGENTINA_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "infoleg_ley23349_art28",
-      title: "Infoleg — Ley de IVA N.º 23.349, texto ordenado 1997, art. 28: 21% general, 27% utilities, 50% (10,5%) list (applicability, not origin)",
+      title: "Infoleg — Ley de IVA N.º 23.349, texto ordenado 1997, art. 28: 21% general, 27% utilities, 50% (10,5%) list, with Infoleg's EVOLUCION DE LAS ALICUOTAS table (Ley 23.966 18% from 1/3/92; Ley 24468 21% from 1/04/95; Ley 24.631 21% from 01/04/96) and art-28 notes (Decreto 2312/2002 temporary 19% window 18/11/2002–17/01/2003, 50% computed on the reduced rate)",
       url: "https://servicios.infoleg.gob.ar/infolegInternet/anexos/40000-44999/42701/texact.htm",
       asOf: "2026-09-18",
     },
@@ -118,14 +136,23 @@ export const ARGENTINA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Argentina IVA alícuota general",
         ratePercent: 21,
         role: "standard",
-        rates: [{ ratePercent: 21, effectiveFrom: "2026-09-18", sourceId: "infoleg_ley23349_art28" }],
+        rates: [
+          { ratePercent: 18, effectiveFrom: "1992-03-01", effectiveTo: "1995-03-31", sourceId: "infoleg_ley23349_art28" },
+          { ratePercent: 21, effectiveFrom: "1995-04-01", effectiveTo: "1996-03-31", sourceId: "infoleg_ley23349_art28" },
+          { ratePercent: 21, effectiveFrom: "1996-04-01", effectiveTo: "2002-11-17", sourceId: "infoleg_ley23349_art28" },
+          { ratePercent: 19, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+          { ratePercent: 21, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+        ],
       },
       {
         code: "AR-VAT-RED105",
         name: "Argentina IVA alícuota reducida 10,5% — bienes primarios del art. 28",
         ratePercent: 10.5,
         role: "reduced",
-        rates: [{ ratePercent: 10.5, effectiveFrom: "2026-09-18", sourceId: "infoleg_ley23349_art28" }],
+        rates: [
+          { ratePercent: 9.5, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+          { ratePercent: 10.5, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+        ],
       },
       {
         code: "AR-VAT-INC27",
