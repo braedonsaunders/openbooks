@@ -333,6 +333,53 @@ export function packCertificates(country: string): PayrollPackCertificates {
   return declared;
 }
 
+/**
+ * The pack's declared field answered through an `employee_payroll_profiles`
+ * column — the read mapping the profile editor renders and the profile POST
+ * validates against, so neither reimplements a pack's form (the W-4's choice
+ * set, the TD1's 0–10 claim-code band). First match wins: packs keep one
+ * column on one certificate family, and the thirteen provincial TD1s share
+ * their three columns deliberately, with identical shapes.
+ */
+export function profileColumnField(country: string, column: string): PayrollCertificateField | null {
+  for (const certificate of packCertificates(country).certificates) {
+    for (const field of certificate.fields) {
+      if (field.storage?.kind === "column" && field.storage.column === column) {
+        return field;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The allowed answers for a column-mapped `choice` field (the W-4 filing
+ * statuses), or null when the pack declares no such field for the column —
+ * which refuses the answer rather than inheriting another pack's choices.
+ */
+export function profileColumnChoices(country: string, column: string): readonly string[] | null {
+  const field = profileColumnField(country, column);
+  if (!field || field.kind !== "choice" || !field.choices) return null;
+  return field.choices.map((choice) => choice.value);
+}
+
+/**
+ * The inclusive integer band for a column-mapped `count` field (TD1 claim
+ * codes 0–10, W-4 allowances 0–99), or null when the pack declares no such
+ * field for the column.
+ */
+export function profileColumnCountBounds(
+  country: string,
+  column: string,
+): { min: number; max: number } | null {
+  const field = profileColumnField(country, column);
+  if (!field || field.kind !== "count") return null;
+  const min = field.min == null ? 0 : Number(field.min);
+  const max = field.max == null ? Number.MAX_SAFE_INTEGER : Number(field.max);
+  if (!Number.isInteger(min) || !Number.isInteger(max)) return null;
+  return { min, max };
+}
+
 /** One certificate, or a refusal listing what the pack declares. */
 export function payrollCertificate(country: string, key: string): PayrollCertificate {
   const pack = packCertificates(country);
