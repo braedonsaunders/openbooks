@@ -11,7 +11,7 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { loadEquipment } from '../_lib'
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
-function bad(error: string) { return NextResponse.json({ error }, { status: 422 }) }
+function bad(error: string) { return NextResponse.json({ error, code: error }, { status: 422 }) }
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 function wholeDigits(canonical: string): number {
