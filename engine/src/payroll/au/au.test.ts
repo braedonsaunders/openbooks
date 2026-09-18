@@ -12,9 +12,9 @@ import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_WITHHOLDING } from "./jurisdictio
 import { AU_PAYROLL_PACK } from "./pack.ts";
 import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
 
-test("AU pack exists and is a non-installable skeleton", () => {
+test("AU pack exists and is installable for FY 2026–27", () => {
   assert.equal(AU_PAYROLL_PACK.country, "AU");
-  assert.equal(AU_PAYROLL_PACK.installable, false);
+  assert.equal(AU_PAYROLL_PACK.installable, true);
   assert.equal(AU_PAYROLL_PACK.statutoryCurrency, "AUD");
   assert.deepEqual(AU_PAYROLL_PACK.taxYear, {
     basis: "fiscal",
