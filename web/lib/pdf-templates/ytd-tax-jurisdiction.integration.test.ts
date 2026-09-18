@@ -11,7 +11,7 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } = await import('@openbooks/engine/src/payroll-run.ts')
 const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
@@ -26,17 +26,17 @@ const cents = (n: number): number => Math.round(n * 100)
 
 async function account(orgId: string, number: string, name: string, type: string): Promise<string> {
   const id = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                           reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-            '[]'::jsonb, '{}'::jsonb, true)`)
+            '[]'::jsonb, '{}'::jsonb, true)`))
   return id
 }
 
 /** Committed-scope YTD oracle straight from the persisted stubs + lines. */
 async function ytdOracle(orgId: string, employeeId: string, taxYear: number, payDate: string, currency: string) {
-  const r = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
+  const r = (await withOrgContext(orgId, () => db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0)::text as gross, coalesce(sum(s.net_pay), 0)::text as net,
            coalesce(sum(income_tax_lines.tax), 0)::text as tax
       from pay_stubs s
@@ -52,17 +52,17 @@ async function ytdOracle(orgId: string, employeeId: string, taxYear: number, pay
      where s.org_id = ${orgId} and s.employee_party_id = ${employeeId}
        and s.tax_year = ${taxYear} and s.pay_date <= ${payDate}
        and s.currency_code = ${currency}
-  `))
+  `)))
   return r.rows[0]!
 }
 
 async function incomeTaxLines(orgId: string, stubId: string) {
-  const r = (await db.execute<{ system_key: string; amount: string }>(sql`
+  const r = (await withOrgContext(orgId, () => db.execute<{ system_key: string; amount: string }>(sql`
     select c.system_key, l.amount::text as amount
       from pay_stub_lines l join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id = ${stubId}
        and c.system_key in ('income_tax', 'qc_income_tax', 'fit', 'state_income_tax', 'local_income_tax')
-  `))
+  `)))
   return r.rows
 }
 
@@ -73,6 +73,7 @@ interface CaFixture {
 }
 
 async function caPayrollOrg(): Promise<CaFixture> {
+  return withBypassContext(async () => {
   const org = await createScratchOrg()
   const actorId = (await seedFlowActors(org.orgId)).adminId
   const wageExpense = await account(org.orgId, '6000', 'Wages expense', 'expense')
@@ -105,9 +106,11 @@ async function caPayrollOrg(): Promise<CaFixture> {
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`)
   return { orgId: org.orgId, actorId, scheduleId }
+  })
 }
 
 async function caEmployee(fx: CaFixture, name: string, province: string): Promise<string> {
+  return withBypassContext(async () => {
   const id = randomUUID()
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -135,12 +138,13 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
               false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`)
   }
   return id
+  })
 }
 
 async function stubIdFor(orgId: string, documentId: string, employeeId: string): Promise<string> {
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-     and employee_party_id = ${employeeId}`))
+     and employee_party_id = ${employeeId}`)))
   assert.ok(r.rows[0], 'engine-generated stub exists')
   return r.rows[0]!.id
 }
@@ -150,13 +154,13 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
   try {
     const ontario = await caEmployee(fx, 'Ontario Hourly', 'ON')
     const quebec = await caEmployee(fx, 'Quebec Hourly', 'QC')
-    const run = await createPayRun({
+    const run = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-05', periodEnd: '2026-07-18',
-    })
-    const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })
+    }))
+    const result = await withOrgContext(fx.orgId, () => calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
     assert.deepEqual(result.errors, [])
-    await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })
+    await withOrgContext(fx.orgId, () => commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
 
     for (const [employee, label] of [[ontario, 'Ontario'], [quebec, 'Quebec']] as const) {
       const stubId = await stubIdFor(fx.orgId, run.documentId, employee)
@@ -164,7 +168,7 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
       assert.ok(lines.length > 0, `${label} stub carries persisted income-tax lines`)
       const expected = lines.reduce((total, line) => total + Number(line.amount), 0)
 
-      const record = await loadPdfRecordValues('pay_stub', fx.orgId, stubId)
+      const record = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stubId))
       assert.ok(record)
       assert.equal(cents(parseMoney(record.values.ytd_tax)), cents(expected))
       // Gross/net scope is unchanged by the tax fix.
@@ -183,7 +187,7 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
       .reduce((total, l) => total + Number(l.amount), 0)
     assert.ok(qcProvincial > 0, 'the QC fixture is genuinely subject to provincial tax')
     assert.ok(qcFederal > 0, 'the QC fixture is genuinely subject to federal tax')
-    const qcRecord = await loadPdfRecordValues('pay_stub', fx.orgId, qcStub)
+    const qcRecord = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, qcStub))
     assert.equal(cents(parseMoney(qcRecord!.values.ytd_tax)), cents(qcFederal + qcProvincial))
 
     // Ontario parity: no provincial line, federal only — the old answer.
@@ -199,42 +203,42 @@ test('a voided pay run leaves printed YTD through the real void path', { skip: !
   const fx = await caPayrollOrg()
   try {
     const employee = await caEmployee(fx, 'Voided Hourly', 'ON')
-    const run1 = await createPayRun({
+    const run1 = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-05', periodEnd: '2026-07-18',
-    })
-    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId })).errors, [])
-    await commitPayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId })
+    }))
+    assert.deepEqual((await withOrgContext(fx.orgId, () => calculatePayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId }))).errors, [])
+    await withOrgContext(fx.orgId, () => commitPayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId }))
     const stub1 = await stubIdFor(fx.orgId, run1.documentId, employee)
-    const before = await loadPdfRecordValues('pay_stub', fx.orgId, stub1)
+    const before = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub1))
     assert.ok(before)
     assert.ok(parseMoney(before.values.ytd_tax) > 0)
 
-    const run2 = await createPayRun({
+    const run2 = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-19', periodEnd: '2026-08-01',
-    })
-    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId })).errors, [])
-    await commitPayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId })
+    }))
+    assert.deepEqual((await withOrgContext(fx.orgId, () => calculatePayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId }))).errors, [])
+    await withOrgContext(fx.orgId, () => commitPayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId }))
     const stub2 = await stubIdFor(fx.orgId, run2.documentId, employee)
-    const during = await loadPdfRecordValues('pay_stub', fx.orgId, stub2)
+    const during = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2))
     assert.ok(during)
     assert.ok(cents(parseMoney(during!.values.ytd_tax)) > cents(parseMoney(before!.values.ytd_tax)))
 
     // Fixture approval, as the void tests seed it: the approval flow owns the
     // draft→approved write; the void itself (including the run_status flip the
     // YTD scope reads) goes through the real void API below.
-    await db.execute(sql`update documents set status = 'approved', updated_at = now()
-      where id = ${run2.documentId} and org_id = ${fx.orgId}`)
-    await requestDocumentVoid({
+    await withBypassContext(() => db.execute(sql`update documents set status = 'approved', updated_at = now()
+      where id = ${run2.documentId} and org_id = ${fx.orgId}`))
+    await withOrgContext(fx.orgId, () => requestDocumentVoid({
       documentId: run2.documentId, orgId: fx.orgId, actorId: fx.actorId,
       reason: 'duplicate pay run entered in error', reversalDate: '2026-08-03',
-    })
-    await completeRequestedDocumentVoid(run2.documentId, fx.orgId)
+    }))
+    await withOrgContext(fx.orgId, () => completeRequestedDocumentVoid(run2.documentId, fx.orgId))
 
     // stub2 still loads (its row is history), but its YTD now counts the
     // surviving committed run only — identical to the pre-run-2 print.
-    const after = await loadPdfRecordValues('pay_stub', fx.orgId, stub2)
+    const after = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2))
     assert.ok(after)
     assert.equal(cents(parseMoney(after.values.ytd_tax)), cents(parseMoney(before!.values.ytd_tax)))
     assert.equal(cents(parseMoney(after.values.ytd_gross)), cents(parseMoney(before!.values.ytd_gross)))
@@ -244,68 +248,70 @@ test('a voided pay run leaves printed YTD through the real void path', { skip: !
 })
 
 test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
     const wageExpense = await account(org.orgId, '6000', 'Wages expense', 'expense')
     const burdenExpense = await account(org.orgId, '6010', 'Payroll burden', 'expense')
     const netPayable = await account(org.orgId, '2300', 'Wages payable', 'liability_current')
     const irsPayable = await account(org.orgId, '2330', 'Federal payroll taxes payable', 'liability_current')
     const statePayable = await account(org.orgId, '2360', 'State income tax payable', 'liability_current')
-    await db.execute(sql`
-      update orgs set settings = settings || ${JSON.stringify({
-        payroll: {
-          wageExpenseAccountId: wageExpense,
-          burdenExpenseAccountId: burdenExpense,
-          netPayAccountId: netPayable,
-          wagesTo: 'expense',
-          countries: ['US'],
-        },
-        features: { payroll: true },
-      })}::jsonb where id = ${org.orgId}`)
-    await seedPayrollComponents(org.orgId, actorId, 'US')
-    for (const slot of ['fit', 'fica', 'futa', 'suta']) {
-      await setPackSlotAccount(org.orgId, actorId, 'US', slot, irsPayable)
-    }
-    await setPackSlotAccount(org.orgId, actorId, 'US', 'state_income_tax', statePayable)
-    await setPackSlotAccount(org.orgId, actorId, 'US', 'local_income_tax', statePayable)
     const subsidiaryId = randomUUID()
-    await db.execute(sql`
-      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
-                                is_elimination, is_active, custom)
-      values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
-              '{}'::jsonb, false, true, '{}'::jsonb)`)
     const scheduleId = randomUUID()
-    await db.execute(sql`
-      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                 pay_date_offset_days, subsidiary_id, is_active,
-                                 created_by, updated_by)
-      values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
-              ${subsidiaryId}, true, ${actorId}, ${actorId})`)
     const employee = randomUUID()
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${employee}, ${org.orgId}, 'person', 'Cali Coder', ${subsidiaryId}, true, '{}'::jsonb)`)
-    await db.execute(sql`
-      insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employee})`)
-    await db.execute(sql`
-      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                    effective_from, is_active, created_by, updated_by)
-      values (${org.orgId}, ${employee}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
-              ${actorId}, ${actorId})`)
-    await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                             province, pay_basis, filing_status,
-                                             is_active, created_by, updated_by)
-      values (${org.orgId}, ${employee}, ${scheduleId}, 'US', 'CA',
-              'salary', 'single', true, ${actorId}, ${actorId})`)
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            wagesTo: 'expense',
+            countries: ['US'],
+          },
+          features: { payroll: true },
+        })}::jsonb where id = ${org.orgId}`)
+      await seedPayrollComponents(org.orgId, actorId, 'US')
+      for (const slot of ['fit', 'fica', 'futa', 'suta']) {
+        await setPackSlotAccount(org.orgId, actorId, 'US', slot, irsPayable)
+      }
+      await setPackSlotAccount(org.orgId, actorId, 'US', 'state_income_tax', statePayable)
+      await setPackSlotAccount(org.orgId, actorId, 'US', 'local_income_tax', statePayable)
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                                  is_elimination, is_active, custom)
+        values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+                '{}'::jsonb, false, true, '{}'::jsonb)`)
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, subsidiary_id, is_active,
+                                   created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
+                ${subsidiaryId}, true, ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employee}, ${org.orgId}, 'person', 'Cali Coder', ${subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`
+        insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employee})`)
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employee}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
+                ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+                                               province, pay_basis, filing_status,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employee}, ${scheduleId}, 'US', 'CA',
+                'salary', 'single', true, ${actorId}, ${actorId})`)
+    })
 
-    const run = await createPayRun({
+    const run = await withOrgContext(org.orgId, () => createPayRun({
       orgId: org.orgId, actorId, payScheduleId: scheduleId,
       periodStart: '2026-07-05', periodEnd: '2026-07-18',
-    })
-    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, [])
-    await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId })
+    }))
+    assert.deepEqual((await withOrgContext(org.orgId, () => calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId }))).errors, [])
+    await withOrgContext(org.orgId, () => commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }))
     const stubId = await stubIdFor(org.orgId, run.documentId, employee)
 
     // Engine-persisted reality, not hand keys: the state line exists and the
