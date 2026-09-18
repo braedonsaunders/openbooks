@@ -46,7 +46,7 @@ test('a partyless AR leg is reported with its account', { skip: !process.env.OPE
     assert.equal(warnings[0]?.accountNumber, '1100')
     assert.equal(warnings[0]?.accountName, 'Accounts Receivable')
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -57,6 +57,6 @@ test('a partied control leg stays silent', { skip: !process.env.OPENBOOKS_DB_URL
     const warnings = await withBypassContext(() => partylessControlLines(org.orgId, entry))
     assert.deepEqual(warnings, [])
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

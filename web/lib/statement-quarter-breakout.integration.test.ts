@@ -72,6 +72,6 @@ test('quarter breakout follows the org fiscal start month, not January', { skip:
       assert.deepEqual(revenue.values.slice(0, 2).map(String), ['100.0000', '200.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

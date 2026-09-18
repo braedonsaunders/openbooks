@@ -57,7 +57,7 @@ test('scalar P&L terminates on an account-parent cycle', { skip: !process.env.OP
       assert.ok(pnl, 'P&L must return despite the cycle')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -76,7 +76,7 @@ test('matrix P&L terminates on an account-parent cycle', { skip: !process.env.OP
       assert.ok(matrix, 'matrix must return despite the cycle')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -89,6 +89,6 @@ test('balance sheet terminates on an account-parent cycle', { skip: !process.env
       assert.ok(bs, 'balance sheet must return despite the cycle')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

@@ -96,7 +96,7 @@ test('project profitability surfaces untagged P&L activity as an Unassigned row'
     assert.ok(tagged, 'tagged project row survives')
     assert.equal(decimalCmp(tagged.revenue, '1000'), 0)
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -120,6 +120,6 @@ test('project profitability omits the Unassigned row when everything is tagged',
     assert.equal(result.rows.some((row) => row.projectId === 'unassigned'), false, 'no Unassigned row without untagged activity')
     assert.equal(decimalCmp(result.totals.revenue, '1000'), 0)
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

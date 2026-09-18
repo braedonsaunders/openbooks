@@ -124,7 +124,7 @@ test('AR aging as of July still shows the balance settled in August', { skip: !p
       assert.equal(stmt.aging.total, '500.0000', 'partner-statement footer must agree with its own closing')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -152,7 +152,7 @@ test('AP aging as of July still shows the bill paid in August', { skip: !process
       assert.equal(aging.totals.current, '300.0000')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -168,6 +168,6 @@ test('aging as of today still matches the live open balances', { skip: !process.
       assert.equal(detail.totals.total, '0.0000')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

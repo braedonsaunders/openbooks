@@ -488,7 +488,7 @@ test(
         assert.equal(detailBody.stubs.length, 1);
       }
     } finally {
-      await withBypass(() => dropScratchOrg(orgId)).catch(() => {});
+      await withBypass(() => dropScratchOrg(orgId));
     }
   },
 );

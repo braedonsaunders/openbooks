@@ -87,6 +87,6 @@ test('cash-basis drill-down ties to the cash-basis statement cell', { skip: !pro
       assert.equal(toUnits(String(accrual.net)), toUnits('1000.0000'))
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

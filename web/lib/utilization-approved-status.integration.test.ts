@@ -44,6 +44,6 @@ test('utilization counts approved time only', { skip: !process.env.OPENBOOKS_DB_
       assert.equal(data.employees[0]!.range.hours, 8)
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
