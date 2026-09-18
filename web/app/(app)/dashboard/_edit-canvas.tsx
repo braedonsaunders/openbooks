@@ -85,8 +85,13 @@ export async function loadDashboardView(
   authz: Authz,
   layout: DashboardLayoutData,
 ): Promise<{ nodes: Record<string, React.ReactNode> }> {
+  // The layout arriving here is already visibility-filtered by the slot, but
+  // the canSeeWidget check below is the enforcement point — derive the
+  // loader's query set from exactly the ids that survive it, so a denied
+  // widget's reader never runs.
+  const visibleIds = layout.widgets.map((w) => w.id).filter((id) => id in WIDGETS && canSeeWidget(authz, id))
   const [metrics, cardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz),
+    loadDashboardMetrics(authz, visibleIds),
     loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
     loadDashboardApps(authz),
   ])
@@ -124,8 +129,9 @@ export async function loadDashboardEditCanvas(
   const widgetAllowed = (id: string) => !opts.allowedWidgetIds || opts.allowedWidgetIds.has(id)
   const canUseInsights = can(authz, 'insights.read')
 
+  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && canSeeWidget(authz, id))
   const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz),
+    loadDashboardMetrics(authz, previewIds),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
     loadInsightCardNodes(
       authz,
