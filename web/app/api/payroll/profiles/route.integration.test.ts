@@ -127,6 +127,13 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
       assert.equal(typeof profile.subdivisionLabel, 'string', `${country} declares a subdivision label`)
       assert.ok(profile.subdivisionLabel.length > 0, `${country} subdivision label is non-empty`)
       assert.ok(Array.isArray(profile.subdivisions), `${country} declares subdivisions`)
+      // Anchor the loop: an installable pack that supports no subdivision
+      // would make every assertion below vacuous. installable-region-coverage
+      // pins the same fact at the pack level; this pins it at the wire.
+      assert.ok(
+        profile.supportedSubdivisions.length > 0,
+        `${country} serves at least one supported subdivision`,
+      )
       for (const code of profile.supportedSubdivisions) {
         assert.ok(profile.subdivisions.includes(code), `${country} supports only a known subdivision: ${code}`)
       }
