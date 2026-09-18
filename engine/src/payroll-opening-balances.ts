@@ -71,8 +71,13 @@ export interface OpeningBalanceField {
   key: string;
   /** payroll_opening_balances column. */
   column: string;
-  /** Country packs the amount means something for. */
-  packs: readonly ("CA" | "US")[];
+  /**
+   * Country packs the amount means something for — an OPEN list, like
+   * PAYROLL_COUNTRY_PACKS itself. A third pack tags its fields with its own
+   * country code; closing this union is what forced the UI's silent-Canada
+   * fallthrough, because a pack that cannot be named cannot be offered.
+   */
+  packs: readonly string[];
   /** English fallback label; the UI localizes by key and falls back to this. */
   label: string;
   /** What the operator copies out of the prior provider's YTD report. */
