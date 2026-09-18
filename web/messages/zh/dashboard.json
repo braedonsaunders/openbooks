@@ -27,7 +27,10 @@
     "overdueReceivables": "逾期应收",
     "openPayables": "未结应付",
     "overduePayables": "逾期应付",
-    "agentFindings": "智能体发现"
+    "agentFindings": "智能体发现",
+    "revenue": "收入",
+    "netIncome": "净利润",
+    "grossMargin": "毛利率"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -38,7 +41,9 @@
     "asOf": "截至 {date}",
     "agentProposals": "{count} 个含建议",
     "agentLastRun": "上次运行 {date}",
-    "agentClear": "一切正常"
+    "agentClear": "一切正常",
+    "monthToDate": "本月至今",
+    "noData": "暂无数据"
   },
   "categories": {
     "kpi": "要点",
@@ -64,7 +69,10 @@
     "overdueReceivables": "以本位币计的已逾期客户发票。",
     "openPayables": "以本位币计的未付应付账单。",
     "overduePayables": "以本位币计的已逾期应付账单。",
-    "agentFindings": "打开后台智能体的发现——跳转到工作台。"
+    "agentFindings": "打开后台智能体的发现——跳转到工作台。",
+    "revenue": "本月至今确认的收入（本位币）。",
+    "netIncome": "本月至今收入减去成本和费用。",
+    "grossMargin": "本月至今毛利及毛利率。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

@@ -27,7 +27,10 @@
     "overdueReceivables": "Overdue receivables",
     "openPayables": "Open payables",
     "overduePayables": "Overdue payables",
-    "agentFindings": "Agent findings"
+    "agentFindings": "Agent findings",
+    "revenue": "Revenue",
+    "netIncome": "Net income",
+    "grossMargin": "Gross margin"
   },
   "metricContext": {
     "today": "Posted today",
@@ -38,7 +41,9 @@
     "agentProposals": "{count} with proposals",
     "agentLastRun": "last run {date}",
     "agentClear": "All clear",
-    "asOf": "As of {date}"
+    "asOf": "As of {date}",
+    "monthToDate": "Month to date",
+    "noData": "No data"
   },
   "categories": {
     "kpi": "Headlines",
@@ -64,7 +69,10 @@
     "overdueReceivables": "Customer invoices past their due date in base currency.",
     "openPayables": "Unpaid vendor bills in base currency.",
     "overduePayables": "Vendor bills past their due date in base currency.",
-    "agentFindings": "Open background-agent findings — jump to the workbench."
+    "agentFindings": "Open background-agent findings — jump to the workbench.",
+    "revenue": "Revenue posted month to date, in base currency.",
+    "netIncome": "Revenue minus cost and expenses, month to date.",
+    "grossMargin": "Gross profit and margin, month to date."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

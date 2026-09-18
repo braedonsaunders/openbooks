@@ -951,6 +951,44 @@ test('recent journal widget copy ships translated in every locale', () => {
   }
 })
 
+test('money widget copy ships translated in every locale', () => {
+  // The MTD revenue/income/margin tiles (dw1) render these dashboard keys;
+  // absent outside en they fall back to English inside otherwise translated
+  // tiles. Every leaf must exist, keep its ICU placeholders, and differ
+  // from English (short financial labels have no true cognates here).
+  const keys = [
+    'dashboard.widgets.revenue',
+    'dashboard.widgets.netIncome',
+    'dashboard.widgets.grossMargin',
+    'dashboard.catalog.revenue',
+    'dashboard.catalog.netIncome',
+    'dashboard.catalog.grossMargin',
+    'dashboard.metricContext.monthToDate',
+    'dashboard.metricContext.noData',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+    const drift = (keys as readonly string[]).filter((key) => {
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} money-widget translations drop or rename ICU placeholders`)
+  }
+})
+
 test('property creation drawer copy ships translated in every locale', () => {
   // The New-property drawer (F-t09-013 residual) was fully hard-coded
   // English; every string now resolves through these keys plus common
