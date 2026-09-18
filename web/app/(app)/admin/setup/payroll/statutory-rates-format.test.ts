@@ -18,3 +18,9 @@ test('percents and amounts render as entered', () => {
 test('unparseable rates fall back to the raw value', () => {
   assert.equal(formatRateFieldValue({ kind: 'rate', decimals: 4 }, 'n/a'), 'n/a')
 })
+
+test('flags render as Yes or No, unknown values as entered', () => {
+  assert.equal(formatRateFieldValue({ kind: 'flag', decimals: 0 }, 'true'), 'Yes')
+  assert.equal(formatRateFieldValue({ kind: 'flag', decimals: 0 }, 'false'), 'No')
+  assert.equal(formatRateFieldValue({ kind: 'flag', decimals: 0 }, 'yes'), 'yes')
+})

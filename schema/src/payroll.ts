@@ -674,6 +674,48 @@ export const payrollOpeningBalanceComponents = pgTable(
 );
 
 /**
+ * Employer-scope opening carry-in (0174): the pre-adoption employer base for
+ * one pack-declared aggregate levy in one scope — the employer total a
+ * threshold levy prices its room against. Per-employee caps do NOT live
+ * here; a personal cap's carry-in rides the pack's own per-employee opening
+ * field beside every other personal year-to-date.
+ *
+ * One row per scope point (org, tax year, country, levy, region): two rows
+ * for the same point would make the room computation ambiguous. Written by
+ * the carry-in save under the levy fence; read with the committed stub
+ * factors to form the annual room.
+ */
+export const payrollEmployerLevyOpening = pgTable(
+  "payroll_employer_levy_opening",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** The tax year this history belongs to. */
+    taxYear: integer("tax_year").notNull(),
+    /** Country pack declaring the levy key namespace. */
+    country: text("country").notNull(),
+    /** The pack's declared levy key. */
+    levyKey: text("levy_key").notNull(),
+    /** Province/state for region levies; null for org-wide levies. */
+    region: text("region"),
+    /** Pre-adoption employer base in scope. Never negative. */
+    baseYtd: money("base_ytd").notNull().default("0"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("payroll_employer_levy_opening_org_point").on(
+      t.orgId, t.taxYear, t.country, t.levyKey,
+      sql`coalesce(${t.region}, '')`,
+    ),
+    check(
+      "payroll_employer_levy_opening_nonnegative",
+      sql`${t.baseYtd} >= 0`,
+    ),
+    index("payroll_employer_levy_opening_org_year").on(t.orgId, t.country, t.taxYear),
+  ],
+);
+
+/**
  * Union construction layer.
  *
  * A collective agreement names the union/local and its remittance party; its
