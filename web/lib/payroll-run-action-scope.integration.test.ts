@@ -77,7 +77,11 @@ test("payroll detail rechecks employee ownership after a concurrent transfer", {
     assert.equal((await read()).status, 200, "the scoped owner can read its own complete run");
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls','on',true)");
-    const moved = await writer.query("update parties set subsidiary_id=$1 where org_id=$2 and id=$3", [childId, fx.orgId, fx.employeeId]);
+    // Fixture write through the held transaction: it must stay uncommitted to
+    // block the concurrent reader, so it cannot go through db.execute. The
+    // raw session carries the bypass via set_config above; the scope is
+    // declared here.
+    const moved = await withBypassContext(() => writer.query("update parties set subsidiary_id=$1 where org_id=$2 and id=$3", [childId, fx.orgId, fx.employeeId]));
     assert.equal(moved.rowCount, 1, "concurrent writer must hold the transferred employee row");
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = read(); void pending.catch(() => {});
