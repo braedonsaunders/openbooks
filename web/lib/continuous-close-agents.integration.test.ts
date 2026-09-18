@@ -27,28 +27,32 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('./authz');
 const { executeAssistantTool } = await import('./assistant/registry');
 
 async function seedFinding(orgId: string, agentKey: string, fingerprint: string): Promise<string> {
+  return withBypassContext(async () => {
   const id = randomUUID();
   await db.execute(sql`insert into ai_work_items
     (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, confidence, materiality, summary)
     values (${id}, ${orgId}, ${agentKey}, 'unmatched_bank_activity', 'test', ${fingerprint}, 'warning', '0.9', '1500', '{}'::jsonb)`);
   return id;
+  });
 }
 
 async function asUser(orgId: string, name: string, roleKey: string, perms: string[]): Promise<void> {
+  return withBypassContext(async () => {
   const actor = await createScratchUser(orgId, name, roleKey);
   await db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`);
   state.user = { id: actor, orgId, name, email: `${roleKey}@scratch.test`, roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
+  });
 }
 
 test('agent findings stay inside the caller org', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   try {
     await seedFinding(orgA.orgId, 'accounting', 'fp-a-1');
     await seedFinding(orgB.orgId, 'accounting', 'fp-b-1');
@@ -68,7 +72,7 @@ test('agent findings stay inside the caller org', { skip: !process.env.OPENBOOKS
 });
 
 test('agent findings narrow to the caller readable packs', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const findingId = await seedFinding(org.orgId, 'accounting', 'fp-narrow-1');
     // AR clerk: assistant doorway open and the collections pack readable, but
@@ -101,7 +105,7 @@ test('agent findings narrow to the caller readable packs', { skip: !process.env.
 });
 
 test('pack readers the workbench admits keep their assistant doorway (payroll)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const findingId = await seedFinding(org.orgId, 'payroll', 'fp-payroll-1');
     // Payroll clerk: payroll.read makes the payroll pack workbench-readable

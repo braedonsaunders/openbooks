@@ -247,7 +247,7 @@ test('a malformed or impossible edit date fails closed before any write', { skip
       const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
       assert.ok(current)
       await assert.rejects(
-        applyDocumentEdit(id, current, { ...patch, expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' }),
+        withOrgContext(org.orgId, () => applyDocumentEdit(id, current, { ...patch, expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' })),
         (e: unknown) => e instanceof DocumentEditError && e.status === 422,
         `patch ${JSON.stringify(patch)} should fail closed with a named error`,
       )
@@ -258,7 +258,7 @@ test('a malformed or impossible edit date fails closed before any write', { skip
     assert.equal(stored.document_date, org.date)
     const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
     assert.ok(current)
-    await applyDocumentEdit(id, current, { documentDate: '2024-02-28', expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' })
+    await withOrgContext(org.orgId, () => applyDocumentEdit(id, current, { documentDate: '2024-02-28', expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' }))
     const moved = (await withBypass(() => db.execute<{ document_date: string }>(sql`
       select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`))).rows[0]!
     assert.equal(moved.document_date, '2024-02-28')

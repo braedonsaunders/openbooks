@@ -22,26 +22,26 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { getAuthz } = await import('../authz')
 const { executeAssistantTool } = await import('./registry')
 
 test('find_parties hides parties assigned to an inaccessible subsidiary', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'Party scope prober', 'party_scope_prober')
+  const org = await withBypassContext(() => createScratchOrg())
+  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Party scope prober', 'party_scope_prober'))
   const hidden = randomUUID()
   const visibleParty = randomUUID()
   const hiddenParty = randomUUID()
-  await db.execute(sql`update app_roles
+  await withBypassContext(() => db.execute(sql`update app_roles
     set permissions=${JSON.stringify(['parties.read', 'assistant.use'])}::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
-    where org_id=${org.orgId} and key='party_scope_prober'`)
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-    values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden Party Branch','CAD','CA')`)
-  await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active)
+    where org_id=${org.orgId} and key='party_scope_prober'`))
+  await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+    values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden Party Branch','CAD','CA')`))
+  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active)
     values (${visibleParty},${org.orgId},'customer','Visible Party',${org.subsidiaryId},true),
-           (${hiddenParty},${org.orgId},'customer','Hidden Party',${hidden},true)`)
+           (${hiddenParty},${org.orgId},'customer','Hidden Party',${hidden},true)`))
   state.user = {
     id: actor,
     orgId: org.orgId,
