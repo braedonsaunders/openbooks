@@ -24,7 +24,7 @@
  *   docs <orgId> <partyId>
  */
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../../../engine/src/db.ts";
+import { db, withBypassContext, withOrg } from "../../../engine/src/db.ts";
 import { runDunningForOrg } from "../../../engine/src/dunning.ts";
 
 function emit(value: unknown): void {
@@ -37,10 +37,17 @@ async function main(): Promise<void> {
   switch (command) {
     case "org": {
       const [email] = args;
+      // Identity bootstrap: this resolves WHICH org to scope to, so it cannot
+      // run inside withOrg. Under FORCE row-level security as the constrained
+      // runtime role an unscoped read returns zero rows SILENTLY, which
+      // surfaced as "no user e2e@openbooks.test" against a database that has
+      // one. withBypassContext is the documented remedy for exactly this.
       const rows = (
-        await db.execute<{ orgId: string }>(sql`
-          select u.org_id as "orgId" from users u where u.email = ${email} order by u.created_at limit 1
-        `)
+        await withBypassContext(() =>
+          db.execute<{ orgId: string }>(sql`
+            select u.org_id as "orgId" from users u where u.email = ${email} order by u.created_at limit 1
+          `),
+        )
       ).rows;
       if (!rows[0]) throw new Error(`no user ${email}`);
       emit({ orgId: rows[0].orgId });
