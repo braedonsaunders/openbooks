@@ -86,9 +86,9 @@ const { detectorSpecsForAgent } = await import(
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("a setup manager gets the pack policy, specs and routing targets", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = await createScratchUser(org.orgId, "Policy Admin", "admin");
+    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Policy Admin", "admin"));
     loaderState.user = { orgId: org.orgId, id: userId };
     loaderState.permissions = new Set(["admin.setup.manage"]);
     const data = await withBypassContext(() => loadAgentPolicy("accounting"));
@@ -119,7 +119,7 @@ test("a setup manager gets the pack policy, specs and routing targets", { skip: 
 });
 
 test("an unknown pack key 404s", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000001" };
     loaderState.permissions = new Set(["admin.setup.manage"]);
@@ -130,7 +130,7 @@ test("an unknown pack key 404s", { skip: !DB }, async () => {
 });
 
 test("without the setup key the policy redirects", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
