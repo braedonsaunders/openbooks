@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { commitPayRun } from "@openbooks/engine/src/payroll-run.ts";
 import { dropScratchOrgReporting } from "@openbooks/engine/src/test-fixtures.ts";
 import {
@@ -81,12 +81,13 @@ const { GET } = (await import(
   routeUrl
 )) as typeof import("../app/api/payroll/remittances/route.ts");
 hooks.deregister();
-const get = () =>
-  GET(
-    new Request(
-      "http://openbooks.test/api/payroll/remittances?from=2026-07-01&to=2026-07-31",
-    ),
-  );
+const get = (orgId: string) =>
+  withOrgContext(orgId, () =>
+    GET(
+      new Request(
+        "http://openbooks.test/api/payroll/remittances?from=2026-07-01&to=2026-07-31",
+      ),
+    ));
 
 for (const change of [
   "hidden-original",
@@ -97,49 +98,55 @@ for (const change of [
     `remittance route handles ${change} historical attribution`,
     { skip: !process.env.OPENBOOKS_DB_URL },
     async () => {
-      const fx = await seedAdoption();
+      // seedAdoption mixes tenant seed writes (including seedFlowActors) that
+      // must run under bypass once the route import trips the resolver.
+      const fx = await withBypassContext(() => seedAdoption());
       try {
         const hidden = randomUUID(),
           first = randomUUID(),
           second = randomUUID();
-        await db.execute(sql`insert into subsidiaries(id,org_id,name,base_currency,country,parent_id,is_elimination,is_active,custom)
+        await withBypassContext(async () => {
+          await db.execute(sql`insert into subsidiaries(id,org_id,name,base_currency,country,parent_id,is_elimination,is_active,custom)
     values(${hidden},${fx.orgId},'Restricted employer','CAD','CA',${fx.subsidiaryId},false,true,'{}'::jsonb)`);
-        await db.execute(
-          sql`update parties set subsidiary_id=${fx.subsidiaryId} where id=${fx.employeeId} and org_id=${fx.orgId}`,
-        );
-        await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id,is_default)
+          await db.execute(
+            sql`update parties set subsidiary_id=${fx.subsidiaryId} where id=${fx.employeeId} and org_id=${fx.orgId}`,
+          );
+          await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id,is_default)
     values(${first},${fx.orgId},'CA','ca_rp','123456789RP0001','Original employer',${change === "hidden-original" ? hidden : fx.subsidiaryId},true),
     (${second},${fx.orgId},'CA','ca_rp','123456789RP0002','Future employer',${fx.subsidiaryId},false)`);
-        if (change === "inactive-original")
-          await db.execute(
-            sql`update employee_payroll_profiles set filing_account_id=${first} where org_id=${fx.orgId}`,
-          );
-        const { input } = await calculatedRun(fx);
-        await commitPayRun(input);
+          if (change === "inactive-original")
+            await db.execute(
+              sql`update employee_payroll_profiles set filing_account_id=${first} where org_id=${fx.orgId}`,
+            );
+        });
+        const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
+        await withOrgContext(fx.orgId, () => commitPayRun(input));
         routeState.authz = {
           user: { orgId: fx.orgId, id: fx.actorId },
           permissions: new Set(["payroll.read"]),
           allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
         };
         if (change === "hidden-original") {
-          await db.execute(
-            sql`update employee_payroll_profiles set filing_account_id=${second} where org_id=${fx.orgId}`,
-          );
-          const response = await get();
+          await withBypassContext(() =>
+            db.execute(
+              sql`update employee_payroll_profiles set filing_account_id=${second} where org_id=${fx.orgId}`,
+            ));
+          const response = await get(fx.orgId);
           assert.equal(response.status, 404);
           assert.deepEqual(await response.json(), { error: "not found" });
         } else if (change === "inactive-original") {
-          await db.execute(
-            sql`update payroll_filing_accounts set is_active=false where id=${first} and org_id=${fx.orgId}`,
-          );
-          const response = await get();
+          await withBypassContext(() =>
+            db.execute(
+              sql`update payroll_filing_accounts set is_active=false where id=${first} and org_id=${fx.orgId}`,
+            ));
+          const response = await get(fx.orgId);
           assert.equal(response.status, 200);
           const body = await response.json();
           assert.ok(body.groups.length > 0);
           assert.equal(body.groups[0].filingAccount.id, first);
         } else {
-          await markLegacy(fx.orgId);
-          const response = await get();
+          await withBypassContext(() => markLegacy(fx.orgId));
+          const response = await get(fx.orgId);
           assert.equal(response.status, 200);
           const body = await response.json();
           assert.ok(body.groups.length > 0);
