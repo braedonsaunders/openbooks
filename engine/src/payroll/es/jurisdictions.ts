@@ -16,13 +16,10 @@
  * lands on a weekend — when one does, the communities may add a substitute
  * day, which is THEIR declaration, not this one's.
  *
- * `holidayPay` is the ET art. 37.2 rule itself: the day is paid at the normal
- * day's salary (`normal_day`). The `whenIrregular` arm is flagged honestly —
- * the ET states no varying-hours fallback (that lives in the convenios
- * colectivos, untranscribed), so the declaration carries an average-day
- * lookback as a marked placeholder pending convenio transcription, not as
- * statute. No premium is mandated at statute level (`multiplier: "1"`,
- * `plusHolidayPay: true`: the paid day plus the hours' normal pay).
+ * `holidayPay` is null: ET art. 37.2 mandates a paid, non-recoverable day,
+ * but the irregular-hours formula lives in convenios (untranscribed). A
+ * PLACEHOLDER average-day lookback would COMPUTE a number nobody sourced.
+ * Null refuses until a sourced formula lands — same posture as IT.
  */
 import type { PayrollJurisdiction } from "../packs.ts";
 
@@ -44,24 +41,6 @@ export const ES_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       { key: "inmaculada", name: "Inmaculada Concepción", rule: { kind: "fixed", month: 12, day: 8 }, observance: "none" },
       { key: "navidad", name: "Natividad del Señor", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
     ],
-    holidayPay: [
-      {
-        effectiveFrom: null,
-        effectiveTo: null,
-        rule: {
-          citation: "ET art. 37.2: fiestas laborales de carácter retribuido y no recuperable",
-          basis: {
-            kind: "normal_day",
-            // PLACEHOLDER, not statute: the ET states no varying-hours
-            // fallback — convenios colectivos govern it and are untranscribed.
-            whenIrregular: { kind: "average_day", lookbackDays: 30, counting: "worked" },
-          },
-          include: { overtime: false, vacationPay: false, holidayPay: false },
-          qualifying: { lastAndFirstScheduledShift: false },
-          premium: { multiplier: "1", plusHolidayPay: true },
-          lookbackEnds: { kind: "day_before" },
-        },
-      },
-    ],
+    holidayPay: null,
   },
 ];
