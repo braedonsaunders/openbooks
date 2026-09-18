@@ -44,6 +44,19 @@ const BE_VAT_PERIODIC_2026: TaxReturnPack = {
  * Consumption Tax Trends summary and the Microsoft box cross-reference
  * were dropped rather than blessed. A shorter FPS-sourced history beats a
  * longer one resting on a law firm's summary.
+ *
+ * The changeover is identified but not transcribable from here: the 21%
+ * rate applies from 1 January 1996 under the Loi du 22 décembre 1995
+ * (M.B. 30.12.1995), replacing 20.5% — sourced so far only to a course
+ * Code TVA, so UNVERIFIED at the gazette level. Two blocks: finance.belgium.be
+ * serves plain clients a JS/image-captcha challenge (curl) or an empty body
+ * (fetcher) as of 2026-09-18, so no deeper FPS history is fetchable; and the
+ * Moniteur belge host (ejustice.just.fgov.be, answers 200) is outside the
+ * wave4 approved primary-source list, which this shard may not edit. A
+ * FLEET-PROPOSE for that host is with Orchestrate; if approved, prepend a
+ * single {21, 1996-01-01} open row per code (12% and 6% are long-standing
+ * but their own origins still need gazette dates — do not backfill them
+ * from the 21% act).
  */
 export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
   code: "BE_INDIRECT_TAX",
