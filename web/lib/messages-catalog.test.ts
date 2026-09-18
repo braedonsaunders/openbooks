@@ -11,6 +11,7 @@ import {
   readFallbackManifest,
 } from './i18n-catalog-completeness.ts'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { COUNTRY_TAX_PACKS } from '@openbooks/engine/src/country-tax-packs/index.ts'
 
 /**
  * Structural guards on the translation catalogs.
@@ -625,6 +626,32 @@ test('partyless-control post warning ships localized in every locale', () => {
     assert.ok(value && value.trim(), `${locale} is missing ${key}`)
     assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
     assert.ok(value.includes('{accounts}'), `${locale} must keep the {accounts} interpolation`)
+  }
+})
+
+test('pack-declared tax filing notices resolve localized in every locale', () => {
+  // F-w4-001: the generic prepare panel branched on the literal `CA_GST34`
+  // code because packs had no notice channel. Packs now declare a
+  // `tax`-namespace catalog key instead — and an untranslated key renders as
+  // its raw path, so every declared key must exist and be localized. Keys
+  // derive from the packs (not a pinned list) so a new pack notice without
+  // translations fails, and removing the last declaration fails too.
+  const keys = COUNTRY_TAX_PACKS.flatMap((pack) =>
+    pack.returnPacks.flatMap((form) => (form.noticeKey ? [`tax.${form.noticeKey}`] : [])),
+  )
+  assert.ok(keys.length > 0, 'at least one return pack must declare a filing notice')
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    assert.ok(source.get(key), `en is missing pack-declared ${key}`)
+  }
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing pack-declared ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize pack-declared ${key}`)
+    }
   }
 })
 

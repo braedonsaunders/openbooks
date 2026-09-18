@@ -7,6 +7,7 @@ export const CANADA_RETURN_PACKS: readonly TaxReturnPack[] = [
     defaultFrequency: "quarterly", submissionChannel: "portal_manual", governmentFormat: "portal_entry",
     submissionUrl: "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/gst-hst-businesses/file-gst-hst-return/how-file.html",
     watermark: "Working copy — submit electronically through the government filing service",
+    noticeKey: "submission.gst34Notice",
     boxes: [
       { lineCode: "101", label: "Sales and other revenue", sign: 1, sequence: 10, basis: "taxable_base", glMap: "sales" },
       { lineCode: "103", label: "GST/HST collected or collectible", sign: -1, sequence: 20, basis: "tax_collected", glMap: "sales" },
