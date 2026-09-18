@@ -762,6 +762,15 @@
           "inps": "INPS a recolher (contribuições IVS de funcionário e empregador)"
         }
       },
+      "AU": {
+        "title": "Austr\u00e1lia \u2014 contas oficiais (ATO)",
+        "description": "Contas de passivo para os valores que o pacote da Austr\u00e1lia ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "slots": {
+          "payg": "PAYG a recolher (imposto de renda, Medicare + amortiza\u00e7\u00e3o STSL)",
+          "super": "Superannuation Guarantee a recolher (contribui\u00e7\u00e3o do empregador)",
+          "wcb": "Workers' compensation a recolher (pr\u00eamio do empregador)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

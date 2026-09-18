@@ -762,6 +762,15 @@
           "inps": "INPS por pagar (cotizaciones IVS de empleado y empleador)"
         }
       },
+      "AU": {
+        "title": "Australia \u2014 cuentas legales ATO",
+        "description": "Cuentas de pasivo para los montos que el paquete AU retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "payg": "PAYG por pagar (impuesto sobre la renta, Medicare + amortizaci\u00f3n STSL)",
+          "super": "Superannuation Guarantee por pagar (aportaci\u00f3n del empleador)",
+          "wcb": "Workers' compensation por pagar (prima del empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {
