@@ -17,7 +17,10 @@ test(
       const first = await provisionTaxPacks(target.orgId, selections);
       assert.deepEqual(first.packs, selections);
       assert.equal(first.jurisdictionsCreated, 5);
-      assert.equal(first.taxCodesCreated, 5);
+      // Five packs declare twelve codes: ES 3 (STD/RED/SUPERRED), IE 3
+      // (STD/RED/RED2), IT 3 (STD/RED10/RED4), NL 2 (STD/RED), SG 1 (GST).
+      // One-code-per-pack predates the multi-code pack declarations.
+      assert.equal(first.taxCodesCreated, 12);
       assert.equal(first.taxGroupsCreated, 5);
       assert.equal(first.registrationsCreated, 5);
 
@@ -25,6 +28,13 @@ test(
         const forms = (await db.execute(sql`
           select code from tax_return_forms
            where org_id = ${target.orgId} and code in ('ES_MODELO303', 'IT_LIPE', 'NL_OB', 'IE_VAT3', 'SG_GSTF5')
+           order by code
+        `)).rows as Array<{ code: string }>;
+        // The installer must create exactly the declared set: no fewer
+        // (a dropped reduced-rate code) and no more (a duplicated insert).
+        const declared = (await db.execute(sql`
+          select code from tax_codes
+           where org_id = ${target.orgId}
            order by code
         `)).rows as Array<{ code: string }>;
         const codes = (await db.execute(sql`
@@ -51,10 +61,24 @@ test(
             (select count(*)::int from tax_registrations where org_id = ${target.orgId} and is_active) as registrations,
             (select count(*)::int from tax_report_lines where org_id = ${target.orgId} and report_code in ('ES_MODELO303', 'IT_LIPE', 'NL_OB', 'IE_VAT3', 'SG_GSTF5')) as lines
         `)).rows[0] as { registrations: number; lines: number };
-        return { forms, codes, manifests, counts };
+        return { forms, codes, declared, manifests, counts };
       });
 
       assert.deepEqual(state.forms.map((row) => row.code), ["ES_MODELO303", "IE_VAT3", "IT_LIPE", "NL_OB", "SG_GSTF5"]);
+      assert.deepEqual(state.declared.map((row) => row.code), [
+        "ES-VAT-RED",
+        "ES-VAT-STD",
+        "ES-VAT-SUPERRED",
+        "IE-VAT-RED",
+        "IE-VAT-RED2",
+        "IE-VAT-STD",
+        "IT-VAT-RED10",
+        "IT-VAT-RED4",
+        "IT-VAT-STD",
+        "NL-VAT-RED",
+        "NL-VAT-STD",
+        "SG-GST",
+      ]);
       assert.deepEqual(state.codes.map((row) => [row.code, row.rateCount]), [
         ["ES-VAT-STD", 1],
         ["IE-VAT-STD", 17],
@@ -68,7 +92,10 @@ test(
       assert.equal(state.manifests.find((row) => row.country === "IE")?.standardRates, "complete");
       assert.equal(state.manifests.find((row) => row.country === "SG")?.standardRates, "complete");
       assert.equal(state.counts.registrations, 5);
-      assert.equal(state.counts.lines, 60);
+      // 60 statutory boxes plus 18 workpaper rows fanned out over the new
+      // reduced-rate codes (the OB_OUTPUT/OB_INPUT boxes sum all configured
+      // rates); every (report, line, code) triple is distinct.
+      assert.equal(state.counts.lines, 78);
 
       const second = await provisionTaxPacks(target.orgId, selections);
       assert.equal(second.jurisdictionsCreated, 0);
