@@ -38,8 +38,8 @@ import {
 import { GB_TAX_YEAR } from "./rates.ts";
 import { parseGbTaxCode } from "./tax-codes.ts";
 
-/** Regions whose income tax this engine computes end to end (rUK). */
-const GB_COMPUTED_REGIONS: readonly string[] = ["ENG", "WLS", "NIR"];
+/** Regions whose income tax this engine computes end to end (rUK + Scotland). */
+const GB_COMPUTED_REGIONS: readonly string[] = ["ENG", "WLS", "NIR", "SCT"];
 
 /** In-year sums from committed stubs, plus the record's start. */
 export interface GbPriorPeriod {
@@ -119,8 +119,8 @@ export async function computeGbStatutory(
   if (!GB_COMPUTED_REGIONS.includes(region)) {
     throw new PayrollPackError(
       `PAYE income tax withholding for ${region} is not implemented by the GB payroll pack: `
-      + "the engine computes England, Wales and Northern Ireland end to end; Scotland (SCT) "
-      + "prices against its own bands and is refused by name (see GB_REGIONS).",
+      + "the engine computes England, Wales, Northern Ireland and Scotland end to end "
+      + "(see GB_REGIONS).",
     );
   }
 
@@ -142,6 +142,19 @@ export async function computeGbStatutory(
     );
   }
   let code = parseGbTaxCode(rawCode);
+  // Scottish-taxpayer status follows the S-prefix code (main home in
+  // Scotland), so an S-code prices the Scottish bands in any region. The
+  // reverse — a non-Scottish code on an SCT-region run — would fall through
+  // to the rUK bands, wrong money for every Scottish employee, so it is
+  // refused by name. NT deducts nothing on any table and needs no gate.
+  if (region === "SCT" && code.kind !== "none" && !code.scottish) {
+    throw new PayrollPackError(
+      `Scottish income tax for SCT needs a Scottish S-prefix code on the P6/P9 coding notice: `
+      + `"${rawCode}" prices against the rUK bands and is refused by name for SCT — HMRC issues `
+      + "Scottish taxpayers an S-prefix code (S1257L, SBR, SD0, SD1, SD2, SD3), and the product "
+      + "does not fall an S-less code through to the wrong table (see GB_REGIONS).",
+    );
+  }
   if (bool(notice?.answers.non_cumulative)) {
     if (code.kind === "flat" || code.kind === "none") {
       throw new PayrollPackError(

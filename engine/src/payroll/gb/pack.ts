@@ -18,15 +18,18 @@
  *   jurisdictions.ts header): no slot, no engine. The Employment Allowance
  *   (£10,500) is tenant-entered, never computed (conditional eligibility).
  * - fiscal tax year opening 6 April, named for the opening year (2026/27).
- * - four nations, three supported (ENG/WLS/NIR share the rUK bands);
- *   Scotland refused by name with its own reason.
+ * - four nations, four supported: ENG/WLS/NIR share the rUK bands and SCT
+ *   prices its own starter..top bands through the SCT edition (GB_SCT_BANDS),
+ *   selected by the S-prefix code — never by falling an S-less code through
+ *   to rUK (see compute-statutory.ts). NIC stays UK-wide for all four.
  * - starter checklist + P6/P9 coding-notice certificates (not a W-4 clone):
- *   the tax code rides the notice and the engine operates it — 1257L
- *   cumulative, W1/M1/X period-only, BR/D0/D1 flat, 0T/NT, K with its 50%
- *   cap — refusing every other code by name (see tax-codes.ts).
- * - `installable: true`: the 2026/27 rUK edition is transcribed, the engine
- *   reads it, and the parity harness (parity.test.ts) proves it to the
- *   penny against HMRC's own worked examples.
+ *   the tax code rides the notice and the engine operates it — 1257L/S1257L
+ *   cumulative, W1/M1/X period-only, BR/D0/D1 and SBR/SD0–SD3 flat, 0T/NT,
+ *   K with its 50% cap — refusing every other code by name (see tax-codes.ts).
+ * - `installable: true`: the 2026/27 rUK and SCT editions are transcribed,
+ *   the engine reads them, and the parity harnesses (parity.test.ts,
+ *   parity-scotland.test.ts) prove them to the penny against HMRC's own
+ *   worked examples.
  *
  * Wiring checklist for Orchestrate (one entry, no other file changes):
  *   1. Open `PayrollCountry` (packs.ts:190) to the registry keys.
@@ -121,8 +124,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   country: typeof GB_COUNTRY_CODE;
 } = {
   country: GB_COUNTRY_CODE,
-  // 2026/27 rUK edition transcribed (GB_TAX_YEARS), engine behind it,
-  // parity harness green: installable, pending registry wiring by Orchestrate.
+  // 2026/27 rUK + SCT editions transcribed (GB_TAX_YEARS), engine behind
+  // both, parity harnesses green: installable, pending registry wiring by
+  // Orchestrate.
   installable: true,
   statutorySlots: GB_STATUTORY_SLOTS,
   // PAYE and NIC are remitted to the HMRC Accounts Office on the employer's

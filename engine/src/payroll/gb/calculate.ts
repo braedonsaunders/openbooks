@@ -55,6 +55,7 @@ import {
   GB_NIC_WEEKLY,
   GB_PERSONAL_ALLOWANCE_ANNUAL,
   GB_RUK_BANDS,
+  GB_SCT_BANDS,
   GB_TAX_YEAR,
   GB_TAX_YEAR_END,
   GB_TAX_YEAR_START,
@@ -162,22 +163,42 @@ export function calculateGbNic(input: {
   return { employee: fromUnits(employee), employer: fromUnits(employer) };
 }
 
-/** rUK liability on taxable pay units: 20/40/45 across the transcribed bands. */
-export function gbRukLiabilityUnits(taxableUnits: bigint): bigint {
+/**
+ * Liability on taxable pay units across a transcribed band table. Every rate
+ * here is a whole percent parsed exactly (no float ever prices money); the
+ * only rounding in the pack is the penny rounding at the PAYE entry point.
+ */
+function gbBandedLiabilityUnits(
+  bands: readonly { upTo: string | null; rate: string }[],
+  taxableUnits: bigint,
+): bigint {
   if (taxableUnits <= 0n) return 0n;
   let remaining = taxableUnits;
   let liability = 0n;
   let lower = 0n;
-  for (const band of GB_RUK_BANDS) {
+  for (const band of bands) {
     if (remaining <= 0n) break;
     const width = band.upTo == null ? null : annualUnits(band.upTo) - lower;
     const inBand = width == null ? remaining : (remaining < width ? remaining : width);
-    const percent = BigInt(band.rate === "0.20" ? 20 : band.rate === "0.40" ? 40 : 45);
-    liability += (inBand * percent) / 100n;
+    liability += (inBand * wholePercent(band.rate)) / 100n;
     remaining -= inBand;
     if (width != null) lower += width;
   }
   return liability;
+}
+
+/** rUK liability on taxable pay units: 20/40/45 across the transcribed bands. */
+export function gbRukLiabilityUnits(taxableUnits: bigint): bigint {
+  return gbBandedLiabilityUnits(GB_RUK_BANDS, taxableUnits);
+}
+
+/**
+ * Scottish liability on taxable pay units: starter 19% through top 48%
+ * across GB_SCT_BANDS. NIC is untouched — it remains reserved and UK-wide,
+ * so only the PAYE entry point below selects this table (never the NIC one).
+ */
+export function gbSctLiabilityUnits(taxableUnits: bigint): bigint {
+  return gbBandedLiabilityUnits(GB_SCT_BANDS, taxableUnits);
 }
 
 /** HMRC tax-month number (1–12) for a pay date in 2026/27. Month 1 = 6 Apr–5 May. */
@@ -293,10 +314,17 @@ export function calculateGbPaye(input: {
     return { tax: "0.0000", periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
   if (code.kind === "flat") {
-    const percent = code.rate === "0.20" ? 20n : code.rate === "0.40" ? 40n : 45n;
-    const tax = gbRoundPennyUnits((period * percent) / 100n);
+    // The rate rides the code itself (Tables B): SBR/SD0–SD3 carry their
+    // Scottish rates, BR/D0/D1 their rUK ones — no table lookup here.
+    const tax = gbRoundPennyUnits((period * wholePercent(code.rate)) / 100n);
     return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
+  // Scottish-taxpayer status follows the S-prefix code (the employee's main
+  // home is in Scotland — letters page), so the CODE selects the band table:
+  // S1257L prices through the Scottish starter..top bands, everything else
+  // through rUK. The free-pay schedule is shared (£12,570 reserved
+  // allowance); only the bands differ. NIC never reaches this selector.
+  const bandLiability = code.scottish ? gbSctLiabilityUnits : gbRukLiabilityUnits;
 
   const cumulative = !code.nonCumulative;
   if (cumulative && periodsPerYear !== 12 && periodsPerYear !== 52) {
@@ -310,7 +338,7 @@ export function calculateGbPaye(input: {
     if (code.kind === "k") {
       const added = (toUnits(code.addedAnnual) / BigInt(periodsPerYear));
       const taxable = period + added;
-      let tax = gbRoundPennyUnits(gbRukLiabilityUnits(taxable < 0n ? 0n : taxable));
+      let tax = gbRoundPennyUnits(bandLiability(taxable < 0n ? 0n : taxable));
       const cap = gross / 2n;
       if (tax > cap) tax = cap;
       return {
@@ -322,7 +350,7 @@ export function calculateGbPaye(input: {
     const allowance = code.kind === "suffix" ? toUnits(code.allowanceAnnual) : 0n;
     const free = allowance / BigInt(periodsPerYear);
     const taxable = period - free;
-    const tax = gbRoundPennyUnits(gbRukLiabilityUnits(taxable < 0n ? 0n : taxable));
+    const tax = gbRoundPennyUnits(bandLiability(taxable < 0n ? 0n : taxable));
     return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
 
@@ -332,7 +360,7 @@ export function calculateGbPaye(input: {
     const addedToDate = (addedAnnual * BigInt(elapsed)) / BigInt(periodsPerYear);
     const addedPeriod = addedToDate - priorAdded;
     const cumTaxable = priorPay + period + addedToDate;
-    const cumLiability = gbRoundPennyUnits(gbRukLiabilityUnits(cumTaxable < 0n ? 0n : cumTaxable));
+    const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable));
     let due = cumLiability - priorPaid;
     const cap = gross / 2n;
     if (due > cap) due = cap;
@@ -347,7 +375,7 @@ export function calculateGbPaye(input: {
     : cumulativeFreePayUnits(periodsPerYear, elapsed);
   const cumPay = priorPay + period;
   const cumTaxable = cumPay - free;
-  const cumLiability = gbRoundPennyUnits(gbRukLiabilityUnits(cumTaxable < 0n ? 0n : cumTaxable));
+  const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable));
   const due = cumLiability - priorPaid;
   return {
     tax: fromUnits(due),
