@@ -12,17 +12,19 @@ import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
+import { computeDeStatutory } from "./compute-statutory.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
 /**
- * Germany payroll country pack — SKELETON (not installable).
+ * Germany payroll country pack — installable for 2026.
  *
- * Declares the statutory set from primary sources (EStG, SGB III/V/VI/VII/XI,
- * Solidaritätszuschlaggesetz, Aufwendungsausgleichsgesetz) with NO transcribed
- * tables: `installable` is false, `taxYears.editions` is empty, and
- * `computeStatutory` refuses every pay date by name until the 2026 BMF
- * Programmablaufplan (BMF-Schreiben vom 12.11.2025) and the 2026 SV
- * Rechengrößen are transcribed.
+ * The 2026 BMF Programmablaufplan für den Lohnsteuerabzug (BMF-Schreiben vom
+ * 12.11.2025, Stand 12.11.2025 endgültig) is implemented in pap.ts (exact
+ * integer math, 516/516 Prüftabellen cells), the 2026 SV Rechengrößen and
+ * rates are transcribed in rates.ts, and computeStatutory wires the two
+ * together: Lohnsteuer, Solidaritätszuschlag, Kirchenlohnsteuer (8% BY/BW,
+ * 9% elsewhere, where the ELStAM Konfession is set) and the four SV branches
+ * with their Beitragsbemessungsgrenzen, monthly payroll only.
  *
  * Typed as `Omit<PayrollCountryPack, "country"> & { country: "DE" }` because
  * `PayrollCountry` is still `"CA" | "US"` (packs.ts:190) — see
@@ -30,18 +32,10 @@ import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
  * registers unchanged once Orchestrate opens the union.
  */
 
-const DE_UNTRANSCRIBED =
-  "DE payroll pack: tax year 2026 is not transcribed — the BMF "
-  + "Programmablaufplan für den Lohnsteuerabzug 2026 (BMF-Schreiben vom "
-  + "12.11.2025) and the 2026 SV Rechengrößen "
-  + "(Sozialversicherungs-Rechengrößenverordnung 2026) have not been "
-  + "transcribed into engine/src/payroll/de/.";
-
-const DE_KIST_REFUSAL =
-  "Kirchenlohnsteuer is not withheld by this pack: it is assessed per Land "
-  + "from the employee's ELStAM confession key (8% in Bayern and "
-  + "Baden-Württemberg, 9% elsewhere) on the Lohnsteuer base, and the base "
-  + "itself is not transcribed.";
+const DE_YEAR_REFUSAL =
+  "DE payroll pack: only tax year 2026 is transcribed (BMF "
+  + "Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom "
+  + "12.11.2025, plus SVRV 2026).";
 
 /** The 16 Bundesländer — every code an employee may legitimately carry. */
 const DE_LAENDER: readonly { code: string; name: string }[] = [
@@ -66,13 +60,13 @@ const DE_LAENDER: readonly { code: string; name: string }[] = [
 const DE_REGION_COVERAGE: PayrollRegionCoverage = {
   label: "Land",
   known: DE_LAENDER.map((land) => land.code),
-  // Nothing is computed end to end: the 2026 Programmablaufplan is not
-  // transcribed. Every Land is refused by name until it is.
-  supported: [],
+  // Lohnsteuer follows the federal PAP (no Land publishes its own tables),
+  // and the engine implements the per-Land rules (KiSt 8/9 split, Sachsen PV)
+  // — so every Land is supported end to end.
+  supported: DE_LAENDER.map((land) => land.code),
   unsupportedReason:
     "Lohnsteuer withholding for {region} is not implemented by the DE payroll "
-    + "pack — the 2026 BMF Programmablaufplan (BMF-Schreiben vom 12.11.2025) "
-    + "is not transcribed. " + DE_KIST_REFUSAL,
+    + "pack. " + DE_YEAR_REFUSAL,
 };
 
 function deJurisdiction(code: string, name: string): PayrollJurisdiction {
@@ -162,25 +156,77 @@ const DE_ELSTAM: PayrollCertificate = {
       min: "0",
       help: "Annual addition amount the Finanzamt set under §39a EStG.",
     },
+    {
+      key: "faktor",
+      label: "Faktor (§39f EStG)",
+      kind: "amount",
+      decimals: 3,
+      min: "0.001",
+      max: "1.000",
+      default: "1.000",
+      help: "Faktor for the Steuerklasse IV Faktorverfahren (EStG §39f), three "
+        + "decimals. Only valid with Steuerklasse IV; 1.000 means no Faktorverfahren.",
+    },
+  ],
+};
+
+/**
+ * The employer-collected PV child proof: Nachweis der Kinder für den
+ * Pflegeversicherungs-Abschlag (§55 Abs. 3 SGB XI, PUEG Nachweispflicht).
+ * NOT ELStAM — ELStAM carries no PV child data, and the
+ * Kinderfreibetragszähler (halves per parent) cannot be mapped onto PV
+ * children, so the employer enters what their records show. Without it the
+ * engine refuses (compute-statutory.ts) rather than assuming childlessness.
+ */
+const DE_PV_NACHWEIS: PayrollCertificate = {
+  key: "de_pv_nachweis",
+  form: "Nachweis der Kinder (PV-Abschlag)",
+  label: "Kindernachweis für die Pflegeversicherung",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "§55 Abs. 3 SGB XI (Beitragszuschlag/Abschläge); §58 Abs. 1 SGB XI",
+  summary:
+    "The employer's record of the employee's children relevant to the "
+    + "Pflegeversicherung childless surcharge and per-child discounts. "
+    + "Collected from the employee (PUEG Nachweispflicht), not retrieved "
+    + "from ELStAM.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "kinderlosenzuschlag",
+      label: "Beitragszuschlag für Kinderlose",
+      kind: "flag",
+      default: "false",
+      help: "Set when the employee is 23 or older with no eligible children "
+        + "(§55 Abs. 3 Satz 1 SGB XI): the 0,6-point surcharge applies.",
+    },
+    {
+      key: "abschlag_kinder",
+      label: "Abschlag Kinder (2.–5. Kind)",
+      kind: "count",
+      min: "0",
+      max: "4",
+      default: "0",
+      help: "Number of discount children (second to fifth child), 0–4: each "
+        + "lowers the employee PV share by 0,25 points (§55 Abs. 3 SGB XI).",
+    },
   ],
 };
 
 const DE_CERTIFICATES: PayrollPackCertificates = {
   country: "DE",
-  certificates: [DE_ELSTAM],
+  certificates: [DE_ELSTAM, DE_PV_NACHWEIS],
 };
 
 function deWithholdingRegion(code: string, name: string): PayrollRegionWithholding {
   return {
     region: code,
     label: `${name} Lohnsteuer`,
-    implemented: false,
-    unimplementedReason:
-      `the 2026 BMF Programmablaufplan (BMF-Schreiben vom 12.11.2025) is not `
-      + `transcribed into engine/src/payroll/de/. ${DE_KIST_REFUSAL}`,
+    implemented: true,
     // Lohnsteuer is withheld by the employer on wages earned in Germany
-    // whatever the employee's residence (EStG §38) — but the engine computes
-    // nothing yet, so residence-side rules are honestly unknown.
+    // whatever the employee's residence (EStG §38). Kirchenlohnsteuer rides
+    // the same withholding where the ELStAM Konfession is set (8% BY/BW,
+    // 9% elsewhere, on the PAP BK base).
     taxesNonresidentWages: true,
     residentWithholding: "unknown",
     residentWithholdingImplemented: false,
@@ -216,10 +262,15 @@ function dePackFilings() {
         cadence: "annual" as const,
         description:
           "The employer's annual electronic wage-tax certificate per employee, "
-          + "transmitted via ELSTER (EStG §41b). Population is refused until "
-          + "the 2026 tables are transcribed.",
+          + "transmitted via ELSTER (EStG §41b).",
         population: (): Promise<PayrollFilingData> =>
-          Promise.reject(new Error(DE_UNTRANSCRIBED)),
+          Promise.reject(
+            new Error(
+              "ELSTER transmission of the Lohnsteuerbescheinigung is not "
+              + "implemented by the DE payroll pack — the 2026 monthly engine "
+              + "computes, but year-end population is a separate filing feature.",
+            ),
+          ),
         parseRowId: (): null => null,
         downloadRefusal:
           "ELSTER transmission of the Lohnsteuerbescheinigung is not "
@@ -239,7 +290,7 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   country: "DE";
 } = {
   country: "DE",
-  installable: false,
+  installable: true,
   statutoryCurrency: "EUR",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },
   regions: DE_REGION_COVERAGE,
@@ -280,6 +331,16 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
         {
           code: "SOLI", name: "Solidaritätszuschlag", systemKey: "solidaritaetszuschlag",
           kind: "deduction", sequence: 115,
+          assessedOn: "taxable_income", remittance: "tax_authority",
+        },
+      ],
+    },
+    {
+      key: "kirchenlohnsteuer",
+      components: [
+        {
+          code: "KIST", name: "Kirchenlohnsteuer", systemKey: "kirchenlohnsteuer",
+          kind: "deduction", sequence: 117,
           assessedOn: "taxable_income", remittance: "tax_authority",
         },
       ],
@@ -375,9 +436,6 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       ],
     },
   ],
-  // Zero parameters: a skeleton refuses before reading anything, so there is
-  // no context to name. (A zero-arg function satisfies the one-arg signature.)
-  computeStatutory: (): Promise<Record<string, string>> =>
-    Promise.reject(new Error(DE_UNTRANSCRIBED)),
+  computeStatutory: computeDeStatutory,
   statutoryEngineLabel: "Programmablaufplan (EStG §39b)",
 };
