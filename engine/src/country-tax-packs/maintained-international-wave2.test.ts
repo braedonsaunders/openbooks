@@ -125,6 +125,7 @@ test("second-wave maintained sources remain restricted to official government an
     "sede.agenciatributaria.gob.es",
     "www.gazzettaufficiale.it",
     "def.finanze.it",
+    "www.agenziaentrate.gov.it",
     "www1.agenziaentrate.gov.it",
     "www.belastingdienst.nl",
     "download.belastingdienst.nl",

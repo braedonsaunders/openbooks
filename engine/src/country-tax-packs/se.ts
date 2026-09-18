@@ -65,7 +65,7 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
     {
       id: "skatteverket_vat_return_english",
       title: "Skatteverket — VAT return English translation: box labels for sections A, B, F, G",
-      url: "http://www.skatteverket.se/download/18.7be5268414bea064694a4b5/1430837196910/4700-engelsk-oversattning-moms-2015.pdf",
+      url: "https://www.skatteverket.se/download/18.7be5268414bea064694a4b5/1430837196910/4700-engelsk-oversattning-moms-2015.pdf",
       asOf: "2026-09-18",
     },
     {
