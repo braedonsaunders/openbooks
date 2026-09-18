@@ -11,7 +11,7 @@ const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/d
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { requestDocumentVoid } = await import('@openbooks/engine/src/document-void.ts')
-const { runRevenueRecognition } = await import('@openbooks/engine/src/revenue-recognition.ts')
+const { runRevenueRecognition, cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/src/revenue-recognition.ts')
 const { customerData } = await import('./customer-data')
 const { profitAndLoss } = await import('../reports/statements')
 
@@ -73,17 +73,20 @@ async function postSale(
  * bridge explains the gap: invoiced − recognized =
  * tax + credits + (timingDeferred − timingRecognized) + voids + other.
  *
- * Four customers pin the four bridge stories plus the residual, and the org
- * total ties to the P&L resolver (the unification proof — one definition of
- * revenue, read by both surfaces).
+ * Five customers pin the bridge stories plus the residual — taxed invoice with
+ * a partial credit, deferred subscription recognized in-period, cross-period
+ * document void, party-tagged manual journal, and a cross-period recognition
+ * cancellation (f6's route; the mirror attributes through the schedule
+ * back-link) — and the org total ties to the P&L resolver in both months
+ * (the unification proof — one definition of revenue, read by both surfaces).
  */
 test('customer revenue reconciles invoiced billings to ledger recognized revenue', { skip: !DB }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Recon Controller', 'admin'))
-    const [custA, custB, custC, custD] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+    const [custA, custB, custC, custD, custE] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
     await withBypass(async () => {
-      for (const [id, name] of [[custA, 'Taxed'], [custB, 'Deferred'], [custC, 'Voided'], [custD, 'Manual']] as const) {
+      for (const [id, name] of [[custA, 'Taxed'], [custB, 'Deferred'], [custC, 'Voided'], [custD, 'Manual'], [custE, 'Cancelled']] as const) {
         await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${id}, ${scratch.orgId}, 'customer', ${name}, true, '{}'::jsonb)`)
       }
@@ -94,6 +97,9 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
       await db.execute(sql`insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${randomUUID()}, ${scratch.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal})`)
+      await db.execute(sql`insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${scratch.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal})`)
     })
 
     // A: plain 1000 + taxed 500/50 invoice, partial 200/20 credit memo.
@@ -115,6 +121,7 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
         where org_id = ${scratch.orgId} and id = ${scratch.recognitionRuleId}`)
     })
     await postSale(scratch, actor, { kind: 'customer_invoice', partyId: custB, amount: '1200', itemId: scratch.items.service })
+    const eJul = await postSale(scratch, actor, { kind: 'customer_invoice', partyId: custE, amount: '600', itemId: scratch.items.service })
     await withBypass(() => runRevenueRecognition(scratch.orgId, '2026-07-31', actor))
 
     // C: June 300 invoice voided into July, plus a small July invoice so the
@@ -147,6 +154,12 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
       await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${entry},
           posting_period_id = ${scratch.periodId} where id = ${doc}`)
     })
+
+    // E: 600 deferred subscription recognized in July, then cancelled in August
+    // (f6's route flips the July posting to reversed and mirrors in August).
+    // A small August invoice keeps E in the August billing population.
+    await postSale(scratch, actor, { kind: 'customer_invoice', partyId: custE, amount: '10', date: '2026-08-05' })
+    await withBypass(() => cancelRevenueRecognitionForInvoice({ documentId: eJul, orgId: scratch.orgId, actorId: actor, reason: 'Recon cancel test', reversalDate: '2026-08-15' }))
 
     // Reads through web readers run inside withOrgContext: importing a web
     // reader replaces the test bypass, so an unscoped read silently returns
@@ -191,9 +204,38 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     close(d.revenue, 85, 'D recognized includes the manual journal')
     close(d.recon.other, -75, 'D residual catches the manual income')
 
-    // Unification: CI recognized total ties to the P&L resolver exactly.
-    close(data.kpis.totalRevenue, Number(pnl.revenue), 'CI total ties to P&L revenue')
+    // E is absent in July: f6's cancellation also voids the invoice, so the
+    // voided document leaves the billing population entirely (same exclusion
+    // customer C pins). The whole cancellation story lands in August.
+    assert.ok(!byName.has('Cancelled'), 'E voided out of July')
+
+    // Unification: CI recognized total ties to the P&L resolver, modulo the
+    // known population edge F-p2-002 — E's reversed July posting (+600 in the
+    // P&L universe) has no CI row because the voided invoice left the
+    // doc-gated population. Pinned as E's seeded constant, not derived: any
+    // other gap fails loudly instead of hiding in a plug.
+    close(Number(pnl.revenue) - data.kpis.totalRevenue, 600, 'July gap is exactly E unattributed (F-p2-002)')
     close(data.kpis.totalInvoiced, 1550 + 1200 + 50 + 10, 'CI invoiced total')
+
+    // E in August: the recognition mirror (attributed through the schedule
+    // back-link — those legs carry no party) explains the whole gap. The
+    // invoice void mirror carries no income legs (the invoice was parked),
+    // so recognition timing is the entire story.
+    const AUG = { from: '2026-08-01', to: '2026-08-31', label: 'August 2026' }
+    const { aug, augPnl } = await withOrgContext(scratch.orgId, async () => ({
+      aug: await customerData(AUG, scratch.orgId, null),
+      augPnl: await profitAndLoss('2026-08-01', '2026-08-31', undefined, scratch.orgId),
+    }))
+    assert.equal(aug.rows.length, 1, 'only E billed in August')
+    const ea = aug.rows[0]!
+    const eb = ea.recon.tax + ea.recon.credits
+      + (ea.recon.timingDeferred - ea.recon.timingRecognized) + ea.recon.voids + ea.recon.other
+    close(ea.invoicedRevenue - ea.revenue, eb, 'E August bridge')
+    close(ea.invoicedRevenue, 10, 'E August invoiced')
+    close(ea.revenue, -590, 'E August recognized nets the mirror')
+    close(ea.recon.voids, 600, 'E August voids (mirror attributed)')
+    close(ea.recon.other, 0, 'E August other')
+    close(aug.kpis.totalRevenue, Number(augPnl.revenue), 'August CI ties to P&L')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

@@ -30,6 +30,12 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
  *       headline.
  *     * recon bridges them per customer: invoiced − recognized =
  *       tax + credits + (timingDeferred − timingRecognized) + voids + other.
+ *     Recognition cancellations attribute through the schedule
+ *     reversal_journal_entry_id back-link (both the flipped original and the
+ *     mirror land in voids); the mirror period ties to the P&L exactly.
+ *     Known edge (F-p2-002): a voided invoice's prior-period reversed
+ *     recognition has no population row, so the org total trails the P&L by
+ *     exactly those legs until the population rule learns ledger presence.
  *    Population, invoice counts, avg invoice value and first/last dates stay
  *    document-based (billing activity); every `revenue` roll-up (rows, KPIs,
  *    segments, tiers, monthly trend, cohorts) is recognized.
@@ -797,8 +803,14 @@ export async function customerData(
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
       left join documents d on d.id = e.source_document_id and d.org_id = ${orgId}
+      -- Schedules carry no party, so their legs attribute through the contract
+      -- customer — including cancellation mirrors, which link back through
+      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversed and posts the mirror with reverses_entry_id, so both land in
+      -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
-        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+        on (rsl.journal_entry_id = e.id or rsl.reversal_journal_entry_id = e.id)
+       and rsl.org_id = ${orgId}
        and e.origin = 'revenue_recognition'
       left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
       left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
@@ -827,8 +839,14 @@ export async function customerData(
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
+      -- Schedules carry no party, so their legs attribute through the contract
+      -- customer — including cancellation mirrors, which link back through
+      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversed and posts the mirror with reverses_entry_id, so both land in
+      -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
-        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+        on (rsl.journal_entry_id = e.id or rsl.reversal_journal_entry_id = e.id)
+       and rsl.org_id = ${orgId}
        and e.origin = 'revenue_recognition'
       left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
       left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
@@ -856,8 +874,14 @@ export async function customerData(
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
+      -- Schedules carry no party, so their legs attribute through the contract
+      -- customer — including cancellation mirrors, which link back through
+      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversed and posts the mirror with reverses_entry_id, so both land in
+      -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
-        on rsl.journal_entry_id = e.id and rsl.org_id = ${orgId}
+        on (rsl.journal_entry_id = e.id or rsl.reversal_journal_entry_id = e.id)
+       and rsl.org_id = ${orgId}
        and e.origin = 'revenue_recognition'
       left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
       left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
