@@ -322,7 +322,25 @@ export function compileInsightQuery(
       ? ` group by ${dimensions.map((_, i) => i + 1).join(', ')}`
       : ''
 
-  const orderBy = compileOrderBy(query, columns, source, isAggregate)
+  // Sort refs name output aliases, but authored plans (including the seeded
+  // dashboard cards) name the catalog FIELD — `sort: [{ref:'posting_date'}]`
+  // on a month-binned dimension. The binned alias (`posting_date_month`)
+  // never equals the field, so an alias-only lookup silently drops the sort
+  // and the query falls back to measure-desc: a twelve-month line renders in
+  // revenue order instead of calendar order. Resolve field keys to their
+  // output ordinal; aliases still win on collision.
+  const fieldOrd = new Map<string, number>()
+  if (isAggregate) {
+    dimensions.forEach((d, i) => {
+      if (!fieldOrd.has(d.field)) fieldOrd.set(d.field, i + 1)
+    })
+    measures.forEach((m, j) => {
+      if (m.agg !== 'count' && m.field && !fieldOrd.has(m.field))
+        fieldOrd.set(m.field, dimensions.length + j + 1)
+    })
+  }
+
+  const orderBy = compileOrderBy(query, columns, fieldOrd, source, isAggregate)
 
   const sql =
     `select ${selects.join(', ')}\n` +
@@ -338,14 +356,18 @@ export function compileInsightQuery(
 function compileOrderBy(
   query: InsightQuery,
   columns: ResultColumn[],
+  fieldOrd: Map<string, number>,
   source: AnalyticsSource,
   isAggregate: boolean,
 ): string {
   const byKey = new Map(columns.map((c, i) => [c.key, i + 1]))
   const parts: string[] = []
   for (const s of query.sort ?? []) {
-    const ord = byKey.get(s.ref)
-    if (!ord) continue // ignore refs that aren't in the output
+    // Output aliases first (existing plans keep meaning), then catalog field
+    // keys. Refs naming neither stay ignored: a stale ref on a stored plan
+    // must not break rendering — the default below still orders the rows.
+    const ord = byKey.get(s.ref) ?? fieldOrd.get(s.ref)
+    if (!ord) continue
     parts.push(`${ord} ${s.dir === 'asc' ? 'asc' : 'desc'} nulls last`)
   }
   if (parts.length > 0) return `\norder by ${parts.join(', ')}`

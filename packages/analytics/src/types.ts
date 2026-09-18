@@ -74,7 +74,8 @@ export type QueryFilter = {
 }
 
 export type QuerySort = {
-  /** An output alias (measure or dimension) to order by. */
+  /** An output alias, or a dimension/measure catalog field key, to order by.
+   *  Aliases win when both name a column. */
   ref: string
   dir: 'asc' | 'desc'
 }
