@@ -90,6 +90,15 @@ export const NAV_MODULES: NavModule[] = [
     group: 'my-work',
     requiredPermission: 'ap.approve',
   },
+  // The in-app inbox. Strictly self-scoped (your rows, your org), so it
+  // carries no permission — every signed-in person has one.
+  {
+    key: 'notifications',
+    href: '/notifications',
+    label: 'Notifications',
+    iconKey: 'bell',
+    group: 'my-work',
+  },
   {
     key: 'documents',
     href: '/documents',
@@ -858,7 +867,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 /** Canonical scan order inside each workspace. Kept separate from the module
  * declarations so the information architecture is reviewable in one place. */
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
-  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'notifications', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-leads',
