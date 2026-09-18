@@ -1,4 +1,5 @@
 import { resolveStatutoryRates } from "../statutory-rates.ts";
+import { CA_PACK_RATES } from "./rates.ts";
 
 /**
  * CA pack configuration. EHT is levied by four provinces at four rates above
@@ -12,7 +13,7 @@ export interface CaPayrollConfig {
 }
 
 export async function caPayrollConfig(orgId: string, taxYear: number): Promise<CaPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, "CA", taxYear);
+  const rates = await resolveStatutoryRates(orgId, CA_PACK_RATES, taxYear);
   return {
     eht: (region) => {
       const values = rates.values("ca_eht", { region });

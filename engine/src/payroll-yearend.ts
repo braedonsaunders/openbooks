@@ -18,7 +18,7 @@ import {
   type PayrollFilingIssue,
 } from "./payroll-filing-registry.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
-import { payrollTaxYearProblem } from "./payroll/tax-years.ts";
+import { payrollTaxYearProblem } from "./payroll/packs.ts";
 import { PayrollError } from "./payroll-error.ts";
 
 /**

@@ -4,20 +4,18 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
 import { installedPayrollCountries, payrollStatutoryRateGaps } from '@openbooks/engine/src/payroll-readiness.ts'
-import { PayrollPackError, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
+import { PayrollPackError, packRates, payrollPack, statutoryRateSlot } from '@openbooks/engine/src/payroll/packs.ts'
 import { normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
   deleteStatutoryRate,
   listStatutoryRates,
-  packRates,
-  statutoryRateSlot,
   statutoryRateProblem,
   upsertStatutoryRate,
 } from '@openbooks/engine/src/payroll/statutory-rates.ts'
 import {
   payrollTaxYearCoverage,
   payrollTaxYearForDate,
-} from '@openbooks/engine/src/payroll/tax-years.ts'
+} from '@openbooks/engine/src/payroll/packs.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
@@ -240,8 +238,10 @@ export async function PUT(req: Request) {
   // The pack declaration is the only validator — scope, region, program type and
   // every field's scale and range come from it, exactly as filing-account
   // program types are validated against the pack's filing declaration.
+  const pack = payrollPack(parsed.country)
   const problem = statutoryRateProblem({
-    country: parsed.country,
+    rates: pack.statutoryRates,
+    regions: pack.regions,
     rateKey: parsed.rateKey,
     region: parsed.region,
     subRegion: parsed.subRegion,
@@ -260,7 +260,7 @@ export async function PUT(req: Request) {
     const saved = await upsertStatutoryRate({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
-      country: parsed.country,
+      rates: pack.statutoryRates,
       rateKey: parsed.rateKey,
       region: parsed.region,
       subRegion: parsed.subRegion,

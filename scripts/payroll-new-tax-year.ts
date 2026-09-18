@@ -47,8 +47,10 @@ import { dirname, join, resolve } from "node:path";
 import {
   declaredPayrollTaxYears,
   payrollTaxYearSupport,
-  type PayrollEditionScaffold,
-  type PayrollTaxYearSupport,
+} from "../engine/src/payroll/packs.ts";
+import type {
+  PayrollEditionScaffold,
+  PayrollTaxYearSupport,
 } from "../engine/src/payroll/tax-years.ts";
 
 /** This checkout — where a real rollover writes, and the `--root` default. */

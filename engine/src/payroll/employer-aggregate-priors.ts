@@ -104,7 +104,11 @@ export async function assessStubAggregateLevies(input: {
       );
     }
   }
-  const rates = await resolveStatutoryRates(input.orgId, input.country, input.taxYear);
+  const rates = await resolveStatutoryRates(
+    input.orgId,
+    payrollPack(input.country).statutoryRates,
+    input.taxYear,
+  );
   const wanted = new Set<string>();
   for (const levy of leviesToAssess) {
     if (levy.rate.kind === "tenant_slot") wanted.add(levy.rate.slotKey);

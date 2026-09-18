@@ -9,18 +9,20 @@ import { ratesForPayDate as caRatesForPayDate } from "./payroll/canada/rates.ts"
 import { qcRatesForPayDate } from "./payroll/canada/quebec/rates.ts";
 import { ratesForPayDate as usRatesForPayDate } from "./payroll/us/rates.ts";
 import {
-  assertPayrollTaxYearSupported,
   payrollDraftTaxYears,
   payrollSupportedTaxYears,
+  type PayrollTaxYearSupport,
+} from "./payroll/tax-years.ts";
+import {
+  assertPayrollTaxYearSupported,
+  PAYROLL_COUNTRY_PACKS,
   payrollTaxYearCoverage,
   payrollTaxYearForDate,
   payrollTaxYearProblem,
   payrollTaxYearSupport,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
-  type PayrollTaxYearSupport,
-} from "./payroll/tax-years.ts";
-import { PAYROLL_COUNTRY_PACKS } from "./payroll/packs.ts";
+} from "./payroll/packs.ts";
 import { unfilledPaths, UNFILLED } from "./payroll/unfilled.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -49,23 +51,23 @@ test("the declaration agrees with what the engines will actually calculate", () 
   // The declaration is only worth having if it cannot drift from the tables. It
   // is derived from the edition lists themselves, so this asserts the round trip
   // rather than a duplicated literal.
-  for (const year of payrollSupportedTaxYears("CA")) {
+  for (const year of payrollSupportedTaxYears(payrollTaxYearSupport("CA"))) {
     assert.equal(caRatesForPayDate(`${year}-01-15`).year, year);
   }
-  for (const year of payrollSupportedTaxYears("US")) {
+  for (const year of payrollSupportedTaxYears(payrollTaxYearSupport("US"))) {
     assert.equal(usRatesForPayDate(`${year}-01-15`).year, year);
   }
-  for (const year of payrollSupportedTaxYears("CA", "QC")) {
+  for (const year of payrollSupportedTaxYears(payrollTaxYearSupport("CA"), "QC")) {
     assert.equal(qcRatesForPayDate(`${year}-01-15`).year, year);
   }
   // And a year outside it throws, from the engine, exactly as before.
-  const beyond = Math.max(...payrollSupportedTaxYears("CA")) + 1;
+  const beyond = Math.max(...payrollSupportedTaxYears(payrollTaxYearSupport("CA"))) + 1;
   assert.throws(() => caRatesForPayDate(`${beyond}-01-15`));
   assert.throws(() => usRatesForPayDate(`${beyond}-01-15`));
 });
 
 test("an unloaded year is named, with the year, the pack and the fix", () => {
-  const beyond = Math.max(...payrollSupportedTaxYears("CA")) + 1;
+  const beyond = Math.max(...payrollSupportedTaxYears(payrollTaxYearSupport("CA"))) + 1;
   const problem = payrollTaxYearProblem("CA", beyond);
   assert.equal(problem?.kind, "missing");
   assert.match(problem!.message, new RegExp(`${beyond} statutory tables are not loaded for CA`));
@@ -94,12 +96,12 @@ test("a region with its own tables can lag the country's, and says so", () => {
   };
   registerPayrollTaxYears(support);
   try {
-    assert.deepEqual(payrollSupportedTaxYears(country), [2026, 2027]);
-    assert.deepEqual(payrollSupportedTaxYears(country, "R1"), [2026]);
-    assert.deepEqual(payrollSupportedTaxYears(country, "R2"), [2026, 2027]);
+    assert.deepEqual(payrollSupportedTaxYears(support), [2026, 2027]);
+    assert.deepEqual(payrollSupportedTaxYears(support, "R1"), [2026]);
+    assert.deepEqual(payrollSupportedTaxYears(support, "R2"), [2026, 2027]);
     // A scaffolded-but-unfilled year is a LOUDER refusal than a missing one: the
     // module exists, so anything checking mere presence would have said yes.
-    assert.deepEqual(payrollDraftTaxYears(country, "R1"), [2027]);
+    assert.deepEqual(payrollDraftTaxYears(support, "R1"), [2027]);
     const drafted = payrollTaxYearProblem(country, 2027, "R1");
     assert.equal(drafted?.kind, "draft");
     assert.match(drafted!.message, /scaffolded but not filled in/);
@@ -108,7 +110,7 @@ test("a region with its own tables can lag the country's, and says so", () => {
   } finally {
     unregisterPayrollTaxYears(country);
   }
-  assert.throws(() => payrollSupportedTaxYears(country), /declares no statutory tax years/);
+  assert.throws(() => payrollTaxYearSupport(country), /declares no statutory tax years/);
 });
 
 test("the tax year of a date comes from the pack's own year definition", () => {
@@ -190,7 +192,7 @@ test(
   "a run in a year whose tables are not loaded is a named readiness BLOCKER",
   { skip: !DB },
   async () => {
-    const unloaded = Math.max(...payrollSupportedTaxYears("CA")) + 1;
+    const unloaded = Math.max(...payrollSupportedTaxYears(payrollTaxYearSupport("CA"))) + 1;
     const run = await seedRunForYear(unloaded);
     try {
       // The whole point: the operator learns this from the pre-flight, with the
@@ -261,7 +263,7 @@ test(
         update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
           payroll: { countries: ["CA", "US"] },
         })}::jsonb where id = ${org.orgId}`);
-      const unloaded = Math.max(...payrollSupportedTaxYears("US")) + 1;
+      const unloaded = Math.max(...payrollSupportedTaxYears(payrollTaxYearSupport("US"))) + 1;
       const sections = await orgYearEndFilings(org.orgId, unloaded);
       assert.ok(sections.length > 0);
       for (const section of sections) {

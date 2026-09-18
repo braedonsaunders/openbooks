@@ -4,8 +4,10 @@ import {
   assertPayrollRegionSupported,
   packStatutoryComponents,
   PAYROLL_COUNTRY_PACKS,
+  packRates,
   payrollCountry,
   payrollPack,
+  payrollTaxYearSupport,
   resolveEmployeePayrollContext,
   resolvePayrollRunContext,
   statutoryAssessment,
@@ -13,8 +15,6 @@ import {
   type PayrollRunContext,
 } from "./payroll/packs.ts";
 import { declaredPayrollFilings } from "./payroll-filing-registry.ts";
-import { packRates } from "./payroll/statutory-rates.ts";
-import { payrollTaxYearSupport } from "./payroll/tax-years.ts";
 
 /**
  * A third country pack is expressible: declaring it in the registry is the

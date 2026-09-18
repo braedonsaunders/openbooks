@@ -752,6 +752,16 @@
           "usc": "USC por pagar (cargo separado, no impuesto sobre la renta)"
         }
       },
+      "IT": {
+        "title": "Italia — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete IT retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "irpef": "IRPEF por pagar (impuesto nacional sobre la renta)",
+          "addizionale_regionale": "Addizionale regionale por pagar (recargo regional del IRPEF)",
+          "addizionale_comunale": "Addizionale comunale por pagar (recargo municipal del IRPEF)",
+          "inps": "INPS por pagar (cotizaciones IVS de empleado y empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

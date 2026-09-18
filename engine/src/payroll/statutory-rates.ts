@@ -2,7 +2,18 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "../db.ts";
 import { cmp, mulDecimal, normalizeDecimal } from "../money.ts";
-import { PAYROLL_COUNTRY_PACKS, PayrollPackError, payrollPack } from "./packs.ts";
+import { PayrollPackError } from "./payroll-error.ts";
+import type { PayrollRegionCoverage } from "./packs.ts";
+
+// This module never imports `./packs.ts` at runtime — not even inside
+// function bodies reached only after init. `packs.ts` imports every country
+// pack to build the registry, and pack engines import THIS module, so a
+// runtime edge back would close a load-order-dependent cycle that crashes
+// with "Cannot access '<CC>_PAYROLL_PACK' before initialization" whenever a
+// pack is entered first (F-reg-003). The registry is handed in as data:
+// `PayrollPackRates` and `PayrollRegionCoverage` declarations resolved by the
+// caller, where the country is already known. Type-only imports are erased,
+// so they are safe.
 
 /**
  * Statutory rates that are NOT constants — and where each one lives.
@@ -143,41 +154,24 @@ export interface PayrollPackRates {
 }
 
 // ---------------------------------------------------------------------------
-// The registry
+// Lookup over a handed-in declaration
 // ---------------------------------------------------------------------------
+//
+// `declaredPackRates()`, `packRates()` and `statutoryRateSlot()` used to live
+// here, reading the pack registry. A function whose whole job is "ask every
+// pack" belongs with the registry, so they moved to `packs.ts` (F-reg-003).
+// What stays here takes the pack's declaration as a parameter instead.
 
-/**
- * Every pack's rate declaration, read off the pack registry — the same shape
- * as `declaredPayrollFilings()`. The declarations are authored in each pack's
- * own rate module beside the constants they sit next to and carried on
- * `PayrollCountryPack.statutoryRates`; a closed list here would be a second
- * registry a new pack has to edit after declaring itself.
- */
-export function declaredPackRates(): PayrollPackRates[] {
-  return Object.values(PAYROLL_COUNTRY_PACKS).map((pack) => pack.statutoryRates);
-}
-
-/** A pack's rate declaration, or a refusal naming the packs that have one. */
-export function packRates(country: string): PayrollPackRates {
-  const declared = declaredPackRates().find((entry) => entry.country === country);
-  if (!declared) {
-    throw new PayrollPackError(
-      `the ${country || "(unset)"} payroll pack declares no statutory rate slots — a pack must `
-      + "declare which of its statutory rates are tenant-entered and at what scope. Declared for: "
-      + (declaredPackRates().map((entry) => entry.country).join(", ") || "none"),
-    );
-  }
-  return declared;
-}
-
-/** One slot, or a refusal listing what the pack declares. */
-export function statutoryRateSlot(country: string, slotKey: string): PayrollStatutoryRateSlot {
-  const pack = packRates(country);
-  const slot = pack.slots.find((declared) => declared.key === slotKey);
+/** One slot of a handed-in rate declaration, or a refusal listing what it declares. */
+export function statutoryRateSlotIn(
+  rates: PayrollPackRates,
+  slotKey: string,
+): PayrollStatutoryRateSlot {
+  const slot = rates.slots.find((declared) => declared.key === slotKey);
   if (!slot) {
     throw new PayrollPackError(
-      `the ${country} payroll pack declares no "${slotKey}" statutory rate — it declares `
-      + (pack.slots.map((declared) => declared.key).join(", ") || "none"),
+      `the ${rates.country} payroll pack declares no "${slotKey}" statutory rate — it declares `
+      + (rates.slots.map((declared) => declared.key).join(", ") || "none"),
     );
   }
   return slot;
@@ -272,7 +266,13 @@ export function canonicalStatutoryRateValues(
  * Returns the problem as a sentence, or null.
  */
 export function statutoryRateProblem(input: {
-  country: string;
+  /**
+   * The pack's rate declaration and region declaration, resolved by the
+   * caller where the country is already known (F-reg-003: this module must
+   * not reach back into the registry for them).
+   */
+  rates: PayrollPackRates;
+  regions: PayrollRegionCoverage;
   rateKey: string;
   region: string | null;
   subRegion?: string | null;
@@ -281,9 +281,11 @@ export function statutoryRateProblem(input: {
   /** The named filing account, when one is named, for the cross-checks. */
   account?: { country: string; programType: string; stateCode: string | null } | null;
 }): string | null {
+  const { rates, regions } = input;
+  const country = rates.country;
   let slot: PayrollStatutoryRateSlot;
   try {
-    slot = statutoryRateSlot(input.country, input.rateKey);
+    slot = statutoryRateSlotIn(rates, input.rateKey);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -293,36 +295,35 @@ export function statutoryRateProblem(input: {
   const hasRegion = input.region != null && input.region !== "";
   if (slot.scope === "org") {
     if (hasRegion) {
-      return `${slot.label} is declared org-wide by the ${input.country} pack — it carries no `
+      return `${slot.label} is declared org-wide by the ${country} pack — it carries no `
         + "region. Remove the region, or declare the slot per region in the pack.";
     }
   } else {
     if (!hasRegion) {
-      const { regions } = payrollPack(input.country);
       return `${slot.label} varies by ${regions.label} — name the ${regions.label} it applies to`;
     }
-    const problem = regionProblem(input.country, slot, input.region!);
+    const problem = regionProblem(country, slot, input.region!, regions);
     if (problem) return problem;
   }
   const hasSubRegion = input.subRegion != null && input.subRegion !== "";
   if (slot.scope === "sub_region") {
     if (!hasSubRegion) {
-      return `${slot.label} varies by taxing jurisdiction inside the ${payrollPack(input.country).regions.label}`
+      return `${slot.label} varies by taxing jurisdiction inside the ${regions.label}`
         + " — name the jurisdiction it applies to";
     }
   } else if (hasSubRegion) {
-    return `${slot.label} is not assigned per sub-jurisdiction by the ${input.country} pack — `
+    return `${slot.label} is not assigned per sub-jurisdiction by the ${country} pack — `
       + "remove it, or declare the slot at sub_region scope.";
   }
   if (slot.scope !== "filing_account" && input.filingAccountId) {
-    return `${slot.label} is not assigned per filing account by the ${input.country} pack — `
+    return `${slot.label} is not assigned per filing account by the ${country} pack — `
       + "it applies to every account. Remove the account, or declare the slot per account.";
   }
   if (input.filingAccountId) {
     const account = input.account;
     if (!account) return "the named payroll filing account does not exist";
-    if (account.country !== input.country) {
-      return `the named filing account files under ${account.country}, not ${input.country}`;
+    if (account.country !== country) {
+      return `the named filing account files under ${account.country}, not ${country}`;
     }
     if (slot.programType && account.programType !== slot.programType) {
       return `${slot.label} is held by a ${slot.programType} account — the named account is a `
@@ -339,8 +340,8 @@ function regionProblem(
   country: string,
   slot: PayrollStatutoryRateSlot,
   region: string,
+  regions: PayrollRegionCoverage,
 ): string | null {
-  const { regions } = payrollPack(country);
   if (!regions.known.includes(region)) {
     return `unknown ${country} ${regions.label} "${region}"`;
   }
@@ -409,7 +410,8 @@ export async function listStatutoryRates(
 export async function upsertStatutoryRate(input: {
   orgId: string;
   actorId: string;
-  country: string;
+  /** The pack's rate declaration, resolved by the caller (F-reg-003). */
+  rates: PayrollPackRates;
   rateKey: string;
   region: string | null;
   subRegion?: string | null;
@@ -417,7 +419,8 @@ export async function upsertStatutoryRate(input: {
   taxYear: number;
   values: Record<string, unknown>;
 }): Promise<{ id: string; values: Record<string, string> }> {
-  const slot = statutoryRateSlot(input.country, input.rateKey);
+  const slot = statutoryRateSlotIn(input.rates, input.rateKey);
+  const country = input.rates.country;
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
@@ -427,7 +430,7 @@ export async function upsertStatutoryRate(input: {
   // the otherwise-unlockable missing-row case. The row lock below then protects
   // the before-image for updates.
   const lockKey = [
-    input.orgId, input.country, input.rateKey, input.taxYear,
+    input.orgId, country, input.rateKey, input.taxYear,
     region ?? "", subRegion ?? "", input.filingAccountId ?? "",
   ].join("\u001f");
   return await inDbTransaction(async (tx) => {
@@ -435,7 +438,7 @@ export async function upsertStatutoryRate(input: {
       select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
     const existing = (await tx.execute<{ id: string; rate_values: Record<string, string> }>(sql`
       select id, rate_values from payroll_statutory_rates
-       where org_id = ${input.orgId} and country = ${input.country}
+       where org_id = ${input.orgId} and country = ${country}
          and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
          and region is not distinct from ${region}
          and sub_region is not distinct from ${subRegion}
@@ -455,7 +458,7 @@ export async function upsertStatutoryRate(input: {
         insert into payroll_statutory_rates
           (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
            rate_values, created_by, updated_by)
-        values (${id}, ${input.orgId}, ${input.country}, ${input.rateKey}, ${region}, ${subRegion},
+        values (${id}, ${input.orgId}, ${country}, ${input.rateKey}, ${region}, ${subRegion},
                 ${input.filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
                 ${input.actorId}, ${input.actorId})`);
     }
@@ -463,7 +466,7 @@ export async function upsertStatutoryRate(input: {
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
               ${JSON.stringify({
-                country: input.country, rateKey: input.rateKey, region, subRegion,
+                country: country, rateKey: input.rateKey, region, subRegion,
                 filingAccountId: input.filingAccountId, taxYear: input.taxYear,
                 before: before?.rate_values ?? null, after: values,
               })}::jsonb, ${input.actorId})`);
@@ -556,10 +559,11 @@ export interface StatutoryRateResolution {
  */
 export async function resolveStatutoryRates(
   orgId: string,
-  country: string,
+  /** The pack's rate declaration, resolved by the caller (F-reg-003). */
+  pack: PayrollPackRates,
   taxYear: number,
 ): Promise<StatutoryRateResolution> {
-  const pack = packRates(country);
+  const country = pack.country;
   const [rows, blobRes] = await Promise.all([
     listStatutoryRates(orgId, { country, taxYear }),
     db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
@@ -578,7 +582,7 @@ export function buildResolution(input: {
 }): StatutoryRateResolution {
   const { country, taxYear, pack, rows, legacy } = input;
   const resolve: StatutoryRateResolution["resolve"] = (slotKey, at = {}) => {
-    const slot = statutoryRateSlot(country, slotKey);
+    const slot = statutoryRateSlotIn(pack, slotKey);
     const region = slot.scope === "org" ? null : (at.region ?? null);
     const subRegion = slot.scope === "sub_region" ? (at.subRegion ?? null) : null;
     const accountId = at.filingAccountId ?? null;

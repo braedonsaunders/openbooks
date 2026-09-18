@@ -752,6 +752,16 @@
           "usc": "USC应付（与所得税分开的累进收费）"
         }
       },
+      "IT": {
+        "title": "意大利 — 法定科目",
+        "description": "意大利包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "irpef": "IRPEF应付（国家个人所得税）",
+          "addizionale_regionale": "Addizionale regionale应付（IRPEF大区附加税）",
+          "addizionale_comunale": "Addizionale comunale应付（IRPEF市镇附加税）",
+          "inps": "INPS应付（雇员和雇主IVS缴款）"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {

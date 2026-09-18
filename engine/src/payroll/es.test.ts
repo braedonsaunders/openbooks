@@ -14,11 +14,11 @@ import { ES_PACK_RATES, ES_TAX_YEARS } from "./es/rates.ts";
 import { esPackFilings } from "./es/filings.ts";
 import { computeEsStatutory } from "./es/compute-statutory.ts";
 import {
+  PayrollPackError,
   payrollTaxYearProblem,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
-} from "./tax-years.ts";
-import { PayrollPackError } from "./packs.ts";
+} from "./packs.ts";
 
 test("ES pack exists as an uninstallable skeleton in euro on a calendar year", () => {
   assert.equal(ES_PAYROLL_PACK.country, "ES");

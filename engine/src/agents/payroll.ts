@@ -16,7 +16,7 @@ import {
   remittanceDueDateExplained,
   remittanceGroupUsesQuebecCalendar,
 } from "../payroll-remittance.ts";
-import { payrollTaxYearForDate } from "../payroll/tax-years.ts";
+import { payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

@@ -34,22 +34,28 @@ import {
   type PayrollPackWithholding,
   registerPayrollWithholdingSource,
 } from "./withholding-jurisdictions.ts";
-import type { PayrollPackRates } from "./statutory-rates.ts";
+import type { PayrollPackRates, PayrollStatutoryRateSlot } from "./statutory-rates.ts";
+import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts";
+import { taxYearFor } from "./tax-year-math.ts";
+
+// `taxYearFor` is re-exported so existing call sites keep working unchanged —
+// the arithmetic moved to the leaf `tax-year-math.ts` (F-reg-003).
+export { taxYearFor };
 import type {
   PayrollEmployerLevyContext,
   PayrollEmployerLevyFactors,
   PayrollStatutoryComputeContext,
 } from "./statutory-context.ts";
-import type { PayrollTaxYearSupport } from "./tax-years.ts";
+import type { PayrollTaxYearEdition, PayrollTaxYearSupport } from "./tax-years.ts";
 import { applyCaEmployerLevies } from "./canada/employer-levies.ts";
 import { computeCaStatutory } from "./canada/compute-statutory.ts";
 import { computeUsStatutory } from "./us/compute-statutory.ts";
 
-// Declared in a leaf module so the packs can import it without closing a
+// Declared in a leaf module so the packs can import them without closing a
 // cycle back through this file; re-exported here for existing call sites.
 // See payroll-error.ts for why.
-export { PayrollPackError } from "./payroll-error.ts";
-import { PayrollPackError } from "./payroll-error.ts";
+export { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
+import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 
 /**
  * Payroll country packs — the jurisdiction layer.
@@ -1351,16 +1357,11 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   FR: FR_PAYROLL_PACK,
   IE: IE_PAYROLL_PACK,
   AU: AU_PAYROLL_PACK,
-  // IT is written, proven (IRPEF 23/35/43, AdE Circ. 4/E Esempi 1-3 to the
-  // penny) and deliberately HELD OUT of the registry pending F-reg-003.
-  // Registering it closes a transitive cycle — packs.ts -> it/pack.ts ->
-  // it/compute-statutory.ts -> ../statutory-rates.ts -> packs.ts — because that
-  // helper imports runtime bindings from here. Every other pack dodges the same
-  // edge only by importing the generic layer TYPE-ONLY; Italy is the first pack
-  // to need actual behaviour (resolveStatutoryRates), which it is right to
-  // reuse rather than reimplement. Orchestrate is inverting the dependency so
-  // those consumers take the pack as a parameter; restore this line then.
-  // IT: IT_PAYROLL_PACK,
+  // F-reg-003 is fixed: the generic rate and tax-year modules take the pack's
+  // declarations as parameters instead of importing this registry, so Italy —
+  // the first pack to need actual behaviour (`resolveStatutoryRates`) rather
+  // than types — registers like every other pack.
+  IT: IT_PAYROLL_PACK,
   NL: NL_PAYROLL_PACK,
   ES: ES_PAYROLL_PACK,
 };
@@ -1423,7 +1424,6 @@ export function packStatutoryComponents(country: string): readonly PayrollStatut
  * both sides are somebody's configuration, and guessing which one is wrong is
  * how the wrong money got withheld in the first place.
  */
-export class PayrollJurisdictionError extends PayrollPackError {}
 
 /**
  * Every country pack an org may install, in registry order — packs flagged
@@ -1469,21 +1469,12 @@ export function payrollTaxYear(country: string, payDate: string): number {
 }
 
 /**
- * The arithmetic behind `payrollTaxYear`, separated so the MECHANISM is
- * testable against jurisdictions no pack has yet — an HMRC 6-April year and an
- * ATO 1-July year — rather than only against the two packs that both answer
- * "calendar" and would pass even if the whole thing were still hardcoded.
+ * The arithmetic behind `payrollTaxYear` lives in the leaf
+ * `tax-year-math.ts` (re-exported above) so the MECHANISM stays testable
+ * against jurisdictions no pack has yet — an HMRC 6-April year and an ATO
+ * 1-July year — without the generic date module reaching back into this
+ * registry (F-reg-003).
  */
-export function taxYearFor(definition: PayrollTaxYearDefinition, payDate: string): number {
-  const [year, month, day] = payDate.split("-").map(Number);
-  if (!year || !month || !day) {
-    throw new PayrollJurisdictionError(`invalid pay date "${payDate}"`);
-  }
-  const opensThisYear = month > definition.startMonth
-    || (month === definition.startMonth && day >= definition.startDay);
-  const openingYear = opensThisYear ? year : year - 1;
-  return definition.namedBy === "opening_year" ? openingYear : openingYear + 1;
-}
 
 /**
  * Refuse a region the pack cannot withhold for, distinguishing "does not
@@ -1512,6 +1503,188 @@ export function assertPayrollRegionSupported(country: string, region: string): v
 export function payrollRegionSupported(country: string, region: string): boolean {
   const { regions } = payrollPack(country);
   return regions.supported.includes(region);
+}
+
+// ---------------------------------------------------------------------------
+// Tax-year declarations, read off the pack registry
+// ---------------------------------------------------------------------------
+//
+// These lived in `tax-years.ts` and read this registry from there — the other
+// edge that closed the F-reg-003 cycle. They live here now; the pure coverage
+// arithmetic (`payrollSupportedTaxYears`, `payrollDraftTaxYears`) stays in
+// `tax-years.ts` and takes the declaration as a parameter.
+
+/**
+ * Declarations registered beyond the packs (tests, an out-of-tree pack).
+ * Everything else is read off the pack registry below.
+ */
+const EXTRA_PAYROLL_TAX_YEARS = new Map<string, PayrollTaxYearSupport>();
+
+/**
+ * Every pack's tax-year declaration, registry packs first. The declarations
+ * are authored in each pack's own rate module and carried on
+ * `PayrollCountryPack.taxYears` — the same shape `declaredPayrollFilings()`
+ * uses. A closed built-ins list here would be a second registry a new pack
+ * has to edit after declaring itself.
+ */
+export function declaredPayrollTaxYears(): PayrollTaxYearSupport[] {
+  return [
+    ...Object.values(PAYROLL_COUNTRY_PACKS).map((pack) => pack.taxYears),
+    ...EXTRA_PAYROLL_TAX_YEARS.values(),
+  ];
+}
+
+/** Register a pack's tax-year declaration. Refuses a second one per country. */
+export function registerPayrollTaxYears(declaration: PayrollTaxYearSupport): void {
+  if (!declaration.country) {
+    throw new PayrollPackError("a payroll tax-year declaration must name its country");
+  }
+  if (declaredPayrollTaxYears().some((declared) => declared.country === declaration.country)) {
+    throw new PayrollPackError(
+      `payroll tax years for ${declaration.country} are already declared — a country has `
+      + "exactly one statutory-table declaration",
+    );
+  }
+  EXTRA_PAYROLL_TAX_YEARS.set(declaration.country, declaration);
+}
+
+/** Remove a non-built-in registration (test isolation only). */
+export function unregisterPayrollTaxYears(country: string): void {
+  EXTRA_PAYROLL_TAX_YEARS.delete(country);
+}
+
+/** A pack's declaration, or a refusal naming the packs that have one. */
+export function payrollTaxYearSupport(country: string): PayrollTaxYearSupport {
+  const declared = declaredPayrollTaxYears().find((entry) => entry.country === country);
+  if (!declared) {
+    throw new PayrollPackError(
+      `the ${country || "(unset)"} payroll pack declares no statutory tax years — a pack must `
+      + "declare which years its tables are transcribed for. Declared for: "
+      + (declaredPayrollTaxYears().map((entry) => entry.country).join(", ") || "none"),
+    );
+  }
+  return declared;
+}
+
+/*
+ * No `packsMissingTaxYearDeclarations` probe remains: the declaration is a
+ * required `PayrollCountryPack` field read off the pack above, so every
+ * installable pack answers by construction and there is no list to fall
+ * behind. The third-country pack test asserts the derivation.
+ */
+
+/**
+ * Why a tax year cannot be calculated, or null when it can.
+ *
+ * `kind` separates the two failures the product must never conflate:
+ * `missing` — nobody has transcribed the year; `draft` — a skeleton exists and
+ * still carries placeholders, which is the one state where a silent
+ * approximation would look like real tables.
+ */
+export interface PayrollTaxYearProblem {
+  country: string;
+  region: string | null;
+  taxYear: number;
+  kind: "missing" | "draft" | "undeclared";
+  /** Ready to show: names the year, the pack, the region, and the fix. */
+  message: string;
+}
+
+export function payrollTaxYearProblem(
+  country: string,
+  taxYear: number,
+  region?: string | null,
+): PayrollTaxYearProblem | null {
+  let support: PayrollTaxYearSupport;
+  try {
+    support = payrollTaxYearSupport(country);
+  } catch (error) {
+    return {
+      country, region: region ?? null, taxYear, kind: "undeclared",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  const scope = region && support.regionsWithOwnTables.includes(region)
+    ? `${country} · ${region}`
+    : country;
+  if (payrollSupportedTaxYears(support, region).includes(taxYear)) return null;
+  if (payrollDraftTaxYears(support, region).includes(taxYear)) {
+    return {
+      country, region: region ?? null, taxYear, kind: "draft",
+      message:
+        `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — the draft `
+        + `edition still carries placeholder values. Transcribe the published figures in `
+        + `${support.ratesModule} and make its goldens pass before paying into ${taxYear}.`,
+    };
+  }
+  const loaded = payrollSupportedTaxYears(support, region);
+  return {
+    country, region: region ?? null, taxYear, kind: "missing",
+    message:
+      `${taxYear} statutory tables are not loaded for ${scope} — `
+      + (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ")
+      + `Scaffold the edition with \`node --import tsx scripts/payroll-new-tax-year.ts --country `
+      + `${country} --year ${taxYear}\` and transcribe the published figures into `
+      + `${support.ratesModule}.`,
+  };
+}
+
+/** The throwing form, for engines that must refuse rather than report. */
+export function assertPayrollTaxYearSupported(
+  country: string,
+  taxYear: number,
+  region?: string | null,
+): void {
+  const problem = payrollTaxYearProblem(country, taxYear, region);
+  if (problem) throw new PayrollPackError(problem.message);
+}
+
+/** One pack's coverage, for the setup surface. */
+export interface PayrollTaxYearCoverage {
+  country: string;
+  /** True when the pack is a declared country pack (not just a rate table). */
+  installable: boolean;
+  supported: number[];
+  draft: number[];
+  ratesModule: string;
+  regionsWithOwnTables: string[];
+  editions: PayrollTaxYearEdition[];
+  /** Regional coverage, only for regions that publish their own tables. */
+  regions: { region: string; supported: number[]; draft: number[] }[];
+}
+
+export function payrollTaxYearCoverage(): PayrollTaxYearCoverage[] {
+  return declaredPayrollTaxYears().map((support) => ({
+    country: support.country,
+    installable: PAYROLL_COUNTRY_PACKS[support.country]?.installable === true,
+    supported: payrollSupportedTaxYears(support),
+    draft: payrollDraftTaxYears(support),
+    ratesModule: support.ratesModule,
+    regionsWithOwnTables: [...support.regionsWithOwnTables],
+    editions: [...support.editions].sort((a, b) =>
+      a.year - b.year || a.effectiveFrom.localeCompare(b.effectiveFrom)),
+    regions: support.regionsWithOwnTables.map((region) => ({
+      region,
+      supported: payrollSupportedTaxYears(support, region),
+      draft: payrollDraftTaxYears(support, region),
+    })),
+  }));
+}
+
+/**
+ * The tax year a date falls in for the pack, and whether it is loaded — the
+ * one call a surface needs when it holds a date rather than a year. The year
+ * itself comes from the pack's own tax-year definition (HMRC's 6 April, the
+ * ATO's 1 July), never from `slice(0, 4)`.
+ */
+export function payrollTaxYearForDate(country: string, date: string): {
+  taxYear: number;
+  problem: PayrollTaxYearProblem | null;
+} {
+  // `taxYearFor` is the pack layer's own arithmetic — never a second copy of
+  // it, and never `date.slice(0, 4)`.
+  const taxYear = taxYearFor(payrollPack(country).taxYear, date);
+  return { taxYear, problem: payrollTaxYearProblem(country, taxYear) };
 }
 
 /**
@@ -1708,6 +1881,60 @@ export function resolveEmployeePayrollContext(input: {
  * classified must stop the run rather than silently pick a class and either go
  * stale or be double-pushed.
  */
+// ---------------------------------------------------------------------------
+// Statutory rate declarations, read off the pack registry
+// ---------------------------------------------------------------------------
+//
+// These lived in `statutory-rates.ts` and read this registry from there — the
+// edge that closed the F-reg-003 cycle. A function whose whole job is "ask
+// every pack" belongs with the registry, so they live here now; the
+// calculation half in `statutory-rates.ts` takes the declarations as
+// parameters instead.
+
+/**
+ * Every pack's rate declaration, read off the pack registry — the same shape
+ * as `declaredPayrollFilings()`. The declarations are authored in each pack's
+ * own rate module beside the constants they sit next to and carried on
+ * `PayrollCountryPack.statutoryRates`; a closed list here would be a second
+ * registry a new pack has to edit after declaring itself.
+ */
+export function declaredPackRates(): PayrollPackRates[] {
+  return Object.values(PAYROLL_COUNTRY_PACKS).map((pack) => pack.statutoryRates);
+}
+
+/** A pack's rate declaration, or a refusal naming the packs that have one. */
+export function packRates(country: string): PayrollPackRates {
+  const declared = declaredPackRates().find((entry) => entry.country === country);
+  if (!declared) {
+    throw new PayrollPackError(
+      `the ${country || "(unset)"} payroll pack declares no statutory rate slots — a pack must `
+      + "declare which of its statutory rates are tenant-entered and at what scope. Declared for: "
+      + (declaredPackRates().map((entry) => entry.country).join(", ") || "none"),
+    );
+  }
+  return declared;
+}
+
+/** One slot, or a refusal listing what the pack declares. */
+export function statutoryRateSlot(country: string, slotKey: string): PayrollStatutoryRateSlot {
+  const pack = packRates(country);
+  const slot = pack.slots.find((declared) => declared.key === slotKey);
+  if (!slot) {
+    throw new PayrollPackError(
+      `the ${country} payroll pack declares no "${slotKey}" statutory rate — it declares `
+      + (pack.slots.map((declared) => declared.key).join(", ") || "none"),
+    );
+  }
+  return slot;
+}
+
+/*
+ * No `packsMissingRateDeclarations` probe remains: the declaration is a
+ * required `PayrollCountryPack` field read off the pack above, so every
+ * installable pack answers by construction and there is no list to fall
+ * behind. The third-country pack test asserts the derivation.
+ */
+
 export function statutoryAssessment(
   country: string,
   systemKey: string,

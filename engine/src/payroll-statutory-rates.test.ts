@@ -10,15 +10,13 @@ import {
   canonicalStatutoryRateValues,
   deleteStatutoryRate,
   listStatutoryRates,
-  packRates,
   resolveStatutoryRates,
   statutoryRateProblem,
-  statutoryRateSlot,
   unconfiguredStatutoryRates,
   upsertStatutoryRate,
   type StatutoryRateRow,
 } from "./payroll/statutory-rates.ts";
-import { PAYROLL_COUNTRY_PACKS } from "./payroll/packs.ts";
+import { packRates, PAYROLL_COUNTRY_PACKS, payrollPack, statutoryRateSlot } from "./payroll/packs.ts";
 import { US_PACK_RATES } from "./payroll/us/rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -90,14 +88,16 @@ test("the QC health services fund is declared per region, rate-only, QC-only", (
   );
   assert.match(
     statutoryRateProblem({
-      country: "CA", rateKey: "ca_hsf", region: "ON", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
+      rateKey: "ca_hsf", region: "ON", taxYear: 2026, filingAccountId: null,
     }) ?? "",
     /not levied in ON/,
     "an HSF rate belongs to QC employment, never to another province",
   );
   assert.equal(
     statutoryRateProblem({
-      country: "CA", rateKey: "ca_hsf", region: "QC", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
+      rateKey: "ca_hsf", region: "QC", taxYear: 2026, filingAccountId: null,
     }),
     null,
   );
@@ -174,7 +174,10 @@ test("flag fields store employer facts as true/false, never coerced", () => {
 });
 
 test("scope is enforced at the write boundary the pack declaration owns", () => {
-  const base = { country: "US", taxYear: 2026, filingAccountId: null };
+  const base = {
+    rates: US_PACK_RATES, regions: payrollPack("US").regions,
+    taxYear: 2026, filingAccountId: null,
+  };
   assert.equal(
     statutoryRateProblem({ ...base, rateKey: "us_futa", region: "MI" }), null,
   );
@@ -193,7 +196,8 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
   );
   assert.match(
     statutoryRateProblem({
-      country: "US", rateKey: "us_sui", region: "MI", taxYear: 2026,
+      rates: US_PACK_RATES, regions: payrollPack("US").regions,
+      rateKey: "us_sui", region: "MI", taxYear: 2026,
       filingAccountId: randomUUID(),
       account: { country: "US", programType: "us_ein", stateCode: null },
     }) ?? "",
@@ -202,7 +206,8 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
   );
   assert.match(
     statutoryRateProblem({
-      country: "CA", rateKey: "ca_eht", region: "AB", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
+      rateKey: "ca_eht", region: "AB", taxYear: 2026, filingAccountId: null,
     }) ?? "",
     /not levied in AB/,
   );
@@ -374,24 +379,24 @@ test(
       // of these two saves overwrote the first and every employee of both
       // divisions was assessed at whichever rate was entered last.
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_sui",
+        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
         values: { rate: "0.0106", wageBase: "9500" },
       });
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_sui",
+        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein2, taxYear: 2026,
         values: { rate: "0.0630", wageBase: "9500" },
       });
       // FUTA on the same employer, differing by state in the same payroll.
       for (const [state, rate] of [["MI", "0.009"], ["TX", "0.006"]] as const) {
         await upsertStatutoryRate({
-          orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_futa",
+          orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
           region: state, filingAccountId: null, taxYear: 2026, values: { rate },
         });
       }
 
-      const resolution = await resolveStatutoryRates(fixture.orgId, "US", 2026);
+      const resolution = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026);
       assert.deepEqual(
         resolution.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 }),
         { rate: "0.0106", wageBase: "9500.00" },
@@ -406,19 +411,19 @@ test(
       // Re-saving one account's rate updates it in place: two rows for one
       // scope point would make the resolution ambiguous.
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_sui",
+        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
         values: { rate: "0.0115", wageBase: "9500" },
       });
       const rows = await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 });
       assert.equal(rows.filter((r) => r.rateKey === "us_sui").length, 2);
-      const again = await resolveStatutoryRates(fixture.orgId, "US", 2026);
+      const again = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026);
       assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 })!.rate, "0.0115");
       assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein2 })!.rate, "0.0630");
 
       // A rate is assigned FOR A YEAR: next year's resolution does not inherit
       // this year's experience rate, and the gap is reported.
-      const nextYear = await resolveStatutoryRates(fixture.orgId, "US", 2027);
+      const nextYear = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2027);
       assert.equal(nextYear.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 }), null);
 
       // Every write is audited with before/after — a statutory rate change is
@@ -460,7 +465,7 @@ test(
 
         await assert.rejects(
           () => upsertStatutoryRate({
-            orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_futa",
+            orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
             region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
           }),
           (error: unknown) => errorChainMatches(error, /injected statutory-rate audit failure/),
@@ -474,7 +479,7 @@ test(
       }
 
       const saved = await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, country: "US", rateKey: "us_futa",
+        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
       });
       await assert.rejects(
@@ -484,7 +489,7 @@ test(
       // A Remove request cannot erase the effective-dated input used to replay a
       // prior payroll period; the row and its resolution remain available.
       assert.equal(
-        (await resolveStatutoryRates(fixture.orgId, "US", 2026)).values("us_futa", { region: "MI" })?.rate,
+        (await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
         "0.0090",
       );
     } finally {
@@ -509,12 +514,12 @@ test(
           },
         })}::jsonb where id = ${org.orgId}`);
 
-      const us = await resolveStatutoryRates(org.orgId, "US", 2026);
+      const us = await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026);
       assert.deepEqual(us.values("us_sui", { region: "MI", filingAccountId: null }), {
         rate: "0.027", wageBase: "9500",
       });
       assert.equal(us.values("us_futa", { region: "MI" })!.rate, "0.006");
-      const ca = await resolveStatutoryRates(org.orgId, "CA", 2026);
+      const ca = await resolveStatutoryRates(org.orgId, CA_PACK_RATES, 2026);
       assert.deepEqual(ca.values("ca_eht", { region: "ON" }), {
         rate: "1.95", annualExemption: "1000000",
       });
