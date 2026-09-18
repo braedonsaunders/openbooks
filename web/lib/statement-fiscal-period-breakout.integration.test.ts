@@ -62,8 +62,23 @@ async function revenueValues(matrix: Awaited<ReturnType<typeof statementMatrix>>
  * P01 02-02..03-01 (4w), P02 03-02..03-29 (4w), P03 03-30..05-03 (5w),
  * P04 05-04..05-31 (4w), … P12 ending 2027-01-31.
  */
-async function make445Org(): Promise<{ org: ScratchOrg; calendarId: string }> {
+async function release445Org(org: ScratchOrg, calendarId: string, baselineCalendarId: string) {
+  // Undo the default switch before release: the fixture reset restores
+  // baseline calendar rows in place, and a surviving second default trips
+  // fiscal_calendars_one_default, tainting the lease. Retail off first so
+  // two defaults never coexist; the baseline row then re-arms exactly.
+  await withBypassContext(() => db.execute(sql`update fiscal_calendars set is_default = false where id = ${calendarId} and org_id = ${org.orgId}`))
+  await withBypassContext(() => db.execute(sql`update fiscal_calendars set is_default = true where id = ${baselineCalendarId} and org_id = ${org.orgId}`))
+  await withBypassContext(() => dropScratchOrg(org.orgId))
+}
+
+async function make445Org(): Promise<{ org: ScratchOrg; calendarId: string; baselineCalendarId: string }> {
   const org = await withBypassContext(() => createScratchOrg())
+  const baselineCalendarId = await withBypassContext(async () => {
+    const row = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} and is_default`)).rows[0]
+    assert.ok(row, 'expected a baseline default calendar')
+    return row.id
+  })
   const calendarId = await withBypassContext(async () => {
     const id = randomUUID()
     await db.execute(sql`update fiscal_calendars set is_default = false where org_id = ${org.orgId} and is_default`)
@@ -85,11 +100,11 @@ async function make445Org(): Promise<{ org: ScratchOrg; calendarId: string }> {
     )
     return id
   })
-  return { org, calendarId }
+  return { org, calendarId, baselineCalendarId }
 }
 
 test('month breakout follows 4-4-5 fiscal periods; a 5-week period is one column', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, calendarId } = await make445Org()
+  const { org, calendarId, baselineCalendarId } = await make445Org()
   try {
     await withBypassContext(async () => {
       // Mar 31 and Apr 15 both fall in the 5-week P03 (03-30..05-03):
@@ -120,12 +135,12 @@ test('month breakout follows 4-4-5 fiscal periods; a 5-week period is one column
       assert.deepEqual(await revenueValues(matrix, 4), ['400.0000', '0.0000', '300.0000', '500.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await release445Org(org, calendarId, baselineCalendarId)
   }
 })
 
 test('quarter breakout groups the 4-4-5 calendar declared periods', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, calendarId } = await make445Org()
+  const { org, calendarId, baselineCalendarId } = await make445Org()
   try {
     await withBypassContext(async () => {
       await postRevenue(org, calendarId, '2026-02-10', '400.0000')
@@ -154,7 +169,7 @@ test('quarter breakout groups the 4-4-5 calendar declared periods', { skip: !pro
       assert.deepEqual(await revenueValues(matrix, 2), ['700.0000', '500.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await release445Org(org, calendarId, baselineCalendarId)
   }
 })
 
@@ -162,7 +177,7 @@ test('month breakout falls back to calendar math past generated periods', { skip
   // Fail-safe gate: FY2027 was never generated for this calendar, so a
   // window reaching past FY2026 must keep the old calendar columns rather
   // than silently dropping activity outside declared periods.
-  const { org, calendarId } = await make445Org()
+  const { org, calendarId, baselineCalendarId } = await make445Org()
   try {
     await withBypassContext(async () => {
       await postRevenue(org, calendarId, '2026-04-15', '200.0000')
@@ -182,7 +197,7 @@ test('month breakout falls back to calendar math past generated periods', { skip
       assert.deepEqual(await revenueValues(matrix, 17).then((v) => [v[0], v[2]]), ['0.0000', '200.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await release445Org(org, calendarId, baselineCalendarId)
   }
 })
 
@@ -221,7 +236,7 @@ test('monthly January-start orgs keep calendar-month breakouts byte-identical', 
       assert.deepEqual(await revenueValues(matrix, 3), ['100.0000', '200.0000', '300.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -257,12 +272,12 @@ test('monthly April-start orgs keep fiscal quarter breakouts byte-identical', { 
       assert.deepEqual(await revenueValues(matrix, 2), ['100.0000', '200.0000'])
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
 test('period presets agree with fiscal periods on a 4-4-5 org', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org } = await make445Org()
+  const { org, calendarId, baselineCalendarId } = await make445Org()
   try {
     await withOrgContext(org.orgId, async () => {
       const today = '2026-04-15' // inside the 5-week P03
@@ -298,6 +313,6 @@ test('period presets agree with fiscal periods on a 4-4-5 org', { skip: !process
       })
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await release445Org(org, calendarId, baselineCalendarId)
   }
 })
