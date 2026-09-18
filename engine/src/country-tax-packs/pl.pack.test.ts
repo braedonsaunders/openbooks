@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { packTaxCodesForReturn } from "./index.ts";
 import { POLAND_TAX_PACK } from "./pl.ts";
 import type { CountryTaxCodeDefinition, EffectiveTaxRate } from "./types.ts";
 
-function isTaxCodeSet(
-  entry: CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[],
-): entry is readonly CountryTaxCodeDefinition[] {
-  return Array.isArray(entry);
-}
-
 function codesForReturn(packCode: string): readonly CountryTaxCodeDefinition[] {
-  const entry = POLAND_TAX_PACK.returnPackTaxCodes[packCode];
-  assert.ok(entry, `no tax codes declared for ${packCode}`);
-  return isTaxCodeSet(entry) ? entry : [entry];
+  const codes = packTaxCodesForReturn(POLAND_TAX_PACK, packCode);
+  assert.ok(codes.length > 0, `no tax codes declared for ${packCode}`);
+  return codes;
 }
 
 function assertContiguous(rates: readonly EffectiveTaxRate[], code: string): void {

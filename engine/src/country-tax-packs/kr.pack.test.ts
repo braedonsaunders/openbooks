@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { packTaxCodesForReturn } from "./index.ts";
 import { KOREA_TAX_PACK } from "./kr.ts";
 import type { CountryTaxCodeDefinition, EffectiveTaxRate } from "./types.ts";
 
 function codesFor(returnPackCode: string): readonly CountryTaxCodeDefinition[] {
-  const entry = KOREA_TAX_PACK.returnPackTaxCodes[returnPackCode];
-  assert.ok(entry, `missing tax codes for ${returnPackCode}`);
-  return Array.isArray(entry) ? entry : [entry];
+  const codes = packTaxCodesForReturn(KOREA_TAX_PACK, returnPackCode);
+  assert.ok(codes.length > 0, `missing tax codes for ${returnPackCode}`);
+  return codes;
 }
 
 function assertContiguous(rates: readonly EffectiveTaxRate[], code: string): void {
