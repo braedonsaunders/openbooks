@@ -217,5 +217,6 @@ export const AU_REFUSED_2027: readonly string[] = [
   "Superannuation maximum contributions base dollar figure (2026–27 concessional-cap input unquotable; formula transcribed)",
   "HELP repayable-debt cap (the employee's accumulated HELP debt is not visible to the pack)",
   "No-TFN withholding rate (Taxation Administration Act Schedule 1 is on the same 403ing host)",
+  "Medicare levy and HELP for foreign residents and working holiday makers (liability turns on Part VIIB of the Assessment Act 1936, not transcribed)",
   "State payroll tax (employer-aggregate state levy, not PAYG — out of scope, not a region of this pack)",
 ];
