@@ -23,6 +23,8 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-revenue-mtd': ['reports.read'],
   'kpi-net-income-mtd': ['reports.read'],
   'kpi-gross-margin-mtd': ['reports.read'],
+  'kpi-expected-receipts-30d': ['ar.read'],
+  'kpi-bills-due-30d': ['ap.read'],
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,

@@ -30,7 +30,9 @@
     "agentFindings": "Achados dos agentes",
     "revenue": "Receita",
     "netIncome": "Lucro líquido",
-    "grossMargin": "Margem bruta"
+    "grossMargin": "Margem bruta",
+    "expectedReceipts": "Recebimentos previstos",
+    "expectedPayments": "Pagamentos previstos"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -43,7 +45,10 @@
     "agentLastRun": "última execução {date}",
     "agentClear": "Tudo certo",
     "monthToDate": "Mês até a data",
-    "noData": "Sem dados"
+    "noData": "Sem dados",
+    "next30Days": "Próximos 30 dias",
+    "dso": "DSO {days}",
+    "dpo": "DPO {days}"
   },
   "categories": {
     "kpi": "Destaques",
@@ -72,7 +77,9 @@
     "agentFindings": "Abra os achados dos agentes em segundo plano — vá para a bancada.",
     "revenue": "Receita lançada no mês até a data, na moeda base.",
     "netIncome": "Receita menos custos e despesas do mês até a data.",
-    "grossMargin": "Lucro bruto e margem do mês até a data."
+    "grossMargin": "Lucro bruto e margem do mês até a data.",
+    "expectedReceipts": "Recebimentos de clientes previstos para os próximos 30 dias, na moeda base.",
+    "expectedPayments": "Pagamentos a fornecedores previstos para os próximos 30 dias, na moeda base."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

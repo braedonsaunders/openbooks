@@ -30,7 +30,9 @@
     "agentFindings": "Agentenfeststellungen",
     "revenue": "Umsatz",
     "netIncome": "Nettoergebnis",
-    "grossMargin": "Bruttomarge"
+    "grossMargin": "Bruttomarge",
+    "expectedReceipts": "Erwartete Eingänge",
+    "expectedPayments": "Anstehende Zahlungen"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -43,7 +45,10 @@
     "agentLastRun": "letzter Lauf {date}",
     "agentClear": "Alles in Ordnung",
     "monthToDate": "Seit Monatsbeginn",
-    "noData": "Keine Daten"
+    "noData": "Keine Daten",
+    "next30Days": "Nächste 30 Tage",
+    "dso": "DSO {days}",
+    "dpo": "DPO {days}"
   },
   "categories": {
     "kpi": "Kennzahlen",
@@ -72,7 +77,9 @@
     "agentFindings": "Feststellungen der Hintergrundagenten öffnen — zur Workbench springen.",
     "revenue": "Seit Monatsbeginn erfasster Umsatz, in Basiswährung.",
     "netIncome": "Umsatz minus Kosten und Aufwendungen seit Monatsbeginn.",
-    "grossMargin": "Bruttoergebnis und Marge seit Monatsbeginn."
+    "grossMargin": "Bruttoergebnis und Marge seit Monatsbeginn.",
+    "expectedReceipts": "Prognostizierte Kundeneingänge der nächsten 30 Tage, in Basiswährung.",
+    "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

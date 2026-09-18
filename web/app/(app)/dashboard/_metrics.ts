@@ -10,14 +10,20 @@ import { profitAndLoss } from '@/lib/reports/statements'
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { decimalRatio } from '@/lib/reports/decimals'
 import {
+  addDays,
   bankBalances,
+  buildWeekGrid,
   compareMoney,
   parseISO,
+  paymentStats,
+  scheduleForecast,
   subtractMoney,
   summariseSide,
   sumMoney,
+  toISO,
   ZERO_MONEY,
   type OpenItem,
+  type PaymentStats,
 } from '@/lib/cash/core'
 import { presentationCurrency } from '@/lib/fx-presentation'
 import { WIDGETS } from './_widget-registry'
@@ -31,10 +37,11 @@ import { WIDGETS } from './_widget-registry'
 export type DashboardMoneyReaders = {
   bankBalances: typeof bankBalances
   openItems: typeof openItems
+  paymentStats: typeof paymentStats
   profitAndLoss: typeof profitAndLoss
 }
 
-const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems, profitAndLoss }
+const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems, paymentStats, profitAndLoss }
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -65,6 +72,21 @@ export type DashboardMetrics = {
   grossProfitMtd: string | null
   /** Gross-margin ratio on the 0–1 scale; null when MTD revenue is zero. */
   grossMarginMtd: string | null
+  /**
+   * Predicted collections / payments inside 30 days — the same
+   * scheduleForecast prediction the AR/AP cockpits read (payment-stats
+   * averages over the same open items), summed at the same +30d cut-off the
+   * cockpits' expectedThisWeek/expectedNext30 use. Null when not queried.
+   */
+  expectedReceipts30d: string | null
+  expectedPayments30d: string | null
+  /**
+   * Collection / payment day averages feeding the forecast above — the same
+   * paymentStats.globalAvg the cockpits label DSO/DPO, surfaced on the open
+   * AR/AP tiles as hint text rather than minted as tiles of their own.
+   */
+  receivablesDso: number | null
+  payablesDpo: number | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -149,10 +171,12 @@ export async function loadDashboardMetrics(
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
   const wantCash = need('cashBalance')
   const wantMoney = need('baseCurrency')
-  const wantAr = need('openReceivables', 'overdueReceivables')
-  const wantAp = need('openPayables', 'overduePayables')
+  const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso')
+  const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo')
   const wantPl = need('revenueMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
-  const [totals, banks, baseCurrency, arItems, apItems, pl, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const wantArStats = need('expectedReceipts30d', 'receivablesDso')
+  const wantApStats = need('expectedPayments30d', 'payablesDpo')
+  const [totals, banks, baseCurrency, arItems, apItems, arStats, apStats, pl, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -180,6 +204,12 @@ export async function loadDashboardMetrics(
     // contract), never a silently undercounted tile.
     wantAr ? readers.openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
     wantAp ? readers.openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
+    // Settlement-behaviour averages behind the forecast and the DSO/DPO
+    // hints — the same paymentStats reader the cockpits feed into
+    // scheduleForecast, so the tile prediction and the cockpit worklist
+    // agree item for item.
+    wantArStats ? readers.paymentStats('ar', today, subIds, orgId) : Promise.resolve(null),
+    wantApStats ? readers.paymentStats('ap', today, subIds, orgId) : Promise.resolve(null),
     // One MTD profitAndLoss call feeds the revenue, net-income and margin
     // tiles — three round trips for one period would triple the dashboard's
     // heaviest reader. A multi-functional scope refuses inside (the report
@@ -261,6 +291,20 @@ export async function loadDashboardMetrics(
   }
   const arTile = sideTile(arItems)
   const apTile = sideTile(apItems)
+  // Forward 30-day prediction off the same open items the stock tiles just
+  // summarised: scheduleForecast with the same stats the cockpits use, cut
+  // at the same +30d the cockpits' expectedNext30/dueNext30 use (a 5-week
+  // grid covers the cut-off either way — the grid only bounds the
+  // prediction, the cut-off selects it).
+  const forecast30d = (items: OpenItem[], stats: PaymentStats | null): string | null => {
+    if (!stats) return null
+    const grid = buildWeekGrid(today, 5)
+    const forecast = scheduleForecast(items, stats, grid.asOf, grid.start, grid.end)
+    const cutoff = toISO(addDays(grid.asOf, 30))
+    return sumMoney(forecast.entries.filter((e) => e.predictedDate <= cutoff).map((e) => e.amount))
+  }
+  const expectedReceipts = need('expectedReceipts30d') ? forecast30d(arItems, arStats) : null
+  const expectedPayments = need('expectedPayments30d') ? forecast30d(apItems, apStats) : null
   const unionRequestedAt = (item: ApprovalWorklistItem): string => {
     const raw =
       item.kind === 'flow_gate' ? item.createdAt : (item.submittedAt ?? item.createdAt)
@@ -329,6 +373,10 @@ export async function loadDashboardMetrics(
     netIncomeMtd: pl?.netIncome ?? null,
     grossProfitMtd: pl?.grossProfit ?? null,
     grossMarginMtd: pl?.margin ?? null,
+    expectedReceipts30d: expectedReceipts,
+    expectedPayments30d: expectedPayments,
+    receivablesDso: arStats?.globalAvg ?? null,
+    payablesDpo: apStats?.globalAvg ?? null,
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -363,13 +411,15 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-agent-findings': ['agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun'],
   'kpi-ledger-balance': ['ledgerSum'],
   'kpi-cash-balance': ['baseCurrency', 'cashBalance', 'asOfDate'],
-  'kpi-open-receivables': ['baseCurrency', 'openReceivables', 'asOfDate'],
+  'kpi-open-receivables': ['baseCurrency', 'openReceivables', 'receivablesDso', 'asOfDate'],
   'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'asOfDate'],
-  'kpi-open-payables': ['baseCurrency', 'openPayables', 'asOfDate'],
+  'kpi-open-payables': ['baseCurrency', 'openPayables', 'payablesDpo', 'asOfDate'],
   'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
   'kpi-revenue-mtd': ['baseCurrency', 'revenueMtd', 'asOfDate'],
   'kpi-net-income-mtd': ['baseCurrency', 'netIncomeMtd', 'asOfDate'],
   'kpi-gross-margin-mtd': ['baseCurrency', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
+  'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'asOfDate'],
+  'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -396,6 +446,10 @@ const EMPTY_METRICS: DashboardMetrics = {
   netIncomeMtd: null,
   grossProfitMtd: null,
   grossMarginMtd: null,
+  expectedReceipts30d: null,
+  expectedPayments30d: null,
+  receivablesDso: null,
+  payablesDpo: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],

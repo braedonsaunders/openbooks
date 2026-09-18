@@ -70,6 +70,10 @@ function denialSpies(calls: string[]): DashboardMoneyReaders {
       calls.push("profitAndLoss");
       throw new Error("profitAndLoss must not run for a denied widget");
     }) as DashboardMoneyReaders["profitAndLoss"],
+    paymentStats: (async (...args: Parameters<DashboardMoneyReaders["paymentStats"]>) => {
+      calls.push(`paymentStats:${args[0]}`);
+      throw new Error("paymentStats must not run for a denied widget");
+    }) as DashboardMoneyReaders["paymentStats"],
   };
 }
 
@@ -125,8 +129,12 @@ test("the visible set — not the permission check — selects the queries", { s
       }) as DashboardMoneyReaders["openItems"],
       profitAndLoss: (async () => {
         calls.push("profitAndLoss");
-        return null;
+        return { revenue: "0", netIncome: "0", grossProfit: "0" };
       }) as unknown as DashboardMoneyReaders["profitAndLoss"],
+      paymentStats: (async (...args: Parameters<DashboardMoneyReaders["paymentStats"]>) => {
+        calls.push(`paymentStats:${args[0]}`);
+        return { map: new Map(), globalAvg: 45 };
+      }) as DashboardMoneyReaders["paymentStats"],
     };
     const allowedId = await withBypass(() => createScratchUser(org.orgId, "AR Reader", "staff"));
     const allowed = authzFor(org.orgId, allowedId as unknown as string, ["dashboard.read", "ar.read"]);
@@ -134,10 +142,12 @@ test("the visible set — not the permission check — selects the queries", { s
     const metrics = await withOrgContext(org.orgId, () =>
       loadDashboardMetrics(allowed, ["kpi-open-receivables", "kpi-overdue-receivables"], readers),
     );
-    // The AR reader ran exactly once; the AP and cash readers never did.
-    assert.deepEqual(calls, ["openItems:ar"]);
+    // The AR item reader ran exactly once, with its stats reader alongside
+    // (the open tile now carries the DSO hint); AP, P&L and cash never did.
+    assert.deepEqual(calls, ["openItems:ar", "paymentStats:ar"]);
     assert.equal(toUnits(metrics.openReceivables), toUnits("1000"));
     assert.equal(toUnits(metrics.overdueReceivables), toUnits("600"));
+    assert.equal(metrics.receivablesDso, 45);
     assert.equal(toUnits(metrics.openPayables), toUnits("0"));
     assert.equal(toUnits(metrics.cashBalance), toUnits("0"));
   } finally {
@@ -157,7 +167,11 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
       openItems: (async (...args: Parameters<DashboardMoneyReaders["openItems"]>) => {
         calls.push(`openItems:${args[1]}`); return [];
       }) as DashboardMoneyReaders["openItems"],
-      profitAndLoss: (async () => { calls.push("profitAndLoss"); return null; }) as unknown as DashboardMoneyReaders["profitAndLoss"],
+      profitAndLoss: (async () => {
+        calls.push("profitAndLoss");
+        return { revenue: "0", netIncome: "0", grossProfit: "0" };
+      }) as unknown as DashboardMoneyReaders["profitAndLoss"],
+      paymentStats: (async (...args: Parameters<DashboardMoneyReaders["paymentStats"]>) => { calls.push(`paymentStats:${args[0]}`); return { map: new Map(), globalAvg: 45 }; }) as DashboardMoneyReaders["paymentStats"],
     };
     const fullId = await withBypass(() => createScratchUser(org.orgId, "Full Reader", "admin"));
     const full = authzFor(org.orgId, fullId as unknown as string, ["dashboard.read", "gl.read", "ar.read", "ap.read"]);
@@ -166,6 +180,8 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
     assert.ok(calls.includes("openItems:ar"), "default still queries AR items");
     assert.ok(calls.includes("openItems:ap"), "default still queries AP items");
     assert.ok(calls.includes("profitAndLoss"), "default still queries the P&L reader");
+    assert.ok(calls.includes("paymentStats:ar"), "default still queries AR settlement stats");
+    assert.ok(calls.includes("paymentStats:ap"), "default still queries AP settlement stats");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
