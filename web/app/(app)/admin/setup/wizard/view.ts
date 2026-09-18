@@ -15,6 +15,7 @@ import {
   isTaxPosition,
   isTeamSize,
 } from '../../../../../lib/workspace-profile'
+import { installablePayrollCountries } from '@openbooks/engine/src/payroll/packs.ts'
 import type { SetupWizard } from './SetupWizard'
 
 /**
@@ -54,6 +55,8 @@ export interface WizardData {
   initial: SetupWizardProps['initial']
   canSwitchIndustry: boolean
   isRerun: boolean
+  /** Installable payroll packs, in registry order — declared by the packs. */
+  payrollPacks: string[]
 }
 
 export async function loadWizard(): Promise<WizardData> {
@@ -76,6 +79,7 @@ export async function loadWizard(): Promise<WizardData> {
   return {
     open: true,
     industries: INDUSTRIES,
+    payrollPacks: installablePayrollCountries(),
     initial: {
       name: row?.name ?? '',
       legalName: row?.legal_name ?? '',
@@ -133,6 +137,7 @@ export function wizardSpec(data: WizardData): PageSpec {
         initial: data.initial,
         canSwitchIndustry: data.canSwitchIndustry,
         isRerun: data.isRerun,
+        payrollPacks: data.payrollPacks,
       }),
     ],
   })

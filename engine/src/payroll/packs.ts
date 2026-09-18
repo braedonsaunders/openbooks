@@ -1241,6 +1241,19 @@ export function packStatutoryComponents(country: string): readonly PayrollStatut
  */
 export class PayrollJurisdictionError extends PayrollPackError {}
 
+/**
+ * Every country pack an org may install, in registry order — packs flagged
+ * `installable: false` (in development, superseded) are known to validation
+ * but refused for install. The single source behind the settings API, the
+ * setup wizard, and the onboarding pack cards: one function, never a
+ * per-surface copy of the list.
+ */
+export function installablePayrollCountries(): string[] {
+  return Object.values(PAYROLL_COUNTRY_PACKS)
+    .filter((pack) => pack.installable)
+    .map((pack) => pack.country);
+}
+
 /** The pack for a country, or a refusal naming the packs that do exist. */
 export function payrollPack(country: string): PayrollCountryPack {
   const pack = PAYROLL_COUNTRY_PACKS[country];
