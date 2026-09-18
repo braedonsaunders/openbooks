@@ -743,6 +743,15 @@
           "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)"
         }
       },
+      "IE": {
+        "title": "Irlanda — contas oficiais (Revenue)",
+        "description": "Contas de passivo para os valores que o pacote da Irlanda retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "paye": "PAYE a recolher (imposto de renda após créditos)",
+          "prsi": "PRSI a recolher (classe A de funcionário e empregador)",
+          "usc": "USC a recolher (encargo separado, não imposto de renda)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

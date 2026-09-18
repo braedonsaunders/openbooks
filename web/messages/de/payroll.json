@@ -743,6 +743,15 @@
           "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)"
         }
       },
+      "IE": {
+        "title": "Irland — gesetzliche Revenue-Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das IE-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "paye": "Verbindlichkeiten aus PAYE (Einkommensteuer nach Steuergutschriften)",
+          "prsi": "Verbindlichkeiten aus PRSI (Klasse-A-Beiträge von Arbeitnehmer und Arbeitgeber)",
+          "usc": "Verbindlichkeiten aus USC (separate Abgabe, keine Einkommensteuer)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {
