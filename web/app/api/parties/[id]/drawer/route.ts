@@ -32,8 +32,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`)),
     isFeatureEnabled(gate.user.orgId, 'payroll').then((enabled) => enabled
-      ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`) as any
-      : Promise.resolve({ rows: [] })),
+      ? db.execute<{ id: string; name: string }>(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`)
+      : Promise.resolve({ rows: [] as { id: string; name: string }[] })),
     loadFieldDefs('parties'),
     subsidiaryUiOptions(gate.user.orgId).then((options) => gate.allowedSubsidiaryIds
       ? options.filter((option) => gate.allowedSubsidiaryIds!.has(option.id))

@@ -74,13 +74,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
   }
 
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
     values (${user.orgId}, ${key}, ${name}, ${body.category?.trim() || null},
             ${body.description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
     returning id
-  `)) as any
-  const templateId = inserted.rows[0].id as string
+  `))
+  const templateId = inserted.rows[0]!.id
 
   await db.execute(sql`
     insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)

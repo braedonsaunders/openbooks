@@ -156,6 +156,57 @@ type Executor = Pick<Tx, 'execute'>
  */
 type SubsidiaryScope = ReadonlySet<string> | null
 
+/** One locked wip_prebills header plus the joined project context conversion needs. */
+interface WipPrebillHeaderRow extends Record<string, unknown> {
+  status: string
+  customer_id: string | null
+  currency: string | null
+  subsidiary_id: string | null
+  project_id: string
+  period_end: string
+  proposed_bill_amount: string
+  worksheet_number: string
+  customer_po_number: string | null
+  billing_method: string | null
+  notes: string | null
+  custom: Record<string, unknown> | null
+  invoice_document_id: string | null
+}
+
+/** One convertible wip_prebill_lines row plus its hold flag. */
+interface WipPrebillLineRow extends Record<string, unknown> {
+  id: string
+  org_id: string
+  prebill_id: string
+  line_number: number
+  source_type: string
+  time_entry_id: string | null
+  document_line_id: string | null
+  document_id: string | null
+  project_id: string
+  item_id: string | null
+  income_account_id: string | null
+  description: string | null
+  quantity: string
+  unit: string | null
+  amount: string
+  bill_amount: string
+  proposed_bill_amount: string
+  original_bill_amount: string
+  cost_amount: string
+  adjustment_amount: string
+  cost_multiplier: string | null
+  markup_percent: string | null
+  tax_code_id: string | null
+  time_type_id: string | null
+  employee_party_id: string | null
+  department_id: string | null
+  disposition: string
+  is_billable: boolean | null
+  billed_by_line_id: string | null
+  actively_held: boolean
+}
+
 type ProjectPolicyContext = {
   projectId: string
   projectTypeId: string
@@ -1011,7 +1062,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
   if (observed.status !== 'approved') throw new WipBillingError('Only an approved prebill can be converted')
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
-    const header = (await tx.execute<Record<string, any>>(sql`
+    const header = (await tx.execute<WipPrebillHeaderRow>(sql`
       select worksheet.*, project.customer_id, project.customer_po_number, project.subsidiary_id,
              project.name as project_name, type.billing_method,
              coalesce(subsidiary.base_currency, org.base_currency) as currency
@@ -1053,7 +1104,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       }
     }
 
-    const lines = (await tx.execute<Record<string, any>>(sql`
+    const lines = (await tx.execute<WipPrebillLineRow>(sql`
       select line.*,
              exists (
                select 1 from wip_holds hold

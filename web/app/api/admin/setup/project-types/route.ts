@@ -22,22 +22,27 @@ function invalidSortOrder(value: unknown): boolean {
   return typeof value !== 'number' || !Number.isInteger(value) || value < -2147483648 || value > 2147483647
 }
 
-function validateInvoicingProfile(profile: any, billingMethod: unknown): string | null {
+function isProfileRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function validateInvoicingProfile(profile: unknown, billingMethod: unknown): string | null {
   const validBases = new Set(['date_range', 'draw_amount', 'time_selection', 'milestone', 'field_ticket'])
-  const procedure = profile?.billingProcedure
-  if (!['standard', 'application_for_payment'].includes(procedure)) return 'Invalid billing procedure'
-  if (!Array.isArray(profile?.allowedBases) || profile.allowedBases.length === 0) return 'At least one billing basis is required'
-  if (profile.allowedBases.some((basis: unknown) => typeof basis !== 'string' || !validBases.has(basis))) {
+  const record = isProfileRecord(profile) ? profile : {}
+  const procedure = record.billingProcedure
+  if (typeof procedure !== 'string' || !['standard', 'application_for_payment'].includes(procedure)) return 'Invalid billing procedure'
+  if (!Array.isArray(record.allowedBases) || record.allowedBases.length === 0) return 'At least one billing basis is required'
+  if (record.allowedBases.some((basis: unknown) => typeof basis !== 'string' || !validBases.has(basis))) {
     return 'Invalid billing basis'
   }
-  if (new Set(profile.allowedBases).size !== profile.allowedBases.length) return 'Billing bases must be unique'
-  if (!profile.allowedBases.includes(profile.defaultBasis)) return 'Default billing basis must be allowed'
+  if (new Set(record.allowedBases).size !== record.allowedBases.length) return 'Billing bases must be unique'
+  if (!record.allowedBases.includes(record.defaultBasis)) return 'Default billing basis must be allowed'
   if (procedure === 'application_for_payment') {
     if (billingMethod !== 'fixed_price') return 'Applications for payment require the fixed-price billing classification'
-    if (profile.allowedBases.length !== 1 || profile.allowedBases[0] !== 'draw_amount') {
+    if (record.allowedBases.length !== 1 || record.allowedBases[0] !== 'draw_amount') {
       return 'Applications for payment require draw-amount billing'
     }
-    if (profile.defaultBasis !== 'draw_amount' || profile.lineBuilder !== 'draw') {
+    if (record.defaultBasis !== 'draw_amount' || record.lineBuilder !== 'draw') {
       return 'Applications for payment require the controlled draw line builder'
     }
   }
@@ -59,16 +64,19 @@ export async function POST(req: Request) {
   const key = String(b.key ?? '').trim()
   const name = String(b.name ?? '').trim()
   if (!key || !name) return NextResponse.json({ error: 'Key and name are required' }, { status: 422 })
-  if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
+  if (typeof b.billingMethod !== 'string' || !['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
   if (!b.financialProfile || !b.invoicingProfile || !b.backupProfile)
     return NextResponse.json({ error: 'Missing profile' }, { status: 422 })
   const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
   if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
+  // Validation above establishes the invoicing shape; only the static view
+  // is pinned down here.
+  const invoicingBases = (b.invoicingProfile as { allowedBases: string[] }).allowedBases
   if (b.sortOrder !== undefined && b.sortOrder !== null && invalidSortOrder(b.sortOrder))
     return NextResponse.json({ error: 'sortOrder must be an integer' }, { status: 400 })
   if (
-    b.invoicingProfile.allowedBases.includes('field_ticket')
+    invoicingBases.includes('field_ticket')
     && !(await isFeatureEnabled(orgId, 'fieldTickets'))
   ) {
     return NextResponse.json(
@@ -91,7 +99,8 @@ export async function POST(req: Request) {
         orgId,
         projectTypeId: createdId,
         effectiveFrom: await businessToday(orgId),
-        financialProfile: b.financialProfile,
+        // The engine asserts validity on publish; failures 422 below.
+        financialProfile: b.financialProfile as FinancialProfile,
         reason: 'Initial project type financial policy',
         actorId: gate.user.id,
       })
@@ -120,8 +129,9 @@ export async function PATCH(req: Request) {
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const b = ((parsedBody2.data))
-  if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
+  if (typeof b.id !== 'string' || !isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const id = b.id
+  if (typeof b.billingMethod !== 'string' || !['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
   const hasOwn = (key: string): boolean => Object.prototype.hasOwnProperty.call(b, key)
   if (hasOwn('name') && !String(b.name ?? '').trim()) {
@@ -178,8 +188,12 @@ export async function PATCH(req: Request) {
       `))
       if (!before.rows[0]) return false
       const beforeInvoicing = before.rows[0].invoicing_profile as { allowedBases?: string[] } | null
+      // Validation above establishes the invoicing shape when present.
+      const invoicingBases = b.invoicingProfile
+        ? (b.invoicingProfile as { allowedBases?: string[] }).allowedBases
+        : undefined
       if (
-        b.invoicingProfile?.allowedBases?.includes('field_ticket')
+        invoicingBases?.includes('field_ticket')
         && !fieldTicketsEnabled
         && !beforeInvoicing?.allowedBases?.includes('field_ticket')
       ) {
@@ -189,7 +203,7 @@ export async function PATCH(req: Request) {
       let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
       if (b.financialProfile) {
         const comparison = (await tx.execute<{ changed: boolean }>(sql`
-          select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile))}::jsonb
+          select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile as FinancialProfile))}::jsonb
                  is distinct from
                  ${JSON.stringify(
                    before.rows[0].financial_profile
@@ -202,9 +216,9 @@ export async function PATCH(req: Request) {
         if (comparison.rows[0]?.changed) {
           financialVersion = await publishProjectFinancialProfileInTransaction(tx, {
             orgId,
-            projectTypeId: b.id,
+            projectTypeId: id,
             effectiveFrom: String(b.financialEffectiveFrom ?? today),
-            financialProfile: b.financialProfile,
+            financialProfile: b.financialProfile as FinancialProfile,
             reason: String(b.financialChangeReason ?? ''),
             actorId: gate.user.id,
           })

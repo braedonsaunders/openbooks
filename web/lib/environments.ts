@@ -50,11 +50,10 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
     for (const o of accessible) {
       let sandboxes: EnvOption[] = [];
       if (canManage && o.envKind === "production") {
-        const rows = (await db.execute(sql`
+        sandboxes = (await db.execute<{ orgId: string; name: string; status: string; tier: string }>(sql`
           select org_id as "orgId", name, status, tier
             from sandboxes where production_org_id = ${o.orgId}
-           order by created_at`)) as any;
-        sandboxes = rows.rows as EnvOption[];
+           order by created_at`)).rows;
       }
       tenants.push({
         productionOrgId: o.orgId,

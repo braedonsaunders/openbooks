@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
-        (${user.orgId}, 'bank_match_rules', ${(row.rows[0] as any).id as string}, 'insert',
+        (${user.orgId}, 'bank_match_rules', ${String(row.rows[0]!.id)}, 'insert',
          ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${user.id})
     `)
     return row.rows[0]!

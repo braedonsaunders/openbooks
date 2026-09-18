@@ -103,7 +103,7 @@ export async function POST(req: Request) {
         await tx.execute(sql`
           update pdf_templates set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
-      const result = (await tx.execute(sql`
+      const result = (await tx.execute<{ id: string; name: string }>(sql`
         insert into pdf_templates (org_id, record_type, name, description, paper_size, orientation,
                                    margin_mm, header_html, footer_html, source_html, compiled_html,
                                    is_default, created_by, updated_by)
@@ -112,8 +112,8 @@ export async function POST(req: Request) {
                 ${prettySource}, ${compiled.compiledHtml}, ${!!body.isDefault},
                 ${user.id}, ${user.id})
         returning id, name
-      `)) as any;
-      const inserted = result.rows[0];
+      `));
+      const inserted = result.rows[0]!;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'pdf_templates', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name })}, ${user.id})`);

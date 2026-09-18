@@ -4,7 +4,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { createPayRun, PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { createPayRun, PayrollError, type PayRunType } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -49,16 +49,21 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  if (!isUuid(body.payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
+  const payScheduleId = typeof body?.payScheduleId === 'string' ? body.payScheduleId : ''
+  if (!isUuid(payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
   for (const key of ['periodStart', 'periodEnd', 'payDate'] as const) {
-    if (body[key] != null && !isIsoCalendarDate(body[key])) {
+    if (body?.[key] != null && !isIsoCalendarDate(body[key])) {
       return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
     }
   }
-  const runType = body.runType ?? 'regular'
-  if (!['regular', 'bonus', 'termination'].includes(runType)) {
+  const requestedRunType = body?.runType ?? 'regular'
+  if (typeof requestedRunType !== 'string' || !['regular', 'bonus', 'termination'].includes(requestedRunType)) {
     return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
   }
+  const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' ? requestedRunType : 'regular'
+  const periodStart = typeof body?.periodStart === 'string' ? body.periodStart : undefined
+  const periodEnd = typeof body?.periodEnd === 'string' ? body.periodEnd : undefined
+  const payDate = typeof body?.payDate === 'string' ? body.payDate : undefined
   // A final pay run pays out and clears every accrued bank, so it must name
   // the employees it pays; the engine refuses an unscoped one outright.
   if (body.employeePartyIds != null && !Array.isArray(body.employeePartyIds)) {
@@ -86,7 +91,7 @@ export async function POST(req: Request) {
     const schedule = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId"
         from pay_schedules
-       where org_id = ${gate.user.orgId} and id = ${body.payScheduleId} and is_active`)).rows[0]
+       where org_id = ${gate.user.orgId} and id = ${payScheduleId} and is_active`)).rows[0]
     const runSubsidiaryId = schedule?.subsidiaryId
       ?? (schedule
         ? (await db.execute<{ id: string }>(sql`
@@ -121,10 +126,10 @@ export async function POST(req: Request) {
     const result = await createPayRun({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
-      payScheduleId: body.payScheduleId,
-      periodStart: body.periodStart ?? undefined,
-      periodEnd: body.periodEnd ?? undefined,
-      payDate: body.payDate ?? undefined,
+      payScheduleId,
+      periodStart,
+      periodEnd,
+      payDate,
       runType,
       employeePartyIds,
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,

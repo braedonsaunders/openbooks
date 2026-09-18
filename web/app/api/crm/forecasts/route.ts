@@ -63,7 +63,9 @@ export async function POST(req: NextRequest) {
   // convenient personal-snapshot default.
   const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
   const salesTeamId = body.salesTeamId ?? null
-  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1 || (ownerUserId && !isUuid(ownerUserId)) || (salesTeamId && !isUuid(salesTeamId))) return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
+  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1 ||
+    (ownerUserId && (typeof ownerUserId !== 'string' || !isUuid(ownerUserId))) ||
+    (salesTeamId && (typeof salesTeamId !== 'string' || !isUuid(salesTeamId)))) return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
   const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
     ? null
     : canonicalDecimal(body.overrideAmount, 4)
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest) {
   }
   const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
   const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
-  if (!['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
+  if (typeof kind !== 'string' || !['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
   if ((kind === 'calculated') !== (overrideAmount === null)) {
     return NextResponse.json({ error: 'snapshot kind must match the presence of an override amount' }, { status: 422 })
   }
@@ -90,7 +92,12 @@ export async function POST(req: NextRequest) {
     const overrideGate = await guardPermission('crm.forecasts.override')
     if (overrideGate instanceof NextResponse) return overrideGate
   }
-  const forecast = await calculateForecast({ orgId: user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId })
+  // calculateForecast only tests these for truthiness, so collapse the
+  // already-validated values to its scope type without touching the raw
+  // values stored on the snapshot row below.
+  const forecast = await calculateForecast({ orgId: user.orgId, periodStart, periodEnd,
+    ownerUserId: typeof ownerUserId === 'string' || ownerUserId == null ? ownerUserId : undefined,
+    salesTeamId: typeof salesTeamId === 'string' || salesTeamId == null ? salesTeamId : undefined })
   if (overrideAmount !== null && !requestedCurrency && forecast.length !== 1) {
     return NextResponse.json({ error: 'choose one currency for the override amount' }, { status: 422 })
   }

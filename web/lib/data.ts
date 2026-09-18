@@ -125,8 +125,30 @@ export async function journalPage(orgId: string, offset: number, limit = 50) {
      order by e.posting_date desc, e.entry_number desc
      limit ${limit} offset ${offset}
   `));
-  const c = (await db.execute(sql`select count(*) as n from journal_entries where org_id = ${orgId}`)) as any;
-  return { entries: r.rows, total: Number(c.rows[0].n) };
+  const c = (await db.execute<{ n: string }>(sql`select count(*) as n from journal_entries where org_id = ${orgId}`));
+  return { entries: r.rows, total: Number(c.rows[0]?.n ?? 0) };
+}
+
+interface JournalEntryDetailRow extends Record<string, unknown> {
+  id: string;
+  entry_number: string;
+  posting_date: string;
+  memo: string | null;
+  status: string;
+  origin: string;
+  source_document_id: string | null;
+  reverses_number: string | null;
+}
+
+interface JournalEntryDetailLineRow extends Record<string, unknown> {
+  line_number: number;
+  amount: string;
+  memo: string | null;
+  is_open_item: boolean;
+  account_number: string | null;
+  account_name: string;
+  party: string | null;
+  department: string | null;
 }
 
 export async function entryDetail(
@@ -142,13 +164,13 @@ export async function entryDetail(
     sql`l.subsidiary_id`,
     allowedSubsidiaryIds,
   );
-  const e = (await db.execute(sql`
+  const e = (await db.execute<JournalEntryDetailRow>(sql`
     select e.*, re.entry_number as reverses_number
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}${entrySubsidiaryFilter}
   `));
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<JournalEntryDetailLineRow>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
            a.number as account_number, a.name as account_name,
            p.display_name as party, d.name as department

@@ -52,6 +52,64 @@ function money(v: unknown): string {
   return normalizeMoneyValue(String(v ?? "0"));
 }
 
+interface JournalEntrySummaryRow extends Record<string, unknown> {
+  id: string;
+  entry_number: string;
+  posting_date: string;
+  memo: string | null;
+  status: string;
+  origin: string;
+  source_document_id: string | null;
+  line_count: string;
+  total_debits: string | null;
+}
+
+interface DocumentSummaryRow extends Record<string, unknown> {
+  id: string;
+  kind: string;
+  document_number: string | null;
+  reference_number: string | null;
+  document_date: string | null;
+  due_date: string | null;
+  status: string;
+  currency: string;
+  total: string | null;
+  memo: string | null;
+  posted_entry_id: string | null;
+  documentRevision: string;
+  party_id: string | null;
+  party: string | null;
+}
+
+interface DocumentDetailRow extends DocumentSummaryRow {
+  posting_date: string | null;
+  subtotal: string | null;
+  tax_total: string | null;
+}
+
+interface DocumentLineRow extends Record<string, unknown> {
+  line_number: number;
+  description: string | null;
+  quantity: string | null;
+  unit: string | null;
+  unit_price: string | null;
+  amount: string;
+  tax_amount: string | null;
+  account_number: string | null;
+  account_name: string | null;
+  item_name: string | null;
+}
+
+interface PartyDirectoryRow extends Record<string, unknown> {
+  id: string;
+  kind: string;
+  display_name: string;
+  short_code: string | null;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // whoami
 // ---------------------------------------------------------------------------
@@ -162,7 +220,7 @@ const accountRegisterTool: AssistantToolDef = {
         returned: r.lines.length,
         truncated: r.total > r.lines.length,
         balanceDebitSigned: money(r.balance),
-        lines: r.lines.map((l: any) => ({
+        lines: r.lines.map((l) => ({
           entryId: l.entry_id,
           entryNumber: l.entry_number,
           postingDate: l.posting_date,
@@ -221,7 +279,7 @@ const findJournalEntries: AssistantToolDef = {
     if (a.origin) where = sql`${where} and e.origin = ${a.origin}`;
     if (a.fromDate) where = sql`${where} and e.posting_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and e.posting_date <= ${a.toDate}`;
-    const rows = (await db.execute<any>(sql`
+    const rows = (await db.execute<JournalEntrySummaryRow>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
              e.source_document_id,
              count(l.id) as line_count,
@@ -280,7 +338,7 @@ const getJournalEntry: AssistantToolDef = {
     const a = raw as { entryId: string };
     const r = await entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds);
     if (!r.entry) return { ok: false, error: "entry_not_found" };
-    const e = r.entry as any;
+    const e = r.entry;
     return {
       ok: true,
       data: {
@@ -292,7 +350,7 @@ const getJournalEntry: AssistantToolDef = {
         origin: e.origin,
         sourceDocumentId: e.source_document_id,
         reversesEntryNumber: e.reverses_number,
-        lines: r.lines.map((l: any) => ({
+        lines: r.lines.map((l) => ({
           lineNumber: l.line_number,
           account: `${l.account_number ?? ""} ${l.account_name}`.trim(),
           amount: money(l.amount),
@@ -396,7 +454,7 @@ const findDocuments: AssistantToolDef = {
     if (a.partyQuery) where = sql`${where} and p.display_name ilike ${`%${a.partyQuery}%`}`;
     if (a.fromDate) where = sql`${where} and d.document_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
-    const rows = (await db.execute<any>(sql`
+    const rows = (await db.execute<DocumentSummaryRow>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
              ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
@@ -460,7 +518,7 @@ const getDocument: AssistantToolDef = {
     const a = raw as { documentId: string };
     // A document outside the caller's legal-entity scope reads as missing —
     // the same indistinguishability the UI single-record routes give.
-    const doc = (await db.execute<any>(sql`
+    const doc = (await db.execute<DocumentDetailRow>(sql`
       select d.*, ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
              p.display_name as party
         from documents d
@@ -473,7 +531,7 @@ const getDocument: AssistantToolDef = {
     if (!(await isDocKindEnabled(authz.user.orgId, d.kind))) return { ok: false, error: "document_not_found" };
     const perm = KIND_PERM[d.kind];
     if (!perm || !can(authz, perm)) return { ok: false, error: "forbidden" };
-    const lines = (await db.execute<any>(sql`
+    const lines = (await db.execute<DocumentLineRow>(sql`
       select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount,
              l.tax_amount, a.number as account_number, a.name as account_name,
              i.name as item_name
@@ -549,7 +607,7 @@ const findParties: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
     }
-    const rows = (await db.execute<any>(sql`
+    const rows = (await db.execute<PartyDirectoryRow>(sql`
       select id, kind, display_name, short_code, email, phone, is_active
         from parties where ${where}
        order by display_name

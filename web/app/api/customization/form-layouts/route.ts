@@ -74,15 +74,15 @@ export async function POST(req: Request) {
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
-      const result = (await tx.execute(sql`
+      const result = (await tx.execute<{ id: string; name: string }>(sql`
         insert into form_layouts (org_id, record_type, name, description, is_default, is_active,
                                   allowed_roles, layout, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
                 ${!!body.isDefault}, ${body.isActive ?? true},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
         returning id, name
-      `)) as any;
-      const inserted = result.rows[0];
+      `));
+      const inserted = result.rows[0]!;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'form_layouts', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name })}, ${user.id})`);

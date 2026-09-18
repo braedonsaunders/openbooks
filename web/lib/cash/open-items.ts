@@ -21,6 +21,20 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
  * Reversed historical entries remain in the general ledger forever, but must
  * not become a second collectible/payable item after append-only correction.
  */
+interface OpenItemQueryRow extends Record<string, unknown> {
+  id: string
+  entry_id: string
+  doc_id: string | null
+  doc_kind: string | null
+  doc_number: string | null
+  party_id: string | null
+  party_name: string
+  tran_date: string
+  due_date: string | null
+  remaining: string
+  func: string | null
+}
+
 export async function openItems(
   orgId: string,
   side: Side,
@@ -47,7 +61,7 @@ export async function openItems(
   // applications instead would let a later settlement rewrite a past forecast,
   // and gating on the live cached open_balance would hide documents settled
   // after the date that were open on it.
-  const result = (await db.execute(sql`
+  const result = (await db.execute<OpenItemQueryRow>(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
@@ -82,7 +96,7 @@ export async function openItems(
   // functionals, so each item translates to the presentation currency at the
   // closing spot — raw functionals would mix subsidiary currencies. One rate
   // lookup per functional in view; missing coverage fails closed.
-  const rows = result.rows as any[]
+  const rows = result.rows
   const base = await presentationCurrency(orgId)
   const rates = await presentationRates(orgId, base, rows.map((row) => row.func ?? null), asOf)
   return rows.map((row) => ({

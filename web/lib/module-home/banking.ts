@@ -137,7 +137,7 @@ export async function bankingHome(
     // 7-day figure, folded in as a second grouped shape would cost another
     // scan — computed in JS from daily-precision rows instead is overkill;
     // one extra filtered aggregate below keeps this a single pass).
-    db.execute<any>(sql`
+    db.execute<{ account_id: string; wk: string; func: string | null; flow: string; flow_7d: string | null }>(sql`
       select jl.account_id,
              (date_trunc('week', je.posting_date))::date as wk,
              sub.base_currency as func,
@@ -180,7 +180,7 @@ export async function bankingHome(
   const rates = await presentationRates(
     orgId,
     base,
-    [...rosterRes.rows.map((r) => r.func ?? null), ...flowsRes.rows.map((r) => r.func ?? null)],
+    [...rosterRes.rows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.rows.map((r) => r.func)],
     today,
   )
   const tr = (amount: unknown, func: unknown): number =>

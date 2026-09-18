@@ -75,12 +75,12 @@ export async function POST(req: Request) {
              where org_id = ${user.orgId} and record_type = ${body.recordType} and scope='user'
                and owner_id = ${user.id} and is_default`);
       }
-      const [inserted] = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string; name: string }>(sql`
         insert into list_views (org_id, record_type, name, scope, owner_id, is_default, is_active,
                                 config, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${scope}, ${ownerId},
                 ${!!body.isDefault}, true, ${config}, ${user.id}, ${user.id})
-        returning id, name`) as any).rows;
+        returning id, name`)).rows[0]!;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name, scope })}, ${user.id})`);

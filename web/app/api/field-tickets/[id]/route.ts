@@ -116,16 +116,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ('documentDate' in body && (typeof body.documentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.documentDate))) {
     return NextResponse.json({ error: 'invalid documentDate — expected YYYY-MM-DD' }, { status: 422 })
   }
-  if ('projectId' in body && body.projectId !== null && !isUuid(body.projectId)) {
+  if ('projectId' in body && body.projectId !== null && (typeof body.projectId !== 'string' || !isUuid(body.projectId))) {
     return NextResponse.json({ error: 'invalid projectId' }, { status: 422 })
   }
-  if ('foremanPartyId' in body && body.foremanPartyId !== null && !isUuid(body.foremanPartyId)) {
+  if ('foremanPartyId' in body && body.foremanPartyId !== null && (typeof body.foremanPartyId !== 'string' || !isUuid(body.foremanPartyId))) {
     return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
   }
-  if ('period' in body && !['shift', 'daily', 'weekly'].includes(body.period)) {
+  if ('period' in body && (typeof body.period !== 'string' || !['shift', 'daily', 'weekly'].includes(body.period))) {
     return NextResponse.json({ error: 'invalid period' }, { status: 422 })
   }
-  if ('projectId' in body && isUuid(body.projectId)) {
+  if ('projectId' in body && typeof body.projectId === 'string' && isUuid(body.projectId)) {
     const projectDenied = await guardProjectScope(gate, body.projectId)
     if (projectDenied) return projectDenied
   }
@@ -182,7 +182,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const expectedRevision = preflightRevision as string
       // Same fail-closed contract as PATCH above: a malformed foreman id
       // must not coerce to null and silently clear the stored foreman.
-      if ('foremanPartyId' in body && body.foremanPartyId !== null && !isUuid(body.foremanPartyId)) {
+      if ('foremanPartyId' in body && body.foremanPartyId !== null && (typeof body.foremanPartyId !== 'string' || !isUuid(body.foremanPartyId))) {
         return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
       }
       await updateTicketHeader(orgId, userId, id, {
@@ -198,18 +198,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (action === 'add-line') {
       const expectedRevision = preflightRevision as string
-      const equipmentUnitId = isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
+      const equipmentUnitId = typeof body.equipmentUnitId === 'string' && isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
-      if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'equipment'))) {
+      if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'equipment'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0]?.kind === 'equipment_charge') {
           return NextResponse.json({ error: 'not found' }, { status: 404 })
         }
       }
-      if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
+      if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
@@ -217,18 +217,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
       }
       await addTicketLine(orgId, userId, id, {
-        itemId: body.itemId,
-        quantity: body.quantity,
+        // Forwarded as received: the engine looks the item up (garbage fails
+        // closed there, exactly as when this read `any`), and parses the
+        // quantity — only the static shape is pinned down here.
+        itemId: body.itemId as string,
+        quantity: body.quantity as string | number,
         rateUnitCode: typeof body.rateUnitCode === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(body.rateUnitCode)
           ? body.rateUnitCode
           : null,
         equipmentUnitId,
-        employeeId: isUuid(body.employeeId) ? body.employeeId : null,
-        description: body.description ?? null,
+        employeeId: typeof body.employeeId === 'string' && isUuid(body.employeeId) ? body.employeeId : null,
+        description: (body.description ?? null) as string | null,
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (action === 'remove-line') {
       const expectedRevision = preflightRevision as string
-      if (!isUuid(body.lineId)) return NextResponse.json({ error: 'invalid lineId' }, { status: 422 })
+      if (typeof body.lineId !== 'string' || !isUuid(body.lineId)) return NextResponse.json({ error: 'invalid lineId' }, { status: 422 })
       await removeTicketLine(orgId, id, body.lineId, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (action === 'submit') {
       await submitFieldTicket(orgId, userId, id)

@@ -75,6 +75,30 @@ interface ExpenseTrendRow extends Record<string, unknown> {
   bill_amount: SqlNumber
 }
 
+interface ExpenseSpenderRow extends Record<string, unknown> {
+  employee_id: string
+  employee_name: string
+  current_spend: SqlNumber
+  prior_spend: SqlNumber
+  report_count: string
+}
+
+interface ExpenseCategoryRow extends Record<string, unknown> {
+  category_id: string
+  category_name: string
+  current_amount: SqlNumber
+  prior_amount: SqlNumber
+}
+
+interface ExpenseQueueRow extends Record<string, unknown> {
+  id: string
+  document_number: string | null
+  employee: string | null
+  date: string | null
+  total: SqlNumber
+  status: string
+}
+
 const moneyUnits = (value: unknown): bigint => {
   if (value === null || value === undefined) return 0n
   if (typeof value !== 'string' && typeof value !== 'number') {
@@ -143,7 +167,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     `),
     // Top spenders — expense reports by employee, current vs prior window
     // (verbatim Spend Velocity query 7).
-    db.execute(sql`
+    db.execute<ExpenseSpenderRow>(sql`
       select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
         sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
@@ -179,7 +203,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       ) s
     `),
     // Expense categories (accounts on expense-report lines), current vs prior.
-    db.execute(sql`
+    db.execute<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
@@ -234,7 +258,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       order by 1
     `),
     // Approval queue — oldest unfinished reports first.
-    db.execute(sql`
+    db.execute<ExpenseQueueRow>(sql`
       select d.id, d.document_number, d.document_date::text as date, d.total, d.status,
         p.display_name as employee
       from documents d
@@ -248,7 +272,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
   ]))
 
   const pipe = pipeRes.rows[0] ?? {}
-  const topSpenders: ExpenseSpender[] = (spenderRes.rows as any[])
+  const topSpenders: ExpenseSpender[] = spenderRes.rows
     .map((r) => {
       const current = toUnits(r.current_spend ?? 0)
       const prior = toUnits(r.prior_spend ?? 0)
@@ -263,7 +287,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     })
     .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n)
 
-  const categories: ExpenseCategory[] = (catRes.rows as any[])
+  const categories: ExpenseCategory[] = catRes.rows
     .map((r) => {
       const current = toUnits(r.current_amount ?? 0)
       const prior = toUnits(r.prior_amount ?? 0)
@@ -307,7 +331,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     topSpenders,
     categories,
     monthlyTrends,
-    queue: (queueRes.rows as any[]).map((r) => ({
+    queue: queueRes.rows.map((r) => ({
       id: r.id,
       documentNumber: r.document_number ?? '',
       employee: r.employee ?? null,

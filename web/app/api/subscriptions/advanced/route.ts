@@ -9,6 +9,7 @@ import {
   subscriptionPeriodCount,
   publishPlanVersion,
   type AmendmentRequest,
+  type AmendmentType,
   type BillingTiming,
   type Interval,
   type RenewalPolicy,
@@ -124,8 +125,8 @@ export async function POST(req: Request) {
           subscriptionId: String(body.subscriptionId),
           planVersionId: String(body.planVersionId),
           termStartsOn: String(body.termStartsOn),
-          termEndsOn: body.termEndsOn || null,
-          trialEndsOn: body.trialEndsOn || null,
+          termEndsOn: typeof body.termEndsOn === "string" || body.termEndsOn == null ? body.termEndsOn || null : String(body.termEndsOn),
+          trialEndsOn: typeof body.trialEndsOn === "string" || body.trialEndsOn == null ? body.trialEndsOn || null : String(body.trialEndsOn),
           renewalPolicy: (body.renewalPolicy ?? "auto") as RenewalPolicy,
           renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : subscriptionPeriodCount(body.renewalTermMonths, "renewal term"),
         }, authz.allowedSubsidiaryIds);
@@ -134,7 +135,15 @@ export async function POST(req: Request) {
         if (!body.subscriptionId || !body.type || !body.effectiveOn || !body.idempotencyKey) {
           return NextResponse.json({ error: "subscription, amendment type, effective date and idempotency key are required" }, { status: 400 });
         }
-        const amendment = { ...body } as AmendmentRequest;
+        if (typeof body.subscriptionId !== "string" || typeof body.type !== "string" ||
+          typeof body.effectiveOn !== "string" || typeof body.idempotencyKey !== "string") {
+          return NextResponse.json({ error: "subscription, amendment type, effective date and idempotency key must be strings" }, { status: 400 });
+        }
+        const amendment: AmendmentRequest = { ...body,
+          subscriptionId: body.subscriptionId,
+          type: body.type as AmendmentType,
+          effectiveOn: body.effectiveOn,
+          idempotencyKey: body.idempotencyKey };
         if (body.quantity != null && body.quantity !== "") {
           const quantity = exactMoney(body.quantity);
           if (quantity === null) return invalidDecimal("quantity");

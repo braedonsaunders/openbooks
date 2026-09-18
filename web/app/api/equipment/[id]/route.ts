@@ -55,7 +55,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
   const status = body.status ?? current.rows[0].status
-  if (!['draft','active','inactive','retired'].includes(status)) return bad('invalid_status')
+  if (typeof status !== 'string' || !['draft','active','inactive','retired'].includes(status)) return bad('invalid_status')
   const name = body.name !== undefined ? text(body.name) : current.rows[0].name
   if (status === 'active' && (!name || name === 'New equipment unit')) return bad('name_required')
   const chargeItemId = body.chargeItemId !== undefined ? text(body.chargeItemId) : current.rows[0].charge_item_id

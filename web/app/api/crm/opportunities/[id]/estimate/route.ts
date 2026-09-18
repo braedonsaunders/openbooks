@@ -94,13 +94,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const op = opportunity.rows[0]
     if (!op) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
-    const sequence = (await tx.execute<any>(sql`
+    const sequence = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${user.orgId}, 'quote', null, 'EST-')
       on conflict on constraint sequences_org_kind_sub do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${user.orgId}
       returning prefix, next_number, padding`))
-    const seq = sequence.rows[0]
+    const seq = sequence.rows[0]!
     const number = `${seq.prefix}${String(seq.next_number).padStart(seq.padding, '0')}`
     const projected = persistEstimateProjectedAmount(op.projected_amount ?? '0')
     const document = (await tx.execute<{ id: string }>(sql`

@@ -202,7 +202,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
       const amountRaw = canonicalDecimal(amount, 4)
       if (
-        !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
+        typeof componentId !== 'string' || !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
         !employees.every((v: unknown) => typeof v === 'string' && isUuid(v)) ||
         amountRaw === null ||
         (note != null && (typeof note !== 'string' || note.length > 500)) ||
@@ -218,7 +218,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             documentId: id,
             actorId: gate.user.id,
             allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-            mutation: { action: 'add', employeePartyId, componentId, amount: canonicalAmount, replaceComponent, note },
+            mutation: { action: 'add', employeePartyId, componentId, amount: canonicalAmount, replaceComponent: replaceComponent ?? undefined, note },
           })
         }
       })
@@ -243,7 +243,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (hoursRaw === null) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       }
       if (
-        !isUuid(employeePartyId) || !isUuid(componentId) ||
+        typeof employeePartyId !== 'string' || !isUuid(employeePartyId) ||
+        typeof componentId !== 'string' || !isUuid(componentId) ||
         amountRaw === null ||
         (note != null && (typeof note !== 'string' || note.length > 500)) ||
         (replaceComponent != null && typeof replaceComponent !== 'boolean')
@@ -255,12 +256,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         documentId: id,
         actorId: gate.user.id,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        mutation: { action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw), hours: hoursRaw, replaceComponent, note },
+        mutation: { action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw), hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note },
       })
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'delete-adjustment') {
-      if (!isUuid(body.adjustmentId)) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      if (typeof body.adjustmentId !== 'string' || !isUuid(body.adjustmentId)) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       await mutatePayRunAdjustment({
         orgId: gate.user.orgId,
         documentId: id,
@@ -301,7 +302,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, included: keep.size, excluded: roster.length - keep.size })
     }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {
-      if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+      if (typeof body.employeePartyId !== 'string' || !isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
       await mutatePayRunAdjustment({
         orgId: gate.user.orgId,
         documentId: id,
@@ -319,7 +320,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'record-payment') {
-      if (!isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })
+      if (typeof body.bankAccountId !== 'string' || !isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })
       const result = await recordPayRunPayment({
         orgId: gate.user.orgId, actorId: gate.user.id, documentId: id,
         bankAccountId: body.bankAccountId,

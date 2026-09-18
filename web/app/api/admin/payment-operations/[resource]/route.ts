@@ -69,7 +69,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data)
+  const body = parsedBody.data as {
+    code?: string; name?: string; formatterScript?: string; direction?: string;
+    country?: unknown; currency?: string; fileExtension?: string; contentType?: string;
+    settings?: Record<string, unknown>; isActive?: boolean; bankAccountId?: string;
+    paymentFormatId?: string; subsidiaryId?: string; paymentBankProfileId?: string;
+    cron?: string; timezone?: string; selectionCriteria?: Record<string, unknown>;
+    action?: string; partyId?: string; partyBankAccountId?: string; scheme?: string;
+    mandateReference?: string; status?: string; signedOn?: string; validFrom?: string;
+    expiresOn?: string; proofFileId?: string;
+  }
   try {
     if (resource === 'formats') {
       // Format currency is Multi-currency configuration. Turning that
@@ -89,15 +98,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const row = await db.transaction(async (tx) => {
         const createdFormat = (await tx.insert(schema.paymentFormats).values({
           orgId: gate.user.orgId,
-          code: body.code.trim().toUpperCase(),
-          name: body.name.trim(),
+          code: body.code!.trim().toUpperCase(),
+          name: body.name!.trim(),
           rail: 'custom',
           direction: body.direction === 'debit' || body.direction === 'both' ? body.direction : 'credit',
           country,
           currency: body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null,
           fileExtension: body.fileExtension?.trim().replace(/^\./, '') || 'txt',
           contentType: body.contentType?.trim() || 'text/plain; charset=utf-8',
-          formatterScript: body.formatterScript,
+          formatterScript: body.formatterScript!,
           settings: body.settings ?? {},
           isActive: body.isActive !== false,
           createdBy: gate.user.id,
@@ -122,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const country = optionalCountry(body.country)
       if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
       body.country = country
-      if (!body.name || !isUuid(body.bankAccountId) || !isUuid(body.paymentFormatId)) {
+      if (!body.name || !isUuid(body.bankAccountId ?? '') || !isUuid(body.paymentFormatId ?? '')) {
         return NextResponse.json({ error: 'name, bankAccountId, and paymentFormatId are required' }, { status: 400 })
       }
       let currency =
@@ -144,19 +153,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json(row, { status: 201 })
     }
     if (resource === 'schedules') {
-      if (!body.name?.trim() || !isUuid(body.paymentBankProfileId) || !body.cron?.trim()) {
+      if (!body.name?.trim() || !isUuid(body.paymentBankProfileId ?? '') || !body.cron?.trim()) {
         return NextResponse.json({ error: 'name, paymentBankProfileId, and cron are required' }, { status: 400 })
       }
-      const nextRunAt = computeNextRunAt(body.cron.trim(), new Date(), body.timezone?.trim() || 'UTC')
+      const nextRunAt = computeNextRunAt(body.cron!.trim(), new Date(), body.timezone?.trim() || 'UTC')
       if (!nextRunAt) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
       const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
       if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       const row = await db.transaction(async (tx) => {
         const created = (await tx.insert(schema.paymentSchedules).values({
           orgId: gate.user.orgId,
-          name: body.name.trim(),
-          paymentBankProfileId: body.paymentBankProfileId,
-          cron: body.cron.trim(),
+          name: body.name!.trim(),
+          paymentBankProfileId: body.paymentBankProfileId!,
+          cron: body.cron!.trim(),
           timezone: body.timezone?.trim() || 'UTC',
           selectionCriteria: body.selectionCriteria ?? {},
           action: body.action === 'submit_for_approval' ? 'submit_for_approval' : 'create_draft',
@@ -171,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       })
       return NextResponse.json({ id: row.id }, { status: 201 })
     }
-    if (!isUuid(body.partyId) || !isUuid(body.partyBankAccountId) || !body.mandateReference?.trim()) {
+    if (!isUuid(body.partyId ?? '') || !isUuid(body.partyBankAccountId ?? '') || !body.mandateReference?.trim()) {
       return NextResponse.json({ error: 'partyId, partyBankAccountId, and mandateReference are required' }, { status: 400 })
     }
     const mandateBank = (await db.execute(sql`
@@ -180,18 +189,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
          and p.org_id = ${gate.user.orgId} and p.is_active and b.is_active and b.approved_at is not null
     `))
     if (!mandateBank.rows[0]) return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
+    const scheme = body.scheme === 'nacha' || body.scheme === 'sepa_core' || body.scheme === 'sepa_b2b' || body.scheme === 'custom' ? body.scheme : 'custom'
+    const mandateStatus = body.status === 'pending' || body.status === 'active' || body.status === 'suspended' || body.status === 'revoked' || body.status === 'expired' ? body.status : 'pending'
     const row = await db.transaction(async (tx) => {
       const created = (await tx.insert(schema.paymentMandates).values({
         orgId: gate.user.orgId,
-        partyId: body.partyId,
-        partyBankAccountId: body.partyBankAccountId,
-        scheme: ['nacha', 'sepa_core', 'sepa_b2b', 'custom'].includes(body.scheme) ? body.scheme : 'custom',
-        mandateReference: body.mandateReference.trim(),
-        status: ['pending', 'active', 'suspended', 'revoked', 'expired'].includes(body.status) ? body.status : 'pending',
+        partyId: body.partyId!,
+        partyBankAccountId: body.partyBankAccountId!,
+        scheme,
+        mandateReference: body.mandateReference!.trim(),
+        status: mandateStatus,
         signedOn: body.signedOn || null,
         validFrom: body.validFrom || null,
         expiresOn: body.expiresOn || null,
-        proofFileId: isUuid(body.proofFileId) ? body.proofFileId : null,
+        proofFileId: isUuid(body.proofFileId ?? '') ? body.proofFileId : null,
         createdBy: gate.user.id,
         updatedBy: gate.user.id,
       }).returning())[0]!

@@ -197,7 +197,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     : Number(body.probability)
   if (!Number.isInteger(probability) || probability < 0 || probability > 100) return NextResponse.json({ error: 'probability must be from 0 to 100' }, { status: 422 })
   let category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
-  if (!CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
+  if (typeof category !== 'string' || !CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
   let title = body.title === undefined ? current.title : textOrNull(body.title)
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
   if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
@@ -292,7 +292,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const refusal = stageGates(policy)
       ? validateOpportunityStageTransition(
           {
-            lineCount: lines ? lines.length : await storedLineCount(db, id, user.orgId),
+            lineCount: Array.isArray(lines) ? lines.length : await storedLineCount(db, id, user.orgId),
             hasPrimaryContact: !!contactId,
             projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
             winLossReason,
@@ -408,7 +408,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
       throw new OpportunityValidationError('probability must be from 0 to 100')
     }
-    if (!CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
+    if (typeof category !== 'string' || !CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
     if (!title) throw new OpportunityValidationError('title is required')
     // Activation means "a real record, not a creation stub" — the drawer has
     // no active toggle, so this computation is the only path to list
@@ -439,7 +439,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // Item and team-member references are mutable too.  Validate them after
     // locking and before the corresponding delete/insert pairs below.
+    // (The pre-lock block already rejected a non-array `lines`; re-check here
+    // so the narrowed element type survives into this closure.)
     if (lines) {
+      if (!Array.isArray(lines)) throw new OpportunityValidationError('lines must be an array')
       for (const line of lines) {
         if (!line.itemId || !isUuid(line.itemId) || !((await tx.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`))).rows[0]) {
           throw new OpportunityValidationError('a valid item is required for every line')
@@ -493,7 +496,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const refusal = stageGates(policy)
         ? validateOpportunityStageTransition(
             {
-              lineCount: lines ? lines.length : await storedLineCount(lockedDb, id, user.orgId),
+              lineCount: Array.isArray(lines) ? lines.length : await storedLineCount(lockedDb, id, user.orgId),
               hasPrimaryContact: !!contactId,
               projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
               winLossReason,
@@ -504,7 +507,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (refusal) throw new OpportunityValidationError(STAGE_REFUSAL_MESSAGES[refusal])
     }
 
-    if (lines && calculated) {
+    if (Array.isArray(lines) && calculated) {
       await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
       for (let index = 0; index < lines.length; index++) {
         const input = lines[index]!

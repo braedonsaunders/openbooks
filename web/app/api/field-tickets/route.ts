@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  if (!isUuid(body.projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 422 })
+  if (typeof body.projectId !== 'string' || !isUuid(body.projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 422 })
   // Creating under a project is itself a subsidiary boundary — the ticket
   // inherits the job's legal entity. Mirror the [id] route's project gate so
   // a restricted caller cannot open a ticket under another subsidiary's job.
@@ -85,9 +85,9 @@ export async function POST(req: Request) {
     scopedProject.rows[0].subsidiaryId,
   )
   if (projectDenied) return projectDenied
-  if (body.period !== undefined && !TICKET_PERIODS.includes(body.period)) return NextResponse.json({ error: 'Invalid ticket period' }, { status: 422 })
+  if (body.period !== undefined && (typeof body.period !== 'string' || !TICKET_PERIODS.includes(body.period as TicketPeriod))) return NextResponse.json({ error: 'Invalid ticket period' }, { status: 422 })
   const period = body.period as TicketPeriod | undefined
-  const date = body.date
+  const date = body.date as string | undefined
   try {
     const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     return NextResponse.json(created)

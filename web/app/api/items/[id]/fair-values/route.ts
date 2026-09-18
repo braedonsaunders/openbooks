@@ -115,16 +115,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         (${orgId}, ${id}, ${parsed.currency}, ${parsed.unitPrice}, ${parsed.lowValue}, ${parsed.highValue},
          ${parsed.effectiveFrom}, ${parsed.effectiveTo}, ${parsed.isActive}, ${actorId}, ${actorId})
       returning *
-    `)) as any
+    `))
+    const createdRow = row.rows[0]!
     await auditSetupChange({
       orgId,
       table: 'fair_value_prices',
-      rowId: String(row.rows[0].id),
+      rowId: String(createdRow.id),
       action: 'insert',
-      changes: { after: row.rows[0] },
+      changes: { after: createdRow },
       actorId,
     }, tx)
-    return row.rows[0] as Record<string, unknown>
+    return createdRow
   })
   return NextResponse.json({ id: String(created.id) })
 }

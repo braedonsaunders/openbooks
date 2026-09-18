@@ -97,26 +97,29 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data
-  if (!body || !isUuid(body.fileId) || !body.targetTable || !isUuid(body.targetId)) {
+  const fileId = typeof body?.fileId === 'string' ? body.fileId : undefined
+  const targetId = typeof body?.targetId === 'string' ? body.targetId : undefined
+  if (!body || !fileId || !isUuid(fileId) || !body.targetTable || !targetId || !isUuid(targetId)) {
     return NextResponse.json({ error: 'fileId, targetTable, and targetId are required' }, { status: 400 })
   }
   if (!isAttachableTargetTable(String(body.targetTable))) {
     return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
   }
-  if (!canMutateFiles(gate, body.targetTable)) {
+  const targetTable = String(body.targetTable)
+  if (!canMutateFiles(gate, targetTable)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
-  if (!(await attachmentTargetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await attachmentTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.
-  if (!(await getFile(gate.user.orgId, body.fileId, fileViewer(gate)))) {
+  if (!(await getFile(gate.user.orgId, fileId, fileViewer(gate)))) {
     return NextResponse.json({ error: 'file not found' }, { status: 404 })
   }
   const id = await attachExisting({
     orgId: gate.user.orgId,
-    fileId: body.fileId,
-    targetTable: body.targetTable,
-    targetId: body.targetId,
+    fileId,
+    targetTable,
+    targetId,
     createdBy: gate.user.id,
   })
   if (!id) return NextResponse.json({ error: 'already attached' }, { status: 409 })

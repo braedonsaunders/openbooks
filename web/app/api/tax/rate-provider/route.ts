@@ -71,15 +71,18 @@ export async function POST(req: Request) {
     }
     const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);
     if (taxableAmount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+    if (body.currency != null && typeof body.currency !== "string") return NextResponse.json({ error: "invalid currency" }, { status: 422 });
+    if (body.itemCode != null && typeof body.itemCode !== "string") return NextResponse.json({ error: "invalid item code" }, { status: 422 });
+    if (body.quotedOn != null && typeof body.quotedOn !== "string") return NextResponse.json({ error: "invalid quotedOn" }, { status: 422 });
     const result = await quoteExternalTax(
       gate.user.orgId,
       {
         taxableAmount: normalizeMoney(taxableAmount),
-        currency: body.currency ?? null,
+        currency: typeof body.currency === "string" ? body.currency : null,
         shipFrom: body.shipFrom ?? {},
         shipTo: body.shipTo ?? {},
-        itemCode: body.itemCode ?? null,
-        quotedOn: body.quotedOn,
+        itemCode: typeof body.itemCode === "string" ? body.itemCode : null,
+        quotedOn: typeof body.quotedOn === "string" ? body.quotedOn : undefined,
       },
       gate.user.id,
     );

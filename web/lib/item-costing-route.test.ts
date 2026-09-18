@@ -473,7 +473,7 @@ const itemRatesSource = readFileSync(new URL('./item-rates.ts', import.meta.url)
 
 test('item-rate version replacement copies unrelated item lines', () => {
   assert.match(ratesRouteSource, /const previousVersion = \(\(await tx\.execute/)
-  assert.match(ratesRouteSource, /insert into item_rate_lines \([\s\S]*select org_id, \$\{version\.rows\[0\]\.id\}[\s\S]*item_id <> \$\{id\}/)
+  assert.match(ratesRouteSource, /insert into item_rate_lines \([\s\S]*select org_id, \$\{version\.rows\[0\]!?\.id\}[\s\S]*item_id <> \$\{id\}/)
 })
 
 test('time bill snapshots rank matching dimensions and use the organization currency for defaults', () => {

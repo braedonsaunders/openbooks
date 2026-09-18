@@ -1690,9 +1690,9 @@ export type Opt = {
   code?: string
   rate?: string
   label?: string
-  last_four?: string
-  network?: string
-  liability_account_id?: string
+  last_four?: string | null
+  network?: string | null
+  liability_account_id?: string | null
   /** Settlement currency the account accepts (null = any). Drawers read it
    * for form-level currency validation (F-t06-002). */
   currency_restriction?: string | null
@@ -1790,7 +1790,7 @@ export async function itemOptions(orgId?: string): Promise<Opt[]> {
 /** Active corporate cards (for card_charge / card_refund funding source). */
 export async function cardOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute<any>(sql`
+  const r = (await db.execute<{ id: string; label: string; last_four: string | null; network: string | null; liability_account_id: string | null; holder: string | null }>(sql`
     select pc.id, pc.label, pc.last_four, pc.network, pc.liability_account_id, p.display_name as holder
       from payment_cards pc
       left join parties p on p.id = pc.holder_party_id and p.org_id = pc.org_id

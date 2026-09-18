@@ -51,9 +51,11 @@ export async function POST(req: Request) {
   const { partyId, from, to } = body
   const filingAccountId = body.filingAccountId ?? null
   if (
-    !isUuid(partyId) || !DATE.test(String(from)) || !DATE.test(String(to))
+    typeof partyId !== 'string' || !isUuid(partyId)
+    || typeof from !== 'string' || typeof to !== 'string'
+    || !DATE.test(from) || !DATE.test(to)
     || from > to
-    || (filingAccountId !== null && !isUuid(filingAccountId))
+    || (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId)))
   ) {
     return NextResponse.json({ error: 'invalid request' }, { status: 422 })
   }

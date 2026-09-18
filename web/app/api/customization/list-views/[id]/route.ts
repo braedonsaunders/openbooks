@@ -14,11 +14,11 @@ const nameBodySchema = z.looseObject({
 });
 
 async function loadOwn(orgId: string, userId: string, id: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; recordType: string; name: string; scope: string; ownerId: string | null; isDefault: boolean; isActive: boolean; config: unknown }>(sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
       from list_views where org_id = ${orgId} and id = ${id}
-  `)) as any;
+  `));
   const row = r.rows[0] ?? null;
   if (!row) return null;
   // org-scope rows are visible org-wide; user-scope only to the owner.
