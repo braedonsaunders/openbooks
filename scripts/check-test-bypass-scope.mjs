@@ -557,56 +557,50 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // fails the build); a file fixed must leave this list in the same commit
 // (a stale entry fails the build). Shrink this list only by fixing files —
 // never add an entry without a slot-probe verification behind it.
-// 101 files, 802 unscoped writes.
+// 114 files, 894 unscoped writes.
 export const BASELINE_EXPOSED = new Map([
-  ["web/app/api/admin/setup/overhead/route-apply-date.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/admin/setup/overhead/route-publish-validation.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/ap-capture/capture-revision-guard.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/compliance/information-returns/route-threshold.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/crm/accounts/[id]/route-magnitude.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/crm/activities/[id]/route-duration.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/crm/opportunities/[id]/route-magnitude.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/app/api/journals/[id]/route-custom-preservation.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/application/setup-commands.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/assistant/tools-expenses.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/assistant/tools-files-scope.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/data-io/transaction-roundtrip.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/data-io/transaction-subsidiary.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/order-revision-integrity.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/payroll-filing-history.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
-  ["web/lib/payroll-payment-route-scope.integration.test.ts", { writes: 0, via: "inherited exposure; not yet triaged (int1 queue)" }],
+  ["web/app/(app)/admin/navigation/view-permission.integration.test.ts", { writes: 2, via: "view.ts -> store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/[agentKey]/view-permission.integration.test.ts", { writes: 4, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/overview-loader.integration.test.ts", { writes: 5, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/view-permission.integration.test.ts", { writes: 2, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
+  ["web/app/(app)/approvals/_union-worklist.integration.test.ts", { writes: 8, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/_metrics-approval-union.integration.test.ts", { writes: 8, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/_metrics-arap-tiles.integration.test.ts", { writes: 11, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/agent-findings-count.integration.test.ts", { writes: 4, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/pending-approvals-count.integration.test.ts", { writes: 7, via: "authz.ts -> auth.ts" }],
-
-
+  ["web/app/api/admin/setup/overhead/route-apply-date.integration.test.ts", { writes: 3, via: "route.ts -> overhead-publish.ts -> true-cost-data.ts -> money-server.ts -> locale.ts -> auth.ts" }],
+  ["web/app/api/admin/setup/overhead/route-publish-validation.integration.test.ts", { writes: 1, via: "route.ts -> overhead-publish.ts -> true-cost-data.ts -> money-server.ts -> locale.ts -> auth.ts" }],
+  ["web/app/api/admin/setup/overhead/route.integration.test.ts", { writes: 16, via: "route.ts -> overhead-publish.ts -> true-cost-data.ts -> money-server.ts -> locale.ts -> auth.ts" }],
   ["web/app/api/admin/users/route.integration.test.ts", { writes: 3, via: "route.ts -> auth-reset.ts -> auth.ts" }],
   ["web/app/api/agents/briefing/route.integration.test.ts", { writes: 3, via: "route.ts -> briefing.ts -> fiscal.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/agents/inbox/route.integration.test.ts", { writes: 7, via: "route.ts -> proposals.ts -> tool-catalog.ts -> documents.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-
-
-
-
+  ["web/app/api/ap-capture/capture-revision-guard.integration.test.ts", { writes: 6, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/ap-capture/review-controls.integration.test.ts", { writes: 8, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/compliance/information-returns/route-threshold.integration.test.ts", { writes: 2, via: "route.ts -> compliance.ts -> core.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/crm/accounts/[id]/route-magnitude.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/crm/activities/[id]/route-duration.integration.test.ts", { writes: 2, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/crm/opportunities/[id]/route-magnitude.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/crm/opportunities/[id]/route-revision.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/documents/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/expenses/actions/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/expenses/actions/route-resubmit.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/field-tickets/[id]/route-malformed-header.integration.test.ts", { writes: 10, via: "field-tickets.ts -> authz.ts -> auth.ts" }],
-
+  ["web/app/api/journals/[id]/route-custom-preservation.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/journals/[id]/route-header-refs.integration.test.ts", { writes: 13, via: "documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/journals/[id]/route-line-account-scope.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/journals/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/journals/[id]/route-subsidiary.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/pdf-templates/[id]/route-patch-flags.integration.test.ts", { writes: 3, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/api/timesheets/reject-audit.integration.test.ts", { writes: 6, via: "route.ts -> _lib.ts -> authz.ts -> auth.ts" }],
+  ["web/app/api/timesheets/reopen-audit.integration.test.ts", { writes: 6, via: "route.ts -> _lib.ts -> authz.ts -> auth.ts" }],
   ["web/lib/api/writers-distributions.integration.test.ts", { writes: 12, via: "writers.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/application/approvals-worklist.integration.test.ts", { writes: 10, via: "approvals.ts -> authz.ts -> auth.ts" }],
   ["web/lib/application/banking-actions.integration.test.ts", { writes: 17, via: "tool-catalog.ts -> authz.ts -> auth.ts" }],
   ["web/lib/application/document-lifecycle-kinds.integration.test.ts", { writes: 8, via: "tool-catalog.ts -> authz.ts -> auth.ts" }],
   ["web/lib/application/documents-subsidiary-scope.integration.test.ts", { writes: 7, via: "context.ts -> authz.ts -> auth.ts" }],
   ["web/lib/application/files-upload.integration.test.ts", { writes: 5, via: "tool-catalog.ts -> authz.ts -> auth.ts" }],
-
-  ["web/lib/apps/custom-field-controls.integration.test.ts", { writes: 1, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/lib/application/setup-commands.integration.test.ts", { writes: 13, via: "tool-catalog.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/apps/custom-field-controls.integration.test.ts", { writes: 15, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/apps/query-catalog.integration.test.ts", { writes: 5, via: "custom-record-report-catalog.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/open-items-scope.integration.test.ts", { writes: 8, via: "registry.ts -> tools.ts -> data.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/assistant/tool-contract.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
@@ -616,10 +610,11 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/assistant/tools-banking-scope.integration.test.ts", { writes: 6, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-budgets-scope.integration.test.ts", { writes: 12, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-close-scope.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/assistant/tools-crm.integration.test.ts", { writes: 11, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-equipment.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-
-
-
+  ["web/lib/assistant/tools-expenses.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/assistant/tools-files-scope.integration.test.ts", { writes: 7, via: "registry.ts -> tools.ts -> data.ts -> org-scope.ts -> auth.ts" }],
+  ["web/lib/assistant/tools-fx-scope.integration.test.ts", { writes: 24, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-inventory.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-meta.integration.test.ts", { writes: 6, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-ops.integration.test.ts", { writes: 12, via: "registry.ts -> authz.ts -> auth.ts" }],
@@ -638,24 +633,28 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/crm-forecast-snapshots.integration.test.ts", { writes: 5, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-party-lifecycle.integration.test.ts", { writes: 9, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-write-validation.integration.test.ts", { writes: 1, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/lib/custom-field-creation.integration.test.ts", { writes: 3, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/import-scope.integration.test.ts", { writes: 3, via: "route.ts -> resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/resource-roundtrip-matrix.integration.test.ts", { writes: 3, via: "resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-
-
+  ["web/lib/data-io/transaction-roundtrip.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
+  ["web/lib/data-io/transaction-subsidiary.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/document-lifecycle-revision.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/health-headcount.integration.test.ts", { writes: 3, via: "financial-health.ts -> org-scope.ts -> auth.ts" }],
-
+  ["web/lib/health-scope.integration.test.ts", { writes: 18, via: "health-data.ts -> financial-health.ts -> org-scope.ts -> auth.ts" }],
+  ["web/lib/module-home/customers-dso.integration.test.ts", { writes: 11, via: "core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-currency.integration.test.ts", { writes: 6, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-open-po-currency.integration.test.ts", { writes: 5, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-pulse-tieout.integration.test.ts", { writes: 5, via: "core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-subsidiaryless-scope.integration.test.ts", { writes: 8, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/order-billed-unwind.integration.test.ts", { writes: 4, via: "order-cycle.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/order-read-scope.integration.test.ts", { writes: 2, via: "handlers.ts -> authz.ts -> auth.ts" }],
-
+  ["web/lib/order-read-scope.integration.test.ts", { writes: 8, via: "handlers.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/order-revision-integrity.integration.test.ts", { writes: 7, via: "handlers.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/payroll-941-source-scope.integration.test.ts", { writes: 10, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-bank-file-scope.integration.test.ts", { writes: 5, via: "route.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/payroll-filing-history-scope.integration.test.ts", { writes: 11, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
+  ["web/lib/payroll-filing-history.integration.test.ts", { writes: 9, via: "route.ts -> subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-filing-row-scope.integration.test.ts", { writes: 4, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
-
+  ["web/lib/payroll-payment-route-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-remittance-history-scope.integration.test.ts", { writes: 14, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-retro-route.integration.test.ts", { writes: 3, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-roe-source-scope.integration.test.ts", { writes: 15, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
@@ -664,7 +663,7 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/payroll-stub-outputs-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/pdf-templates/payroll-scope.integration.test.ts", { writes: 20, via: "authz.ts -> auth.ts" }],
   ["web/lib/pdf-templates/values.integration.test.ts", { writes: 4, via: "values.ts -> locale.ts -> auth.ts" }],
-
+  ["web/lib/pdf-templates/ytd-tax-jurisdiction.integration.test.ts", { writes: 20, via: "values.ts -> field-tickets.ts -> authz.ts -> auth.ts" }],
   ["web/lib/primary-book-history.integration.test.ts", { writes: 21, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/project-billing-accounting.integration.test.ts", { writes: 46, via: "bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/recurring-controls.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
