@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
+import { packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import { NORWAY_TAX_PACK } from "./no.ts";
 import type { EffectiveTaxRate } from "./types.ts";
 
@@ -54,7 +54,7 @@ test("Norway primary code is the standard 25% band", () => {
 });
 
 test("Norway rate schedules are contiguous and every sourceId resolves", () => {
-  assert.deepEqual(Object.keys(NORWAY_TAX_PACK.returnPackTaxCodes), ["NO_MVA_MELDING"]);
+  assert.deepEqual(packReturnCodesWithTaxCodes(NORWAY_TAX_PACK), ["NO_MVA_MELDING"]);
   const sourceIds = new Set(NORWAY_TAX_PACK.sources.map((source) => source.id));
   for (const code of packTaxCodesForReturn(NORWAY_TAX_PACK, "NO_MVA_MELDING")) {
     assert.ok(code.rates && code.rates.length > 0, `${code.code} must carry a sourced schedule`);
