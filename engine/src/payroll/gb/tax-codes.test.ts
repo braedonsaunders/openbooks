@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import { parseGbTaxCode } from "./tax-codes.ts";
 
 test("1257L parses cumulative with the £12,570 allowance", () => {

@@ -45,7 +45,7 @@
  */
 
 import { fromUnits, toUnits } from "../../money.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import {
   GB_NIC_ANNUAL,
   GB_NIC_EMPLOYEE_MAIN_RATE,

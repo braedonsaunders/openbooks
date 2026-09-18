@@ -2,7 +2,7 @@
  * Phase 9 — ES pack statutory pass. REFUSES: no statutory year is transcribed
  * (see ./rates.ts), so any calculation would be invented money.
  */
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 // No context parameter: the pack refuses before reading anything, and an
 // unread parameter would trip the repo's zero-headroom unused-vars gate.

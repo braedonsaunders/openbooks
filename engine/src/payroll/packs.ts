@@ -37,12 +37,11 @@ import { applyCaEmployerLevies } from "./canada/employer-levies.ts";
 import { computeCaStatutory } from "./canada/compute-statutory.ts";
 import { computeUsStatutory } from "./us/compute-statutory.ts";
 
-/**
- * Anything the jurisdiction layer refuses. Declared FIRST because
- * `PayrollJurisdictionError` extends it and a class expression cannot reach
- * forward past its own temporal dead zone.
- */
-export class PayrollPackError extends Error {}
+// Declared in a leaf module so the packs can import it without closing a
+// cycle back through this file; re-exported here for existing call sites.
+// See payroll-error.ts for why.
+export { PayrollPackError } from "./payroll-error.ts";
+import { PayrollPackError } from "./payroll-error.ts";
 
 /**
  * Payroll country packs — the jurisdiction layer.

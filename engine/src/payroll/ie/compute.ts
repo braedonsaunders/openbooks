@@ -70,7 +70,7 @@
  * decimal.ts and are built on engine/src/money.ts only.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import {
   prsiPeriodBands,
   ratesForPayDate,

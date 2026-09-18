@@ -26,7 +26,7 @@
 
 import { sql } from "drizzle-orm";
 import { sum } from "../../money.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
   calculateGbNic,
