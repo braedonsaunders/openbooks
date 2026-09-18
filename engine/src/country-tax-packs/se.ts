@@ -34,10 +34,22 @@ const SE_MOMSDEKLARATION_2026: TaxReturnPack = {
  * quarterly, or annual filing by turnover; the pack does not model that
  * threshold. Rate histories are left-truncated to the 2026 applicability
  * Skatteverket publishes (no Skatteverket/SCB origin source found for the
- * 1990 standard-rate change). The temporary food-rate cut to 6% from
- * 1 April 2026 through 31 December 2027 is not modeled. No zero-rated code:
- * the declaration's output-tax rutor are 25/12/6% only, with exempt sales in
- * section E — there is no zero-rated band on the return to line a code up with.
+ * 1990 standard-rate change).
+ *
+ * The temporary food-rate cut is a SEPARATE code, not a closed interval on
+ * SE-VAT-RED12: the 12% band covers food, restaurant meals and hotels, but
+ * the cut (SFS 2026:118, 9 kap. 19 §) moves only food — including bottled
+ * water for sale, excluding drinking-water-directive water and
+ * spirits/wine/strong beer — to 6% from 2026-04-01. Restaurant meals and
+ * hotels stay at 12%, so SE-VAT-RED12 stays open-ended and still covers
+ * today. The window end, 2027-12-31, is attested by the enacted reverting
+ * act SFS 2026:119, which taxes the same foods at 12% again from
+ * 2028-01-01. Output tax for the 6% food band is reported in ruta 12, which
+ * already exists on the return.
+ *
+ * No zero-rated code: the declaration's output-tax rutor are 25/12/6% only,
+ * with exempt sales in section E — there is no zero-rated band on the return
+ * to line a code up with.
  */
 export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
   code: "SE_INDIRECT_TAX",
@@ -80,6 +92,18 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://www.skatteverket.se/download/18.70685bee19c85dd5dd03acd/1775022844839/belopp-och-procentsatser-for-inkomstaret-2026-lagandringar-1-april.pdf",
       asOf: "2026-09-18",
     },
+    {
+      id: "sfs_2026_118_food_6_temp",
+      title: "SFS 2026:118 (Prop. 2025/26:55, bet. 2025/26:SkU9, rskr. 2025/26:158) — 9 kap. 19 § taxes food at 6% from 2026-04-01, bottled water for sale included, drinking-water-directive water and spirits/wine/strong beer excluded",
+      url: "https://svenskforfattningssamling.se/sites/default/files/sfs/2026-02/SFS2026-118.pdf",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "sfs_2026_119_food_12_revert",
+      title: "SFS 2026:119 — the same foods taxed at 12% again from 2028-01-01, attesting the temporary 6% window ends 2027-12-31",
+      url: "https://svenskforfattningssamling.se/sites/default/files/sfs/2026-02/SFS2026-119.pdf",
+      asOf: "2026-09-18",
+    },
   ],
   jurisdictions: [],
   returnPacks: [SE_MOMSDEKLARATION_2026],
@@ -94,10 +118,17 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
       },
       {
         code: "SE-VAT-RED12",
-        name: "Sweden reduced VAT 12% — food, restaurant meals, hotels",
+        name: "Sweden reduced VAT 12% — restaurant meals, hotels (and food outside the 2026-04-01–2027-12-31 temporary 6% window)",
         ratePercent: 12,
         role: "reduced",
         rates: [{ ratePercent: 12, effectiveFrom: "2026-01-01", sourceId: "skatteverket_rates_applicability_2026" }],
+      },
+      {
+        code: "SE-VAT-FOOD6",
+        name: "Sweden temporary food VAT 6% — food and bottled water for sale only, 2026-04-01 through 2027-12-31 (SFS 2026:118; reverts to 12% per SFS 2026:119)",
+        ratePercent: 6,
+        role: "reduced",
+        rates: [{ ratePercent: 6, effectiveFrom: "2026-04-01", effectiveTo: "2027-12-31", sourceId: "sfs_2026_118_food_6_temp" }],
       },
       {
         code: "SE-VAT-RED6",
