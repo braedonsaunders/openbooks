@@ -25,9 +25,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("depreciation schedules allocate every native month into 4-4-5 periods", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  const calendarId = randomUUID();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const calendarId = randomUUID();
     await db.execute(sql`
       insert into fiscal_calendars
         (id, org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone, is_default, is_active, config)
@@ -78,6 +78,10 @@ test("depreciation schedules allocate every native month into 4-4-5 periods", { 
     }
     assert.equal(lines.length, 4, `expected 4 period lines (Jul–Dec 2026), got ${lines.length}`);
   } finally {
+    // Release the default flag before the lease is returned: the fixture
+    // reset restores baseline calendar rows in place, and a surviving second
+    // default violates fiscal_calendars_one_default during the restore pass.
+    await db.execute(sql`update fiscal_calendars set is_default = false where id = ${calendarId} and org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
   }
 });
