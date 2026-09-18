@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./tax-pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
@@ -114,10 +115,42 @@ test("pack completeness is explicit and never inferred from a jurisdiction check
 
 test("default tax codes are unique across packs", () => {
   const codes = [
-    ...Object.values(PACK_DEFAULT_CODES),
+    ...COUNTRY_TAX_PACKS.flatMap((pack) =>
+      packReturnCodesWithTaxCodes(pack).flatMap((code) => packTaxCodesForReturn(pack, code))),
     ...TAX_SUBDIVISION_CATALOG.flatMap((jurisdiction) => jurisdiction.defaultTaxCode ? [jurisdiction.defaultTaxCode] : []),
   ].map((c) => c.code);
   assert.equal(new Set(codes).size, codes.length);
+});
+
+test("return pack tax code sets are keyed by own returns, non-empty, and code-unique", () => {
+  for (const pack of COUNTRY_TAX_PACKS) {
+    const ownReturns = new Set(pack.returnPacks.map((returnPack) => returnPack.code));
+    for (const code of packReturnCodesWithTaxCodes(pack)) {
+      assert.ok(ownReturns.has(code), `${pack.code} declares tax codes for ${code}, which is not its own return pack`);
+      const definitions = packTaxCodesForReturn(pack, code);
+      assert.ok(definitions.length > 0, `${pack.code}/${code} declares an empty tax code set`);
+      assert.equal(
+        new Set(definitions.map((definition) => definition.code)).size,
+        definitions.length,
+        `${pack.code}/${code} declares duplicate tax codes`,
+      );
+    }
+  }
+});
+
+test("every declared code in every return set carries a valid effective-dated schedule", () => {
+  for (const pack of COUNTRY_TAX_PACKS) {
+    for (const code of packReturnCodesWithTaxCodes(pack)) {
+      for (const definition of packTaxCodesForReturn(pack, code)) {
+        const label = `${pack.code}/${code}/${definition.code}`;
+        assert.ok(definition.rates?.length, `missing effective-dated rates for ${label}`);
+        const openEnded = definition.rates.filter((rate) => rate.effectiveTo === undefined);
+        assert.equal(openEnded.length, 1, `${label} must have exactly one current open-ended rate`);
+        assert.equal(definition.rates.at(-1), openEnded[0], `${label} current rate must be last`);
+        assert.equal(definition.ratePercent, openEnded[0]!.ratePercent, `${label} headline rate is stale`);
+      }
+    }
+  }
 });
 
 test("Canada GST history is effective-dated instead of backdating the current rate", () => {
@@ -262,4 +295,35 @@ test("immutable pack evidence permits only an explicit sandbox teardown", () => 
   assert.match(baseline, /current_setting\('openbooks\.sandbox_wipe', true\) = 'on'/);
   assert.match(baseline, /env_kind = 'sandbox'/);
   assert.match(baseline, /country tax pack installation evidence is immutable/);
+});
+
+test("the per-return code-set field is read only through packTaxCodesForReturn", () => {
+  // The field name is assembled so this very file never contains the literal
+  // and cannot trip its own scan.
+  const field = ["returnPack", "TaxCodes"].join("");
+  const declaration = new RegExp(`^\\s*${field}\\s*:\\s*\\{`);
+  const owners = new Set([
+    join("engine", "src", "country-tax-packs", "types.ts"),
+    join("engine", "src", "country-tax-packs", "index.ts"),
+  ]);
+  const skipDirs = new Set(["node_modules", ".next", "dist", "build", "coverage", ".git"]);
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name)) walk(path);
+      } else if (/\.[cm]?[tj]sx?$/.test(entry.name) && !owners.has(path)) {
+        readFileSync(path, "utf8").split("\n").forEach((line, index) => {
+          if (!line.includes(field)) return;
+          // Pack files DECLARE the field as an object-literal key; that is
+          // writing content, not reading the union — reads are the ban.
+          if (declaration.test(line)) return;
+          offenders.push(`${path}:${index + 1}: ${line.trim()}`);
+        });
+      }
+    }
+  };
+  for (const root of ["engine", "web", "scripts", "schema"]) walk(root);
+  assert.deepEqual(offenders, []);
 });
