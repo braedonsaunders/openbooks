@@ -58,6 +58,11 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
         await db.execute(sql`delete from item_inventory_profiles where item_id=${id}`);
         const responses=await Promise.all([put(),put()]);
         assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
+        // Remove the race winner's recreated row before release: nothing
+        // references item_inventory_profiles, and the lease-reset restore
+        // re-inserts the baseline snapshot row — leaving both would trip
+        // item_inventory_profiles_item_id_unique and taint the lease.
+        await db.execute(sql`delete from item_inventory_profiles where item_id=${id}`);
       } else {
         const saved=await put();
         const result=await saved.json();
