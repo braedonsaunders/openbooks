@@ -602,7 +602,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/order-read-scope.integration.test.ts", { writes: 8, via: "handlers.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-941-source-scope.integration.test.ts", { writes: 10, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-filing-history.integration.test.ts", { writes: 9, via: "route.ts -> subsidiary-scope.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/payroll-payment-route-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-run-action-scope.integration.test.ts", { writes: 9, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-stub-outputs-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/primary-book-history.integration.test.ts", { writes: 21, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
