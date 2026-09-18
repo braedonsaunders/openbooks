@@ -196,8 +196,9 @@ export async function computeFrStatutory(
   if (region !== "FR") {
     throw new PayrollPackError(
       `FR PAS withholding for region "${region}" is not supported: the pack `
-      + "knows one national region, FR (regions.supported stays [] until a "
-      + "full payslip is right).",
+      + "knows one national region, FR — PAS is national. DOM grilles II and "
+      + "III are keyed by domicile on the fr_pas_option certificate, not by "
+      + "region, and are refused below by domicile name.",
     );
   }
   const payDate = run["pay_date"];

@@ -85,11 +85,18 @@ test("tenant-entered surtax slots: regionale per region, comunale per sub-region
   assert.equal(IT_PAYROLL_PACK.statutoryRates, IT_PACK_RATES);
 });
 
-test("all 20 regions are known, unsupported by choice, withholding implemented", () => {
+test("all 20 regions are known, all supported, withholding implemented", () => {
   assert.equal(IT_REGION_CODES.length, 20);
   assert.deepEqual(IT_PAYROLL_PACK.regions.known, IT_REGION_CODES);
-  assert.deepEqual(IT_PAYROLL_PACK.regions.supported, []);
-  assert.match(IT_PAYROLL_PACK.regions.unsupportedReason, /tenant-declared rate/);
+  // This used to assert supported === [], reading `supported` as "the region
+  // publishes its own withholding tables". It means "the engine computes the
+  // region's income tax end to end", which IT does (IRPEF + addizionale from
+  // the tenant-declared rate, identically for all 20). Under the old reading
+  // Link 4 of resolveEmployeePayrollContext refused every Italian employee
+  // before a line was computed. supported and withholding.implemented are the
+  // same fact and are now asserted equal — see
+  // ../installable-region-coverage.test.ts.
+  assert.deepEqual(IT_PAYROLL_PACK.regions.supported, IT_REGION_CODES);
   assert.equal(IT_WITHHOLDING.country, "IT");
   assert.deepEqual(
     IT_WITHHOLDING.regions.map((region) => region.region),

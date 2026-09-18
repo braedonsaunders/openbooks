@@ -87,12 +87,17 @@ test("FR statutory slots are named, assessed, and routable", () => {
   assert.equal(bySystemKey.get("pas|deduction")?.remittance, "tax_authority");
 });
 
-test("FR regions are national: one known region, none supported (F-fr-001)", () => {
+test("FR regions are national: one known region, and it is supported", () => {
   assert.deepEqual([...FR_PAYROLL_PACK.regions.known], ["FR"]);
-  // supported stays [] even though the pack is installable: DOM domiciles
-  // use untranscribed grilles II/III, so no region's income tax computes
-  // for every domicile it legitimately carries. Never regress this.
-  assert.deepEqual([...FR_PAYROLL_PACK.regions.supported], []);
+  // This assertion used to require supported === [], on the argument that
+  // region FR legitimately carries DOM domiciles whose grilles II/III are
+  // untranscribed. That argument proves too much: Link 4 of
+  // resolveEmployeePayrollContext gates EVERY employee on this list, so an
+  // empty list refuses the métropole majority whose PAS does compute — the
+  // pack was installable for nobody. A domicile gap belongs at the domicile,
+  // and compute-statutory.ts already throws by domicile name off the
+  // fr_pas_option certificate. Keep the gap there, not here.
+  assert.deepEqual([...FR_PAYROLL_PACK.regions.supported], ["FR"]);
 });
 
 test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
