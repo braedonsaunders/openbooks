@@ -14,7 +14,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier.startsWith("@/")) return next(root+"web/"+specifier.slice(2)+".ts",context);
   return next(specifier,context);
 }});
-const { db, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { makeGET, makePATCH, makeDELETE, makeConvertPOST } = await import("../app/api/_order/handlers");
@@ -22,23 +22,23 @@ const request = (method: string, body?: unknown) => new Request("http://audit.lo
 
 for (const operation of ["read", "edit", "issue", "delete", "void", "conversion race", "current issue", "current void", "current conversion", "truncated token"] as const) {
   test(`order revision contract: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     let release = () => {};
     let edit: Promise<unknown> | undefined;
     let command: Promise<Response> | undefined;
     try {
-      const actor = await createScratchUser(org.orgId, "Order reviewer", "reviewer");
-      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+      const actor = await withBypassContext(() => createScratchUser(org.orgId, "Order reviewer", "reviewer"));
+      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`));
       state.user = { id: actor,orgId:org.orgId,name:"Order reviewer",email:"order@scratch.test",roles:[],isSuperAdmin:false,envKind:"production",productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor };
       const id = randomUUID();
       const kind = operation.includes("conversion") ? "quote" as const : "sales_order" as const;
-      await db.execute(sql`insert into documents (id,org_id,kind,document_number,document_date,currency,party_id,subsidiary_id,created_by)
-        values (${id},${org.orgId},${kind},${`ORDER-${id}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`);
-      await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount)
-        values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`);
-      if (operation.endsWith("void") || operation.includes("conversion")) await db.execute(sql`update documents set status='approved' where id=${id}`);
-      await db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`);
-      const token = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`)).rows[0]!.revision;
+      await withBypassContext(() => db.execute(sql`insert into documents (id,org_id,kind,document_number,document_date,currency,party_id,subsidiary_id,created_by)
+        values (${id},${org.orgId},${kind},${`ORDER-${id}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`));
+      await withBypassContext(() => db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount)
+        values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`));
+      if (operation.endsWith("void") || operation.includes("conversion")) await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
+      await withBypassContext(() => db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`));
+      const token = (await withOrgContext(org.orgId, () => db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`))).rows[0]!.revision;
       const cfg = { kind, readPerm: "ar.read", createPerm: "ar.create" };
       const params = { params: Promise.resolve({ id }) };
       await withOrgContext(org.orgId, async () => {

@@ -62,18 +62,18 @@ const routeUrl = "./route.ts?overhead-apply-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Admin", "admin");
-  await db.execute(sql`
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Overhead Admin", "admin"));
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ projects: true })}::jsonb)
-     where id = ${org.orgId}`);
+     where id = ${org.orgId}`));
   routeState.authz = {
     user: { orgId: org.orgId, id: actorId },
     permissions: new Set(["*"]),
@@ -93,15 +93,17 @@ test(
   "apply rejects an impossible calendar date with a 400 field error",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    await seed();
-    const res = await POST(
-      postRequest({
-        action: "apply",
-        projectTypeIds: [randomUUID()],
-        overhead: { method: "none" },
-        effectiveFrom: "2026-02-30",
-        reason: "test",
-      }),
+    const { orgId } = await seed();
+    const res = await withOrgContext(orgId, () =>
+      POST(
+        postRequest({
+          action: "apply",
+          projectTypeIds: [randomUUID()],
+          overhead: { method: "none" },
+          effectiveFrom: "2026-02-30",
+          reason: "test",
+        }),
+      ),
     );
     assert.equal(res.status, 400);
     assert.match(String((await res.json()).error), /effectiveFrom/);
@@ -112,15 +114,17 @@ test(
   "apply still reaches the profile lookup for a real calendar date",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    await seed();
-    const res = await POST(
-      postRequest({
-        action: "apply",
-        projectTypeIds: [randomUUID()],
-        overhead: { method: "none" },
-        effectiveFrom: "2026-03-31",
-        reason: "test",
-      }),
+    const { orgId } = await seed();
+    const res = await withOrgContext(orgId, () =>
+      POST(
+        postRequest({
+          action: "apply",
+          projectTypeIds: [randomUUID()],
+          overhead: { method: "none" },
+          effectiveFrom: "2026-03-31",
+          reason: "test",
+        }),
+      ),
     );
     assert.equal(res.status, 422);
     assert.match(String((await res.json()).error), /project type not found/);

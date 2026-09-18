@@ -33,27 +33,27 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   state.orgId = org.orgId
   state.actorId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const partyId = (await db.execute<{ id: string }>(sql`
+     where id = ${org.orgId}`))
+  const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Account', true)
-    returning id`)).rows[0]!.id
-  await db.execute(sql`
+    returning id`))).rows[0]!.id
+  await withBypassContext(() => db.execute(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, annual_revenue, employee_count)
-    values (${org.orgId}, ${partyId}, 'lead', '100.0000', 10)`)
+    values (${org.orgId}, ${partyId}, 'lead', '100.0000', 10)`))
   return { org, partyId }
 }
 
@@ -74,9 +74,9 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function profile(partyId: string) {
-  const rows = (await db.execute<{ annual_revenue: string | null; employee_count: number | null }>(sql`
+  const rows = (await withOrgContext(state.orgId, () => db.execute<{ annual_revenue: string | null; employee_count: number | null }>(sql`
     select annual_revenue::text as annual_revenue, employee_count
-      from crm_account_profiles where party_id = ${partyId}`)).rows
+      from crm_account_profiles where party_id = ${partyId}`))).rows
   return rows[0]!
 }
 
