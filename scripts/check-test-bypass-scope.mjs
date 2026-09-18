@@ -575,7 +575,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/app/api/agents/inbox/route.integration.test.ts", { writes: 7, via: "route.ts -> proposals.ts -> tool-catalog.ts -> documents.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/ap-capture/capture-revision-guard.integration.test.ts", { writes: 6, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/ap-capture/review-controls.integration.test.ts", { writes: 8, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/compliance/information-returns/[id]/recipients/[recipientId]/route.integration.test.ts", { writes: 13, via: "route.ts -> compliance.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/compliance/information-returns/route-threshold.integration.test.ts", { writes: 2, via: "route.ts -> compliance.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/crm/accounts/[id]/route-magnitude.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/crm/activities/[id]/route-duration.integration.test.ts", { writes: 2, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
