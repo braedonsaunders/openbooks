@@ -1047,9 +1047,31 @@ async function ensureRuntimeRoleExists(
   }
   // Reassert every prohibited cluster privilege on every deployment. A role
   // that was accidentally elevated must be made safe before traffic starts.
-  await pool.query(
-    `alter role ${role} login inherit nosuperuser nobypassrls nocreatedb nocreaterole noreplication password ${password}`,
-  );
+  try {
+    await pool.query(
+      `alter role ${role} login inherit nosuperuser nobypassrls nocreatedb nocreaterole noreplication password ${password}`,
+    );
+  } catch (err) {
+    // A re-run over the transferred test login runs without role privileges
+    // (only a superuser or CREATEROLE may alter roles, and the transferred
+    // login is neither). Converge instead of enforcing — but a drifted posture
+    // still fails loudly. Password rotation likewise requires a privileged run.
+    if ((err as { code?: string }).code !== "42501") throw err;
+    const posture = await pool.query<{ safe: boolean }>(
+      `select (rolcanlogin and rolinherit and not rolsuper and not rolbypassrls
+                 and not rolcreatedb and not rolcreaterole and not rolreplication) as safe
+         from pg_roles where rolname = $1`,
+      [config.roleName],
+    );
+    if (!posture.rows[0]?.safe) {
+      throw new Error(
+        `[bootstrap] cannot enforce safe posture on role ${config.roleName} without privilege; re-run as a superuser`,
+      );
+    }
+    console.log(
+      `[bootstrap] runtime role ${config.roleName} posture already safe; not re-enforced without privilege (password rotation needs a privileged run)`,
+    );
+  }
 }
 
 async function ensureRuntimeDatabaseRole(
@@ -1076,9 +1098,20 @@ async function ensureRuntimeDatabaseRole(
   // The application establishes tenant identity with connection-local GUCs.
   // This privilege belongs to the runtime login, never to openbooks_read; the
   // governed SQL console switches to openbooks_read before user SQL executes.
-  await pool.query(
-    `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
-  );
+  // A re-run over the transferred test login cannot grant on a pg_catalog
+  // function it does not own; converge by verifying the grant instead.
+  try {
+    await pool.query(
+      `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
+    );
+  } catch (err) {
+    if ((err as { code?: string }).code !== "42501") throw err;
+    const granted = await pool.query<{ ok: boolean }>(
+      `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
+      [config.roleName],
+    );
+    if (!granted.rows[0]?.ok) throw err;
+  }
   await pool.query(
     `alter default privileges in schema public grant select, insert, update, delete on tables to ${role}`,
   );
@@ -1185,6 +1218,150 @@ async function verifyRuntimeDatabaseRole(
   }
 }
 
+// Test-database ownership transfer (CI/testdb provisioning only — refused in
+// production). CI service containers log in as the initdb bootstrap superuser,
+// and PostgreSQL exempts superusers from every RLS policy unconditionally
+// (FORCE ROW LEVEL SECURITY constrains owners, never superusers; and PG16 even
+// refuses to desuperuser the bootstrap login). So a test login that IS the
+// bootstrap user can never be RLS-subject — and every isolation assertion
+// through the app pool is vacuous there. The uniform target posture is a
+// CONSTRAINED OWNER (exactly what long-lived installs already run as): after
+// the privileged steps (extensions, roles, migrations) the executor hands
+// every app-schema object plus database and schema ownership to the
+// constrained runtime role, so the test login owns every object it must DDL
+// while its sessions stay fully RLS-subject under FORCE.
+//
+// The loop is scoped to this database's two app schemas (a cluster-wide
+// REASSIGN OWNED would also be complete, but it refuses outright when the
+// bootstrap login owns system-required objects — always true via the template
+// databases' boilerplate — so it cannot serve here). The explicit opt-in
+// variable plus the production refusal below are the interlocks: never set it
+// on a shared or production database.
+async function transferTestOwnershipToRuntimeRole(
+  config: RuntimeDatabaseConfig,
+): Promise<void> {
+  if (env.OPENBOOKS_TEST_OWNERSHIP_TRANSFER !== "1") return;
+  if (env.NODE_ENV === "production") {
+    throw new Error(
+      "[bootstrap] OPENBOOKS_TEST_OWNERSHIP_TRANSFER is refused in production",
+    );
+  }
+  const loginResult = await pool.query<{ login: string }>(
+    "select current_user as login",
+  );
+  const login = loginResult.rows[0]!.login;
+  if (login === config.roleName) return;
+  const superResult = await pool.query<{ superuser: boolean }>(
+    "select rolsuper as superuser from pg_roles where rolname = current_user",
+  );
+  if (!superResult.rows[0]?.superuser) {
+    // A re-run over the test login (e.g. local bootstrap after the template
+    // transferred) cannot reassign anything; converge instead of enforcing and
+    // fail loudly with instructions when the posture drifted.
+    await verifyTestOwnership(config);
+    console.log(
+      `[bootstrap] ownership transfer skipped without privilege; runtime role ${config.roleName} already owns the RLS nexus`,
+    );
+    return;
+  }
+  // Scoped, catalog-driven ownership loop over THIS database only. REASSIGN
+  // OWNED would be complete by construction but it is cluster-wide and refuses
+  // outright when the bootstrap login owns system-required objects (it always
+  // does: the template databases' boilerplate), so it cannot serve here. The
+  // loop covers every class with an isolation nexus — base tables (RLS),
+  // views, and SECURITY DEFINER functions (which execute as their owner) —
+  // plus sequences and matviews for uniformity. Types are intentionally left
+  // alone: type ownership has no RLS or execution nexus, and array types
+  // cannot be altered directly. Statements are fully quoted server-side.
+  const stmts = await pool.query<{ stmt: string }>(
+    `select (case c.relkind
+               when 'v' then 'alter view '
+               when 'm' then 'alter materialized view '
+               when 'S' then 'alter sequence '
+               when 'f' then 'alter foreign table '
+               else 'alter table ' end)
+              || format('%I.%I', n.nspname, c.relname)
+              || ' owner to ' || quote_ident($1) as stmt
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname in ('public', 'openbooks_query')
+        and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+        and pg_get_userbyid(c.relowner) <> $1
+      union all
+     select 'alter function ' || p.oid::regprocedure::text
+              || ' owner to ' || quote_ident($1) as stmt
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname in ('public', 'openbooks_query')
+        and pg_get_userbyid(p.proowner) <> $1`,
+    [config.roleName],
+  );
+  for (const { stmt } of stmts.rows) {
+    await pool.query(stmt);
+  }
+  const runtimeRole = await quoted(config.roleName, "identifier");
+  const dbResult = await pool.query<{ database_name: string }>(
+    "select current_database() as database_name",
+  );
+  const database = await quoted(dbResult.rows[0]!.database_name, "identifier");
+  await pool.query(`alter database ${database} owner to ${runtimeRole}`);
+  await pool.query(`alter schema public owner to ${runtimeRole}`);
+  await pool.query(`alter schema openbooks_query owner to ${runtimeRole}`);
+  await verifyTestOwnership(config);
+  console.log(
+    `[bootstrap] test ownership transferred to ${config.roleName} (${stmts.rows.length} objects plus database and schemas): constrained owner, RLS-subject sessions`,
+  );
+}
+
+/**
+ * Positive ownership proof over the RLS nexus: every org-scoped base table,
+ * every governed view, every SECURITY DEFINER function (which executes as its
+ * owner — a superuser-owned definer is an exempt path that survives FORCE),
+ * and both app schemas (future CREATEs vest in the schema owner) must be
+ * owned by the runtime role. Deliberately not a census — provisioning
+ * bookkeeping outside the app schema (e.g. testdb's own build record, written
+ * after bootstrap) and type ownership (no RLS or execution nexus) are
+ * ignored; the isolation surface is what must be fully vested.
+ */
+async function verifyTestOwnership(
+  config: RuntimeDatabaseConfig,
+): Promise<void> {
+  const offenders = await pool.query<{ object_name: string }>(
+    `select c.relname as object_name
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+       join pg_roles r on r.oid = c.relowner
+      where ((n.nspname = 'public' and c.relkind in ('r', 'p')
+              and exists (
+                select 1 from pg_attribute a
+                 where a.attrelid = c.oid and a.attname = 'org_id'))
+             or (n.nspname = 'openbooks_query' and c.relkind = 'v'))
+        and r.rolname <> $1
+      union all
+     select p.oid::regprocedure::text as object_name
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+       join pg_roles r on r.oid = p.proowner
+      where n.nspname in ('public', 'openbooks_query')
+        and p.prosecdef
+        and r.rolname <> $1
+      union all
+     select 'schema ' || n.nspname as object_name
+       from pg_namespace n
+       join pg_roles r on r.oid = n.nspowner
+      where n.nspname in ('public', 'openbooks_query')
+        and r.rolname <> $1
+      order by 1`,
+    [config.roleName],
+  );
+  if (offenders.rows.length > 0) {
+    throw new Error(
+      `[bootstrap] ownership transfer incomplete; RLS nexus objects not owned by ${config.roleName}: ` +
+        offenders.rows.map((r) => r.object_name).join(", "),
+    );
+  }
+}
+
 async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
   const steps: [string, string][] = [
     [
@@ -1206,7 +1383,15 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
   ];
   if (runtimeRoleName) {
     const runtimeRole = await quoted(runtimeRoleName, "identifier");
-    steps.push(["grant to runtime user", `grant openbooks_read to ${runtimeRole}`]);
+    const runtimeLiteral = await quoted(runtimeRoleName, "literal");
+    // Conditional like the bootstrap-user grant above: a re-run over the
+    // transferred test login cannot grant role membership (that needs
+    // CREATEROLE), so skip when already a member instead of failing.
+    steps.push(["grant to runtime user", `do $$ begin
+         if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'USAGE') then
+           grant openbooks_read to ${runtimeRole};
+         end if;
+       end $$;`]);
   }
   for (const [label, stmt] of steps) {
     try {
@@ -1464,6 +1649,12 @@ async function main(): Promise<void> {
         await provisionOrganizationDefaults(orgId);
       }
       await seedAdmin(primaryOrgId);
+      if (env.OPENBOOKS_TEST_OWNERSHIP_TRANSFER === "1" && !runtimeConfig) {
+        throw new Error(
+          "[bootstrap] OPENBOOKS_TEST_OWNERSHIP_TRANSFER requires OPENBOOKS_RUNTIME_DB_URL",
+        );
+      }
+      if (runtimeConfig) await transferTestOwnershipToRuntimeRole(runtimeConfig);
       if (runtimeConfig)
         await verifyRuntimeDatabaseRole(runtimeConfig, primaryOrgId);
     });
