@@ -37,16 +37,19 @@ const NO_MVA_MELDING_2026: TaxReturnPack = {
  * Altinn/Skatteetaten API from accounting software; the standard period is six
  * two-month terms a year (`bimonthly`).
  *
- * Rate history runs back to 2012-01-01 on all three main bands. Each year's
- * band is cited to Skatteetaten's own year-table page for that year
- * (`satser/merverdiavgift/?year=`), which states the general, food and low
- * rates applicable that year: 25% throughout; food 15% throughout; low 8%
- * (2012–2015), 10% (2016–2017), 12% (2018 onward, outside the 2020–2021
- * window below). The 2016 year page additionally narrates the 14 December
- * 2015 Storting decision raising the low rate from 8% to 10% for 2016, which
- * pins the 2015/2016 boundary; the other year-turn boundaries rest on the
- * pairwise year tables (Norway's annual rates change at year turns; mid-year
- * changes are narrated separately, as the 2016 and 2020 cases show).
+ * Rate history runs back to 2012-01-01 on all three main bands, one row per
+ * actual rate change. Norwegian rates are re-enacted annually by Stortingets
+ * skattevedtak, so an unchanged rate produces no new instrument; each
+ * collapsed span below was verified year by year against Skatteetaten's own
+ * year-table pages (`satser/merverdiavgift/?year=`) and the cited source is
+ * the earliest table attesting the value from the row's start date: 25%
+ * general and 15% food every year 2012–2025; low 8% every year 2012–2015,
+ * 10% in 2016 and 2017, 12% in 2018, 2019 and 2020 (headline) through 2025.
+ * The 2016 year page additionally narrates the 14 December 2015 Storting
+ * decision raising the low rate from 8% to 10% for 2016, which pins the
+ * 2015/2016 boundary; the other year-turn boundaries rest on the pairwise
+ * year tables (Norway's annual rates change at year turns; mid-year changes
+ * are narrated separately, as the 2016 and 2020 cases show).
  *
  * The temporary 12%-to-6% low-rate cut of 2020–2021 IS transcribed: both
  * endpoints (from 1 April 2020 to 30 September 2021) are stated on
@@ -105,45 +108,15 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
-      id: "skatteetaten_satshistorikk_2013",
-      title: "Skatteetaten — Merverdiavgift satser for 2013: general 25%, food 15%, low 8% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2013",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2014",
-      title: "Skatteetaten — Merverdiavgift satser for 2014: general 25%, food 15%, low 8% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2014",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2015",
-      title: "Skatteetaten — Merverdiavgift satser for 2015: general 25%, food 15%, low 8% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2015",
-      asOf: "2026-09-18",
-    },
-    {
       id: "skatteetaten_satshistorikk_2016",
       title: "Skatteetaten — Merverdiavgift satser for 2016: general 25%, food 15%, low 10%; notes the 14 December 2015 Storting decision raising the low rate from 8% to 10% for 2016",
       url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2016",
       asOf: "2026-09-18",
     },
     {
-      id: "skatteetaten_satshistorikk_2017",
-      title: "Skatteetaten — Merverdiavgift satser for 2017: general 25%, food 15%, low 10% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2017",
-      asOf: "2026-09-18",
-    },
-    {
       id: "skatteetaten_satshistorikk_2018",
       title: "Skatteetaten — Merverdiavgift satser for 2018: general 25%, food 15%, low 12% (year-table applicability)",
       url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2018",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2019",
-      title: "Skatteetaten — Merverdiavgift satser for 2019: general 25%, food 15%, low 12% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2019",
       asOf: "2026-09-18",
     },
     {
@@ -156,30 +129,6 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
       id: "skatteetaten_satshistorikk_2021",
       title: "Skatteetaten — Merverdiavgift satser for 2021: general 25%, food 15%, low 12% with the temporary 12%-to-6% cut from 1 April 2020 to 30 September 2021 stated on the same page",
       url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2021",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2022",
-      title: "Skatteetaten — Merverdiavgift satser for 2022: general 25%, food 15%, low 12% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2022",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2023",
-      title: "Skatteetaten — Merverdiavgift satser for 2023: general 25%, food 15%, low 12% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2023",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2024",
-      title: "Skatteetaten — Merverdiavgift satser for 2024: general 25%, food 15%, low 12% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2024",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "skatteetaten_satshistorikk_2025",
-      title: "Skatteetaten — Merverdiavgift satser for 2025: general 25%, food 15%, low 12% (year-table applicability)",
-      url: "https://www.skatteetaten.no/satser/merverdiavgift/?year=2025",
       asOf: "2026-09-18",
     },
     {
@@ -205,20 +154,7 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 25,
         role: "standard",
         rates: [
-          { ratePercent: 25, effectiveFrom: "2012-01-01", effectiveTo: "2012-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
-          { ratePercent: 25, effectiveFrom: "2013-01-01", effectiveTo: "2013-12-31", sourceId: "skatteetaten_satshistorikk_2013" },
-          { ratePercent: 25, effectiveFrom: "2014-01-01", effectiveTo: "2014-12-31", sourceId: "skatteetaten_satshistorikk_2014" },
-          { ratePercent: 25, effectiveFrom: "2015-01-01", effectiveTo: "2015-12-31", sourceId: "skatteetaten_satshistorikk_2015" },
-          { ratePercent: 25, effectiveFrom: "2016-01-01", effectiveTo: "2016-12-31", sourceId: "skatteetaten_satshistorikk_2016" },
-          { ratePercent: 25, effectiveFrom: "2017-01-01", effectiveTo: "2017-12-31", sourceId: "skatteetaten_satshistorikk_2017" },
-          { ratePercent: 25, effectiveFrom: "2018-01-01", effectiveTo: "2018-12-31", sourceId: "skatteetaten_satshistorikk_2018" },
-          { ratePercent: 25, effectiveFrom: "2019-01-01", effectiveTo: "2019-12-31", sourceId: "skatteetaten_satshistorikk_2019" },
-          { ratePercent: 25, effectiveFrom: "2020-01-01", effectiveTo: "2020-12-31", sourceId: "skatteetaten_satshistorikk_2020" },
-          { ratePercent: 25, effectiveFrom: "2021-01-01", effectiveTo: "2021-12-31", sourceId: "skatteetaten_satshistorikk_2021" },
-          { ratePercent: 25, effectiveFrom: "2022-01-01", effectiveTo: "2022-12-31", sourceId: "skatteetaten_satshistorikk_2022" },
-          { ratePercent: 25, effectiveFrom: "2023-01-01", effectiveTo: "2023-12-31", sourceId: "skatteetaten_satshistorikk_2023" },
-          { ratePercent: 25, effectiveFrom: "2024-01-01", effectiveTo: "2024-12-31", sourceId: "skatteetaten_satshistorikk_2024" },
-          { ratePercent: 25, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2025" },
+          { ratePercent: 25, effectiveFrom: "2012-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
           { ratePercent: 25, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
         ],
       },
@@ -228,20 +164,7 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 15,
         role: "reduced",
         rates: [
-          { ratePercent: 15, effectiveFrom: "2012-01-01", effectiveTo: "2012-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
-          { ratePercent: 15, effectiveFrom: "2013-01-01", effectiveTo: "2013-12-31", sourceId: "skatteetaten_satshistorikk_2013" },
-          { ratePercent: 15, effectiveFrom: "2014-01-01", effectiveTo: "2014-12-31", sourceId: "skatteetaten_satshistorikk_2014" },
-          { ratePercent: 15, effectiveFrom: "2015-01-01", effectiveTo: "2015-12-31", sourceId: "skatteetaten_satshistorikk_2015" },
-          { ratePercent: 15, effectiveFrom: "2016-01-01", effectiveTo: "2016-12-31", sourceId: "skatteetaten_satshistorikk_2016" },
-          { ratePercent: 15, effectiveFrom: "2017-01-01", effectiveTo: "2017-12-31", sourceId: "skatteetaten_satshistorikk_2017" },
-          { ratePercent: 15, effectiveFrom: "2018-01-01", effectiveTo: "2018-12-31", sourceId: "skatteetaten_satshistorikk_2018" },
-          { ratePercent: 15, effectiveFrom: "2019-01-01", effectiveTo: "2019-12-31", sourceId: "skatteetaten_satshistorikk_2019" },
-          { ratePercent: 15, effectiveFrom: "2020-01-01", effectiveTo: "2020-12-31", sourceId: "skatteetaten_satshistorikk_2020" },
-          { ratePercent: 15, effectiveFrom: "2021-01-01", effectiveTo: "2021-12-31", sourceId: "skatteetaten_satshistorikk_2021" },
-          { ratePercent: 15, effectiveFrom: "2022-01-01", effectiveTo: "2022-12-31", sourceId: "skatteetaten_satshistorikk_2022" },
-          { ratePercent: 15, effectiveFrom: "2023-01-01", effectiveTo: "2023-12-31", sourceId: "skatteetaten_satshistorikk_2023" },
-          { ratePercent: 15, effectiveFrom: "2024-01-01", effectiveTo: "2024-12-31", sourceId: "skatteetaten_satshistorikk_2024" },
-          { ratePercent: 15, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2025" },
+          { ratePercent: 15, effectiveFrom: "2012-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
           { ratePercent: 15, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
         ],
       },
@@ -251,21 +174,11 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 12,
         role: "reduced",
         rates: [
-          { ratePercent: 8, effectiveFrom: "2012-01-01", effectiveTo: "2012-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
-          { ratePercent: 8, effectiveFrom: "2013-01-01", effectiveTo: "2013-12-31", sourceId: "skatteetaten_satshistorikk_2013" },
-          { ratePercent: 8, effectiveFrom: "2014-01-01", effectiveTo: "2014-12-31", sourceId: "skatteetaten_satshistorikk_2014" },
-          { ratePercent: 8, effectiveFrom: "2015-01-01", effectiveTo: "2015-12-31", sourceId: "skatteetaten_satshistorikk_2015" },
-          { ratePercent: 10, effectiveFrom: "2016-01-01", effectiveTo: "2016-12-31", sourceId: "skatteetaten_satshistorikk_2016" },
-          { ratePercent: 10, effectiveFrom: "2017-01-01", effectiveTo: "2017-12-31", sourceId: "skatteetaten_satshistorikk_2017" },
-          { ratePercent: 12, effectiveFrom: "2018-01-01", effectiveTo: "2018-12-31", sourceId: "skatteetaten_satshistorikk_2018" },
-          { ratePercent: 12, effectiveFrom: "2019-01-01", effectiveTo: "2019-12-31", sourceId: "skatteetaten_satshistorikk_2019" },
-          { ratePercent: 12, effectiveFrom: "2020-01-01", effectiveTo: "2020-03-31", sourceId: "skatteetaten_satshistorikk_2020" },
+          { ratePercent: 8, effectiveFrom: "2012-01-01", effectiveTo: "2015-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
+          { ratePercent: 10, effectiveFrom: "2016-01-01", effectiveTo: "2017-12-31", sourceId: "skatteetaten_satshistorikk_2016" },
+          { ratePercent: 12, effectiveFrom: "2018-01-01", effectiveTo: "2020-03-31", sourceId: "skatteetaten_satshistorikk_2018" },
           { ratePercent: 6, effectiveFrom: "2020-04-01", effectiveTo: "2021-09-30", sourceId: "skatteetaten_satshistorikk_2020" },
-          { ratePercent: 12, effectiveFrom: "2021-10-01", effectiveTo: "2021-12-31", sourceId: "skatteetaten_satshistorikk_2021" },
-          { ratePercent: 12, effectiveFrom: "2022-01-01", effectiveTo: "2022-12-31", sourceId: "skatteetaten_satshistorikk_2022" },
-          { ratePercent: 12, effectiveFrom: "2023-01-01", effectiveTo: "2023-12-31", sourceId: "skatteetaten_satshistorikk_2023" },
-          { ratePercent: 12, effectiveFrom: "2024-01-01", effectiveTo: "2024-12-31", sourceId: "skatteetaten_satshistorikk_2024" },
-          { ratePercent: 12, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2025" },
+          { ratePercent: 12, effectiveFrom: "2021-10-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2021" },
           { ratePercent: 12, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
         ],
       },
