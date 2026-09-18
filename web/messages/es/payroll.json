@@ -786,6 +786,16 @@
           "unfall": "Berufsgenossenschaft por pagar (seguro de accidentes del empleador)"
         }
       },
+      "FR": {
+        "title": "Francia \u2014 cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete FR retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "pas": "PAS por pagar (impuesto sobre la renta retenido en la fuente)",
+          "salariales": "Cotizaciones sociales por pagar (parte del empleado: vieillesse, CSG + CRDS)",
+          "retraite_comp": "Jubilaci\u00f3n complementaria por pagar (AGIRC-ARRCO, CEG + CET, empleado y empleador)",
+          "patronales": "Cotizaciones patronales por pagar (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

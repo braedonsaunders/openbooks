@@ -786,6 +786,16 @@
           "unfall": "Berufsgenossenschaft a recolher (seguro de acidentes do empregador)"
         }
       },
+      "FR": {
+        "title": "Fran\u00e7a \u2014 contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Fran\u00e7a ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "slots": {
+          "pas": "PAS a recolher (imposto de renda retido na fonte)",
+          "salariales": "Contribui\u00e7\u00f5es sociais a recolher (parte do funcion\u00e1rio: vieillesse, CSG + CRDS)",
+          "retraite_comp": "Previd\u00eancia complementar a recolher (AGIRC-ARRCO, CEG + CET, funcion\u00e1rio e empregador)",
+          "patronales": "Contribui\u00e7\u00f5es patronais a recolher (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

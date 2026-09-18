@@ -786,6 +786,16 @@
           "unfall": "Verbindlichkeiten aus Berufsgenossenschaft (Arbeitgeber-Unfallversicherung)"
         }
       },
+      "FR": {
+        "title": "Frankreich \u2014 gesetzliche Konten",
+        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das FR-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "pas": "Verbindlichkeiten aus PAS (an der Quelle einbehaltene Einkommensteuer)",
+          "salariales": "Verbindlichkeiten aus Arbeitnehmerbeitr\u00e4gen (vieillesse, CSG + CRDS)",
+          "retraite_comp": "Verbindlichkeiten aus Retraite compl\u00e9mentaire (AGIRC-ARRCO, CEG + CET, Arbeitnehmer + Arbeitgeber)",
+          "patronales": "Verbindlichkeiten aus Arbeitgeberbeitr\u00e4gen (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

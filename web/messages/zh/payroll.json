@@ -786,6 +786,16 @@
           "unfall": "Berufsgenossenschaft\u5e94\u4ed8\uff08\u96c7\u4e3b\u4e8b\u6545\u4fdd\u9669\uff09"
         }
       },
+      "FR": {
+        "title": "\u6cd5\u56fd \u2014 \u6cd5\u5b9a\u79d1\u76ee",
+        "description": "\u6cd5\u56fd\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "slots": {
+          "pas": "PAS\u5e94\u4ed8\uff08\u6e90\u6cc9\u6263\u7f34\u6240\u5f97\u7a0e\uff09",
+          "salariales": "Cotisations salariales\u5e94\u4ed8\uff08\u96c7\u5458\u7f34\u7eb3vieillesse\u3001CSG\u3001CRDS\uff09",
+          "retraite_comp": "Retraite compl\u00e9mentaire\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bAGIRC-ARRCO\u3001CEG\u3001CET\uff09",
+          "patronales": "Cotisations patronales\u5e94\u4ed8\uff08\u96c7\u4e3bURSSAF\uff1amaladie\u3001vieillesse\u3001ch\u00f4mage\u3001AT/MP\u3001versement mobilit\u00e9\uff09"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {
