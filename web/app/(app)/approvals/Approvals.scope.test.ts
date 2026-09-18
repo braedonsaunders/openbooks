@@ -11,8 +11,10 @@ const application = source('../../../lib/application/approvals.ts')
 test('approval worklists enforce subsidiary visibility in every consumer', () => {
   // The center mine/all tabs and the dashboard tile + widgets all read the
   // unified worklist (F-t01-007) — never a gates-only subquery — so
-  // same-labeled figures tie by construction.
-  assert.match(page, /approvalWorklistForAuthz\(authz\)/)
+  // same-labeled figures tie by construction. The center reads the paged
+  // member of the reader family (same legs, same predicates, windowed rows);
+  // the tile keeps the full reader for its counts.
+  assert.match(page, /approvalWorklist(Page)?ForAuthz\(authz[,)]/)
   assert.match(dashboard, /approvalWorklistForAuthz\(authz\)/)
   assert.doesNotMatch(page, /worklistGates\(/)
   assert.doesNotMatch(dashboard, /worklistGates\(/)
