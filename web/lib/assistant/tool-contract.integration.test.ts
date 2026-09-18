@@ -31,7 +31,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
@@ -218,10 +218,13 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
   const sizes: { tool: string; bytes: number; outcome: string }[] = [];
   try {
     const flags = Object.fromEntries(HARNESS_FEATURES.map((key) => [key, true]));
-    await db.execute(sql`
+    // The registry import replaces the test bypass process-wide, so this
+    // seed UPDATE must carry explicit bypass scope: unscoped it matches zero
+    // rows and every module-gated tool refuses with *_feature_disabled.
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
       where id = ${org.orgId}
-    `);
+    `));
     const authz = readerAuthz(org.orgId);
     await withOrgContext(org.orgId, async () => {
       // Resolve seed-dependent ids from the scratch org's own list tools.

@@ -21,7 +21,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
@@ -52,6 +52,7 @@ function ctxFor(
 }
 
 async function seedSession(orgId: string, subsidiaryId: string, bankId: string, revenueId: string, actorId: string) {
+  return withBypassContext(async () => {
   await db.execute(sql`
     update accounts set reconcilable = true, currency_restriction = 'CAD', subsidiary_id = ${subsidiaryId}
      where id in (${bankId}, ${revenueId}) and org_id = ${orgId}
@@ -101,23 +102,29 @@ async function seedSession(orgId: string, subsidiaryId: string, bankId: string, 
      where id = ${entryId} and org_id = ${orgId}
   `);
   return { lineA, lineB, glA, glB };
+  });
 }
 
 async function reconStatus(orgId: string, reconId: string): Promise<string | null> {
+  return withOrgContext(orgId, async () => {
   const rows = (await db.execute<{ status: string }>(sql`
     select status from reconciliations where id = ${reconId} and org_id = ${orgId}
   `)).rows;
   return rows[0]?.status ?? null;
+  });
 }
 
 test("banking session lifecycle: start, match, unmatch, rematch, sign off", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const ids = await seedSession(org.orgId, org.subsidiaryId, org.accounts.bank, org.accounts.revenue, actors.adminId);
     const ctx = ctxFor(org.orgId, actors.adminId, ["banking.reconcile"]);
+    // The tools read through ambient org scope (production: request). Scope
+    // every call to the caller's org so the permission/subsidiary/module
+    // gates under test run instead of the RLS backstop.
     const run = (name: string, input: Record<string, unknown>) =>
-      executeApplicationTool(applicationTool(name)!, ctx, input);
+      withOrgContext(org.orgId, () => executeApplicationTool(applicationTool(name)!, ctx, input));
 
     const started = await run("start_reconciliation", {
       accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "1250.0000", idempotencyKey: "a05-start-1",
@@ -162,55 +169,55 @@ test("banking session lifecycle: start, match, unmatch, rematch, sign off", { sk
 });
 
 test("banking actions refuse without permission, outside subsidiary scope, or with the module off", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     await seedSession(org.orgId, org.subsidiaryId, org.accounts.bank, org.accounts.revenue, actors.adminId);
     const stranger = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${stranger}, ${org.orgId}, ${org.subsidiaryId}, 'Stranger Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    `);
+    `));
     const full = ctxFor(org.orgId, actors.adminId, ["banking.reconcile"]);
-    const started = await executeApplicationTool(applicationTool("start_reconciliation")!, full, {
+    const started = await withOrgContext(org.orgId, () => executeApplicationTool(applicationTool("start_reconciliation")!, full, {
       accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "1250.0000", idempotencyKey: "a05-start-2",
-    }) as { result: { reconciliationId: string } };
+    })) as { result: { reconciliationId: string } };
 
     // No banking.reconcile permission.
     await assert.rejects(
-      executeApplicationTool(applicationTool("start_reconciliation")!, ctxFor(org.orgId, actors.adminId, []), {
+      withOrgContext(org.orgId, () => executeApplicationTool(applicationTool("start_reconciliation")!, ctxFor(org.orgId, actors.adminId, []), {
         accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "1250.0000", idempotencyKey: "a05-start-3",
-      }),
+      })),
       /forbidden/,
     );
     // Restricted to a subsidiary that does not own the account.
     await assert.rejects(
-      executeApplicationTool(
+      withOrgContext(org.orgId, () => executeApplicationTool(
         applicationTool("match_bank_line")!,
         ctxFor(org.orgId, actors.adminId, ["banking.reconcile"], new Set([stranger])),
         { reconciliationId: started.result.reconciliationId, statementLineId: randomUUID(), journalLineIds: [randomUUID()], idempotencyKey: "a05-scope-01" },
-      ),
+      )),
       /forbidden/,
     );
     // Module off: the execute-time fence matches the routes' 404.
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"banking":false}'::jsonb, true)
       where id = ${org.orgId}
-    `);
+    `));
     try {
       await assert.rejects(
-        executeApplicationTool(applicationTool("start_reconciliation")!, full, {
+        withOrgContext(org.orgId, () => executeApplicationTool(applicationTool("start_reconciliation")!, full, {
           accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "1250.0000", idempotencyKey: "a05-start-4",
-        }),
+        })),
         /banking not found/,
       );
     } finally {
-      await db.execute(sql`
+      await withBypassContext(() => db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"banking":true}'::jsonb, true)
         where id = ${org.orgId}
-      `);
+      `));
     }
   } finally {
     await dropScratchOrg(org.orgId);
@@ -218,21 +225,23 @@ test("banking actions refuse without permission, outside subsidiary scope, or wi
 });
 
 test("banking actions in another org read as missing", { skip: !DB }, async () => {
-  const first = await createScratchOrg();
-  const second = await createScratchOrg();
+  const first = await withBypassContext(() => createScratchOrg());
+  const second = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(first.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(first.orgId));
     await seedSession(first.orgId, first.subsidiaryId, first.accounts.bank, first.accounts.revenue, actors.adminId);
     const full = ctxFor(first.orgId, actors.adminId, ["banking.reconcile"]);
-    const started = await executeApplicationTool(applicationTool("start_reconciliation")!, full, {
+    const started = await withOrgContext(first.orgId, () => executeApplicationTool(applicationTool("start_reconciliation")!, full, {
       accountId: first.accounts.bank, throughDate: "2026-07-31", statementBalance: "1250.0000", idempotencyKey: "a05-start-5",
-    }) as { result: { reconciliationId: string } };
-    const otherActors = await seedFlowActors(second.orgId);
+    })) as { result: { reconciliationId: string } };
+    const otherActors = await withBypassContext(() => seedFlowActors(second.orgId));
     const other = ctxFor(second.orgId, otherActors.adminId, ["banking.reconcile"]);
+    // Scoped to the session's own org on purpose: the row stays RLS-visible
+    // so the refusal comes from the tool's cross-org check, not the backstop.
     await assert.rejects(
-      executeApplicationTool(applicationTool("sign_off_reconciliation")!, other, {
+      withOrgContext(first.orgId, () => executeApplicationTool(applicationTool("sign_off_reconciliation")!, other, {
         reconciliationId: started.result.reconciliationId, idempotencyKey: "a05-cross-02",
-      }),
+      })),
       /reconciliation not found/,
     );
   } finally {
