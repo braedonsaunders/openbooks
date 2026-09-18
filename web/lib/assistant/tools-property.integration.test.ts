@@ -209,10 +209,12 @@ test('property assistant reads isolate orgs and honor the feature flag', { skip:
       );
       assert.deepEqual(cross, { ok: false, error: 'lease_not_found' });
     });
-    await db.execute(sql`
+    // Same fixture-write class as enablePropertyManagement above: unscoped,
+    // the constrained role updates zero orgs rows and the flag stays on.
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":false}'::jsonb)
       where id=${orgA.orgId}
-    `);
+    `));
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(authzA, 'list_properties', {});
       assert.deepEqual(off, { ok: false, error: 'propertyManagement_feature_disabled' });
