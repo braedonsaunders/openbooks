@@ -104,7 +104,10 @@ export function AttachmentPanel({
   if (prevTargetTable !== targetTable || prevTargetId !== targetId || prevT !== t) {
     setPrevTargetTable(targetTable)
     setPrevTargetId(targetId)
-    setPrevT(t)
+    // Wrap the translator: a bare function argument is invoked as a state
+    // updater with the previous translator as the key, and next-intl throws
+    // `key.split is not a function`.
+    setPrevT(() => t)
     setItems([])
     setSelectedId(null)
     setPreviewExpanded(false)
