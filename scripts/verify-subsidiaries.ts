@@ -15,7 +15,8 @@ import { db, withOrg, pool } from "../engine/src/db.ts";
 import { postDocument } from "../engine/src/posting.ts";
 import { deriveConsolidatedRates, runAutoElimination } from "../engine/src/consolidation.ts";
 
-const q = async (s: ReturnType<typeof sql>) => ((await db.execute(s)) as any).rows;
+const q = async (s: ReturnType<typeof sql>): Promise<Record<string, unknown>[]> =>
+  (await db.execute<Record<string, unknown>>(s)).rows;
 
 const targetOrgId = process.argv[2];
 if (!targetOrgId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(targetOrgId)) {
@@ -149,8 +150,8 @@ const periodId = await withOrg(org.id, async () => {
     if (Number(r.total) !== 0) throw new Error(`SUBSIDIARY NOT BALANCED: ${r.name} ${r.total}`);
   }
   if (lines.length !== 4) throw new Error(`expected 4 lines (2 + 2 IC legs), got ${lines.length}`);
-  const eastLines = lines.filter((line: any) => line.sub === "Verify East Inc");
-  if (eastLines.some((line: any) => line.currency !== org.ccy || Number(line.fxRate) !== 0.75)) {
+  const eastLines = lines.filter((line) => line.sub === "Verify East Inc");
+  if (eastLines.some((line) => line.currency !== org.ccy || Number(line.fxRate) !== 0.75)) {
     throw new Error("East lines did not retain CAD transaction currency with the CAD→USD functional rate");
   }
   console.log("✓ per-subsidiary balance holds; cross-currency due-to/due-from legs retain FX detail");

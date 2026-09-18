@@ -74,11 +74,120 @@ interface SettlementRateOption {
   source: string
 }
 
+/** One live application on the payment, with the target line/document join —
+ *  column types per the `applications` table (all NOT NULL) plus the joins
+ *  (target document columns are null when the target has no document). */
+export interface PaymentAppliedRow {
+  id: string
+  amount: string
+  source_amount: string
+  source_transaction_amount: string
+  source_transaction_currency: string
+  target_transaction_amount: string
+  target_transaction_currency: string
+  settlement_rate: string
+  settlement_rate_source: string
+  settlement_rate_reference: string
+  applied_on: string
+  target_entry_number: string
+  target_posting_date: string
+  target_due_date: string | null
+  target_amount: string
+  target_transaction_original: string
+  target_document_id: string | null
+  target_document_number: string | null
+  target_document_kind: string | null
+  target_reference_number: string | null
+}
+
 export interface PaymentPayload {
-  doc: Record<string, any>
+  doc: Record<string, unknown>
   bankAccountId: string | null
   allocations: AllocationClient[]
-  applied: Record<string, any>[]
+  /** Live applications as the loader hands them; narrowed to
+   *  PaymentAppliedRow for rendering below. */
+  applied: Record<string, unknown>[]
+}
+
+/** The payment header: `documents` plus the loader's joins. Dates, uuids
+ *  and numerics arrive from the driver as strings; left-join columns stay
+ *  nullable. Column nullability per schema (documents / parties /
+ *  journal_entries / accounts). */
+export interface PaymentDoc extends Record<string, unknown> {
+  id: string
+  kind: string
+  status: string
+  currency: string
+  total: string
+  document_number: string | null
+  party_id: string | null
+  party_name: string | null
+  document_date: string | null
+  reference_number: string | null
+  memo: string | null
+  updated_at: string
+  entry_id: string | null
+  bank_account_number: string | null
+  bank_account_name: string | null
+}
+
+function docText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+/** Narrow the engine loader's untyped document row to the header fields
+ *  this drawer reads. Non-string values fall back to null (or '' for the
+ *  NOT NULL columns); loader rows always carry strings here, so valid
+ *  payloads pass through unchanged. */
+export function asPaymentDoc(raw: Record<string, unknown>): PaymentDoc {
+  return {
+    ...raw,
+    id: docText(raw.id) ?? '',
+    kind: docText(raw.kind) ?? '',
+    status: docText(raw.status) ?? '',
+    currency: docText(raw.currency) ?? '',
+    total: docText(raw.total) ?? '0',
+    document_number: docText(raw.document_number),
+    party_id: docText(raw.party_id),
+    party_name: docText(raw.party_name),
+    document_date: docText(raw.document_date),
+    reference_number: docText(raw.reference_number),
+    memo: docText(raw.memo),
+    updated_at: docText(raw.updated_at) ?? '',
+    entry_id: docText(raw.entry_id),
+    bank_account_number: docText(raw.bank_account_number),
+    bank_account_name: docText(raw.bank_account_name),
+  }
+}
+
+/** Narrow one live-application row from the loader. All `applications`
+ *  columns are NOT NULL (amounts/dates arrive as strings); the
+ *  target-document columns are null when the target line has no document. */
+export function asPaymentAppliedRow(raw: Record<string, unknown>): PaymentAppliedRow {
+  const req = (value: unknown): string => docText(value) ?? ''
+  return {
+    ...raw,
+    id: req(raw.id),
+    amount: req(raw.amount),
+    source_amount: req(raw.source_amount),
+    source_transaction_amount: req(raw.source_transaction_amount),
+    source_transaction_currency: req(raw.source_transaction_currency),
+    target_transaction_amount: req(raw.target_transaction_amount),
+    target_transaction_currency: req(raw.target_transaction_currency),
+    settlement_rate: req(raw.settlement_rate),
+    settlement_rate_source: req(raw.settlement_rate_source),
+    settlement_rate_reference: req(raw.settlement_rate_reference),
+    applied_on: req(raw.applied_on),
+    target_entry_number: req(raw.target_entry_number),
+    target_posting_date: req(raw.target_posting_date),
+    target_due_date: docText(raw.target_due_date),
+    target_amount: req(raw.target_amount),
+    target_transaction_original: req(raw.target_transaction_original),
+    target_document_id: docText(raw.target_document_id),
+    target_document_number: docText(raw.target_document_number),
+    target_document_kind: docText(raw.target_document_kind),
+    target_reference_number: docText(raw.target_reference_number),
+  }
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -134,7 +243,8 @@ export function PaymentDrawer({
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const doc = payment.doc
+  const doc = asPaymentDoc(payment.doc)
+  const applied = payment.applied.map(asPaymentAppliedRow)
   const isDraft = doc.status === 'draft'
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Only DRAFT payments
@@ -870,7 +980,7 @@ export function PaymentDrawer({
         ) : (
           <div className="space-y-2">
             <Label>{t('appliedTo')}</Label>
-            {payment.applied.length === 0 ? (
+            {applied.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {doc.status === 'voided' ? t('voidedNote') : t('noLiveApplications')}
               </p>
@@ -888,7 +998,7 @@ export function PaymentDrawer({
                     </tr>
                   </thead>
                   <tbody>
-                    {payment.applied.map((a) => (
+                    {applied.map((a) => (
                       <tr key={a.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                         <td className="px-3 py-2">
                           <span className="font-mono text-[13px] font-semibold">

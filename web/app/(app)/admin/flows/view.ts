@@ -51,6 +51,19 @@ const RUN_BADGE: Record<string, 'success' | 'warning' | 'destructive' | 'seconda
   cancelled: 'outline',
 }
 
+/** A `flows` list row with its latest run: `updated_at` is the revision-token
+ *  text, `node_count` an integer, the lateral-join run columns nullable. */
+type FlowDbRow = {
+  id: string
+  name: string
+  subject_kind: string
+  enabled: boolean
+  updated_at: string
+  node_count: number
+  last_run_status: string | null
+  last_run_at: Date | string | null
+}
+
 export interface FlowListRow {
   id: string
   name: string
@@ -109,7 +122,7 @@ export async function loadFlows(
     ${params.q ? sql` and f.name ilike ${'%' + params.q + '%'}` : sql``}`
 
   const [flows, subjects, totalRow] = await Promise.all([
-    (db.execute(sql`
+    (db.execute<FlowDbRow>(sql`
       select f.id, f.name, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count,
              lr.status as last_run_status, lr.started_at as last_run_at
@@ -122,14 +135,14 @@ export async function loadFlows(
        order by f.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
-    (db.execute(sql`
+    (db.execute<{ subject_kind: string; n: string }>(sql`
       select subject_kind, count(*) as n from flows f
        where f.org_id = ${orgId} group by 1 order by 1`)),
-    db.execute(sql`select count(*) as n from flows f where ${where}`) as any,
+    db.execute<{ n: string }>(sql`select count(*) as n from flows f where ${where}`),
   ])
 
   const subjectLabel = new Map(listFlowSubjectProfiles().map((p) => [p.subjectKind, p.label]))
-  const total = Number(totalRow.rows[0].n)
+  const total = Number(totalRow.rows[0]?.n ?? 0)
 
   return {
     title: t('title'),
@@ -138,7 +151,7 @@ export async function loadFlows(
     backLabel: tHub('title'),
     searchPlaceholder: t('searchPlaceholder'),
     subjectLabel: t('subjectFilter'),
-    subjectOptions: subjects.rows.map((r: any) => ({
+    subjectOptions: subjects.rows.map((r) => ({
       value: r.subject_kind,
       label: subjectLabel.get(String(r.subject_kind)) ?? String(r.subject_kind),
       count: Number(r.n),
@@ -154,7 +167,7 @@ export async function loadFlows(
     columnLastRun: t('table.lastRun'),
     columnUpdated: t('table.updated'),
     columnStatus: t('table.status'),
-    rows: flows.rows.map((f: any) => ({
+    rows: flows.rows.map((f) => ({
       id: String(f.id),
       name: String(f.name),
       href: `/admin/flows/${f.id}`,

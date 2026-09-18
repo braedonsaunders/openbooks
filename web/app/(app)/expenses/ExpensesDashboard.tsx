@@ -140,7 +140,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                   option={{
                     grid: { top: 26, bottom: 26, left: 60, right: 12 },
                     legend: { top: 0 },
-                    tooltip: { trigger: 'axis', valueFormatter: (v: any) => money0(v ?? 0) },
+                    tooltip: { trigger: 'axis', valueFormatter: (v: string | number) => money0(v ?? 0) },
                     xAxis: { type: 'category', data: data.monthlyTrends.map((m) => m.month) },
                     yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
                     series: [

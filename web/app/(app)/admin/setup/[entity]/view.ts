@@ -239,7 +239,7 @@ export async function loadSetupEntity(
         (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
         loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds),
         entity.key === 'tax-return-forms'
-          ? db.execute(sql`select code from tax_return_forms where org_id = ${orgId}`) as any
+          ? db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id = ${orgId}`)
           : Promise.resolve({ rows: [] as { code: string }[] }),
       ])
     : [{ rows: [] }, { rows: [] }, {}, { rows: [] }]

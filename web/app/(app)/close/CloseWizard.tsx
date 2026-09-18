@@ -41,15 +41,123 @@ import {
 } from "lucide-react";
 import { WizardLayout } from "../../../components/page-layout";
 
-type Row = Record<string, any>;
+/**
+ * Close-wizard rows. Each list reads a different query (see view.ts), so
+ * each gets its own interface matching the selected columns — dates and
+ * timestamps arrive from the driver as strings, nullable joins stay
+ * nullable, and every list stays a plain record for extra columns.
+ */
+export interface CloseWizardScope extends Record<string, unknown> {
+  subsidiaryIds?: string[];
+}
+/** One `close_runs` row plus the wizard query's joins. */
+export interface CloseRunRow extends Record<string, unknown> {
+  id: string;
+  period_id: string;
+  book_id: string;
+  blueprint_id: string;
+  status: string;
+  current_stage: string;
+  target_close_date: string;
+  scope: CloseWizardScope;
+  readiness_score: number;
+  data_fingerprint: string | null;
+  last_validated_at: string | null;
+  period_name: string;
+  starts_on: string;
+  ends_on: string;
+  fiscal_year: number;
+  book_name: string;
+  book_code: string;
+  blueprint_name: string;
+  blueprint_version: number;
+  package_name: string | null;
+  package_reports: Array<string | ClosePackageReportRef> | null;
+  starter_name: string | null;
+  approver_name: string | null;
+  closer_name: string | null;
+  publisher_name: string | null;
+  binder_hash: string | null;
+}
+/** Reporting-package report refs persist as `{ slug }` objects (or, from
+ * older seeds, bare slug strings). */
+export interface ClosePackageReportRef extends Record<string, unknown> {
+  slug?: string;
+}
+/** `close_run_tasks` plus owner/reviewer names and dependency keys. The
+ * history-derived `predicted_days` is attached by the loader, so the base
+ * (query columns) and the wizard row (with prediction) are separate. */
+export interface CloseWizardTaskRow extends Record<string, unknown> {
+  id: string;
+  key: string;
+  title: string;
+  description: string | null;
+  workstream: string;
+  task_type: string;
+  completion_mode: string;
+  gate_type: string;
+  status: string;
+  owner_name: string | null;
+  reviewer_name: string | null;
+  reviewer_id: string | null;
+  due_on: string | null;
+  evidence_required: boolean;
+  dependencies: string[];
+  evidence_count: string;
+}
+export interface CloseTaskRow extends CloseWizardTaskRow {
+  predicted_days: number | null;
+}
+/** One `close_exceptions` row. `details` carries the interpolation values
+ * (for example `{ count }`) for localised titles. */
+export interface CloseExceptionRow extends Record<string, unknown> {
+  id: string;
+  task_id: string | null;
+  code: string;
+  severity: string;
+  status: string;
+  title: string;
+  message: string;
+  details: { count?: unknown } | null;
+}
+/** One `close_task_evidence` row. */
+export interface CloseEvidenceRow extends Record<string, unknown> {
+  id: string;
+  task_id: string;
+  evidence_type: string;
+  label: string;
+}
+/** One `close_signoffs` row plus the signer's name. */
+export interface CloseSignoffRow extends Record<string, unknown> {
+  id: string;
+  decision: string;
+  comment: string | null;
+  signed_by_name: string;
+  signed_at: string;
+}
+/** One `close_events` row plus the actor's name (null for system events). */
+export interface CloseEventRow extends Record<string, unknown> {
+  id: string;
+  event_type: string;
+  actor_name: string | null;
+  at: string;
+}
+/** One `period_locks` row. Subsidiary locks carry a subsidiary id; the lock
+ * stage renders the root (null subsidiary) locks. */
+export interface CloseLockRow extends Record<string, unknown> {
+  id: string;
+  subsidiary_id: string | null;
+  module: string;
+  state: string;
+}
 type Props = {
-  run: Row;
-  tasks: Row[];
-  exceptions: Row[];
-  evidence: Row[];
-  signoffs: Row[];
-  events: Row[];
-  locks: Row[];
+  run: CloseRunRow;
+  tasks: CloseTaskRow[];
+  exceptions: CloseExceptionRow[];
+  evidence: CloseEvidenceRow[];
+  signoffs: CloseSignoffRow[];
+  events: CloseEventRow[];
+  locks: CloseLockRow[];
   stage?: string;
   canRun: boolean;
   canApprove: boolean;
@@ -92,9 +200,10 @@ export function CloseWizard(props: Props) {
   const visibleStages: readonly Stage[] = props.advancedClose || props.run.status === "published"
     ? STAGES
     : STAGES.filter((stage) => stage !== "publish");
-  const requested: Stage = STAGES.includes(props.stage as Stage)
-    ? (props.stage as Stage)
-    : (props.run.current_stage as Stage);
+  const requested: Stage =
+    STAGES.find((stage) => stage === props.stage) ??
+    STAGES.find((stage) => stage === props.run.current_stage) ??
+    "lock";
   const selected: Stage = visibleStages.includes(requested) ? requested : "lock";
   const completed = props.tasks.filter((task) =>
     ["complete", "waived"].includes(task.status),
@@ -108,7 +217,7 @@ export function CloseWizard(props: Props) {
         !["complete", "waived"].includes(task.status) &&
         task.predicted_days != null,
     )
-    .sort((a, b) => b.predicted_days - a.predicted_days)[0];
+    .sort((a, b) => (b.predicted_days ?? 0) - (a.predicted_days ?? 0))[0];
   const [busy, setBusy] = useState(false);
 
   async function runAction(action: string, comment?: string) {
@@ -186,7 +295,7 @@ export function CloseWizard(props: Props) {
           value={critical ? taskText(t, critical.title) : t("metrics.clear")}
           note={
             critical
-              ? t("metrics.historicalDays", { days: critical.predicted_days })
+              ? t("metrics.historicalDays", { days: critical.predicted_days ?? 0 })
               : t("metrics.noPredictedBlocker")
           }
         />
@@ -433,7 +542,7 @@ function ReadinessStage(
   );
 }
 
-function ExceptionRow({ item, run }: { item: Row; run: Props["run"] }) {
+function ExceptionRow({ item, run }: { item: CloseExceptionRow; run: Props["run"] }) {
   const t = useTranslations("close");
   const critical = ["critical", "error"].includes(item.severity);
   const actionHref = closeExceptionActionHref(item.code, run);
@@ -482,7 +591,7 @@ function ExceptionRow({ item, run }: { item: Row; run: Props["run"] }) {
   );
 }
 
-function closeExceptionActionHref(code: string, run: Props["run"]): string | null {
+function closeExceptionActionHref(code: string, run: CloseRunRow): string | null {
   if (code === "posting-period-missing") {
     return `/close/posting-periods?run=${encodeURIComponent(run.id)}&book=${encodeURIComponent(run.book_id)}`;
   }
@@ -499,7 +608,7 @@ function closeExceptionActionHref(code: string, run: Props["run"]): string | nul
   return actions[code] ?? null;
 }
 
-function TaskStage(props: Props & { tasks: Row[] }) {
+function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
   const t = useTranslations("close");
   const groups = useMemo(
     () => Array.from(new Set(props.tasks.map((task) => task.workstream))),
@@ -528,7 +637,7 @@ function TaskStage(props: Props & { tasks: Row[] }) {
   );
 }
 
-function TaskCard(props: Props & { task: Row }) {
+function TaskCard(props: Props & { task: CloseTaskRow }) {
   const t = useTranslations("close");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -804,7 +913,7 @@ function TaskCard(props: Props & { task: Row }) {
   );
 }
 
-function closeTaskActionHref(task: Row, run: Row): string | null {
+function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | null {
   if (task.task_type === "approval") return "/approvals";
   const exact: Record<string, string> = {
     "drafts-cleared": "/journal",
@@ -1028,14 +1137,12 @@ export function PublishStage(
             <CardDescription>{t("publish.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(props.run.package_reports ?? []).map((report: unknown) => {
+            {(props.run.package_reports ?? []).map((report) => {
               // Reporting packages persist reports as { slug } objects, not
               // bare strings: resolve the slug before keying the i18n lookup
               // or href, or the row renders a raw `close.reports.[object
               // Object]` key (F-t01-001).
-              const slug = typeof report === "string"
-                ? report
-                : (report as { slug?: unknown } | null)?.slug;
+              const slug = typeof report === "string" ? report : report?.slug;
               const code = typeof slug === "string" && slug ? slug : "";
               return (
                 <Link

@@ -10,10 +10,12 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 
+import type { AccountDrawerData } from './account-drawer-data'
+
 type Option = { id: string; name: string; lifecycle_stage?: string; is_default?: boolean }
 
 export function AccountDrawer({ data, statuses, owners, territories, sources, basePath, canManage }: {
-  data: any
+  data: AccountDrawerData
   statuses: Option[]
   owners: Option[]
   territories: Option[]
@@ -97,4 +99,4 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-1.5"><Label>{label}</Label>{children}</div> }
-function Related({ title, rows, empty, value }: { title: string; rows: any[]; empty: string; value: (row: any) => string }) { return <section className="mt-7"><h3 className="mb-2 font-semibold">{title}</h3>{rows.length ? <div className="divide-y rounded-md border dark:divide-slate-800 dark:border-slate-800">{rows.slice(0, 10).map((row) => <div key={row.id} className="px-3 py-2 text-sm">{value(row)}</div>)}</div> : <p className="text-sm text-slate-500">{empty}</p>}</section> }
+function Related<T extends { id: string }>({ title, rows, empty, value }: { title: string; rows: T[]; empty: string; value: (row: T) => string }) { return <section className="mt-7"><h3 className="mb-2 font-semibold">{title}</h3>{rows.length ? <div className="divide-y rounded-md border dark:divide-slate-800 dark:border-slate-800">{rows.slice(0, 10).map((row) => <div key={row.id} className="px-3 py-2 text-sm">{value(row)}</div>)}</div> : <p className="text-sm text-slate-500">{empty}</p>}</section> }

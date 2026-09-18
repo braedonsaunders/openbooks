@@ -62,6 +62,20 @@ export interface EquipmentData {
   drawer: EquipmentDrawerData | null
 }
 
+/** Equipment KPI aggregates: `count(*)` arrives as a string, sums as numerics. */
+type EquipmentSummaryRow = {
+  purchase: string
+  active: string
+  recovery: string
+  billable: string
+}
+
+/** Picker rows for the drawer (`Opt`): charge items and rate books carry
+ *  `code`, fixed assets carry `number`, subsidiaries are id + name. */
+type EquipmentItemRow = { id: string; code: string | null; name: string }
+type EquipmentAssetRow = { id: string; number: string | null; name: string }
+type EquipmentSubsidiaryRow = { id: string; name: string }
+
 export async function loadEquipmentPage(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<EquipmentData> {
@@ -73,7 +87,7 @@ export async function loadEquipmentPage(
   const equipmentId = typeof sp.equipment === 'string' ? sp.equipment : undefined
   const allowed = authz.allowedSubsidiaryIds ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``
   const [summary, open, pickers, subsidiaryUiEnabled, fixedAssetsEnabled, projectsEnabled] = await Promise.all([
-    db.execute(sql`
+    db.execute<EquipmentSummaryRow>(sql`
       select coalesce(sum(e.purchase_price),0) purchase,
              count(*) filter(where e.status='active') active,
              coalesce(sum((select sum(dl.cost_amount) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id
@@ -81,13 +95,13 @@ export async function loadEquipmentPage(
              coalesce(sum((select sum(dl.bill_amount) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id
                where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted'))),0) billable
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
-    `) as any,
+    `),
     equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId) : null,
     equipmentId ? Promise.all([
-      db.execute(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`) as any,
-      db.execute(sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by asset_number`) as any,
-      db.execute(sql`select id,code,name from item_rate_books where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active and not is_elimination ${authz.allowedSubsidiaryIds ? sql`and id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by name`) as any,
+      db.execute<EquipmentItemRow>(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`),
+      db.execute<EquipmentAssetRow>(sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by asset_number`),
+      db.execute<EquipmentItemRow>(sql`select id,code,name from item_rate_books where org_id=${authz.user.orgId} and is_active order by name`),
+      db.execute<EquipmentSubsidiaryRow>(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active and not is_elimination ${authz.allowedSubsidiaryIds ? sql`and id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by name`),
     ]) : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'fixedAssets'),

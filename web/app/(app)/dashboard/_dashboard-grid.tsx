@@ -34,7 +34,7 @@ import type { DashboardApp } from './_app-widget'
 
 const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
   ssr: false,
-}) as unknown as React.ComponentType<any>
+}) as unknown as React.ComponentType<Record<string, unknown>>
 
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 // react-grid-layout measures the content pane, not the browser viewport. With

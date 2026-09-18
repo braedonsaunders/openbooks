@@ -7,6 +7,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import {
   BUILT_IN_REPORT_DEFINITIONS,
   STANDARD_STATEMENT_DEFINITIONS,
+  type ReportCustomQuery,
 } from "@openbooks/reports";
 import { dimensionOptions } from "../../../../../lib/reports";
 import {
@@ -16,11 +17,43 @@ import {
 } from "../../../../../lib/close/report-descriptor";
 import { clamp, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
+import type {
+  AutomationRow,
+  BlueprintRow,
+  BlueprintStepRow,
+  CalendarOptionRow,
+  CalendarRow,
+  PackageRow,
+  PeriodRow,
+  PolicyRow,
+  ReopenRow,
+  SetupRoleRow,
+  SetupUserRow,
+} from "./CloseSetupWorkspace";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
 const CONFIG_PER_PAGE = 12;
+
+/** `accounting_books` as selected for the book chips. All NOT NULL. */
+type CloseSetupBookRow = {
+  id: string
+  code: string
+  name: string
+  is_primary: boolean
+}
+
+/** A `report_definitions` row: the custom-query and statement plans are
+ *  stored as JSONB and arrive parsed. */
+type ReportDefinitionRow = {
+  slug: string
+  name: string
+  kind: string
+  report_type: string
+  query: ReportCustomQuery | null
+  statement: { params?: Record<string, string> | null } | null
+}
 
 function configListParams(
   searchParams: Record<string, string | string[] | undefined>,
@@ -110,15 +143,15 @@ export async function CloseSetupPage({
   const packageDefaultMatch =
     translatedMatch(packageList.query, "defaultData.package.name") ||
     translatedMatch(packageList.query, "defaultData.package.description");
-  const books = ((await db.execute(
+  const books = await db.execute<CloseSetupBookRow>(
     sql`select id, code, name, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`,
-  )));
+  );
   const requestedBookId = pickString(searchParams.book);
-  const selectedBookId = ((books.rows)).some(
+  const selectedBookId = (books.rows).some(
     (book) => book.id === requestedBookId,
   )
     ? requestedBookId!
-    : ((books.rows as any[]).find((book) => book.is_primary)?.id ??
+    : ((books.rows).find((book) => book.is_primary)?.id ??
       books.rows[0]?.id ??
       "");
 
@@ -140,7 +173,7 @@ export async function CloseSetupPage({
     reopenRequests,
     reopenCount,
   ] = ((await Promise.all([
-    db.execute(sql`
+    db.execute<CalendarRow>(sql`
       select * from fiscal_calendars
        where org_id = ${orgId}
          ${calendarList.query ? sql`and (name ilike ${`%${calendarList.query}%`} or (${calendarDefaultMatch} and name = 'close.defaultData.calendar.name'))` : sql``}
@@ -150,10 +183,10 @@ export async function CloseSetupPage({
       select count(*) as count from fiscal_calendars
        where org_id = ${orgId}
          ${calendarList.query ? sql`and (name ilike ${`%${calendarList.query}%`} or (${calendarDefaultMatch} and name = 'close.defaultData.calendar.name'))` : sql``}`),
-    db.execute(
+    db.execute<CalendarOptionRow>(
       sql`select id, name, is_default, is_active from fiscal_calendars where org_id = ${orgId} and is_active order by is_default desc, name`,
     ),
-    db.execute(sql`
+    db.execute<PeriodRow>(sql`
       select p.*, c.name as calendar_name,
              coalesce(jsonb_object_agg(l.module, jsonb_build_object(
                'state', l.state, 'lockedAt', l.locked_at, 'reason', l.reason,
@@ -176,7 +209,7 @@ export async function CloseSetupPage({
       select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
          ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
-    db.execute(sql`
+    db.execute<BlueprintRow>(sql`
       select * from close_blueprints
        where org_id = ${orgId}
          ${blueprintList.query ? sql`and (name ilike ${`%${blueprintList.query}%`} or description ilike ${`%${blueprintList.query}%`} or (${blueprintDefaultMatch} and name = 'close.defaultData.blueprint.name'))` : sql``}
@@ -186,7 +219,7 @@ export async function CloseSetupPage({
       select count(*) as count from close_blueprints
        where org_id = ${orgId}
          ${blueprintList.query ? sql`and (name ilike ${`%${blueprintList.query}%`} or description ilike ${`%${blueprintList.query}%`} or (${blueprintDefaultMatch} and name = 'close.defaultData.blueprint.name'))` : sql``}`),
-    db.execute(sql`
+    db.execute<BlueprintStepRow>(sql`
       select s.*,
              coalesce(jsonb_agg(dep.key order by dep.key) filter (where dep.id is not null), '[]'::jsonb) as depends_on
         from close_blueprint_steps s
@@ -201,7 +234,7 @@ export async function CloseSetupPage({
             limit ${CONFIG_PER_PAGE} offset ${blueprintList.offset}
          )
        group by s.id order by s.blueprint_id, s.sort_order`),
-    db.execute(sql`
+    db.execute<PolicyRow>(sql`
       select * from close_policies
        where org_id = ${orgId}
          ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.independentApproval} and name = 'close.defaultData.policies.independentApproval.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}
@@ -211,7 +244,7 @@ export async function CloseSetupPage({
       select count(*) as count from close_policies
        where org_id = ${orgId}
          ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.independentApproval} and name = 'close.defaultData.policies.independentApproval.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}`),
-    db.execute(sql`
+    db.execute<AutomationRow>(sql`
       select * from close_automation_rules
        where org_id = ${orgId}
          ${automationList.query ? sql`and (name ilike ${`%${automationList.query}%`} or trigger ilike ${`%${automationList.query}%`} or action ilike ${`%${automationList.query}%`})` : sql``}
@@ -221,7 +254,7 @@ export async function CloseSetupPage({
       select count(*) as count from close_automation_rules
        where org_id = ${orgId}
          ${automationList.query ? sql`and (name ilike ${`%${automationList.query}%`} or trigger ilike ${`%${automationList.query}%`} or action ilike ${`%${automationList.query}%`})` : sql``}`),
-    db.execute(sql`
+    db.execute<PackageRow>(sql`
       select * from close_reporting_packages
        where org_id = ${orgId}
          ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}
@@ -231,7 +264,7 @@ export async function CloseSetupPage({
       select count(*) as count from close_reporting_packages
        where org_id = ${orgId}
          ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}`),
-    db.execute(sql`
+    db.execute<ReopenRow>(sql`
       select r.*, p.name as period_name, b.name as book_name,
              requester.name as requester_name, approver.name as approver_name
         from close_reopen_requests r
@@ -257,16 +290,16 @@ export async function CloseSetupPage({
   // notifications, assignments, and reporting packages pick from real people,
   // roles, and reports (built-in + custom) instead of hand-typed JSON.
   const [users, roles, reportDefs, subsidiaries, dimensions, subsidiaryUiEnabled] = ((await Promise.all([
-    db.execute(
+    db.execute<SetupUserRow>(
       sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`,
     ),
-    db.execute(
+    db.execute<SetupRoleRow>(
       sql`select key, name from app_roles where org_id = ${orgId} order by name`,
     ),
-    db.execute(
+    db.execute<ReportDefinitionRow>(
       sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} order by kind, name`,
     ),
-    db.execute(
+    db.execute<{ id: string; name: string }>(
       sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,
     ),
     dimensionOptions(orgId),
@@ -282,13 +315,14 @@ export async function CloseSetupPage({
     STANDARD_STATEMENT_DEFINITIONS.map((def) => [def.slug, def.params]),
   );
   const dbRowBySlug = new Map(((reportDefs.rows)).map((row) => [row.slug, row]));
-  function descriptorFor(slug: string, dbRow: any): ReportDescriptor {
+  function descriptorFor(slug: string, dbRow: ReportDefinitionRow | undefined): ReportDescriptor {
     if (dbRow) {
       if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query);
       if (dbRow.report_type === "statement")
         return describeStatement(dbRow.statement?.params ?? null);
     }
-    if (staticQuery.has(slug)) return describeQuery(staticQuery.get(slug) as any);
+    const staticDef = staticQuery.get(slug);
+    if (staticDef) return describeQuery(staticDef);
     if (staticStatementParams.has(slug))
       return describeStatement(staticStatementParams.get(slug) ?? null);
     return { dateRange: null, breakouts: [], filters: [], measures: [] };
@@ -306,7 +340,7 @@ export async function CloseSetupPage({
     });
   for (const def of STANDARD_STATEMENT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
   for (const def of BUILT_IN_REPORT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
-  for (const row of reportDefs.rows as any[]) addReport(row.slug, row.name, row.kind);
+  for (const row of reportDefs.rows) addReport(row.slug, row.name, row.kind);
   const mergedReportDefs = [...reportBySlug.values()].sort((a, b) =>
     a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "built_in" ? -1 : 1,
   );

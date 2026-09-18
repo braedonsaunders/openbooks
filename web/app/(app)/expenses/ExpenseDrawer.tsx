@@ -69,8 +69,63 @@ interface LineRow extends Record<string, unknown> {
   settlementType: string
 }
 interface ExpensePayload {
-  doc: Record<string, any>
+  doc: Record<string, unknown>
   lines: Record<string, unknown>[]
+}
+
+/** The expense-report header: `documents` plus the loader's joins. Dates,
+ *  uuids and numerics arrive from the driver as strings; nullable columns
+ *  and left-join columns stay nullable. Column nullability per schema. */
+export interface ExpenseDoc extends Record<string, unknown> {
+  id: string
+  status: string
+  currency: string
+  payment_card_id: string | null
+  memo: string | null
+  employee_name: string | null
+  document_date: string | null
+  updated_at: string
+  subtotal: string
+  tax_total: string
+  total: string
+  party_id: string | null
+  entry_id: string | null
+  document_number: string | null
+  custom: Record<string, unknown>
+  extra_dims: Record<string, string>
+}
+
+/** Narrow the engine loader's untyped document row to the header fields
+ *  this drawer reads. Loader rows always carry strings (or string maps for
+ *  custom/extra_dims) here, so valid payloads pass through unchanged. */
+export function asExpenseDoc(raw: Record<string, unknown>): ExpenseDoc {
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null
+  return {
+    ...raw,
+    id: text(raw.id) ?? '',
+    status: text(raw.status) ?? '',
+    currency: text(raw.currency) ?? '',
+    payment_card_id: text(raw.payment_card_id),
+    memo: text(raw.memo),
+    employee_name: text(raw.employee_name),
+    document_date: text(raw.document_date),
+    updated_at: text(raw.updated_at) ?? '',
+    subtotal: text(raw.subtotal) ?? '0',
+    tax_total: text(raw.tax_total) ?? '0',
+    total: text(raw.total) ?? '0',
+    party_id: text(raw.party_id),
+    entry_id: text(raw.entry_id),
+    document_number: text(raw.document_number),
+    custom: isLineMap(raw.custom) ? raw.custom : {},
+    extra_dims: isLineMap(raw.extra_dims)
+      ? Object.fromEntries(
+          Object.entries(raw.extra_dims).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : {},
+  }
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -107,20 +162,31 @@ function positiveAmount(value: unknown): boolean {
   try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
 }
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
+/** Line text columns are uuids/text-or-null; numerics are handled with String(). */
+function lineText(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+function isLineMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
-    accountId: l.account_id ?? '',
-    description: l.description ?? '',
-    departmentId: l.department_id ?? '',
-    projectId: l.project_id ?? '',
+    accountId: lineText(l.account_id),
+    description: lineText(l.description),
+    departmentId: lineText(l.department_id),
+    projectId: lineText(l.project_id),
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
-    settlementType: l.settlement_type ?? 'out_of_pocket',
+    settlementType: lineText(l.settlement_type ?? 'out_of_pocket'),
   }
-  for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
+  const custom = isLineMap(l.custom) ? l.custom : null
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
   return row
 }
 
@@ -198,7 +264,7 @@ export function ExpenseDrawer({
   const t = useTranslations('expenses')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const doc = report.doc
+  const doc = asExpenseDoc(report.doc)
   const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
   const isPendingApproval = doc.status === 'pending_approval'
@@ -335,7 +401,7 @@ export function ExpenseDrawer({
 
   /** Reset every field back to an explicit persisted payload (used by Cancel). */
   function resetForm(source: ExpensePayload) {
-    const sourceDoc = source.doc
+    const sourceDoc = asExpenseDoc(source.doc)
     setPartyId(sourceDoc.party_id ?? '')
     setPaymentCardId(sourceDoc.payment_card_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')

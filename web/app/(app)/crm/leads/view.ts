@@ -9,6 +9,7 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadParty } from '../../../api/parties/_lib'
 import { loadCrmAccount } from '../../../../lib/crm'
 import type { AccountDrawer } from '../AccountDrawer'
+import { toAccountDrawerData } from '../account-drawer-data'
 
 /**
  * The lead list, split into a loader and a spec.
@@ -59,19 +60,19 @@ export async function loadLeads(
     const [party, account, statuses, owners, territories, sources] = await Promise.all([
       loadParty(openId, authz.user.orgId, authz.allowedSubsidiaryIds, { bundle: 'crm' }),
       loadCrmAccount(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      db.execute(sql`select id,name,lifecycle_stage,is_default from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage,sequence`) as any,
-      db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select id,name from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority,name`) as any,
-      db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`) as any,
+      db.execute<{ id: string; name: string; lifecycle_stage: string; is_default: boolean }>(sql`select id,name,lifecycle_stage,is_default from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage,sequence`),
+      db.execute<{ id: string; name: string }>(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`),
+      db.execute<{ id: string; name: string }>(sql`select id,name from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority,name`),
+      db.execute<{ id: string; name: string }>(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`),
     ])
     if (party && account) {
       const requestedReturn = pickString(sp.drawerReturn)
       drawer = {
-        data: { ...party, crm: account } as unknown as AccountDrawerProps['data'],
-        statuses: statuses.rows as unknown as AccountDrawerProps['statuses'],
-        owners: owners.rows as unknown as AccountDrawerProps['owners'],
-        territories: territories.rows as unknown as AccountDrawerProps['territories'],
-        sources: sources.rows as unknown as AccountDrawerProps['sources'],
+        data: toAccountDrawerData(party.party, account),
+        statuses: statuses.rows,
+        owners: owners.rows,
+        territories: territories.rows,
+        sources: sources.rows,
         basePath: requestedReturn?.startsWith(basePath) ? requestedReturn : basePath,
         canManage,
       }

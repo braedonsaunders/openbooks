@@ -13,6 +13,7 @@ import { WidgetCard } from './_widget-views'
 import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
 import type { DashboardMetrics } from './_metrics'
 import { CardTile, type CardTileData } from '../insights/CardTile'
+import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
 import { listApps } from '@/lib/apps/store'
 import { appKeyFromWidgetId, appWidgetId } from '@/lib/apps/surfaces'
 import { AppWidgetCard, type DashboardApp } from './_app-widget'
@@ -60,12 +61,19 @@ async function loadInsightCardNodes(
   const orgId = authz.user.orgId
   const uuidIds = widgetIds.filter((id) => isUuid(id))
   if (uuidIds.length === 0) return {}
-  const res = (await db.execute(sql`
+  const res = await db.execute<{
+    id: string
+    name: string
+    description: string | null
+    query: InsightQuery
+    viz_type: VizType
+    viz_settings: VizSettings
+  }>(sql`
     select id, name, description, query, viz_type, viz_settings
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${uuidIds.join(',')}}`}::uuid[])
        and status = 'published' and ${insightVisibilitySql(authz)}
-  `)) as any
+  `)
   const nodes: Record<string, React.ReactNode> = {}
   for (const row of res.rows) {
     const data: CardTileData = {

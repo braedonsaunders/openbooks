@@ -59,6 +59,32 @@ export interface ScriptRow {
   statusVariant: 'success' | 'outline'
 }
 
+/** One `user_scripts` row for the drawer editor (`select *`). Integer
+ *  columns arrive as numbers. */
+export interface ScriptDetailRow extends Record<string, unknown> {
+  id: string
+  name: string
+  trigger_point: string
+  document_kind: string | null
+  endpoint_slug: string | null
+  source: string
+  cron: string | null
+  timeout_ms: number
+  sort_order: number
+  is_active: boolean
+}
+
+/** One `script_runs` row for the drawer log. `duration_ms` is an integer
+ *  (number); `logs` is a JSONB array surfaced through runtime checks. */
+export interface ScriptRunRow extends Record<string, unknown> {
+  status: string
+  error_message: string | null
+  logs: unknown
+  duration_ms: number | null
+  at: string
+  target_kind: string | null
+}
+
 export interface ScriptsData {
   title: string
   description: string
@@ -112,10 +138,10 @@ export async function loadScripts(
       select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`),
     db.execute<{ n: string }>(sql`select count(*) as n from user_scripts where ${where}`),
     scriptId && scriptId !== 'new'
-      ? db.execute(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`)
+      ? db.execute<ScriptDetailRow>(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`)
       : null,
     scriptId && scriptId !== 'new'
-      ? db.execute(sql`
+      ? db.execute<ScriptRunRow>(sql`
           select status, error_message, logs, duration_ms, at, target_kind
             from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`)
       : null,
@@ -172,8 +198,8 @@ export async function loadScripts(
     currentPage: params.page,
     perPage: params.perPage,
     drawerOpen: Boolean(scriptId),
-    drawerScript: (open?.rows[0] as Record<string, unknown> | undefined) ?? null,
-    drawerRuns: (runs?.rows as Record<string, unknown>[] | undefined) ?? [],
+    drawerScript: open?.rows[0] ?? null,
+    drawerRuns: runs?.rows ?? [],
     customTypes: customTypes.rows.map((r) => ({ key: String(r.key), name: String(r.name) })),
   }
 }

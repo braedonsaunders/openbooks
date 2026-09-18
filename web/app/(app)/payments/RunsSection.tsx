@@ -108,6 +108,32 @@ export async function RunsSection({
     perPage: 25,
     allowedSorts: ['number', 'created', 'bank', 'method', 'scheduled', 'payments', 'total', 'status'] as const,
   })
+  /** One payment run with its bank join and instruction rollup. `scheduled_for`
+   *  is a `date` (ISO string); counts and sums arrive as strings. */
+  type PaymentRunRow = {
+    id: string
+    run_number: string
+    method: string
+    status: string
+    currency: string | null
+    scheduled_for: string | null
+    created_at: Date
+    bank_number: string | null
+    bank_name: string | null
+    instruction_count: string
+    total: string
+  }
+
+  /** Bank profiles backing the run builder's profile picker. */
+  type BankProfileRow = {
+    id: string
+    name: string
+    currency: string
+    format_name: string
+    bank_number: string | null
+    bank_name: string
+  }
+
   const runStatus = pickString(sp.runsStatus)
 
   const billWhere = billParams.q
@@ -154,7 +180,7 @@ export async function RunsSection({
       with open_bills as (${openBillsCte})
       select count(*) as n from open_bills where open > 0 ${billWhere}
     `)) : Promise.resolve({ rows: [{ n: 0 }] }),
-    (db.execute(sql`
+    (db.execute<PaymentRunRow>(sql`
       select r.id, r.run_number, r.method, r.status, r.currency, r.scheduled_for, r.exported_at, r.created_at,
              a.number as bank_number, a.name as bank_name,
              count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
@@ -167,7 +193,7 @@ export async function RunsSection({
        order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
        limit ${runParams.perPage} offset ${(runParams.page - 1) * runParams.perPage}
     `)),
-    (db.execute(sql`
+    (db.execute<{ status: string; n: string }>(sql`
       select r.status, count(*) as n from payment_runs r where ${runScope} and r.direction = ${direction} group by r.status
     `)),
     (db.execute(sql`
@@ -176,7 +202,7 @@ export async function RunsSection({
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
        where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
     `)),
-    building ? db.execute(sql`
+    building ? db.execute<BankProfileRow>(sql`
       select p.id, p.name, p.currency, f.name as format_name,
              a.number as bank_number, a.name as bank_name
         from payment_bank_profiles p
@@ -186,17 +212,17 @@ export async function RunsSection({
        where p.org_id = ${orgId} and p.is_active ${profileScope} and f.direction <> ${collections ? 'credit' : 'debit'}
          and (${collections} = false or f.rail in ('nacha_debit', 'sepa_debit', 'custom'))
        order by p.name
-    `) as any : Promise.resolve({ rows: [] }),
+    `) : Promise.resolve({ rows: [] }),
   ])
 
   // Bills handed over from the AP cockpit's pay-run planner (?preselect=id,id).
   // Fetched by id so they pre-check regardless of the list's pagination.
   const preselectIds = (pickString(sp.preselect)?.split(',') ?? []).filter(isUuid)
   const preselected = building && preselectIds.length
-    ? ((await db.execute(sql`
+    ? (await db.execute<RunBill>(sql`
         with open_bills as (${openBillsCte})
         select * from open_bills where open > 0 and id in (${sql.join(preselectIds.map((id) => sql`${id}`), sql`, `)})
-      `)) as any).rows as RunBill[]
+      `)).rows
     : []
 
   const runsTotal = runCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
@@ -313,7 +339,7 @@ export async function RunsSection({
               paramKey="runsStatus"
               label={tCommon('labels.status')}
               pageParamKey="runsPage"
-              options={runCounts.rows.map((r: any) => ({
+              options={runCounts.rows.map((r) => ({
                 value: r.status,
                 label: runStatusLabel(String(r.status)),
                 count: Number(r.n),
@@ -346,7 +372,7 @@ export async function RunsSection({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {runs.rows.map((r: any) => (
+                {runs.rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-[13px] font-semibold">
                       <Link

@@ -69,8 +69,59 @@ interface LineRow extends Record<string, unknown> {
   credit: string
 }
 interface JournalPayload {
-  doc: Record<string, any>
+  doc: Record<string, unknown>
   lines: Record<string, unknown>[]
+}
+
+/** The journal header: `documents` plus the loader's joins. Dates, uuids
+ *  and numerics arrive from the driver as strings; nullable columns and
+ *  left-join columns stay nullable. Column nullability per schema. */
+export interface JournalDoc extends Record<string, unknown> {
+  id: string
+  status: string
+  currency: string
+  subsidiary_id: string | null
+  reference_number: string | null
+  party_id: string | null
+  party_name: string | null
+  memo: string | null
+  document_date: string | null
+  updated_at: string
+  entry_id: string | null
+  document_number: string | null
+  custom: Record<string, unknown>
+  extra_dims: Record<string, string>
+}
+
+/** Narrow the engine loader's untyped document row to the header fields
+ *  this drawer reads. Loader rows always carry strings (or string maps for
+ *  custom/extra_dims) here, so valid payloads pass through unchanged. */
+export function asJournalDoc(raw: Record<string, unknown>): JournalDoc {
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null
+  return {
+    ...raw,
+    id: text(raw.id) ?? '',
+    status: text(raw.status) ?? '',
+    currency: text(raw.currency) ?? '',
+    subsidiary_id: text(raw.subsidiary_id),
+    reference_number: text(raw.reference_number),
+    party_id: text(raw.party_id),
+    party_name: text(raw.party_name),
+    memo: text(raw.memo),
+    document_date: text(raw.document_date),
+    updated_at: text(raw.updated_at) ?? '',
+    entry_id: text(raw.entry_id),
+    document_number: text(raw.document_number),
+    custom: isLineMap(raw.custom) ? raw.custom : {},
+    extra_dims: isLineMap(raw.extra_dims)
+      ? Object.fromEntries(
+          Object.entries(raw.extra_dims).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : {},
+  }
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -102,22 +153,33 @@ const emptyLine = (): LineRow => ({
   credit: '',
 })
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
+/** Line text columns are uuids/text-or-null. */
+function lineText(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+function isLineMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   // Exact parse at the ledger's numeric(19,4) scale — a float round-trip here
   // would snap 4-decimal lines to cents and silently drop sub-cent legs.
   const units = journalAmountUnits(l.amount) ?? 0n
   const row: LineRow = {
-    accountId: l.account_id ?? '',
-    description: l.description ?? '',
-    partyId: l.party_id ?? '',
-    departmentId: l.department_id ?? '',
-    projectId: l.project_id ?? '',
-    subsidiaryId: l.subsidiary_id ?? '',
+    accountId: lineText(l.account_id),
+    description: lineText(l.description),
+    partyId: lineText(l.party_id),
+    departmentId: lineText(l.department_id),
+    projectId: lineText(l.project_id),
+    subsidiaryId: lineText(l.subsidiary_id),
     debit: units > 0n ? formatJournalAmount(units) : '',
     credit: units < 0n ? formatJournalAmount(-units) : '',
   }
-  for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
+  const custom = isLineMap(l.custom) ? l.custom : null
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
   return row
 }
 
@@ -183,7 +245,7 @@ export function JournalDrawer({
   const t = useTranslations('journal.drawer')
   const tc = useTranslations('common')
   const router = useRouter()
-  const doc = journal.doc
+  const doc = asJournalDoc(journal.doc)
   const isDraft = doc.status === 'draft'
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Only draft journals are editable. Once a journal enters
@@ -337,7 +399,7 @@ export function JournalDrawer({
 
   /** Reset every field back to an explicit persisted payload (used by Cancel). */
   function resetForm(source: JournalPayload) {
-    const sourceDoc = source.doc
+    const sourceDoc = asJournalDoc(source.doc)
     setPartyId(sourceDoc.party_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
     setReferenceNumber(sourceDoc.reference_number ?? '')

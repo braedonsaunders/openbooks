@@ -52,6 +52,47 @@ export interface BankFeedsData {
 const iso = (v: unknown): string | null =>
   v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : null
 
+/** `bank_feed_connections` joined to `accounts`, as selected below. Timestamps
+ *  arrive as Dates from the driver; `iso` also tolerates strings. */
+type ConnectionRow = {
+  id: string
+  name: string
+  provider: string
+  accountId: string
+  status: string
+  externalAccountId: string | null
+  syncCadence: string
+  lastSyncAt: Date | string | null
+  lastAttemptAt: Date | string | null
+  lastResult: unknown
+  lastError: string | null
+  isActive: boolean
+  hasCredentials: boolean
+  accountNumber: string | null
+  accountName: string | null
+}
+
+type SftpServerRow = {
+  id: string
+  name: string
+  username: string
+  rootPrefix: string
+  isActive: boolean
+  lastConnectedAt: Date | string | null
+}
+
+type SftpScheduleRow = {
+  id: string
+  sftpServerId: string
+  accountId: string
+  format: string
+  folder: string
+  isActive: boolean
+  lastRunAt: Date | string | null
+  accountNumber: string | null
+  accountName: string | null
+}
+
 export async function loadBankFeeds(): Promise<BankFeedsData> {
   const authz = await requirePermission('admin.setup.manage')
   const features = await resolvedFeatureState(authz.user.orgId)
@@ -62,7 +103,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
   // a reconcilable non-bank account would be offered as a feed target, and
   // its statements could never be reconciled (F-t11-005).
   const [conns, eligible, servers, sched, cfg, hdrs] = await Promise.all([
-    db.execute<any>(sql`
+    db.execute<ConnectionRow>(sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
@@ -74,12 +115,12 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
        where c.org_id = ${authz.user.orgId} order by c.created_at desc
     `),
     listReconcilableBankAccounts(authz.user.orgId),
-    db.execute<any>(sql`
+    db.execute<SftpServerRow>(sql`
       select id, name, username, root_prefix as "rootPrefix", is_active as "isActive",
              last_connected_at as "lastConnectedAt"
         from sftp_servers where org_id = ${authz.user.orgId} order by created_at desc
     `),
-    db.execute<any>(sql`
+    db.execute<SftpScheduleRow>(sql`
       select sc.id, sc.sftp_server_id as "sftpServerId", sc.account_id as "accountId", sc.format, sc.folder,
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
              a.number as "accountNumber", a.name as "accountName"
@@ -106,16 +147,16 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
   return {
     // Client-side dates stay raw: the island renders them with
     // `new Date(…).toLocaleDateString("en-CA")` in the browser.
-    connections: conns.rows.map((c: any) => ({
+    connections: conns.rows.map((c) => ({
       ...c,
       lastSyncAt: iso(c.lastSyncAt),
       lastAttemptAt: iso(c.lastAttemptAt),
     })),
-    sftpServers: servers.rows.map((s: any) => ({
+    sftpServers: servers.rows.map((s) => ({
       ...s,
       lastConnectedAt: iso(s.lastConnectedAt),
     })),
-    sftpSchedules: sched.rows.map((s: any) => ({
+    sftpSchedules: sched.rows.map((s) => ({
       ...s,
       lastRunAt: iso(s.lastRunAt),
     })),

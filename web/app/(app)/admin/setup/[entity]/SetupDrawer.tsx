@@ -89,7 +89,7 @@ export function SetupDrawer({
   stacked = false,
 }: {
   entity: SetupEntity
-  row: Record<string, any> | null
+  row: Record<string, unknown> | null
   members: string[]
   refOptions: Record<string, RefOption[]>
   closeHref?: string
@@ -122,7 +122,7 @@ export function SetupDrawer({
   const entityTitle = entity.singularTitleKey
     ? t(entity.singularTitleKey)
     : t(`entities.${entity.key}.title`)
-  const set = (key: string, value: any) => {
+  const set = (key: string, value: unknown) => {
     setFieldError(null)
     setForm((f) => ({ ...f, [key]: value }))
   }
@@ -226,7 +226,7 @@ export function SetupDrawer({
     if (!row) return
     if (!confirm(t('confirmDelete'))) return
     setBusy(true)
-    const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(row[idColumn])}`, {
+    const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
       method: 'DELETE',
     })
     const data = await res.json().catch(() => ({}))
@@ -426,11 +426,11 @@ function FieldControl({
 }: {
   field: SetupField
   value: unknown
-  onChange: (v: any) => void
+  onChange: (v: unknown) => void
   creating: boolean
   forceLocked: boolean
   refOptions: RefOption[]
-  t: (k: string, params?: Record<string, any>) => string
+  t: ReturnType<typeof useTranslations>
 }) {
   const locale = useLocale()
   const countries = useMemo(() => countryOptions(locale), [locale])

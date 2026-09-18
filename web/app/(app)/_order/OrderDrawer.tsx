@@ -73,9 +73,69 @@ interface LinkRow {
   status: string
 }
 export interface OrderPayload {
-  doc: Record<string, any>
+  doc: Record<string, unknown>
   lines: Record<string, unknown>[]
   links: LinkRow[]
+}
+
+/** The order header: `documents` plus the loader's joins. Dates, uuids and
+ *  numerics arrive from the driver as strings; nullable columns and
+ *  left-join columns stay nullable. Column nullability per schema. */
+export interface OrderDoc extends Record<string, unknown> {
+  id: string
+  status: string
+  currency: string
+  subsidiary_id: string | null
+  project_id: string | null
+  department_id: string | null
+  memo: string | null
+  due_date: string | null
+  document_date: string | null
+  updated_at: string
+  subtotal: string
+  tax_total: string
+  total: string
+  party_id: string | null
+  party_name: string | null
+  document_number: string | null
+  extra_dims: Record<string, string>
+}
+
+/** Narrow the engine loader's untyped document row to the header fields
+ *  this drawer reads. Loader rows always carry strings here, so valid
+ *  payloads pass through unchanged; anything else falls back to null (or
+ *  '' for the NOT NULL columns). */
+export function asOrderDoc(raw: Record<string, unknown>): OrderDoc {
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null
+  const dims = (value: unknown): Record<string, string> => {
+    if (!isLineMap(value)) return {}
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    )
+  }
+  return {
+    ...raw,
+    id: text(raw.id) ?? '',
+    status: text(raw.status) ?? '',
+    currency: text(raw.currency) ?? '',
+    subsidiary_id: text(raw.subsidiary_id),
+    project_id: text(raw.project_id),
+    department_id: text(raw.department_id),
+    memo: text(raw.memo),
+    due_date: text(raw.due_date),
+    document_date: text(raw.document_date),
+    updated_at: text(raw.updated_at) ?? '',
+    subtotal: text(raw.subtotal) ?? '0',
+    tax_total: text(raw.tax_total) ?? '0',
+    total: text(raw.total) ?? '0',
+    party_id: text(raw.party_id),
+    party_name: text(raw.party_name),
+    document_number: text(raw.document_number),
+    extra_dims: dims(raw.extra_dims),
+  }
 }
 
 type DraftSaveResponse = Pick<Response, 'ok' | 'json'>
@@ -220,19 +280,29 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
 })
 
-function toRow(l: Record<string, any>, segments: SegmentOption[]): LineRow {
+/** Line text columns are uuids/text-or-null; numerics are handled with String(). */
+function lineText(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+function isLineMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
   return {
-    itemId: l.item_id ?? '',
-    accountId: l.account_id ?? '',
-    description: l.description ?? '',
+    itemId: lineText(l.item_id),
+    accountId: lineText(l.account_id),
+    description: lineText(l.description),
     quantity: l.quantity != null ? String(l.quantity) : '',
-    unit: l.unit ?? '',
+    unit: lineText(l.unit),
     unitPrice: l.unit_price != null ? String(l.unit_price) : '',
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
-    departmentId: l.department_id ?? '',
-    projectId: l.project_id ?? '',
-    stockLocationId: l.stock_location_id ?? '',
-    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, l.extra_dims?.[segment.key] ?? ''])),
+    departmentId: lineText(l.department_id),
+    projectId: lineText(l.project_id),
+    stockLocationId: lineText(l.stock_location_id),
+    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, extraDims?.[segment.key] ?? ''])),
   }
 }
 
@@ -282,7 +352,7 @@ export function OrderDrawer({
     return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
   }
   const router = useRouter()
-  const doc = order.doc
+  const doc = asOrderDoc(order.doc)
   const meta = KIND_META[kind]
   const isDraft = doc.status === 'draft'
   const isApproved = doc.status === 'approved'
@@ -474,7 +544,8 @@ export function OrderDrawer({
     await execute(async () => {
       const saved = await persistDraft()
       if (!saved) return { ok: true as const, status: 200, data: null }
-      setTotals({ subtotal: saved.doc.subtotal, taxTotal: saved.doc.tax_total, total: saved.doc.total })
+      const savedDoc = asOrderDoc(saved.doc)
+      setTotals({ subtotal: savedDoc.subtotal, taxTotal: savedDoc.tax_total, total: savedDoc.total })
       setMode('view')
       router.refresh()
       return { ok: true as const, status: 200, data: null }

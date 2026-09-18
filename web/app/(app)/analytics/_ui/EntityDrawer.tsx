@@ -15,10 +15,45 @@ const PER_PAGE = 25
  * row-click flyout for ANY customer/vendor table (cockpits, module homes,
  * cash flyout).
  */
+/** One open item, as `/api/analytics/cashflow/entity` returns it: ISO-date
+ *  strings and ledger-string amounts (never pre-rounded). */
+interface EntityOpenItem {
+  docId: string | null
+  docKind: string | null
+  entryId: string
+  docNumber: string
+  tranDate: string
+  dueDate: string | null
+  remaining: string
+  overdue: boolean
+}
+
+interface EntityPayment {
+  docId: string | null
+  docKind: string | null
+  entryId: string | null
+  docNumber: string
+  date: string
+  amount: string
+}
+
+/** The entity endpoint's JSON body. Amounts are ledger strings — pass them to
+ *  `fmtMoney` untouched so formatting keeps full decimal precision. */
+interface EntityData {
+  avgDays: number | null
+  totalPaid: string
+  paymentCount: number
+  openBalance: string
+  overdueCount: number
+  reliability: number
+  openItems: EntityOpenItem[]
+  recentPayments: EntityPayment[]
+}
+
 export function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const [data, setData] = useState<any>(null)
+  const money = (n: string) => fmtMoney(n, { compact: true })
+  const [data, setData] = useState<EntityData | null>(null)
   const [error, setError] = useState(false)
   const [tab, setTab] = useState<'open' | 'payments'>('open')
   const [page, setPage] = useState(0)
@@ -33,10 +68,13 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
   const dt = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
   const relTone = (r: number) => (r >= 80 ? 'text-emerald-600 dark:text-emerald-400' : r >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')
 
-  const rows: any[] = data ? (tab === 'open' ? (data.openItems ?? []) : (data.recentPayments ?? [])) : []
-  const pageCount = Math.max(1, Math.ceil(rows.length / PER_PAGE))
+  const openRows: EntityOpenItem[] = data?.openItems ?? []
+  const payRows: EntityPayment[] = data?.recentPayments ?? []
+  const rowCount = tab === 'open' ? openRows.length : payRows.length
+  const pageCount = Math.max(1, Math.ceil(rowCount / PER_PAGE))
   const safePage = Math.min(page, pageCount - 1)
-  const visible = rows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE)
+  const visibleOpen = openRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE)
+  const visiblePay = payRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE)
   const linkCls = 'font-medium text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400'
 
   return (
@@ -92,14 +130,14 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
 
           {/* Paginated table — rows drill into the real document flyout. */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {visible.length === 0 ? (
+            {(tab === 'open' ? visibleOpen.length === 0 : visiblePay.length === 0) ? (
               <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">
                 {tab === 'open' ? 'No open items.' : 'No payments recorded.'}
               </p>
             ) : tab === 'open' ? (
               <table className="w-full text-sm">
                 <tbody>
-                  {visible.map((i, k: number) => (
+                  {visibleOpen.map((i, k: number) => (
                     <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></td>
                       <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">overdue</span> : null}</td>
@@ -111,7 +149,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {visible.map((p, k: number) => (
+                  {visiblePay.map((p, k: number) => (
                     <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{dt(p.date)}</td>
                       <td className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className={linkCls}>{p.docNumber || p.docKind}</TxnLink></td>
@@ -124,10 +162,10 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
           </div>
 
           {/* Pager */}
-          {rows.length > PER_PAGE ? (
+          {rowCount > PER_PAGE ? (
             <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
               <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                {safePage * PER_PAGE + 1}–{Math.min((safePage + 1) * PER_PAGE, rows.length)} of {rows.length}
+                {safePage * PER_PAGE + 1}–{Math.min((safePage + 1) * PER_PAGE, rowCount)} of {rowCount}
               </p>
               <div className="flex items-center gap-1">
                 <button

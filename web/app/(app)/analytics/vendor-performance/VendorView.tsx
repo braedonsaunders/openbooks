@@ -281,6 +281,9 @@ function MatrixTab({ data }: { data: VendorData }) {
   )
 }
 
+/** One quadrant-matrix datum, as built below: { name, value: [logSpend, performance, spend] }. */
+type MatrixPoint = { data: { name: string; value: [number, number, number] } }
+
 function matrixOption(rows: VendorRow[], money: (value: number) => string, t: ReturnType<typeof useTranslations>): Record<string, unknown> {
   const maxSpend = Math.max(1, ...rows.map((r) => r.spend))
   const byQuad = (q: Quadrant) =>
@@ -292,7 +295,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string, t: Re
     }))
   return {
     grid: { left: 8, right: 16, top: 16, bottom: 28, containLabel: true },
-    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.data.name}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: p.data.value[1].toFixed(0) })}` },
+    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: MatrixPoint) => `${p.data.name}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: p.data.value[1].toFixed(0) })}` },
     xAxis: { type: 'value', name: t('chart.xAxis'), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (v: number) => money(Math.pow(10, v)) } },
     yAxis: { type: 'value', name: t('chart.yAxis'), min: 0, max: 100, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 } },
     series: [

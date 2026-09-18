@@ -68,7 +68,7 @@ export async function EntityListView({
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
-  formatValue?: (row: any, columnKey: string, value: unknown) => ReactNode
+  formatValue?: (row: Record<string, unknown>, columnKey: string, value: unknown) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
@@ -217,10 +217,10 @@ export async function EntityListView({
               ${countJoins}
              where ${countWhere}
              group by ${statusExpr}`)),
-    db.execute(sql`
+    db.execute<{ n: string }>(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
-       where ${where}`) as any,
+       where ${where}`),
     // Static registry options come first; a loader appends tenant-defined
     // values (custom project types) that no static set can name. No filter
     // mixes both today except billing/project_type, so merging is a no-op
@@ -237,13 +237,13 @@ export async function EntityListView({
       return [...statics, ...loaded.filter((option) => !seen.has(option.value))]
     })),
   ])
-  const rows = rowsRes.rows as any[]
+  const rows = rowsRes.rows as Record<string, unknown>[]
   // Server-computed display values (project actual cost reads the same
   // profile-driven reader as the cockpit). Runs after the page fetch so it
   // touches only displayed rows; SQL serves counts, and sort-by-actual pages
   // arrive pre-ordered from `orderedPageIds` (same reader, so order ties).
   if (source.enrichRows) await source.enrichRows(orgId, rows)
-  const filteredTotal = Number(totalRow.rows[0].n)
+  const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
   const total = filteredTotal
 
   // Enum value → display label, resolved from any list filter that carries an
@@ -290,7 +290,7 @@ export async function EntityListView({
     return buildListDrawerHref(basePath, sp, target.param, target.id)
   }
 
-  const cell = (row: any, c: ListColDesc) => {
+  const cell = (row: Record<string, unknown>, c: ListColDesc) => {
     const v = row[c.key]
     switch (c.kind) {
       case 'reference': {
@@ -307,12 +307,16 @@ export async function EntityListView({
           </TableCell>
         )
       }
-      case 'amount':
+      case 'amount': {
+        // Amount cells come from numeric columns (driver strings/numbers);
+        // String() round-trips both exactly, so formatting is unchanged.
+        const rowCurrency = source.currencyField ? row[source.currencyField] : undefined
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v, source.currencyField ? { currency: row[source.currencyField] } : undefined)}
+            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)}
           </TableCell>
         )
+      }
       case 'status':
         return (
           <TableCell key={c.key}>
@@ -421,7 +425,7 @@ export async function EntityListView({
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.id}>{cols.map((c) => cell(row, c))}</TableRow>
+                <TableRow key={String(row.id)}>{cols.map((c) => cell(row, c))}</TableRow>
               ))}
             </TableBody>
           </Table>

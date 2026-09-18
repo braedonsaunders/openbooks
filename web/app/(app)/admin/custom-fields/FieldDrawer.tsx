@@ -45,12 +45,28 @@ export function NewFieldButton() {
   )
 }
 
+/** A `custom_field_defs` row: text/boolean columns plus the JSONB `config`
+ *  object. Reads below narrow each field to the shape the schema gives it. */
+type FieldDefRow = Record<string, unknown>
+
+const fieldText = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
+const fieldFlag = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback)
+function isFieldMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+function fieldConfig(v: unknown): Record<string, unknown> {
+  return isFieldMap(v) ? v : {}
+}
+function fieldStringList(v: unknown): string[] {
+  return Array.isArray(v) && v.every((item): item is string => typeof item === 'string') ? [...v] : []
+}
+
 export function FieldDrawer({
   def,
   hiddenKinds = [],
   hiddenTables = [],
 }: {
-  def: Record<string, any> | null
+  def: FieldDefRow | null
   hiddenKinds?: string[]
   hiddenTables?: string[]
 }) {
@@ -66,29 +82,29 @@ export function FieldDrawer({
   const formId = useId()
   const creating = !def
   const router = useRouter()
-  const config = ((def?.config ?? {}))
+  const config = fieldConfig(def?.config)
 
-  const [targetTable, setTargetTable] = useState<string>(def?.target_table ?? 'documents')
-  const [targetKind, setTargetKind] = useState<string>(def?.target_kind ?? '')
-  const [key, setKey] = useState<string>(def?.key ?? '')
-  const [label, setLabel] = useState<string>(def?.label ?? '')
-  const [fieldType, setFieldType] = useState<string>(def?.field_type ?? 'text')
-  const [options, setOptions] = useState<string[]>(config.options ?? [])
+  const [targetTable, setTargetTable] = useState<string>(fieldText(def?.target_table, 'documents'))
+  const [targetKind, setTargetKind] = useState<string>(fieldText(def?.target_kind))
+  const [key, setKey] = useState<string>(fieldText(def?.key))
+  const [label, setLabel] = useState<string>(fieldText(def?.label))
+  const [fieldType, setFieldType] = useState<string>(fieldText(def?.field_type, 'text'))
+  const [options, setOptions] = useState<string[]>(fieldStringList(config.options))
   const [optionDraft, setOptionDraft] = useState('')
-  const [helpText, setHelpText] = useState<string>(config.helpText ?? '')
-  const [placeholder, setPlaceholder] = useState<string>(config.placeholder ?? '')
+  const [helpText, setHelpText] = useState<string>(fieldText(config.helpText))
+  const [placeholder, setPlaceholder] = useState<string>(fieldText(config.placeholder))
   const [defaultValue, setDefaultValue] = useState<unknown>(config.defaultValue ?? '')
-  const [referenceTable, setReferenceTable] = useState<string>(config.referenceTable ?? '')
+  const [referenceTable, setReferenceTable] = useState<string>(fieldText(config.referenceTable))
   const [minValue, setMinValue] = useState<string>(config.min != null ? String(config.min) : '')
   const [maxValue, setMaxValue] = useState<string>(config.max != null ? String(config.max) : '')
-  const [isRequired, setIsRequired] = useState<boolean>(def?.is_required ?? false)
-  const [showInList, setShowInList] = useState<boolean>(config.showInList ?? false)
-  const [displayMode, setDisplayMode] = useState<string>(config.displayMode === 'disabled' ? 'readonly' : config.displayMode === 'normal' ? 'always' : config.displayMode ?? 'always')
-  const [allowedRoles, setAllowedRoles] = useState<string[]>(config.allowedRoles ?? [])
-  const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
+  const [isRequired, setIsRequired] = useState<boolean>(fieldFlag(def?.is_required, false))
+  const [showInList, setShowInList] = useState<boolean>(fieldFlag(config.showInList, false))
+  const [displayMode, setDisplayMode] = useState<string>(config.displayMode === 'disabled' ? 'readonly' : config.displayMode === 'normal' ? 'always' : fieldText(config.displayMode, 'always'))
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(fieldStringList(config.allowedRoles))
+  const [isActive, setIsActive] = useState<boolean>(fieldFlag(def?.is_active, true))
   // Pin the revision to the values loaded for this editor. A background refresh
   // must not upgrade a stale draft to another administrator's revision.
-  const [expectedUpdatedAt] = useState<string | undefined>(def?.updated_at)
+  const [expectedUpdatedAt] = useState<string | undefined>(fieldText(def?.updated_at) || undefined)
   const saving = useRef(false)
   const [busy, setBusy] = useState(false)
 
@@ -149,7 +165,7 @@ export function FieldDrawer({
       open
       closeHref="/admin/custom-fields"
       size="lg"
-      title={creating ? t('drawer.newTitle') : t('drawer.editTitle', { label: def!.label })}
+      title={creating ? t('drawer.newTitle') : t('drawer.editTitle', { label: fieldText(def!.label) })}
       description={creating ? t('drawer.newDescription') : undefined}
       headerActions={
         <>
@@ -228,8 +244,8 @@ export function FieldDrawer({
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{targetLabel(def!.target_table, def!.target_kind)}</Badge>
-              <span className="font-mono text-xs text-slate-400">{def!.key}</span>
+              <Badge variant="secondary">{targetLabel(fieldText(def!.target_table), fieldText(def!.target_kind) || null)}</Badge>
+              <span className="font-mono text-xs text-slate-400">{fieldText(def!.key)}</span>
               <span className="text-xs text-slate-400">{t('drawer.lockedAfterCreation')}</span>
             </div>
           )}

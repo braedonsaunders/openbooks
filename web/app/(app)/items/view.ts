@@ -106,17 +106,17 @@ export async function loadItems(
     itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId) : null,
     itemId
       ? Promise.all([
-          db.execute(
+          db.execute<{ id: string; number: string | null; name: string }>(
             sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
-          ) as any,
-          db.execute(
+          ),
+          db.execute<{ id: string; code: string; name: string }>(
             sql`select id, code, name from tax_codes where org_id = ${orgId} and is_active order by code`,
-          ) as any,
+          ),
           loadFieldDefs('items'),
           revenueRecognitionEnabled
-            ? db.execute(
+            ? db.execute<{ id: string; code: string; name: string }>(
                 sql`select id, code, name from recognition_rules where org_id = ${orgId} and is_active and not is_forecast order by code`,
-              ) as any
+              )
             : Promise.resolve({ rows: [] }),
         ])
       : null,

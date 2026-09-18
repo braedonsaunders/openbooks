@@ -543,7 +543,7 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
           height={280}
           option={{
             grid: { top: 20, bottom: 30, left: 45, right: 20 },
-            tooltip: { trigger: 'axis', valueFormatter: (v: any) => (v == null ? '—' : `${Number(v).toFixed(1)}%`) },
+            tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => (v == null ? '—' : `${Number(v).toFixed(1)}%`) },
             xAxis: { type: 'category', data: labels },
             yAxis: { type: 'value', max: 100, min: 0, axisLabel: { formatter: '{value}%' } },
             series: [
@@ -938,6 +938,10 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
 }
 
 /**  → ECharts treemap (size = hours, colour = billable %). */
+
+/** One treemap node, as built below: name + hours value + billable pct. */
+type TreemapPoint = { name: string; value: number; data?: { pct?: number } }
+
 function TreemapSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const { depts, employees } = intelligenceScope(data)
@@ -988,7 +992,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
           height={460}
           option={{
             tooltip: {
-              formatter: (p: any) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
+              formatter: (p: TreemapPoint) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
             },
             series: [{
               type: 'treemap',
@@ -996,7 +1000,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
               roam: false,
               nodeClick: 'zoomToNode',
               breadcrumb: { show: true, top: 4, itemStyle: { color: '#475569', textStyle: { color: '#f1f5f9' } } },
-              label: { show: true, formatter: (p: any) => `${p.name}\n${Math.round(p.value).toLocaleString('en-US')}h`, fontSize: 12, color: '#334155' },
+              label: { show: true, formatter: (p: TreemapPoint) => `${p.name}\n${Math.round(p.value).toLocaleString('en-US')}h`, fontSize: 12, color: '#334155' },
               upperLabel: { show: true, height: 24, color: '#334155', fontWeight: 'bold' },
               itemStyle: { borderColor: 'rgba(255,255,255,0.9)', borderWidth: 3, gapWidth: 3 },
               levels: [

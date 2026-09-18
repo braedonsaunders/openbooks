@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { BookOpen, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
-import type { FinancialProfile, InvoicingProfile, BackupProfile } from '@openbooks/schema'
+import type { FinancialProfile, InvoicingProfile, BackupProfile, PnlLine } from '@openbooks/schema'
 
 export interface ProjectTypeRow {
   id: string
@@ -73,7 +73,7 @@ const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
 const RECOGNITIONS = ['as_invoiced', 'percent_complete_cost', 'milestone']
 const BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']
-const MEASURE_KEYS = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
+const MEASURE_KEYS: PnlLine['measure'][] = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
 const VARIANTS = ['line', 'subtotal', 'total']
 
 function EnumField({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: string[]; onChange: (v: string) => void; disabled?: boolean }) {
@@ -391,7 +391,7 @@ export function ProjectTypesWorkspace({
                     const move = (d: number) => { const next = [...fp.layout]; const [x] = next.splice(i, 1); next.splice(i + d, 0, x!); setFp({ layout: next }) }
                     return (
                       <div key={i} className="flex items-center gap-2 rounded-md border border-slate-200 p-1.5 dark:border-slate-800">
-                        <Select value={line.measure} onChange={(e) => upd({ measure: e.target.value as any })} className="flex-1">
+                        <Select value={line.measure} onChange={(e) => { const measure = MEASURE_KEYS.find((m) => m === e.target.value); if (measure !== undefined) upd({ measure }) }} className="flex-1">
                           {MEASURE_KEYS.map((m) => <option key={m} value={m}>{tMeasures(m as never)}</option>)}
                         </Select>
                         <Select value={line.variant} onChange={(e) => upd({ variant: e.target.value as unknown as "line" | "subtotal" | "total" | undefined })} className="w-32">

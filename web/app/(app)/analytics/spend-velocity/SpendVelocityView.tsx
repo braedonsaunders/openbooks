@@ -152,6 +152,9 @@ export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
 
 /* ---------------------------------------------------------------- Overview */
 
+/** One velocity-scatter datum, as built below: [velocity, acceleration, spend, name]. */
+type ScatterPoint = { data: [number, number, number, string] }
+
 function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
@@ -181,14 +184,14 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       xAxis: { type: 'value' as const, name: t('scatter.xAxis'), nameLocation: 'middle' as const, nameGap: 24, min: vMin - vPad, max: vMax + vPad },
       yAxis: { type: 'value' as const, name: t('scatter.yAxis'), min: aMin - aPad, max: aMax + aPad },
       tooltip: {
-        formatter: (p: any) => `<b>${p.data[3]}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
+        formatter: (p: ScatterPoint) => `<b>${p.data[3]}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
       },
       series: [{
         type: 'scatter' as const,
         symbolSize: (d: number[]) => Math.max(8, Math.min(25, 8 + (d[2]! / maxSpend) * 17)),
         data: accounts.map((a) => [a.velocity, a.acceleration, a.totalSpend, a.name]),
         itemStyle: {
-          color: (p: any) => {
+          color: (p: ScatterPoint) => {
             const v = p.data[0]
             return v > 15 ? '#dc2626' : v > 5 ? '#f97316' : v < -5 ? '#10b981' : '#94a3b8'
           },
@@ -498,7 +501,9 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
   const cmp = data.periodComparison
   const [filter, setFilter] = useState<AcctFilter>('all')
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('currentAmount')
+  /** Numeric account keys the deep-analysis table can sort by (the sort menu below). */
+  type AcctSortKey = 'currentAmount' | 'velocity' | 'changePct' | 'acceleration'
+  const [sortBy, setSortBy] = useState<AcctSortKey>('currentAmount')
 
   const rows = useMemo(() => {
     let list = cmp.accounts
@@ -507,7 +512,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
     else if (filter === 'highvel') list = list.filter((a) => Math.abs(a.velocity) > 10)
     else if (filter === 'new') list = list.filter((a) => a.isNew)
     if (search) list = list.filter((a) => a.accountName.toLowerCase().includes(search.toLowerCase()))
-    return [...list].sort((a, b) => Math.abs((b as any)[sortBy] ?? 0) - Math.abs((a as any)[sortBy] ?? 0))
+    return [...list].sort((a, b) => Math.abs(b[sortBy] ?? 0) - Math.abs(a[sortBy] ?? 0))
   }, [cmp.accounts, filter, search, sortBy])
 
   const chips: { key: AcctFilter; label: string }[] = [
@@ -535,7 +540,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
           ))}
         </div>
         <div className="ml-auto">
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-40" triggerClassName="h-8 text-sm">
+          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value as AcctSortKey)} className="w-40" triggerClassName="h-8 text-sm">
             <option value="currentAmount">{t('sort.spend')}</option>
             <option value="velocity">{t('sort.velocity')}</option>
             <option value="changePct">{t('sort.changePct')}</option>
@@ -618,7 +623,7 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
               option={{
                 grid: { top: 26, bottom: 26, left: 62, right: 14 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => (v == null ? '—' : money0(Number(v))) },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => (v == null ? '—' : money0(Number(v))) },
                 xAxis: { type: 'category', data: trends.map((m) => m.month) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
                 series: [

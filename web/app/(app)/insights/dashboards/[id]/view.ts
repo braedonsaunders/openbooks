@@ -25,6 +25,8 @@ import type { DashboardBuilder } from './DashboardBuilder'
  * neither should be: they are the difference between a dashboard and a leak.
  */
 
+import type { VizType } from '@openbooks/analytics'
+
 type BuilderProps = Parameters<typeof DashboardBuilder>[0]
 
 export interface InsightsDashboardData {
@@ -50,12 +52,17 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
   if (!embed) notFound()
 
   // Published cards available to drop onto the board.
-  const available = (await db.execute(sql`
+  const available = await db.execute<{
+    id: string
+    name: string
+    description: string | null
+    viz_type: VizType
+  }>(sql`
     select id, name, description, viz_type
       from insight_cards
      where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
      order by name asc
-  `)) as any
+  `)
 
   const pinned = await db.execute(sql`
     select 1 from insight_dashboard_pins

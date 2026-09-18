@@ -11,7 +11,7 @@ const lib = readFileSync(new URL('../../api/_order/lib.ts', import.meta.url), 'u
 
 test('the order drawer models a per-line warehouse', () => {
   assert.match(drawer, /stockLocationId: string/, 'LineRow carries the line warehouse')
-  assert.match(drawer, /stock_location_id \?\? ''/, 'stored lines hydrate the row')
+  assert.match(drawer, /stockLocationId: lineText\(l\.stock_location_id\)/, 'stored lines hydrate the row (lineText falls back to blank)')
   assert.match(drawer, /stockLocationId: r\.stockLocationId \|\| null/, 'the save payload sends the choice')
 })
 

@@ -8,6 +8,46 @@ import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import type { RoleRow, SubsidiaryPickerOption } from './RoleEditor'
+import type { SubsidiaryRestriction } from '@openbooks/schema'
+
+/** The roles-list query output: `app_roles` columns plus the permission and
+ *  member counts (`::int` arrives as a number). */
+type RoleDbRow = {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  is_built_in: boolean
+  permissions: unknown
+  subsidiary_restriction: unknown
+  permission_count: number
+  member_count: number
+}
+
+/** Narrow stored JSONB to the restriction union. Anything unrecognised
+ *  means "no restriction" — the column default — never a wider grant. */
+function asSubsidiaryRestriction(value: unknown): SubsidiaryRestriction {
+  if (typeof value !== 'object' || value === null || !('mode' in value)) {
+    return { mode: 'all' }
+  }
+  const { mode } = value
+  if (
+    mode === 'subtree' &&
+    'subsidiaryId' in value &&
+    typeof value.subsidiaryId === 'string'
+  ) {
+    return { mode: 'subtree', subsidiaryId: value.subsidiaryId }
+  }
+  if (
+    mode === 'list' &&
+    'subsidiaryIds' in value &&
+    Array.isArray(value.subsidiaryIds) &&
+    value.subsidiaryIds.every((id): id is string => typeof id === 'string')
+  ) {
+    return { mode: 'list', subsidiaryIds: value.subsidiaryIds }
+  }
+  return { mode: 'all' }
+}
 
 /**
  * Org roles with permission counts and member counts, split into a loader
@@ -112,7 +152,7 @@ export async function loadAdminRoles(
     : null
 
   const [rowsR, countR, typeCountsR] = ((await Promise.all([
-    db.execute(sql`
+    db.execute<RoleDbRow>(sql`
       select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
              r.subsidiary_restriction,
              coalesce(jsonb_array_length(r.permissions), 0)::int as permission_count,
@@ -128,15 +168,17 @@ export async function loadAdminRoles(
        where ${searchWhere} group by r.is_built_in`),
   ])))
 
-  const roles = (rowsR.rows as any[]).map(
+  const roles = rowsR.rows.map(
     (r): AdminRoleRow => ({
       id: r.id,
       key: r.key,
       name: r.name,
       description: r.description,
       isBuiltIn: r.is_built_in,
-      permissions: Array.isArray(r.permissions) ? r.permissions : [],
-      subsidiaryRestriction: r.subsidiary_restriction ?? { mode: 'all' },
+      permissions: Array.isArray(r.permissions)
+        ? r.permissions.filter((p): p is string => typeof p === 'string')
+        : [],
+      subsidiaryRestriction: asSubsidiaryRestriction(r.subsidiary_restriction),
       permissionCount: Number(r.permission_count),
       memberCount: Number(r.member_count),
     }),

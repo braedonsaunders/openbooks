@@ -29,8 +29,33 @@ interface RuleOpt {
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
 const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
+/** The item row as the drawer reads it — column types per the `items`
+ *  table (uuids as strings, numerics as ledger strings, `custom` parsed). */
+interface ItemRecord {
+  id: string
+  kind: string
+  code: string | null
+  name: string
+  category: string | null
+  income_account_id: string | null
+  expense_account_id: string | null
+  deferred_account_id: string | null
+  cost_recovery_account_id: string | null
+  tax_code_id: string | null
+  recognition_rule_id: string | null
+  default_rate: string | null
+  default_cost: string | null
+  standalone_selling_price: string | null
+  unit: string | null
+  description: string | null
+  show_on_timesheet: boolean
+  is_active: boolean
+  create_plans_on: string
+  revenue_allocation: string
+  custom: Record<string, unknown>
+}
 interface ItemPayload {
-  item: Record<string, any>
+  item: ItemRecord
   incomeAccountName: string | null
   expenseAccountName: string | null
   taxCodeName: string | null

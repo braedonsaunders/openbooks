@@ -50,10 +50,29 @@ export interface SetupReadinessData {
   checks: SetupReadinessCheck[]
 }
 
+/** The setup-readiness org snapshot: profile columns plus `::int` counts. */
+type ReadinessOrgRow = {
+  name: string
+  legal_name: string | null
+  base_currency: string
+  country: string
+  settings: unknown
+  currencies: number
+  roots: number
+  accounts: number
+  books: number
+  periods: number
+  payment_terms: number
+  tax_codes: number
+  bank_accounts: number
+  posted_entries: number
+  completed_closes: number
+}
+
 export async function loadSetupReadiness(): Promise<SetupReadinessData> {
   const { user } = await requirePermission('admin.setup.manage')
   const t = await getTranslations('admin')
-  const result = (await db.execute<Record<string, any>>(sql`
+  const result = (await db.execute<ReadinessOrgRow>(sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
       (select count(*)::int from currencies) as currencies,
       (select count(*)::int from subsidiaries s where s.org_id=o.id and s.parent_id is null) as roots,
@@ -67,8 +86,26 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
       (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
     from orgs o where o.id=${user.orgId}
   `))
-  const org = result.rows[0]
-  const settings = ((org?.settings ?? {}))
+  // The authed org always exists; the zeroed fallback only keeps the guide
+  // rendering degraded (rather than crashing) if it ever does not.
+  const org: ReadinessOrgRow = result.rows[0] ?? {
+    name: '',
+    legal_name: null,
+    base_currency: '',
+    country: '',
+    settings: {},
+    currencies: 0,
+    roots: 0,
+    accounts: 0,
+    books: 0,
+    periods: 0,
+    payment_terms: 0,
+    tax_codes: 0,
+    bank_accounts: 0,
+    posted_entries: 0,
+    completed_closes: 0,
+  }
+  const settings = (org.settings ?? {}) as Record<string, unknown>
   const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>
   const bookStart = workspaceProfile.bookStart === 'migrate' ? 'migrate' : 'fresh'
   const taxPosition = ['registered', 'not_registered', 'unsure'].includes(String(workspaceProfile.taxPosition))
