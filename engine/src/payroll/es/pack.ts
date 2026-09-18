@@ -61,9 +61,10 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },
   regions: ES_REGIONS,
   jurisdictions: ES_JURISDICTIONS,
-  // IRPF retentions settle with the AEAT. The key is declared for the day the
-  // pack registers — no settings surface serves it while unregistered.
-  remittanceVendorSettingsKey: "aeatRemittancePartyId",
+  // IRPF retentions settle with the AEAT, but payroll settings only store
+  // cra/rq today. A key naming a field that does not exist looks wired.
+  // Null until Orchestrate adds an AEAT remittance-party settings field.
+  remittanceVendorSettingsKey: null,
   // Atrasos (arrears) are imputed to the year they became due (LIRPF art. 14)
   // and regularised on declaración complementaria — a re-spread the two-value
   // channel cannot express (proposed to Orchestrate). At WITHHOLDING time the

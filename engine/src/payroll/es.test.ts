@@ -26,6 +26,10 @@ test("ES pack exists as an uninstallable skeleton in euro on a calendar year", (
   assert.equal(ES_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.equal(ES_PAYROLL_PACK.taxYear.basis, "calendar");
   assert.equal(ES_PAYROLL_PACK.statutoryEngineLabel, "AEAT");
+  // Payroll settings only store cra/rq. Inventing aeatRemittancePartyId looks wired.
+  assert.equal(ES_PAYROLL_PACK.remittanceVendorSettingsKey, null);
+  // A PLACEHOLDER holiday-pay rule would compute. Null refuses until sourced.
+  assert.equal(ES_PAYROLL_PACK.jurisdictions[0]?.holidayPay, null);
 });
 
 test("ES slots name IRPF withholding and Seguridad Social, employee plus employer", () => {
