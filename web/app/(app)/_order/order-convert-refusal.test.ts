@@ -12,19 +12,24 @@ const source = readFileSync(new URL('./OrderDrawer.tsx', import.meta.url), 'utf8
 test('a convert refusal pins as an alert, not only a toast (F-t03-001)', () => {
   const convertBlock = source.slice(
     source.indexOf('async function convert('),
-    source.indexOf('async function convert(') + 1800,
+    source.indexOf('async function convert(') + 3400,
   )
   assert.match(
     convertBlock,
-    /setActionError\(/,
-    'the convert failure branch must pin the typed reason as an alert',
+    /execute[<(]/,
+    'the convert failure branch must run through the shared action path so the typed reason pins',
+  )
+  assert.match(
+    convertBlock,
+    /readActionResult/,
+    'the convert read path must keep the typed refusal instead of hand-rolled json()',
   )
 })
 
 test('the order drawer renders a record-level alert region (F-t03-001)', () => {
   assert.match(
     source,
-    /role="alert"/,
-    'the drawer must render a role=alert region for pinned refusals',
+    /<ActionAlert error=\{refusal\}/,
+    'the drawer must render the shared alert bound to the pinned refusal',
   )
 })
