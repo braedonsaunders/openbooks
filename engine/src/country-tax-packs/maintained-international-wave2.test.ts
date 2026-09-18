@@ -129,6 +129,7 @@ test("second-wave maintained sources remain restricted to official government an
     "www.belastingdienst.nl",
     "download.belastingdienst.nl",
     "zoek.officielebekendmakingen.nl",
+    "wetten.overheid.nl",
     "www.revenue.ie",
     "www.iras.gov.sg",
     "apisandbox.iras.gov.sg",
