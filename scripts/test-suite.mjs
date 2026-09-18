@@ -37,6 +37,11 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'engine/src/direct-debit.test.ts',
   'engine/src/dunning.test.ts',
   'engine/src/fx-providers.test.ts',
+  // Proves the pack-refusal hierarchy at the real boundary: it installs every
+  // declared country and runs their population() calls, which needs a database.
+  // Left in the unit partition its DB block silently skipped, so the guard for
+  // the year-end crash was never actually exercised in CI.
+  'engine/src/payroll-pack-refusal-class.test.ts',
   'engine/src/harness/scenario.test.ts',
   'engine/src/inventory-costing.test.ts',
   'engine/src/journal-writes.test.ts',
