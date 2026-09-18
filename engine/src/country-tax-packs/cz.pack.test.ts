@@ -42,11 +42,14 @@ test("Czechia return carries the authority-form radky plus the two workpaper box
 
 test("Czechia declares 21 / 12 / 0 with no current 10% band", () => {
   const codes = packTaxCodesForReturn(pack, "CZ_DPH");
-  assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent, code.rates?.[0]?.effectiveFrom]), [
-    ["CZ-VAT-STD", "standard", 21, "2023-06-06"],
-    ["CZ-VAT-RED12", "reduced", 12, "2024-01-01"],
-    ["CZ-VAT-ZERO", "zero", 0, "2024-01-01"],
-  ]);
+  assert.deepEqual(
+    codes.map((code) => [code.code, code.role, code.ratePercent, code.rates?.[0]?.effectiveFrom, code.rates?.[0]?.sourceId]),
+    [
+      ["CZ-VAT-STD", "standard", 21, "2023-06-06", "fs_dph_leaflet_2023"],
+      ["CZ-VAT-RED12", "reduced", 12, "2024-01-01", "esbirka_349_2023"],
+      ["CZ-VAT-ZERO", "zero", 0, "2024-01-01", "esbirka_349_2023"],
+    ],
+  );
   assert.equal(primaryPackTaxCode(pack, "CZ_DPH")?.code, "CZ-VAT-STD");
   for (const code of codes) {
     for (const rate of code.rates ?? []) {
@@ -81,7 +84,7 @@ test("Czechia cites only the Czech tax authority's own hosts", () => {
   for (const source of pack.sources) {
     assert.match(
       source.url,
-      /^https:\/\/(financnisprava\.gov\.cz|adisspr\.mfcr\.cz)\//,
+      /^https:\/\/(financnisprava\.gov\.cz|adisspr\.mfcr\.cz|www\.e-sbirka\.cz)\//,
       `${source.id} must be attested by the authority itself, never a vendor page`,
     );
   }

@@ -31,32 +31,71 @@ const CZ_DPH_2026: TaxReturnPack = {
  *
  * Every row number above is printed on the authority's own return form
  * (tiskopis 25 5401, vzor 26); the box labels follow that form's wording.
- * The 12% single reduced band, the unchanged 21% standard band, and the
- * book exemption with right of deduction (§ 71i) are attested by the tax
- * authority's own rate-change notice, which names the amending act
- * (zákon č. 349/2023 Sb.) and the 2024-01-01 effect date.
+ * The 12% single reduced band and the book exemption with right of
+ * deduction (§ 71i) are attested by the amending act itself — zákon
+ * č. 349/2023 Sb. (konsolidační balíček), ČÁST TŘICÁTÁ ŠESTÁ, Čl. LX,
+ * amending zákon č. 235/2004 Sb. o dani z přidané hodnoty — read in the
+ * state's official legislation portal (e-Sbírka) consolidated text as at
+ * 2026-01-01 and quoted below. The tax authority's own rate-change notice
+ * corroborates the same consolidation and effect date.
+ *
+ * The 12% merger (Čl. LX body 3–6), effective 2024-01-01 per Čl. CXIV
+ * ("Tento zákon nabývá účinnosti dnem 1. ledna 2024" — Čl. LX/Čl. LXI
+ * appear in none of the lettered exceptions, so the DPH part takes the
+ * general date):
+ * - "V § 37 písm. b) bodě 2 se slova „ , 1,15 v případě první snížené
+ *   sazby daně nebo 1,10 v případě druhé snížené sazby daně“ nahrazují
+ *   slovy „nebo 1,12 v případě snížené sazby daně“."
+ * - "V § 47 odst. 1 písm. b) se slovo „první“ zrušuje a slova „15 %,
+ *   nebo“ se nahrazují textem „12 %.“."
+ * - "V § 47 odst. 1 se písmeno c) zrušuje." (the second reduced band)
+ * - "V § 47a se slova „ , první nebo druhé“ nahrazují slovem „nebo“."
+ *   and "V § 48 odst. 1 a v § 49 se slova „První snížená“ nahrazují
+ *   slovem „Snížená“." — the first/second vocabulary leaves the act
+ *   with the merger. Příloha č. 2a and č. 3a are repealed ("Příloha
+ *   č. 2a se zrušuje.", "Příloha č. 3a se zrušuje.") and přílohy č. 2
+ *   and č. 3 rewritten for the single reduced band.
+ *
+ * The books zero rate (Čl. LX bod 24), same 2024-01-01 effect:
+ * - "Za § 71h se vkládají nové § 71i až 71k, které včetně nadpisů znějí:
+ *   „§ 71i Osvobození od daně při dodání knihy a poskytnutí obdobné
+ *   služby ... (3) Osvobození od daně s nárokem na odpočet daně při
+ *   dodání knihy se na dodání zboží uplatní, pokud nelze na takové
+ *   dodání uplatnit osvobození od daně bez nároku na odpočet nebo
+ *   osvobození od daně s nárokem na odpočet podle § 64, 66 anebo
+ *   § 71h.", with "V § 63 se na konci odstavce 1 tečka nahrazuje čárkou
+ *   a doplňuje se písmeno l), které zní: „l) dodání knihy a poskytnutí
+ *   obdobné služby (§ 71i).“."
+ *
+ * The 21% standard band is NOT set by this act: the string "21 %" occurs
+ * nowhere in its DPH part (Čl. LX amends § 47 odst. 1 písm. a) only to
+ * append "nebo": "V § 47 odst. 1 se na konci písmene a) doplňuje slovo
+ * „nebo“."). The act leaves 21% untouched, so the band keeps its
+ * 2023-06-06 applicability truncation: the Financial Administration's
+ * Easy-to-read leaflet of that date states the three-rate regime
+ * ("Základní sazba DPH je 21 % ... První snížená sazba DPH je 15 % ...
+ * Druhá snížená sazba je 10 % ..."), and the 2024 GFR notice corroborates
+ * 21% unchanged across the consolidation — a continuing-authority
+ * collapse, so no 2024 boundary row.
  *
  * Named refusals:
- * - The 21% band runs back to 2023-06-06 as a single open row: the
- *   Financial Administration's Easy-to-read leaflet of that date states the
- *   three-rate regime ("Základní sazba DPH je 21 % ... První snížená sazba
- *   DPH je 15 % ... Druhá snížená sazba je 10 % ..."), and the 2024 GFR
- *   notice corroborates 21% unchanged across the 15%/10%-to-12%
- *   consolidation — a continuing-authority collapse, so no 2024 boundary
- *   row. For the 12% band and the book exemption the notice does attest
- *   genuine origin on 2024-01-01 (the 15% and 10% bands were abolished,
- *   § 71i introduced). Pre-June-2023 history (the pre-2013 20% standard
- *   band, the closed 15%/10% bands, pre-2024 book taxation) is not
+ * - The closed 15%/10% bands are not transcribed. The act confirms their
+ *   old values structurally (first reduced "15 %", deleted second band,
+ *   repealed annexes 2a/3a, coefficients 1,15/1,10) but its transitional
+ *   provisions (Čl. LXI) map no supply to an old band — they cover only
+ *   advance payments for books ("Pokud přede dnem nabytí účinnosti tohoto
+ *   zákona vznikla povinnost přiznat daň z úplaty přijaté před
+ *   uskutečněním dodání knihy ... podle § 71i ...") and the car deduction
+ *   cap. A fully-ended band cannot provision current tax under the
+ *   covers-today channel (F-tax-sunset-001), so without a supply mapping
+ *   the bands stay identified-not-transcribed. Pre-June-2023 history (the
+ *   pre-2013 20% standard band, pre-2024 book taxation) is likewise not
  *   transcribed: no older FS leaflet was found (guessed year URLs return
  *   the site's error page).
  * - The electronic-filing format codes (DPHDP3 for the return, DPHKH1 for
  *   the control statement) are refused: the only fetchable documents naming
  *   them are another vendor's ERP documentation, which is never a source
  *   here. The pack claims filing through MOJE daně (EPO) only.
- * - The amending act's own text was not machine-read: the official
- *   Sbírka publication page is a script-rendered application whose content
- *   is not retrievable with a plain document request, so the act is attested
- *   through the authority notice citing it, not quoted directly.
  * - www.daneelektronicky.cz returned no answer from this sandbox (000 —
  *   this sandbox's vantage only, not a statement about the host).
  * - Kontrolní hlášení is a separate mandatory filing and is not modelled
@@ -86,8 +125,14 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
+      id: "esbirka_349_2023",
+      title: "e-Sbírka (official legislation portal) — Zákon č. 349/2023 Sb., konsolidační balíček, Čl. LX: single 12% reduced band replacing 15%/10%, books § 71i exempt with deduction, effective 2024-01-01 per Čl. CXIV (origin for 12%/books)",
+      url: "https://www.e-sbirka.cz/sb/2023/349",
+      asOf: "2026-09-18",
+    },
+    {
       id: "gfr_rate_change_2024",
-      title: "Generální finanční ředitelství — Informace ke změnám sazeb DPH od 1. 1. 2024: 21% unchanged, single 12% replacing 15%/10% per zákon č. 349/2023 Sb., books § 71i exempt with deduction (origin for 12%/books, applicability for 21%)",
+      title: "Generální finanční ředitelství — Informace ke změnám sazeb DPH od 1. 1. 2024: 21% unchanged, single 12% replacing 15%/10% per zákon č. 349/2023 Sb., books § 71i exempt with deduction (corroboration; applicability for 21%)",
       url: "https://financnisprava.gov.cz/assets/cs/prilohy/d-seznam-dani/Informace_GFR_ke_zmenam_sazeb_DPH_od_1_1_2024.pdf",
       asOf: "2026-09-18",
     },
@@ -126,14 +171,14 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Czechia reduced DPH 12%",
         ratePercent: 12,
         role: "reduced",
-        rates: [{ ratePercent: 12, effectiveFrom: "2024-01-01", sourceId: "gfr_rate_change_2024" }],
+        rates: [{ ratePercent: 12, effectiveFrom: "2024-01-01", sourceId: "esbirka_349_2023" }],
       },
       {
         code: "CZ-VAT-ZERO",
         name: "Czechia zero-rated book supplies (exempt with right of deduction)",
         ratePercent: 0,
         role: "zero",
-        rates: [{ ratePercent: 0, effectiveFrom: "2024-01-01", sourceId: "gfr_rate_change_2024" }],
+        rates: [{ ratePercent: 0, effectiveFrom: "2024-01-01", sourceId: "esbirka_349_2023" }],
       },
     ],
   },
