@@ -37,6 +37,13 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'list-recent-entries': GL,
   'list-pending-approvals': AP,
   'personal-inbox': AP,
+  // Deliberately public: quick-action shortcuts carry no org data, and the
+  // in-progress list is scoped to the caller's own drafts (created_by =
+  // self) in the loader. An empty array is an EXPLICIT open decision — the
+  // registry-agreement test refuses a WIDGETS id with no entry at all, which
+  // is how an ungated tile used to ship through the fallthrough below.
+  'personal-in-progress': [],
+  'personal-actions': [],
 }
 
 function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
@@ -46,7 +53,8 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
 
 export function canSeeWidget(authz: Authz, id: string): boolean {
   const required = WIDGET_PERMISSIONS[id]
-  if (required) return hasAnyPermission(authz.permissions, required)
+  // An empty entry is a reviewed public tile (see above), not a missing one.
+  if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required)
   if (id in WIDGETS) return true
   if (isAppWidgetId(id)) return hasAnyPermission(authz.permissions, ['apps.use'])
   return isUuid(id) && canSeeInsightCards(authz)
