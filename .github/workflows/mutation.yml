@@ -48,12 +48,16 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
-      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_mutation
+      # Mutant runs connect as the constrained runtime role (same RLS honesty
+      # as the database shards); only the Load schema step uses the privileged
+      # container login for extensions, roles, and the ownership transfer.
+      OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_mutation
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_mutation
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "1"
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       OPENBOOKS_TEST_DB_ISOLATED: "1"
-      PGPASSWORD: openbooks
+      PGPASSWORD: openbooks-runtime-ci-password
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -67,6 +71,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qpdf
 
       - name: Load schema
+        env:
+          OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_mutation
         run: npx tsx scripts/bootstrap.ts
 
       - name: Mark database as the owned ephemeral fixture
