@@ -90,26 +90,20 @@ export const payComponents = pgTable(
     country: text("country", { enum: ["CA", "US"] }),
     /**
      * Engine-computed statutory components; null for user components.
-     * cpp/cpp2/ei/qpip (CA) and ss/medicare (US) pairs exist for both
-     * employee and employer sides via kind; income_tax (CRA) and fit (IRS)
-     * are single combined withholding components; futa/suta are
-     * employer-only.
+     * The country pack declares which keys exist (cpp/cpp2/ei/qpip for CA,
+     * ss/medicare for US, and whatever levy the next pack brings) — this
+     * column deliberately carries no enum, so a pack never needs a schema
+     * change to declare a key. Membership is the pack registry's answer;
+     * the database enforces SHAPE only (pay_components_system_key).
+     *
+     * A state's or province's own income tax, and the taxing unit below it
+     * (New York City, Philadelphia, an Ohio municipality), share ONE key
+     * each (state_income_tax / local_income_tax), with the jurisdiction on
+     * the LINE rather than in the key: fifty state keys would be fifty rows
+     * in a table an operator reads, and it still would not answer the
+     * remittance question, which is per registration.
      */
-    systemKey: text("system_key", {
-      enum: [
-        "base_pay", "overtime", "bonus", "stat_holiday", "stat_holiday_premium",
-        "vacation_accrual", "vacation_payout",
-        "cpp", "cpp2", "ei", "qpip", "income_tax", "qc_income_tax",
-        "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
-        // A state's or province's own income tax, and the taxing unit below it
-        // (New York City, Philadelphia, an Ohio municipality). ONE key each,
-        // with the jurisdiction on the LINE rather than in the key: fifty state
-        // keys would be fifty rows in a table an operator reads, and it still
-        // would not answer the remittance question, which is per registration.
-        "state_income_tax", "local_income_tax",
-        "wcb", "eht",
-      ],
-    }),
+    systemKey: text("system_key"),
     /** How a user component's amount is produced (statutory rows ignore this). */
     basis: text("basis", {
       enum: ["fixed_amount", "per_hour", "percent_of_gross"],
@@ -178,6 +172,14 @@ export const payComponents = pgTable(
     uniqueIndex("pay_components_org_code").on(t.orgId, t.code),
     uniqueIndex("pay_components_org_system").on(t.orgId, t.systemKey, t.kind),
     index("pay_components_org_kind").on(t.orgId, t.kind),
+    // Statutory keys are pack-declared (0176): the database enforces that a
+    // system key LOOKS like a stable machine identifier — lowercase
+    // snake_case — never which identifiers may exist. A typo ('CPP',
+    // 'income tax') still fails here at seed time; a legitimate new levy
+    // ('hsf') passes without a schema change. The name is intentionally the
+    // same as the pre-0176 enumeration CHECK it replaces.
+    check("pay_components_system_key",
+      sql`${t.systemKey} is null or ${t.systemKey} ~ '^[a-z][a-z0-9_]{0,63}$'`),
     // Protection is a property of money leaving the employee: an earning or an
     // employer contribution has nothing to protect, and a protected component
     // without a percentage would silently take everything.
