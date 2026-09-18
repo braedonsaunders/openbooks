@@ -28,15 +28,17 @@ import { FR_TAX_YEARS } from "./rates.ts";
  */
 
 // ---------------------------------------------------------------------------
-// Regions: France levies no regional income tax — PAS is national.
+// Regions: France levies no regional income tax — PAS is national — but
+// `supported` stays empty until PAS withholds income tax end to end.
 // ---------------------------------------------------------------------------
 
 const FR_REGIONS: Omit<PayrollCountryPack, "country">["regions"] = {
   label: "country",
   known: ["FR"],
-  supported: ["FR"],
+  supported: [],
   unsupportedReason:
-    "France levies no regional income tax: PAS is computed nationally, so {region} has no separate withholding to implement",
+    "income tax withholding for {region} is not implemented: PAS does not compute end to end. "
+    + "Transcribe the year's grille into engine/src/payroll/fr/ first.",
 };
 
 // ---------------------------------------------------------------------------
