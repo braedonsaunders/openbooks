@@ -123,6 +123,11 @@ export function asJournalDoc(raw: Record<string, unknown>): JournalDoc {
       : {},
   }
 }
+// Stable identity for the omitted-`segments` default. A `= []` default would
+// hand the `payload` memo below a fresh array on every render, and the
+// render-time dirty tracker keys on that memo's identity — an ever-churning
+// identity re-renders forever ("Too many re-renders" on mount).
+const EMPTY_SEGMENTS: SegmentOpt[] = []
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
   posted: 'success',
@@ -222,7 +227,7 @@ export function JournalDrawer({
   departments,
   projects,
   subsidiaries,
-  segments = [],
+  segments = EMPTY_SEGMENTS,
   headerDefs,
   lineDefs,
   layout,
@@ -357,22 +362,18 @@ export function JournalDrawer({
     }),
     [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, customValues, extraDims, rows, lineDefs, segments],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render). `editable` is read
+  // but deliberately NOT subscribed: the gate fires only when `payload`
+  // changes identity, so merely entering edit mode with untouched fields never
+  // marks the form dirty (same guarantee as the ref-mirrored gate this
+  // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  // Ref-mirrored like dirtyRef below: subscribing the tracker to `editable`
-  // would mark the form dirty on merely entering edit mode.
-  const editableRef = useRef(editable)
-  useEffect(() => {
-    editableRef.current = editable
-  }, [editable])
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (editableRef.current) setDirty(true)
-  }, [payload])
+  const [prevPayload, setPrevPayload] = useState(payload)
+  if (prevPayload !== payload) {
+    setPrevPayload(payload)
+    if (editable) setDirty(true)
+  }
 
   // -- optimistic-concurrency fence -----------------------------------------
   // The journal PATCH route refuses any write without an exact revision token.

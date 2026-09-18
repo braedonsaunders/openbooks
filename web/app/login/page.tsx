@@ -89,6 +89,16 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // Surface an SSO failure on arrival, during render (same committed value, no
+  // extra render). Keyed on the error param and translator, like the fetch
+  // below — a later submit still owns the error state afterwards.
+  const ssoErrorParam = params.get('error')
+  const [prevSsoErrorKey, setPrevSsoErrorKey] = useState(() => ({ param: ssoErrorParam, t }))
+  if (prevSsoErrorKey.param !== ssoErrorParam || prevSsoErrorKey.t !== t) {
+    setPrevSsoErrorKey({ param: ssoErrorParam, t })
+    if (ssoErrorParam === 'sso') setError(t('ssoFailed'))
+  }
+
   useEffect(() => {
     let active = true
     fetch('/api/auth/methods', { cache: 'no-store' })
@@ -97,7 +107,6 @@ function LoginForm() {
         if (active && methods?.oidc) setOidc({ enabled: true, label: methods.oidcLabel || t('sso') })
       })
       .catch(() => undefined)
-    if (params.get('error') === 'sso') setError(t('ssoFailed'))
     return () => { active = false }
   }, [params, t])
 

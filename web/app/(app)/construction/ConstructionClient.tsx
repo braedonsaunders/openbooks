@@ -99,26 +99,40 @@ export function ApplicationsBillingWorkspace({
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Loading starts true so the first commit already shows the loading state
+  // instead of flashing a blank panel for a commit before the fetch begins.
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (below, and the mutation reload) instead of a mount
+  // effect.
+  const load = useCallback(() => {
+    return fetch(`/api/construction?projectId=${encodeURIComponent(projectId)}`, {
+      cache: "no-store",
+    })
+      .then((response) => response.json().catch(() => ({})).then((body) => {
+        if (!response.ok) throw new Error(body.error ?? t("errors.load"));
+        setData(body);
+      }))
+      .catch((cause: unknown) => {
+        setData(null);
+        setError(cause instanceof Error ? cause.message : t("errors.load"));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [projectId, t]);
+
+  // Re-enter the loading state while refetching for another project, during
+  // render (same committed values, no extra render).
+  const [prevProjectId, setPrevProjectId] = useState(projectId);
+  if (prevProjectId !== projectId) {
+    setPrevProjectId(projectId);
     setLoading(true);
     setError(null);
-    try {
-      const response = await fetch(`/api/construction?projectId=${encodeURIComponent(projectId)}`, {
-        cache: "no-store",
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? t("errors.load"));
-      setData(body);
-    } catch (cause) {
-      setData(null);
-      setError(cause instanceof Error ? cause.message : t("errors.load"));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, t]);
+  }
 
   useEffect(() => {
     void load();
@@ -137,6 +151,8 @@ export function ApplicationsBillingWorkspace({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? t("errors.action"));
+      setLoading(true);
+      setError(null);
       await load();
       return body;
     } catch (cause) {

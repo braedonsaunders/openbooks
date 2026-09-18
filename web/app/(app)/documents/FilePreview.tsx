@@ -78,16 +78,30 @@ export function FilePreview({ file, canManage }: { file: PreviewFile; canManage:
   const tooLarge = file.sizeBytes > TEXT_PREVIEW_LIMIT
   const editable = canManage && isEditableType(file.contentType)
 
-  // (Re)load text whenever the file or its current version changes.
-  useEffect(() => {
+  // Reset the text view (or enter the loading state) whenever the file or its
+  // current version changes, during render (same committed values, no extra
+  // render). Keyed on the fetch inputs below.
+  const [prevPreviewKeys, setPrevPreviewKeys] = useState(() => ({
+    kind, tooLarge, downloadUrl, version: file.currentVersionId,
+  }))
+  if (
+    prevPreviewKeys.kind !== kind || prevPreviewKeys.tooLarge !== tooLarge ||
+    prevPreviewKeys.downloadUrl !== downloadUrl || prevPreviewKeys.version !== file.currentVersionId
+  ) {
+    setPrevPreviewKeys({ kind, tooLarge, downloadUrl, version: file.currentVersionId })
     if (kind !== 'text' || tooLarge) {
       setLoading(false)
-      return
+    } else {
+      setLoading(true)
+      setLoadError(false)
+      setEditing(false)
     }
+  }
+
+  // (Re)load text whenever the file or its current version changes.
+  useEffect(() => {
+    if (kind !== 'text' || tooLarge) return
     let cancelled = false
-    setLoading(true)
-    setLoadError(false)
-    setEditing(false)
     // Default cache mode: the download route sends an ETag + `no-cache`, so the
     // browser revalidates and gets a 304 on reopen instead of re-fetching bytes;
     // a Replace bumps currentVersionId (effect dep) and the new ETag busts it.

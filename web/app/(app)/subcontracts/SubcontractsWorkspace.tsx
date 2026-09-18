@@ -163,30 +163,44 @@ export function SubcontractsWorkspace({
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/subcontracts", { cache: "no-store" });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Could not load subcontracts");
-      setRows(body.subcontracts);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not load subcontracts");
-    } finally {
-      setLoading(false);
-    }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (the mount initializer above, and the mutation reload)
+  // instead of a mount effect.
+  const loadList = useCallback(() => {
+    return fetch("/api/subcontracts", { cache: "no-store" })
+      .then((response) => response.json().then((body) => {
+        if (!response.ok) throw new Error(body.error ?? "Could not load subcontracts");
+        setRows(body.subcontracts);
+      }))
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : "Could not load subcontracts");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
-  const loadDetail = useCallback(async (id: string) => {
-    const response = await fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, { cache: "no-store" });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error ?? "Could not load subcontract");
-    setDetail(body);
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const loadDetail = useCallback((id: string) => {
+    return fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((response) => response.json().then((body) => {
+        if (!response.ok) throw new Error(body.error ?? "Could not load subcontract");
+        setDetail(body);
+      }));
   }, []);
 
   useEffect(() => { void loadList(); }, [loadList]);
+  // Clear the detail while loading another subcontract, during render (same
+  // committed values, no extra render).
+  const [prevSelectedId, setPrevSelectedId] = useState(selectedId);
+  if (prevSelectedId !== selectedId) {
+    setPrevSelectedId(selectedId);
+    setDetail(null);
+  }
   useEffect(() => {
-    if (!selectedId) { setDetail(null); return; }
+    if (!selectedId) return;
     void loadDetail(selectedId).catch((error) => toast.error(error.message));
   }, [selectedId, loadDetail]);
 
@@ -196,6 +210,7 @@ export function SubcontractsWorkspace({
     try {
       const result = await api(payload);
       toast.success(success);
+      setLoading(true);
       await Promise.all([loadList(), selectedId ? loadDetail(selectedId) : Promise.resolve()]);
       return result;
     } catch (error) {

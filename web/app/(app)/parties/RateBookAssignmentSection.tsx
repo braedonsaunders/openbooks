@@ -84,9 +84,9 @@ export function RateBookAssignmentSection({
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeId, q, status, page])
-  useEffect(() => {
-    if (!editable) setForm(null)
-  }, [editable])
+  // A read-only viewer must never hold the form open. Adjusted during render
+  // (same committed value, no extra render).
+  if (!editable && form !== null) setForm(null)
 
   function startNew() {
     setForm({

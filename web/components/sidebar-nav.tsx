@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useHydrated } from '@/lib/use-hydrated'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Activity,
@@ -183,30 +184,47 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
   )
   const openGroupKey = useMemo(() => [...openGroupIds].sort().join('|'), [openGroupIds])
 
-  useEffect(() => {
+  // Restore the persisted expansion on mount and when the navigation inputs
+  // change, during render (same committed values, no extra render). Gated on
+  // hydration so the server and the first client render agree on the default
+  // expansion, exactly like the previous mount effect.
+  const hydrated = useHydrated()
+  const [prevNavKeys, setPrevNavKeys] = useState(() => ({ activeGroupId, groups, restored: false }))
+  if (
+    hydrated &&
+    (!prevNavKeys.restored || prevNavKeys.activeGroupId !== activeGroupId || prevNavKeys.groups !== groups)
+  ) {
+    setPrevNavKeys({ activeGroupId, groups, restored: true })
     try {
       const raw = localStorage.getItem(EXPANDED_STORAGE_KEY)
-      if (raw === null) return
-      const saved = JSON.parse(raw) as unknown
-      if (!Array.isArray(saved)) return
-      const valid = saved.filter(
-        (id): id is string => typeof id === 'string' && groups.some((group) => group.id === id),
-      )
-      setOpenGroupIds(new Set([...valid, activeGroupId].filter((id): id is string => Boolean(id))))
+      if (raw !== null) {
+        const saved = JSON.parse(raw) as unknown
+        if (Array.isArray(saved)) {
+          const valid = saved.filter(
+            (id): id is string => typeof id === 'string' && groups.some((group) => group.id === id),
+          )
+          setOpenGroupIds(new Set([...valid, activeGroupId].filter((id): id is string => Boolean(id))))
+        }
+      }
     } catch {
       // Corrupt or unavailable storage falls back to Home + the active workspace.
     }
-  }, [activeGroupId, groups])
+  }
 
-  useEffect(() => {
-    if (!activeGroupId) return
-    setOpenGroupIds((current) => {
-      if (current.has(activeGroupId)) return current
-      const next = new Set(current).add(activeGroupId)
-      persistExpandedGroups(next)
-      return next
-    })
-  }, [activeGroupId])
+  // Reveal the active workspace, during render (same committed values, no
+  // extra render). The updater persists only when it actually expands.
+  const [prevActiveGroupId, setPrevActiveGroupId] = useState(activeGroupId)
+  if (prevActiveGroupId !== activeGroupId) {
+    setPrevActiveGroupId(activeGroupId)
+    if (activeGroupId) {
+      setOpenGroupIds((current) => {
+        if (current.has(activeGroupId)) return current
+        const next = new Set(current).add(activeGroupId)
+        persistExpandedGroups(next)
+        return next
+      })
+    }
+  }
 
   useEffect(() => {
     if (collapsed) return
@@ -519,10 +537,10 @@ function SubgroupSection({
   const selfActive = href != null && activeHref === href
   const hasActiveChild = items.some((i) => i.href === activeHref) || selfActive
   const [open, setOpen] = useState(hasActiveChild)
-  // Navigating into a child from elsewhere should reveal the section.
-  useEffect(() => {
-    if (hasActiveChild) setOpen(true)
-  }, [hasActiveChild])
+  // Navigating into a child from elsewhere should reveal the section, during
+  // render (same committed value, no extra render). Navigating away leaves
+  // the section as it was, like before.
+  if (hasActiveChild && !open) setOpen(true)
 
   const headerClass = cn(
     'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm',

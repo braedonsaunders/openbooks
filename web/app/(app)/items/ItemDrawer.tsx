@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
@@ -216,17 +216,14 @@ export function ItemDrawer({
     }),
     [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
+  const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
+  if (prevSavePayload !== savePayload) {
+    setPrevSavePayload(savePayload)
     if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePayload])
+  }
 
   /** Reset every field back to the loaded item (used by Cancel). */
   function resetForm() {

@@ -105,11 +105,9 @@ export function CashWeekFlyout({
       ? { ar: week.arEntries, ap: week.apEntries }
       : null,
   )
-  const [, setLoadingEntries] = useState(false)
   useEffect(() => {
     if (fetched) return
     let cancelled = false
-    setLoadingEntries(true)
     const params = new URLSearchParams({ week: week.weekStart })
     fetch(`/api/cash/week-entries?${params}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
@@ -118,9 +116,6 @@ export function CashWeekFlyout({
       })
       .catch(() => {
         if (!cancelled) setFetched({ ar: [], ap: [] })
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingEntries(false)
       })
     return () => {
       cancelled = true

@@ -35,10 +35,17 @@ export function CardTile({
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)
 
-  useEffect(() => {
-    const mySeq = ++seq.current
+  // Clear the previous query's result while reloading, during render (same
+  // committed values, no extra render).
+  const [prevQuery, setPrevQuery] = useState(card.query)
+  if (prevQuery !== card.query) {
+    setPrevQuery(card.query)
     setResult(null)
     setError(null)
+  }
+
+  useEffect(() => {
+    const mySeq = ++seq.current
     fetch('/api/insights/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

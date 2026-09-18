@@ -108,9 +108,12 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   const [changing, setChanging] = useState<string | null>(null);
   const [changeQty, setChangeQty] = useState("");
 
-  const load = async () => {
-    const r = await fetch("/api/subscriptions");
-    if (r.ok) { const d = await r.json(); setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? "0.0000"); }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = () => {
+    return fetch("/api/subscriptions").then((r) => {
+      if (r.ok) return r.json().then((d) => { setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? "0.0000"); });
+    });
   };
   useEffect(() => { void load(); }, []);
 
@@ -250,9 +253,12 @@ function RecurringPanel() {
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("ar.collections.recurring");
 
-  const load = async () => {
-    const r = await fetch("/api/recurring");
-    if (r.ok) setRows((await r.json()).schedules ?? []);
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = () => {
+    return fetch("/api/recurring").then((r) => {
+      if (r.ok) return r.json().then((body) => setRows(body.schedules ?? []));
+    });
   };
   useEffect(() => { void load(); }, []);
 
@@ -390,9 +396,12 @@ function DunningPanel() {
   const t = useTranslations("ar.collections.dunning");
   const tErrors = useTranslations("ar.collections.errors");
 
-  const load = async () => {
-    const r = await fetch("/api/dunning");
-    if (r.ok) setPolicies((await r.json()).policies ?? []);
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = () => {
+    return fetch("/api/dunning").then((r) => {
+      if (r.ok) return r.json().then((body) => setPolicies(body.policies ?? []));
+    });
   };
   useEffect(() => { void load(); }, []);
 

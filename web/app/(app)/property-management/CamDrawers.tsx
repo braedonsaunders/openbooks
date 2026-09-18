@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Drawer, Button, Input, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
@@ -45,9 +45,14 @@ export function CamDrawer({
     [pool, initialPropertyId, data.properties, year],
   );
   const [form, setForm] = useState(initial);
-  useEffect(() => {
+  // Reseed the form when the drawer opens for another pool, during render
+  // (same committed values, no extra render). Keyed on the memoized `initial`
+  // (stable identity — the sibling slice's restructuring) plus `open`.
+  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }))
+  if (prevFormKeys.open !== open || prevFormKeys.initial !== initial) {
+    setPrevFormKeys({ open, initial })
     if (open) setForm(initial);
-  }, [open, initial]);
+  }
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
   return (
     <Drawer
@@ -194,9 +199,13 @@ export function CamCorrectionDrawer({
   onSave: (reason: string) => void | Promise<void>;
 }) {
   const [reason, setReason] = useState("");
-  useEffect(() => {
+  // Clear the reason when the dialog opens for another pool, during render
+  // (same committed value, no extra render).
+  const [prevReasonKeys, setPrevReasonKeys] = useState(() => ({ open, poolId: pool?.id }))
+  if (prevReasonKeys.open !== open || prevReasonKeys.poolId !== pool?.id) {
+    setPrevReasonKeys({ open, poolId: pool?.id })
     if (open) setReason("");
-  }, [open, pool?.id]);
+  }
   return (
     <Drawer
       open={open}

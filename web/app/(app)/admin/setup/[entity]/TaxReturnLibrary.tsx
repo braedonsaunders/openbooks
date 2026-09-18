@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -65,13 +65,17 @@ export function TaxReturnLibrary({
   const visibleAvailable = shown.filter((pack) => !installedCodesState.has(pack.code))
   const allVisibleSelected = visibleAvailable.length > 0 && visibleAvailable.every((pack) => selectedCodes.has(pack.code))
 
-  useEffect(() => {
+  // Mirror the installed set when the prop changes, during render (same
+  // committed values, no extra render).
+  const [prevInstalledCodes, setPrevInstalledCodes] = useState(installedCodes)
+  if (prevInstalledCodes !== installedCodes) {
+    setPrevInstalledCodes(installedCodes)
     setInstalledCodesState(new Set(installedCodes))
-  }, [installedCodes])
+  }
 
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount)
-  }, [page, pageCount])
+  // Clamp the page when filtering shrinks the list beneath it, during render
+  // (same committed value, no extra render).
+  if (page > pageCount) setPage(pageCount)
 
   function toggle(code: string) {
     setSelectedCodes((current) => {

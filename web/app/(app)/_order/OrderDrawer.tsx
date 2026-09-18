@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -489,17 +489,14 @@ export function OrderDrawer({
     }),
     [partyId, documentDate, dueDate, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
+  const [prevPayload, setPrevPayload] = useState(payload)
+  if (prevPayload !== payload) {
+    setPrevPayload(payload)
     if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload])
+  }
 
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {

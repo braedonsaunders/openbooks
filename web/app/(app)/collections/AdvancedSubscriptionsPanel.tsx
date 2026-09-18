@@ -30,18 +30,23 @@ export function AdvancedSubscriptionsPanel() {
   const [lifecycleForm, setLifecycleForm] = useState({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" });
   const [amendForm, setAmendForm] = useState({ subscriptionId: "", type: "add_component", effectiveOn: today, componentKey: "", name: "", quantity: "1", unitPrice: "0", termEndsOn: "", billingTiming: "advance", renewalTermMonths: "12", anchorSubscriptionId: "", reason: "" });
 
-  const load = async () => {
-    try {
-      const [baseResponse, advancedResponse] = await Promise.all([fetch("/api/subscriptions"), fetch("/api/subscriptions/advanced")]);
-      if (!baseResponse.ok || !advancedResponse.ok) throw new Error("Could not load advanced subscription lifecycle data");
-      const [base, advanced] = await Promise.all([baseResponse.json(), advancedResponse.json()]);
-      setPlans(base.plans ?? []); setSubscriptions(base.subscriptions ?? []);
-      setVersions(advanced.versions ?? []); setLifecycles(advanced.lifecycles ?? []); setAmendments(advanced.amendments ?? []);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load advanced subscriptions");
-    } finally {
-      setLoading(false);
-    }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = () => {
+    return Promise.all([fetch("/api/subscriptions"), fetch("/api/subscriptions/advanced")])
+      .then(([baseResponse, advancedResponse]) => {
+        if (!baseResponse.ok || !advancedResponse.ok) throw new Error("Could not load advanced subscription lifecycle data");
+        return Promise.all([baseResponse.json(), advancedResponse.json()]).then(([base, advanced]) => {
+          setPlans(base.plans ?? []); setSubscriptions(base.subscriptions ?? []);
+          setVersions(advanced.versions ?? []); setLifecycles(advanced.lifecycles ?? []); setAmendments(advanced.amendments ?? []);
+        });
+      })
+      .catch((loadError: unknown) => {
+        setError(loadError instanceof Error ? loadError.message : "Could not load advanced subscriptions");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
   useEffect(() => { void load(); }, []);
 

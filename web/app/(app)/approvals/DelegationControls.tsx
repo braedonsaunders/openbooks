@@ -157,16 +157,20 @@ export function DelegationBanner({ users }: { users: DelegateOption[] }) {
   const [active, setActive] = useState<Delegation | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/flows/delegations')
-      if (!res.ok) return // 404 = endpoint not built yet — render nothing
-      const data = (await res.json().catch(() => ({}))) as { delegations?: Delegation[] }
-      const now = Date.now()
-      setActive((data.delegations ?? []).find((d) => isActiveGiven(d, now)) ?? null)
-    } catch {
-      // network failure — banner stays hidden
-    }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback(() => {
+    fetch('/api/flows/delegations')
+      .then((res) => {
+        if (!res.ok) return // 404 = endpoint not built yet — render nothing
+        return res.json().catch(() => ({})).then((data: { delegations?: Delegation[] }) => {
+          const now = Date.now()
+          setActive((data.delegations ?? []).find((d) => isActiveGiven(d, now)) ?? null)
+        })
+      })
+      .catch(() => {
+        // network failure — banner stays hidden
+      })
   }, [])
 
   useEffect(() => {

@@ -56,10 +56,15 @@ export function PaymentProvidersClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/admin/setup/payment-providers");
-    if (res.ok) setData((await res.json()) as Data);
-    else setError((await res.json().catch(() => ({})))?.error ?? res.statusText);
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback(() => {
+    return fetch("/api/admin/setup/payment-providers").then((res) => {
+      if (res.ok) return res.json().then((body) => setData(body as Data));
+      return res.json().catch(() => ({})).then((body) => {
+        setError((body as { error?: string })?.error ?? res.statusText);
+      });
+    });
   }, []);
   useEffect(() => {
     void load();

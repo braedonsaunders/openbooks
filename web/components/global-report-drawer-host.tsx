@@ -43,16 +43,22 @@ export function GlobalReportDrawerHost() {
     'reportRecord', 'reportRecordKind', 'drawerReturn', 'form', 'transactionTab',
   ]), [pathname, query])
 
-  useEffect(() => {
-    if (!target) {
-      setData(null)
-      setLoadedTarget(null)
-      return
-    }
-    const selection = `${target}:${page}`
-    const controller = new AbortController()
+  // Clear the drill while (re)loading, during render (same committed values,
+  // no extra render). The snapshot mirrors the fetch inputs below exactly.
+  const [prevDrillRequest, setPrevDrillRequest] = useState(() => ({ closeHref, page, router, t, target }))
+  if (
+    prevDrillRequest.closeHref !== closeHref || prevDrillRequest.page !== page ||
+    prevDrillRequest.router !== router || prevDrillRequest.t !== t || prevDrillRequest.target !== target
+  ) {
+    setPrevDrillRequest({ closeHref, page, router, t, target })
     setData(null)
     setLoadedTarget(null)
+  }
+
+  useEffect(() => {
+    if (!target) return
+    const selection = `${target}:${page}`
+    const controller = new AbortController()
     const search = new URLSearchParams({ target, page: String(page) })
     fetch(`/api/reports/drill?${search}`, { signal: controller.signal })
       .then(async (response) => {
@@ -71,16 +77,26 @@ export function GlobalReportDrawerHost() {
     return () => controller.abort()
   }, [closeHref, page, router, t, target])
 
-  useEffect(() => {
-    if (!recordId || !recordKind) {
-      setRecordData(null)
-      setLoadedRecord(null)
-      return
-    }
-    const selection = `${recordKind}:${recordId}`
-    const controller = new AbortController()
+  // Same render-time reset for the nested record drawer. Keyed on the query
+  // string (not the search-params object, whose identity is not stable across
+  // renders) plus the other fetch inputs.
+  const [prevRecordRequest, setPrevRecordRequest] = useState(() => ({
+    query, recordCloseHref, recordId, recordKind, router, t,
+  }))
+  if (
+    prevRecordRequest.query !== query || prevRecordRequest.recordCloseHref !== recordCloseHref ||
+    prevRecordRequest.recordId !== recordId || prevRecordRequest.recordKind !== recordKind ||
+    prevRecordRequest.router !== router || prevRecordRequest.t !== t
+  ) {
+    setPrevRecordRequest({ query, recordCloseHref, recordId, recordKind, router, t })
     setRecordData(null)
     setLoadedRecord(null)
+  }
+
+  useEffect(() => {
+    if (!recordId || !recordKind) return
+    const selection = `${recordKind}:${recordId}`
+    const controller = new AbortController()
     const search = new URLSearchParams({ id: recordId, kind: recordKind })
     const form = params.get('form')
     if (form) search.set('form', form)

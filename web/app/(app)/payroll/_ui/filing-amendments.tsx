@@ -134,13 +134,20 @@ export function useFilingLifecycle(section: YearEndFilingSection | null, year: n
   const country = section?.country ?? ''
   const key = section?.key ?? ''
 
+  // Reset the lifecycle when its inputs change, during render (same committed
+  // values, no extra render).
+  const [prevInputs, setPrevInputs] = useState(() => ({ country, key, year, enabled, nonce }))
+  if (
+    prevInputs.country !== country || prevInputs.key !== key || prevInputs.year !== year ||
+    prevInputs.enabled !== enabled || prevInputs.nonce !== nonce
+  ) {
+    setPrevInputs({ country, key, year, enabled, nonce })
+    setState(!enabled || !country || !key ? { status: 'idle' } : { status: 'loading' })
+  }
+
   useEffect(() => {
-    if (!enabled || !country || !key) {
-      setState({ status: 'idle' })
-      return
-    }
+    if (!enabled || !country || !key) return
     let alive = true
-    setState({ status: 'loading' })
     void fetch(
       `/api/payroll/year-end/amendments?country=${encodeURIComponent(country)}`
       + `&filing=${encodeURIComponent(key)}&year=${year}`,

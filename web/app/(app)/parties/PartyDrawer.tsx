@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -355,10 +355,15 @@ export function PartyDrawer({
     setTab(key)
     setKeptTabs((prev) => rememberDrawerTab(prev, key))
   }
-  useEffect(() => {
+  // Adopt a new initial tab during render (same committed values, no extra
+  // render). `rememberDrawerTab` returns the previous set when the tab is
+  // already kept, so this settles after one pass.
+  const [prevAllowedInitialTab, setPrevAllowedInitialTab] = useState(allowedInitialTab)
+  if (prevAllowedInitialTab !== allowedInitialTab) {
+    setPrevAllowedInitialTab(allowedInitialTab)
     setTab(allowedInitialTab)
     setKeptTabs((prev) => rememberDrawerTab(prev, allowedInitialTab))
-  }, [allowedInitialTab])
+  }
   const p = payload.party
   const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null)
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
@@ -519,27 +524,22 @@ export function PartyDrawer({
     }),
     [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render). `skipDirty` is a
+  // one-shot latch consumed here: the autosave writes server-canonical rows
+  // back into the form without marking it dirty. `editable` is read but
+  // deliberately NOT subscribed: the gate fires only when `savePayload`
+  // changes identity, so merely entering edit mode with untouched fields never
+  // marks the form dirty (same guarantee as the ref-mirrored gate this
+  // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  const skipDirty = useRef(false)
-  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
-  // dirty on merely entering edit mode.
-  const editableRef = useRef(editable)
-  useEffect(() => {
-    editableRef.current = editable
-  }, [editable])
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (skipDirty.current) {
-      skipDirty.current = false
-      return
-    }
-    if (editableRef.current) setDirty(true)
-  }, [savePayload])
+  const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
+  const [skipDirty, setSkipDirty] = useState(false)
+  if (prevSavePayload !== savePayload) {
+    setPrevSavePayload(savePayload)
+    if (skipDirty) setSkipDirty(false)
+    else if (editable) setDirty(true)
+  }
 
   /** Reset every field back to the loaded party (used by Cancel). */
   function resetForm() {
@@ -629,7 +629,7 @@ export function PartyDrawer({
         fallbackMessage: t('autosaveFailed'),
         successMessage: tc('feedback.saved'),
         onOk: (result) => {
-          skipDirty.current = true
+          setSkipDirty(true)
           const rows = (result as { addresses?: unknown; contacts?: unknown } | null)
           if (kind === 'addresses') {
             setAddresses(((rows?.addresses ?? []) as AddressApiRecord[]).map(addressFromApi))

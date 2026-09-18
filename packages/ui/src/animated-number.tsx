@@ -33,10 +33,10 @@ export function AnimatedNumber({
   const [displayValue, setDisplayValue] = React.useState(reduce ? value : from)
 
   React.useEffect(() => {
-    if (reduce) {
-      setDisplayValue(value)
-      return
-    }
+    // Reduced motion: the rendered value below already equals `value`, so
+    // there is no state to synchronize — starting an animation would only
+    // fight the user's motion preference.
+    if (reduce) return
     const controls = animate(mv, value, {
       duration,
       ease: [0.22, 0.61, 0.36, 1],
@@ -47,7 +47,7 @@ export function AnimatedNumber({
 
   return (
     <span className={className} aria-label={String(value)}>
-      {formatValue(displayValue, format, decimals)}
+      {formatValue(reduce ? value : displayValue, format, decimals)}
     </span>
   )
 }

@@ -32,9 +32,9 @@ export function ItemRatesEditor({
   const common = useTranslations('common')
   const [data, setData] = useState<RateData | null>(null)
   const [editing, setEditing] = useState(false)
-  useEffect(() => {
-    if (!canManage) setEditing(false)
-  }, [canManage])
+  // A read-only viewer must never hold the form in edit mode. Adjusted during
+  // render (same committed value, no extra render).
+  if (!canManage && editing) setEditing(false)
   const [busy, setBusy] = useState(false)
   const [rateBookId, setRateBookId] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(useBusinessToday())
@@ -48,18 +48,23 @@ export function ItemRatesEditor({
   ])
 
   // useCallback, not a bare closure: the effect below depends on it, and a bare
-  // `load` would be a fresh identity every render (refetch loop).
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/items/${itemId}/rates`)
-    if (!res.ok) return
-    const next = await res.json() as RateData
-    setData(next)
-    setRateBookId(next.books.find((b) => b.is_default)?.id ?? next.books[0]?.id ?? '')
-    if (next.profile) {
-      setBaseUnit(next.profile.base_unit)
-      setPricingPolicy(next.profile.pricing_policy)
-      setInvoicePresentation(next.profile.invoice_presentation)
-    }
+  // `load` would be a fresh identity every render (refetch loop). Every state
+  // update sits in a promise continuation (the fetch response), never
+  // synchronously in the effect body.
+  const load = useCallback(() => {
+    return fetch(`/api/items/${itemId}/rates`)
+      .then((res) => {
+        if (!res.ok) return
+        return (res.json() as Promise<RateData>).then((next) => {
+          setData(next)
+          setRateBookId(next.books.find((b) => b.is_default)?.id ?? next.books[0]?.id ?? '')
+          if (next.profile) {
+            setBaseUnit(next.profile.base_unit)
+            setPricingPolicy(next.profile.pricing_policy)
+            setInvoicePresentation(next.profile.invoice_presentation)
+          }
+        })
+      })
   }, [itemId])
   useEffect(() => { void load() }, [load])
 

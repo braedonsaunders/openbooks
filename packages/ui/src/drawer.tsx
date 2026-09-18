@@ -4,6 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
+import { useHydrated } from './use-hydrated'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -88,8 +89,7 @@ export function Drawer({
   onExitComplete?: () => void
 }) {
   const t = useTranslations('common.actions')
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   // The dialog's accessible name is its own heading: aria-labelledby points at
   // the h2 below. A drawer opened without usable title text never ships as an
@@ -106,9 +106,9 @@ export function Drawer({
   // height is already 100%. Resets when the drawer closes so the next open
   // starts at its designed size.
   const [fullscreen, setFullscreen] = React.useState(initialFullscreen)
-  React.useEffect(() => {
-    if (!open) setFullscreen(initialFullscreen)
-  }, [initialFullscreen, open])
+  // Reset when the drawer closes so the next open starts at its designed
+  // size. Adjusted during render (same committed value, no extra render).
+  if (!open && fullscreen !== initialFullscreen) setFullscreen(initialFullscreen)
 
   const panelRef = React.useRef<HTMLElement>(null)
 
@@ -409,12 +409,14 @@ export function UrlDrawer({
   syncUrlOnClose?: boolean
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
-  const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
-  React.useEffect(() => {
-    if (!contextualReturn) {
-      setNestedContext(null)
-      return
-    }
+  // Derived from the address bar (an external store) plus props. Gated on
+  // hydration so the server and the first client render agree on `null`, then
+  // computed during render — no effect cascade. Recomputes exactly when the
+  // old effect re-ran: after hydration and when `closeHref`/`contextualReturn`
+  // change.
+  const hydrated = useHydrated()
+  const nestedContext = React.useMemo((): { closeHref: string; stacked: boolean } | null => {
+    if (!hydrated || !contextualReturn) return null
     const currentParams = new URLSearchParams(window.location.search)
 
     // Party transaction drill-through stays on the same page. Closing the
@@ -424,11 +426,10 @@ export function UrlDrawer({
       currentParams.delete('partyTxn')
       currentParams.delete('partyTxnKind')
       const query = currentParams.toString()
-      setNestedContext({
+      return {
         closeHref: query ? `${window.location.pathname}?${query}` : window.location.pathname,
         stacked: true,
-      })
-      return
+      }
     }
 
     const requestedReturn = currentParams.get('drawerReturn')
@@ -441,10 +442,10 @@ export function UrlDrawer({
     // whose ordinary closeHref is its module list, consumes this context.
     const closeParams = new URL(closeHref, window.location.origin).searchParams
     const isRelatedRecordHost = closeParams.has('drawerReturn')
-    setNestedContext(safeReturn && !isRelatedRecordHost
+    return safeReturn && !isRelatedRecordHost
       ? { closeHref: safeReturn, stacked: currentParams.has('relatedParty') || currentParams.has('reportRecord') || currentParams.has('projectTxn') }
-      : null)
-  }, [closeHref, contextualReturn])
+      : null
+  }, [hydrated, closeHref, contextualReturn])
   const resolvedCloseHref = nestedContext?.closeHref ?? closeHref
   const resolvedStacked = stacked === true || nestedContext?.stacked === true
   // Local presence state: the URL says the drawer is open, but closing must
@@ -453,7 +454,14 @@ export function UrlDrawer({
   // onExitComplete — otherwise navigating immediately re-renders the server
   // component, unmounts the drawer, and the exit animation never plays.
   const [show, setShow] = React.useState(open)
-  React.useEffect(() => setShow(open), [open])
+  const [prevOpen, setPrevOpen] = React.useState(open)
+  // Mirror `open` during render (same committed value, no extra render). A
+  // `close()`-driven `show === false` while `open` is still true is untouched,
+  // so the exit animation still plays before the deferred navigation.
+  if (prevOpen !== open) {
+    setPrevOpen(open)
+    setShow(open)
+  }
   async function close() {
     if (beforeClose && !(await beforeClose())) return
     if (syncUrlOnClose && typeof window !== 'undefined') {

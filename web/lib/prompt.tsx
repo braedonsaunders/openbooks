@@ -70,10 +70,17 @@ export function PromptRoot() {
   const [value, setValue] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
-  // Reset the field each time a new request opens; focus + select the text.
+  // Reset the field each time a new request opens, during render (same
+  // committed value, no extra render). Focus + scroll-lock stay in the effect
+  // below — they synchronize external systems, not state.
+  const [prevReqId, setPrevReqId] = React.useState(req?.id)
+  if (prevReqId !== req?.id) {
+    setPrevReqId(req?.id)
+    if (req) setValue(req.initialValue ?? '')
+  }
+  // Focus + select the text each time a new request opens.
   React.useEffect(() => {
     if (!req) return
-    setValue(req.initialValue ?? '')
     const id = requestAnimationFrame(() => {
       inputRef.current?.focus()
       inputRef.current?.select()

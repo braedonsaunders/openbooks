@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
@@ -42,9 +42,15 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
     [initialPropertyId, initialUnitId, data.properties, today],
   );
   const [form, setForm] = useState(initial);
-  useEffect(() => {
+  // Reseed the form when the drawer opens for another lease, during render
+  // (same committed values, no extra render). Keyed on the memoized `initial`
+  // (stable identity — the sibling slice's restructuring, which already folds
+  // the property/unit overrides in) plus `open`.
+  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }))
+  if (prevFormKeys.open !== open || prevFormKeys.initial !== initial) {
+    setPrevFormKeys({ open, initial })
     if (open) setForm(initial);
-  }, [open, initial]);
+  }
   const units = data.units.filter(
     (unit) => unit.propertyId === form.propertyId && unit.status === "vacant",
   );

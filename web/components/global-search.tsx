@@ -81,15 +81,23 @@ export function GlobalSearch({ className }: { className?: string }) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [])
 
+  // Reset the results while the query changes, during render (same committed
+  // values, no extra render).
+  const [prevQ, setPrevQ] = useState(q)
+  if (prevQ !== q) {
+    setPrevQ(q)
+    if (q.trim().length < 2) {
+      setRes(null)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+  }
+
   // Debounced fetch.
   useEffect(() => {
     const term = q.trim()
-    if (term.length < 2) {
-      setRes(null)
-      setLoading(false)
-      return
-    }
-    setLoading(true)
+    if (term.length < 2) return
     const ctrl = new AbortController()
     const t = setTimeout(async () => {
       try {

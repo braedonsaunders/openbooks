@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { BookOpen, Clock, KeyRound, Play, RotateCcw, Search, TerminalSquare } from 'lucide-react'
 import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
@@ -118,12 +118,17 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
     if (selected) setBody(bodyTemplate(selected))
   }, [selected])
 
-  useEffect(() => {
-    if (!selected) return
-    setMethod(methods[0]?.method ?? 'GET')
-    setResponse(null)
-    setBody(bodyTemplate(selected))
-  }, [selectedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reseed the console when the selected type changes, during render (same
+  // committed values, no extra render). Keyed on selectedKey, like before.
+  const [prevSelectedKey, setPrevSelectedKey] = useState(selectedKey)
+  if (prevSelectedKey !== selectedKey) {
+    setPrevSelectedKey(selectedKey)
+    if (selected) {
+      setMethod(methods[0]?.method ?? 'GET')
+      setResponse(null)
+      setBody(bodyTemplate(selected))
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

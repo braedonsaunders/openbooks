@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -53,18 +53,25 @@ export function DocsSidebar({
   )
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(initialSections))
 
-  useEffect(() => {
-    if (!activeArticle) return
-    setExpandedCategories((current) => new Set(current).add(activeArticle.category))
-    if (activeArticle.section) {
-      const path = ancestorsOf(activeArticle.section, sectionByKey)
-      setExpandedSections((current) => {
-        const next = new Set(current)
-        for (const key of path) next.add(key)
-        return next
-      })
+  // Expand the active article's category and section path, during render (same
+  // committed values, no extra render). Keyed on the inputs below.
+  const [prevActiveArticle, setPrevActiveArticle] = useState(activeArticle)
+  const [prevSectionByKey, setPrevSectionByKey] = useState(sectionByKey)
+  if (prevActiveArticle !== activeArticle || prevSectionByKey !== sectionByKey) {
+    setPrevActiveArticle(activeArticle)
+    setPrevSectionByKey(sectionByKey)
+    if (activeArticle) {
+      setExpandedCategories((current) => new Set(current).add(activeArticle.category))
+      if (activeArticle.section) {
+        const path = ancestorsOf(activeArticle.section, sectionByKey)
+        setExpandedSections((current) => {
+          const next = new Set(current)
+          for (const key of path) next.add(key)
+          return next
+        })
+      }
     }
-  }, [activeArticle, sectionByKey])
+  }
 
   const needle = q.trim().toLowerCase()
   const filtered = useMemo(() => {

@@ -9,11 +9,12 @@ const SHARE_PANEL_SOURCE = readFileSync(
 
 test('sharing load fails closed when either endpoint or payload is unavailable', () => {
   const load = SHARE_PANEL_SOURCE.slice(
-    SHARE_PANEL_SOURCE.indexOf('async function load()'),
+    SHARE_PANEL_SOURCE.indexOf('\n  function load() {'),
     SHARE_PANEL_SOURCE.indexOf('\n  useEffect(() => {'),
   )
 
-  assert.match(load, /const \[g, p\] = await Promise\.all\(\[fetch\(base\), fetch\('\/api\/file-cabinet\/principals'\)\]\)/)
+  assert.match(load, /return Promise\.all\(\[fetch\(base\), fetch\('\/api\/file-cabinet\/principals'\)\]\)/)
+  assert.match(load, /\.then\(\(\[g, p\]\) => \{/)
   assert.match(load, /if \(!g\.ok \|\| !p\.ok\) throw new Error\('SHARING_LOAD_FAILED'\)/)
   assert.match(load, /!Array\.isArray\(grantsPayload\.grants\)/)
   assert.match(load, /!Array\.isArray\(principalsPayload\.users\)/)

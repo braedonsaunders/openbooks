@@ -34,17 +34,22 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
   const [copied, setCopied] = useState<string | null>(null);
   const [available, setAvailable] = useState(true);
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/payments/links?documentId=${documentId}`);
-    if (res.status === 404) {
-      setAvailable(false);
-      return;
-    }
-    if (!res.ok) return;
-    const json = (await res.json()) as { links: Link[]; providers: string[] };
-    setLinks(json.links);
-    setProviders(json.providers);
-    setProvider((p) => p || json.providers[0] || "");
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback(() => {
+    return fetch(`/api/payments/links?documentId=${documentId}`)
+      .then((res) => {
+        if (res.status === 404) {
+          setAvailable(false);
+          return;
+        }
+        if (!res.ok) return;
+        return (res.json() as Promise<{ links: Link[]; providers: string[] }>).then((json) => {
+          setLinks(json.links);
+          setProviders(json.providers);
+          setProvider((p) => p || json.providers[0] || "");
+        });
+      });
   }, [documentId]);
   useEffect(() => {
     void load();

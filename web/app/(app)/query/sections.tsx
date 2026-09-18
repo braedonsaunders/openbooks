@@ -19,6 +19,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
+import { useHydrated } from '@/lib/use-hydrated'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { exportCsv } from '../analytics/_ui/exportCsv'
 import { ResultsGrid, resultToCsv, type QueryResult } from './ResultsGrid'
@@ -80,7 +81,14 @@ export function QueryConsole() {
   const snippetNameRef = useRef<HTMLInputElement>(null)
 
   // --- restore draft + history + saved snippets, load schema ---
-  useEffect(() => {
+  // Adopt the persisted store once the client is hydrated (the server and the
+  // first client render agree on the starter state, exactly like the previous
+  // mount effect — including its one-commit starter flash when a draft
+  // exists). `localStorage` reads during render are purity-clean here.
+  const hydrated = useHydrated()
+  const [storeAdopted, setStoreAdopted] = useState(false)
+  if (hydrated && !storeAdopted) {
+    setStoreAdopted(true)
     try {
       const draft = localStorage.getItem(DRAFT_KEY)
       if (draft) setSqlText(draft)
@@ -91,7 +99,7 @@ export function QueryConsole() {
     } catch {
       /* ignore corrupt storage */
     }
-  }, [])
+  }
 
   useEffect(() => {
     let alive = true

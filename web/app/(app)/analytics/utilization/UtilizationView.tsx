@@ -131,9 +131,24 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
+  // Reset the drill state when its inputs change, during render (same
+  // committed values, no extra render — and no one-commit flash of the
+  // previous drill's rows while the new fetch is in flight).
+  const [prevKind, setPrevKind] = useState(kind)
+  const [prevId, setPrevId] = useState(id)
+  const [prevFrom, setPrevFrom] = useState(from)
+  const [prevTo, setPrevTo] = useState(to)
+  if (prevKind !== kind || prevId !== id || prevFrom !== from || prevTo !== to) {
+    setPrevKind(kind)
+    setPrevId(id)
+    setPrevFrom(from)
+    setPrevTo(to)
+    setEntries(null)
+    setError(false)
+    setView('entries')
+  }
   useEffect(() => {
     let live = true
-    setEntries(null); setError(false); setView('entries')
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => { if (live) setEntries(j.entries) })

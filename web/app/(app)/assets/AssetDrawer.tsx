@@ -199,10 +199,24 @@ export function AssetDrawer({
     taxDepreciation: taxValues,
   }), [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, openingAccumulated, openingAsOf, serialNumber, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, convention, assetAccountId, accumAccountId, expenseAccountId, customValues, taxValues])
 
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed values, no extra render). Note `editable`
+  // stays a trigger like before: toggling edit mode with untouched fields
+  // still marks the form dirty here — preserved as-is, see the slice report.
+  const [prevPayloadBody, setPrevPayloadBody] = useState(payloadBody)
+  const [prevEditable, setPrevEditable] = useState(editable)
+  if (prevPayloadBody !== payloadBody || prevEditable !== editable) {
+    setPrevPayloadBody(payloadBody)
+    setPrevEditable(editable)
+    if (editable) { setDirty(true); setSaveState('dirty') }
+  }
+  // Live edit counter read by save() to detect edits made while a save is in
+  // flight. Bumped post-commit (no setState, so no cascade); save() only ever
+  // runs between commits, so it always observes the bumped value.
   const first = useRef(true)
   useEffect(() => {
     if (first.current) { first.current = false; return }
-    if (editable) { editVersion.current += 1; setDirty(true); setSaveState('dirty') }
+    if (editable) editVersion.current += 1
   }, [payloadBody, editable])
 
   function resetForm() {

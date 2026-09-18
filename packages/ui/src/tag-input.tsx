@@ -24,6 +24,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from './utils'
+import { useHydrated } from './use-hydrated'
 
 export type TagOption = {
   value: string
@@ -64,7 +65,7 @@ export function TagInput({
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useHydrated()
   const wrapRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -76,8 +77,6 @@ export function TagInput({
     const r = wrapRef.current?.getBoundingClientRect()
     if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width })
   }
-
-  useEffect(() => setMounted(true), [])
 
   const selectedKeys = useMemo(() => new Set(value.map(normalizeTag)), [value])
 
@@ -149,9 +148,9 @@ export function TagInput({
     }
   }, [open])
 
-  useEffect(() => {
-    if (highlight >= rowCount) setHighlight(Math.max(0, rowCount - 1))
-  }, [highlight, rowCount])
+  // Clamp the highlight when the option list shrinks beneath it. Adjusted
+  // during render (same committed value, no extra render).
+  if (highlight >= rowCount) setHighlight(Math.max(0, rowCount - 1))
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') {

@@ -65,12 +65,22 @@ export function EntryFlyout() {
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
 
+  // Reset while reloading for another entry, during render (same committed
+  // values, no extra render). Like the fetch below, a cleared `txn` resets
+  // nothing — the flyout simply closes over the retained payload.
+  const [prevTxn, setPrevTxn] = useState(txn)
+  if (prevTxn !== txn) {
+    setPrevTxn(txn)
+    if (txn) {
+      setLoading(true)
+      setFailed(false)
+      setData(null)
+    }
+  }
+
   useEffect(() => {
     if (!txn) return
     let active = true
-    setLoading(true)
-    setFailed(false)
-    setData(null)
     fetch(`/api/reports/entry/${txn}`)
       .then((r) => {
         if (!r.ok) throw new Error('entry load failed')

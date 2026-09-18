@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { ChevronRight } from 'lucide-react'
 import {
   Badge,
@@ -184,10 +184,21 @@ function TimeEntriesDrawer({
   const [data, setData] = useState<TimeEntryPage | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const controller = new AbortController()
+  // Reset the page when the request inputs change, during render (same
+  // committed values, no extra render). The key mirrors the fetch effect's
+  // inputs exactly, including the locale (the translator identity changes
+  // with it) and the manual refresh counter.
+  const locale = useLocale()
+  const requestKey = JSON.stringify([locale, projectId, target.dimension, target.key ?? 'unassigned', page, reload])
+  const [prevRequestKey, setPrevRequestKey] = useState(requestKey)
+  if (prevRequestKey !== requestKey) {
+    setPrevRequestKey(requestKey)
     setData(null)
     setError(null)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
     const params = new URLSearchParams({
       dimension: target.dimension,
       key: target.key ?? 'unassigned',
