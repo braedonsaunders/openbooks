@@ -90,68 +90,78 @@ const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(bank
 const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
 hooks.deregister();
 
-const { db, withBypass } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
 
 const NOT_FOUND = JSON.stringify({ error: "not found" });
 
+// Production scopes every route read through the request org; the mocked
+// authz stands in for the request here, so each route call runs inside the
+// mocked caller's org boundary. Without it every surface 404s at the RLS
+// backstop — including the caller's own rows — and the subsidiary gate under
+// test never runs.
+function scoped<T>(fn: () => Promise<T>): Promise<T> {
+  const authz = routeState.authz;
+  assert.ok(authz, "route helpers require an authenticated caller");
+  return withOrgContext(authz.user.orgId, fn);
+}
 function get(): Promise<Response> {
-  return getRuns();
+  return scoped(() => getRuns());
 }
 function runGet(id: string, url = `/api/payroll/runs/${id}`): Promise<Response> {
-  return getRun(new Request(`http://openbooks.test${url}`), { params: Promise.resolve({ id }) });
+  return scoped(() => getRun(new Request(`http://openbooks.test${url}`), { params: Promise.resolve({ id }) }));
 }
 function runPost(id: string, body: Record<string, unknown>): Promise<Response> {
-  return postRun(
+  return scoped(() => postRun(
     new Request(`http://openbooks.test/api/payroll/runs/${id}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id }) },
-  );
+  ));
 }
 function createRun(body: Record<string, unknown>): Promise<Response> {
-  return postRuns(
+  return scoped(() => postRuns(
     new Request("http://openbooks.test/api/payroll/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  );
+  ));
 }
 function stubsPdf(id: string): Promise<Response> {
-  return getStubsPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/stubs-pdf`), {
+  return scoped(() => getStubsPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/stubs-pdf`), {
     params: Promise.resolve({ id }),
-  });
+  }));
 }
 function chequesPdf(id: string): Promise<Response> {
-  return postChequesPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/cheques-pdf`, { method: "POST" }), {
+  return scoped(() => postChequesPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/cheques-pdf`, { method: "POST" }), {
     params: Promise.resolve({ id }),
-  });
+  }));
 }
 function bankPanel(id: string): Promise<Response> {
-  return getBankFilePanel(new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`), {
+  return scoped(() => getBankFilePanel(new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`), {
     params: Promise.resolve({ id }),
-  });
+  }));
 }
 function bankGenerate(id: string, profileId: string): Promise<Response> {
-  return postBankFileGenerate(
+  return scoped(() => postBankFileGenerate(
     new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ paymentBankProfileId: profileId }),
     }),
     { params: Promise.resolve({ id }) },
-  );
+  ));
 }
 function bankRelease(id: string, fileId: string): Promise<Response> {
-  return postBankFileRelease(
+  return scoped(() => postBankFileRelease(
     new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file/${fileId}`, { method: "POST" }),
     { params: Promise.resolve({ id, fileId }) },
-  );
+  ));
 }
 
 /** Every org-scoped table a payroll write could touch. */
@@ -162,6 +172,7 @@ const WRITE_SURFACES = [
 ] as const;
 
 async function writeSnapshot(orgId: string): Promise<Record<string, number>> {
+  return withOrgContext(orgId, async () => {
   const out: Record<string, number> = {};
   for (const table of WRITE_SURFACES) {
     // file_versions and file_blobs carry no org_id — they hang off the org's
@@ -179,6 +190,7 @@ async function writeSnapshot(orgId: string): Promise<Record<string, number>> {
     out[table] = Number(r.rows[0]!.n);
   }
   return out;
+  });
 }
 
 test(
@@ -189,102 +201,110 @@ test(
     const orgId = org.orgId;
     const rootId = org.subsidiaryId;
     try {
-      const actors = await seedFlowActors(orgId);
+      const actors = await withBypass(() => seedFlowActors(orgId));
       const adminId = actors.adminId; // unrestricted caller
       const actorAId = actors.submitterId; // subsidiary-A-restricted caller
 
-      // Payroll on, and a second legal entity (US/USD beside the root CA/CAD).
-      await db.execute(sql`
-        update orgs set settings = jsonb_set(settings, '{features}',
-          coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ payroll: true })}::jsonb)
-         where id = ${orgId}`);
-      const subBId = randomUUID();
-      await db.execute(sql`
-        insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, is_elimination, is_active, custom)
-        values (${subBId}, ${orgId}, 'Entity B', 'USD', 'US', ${rootId}, false, true, '{}'::jsonb)`);
-
-      // One schedule per entity: A on the root, B on Entity B.
-      const scheduleA = randomUUID();
-      const scheduleB = randomUUID();
-      for (const [id, name, subId] of [[scheduleA, "A Biweekly", rootId], [scheduleB, "B Biweekly", subBId]] as const) {
+      // Fixture seeds — including the engine-assisted run/file setup — run
+      // under the test bypass. The route helpers below run each call inside
+      // the mocked caller's org boundary (production scopes via the
+      // request); verification reads use withOrgContext.
+      const seeded = await withBypass(async () => {
+        // Payroll on, and a second legal entity (US/USD beside the root CA/CAD).
         await db.execute(sql`
-          insert into pay_schedules (org_id, id, name, frequency, periods_per_year,
-                                     anchor_period_end, pay_date_offset_days, subsidiary_id)
-          values (${orgId}, ${id}, ${name}, 'biweekly', 26, '2026-08-14', 4, ${subId})`);
-      }
-
-      // One employee per entity, with A's employee payable through the route's
-      // own mutation path (profile on schedule A + an adjustable component).
-      const empA = randomUUID();
-      const empB = randomUUID();
-      await db.execute(sql`
-        insert into parties (org_id, id, kind, display_name, subsidiary_id)
-        values (${orgId}, ${empA}, 'person', 'Employee A', ${rootId}),
-               (${orgId}, ${empB}, 'person', 'Employee B', ${subBId})`);
-      await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province)
-        values (${orgId}, ${empA}, ${scheduleA}, 'ON')`);
-      const componentId = randomUUID();
-      await db.execute(sql`
-        insert into pay_components (org_id, id, code, name, kind, basis, sequence)
-        values (${orgId}, ${componentId}, 'COMMISSION', 'Commission', 'earning', 'fixed_amount', 90)`);
-
-      // Runs created through the engine: run A inside A's scope, run B outside it.
-      const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
-      const runA = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleA });
-      const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
-
-      // Wage PII on each run, so a pre-fix 200 would disclose real stub rows.
-      for (const [run, emp, province] of [[runA, empA, "ON"], [runB, empB, "ON"]] as const) {
+          update orgs set settings = jsonb_set(settings, '{features}',
+            coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ payroll: true })}::jsonb)
+           where id = ${orgId}`);
+        const subBId = randomUUID();
         await db.execute(sql`
-          insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
-                                 periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-          select ${orgId}, ${run.documentId}, ${emp}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
-                 '2500.00', '1900.00'
-            from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
-           where r.org_id = ${orgId} and r.document_id = ${run.documentId}`);
-      }
+          insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, is_elimination, is_active, custom)
+          values (${subBId}, ${orgId}, 'Entity B', 'USD', 'US', ${rootId}, false, true, '{}'::jsonb)`);
 
-      // An EFT profile for the org, and a bank-file artifact owned by run B,
-      // so the release route's ownership query passes and only the subsidiary
-      // gate can deny it. The artifact's bytes live in the File Cabinet, so
-      // the real storage rows are seeded too.
-      const profileId = randomUUID();
-      const formatId = randomUUID();
-      await db.execute(sql`
-        insert into payment_formats (org_id, id, code, name, rail, currency)
-        values (${orgId}, ${formatId}, 'CPA005', 'CPA-005', 'eft', 'CAD')`);
-      await db.execute(sql`
-        insert into payment_bank_profiles (org_id, id, name, bank_account_id, payment_format_id, currency)
-        values (${orgId}, ${profileId}, 'Root EFT', ${org.accounts.bank}, ${formatId}, 'CAD')`);
-      const folderId = randomUUID();
-      const fileIdB = randomUUID();
-      const versionIdB = randomUUID();
-      const artifactB = randomUUID();
-      await db.execute(sql`
-        insert into folders (org_id, id, name, is_system, system_kind, is_private, owner_id)
-        values (${orgId}, ${folderId}, 'Payroll bank files', true, 'payroll_bank_files', true, null)`);
-      await db.execute(sql`
-        insert into files (org_id, id, folder_id, name, extension, file_type, content_type,
-                           size_bytes, storage_kind, content_hash)
-        values (${orgId}, ${fileIdB}, ${folderId}, 'B-0001.txt', 'txt', 'text', 'text/plain',
-                9, 'db', 'deadbeef')`);
-      await db.execute(sql`
-        insert into file_versions (id, file_id, version_number, size_bytes, content_type,
-                                   storage_kind, content_hash)
-        values (${versionIdB}, ${fileIdB}, 1, 9, 'text/plain', 'db', 'deadbeef')`);
-      await db.execute(sql`
-        update files set current_version_id = ${versionIdB} where id = ${fileIdB} and org_id = ${orgId}`);
-      await db.execute(sql`
-        insert into file_blobs (version_id, bytes) values (${versionIdB}, '0102030405'::bytea)`);
-      await db.execute(sql`
-        insert into pay_run_bank_files (org_id, pay_run_document_id, payment_bank_profile_id, format,
-                                        sequence_number, file_number, sequence_value, filename, content_type,
-                                        content_hash, size_bytes, file_id, file_version_id, entry_count,
-                                        control_total, currency)
-        values (${orgId}, ${runB.documentId}, ${profileId}, 'cpa005', 1, 'PBF-0001', 1,
-                'B-0001.txt', 'text/plain', 'deadbeef', 9, ${fileIdB}, ${versionIdB},
-                1, 100.00, 'CAD')`);
+        // One schedule per entity: A on the root, B on Entity B.
+        const scheduleA = randomUUID();
+        const scheduleB = randomUUID();
+        for (const [id, name, subId] of [[scheduleA, "A Biweekly", rootId], [scheduleB, "B Biweekly", subBId]] as const) {
+          await db.execute(sql`
+            insert into pay_schedules (org_id, id, name, frequency, periods_per_year,
+                                       anchor_period_end, pay_date_offset_days, subsidiary_id)
+            values (${orgId}, ${id}, ${name}, 'biweekly', 26, '2026-08-14', 4, ${subId})`);
+        }
+
+        // One employee per entity, with A's employee payable through the route's
+        // own mutation path (profile on schedule A + an adjustable component).
+        const empA = randomUUID();
+        const empB = randomUUID();
+        await db.execute(sql`
+          insert into parties (org_id, id, kind, display_name, subsidiary_id)
+          values (${orgId}, ${empA}, 'person', 'Employee A', ${rootId}),
+                 (${orgId}, ${empB}, 'person', 'Employee B', ${subBId})`);
+        await db.execute(sql`
+          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province)
+          values (${orgId}, ${empA}, ${scheduleA}, 'ON')`);
+        const componentId = randomUUID();
+        await db.execute(sql`
+          insert into pay_components (org_id, id, code, name, kind, basis, sequence)
+          values (${orgId}, ${componentId}, 'COMMISSION', 'Commission', 'earning', 'fixed_amount', 90)`);
+
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
+        const runA = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleA });
+        const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
+
+        // Wage PII on each run, so a pre-fix 200 would disclose real stub rows.
+        for (const [run, emp, province] of [[runA, empA, "ON"], [runB, empB, "ON"]] as const) {
+          await db.execute(sql`
+            insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+                                   periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
+            select ${orgId}, ${run.documentId}, ${emp}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
+                   '2500.00', '1900.00'
+              from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
+             where r.org_id = ${orgId} and r.document_id = ${run.documentId}`);
+        }
+
+        // An EFT profile for the org, and a bank-file artifact owned by run B,
+        // so the release route's ownership query passes and only the subsidiary
+        // gate can deny it. The artifact's bytes live in the File Cabinet, so
+        // the real storage rows are seeded too.
+        const profileId = randomUUID();
+        const formatId = randomUUID();
+        await db.execute(sql`
+          insert into payment_formats (org_id, id, code, name, rail, currency)
+          values (${orgId}, ${formatId}, 'CPA005', 'CPA-005', 'eft', 'CAD')`);
+        await db.execute(sql`
+          insert into payment_bank_profiles (org_id, id, name, bank_account_id, payment_format_id, currency)
+          values (${orgId}, ${profileId}, 'Root EFT', ${org.accounts.bank}, ${formatId}, 'CAD')`);
+        const folderId = randomUUID();
+        const fileIdB = randomUUID();
+        const versionIdB = randomUUID();
+        const artifactB = randomUUID();
+        await db.execute(sql`
+          insert into folders (org_id, id, name, is_system, system_kind, is_private, owner_id)
+          values (${orgId}, ${folderId}, 'Payroll bank files', true, 'payroll_bank_files', true, null)`);
+        await db.execute(sql`
+          insert into files (org_id, id, folder_id, name, extension, file_type, content_type,
+                             size_bytes, storage_kind, content_hash)
+          values (${orgId}, ${fileIdB}, ${folderId}, 'B-0001.txt', 'txt', 'text', 'text/plain',
+                  9, 'db', 'deadbeef')`);
+        await db.execute(sql`
+          insert into file_versions (id, file_id, version_number, size_bytes, content_type,
+                                     storage_kind, content_hash)
+          values (${versionIdB}, ${fileIdB}, 1, 9, 'text/plain', 'db', 'deadbeef')`);
+        await db.execute(sql`
+          update files set current_version_id = ${versionIdB} where id = ${fileIdB} and org_id = ${orgId}`);
+        await db.execute(sql`
+          insert into file_blobs (version_id, bytes) values (${versionIdB}, '0102030405'::bytea)`);
+        await db.execute(sql`
+          insert into pay_run_bank_files (org_id, pay_run_document_id, payment_bank_profile_id, format,
+                                          sequence_number, file_number, sequence_value, filename, content_type,
+                                          content_hash, size_bytes, file_id, file_version_id, entry_count,
+                                          control_total, currency)
+          values (${orgId}, ${runB.documentId}, ${profileId}, 'cpa005', 1, 'PBF-0001', 1,
+                  'B-0001.txt', 'text/plain', 'deadbeef', 9, ${fileIdB}, ${versionIdB},
+                  1, 100.00, 'CAD')`);
+        return { scheduleA, scheduleB, empA, empB, componentId, runA, runB, profileId, artifactB };
+      });
+      const { scheduleA, scheduleB, empA, empB, componentId, runA, runB, profileId, artifactB } = seeded;
 
       const asA = (allowed: Set<string> | null, actorId: string) => {
         routeState.authz = {
@@ -332,10 +352,10 @@ test(
           amount: "100.00",
         });
         assert.equal(adjusted.status, 200, await adjusted.text());
-        const adjCount = (await db.execute<{ n: string }>(sql`
+        const adjCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from pay_run_adjustments
            where org_id = ${orgId} and pay_run_document_id = ${runA.documentId}
-             and adjustment_type = 'line'`)).rows[0]!.n;
+             and adjustment_type = 'line'`))).rows[0]!.n;
         assert.equal(adjCount, "1");
 
         // The PDF and bank-file surfaces reach their REAL logic (their own
@@ -448,9 +468,9 @@ test(
 
         // And B's stub — the wage PII the actor tried to reach — still
         // belongs to exactly the run it always did, untouched.
-        const stubCount = (await db.execute<{ n: string }>(sql`
+        const stubCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from pay_stubs
-           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`)).rows[0]!.n;
+           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`))).rows[0]!.n;
         assert.equal(stubCount, "1");
       }
 

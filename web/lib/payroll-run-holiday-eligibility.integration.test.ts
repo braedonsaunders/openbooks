@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
@@ -45,42 +45,50 @@ function runGate(fx: { orgId: string; actorId: string }): Authz {
 }
 
 async function christmasRun(fx: Awaited<ReturnType<typeof seedAdoption>>) {
-  // Mirror a pack-installed tenant: the first install-pack enables statutory
-  // holiday pay, without which the engine skips the holiday path entirely
-  // and no attestation is ever demanded (a vacuous pass).
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'true')
-     where id = ${fx.orgId}`);
-  await db.execute(sql`
-    insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
-      is_billable, billing_status, costing_basis, created_by, updated_by)
-    values (${fx.orgId}, ${fx.employeeId}, '2025-12-22', 8, 'approved', false,
-      'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
-  // Explicit period: Christmas Day 2025 lands inside it, so Ontario's
-  // last-and-first-shift rule demands the absence assertion.
-  return createPayRun({
-    orgId: fx.orgId,
-    actorId: fx.actorId,
-    payScheduleId: fx.scheduleId,
-    periodStart: "2025-12-21",
-    periodEnd: "2026-01-03",
+  return withBypassContext(async () => {
+    // Mirror a pack-installed tenant: the first install-pack enables statutory
+    // holiday pay, without which the engine skips the holiday path entirely
+    // and no attestation is ever demanded (a vacuous pass).
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'true')
+       where id = ${fx.orgId}`);
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
+        is_billable, billing_status, costing_basis, created_by, updated_by)
+      values (${fx.orgId}, ${fx.employeeId}, '2025-12-22', 8, 'approved', false,
+        'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+    // Explicit period: Christmas Day 2025 lands inside it, so Ontario's
+    // last-and-first-shift rule demands the absence assertion.
+    return createPayRun({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      payScheduleId: fx.scheduleId,
+      periodStart: "2025-12-21",
+      periodEnd: "2026-01-03",
+    });
   });
 }
 
 async function calculate(documentId: string, body: Record<string, unknown>) {
-  return POST(
+  // The route reads the run through ambient org scope (production supplies
+  // it per request). Scope each call to the mocked gate's org: unscoped the
+  // run is invisible and every calculate 404s before reaching the holiday
+  // engine under test.
+  const gate = state.gate;
+  assert.ok(gate, "calculate requires an authenticated gate");
+  return withOrgContext(gate.user.orgId, () => POST(
     new Request("https://openbooks.test/api/payroll/runs/fixture", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: documentId }) },
-  );
+  ));
 }
 
 test("calculate without attestations reports the statutory-holiday demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
     const { documentId } = await christmasRun(fx);
@@ -95,7 +103,7 @@ test("calculate without attestations reports the statutory-holiday demand", { sk
 });
 
 test("calculate accepts holidayEligibility and clears the demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
     const { documentId } = await christmasRun(fx);
@@ -111,7 +119,7 @@ test("calculate accepts holidayEligibility and clears the demand", { skip: !proc
 });
 
 test("calculate refuses malformed holidayEligibility", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
     const { documentId } = await christmasRun(fx);
