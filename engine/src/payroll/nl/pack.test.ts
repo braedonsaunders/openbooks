@@ -27,7 +27,7 @@ test("the NL pack exists and is a non-installable EUR calendar-year skeleton", (
     basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year",
   });
   assert.equal(NL_PAYROLL_PACK.statutoryEngineLabel, "Loonbelastingtabellen");
-  assert.equal(NL_PAYROLL_PACK.remittanceVendorSettingsKey, "belastingdienstRemittancePartyId");
+  assert.equal(NL_PAYROLL_PACK.remittanceVendorSettingsKey, null);
   // Retro pay is taxed as bijzondere beloning, never annualized as period
   // income — the pack's nonPeriodic path, not a new engine.
   assert.equal(NL_PAYROLL_PACK.retroactivePayTreatment, "non_periodic");
