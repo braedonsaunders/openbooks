@@ -1111,6 +1111,18 @@ async function ensureRuntimeDatabaseRole(
   // grants. Never blanket-grant the runtime role: the public schema also holds
   // tightly controlled SECURITY DEFINER maintenance functions.
   await pool.query(`revoke execute on all functions in schema public from ${role}`);
+  // The governed-query catalog refresh is the exception the blanket revoke
+  // must not keep. The baseline revokes its PUBLIC grant (it rebuilds tenant
+  // projections), so after this revoke the function sits at an empty ACL —
+  // and PostgreSQL then denies even the owning role both EXECUTE and CREATE
+  // OR REPLACE. The constrained owner runs forward migrations (every one
+  // ends in SELECT refresh) and the migration-replay canary, so it must hold
+  // EXECUTE explicitly. This grants no new power: the role owns the function
+  // and can already drop and recreate it; it merely keeps an owned
+  // maintenance function usable by its owner.
+  await pool.query(
+    `grant execute on function public.openbooks_refresh_query_catalog() to ${role}`,
+  );
   // The application establishes tenant identity with connection-local GUCs.
   // This privilege belongs to the runtime login, never to openbooks_read; the
   // governed SQL console switches to openbooks_read before user SQL executes.
