@@ -22,7 +22,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { loadDashboardMetrics, pruneDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
@@ -47,20 +47,21 @@ async function seedFinding(orgId: string, row: {
   agent?: string; status?: string; summary?: unknown; lastDetected?: string;
 }): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into ai_work_items
+  // File-local seed helper: one body wrap covers every caller.
+  await withBypassContext(() => db.execute(sql`insert into ai_work_items
     (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, status,
      confidence, materiality, subject_type, subject_id, summary, first_detected_at, last_detected_at)
     values (${id}, ${orgId}, ${row.agent ?? 'accounting'}, 'unmatched_bank_activity',
       'test', ${`fp-${id}`}, 'warning', ${row.status ?? 'open'},
       '1', '1000', null, null, ${JSON.stringify(row.summary ?? {})}::jsonb,
       ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz,
-      ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz)`);
+      ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz)`));
   return id;
 }
 
 test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
   try {
     const fresh = new Date().toISOString();
     const stale = new Date(Date.now() - 7 * 86_400_000).toISOString();
@@ -77,10 +78,10 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     // Other org: invisible everywhere.
     await seedFinding(other.orgId, { lastDetected: fresh });
 
-    const reader = await createScratchUser(org.orgId, "Watcher", "b06_tile_watcher");
+    const reader = await withBypassContext(() => createScratchUser(org.orgId, "Watcher", "b06_tile_watcher"));
     const authz = authzFor(org.orgId, reader as unknown as string, ["assistant.use", "gl.read", "dashboard.read"]);
     assert.equal(canSeeWidget(authz, "kpi-agent-findings"), true);
-    const metrics = await loadDashboardMetrics(authz);
+    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authz));
     assert.equal(metrics.agentFindingsOpen, 2);
     assert.equal(metrics.agentFindingsProposals, 1);
     assert.equal(metrics.agentFindingsLastRun, new Date(fresh).toISOString());
@@ -92,7 +93,7 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     // No assistant.use: the tile hides and the counts stay zero.
     const blind = authzFor(org.orgId, reader as unknown as string, ["gl.read", "dashboard.read"]);
     assert.equal(canSeeWidget(blind, "kpi-agent-findings"), false);
-    const blindMetrics = await loadDashboardMetrics(blind);
+    const blindMetrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(blind));
     assert.equal(blindMetrics.agentFindingsOpen, 0);
     assert.equal(blindMetrics.agentFindingsProposals, 0);
     assert.equal(blindMetrics.agentFindingsLastRun, null);

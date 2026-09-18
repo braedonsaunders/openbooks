@@ -20,6 +20,7 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { seedAdoption } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { POST } = await import("../app/api/payroll/retro/route");
 
 /**
@@ -49,15 +50,18 @@ async function propose(body: Record<string, unknown>) {
 }
 
 test("propose accepts an explicitly empty exclusion list", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
-    const res = await propose({
+    // The route reads schedules/runs through RLS; the mocked gate only
+    // supplies identity, so run the call under the org scope the real
+    // middleware would set.
+    const res = await withOrgContext(fx.orgId, () => propose({
       action: "propose",
       payScheduleId: fx.scheduleId,
       payDate: "2026-07-21",
       excludeSourcePayRunDocumentIds: [],
-    });
+    }));
     assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 300));
     const body = await res.json() as { payableTotal: string };
     assert.equal(body.payableTotal, "0.0000");
@@ -65,7 +69,7 @@ test("propose accepts an explicitly empty exclusion list", { skip: !process.env.
 });
 
 test("propose still refuses malformed lists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
     for (const body of [
@@ -80,15 +84,15 @@ test("propose still refuses malformed lists", { skip: !process.env.OPENBOOKS_DB_
 });
 
 test("propose accepts an explicitly empty employee list", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const fx = await seedAdoption();
+  const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
-    const res = await propose({
+    const res = await withOrgContext(fx.orgId, () => propose({
       action: "propose",
       payScheduleId: fx.scheduleId,
       payDate: "2026-07-21",
       employeePartyIds: [],
-    });
+    }));
     assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 300));
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });
