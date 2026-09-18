@@ -46,6 +46,7 @@ const w2 = (employeePartyId: string, overrides: Partial<W2Slip> = {}): W2Slip =>
   box1Wages: "48000.0000", box2FederalIncomeTax: "6000.0000",
   box3SsWages: "48000.0000", box4SsTax: "2976.0000",
   box5MedicareWages: "48000.0000", box6MedicareTax: "696.0000",
+  stateLines: [],
   ...overrides,
 });
 

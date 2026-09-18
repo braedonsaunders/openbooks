@@ -945,6 +945,55 @@ export interface W2Slip {
   box4SsTax: string;
   box5MedicareWages: string;
   box6MedicareTax: string;
+  /**
+   * Boxes 15–20, one entry per work state that withheld state or local income
+   * tax on committed stubs — the paper W-2's own shape is a repeating state
+   * group on the one copy, so the federal boxes above stay whole while each
+   * state below carries its own wages and withholding. A state with stubs but
+   * no state or local withholding gets NO entry (never zeros pretending to be
+   * filed); a mid-year mover gets one entry per state, never a smashed total.
+   */
+  stateLines: W2StateLine[];
+}
+
+/** One locality's boxes 18–20 within a state's W-2 group. */
+export interface W2LocalLine {
+  /**
+   * Box 20 — the locality name in the subledger's own vocabulary: the
+   * withheld stub line's description (e.g. "Philadelphia wage tax"), which
+   * names the jurisdiction's tax rather than inventing a short code for it.
+   */
+  locality: string;
+  /**
+   * Box 18 — the taxable earnings of the stubs in this state that carry this
+   * locality's tax line, i.e. the wages the locality's withholding was
+   * assessed on.
+   */
+  box18LocalWages: string;
+  /** Box 19 — the locality's income tax withheld on those stubs. */
+  box19LocalIncomeTax: string;
+}
+
+/** One work state's boxes 15–17, plus its localities' boxes 18–20. */
+export interface W2StateLine {
+  /** Box 15 — the two-letter work-state abbreviation from the stubs. */
+  state: string;
+  /**
+   * Box 15 — the employer's state-assigned ID number: the org's SUI filing
+   * account number for this state, null where no SUI account is configured
+   * (the slip then names the state with no ID rather than inventing one).
+   */
+  employerStateId: string | null;
+  /**
+   * Box 16 — state wages, tips, etc.: the same taxable-earnings sum as box 1,
+   * restricted to this state's stubs (the subledger carries no separate state
+   * wage base, so this is the attributable figure, stated as such).
+   */
+  box16StateWages: string;
+  /** Box 17 — the state's income tax withheld on this state's stubs. */
+  box17StateIncomeTax: string;
+  /** Boxes 18–20, one entry per locality that withheld on this state's stubs. */
+  localLines: W2LocalLine[];
 }
 
 /** FICA rates a W-2 box 4/6 split is computed from. */
@@ -1019,13 +1068,62 @@ export function openingYtdIntoW2Slip(
   };
 }
 
+/**
+ * One employee's boxes 15–20 from their per-state stub groups — pure, so the
+ * multi-state assembly is verifiable without a database.
+ *
+ * A state earns an entry when its stubs withheld state income tax OR a
+ * locality did; a state with stubs but no state or local withholding gets NO
+ * entry (never zeros pretending to be filed). Entries keep their own wages
+ * and withholding — two states are never totalled into one row.
+ */
+export function buildW2StateLines(
+  groups: readonly { province: string; wages: string; stateTax: string }[],
+  localsOf: (province: string) => W2LocalLine[],
+  stateIdOf: (province: string) => string | null,
+): W2StateLine[] {
+  return groups
+    // A group with no work-state code names no revenue department: its wages
+    // stay in the federal boxes and it earns no state entry.
+    .filter((group) => group.province !== "")
+    .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group.province).length > 0)
+    .map((group) => ({
+      state: group.province,
+      employerStateId: stateIdOf(group.province),
+      box16StateWages: group.wages,
+      box17StateIncomeTax: group.stateTax,
+      localLines: localsOf(group.province),
+    }));
+}
+
+/**
+ * The employer's state-assigned ID numbers for W-2 box 15: the org's active
+ * SUI filing accounts (`us_state_sui`, which requires a region) keyed by
+ * state code. A state with no SUI account on file has no ID to print — the
+ * slip names the state with no ID rather than inventing one.
+ */
+async function usEmployerStateIds(orgId: string): Promise<Map<string, string>> {
+  const rows = (await db.execute<{ state_code: string | null; account_number: string }>(sql`
+    select state_code, account_number
+      from payroll_filing_accounts
+     where org_id = ${orgId} and country = 'US' and program_type = 'us_state_sui'
+       and is_active and state_code is not null
+  `));
+  return new Map(rows.rows.map((row) => [row.state_code!, row.account_number]));
+}
+
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  // Per (employee, EIN account, work state): the federal boxes aggregate up to
+  // the slip, while boxes 15–17 stay per state — the paper W-2's own shape is
+  // a repeating state group on the one copy, so grouping here is what keeps a
+  // mid-year mover's two states from being smashed into one row.
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
-           array_agg(distinct s.province order by s.province) as states,
+           s.province as province,
            s.filing_account_id as filing_account_id,
+           min(s.pay_date) as first_pay_date,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
@@ -1040,39 +1138,129 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
-                  and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
+                  and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key = 'state_income_tax')) as state_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-      group by s.employee_party_id, p.display_name, s.filing_account_id
+      group by s.employee_party_id, p.display_name, s.filing_account_id, s.province
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
-     order by p.display_name, min(s.pay_date)
+     order by p.display_name, min(s.pay_date), s.province
    `));
+  // Boxes 18–20, one row per (employee, EIN account, work state, locality):
+  // the locality is the withheld line's own description and the wages are the
+  // taxable earnings of the stubs in this state carrying that locality's line.
+  const localRows = (await db.execute<Record<string, unknown>>(sql`
+    with stub_wages as (
+      select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province,
+             (select coalesce(sum(l.amount), 0) from pay_stub_lines l
+               join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+              where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                and coalesce(pc.taxable, true)) as wages
+        from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+       where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+    )
+    select w.employee_party_id, w.filing_account_id, w.province, l.description,
+           sum(l.amount) as local_tax,
+           sum(case when coalesce(line_tax.line_tax, 0) <> 0 then w.wages else 0 end) as local_wages
+      from stub_wages w
+      join pay_stub_lines l on l.org_id = ${orgId} and l.stub_id = w.stub_id and l.kind = 'deduction'
+      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+       and pc.system_key = 'local_income_tax'
+      join lateral (
+        select coalesce(sum(l2.amount), 0) as line_tax
+          from pay_stub_lines l2
+         where l2.org_id = ${orgId} and l2.stub_id = w.stub_id and l2.kind = 'deduction'
+           and l2.description = l.description
+      ) line_tax on true
+     group by w.employee_party_id, w.filing_account_id, w.province, l.description
+     order by l.description
+   `));
+  const stateIds = await usEmployerStateIds(orgId);
+  const localByGroup = new Map<string, W2LocalLine[]>();
+  for (const row of localRows.rows) {
+    const tax = num(row.local_tax);
+    if (cmp(tax, "0") === 0) continue;
+    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}:${String(row.province ?? "")}`;
+    const list = localByGroup.get(key) ?? [];
+    list.push({
+      locality: String(row.description),
+      box18LocalWages: num(row.local_wages),
+      box19LocalIncomeTax: tax,
+    });
+    localByGroup.set(key, list);
+  }
   // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
   // are explicitly stored as `pensionable_ytd` for US openings, and the
   // combined FICA carry-in splits into boxes 4/6 under the year's published
   // rates — resolved only when some opening actually carries FICA
   // withholding, so years and orgs without one see zero behavior change.
+  // State lines come from committed stubs only: an opening balance carries no
+  // state attribution, so pre-adoption state wages and withholding stay in the
+  // federal boxes (the slip says so).
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
   const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0)
     ? usFicaSplitRates(taxYear)
     : null;
-  const stubSlips = rows.rows.map((row) => {
-    const states = ((row.states as string[] | null) ?? []).filter(Boolean);
-    return {
+  type StateGroup = {
+    province: string; wages: string; fit: string; ssWages: string; ssTax: string;
+    medicareWages: string; medicareTax: string; stateTax: string;
+  };
+  const groupsBySlip = new Map<string, {
+    employeePartyId: string; employeeName: string; filingAccountId: string | null;
+    groups: StateGroup[];
+  }>();
+  for (const row of rows.rows) {
+    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}`;
+    const slip = groupsBySlip.get(key) ?? {
       employeePartyId: String(row.employee_party_id),
       employeeName: String(row.display_name),
-      states,
-      state: states.join(" / "),
       filingAccountId: (row.filing_account_id as string | null) ?? null,
-      box1Wages: num(row.wages),
-      box2FederalIncomeTax: num(row.fit),
-      box3SsWages: num(row.ss_wages),
-      box4SsTax: num(row.ss_tax),
-      box5MedicareWages: num(row.medicare_wages),
-      box6MedicareTax: num(row.medicare_tax),
+      groups: [],
+    };
+    slip.groups.push({
+      province: String(row.province ?? ""),
+      wages: num(row.wages),
+      fit: num(row.fit),
+      ssWages: num(row.ss_wages),
+      ssTax: num(row.ss_tax),
+      medicareWages: num(row.medicare_wages),
+      medicareTax: num(row.medicare_tax),
+      stateTax: num(row.state_tax),
+    });
+    groupsBySlip.set(key, slip);
+  }
+  const total = (groups: StateGroup[], pick: (group: StateGroup) => string) =>
+    groups.reduce((acc, group) => add(acc, pick(group)), "0");
+  const toStateLines = (employeePartyId: string, filingAccountId: string | null, groups: StateGroup[]): W2StateLine[] =>
+    buildW2StateLines(
+      groups,
+      (province) => localByGroup.get(`${employeePartyId}:${filingAccountId ?? ""}:${province}`) ?? [],
+      (province) => stateIds.get(province) ?? null,
+    );
+  const stubSlips: W2Slip[] = [...groupsBySlip.values()].map((slip) => {
+    // Sorted, like the previous `array_agg(distinct s.province order by
+    // s.province)` — the display string must not move for multi-state slips.
+    const provinces = [...new Set(slip.groups.map((group) => group.province))].filter(Boolean).sort();
+    return {
+      employeePartyId: slip.employeePartyId,
+      employeeName: slip.employeeName,
+      states: provinces,
+      state: provinces.join(" / "),
+      filingAccountId: slip.filingAccountId,
+      box1Wages: total(slip.groups, (group) => group.wages),
+      box2FederalIncomeTax: total(slip.groups, (group) => group.fit),
+      box3SsWages: total(slip.groups, (group) => group.ssWages),
+      box4SsTax: total(slip.groups, (group) => group.ssTax),
+      box5MedicareWages: total(slip.groups, (group) => group.medicareWages),
+      box6MedicareTax: total(slip.groups, (group) => group.medicareTax),
+      stateLines: toStateLines(slip.employeePartyId, slip.filingAccountId, slip.groups),
     };
   });
   const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
@@ -1091,6 +1279,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box4SsTax: "0",
       box5MedicareWages: "0",
       box6MedicareTax: "0",
+      stateLines: [],
     };
   });
   return carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));

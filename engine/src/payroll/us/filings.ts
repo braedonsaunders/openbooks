@@ -1,4 +1,4 @@
-import { add } from "../../money.ts";
+import { add, cmp } from "../../money.ts";
 import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import { form941Worksheet, w2Slips } from "../../payroll-yearend.ts";
@@ -9,6 +9,7 @@ import type {
   PayrollFilingRowScope,
   PayrollFilingSlipData,
   PayrollPackFilings,
+  PayrollSlipBox,
 } from "../../payroll-filing-registry.ts";
 
 /**
@@ -22,10 +23,10 @@ import type {
 
 /**
  * W-2 lines this product does NOT produce, named rather than printed as zeros
- * an employer might file (the RLZ-1.S `RLZ1S_GAPS` pattern): state wages and
- * state income tax withheld (boxes 15–20) for every work state. The stub
- * subledger withholds them — `state_income_tax` lines on committed stubs —
- * but no per-state slip line reports them back.
+ * an employer might file (the RLZ-1.S `RLZ1S_GAPS` pattern). Boxes 15–20
+ * themselves ARE reported from the committed-stub subledger (see `w2Slip`);
+ * what remains is the employer's state-assigned ID number inside box 15,
+ * which exists only where the state has a SUI filing account on file.
  */
 /**
  * The Form 941 row grammar, as the inverse of form941Population's
@@ -57,8 +58,8 @@ export function parseW2RowId(rowId: string): PayrollFilingRowScope | null {
 }
 
 export const W2_GAPS = [
-  "state wages and state income tax withheld (W-2 boxes 15-20) are not reported per state of employment — " +
-    "state tax is withheld on committed stubs but has no slip line; file state wages from payroll records",
+  "the employer's state ID number (W-2 box 15) is the SUI account number where the work state " +
+    "has one on file — a state with no SUI account names the state with no ID; enter the ID before filing",
 ];
 
 async function form941Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
@@ -150,6 +151,52 @@ async function form941Slip(orgId: string, taxYear: number, rowId: string): Promi
   };
 }
 
+/**
+ * Boxes 15–20 for one work state, in the General Instructions' vocabulary
+ * (two-letter state abbreviation and state-assigned ID in 15; state wages in
+ * 16; state income tax in 17; local wages, local tax and locality name in
+ * 18–20). A box whose subledger amount is zero is OMITTED, never printed as
+ * a zero the employer would file as a real amount; box 15 names the state
+ * even where no state ID is on file (see W2_GAPS). Exported for the pure
+ * box-suppression tests — the slip itself needs a database, but the
+ * "never print a zero" rule must not.
+ */
+export function w2StateBoxes(
+  state: string,
+  employerStateId: string | null,
+  stateWages: string,
+  stateIncomeTax: string,
+  localLines: readonly { locality: string; box18LocalWages: string; box19LocalIncomeTax: string }[],
+): PayrollSlipBox[] {
+  const boxes: PayrollSlipBox[] = [
+    {
+      code: "15",
+      label: `State / Employer's state ID number — ${state}`,
+      value: employerStateId ?? "Unassigned",
+    },
+  ];
+  if (cmp(stateWages, "0") !== 0) {
+    boxes.push({ code: "16", label: `State wages, tips, etc. — ${state}`, value: stateWages });
+  }
+  if (cmp(stateIncomeTax, "0") !== 0) {
+    boxes.push({ code: "17", label: `State income tax — ${state}`, value: stateIncomeTax });
+  }
+  for (const local of localLines) {
+    if (cmp(local.box18LocalWages, "0") !== 0) {
+      boxes.push({
+        code: "18", label: `Local wages, tips, etc. — ${local.locality}`, value: local.box18LocalWages,
+      });
+    }
+    if (cmp(local.box19LocalIncomeTax, "0") !== 0) {
+      boxes.push({
+        code: "19", label: `Local income tax — ${local.locality}`, value: local.box19LocalIncomeTax,
+      });
+    }
+    boxes.push({ code: "20", label: "Locality name", value: local.locality });
+  }
+  return boxes;
+}
+
 /** One employee's W-2, box for box — the SSA/IRS printed box titles. */
 async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
   const slips = await w2Slips(orgId, taxYear);
@@ -175,9 +222,16 @@ async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
       { code: "4", label: "Social security tax withheld", value: slip.box4SsTax },
       { code: "5", label: "Medicare wages and tips", value: slip.box5MedicareWages },
       { code: "6", label: "Medicare tax withheld", value: slip.box6MedicareTax },
+      ...slip.stateLines.flatMap((line) =>
+        w2StateBoxes(
+          line.state, line.employerStateId,
+          line.box16StateWages, line.box17StateIncomeTax, line.localLines,
+        )),
     ],
     notes: [
-      "A W-2 carries one federal wage set (boxes 1-6); state wages and state withholding are not reported per state — see the declared W-2 gaps.",
+      "A W-2 carries one federal wage set (boxes 1-6); each work state that withheld repeats its own boxes 15-20 group on this copy, so a mid-year mover's states are never totalled into one row.",
+      "State wages (box 16) are the taxable earnings of that state's committed stubs — the subledger carries no separate state wage base.",
+      "State and local lines reflect committed stubs in this system; pre-adoption state amounts are not attributed by state and stay in the federal boxes.",
     ],
   };
 }
