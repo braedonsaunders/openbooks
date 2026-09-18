@@ -1,5 +1,6 @@
 'use client'
 
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
@@ -26,6 +27,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
+import { metricTilePack, packsEqual } from './_metric-tile-density'
 import type { DashboardMetrics } from './_metrics'
 
 export function WidgetCard({
@@ -213,6 +215,24 @@ const METRIC_TONES: Record<MetricTone, { icon: string; accent: string; wash: str
   slate: { icon: 'bg-slate-500/10 text-slate-700 dark:bg-slate-400/10 dark:text-slate-300', accent: 'from-slate-500 to-slate-300', wash: 'from-slate-500/[0.06]', hover: 'hover:border-slate-300 dark:hover:border-slate-600', dot: 'bg-slate-400' },
 }
 
+function useMetricTilePack() {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [pack, setPack] = useState(() => metricTilePack(0, 0))
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const read = () => {
+      const next = metricTilePack(el.clientWidth, el.clientHeight)
+      setPack((prev) => (packsEqual(prev, next) ? prev : next))
+    }
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return { ref, pack }
+}
+
 /**
  * KPI card. The tone lives INSIDE the rounded shape: a soft corner wash
  * behind the number, a tinted icon, and a short gradient accent stroke under
@@ -235,14 +255,22 @@ function MetricTile({
   tone: MetricTone
 }) {
   const colors = METRIC_TONES[tone]
+  const { ref, pack } = useMetricTilePack()
   const inner = (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl">
+    <div
+      ref={ref}
+      className="relative flex h-full min-h-[7rem] flex-col overflow-hidden rounded-2xl"
+      style={{ padding: `${pack.padTop}px ${pack.padX}px ${pack.padBottom}px` }}
+    >
       <span
         aria-hidden
         className={`pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent ${colors.wash}`}
       />
-      <div className="relative flex items-center gap-2.5 px-4 pt-4">
-        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}>
+      <div className="relative flex items-center gap-2.5">
+        <span
+          className={`inline-flex shrink-0 items-center justify-center rounded-xl ${colors.icon}`}
+          style={{ width: pack.icon, height: pack.icon }}
+        >
           {icon}
         </span>
         <span className="min-w-0 truncate text-[12.5px] font-medium tracking-tight text-slate-600 dark:text-slate-300">
@@ -254,14 +282,26 @@ function MetricTile({
           </span>
         ) : null}
       </div>
-      <div className="relative mt-auto min-w-0 px-4 pb-4 pt-3">
-        <div className="truncate text-[26px] leading-none font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white">
+      <div className="min-h-0 flex-1" aria-hidden />
+      <div className="relative min-w-0">
+        <div
+          className="truncate leading-none font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white"
+          style={{ fontSize: pack.figure }}
+        >
           {value}
         </div>
-        <div className="mt-2.5 flex items-center gap-2">
-          <span aria-hidden className={`h-[3px] w-8 rounded-full bg-gradient-to-r ${colors.accent}`} />
+        <div className="flex items-center gap-2" style={{ marginTop: pack.hintGap }}>
+          {pack.narrow ? null : (
+            <span aria-hidden className={`h-[3px] w-8 shrink-0 rounded-full bg-gradient-to-r ${colors.accent}`} />
+          )}
           {hint ? (
-            <span className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">{hint}</span>
+            <span
+              className={`min-w-0 text-[11px] font-medium text-slate-400 dark:text-slate-500 ${
+                pack.hintLines > 1 ? 'line-clamp-2 leading-snug' : 'truncate leading-none'
+              }`}
+            >
+              {hint}
+            </span>
           ) : null}
         </div>
       </div>
