@@ -47,8 +47,11 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   };
 }
 
-test("FR skeleton pack exists and is not installable", () => {
+test("FR pack computes the full 2026 payslip; installable waits for slot labels", () => {
   assert.equal(FR_PAYROLL_PACK.country, "FR");
+  // PAS + URSSAF + AGIRC-ARRCO prove out in the parity harnesses, but the
+  // messages-catalog gate fires on packAccounts.FR.slots.* until the labels
+  // shard lands them — so installable stays false rather than shipping red.
   assert.equal(FR_PAYROLL_PACK.installable, false);
   assert.equal(FR_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.deepEqual(FR_PAYROLL_PACK.taxYear, {
@@ -73,16 +76,21 @@ test("FR statutory slots are named, assessed, and routable", () => {
   );
   // PAS moves with pre-tax deductions; everything else is rate × salary.
   assert.equal(bySystemKey.get("pas|deduction")?.assessedOn, "taxable_income");
-  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "atmp|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution"]) {
+  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "ceg|deduction", "cet|deduction", "atmp|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution", "arrco|employer_contribution", "ceg|employer_contribution", "cet|employer_contribution"]) {
     assert.equal(bySystemKey.get(key)?.assessedOn, "earnings", key);
   }
+  assert.equal(bySystemKey.get("ceg|deduction")?.remittance, "external");
+  assert.equal(bySystemKey.get("cet|employer_contribution")?.remittance, "external");
   // AGIRC-ARRCO goes to the employer's own caisse, never the statutory vendor.
   assert.equal(bySystemKey.get("arrco|deduction")?.remittance, "external");
   assert.equal(bySystemKey.get("pas|deduction")?.remittance, "tax_authority");
 });
 
-test("FR regions are national: one known region, none supported until PAS computes", () => {
+test("FR regions are national: one known region, none supported (F-fr-001)", () => {
   assert.deepEqual([...FR_PAYROLL_PACK.regions.known], ["FR"]);
+  // supported stays [] even though the pack is installable: DOM domiciles
+  // use untranscribed grilles II/III, so no region's income tax computes
+  // for every domicile it legitimately carries. Never regress this.
   assert.deepEqual([...FR_PAYROLL_PACK.regions.supported], []);
 });
 
@@ -116,14 +124,15 @@ test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
   );
 });
 
-test("FR withholding declares one national region, unimplemented by name", () => {
+test("FR withholding declares one national region, implemented for grille I", () => {
   const declared = FR_PAYROLL_PACK.withholding();
   assert.equal(declared.regions.length, 1);
   const region = declared.regions[0];
   assert.ok(region);
   assert.equal(region.region, "FR");
-  assert.equal(region.implemented, false);
-  assert.match(region.unimplementedReason ?? "", /barème/);
+  assert.equal(region.implemented, true);
+  assert.equal(region.residentWithholdingImplemented, true);
+  assert.equal(region.unimplementedReason, undefined);
   assert.equal(region.certificateKey, "fr_pas_option");
   assert.ok(region.citation.length > 0);
 });

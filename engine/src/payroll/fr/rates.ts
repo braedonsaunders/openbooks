@@ -11,10 +11,12 @@ import type { PayrollTaxYearSupport } from "../tax-years.ts";
  * URSSAF taux-secteur-privé and plafonds pages (both verified 200; the
  * server HTML is a JS shell — "reachable, JS-rendered", not "connection
  * reset"). PAS, the URSSAF cotisations and AGIRC-ARRCO (T1/T2, CEG,
- * CET) compute; the pack flips `installable: true` in the commit where
- * the parity harness lands. Tenant-declared AT/MP / versement mobilité
- * rates have no engine channel and APEC is refused by name — narrow,
- * named, and stated.
+ * CET) compute, proven by the parity harnesses. `installable` stays
+ * false only for the packAccounts.FR.slots.* labels (labels shard) —
+ * the messages-catalog gate fires on those four keys. Tenant-declared
+ * AT/MP / versement mobilité rates have no engine channel and APEC is
+ * refused by name — narrow, named, and stated
+ * (see FR_COTISATION_REFUSALS_2026).
  */
 export const FR_TAX_YEARS: PayrollTaxYearSupport = {
   country: "FR",

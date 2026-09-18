@@ -219,7 +219,7 @@ test("guards: out-of-year dates, unknown effectif, bad amounts refuse by name", 
   );
 });
 
-test("adapter: 2 000 € June versement pushes PAS plus the nine URSSAF lines", async () => {
+test("adapter: 2 000 € June versement pushes PAS, the nine URSSAF lines and the six retraite lines", async () => {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const ctx: PayrollStatutoryComputeContext = {
     tx: null as never,
@@ -261,6 +261,17 @@ test("adapter: 2 000 € June versement pushes PAS plus the nine URSSAF lines", 
   const result = await FR_PAYROLL_PACK.computeStatutory(ctx);
   // May-2026 grille: 2 000 € → 1 928–2 060 → 2,9 % → 58,00 € PAS.
   assert.equal(result["PAS"], "58.0000");
+  // 2 000 € brut, all T1: ARRCO 2 000 × 7,87 % = 157,40 (sal 62,96 /
+  // er 94,44); CEG 2 000 × 2,15 % = 43,00 (17,20 / 25,80); no CET.
+  assert.equal(result["ARRCO_SAL"], "62.9600");
+  assert.equal(result["ARRCO_ER"], "94.4400");
+  assert.equal(result["CEG_SAL"], "17.2000");
+  assert.equal(result["CEG_ER"], "25.8000");
+  assert.equal(result["CET_SAL"], "0.0000");
+  assert.equal(result["CET_ER"], "0.0000");
+  // 1 PAS + 3 salariales + 5 patronales + 1 CDN + 2 ARRCO + 2 CEG + 2 CET
+  // = 16 lines, enumerated so the next addition fails loudly this same way.
+  assert.equal(pushed.length, 16);
   assert.deepEqual(
     pushed.map((line) => [line.systemKey, line.kind, line.amount, line.sequence]),
     [
@@ -274,11 +285,17 @@ test("adapter: 2 000 € June versement pushes PAS plus the nine URSSAF lines", 
       ["chomage_er", "employer_contribution", "80.0000", 225],
       ["ags_er", "employer_contribution", "5.0000", 226],
       ["cdn_er", "employer_contribution", "8.3200", 230],
+      ["arrco", "deduction", "62.9600", 140],
+      ["arrco", "employer_contribution", "94.4400", 240],
+      ["ceg", "deduction", "17.2000", 141],
+      ["ceg", "employer_contribution", "25.8000", 241],
+      ["cet", "deduction", "0.0000", 142],
+      ["cet", "employer_contribution", "0.0000", 242],
     ],
   );
-  // No AT/MP line without a tenant rate, no AGIRC-ARRCO line without rates.
+  // No AT/MP line without a tenant rate, no APEC line without a cadre channel.
   assert.ok(!pushed.some((line) => line.systemKey === "atmp"));
-  assert.ok(!pushed.some((line) => line.systemKey === "arrco"));
+  assert.ok(!pushed.some((line) => line.systemKey === "apec"));
 });
 
 test("adapter refuses without a known effectif, naming FNAL", async () => {

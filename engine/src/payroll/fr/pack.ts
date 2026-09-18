@@ -22,8 +22,10 @@ import { FR_TAX_YEARS } from "./rates.ts";
  * Declared from primary sources; calendar 2026 PAS grille I (métropole) is
  * transcribed in ./tables-2026.ts and the 2026 URSSAF cotisation rates in
  * ./cotisations-2026.ts, both computed in ./compute-statutory.ts. The pack
- * stays `installable: false` until the parity harness lands (APEC and
- * tenant-declared rates without an engine channel stay refused by name):
+ * stays `installable: false` only for the packAccounts.FR.slots.*
+ * labels (labels shard; messages-catalog gate fires until they land).
+ * APEC and tenant-declared rates without an engine channel stay refused
+ * by name:
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
  * - Social contributions: collected by URSSAF (C. séc. soc. art. L213-1);
@@ -180,19 +182,17 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
     {
       region: "FR",
       label: "Prélèvement à la source (national)",
-      implemented: false,
-      unimplementedReason:
-        "the FR payroll pack computes PAS (2026 grille I barème, métropole), "
-        + "the 2026 URSSAF cotisations and the AGIRC-ARRCO T1/T2 + CEG + CET, "
-        + "but APEC (cadres only) and tenant-declared AT/MP/versement-mobilité "
-        + "rates have no engine channel, so no full payslip is right. "
-        + "See FR_REFUSED_2026 in engine/src/payroll/fr/tables-2026.ts and "
-        + "FR_COTISATION_REFUSALS_2026 in engine/src/payroll/fr/cotisations-2026.ts.",
+      // Implemented for grille I (métropole ou hors de France): PAS plus
+      // the 2026 URSSAF cotisations and AGIRC-ARRCO T1/T2 + CEG + CET
+      // compute end to end. DOM domiciles, APEC and tenant-declared
+      // AT/MP/versement-mobilité rates stay refused by name (see
+      // FR_REFUSED_2026 and FR_COTISATION_REFUSALS_2026).
+      implemented: true,
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
       // not PAS — a separate mechanism the skeleton does not implement either.
       taxesNonresidentWages: true,
       residentWithholding: "required",
-      residentWithholdingImplemented: false,
+      residentWithholdingImplemented: true,
       certificateKey: "fr_pas_option",
       subRegions: [],
       // Vacuous: France declares no sub-region wage levies, so no comparison
@@ -322,6 +322,11 @@ const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
 
 export const FR_PAYROLL_PACK = {
   country: "FR",
+  // installable flips to true once packAccounts.FR.slots.* statutory-account
+  // labels land in web/messages (labels shard owns all seven locales) — the
+  // messages-catalog gate fires on those four keys until then, so the flip
+  // waits for labels rather than shipping red. The 2026 payslip itself
+  // (PAS + URSSAF + AGIRC-ARRCO) is proven by the parity harnesses below.
   installable: false,
   statutorySlots: FR_SLOTS,
   statutoryCurrency: "EUR",
