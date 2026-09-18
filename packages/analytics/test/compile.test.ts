@@ -2,6 +2,45 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { compileInsightQuery } from '../src/compile.ts'
 
+test('compileInsightQuery honors a sort ref naming a binned dimension field', () => {
+  // The seeded "Revenue by month" card sorts by its dimension's catalog field
+  // (`posting_date`), not the binned output alias (`posting_date_month`). The
+  // as-of sits just past New Year so the trailing 365 days cross a year
+  // boundary — the case a mis-resolved sort gets wrong in both directions.
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'sum', field: 'credit', alias: 'revenue' }],
+      dimensions: [{ field: 'posting_date', bin: 'month' }],
+      filters: [
+        { field: 'account_type', op: 'in', value: ['income', 'income_other'] },
+        { field: 'posting_date', op: 'last_n_days', value: 365 },
+      ],
+      sort: [{ ref: 'posting_date', dir: 'asc' }],
+    },
+    'org-1',
+    {},
+    '2026-01-15',
+  )
+  assert.match(compiled.sql, /order by 1 asc nulls last/)
+})
+
+test('compileInsightQuery still prefers an explicit output alias for sorts', () => {
+  // Widening sort refs to field keys must not steal refs that already name
+  // an output alias: the alias keeps winning.
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'sum', field: 'credit', alias: 'revenue' }],
+      dimensions: [{ field: 'posting_date', bin: 'month' }],
+      filters: [{ field: 'account_type', op: 'in', value: ['income'] }],
+      sort: [{ ref: 'revenue', dir: 'desc' }],
+    },
+    'org-1',
+  )
+  assert.match(compiled.sql, /order by 2 desc nulls last/)
+})
+
 test('compileInsightQuery emits valid SQL for not_in filters', () => {
   const compiled = compileInsightQuery(
     {
