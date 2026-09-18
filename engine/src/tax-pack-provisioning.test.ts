@@ -378,8 +378,12 @@ test("the per-return code-set field is read only through packTaxCodesForReturn",
   // Build output is not source. The blue/green rebuild leaves `.next-old` and
   // `.next-stage` beside `.next`, and bundled chunks inline the field name, so
   // a fixed-name skip list reports minified JavaScript as an offending reader.
-  const skipDirs = new Set(["node_modules", "dist", "build", "coverage", ".git"]);
-  const skipDir = (name: string): boolean => skipDirs.has(name) || name.startsWith(".next");
+  // Hidden directories are never source either: the payroll scaffold test
+  // copies engine/src under gitignored `engine/.tmp-scaffold-<pid>/` while
+  // this scan walks the tree concurrently, so the copy's owned readers report
+  // as offenders. Same dot-directory rule as workspace-dependencies.test.mjs.
+  const skipDirs = new Set(["node_modules", "dist", "build", "coverage"]);
+  const skipDir = (name: string): boolean => skipDirs.has(name) || name.startsWith(".");
   const offenders: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
