@@ -542,6 +542,11 @@ async function countQueueJob(jobId: string): Promise<number> {
 
 /** Remove exactly the jobs this suite created; leave the rest of the DB alone. */
 async function removeQueueJobs(jobIds: Array<string | null>): Promise<void> {
+  // Both callers pass the ids they just created, so the per-job removal
+  // check below always verifies something. (Null entries only occur when the
+  // test already failed upstream, and stay skippable so the original error
+  // — not a cleanup assert — is what surfaces.)
+  assert.ok(jobIds.length > 0, "queue cleanup must target at least one job");
   const queue = getEmailQueue();
   for (const jobId of jobIds) {
     if (!jobId) continue;

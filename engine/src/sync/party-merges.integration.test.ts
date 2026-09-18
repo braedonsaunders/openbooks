@@ -147,6 +147,9 @@ for (const adapter of ADAPTERS) {
         select 'addresses', party_id from addresses where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'ADDR-1'
          union all
         select 'projects', customer_id from projects where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'P-1'`));
+      // One row per seeded reference (contact, address, project): the
+      // per-row survivor check below cannot pass over an empty set.
+      assert.equal(refs.rows.length, 3);
       for (const row of refs.rows) {
         assert.equal(row.pid, survivorId, `${row.tbl} follows the survivor`);
       }
@@ -350,6 +353,9 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     const journals = await withOrg(org.orgId, () => db.execute<{ id: string; pid: string | null }>(sql`
       select id, party_id as pid from journal_lines
        where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`));
+    // Both seeded AR lines round-trip: the per-line survivor check below
+    // cannot pass over an empty set.
+    assert.equal(journals.rows.length, 2);
     for (const row of journals.rows) assert.equal(row.pid, survivorId);
 
     const application = await withOrg(org.orgId, () => db.execute<{
@@ -413,6 +419,9 @@ test("journal lines in a controller-closed period are retained, never forced", {
     const journals = await withOrg(org.orgId, () => db.execute<{ id: string; pid: string | null }>(sql`
       select id, party_id as pid from journal_lines
        where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`));
+    // Both seeded AR lines round-trip: the per-line retention check below
+    // cannot pass over an empty set.
+    assert.equal(journals.rows.length, 2);
     for (const row of journals.rows) assert.equal(row.pid, absorbedId);
 
     const afterDoc = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`

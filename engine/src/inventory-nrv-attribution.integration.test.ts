@@ -19,6 +19,9 @@ for (const operation of ["write-down", "reversal"] as const) {
       const common = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: org.date };
       let result = await writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
       if (operation === "reversal") result = await reverseInventoryWritedown(org.orgId, actor, { ...common, nrvPerUnit: "10" });
+      // One receipt produces one journal entry: the per-entry actor
+      // provenance below cannot pass over an empty set.
+      assert.equal(result.entities.length, 1);
       for (const entity of result.entities) {
         const evidence = (await db.execute(sql`
           select e.created_by, e.updated_by, e.posted_by, w.created_by as evidence_actor

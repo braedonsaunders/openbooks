@@ -49,6 +49,9 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
         assert.equal(result.figures.revenue, 150, "primary-book headline control");
         assert.equal(result.figures.operatingIncome, 100, "nonoperating income excluded in headline");
         let running = 0;
+        // buildMarginFlow always emits the nine waterfall stages: the
+        // per-stage reconciliation below cannot pass over an empty flow.
+        assert.ok(result.marginFlow.length > 0, "margin waterfall must carry stages");
         for (const stage of result.marginFlow) {
           if (stage.kind === "start") running = stage.amount;
           else if (stage.kind === "deduct") running += stage.amount;

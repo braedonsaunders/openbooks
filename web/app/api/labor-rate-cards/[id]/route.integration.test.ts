@@ -235,6 +235,9 @@ test(
            where version_id = ${fixture.versionId}
            order by sort_order`));
         assert.deepEqual(lines.rows.map((row) => row.id), fixture.storedLineIds);
+        // All three re-sent stored lines survive the prune: the per-line
+        // rate check below cannot pass over an empty set.
+        assert.equal(lines.rows.length, 3);
         for (const row of lines.rows) assert.equal(row.billRate, "125.5000");
 
         const adjustments = (await db.execute<{ code: string; n_targets: number }>(sql`

@@ -157,6 +157,9 @@ test(`concurrent role deletion and unassignment preserve the last role (${repeat
     await waitForBlocked(pid, 2);
     await writer.query("commit");
     const results = await Promise.allSettled(pending);
+    // allSettled preserves input order and length: both racing operations
+    // settled, so the per-result verdict below cannot pass over an empty set.
+    assert.equal(results.length, 2);
     assert.equal(results.filter((result) => result.status === "fulfilled" && result.value.status === 200).length, 1);
     for (const result of results) {
       if (result.status === "fulfilled") assert.ok([200, 409].includes(result.value.status));

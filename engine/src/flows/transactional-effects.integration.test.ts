@@ -250,6 +250,9 @@ test("gate approval requests defer per assignee through the outbox", { skip: !DB
     const gateRows = await db.execute<{ id: string }>(sql`
       select id from flow_gates where run_id = ${run.runId} order by created_at
     `);
+    // gatesCreated is pinned to 2 above: every created gate persisted a row,
+    // so the per-row email check below cannot pass over an empty set.
+    assert.equal(gateRows.rows.length, res.gatesCreated);
     const keys = await db.execute<{ occurrence_key: string }>(sql`
       select occurrence_key from scheduler_outbox
        where kind = 'flow_email' and subject_id = ${run.runId}

@@ -292,6 +292,9 @@ test("concurrent issues isolate per legal entity and the GL corroborates each su
         join inventory_movements im on im.id = c.issue_movement_id and im.org_id = c.org_id
         join cost_layers cl on cl.id = c.cost_layer_id and cl.org_id = c.org_id
        where c.org_id = ${org.orgId}`));
+    // Exactly the two seeded issues (one per entity): the per-row
+    // same-entity check below cannot pass over an empty set.
+    assert.equal(consumers.rows.length, 2);
     for (const row of consumers.rows) {
       assert.equal(row.issue_sub, row.layer_sub, "a consumption crossed legal entities");
     }

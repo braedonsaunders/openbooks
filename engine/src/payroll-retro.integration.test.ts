@@ -381,6 +381,7 @@ test(
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
       });
       assert.equal(corrected.payableTotal, "240.0000", "3 periods × 80 h × the further $1.00");
+      assert.equal(corrected.periods.length, 3, "three committed periods share the correction");
       for (const period of corrected.periods) {
         assert.equal(period.difference!.previouslySettled, "240.0000");
         assert.equal(period.difference!.recomputedEarnings, "2720.0000");
