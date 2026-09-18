@@ -67,8 +67,8 @@ export const HUNGARY_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "afa_rate_change_2012",
-      title: "2007. évi CXXVII. tv. (ÁFA) 82. § (1) set by 2011/CLVI §118 with first application 2012-01-01 per 275. § (2); consolidated text verified via fetched copy, njt.hu unreachable — re-source to NJT",
-      url: "https://monoktamas.hu/wp-content/uploads/2023/04/Afa-torveny-2023.01.01.pdf",
+      title: "Magyar Közlöny 2011/140 (2011-11-29) — 2011. évi CLVI. tv. 118. §: “Az Áfa tv. 82. § (1) bekezdése helyébe a következő rendelkezés lép: '(1) Az adó mértéke az adó alapjának 27 százaléka.'”; new Áfa tv. 275. § (2) (CLVI 130. §): the rate provisions apply first where the §84 chargeable-event date “2012. január 1. napjára esik vagy azt követi”",
+      url: "https://www.magyarkozlony.hu/dokumentumok/0208418ecf1c0f06c26d14cc335968b877540082/megtekintes",
       asOf: "2026-08-01",
     },
   ],
