@@ -454,6 +454,21 @@ test(
         (await payrollState(fixture.orgId)).settings?.rqRemittanceFrequency,
         null,
       );
+
+      // The CRA schedule validates against its own bands: a CRA remitter type
+      // is accepted on the CRA key and refused on the RQ key (and vice versa).
+      const craAccepted = await PUT(
+        request("PUT", { craRemittanceFrequency: "accelerated_2" }),
+      );
+      assert.equal(craAccepted.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).settings?.craRemittanceFrequency,
+        "accelerated_2",
+      );
+      const craCrossAgency = await PUT(
+        request("PUT", { craRemittanceFrequency: "twice_monthly" }),
+      );
+      assert.equal(craCrossAgency.status, 422);
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
