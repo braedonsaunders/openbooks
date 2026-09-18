@@ -3,22 +3,37 @@ import type { PayrollTaxYearSupport } from "../tax-years.ts";
 /**
  * France — statutory-table editions.
  *
- * NOTHING is transcribed yet: the 2026 PAS default grid (grille de taux par
- * défaut, loi de finances pour 2026) and the 2026 URSSAF contribution
- * parameters are both obtainable but neither has been transcribed into this
- * repository, so `editions` is empty and every year is refused by name (see
- * `payrollTaxYearProblem`). The pack stays `installable: false` until a
- * published edition lands here.
- *
- * Sources (not transcriptions):
- * - PAS default grid: loi de finances pour 2026, via impots.gouv.fr
- *   ("Gérer mon prélèvement à la source").
- * - Contribution parameters: URSSAF (urssaf.fr) and the Sécurité sociale
- *   ceiling arrêté (arrêté du 22 décembre 2025, plafond 2026).
+ * Calendar 2026 is transcribed (PAS grille I, métropole, plus the PASS),
+ * as TWO editions: DGFiP replaced the grids mid-year, so January–April
+ * versements use the May-2025 grids and May–December versements the
+ * May-2026 grids (see ./tables-2026.ts). Contribution RATES are not
+ * transcribed — urssaf.fr resets connections and boss.gouv.fr times out
+ * from this vantage — so the pack stays `installable: false`: PAS computes,
+ * no full payslip is right.
  */
 export const FR_TAX_YEARS: PayrollTaxYearSupport = {
   country: "FR",
-  editions: [],
+  editions: [
+    {
+      year: 2026,
+      label: "BOI-BAREME-000037-20250410 (grilles à compter du 1er mai 2025)",
+      effectiveFrom: "2026-01-01",
+      citation:
+        "DGFiP, BOI-BAREME-000037-20250410 (bofip.impots.gouv.fr), "
+        + "grille I métropole; PASS via service-public.gouv.fr A15386 "
+        + "(arrêté du 22 décembre 2025)",
+      status: "published",
+    },
+    {
+      year: 2026,
+      label: "BOI-BAREME-000037-20260407 (grilles à compter du 1er mai 2026)",
+      effectiveFrom: "2026-05-01",
+      citation:
+        "DGFiP, BOI-BAREME-000037-20260407 (bofip.impots.gouv.fr; figures "
+        + "unchanged in -20260706), grille I métropole",
+      status: "published",
+    },
+  ],
   regionsWithOwnTables: [],
   ratesModule: "engine/src/payroll/fr/rates.ts",
   scaffold: {
