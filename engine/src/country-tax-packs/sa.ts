@@ -45,7 +45,13 @@ const SA_VAT_RETURN: TaxReturnPack = {
  * contemporaneous announcement URL 404s and gazt.gov.sa (the authority's
  * former name) is dead. The date is from the Ministry of Finance decision and
  * is not in dispute, but it is NOT attested by the source id on that rate row.
- * Re-source it if a ZATCA or Umm al-Qura page surfaces. Keeping the 5% band
+ * Re-source it if a ZATCA or Umm al-Qura page surfaces. The wave5 re-source
+ * hunt (2026-09-18) checked the ZATCA VAT-law page (notes the Shawwal-1441
+ * amendment, no date), the Implementing-Regulation amendments PDF in English
+ * and the VAT law in Arabic (15% applicability, no changeover sentence), the
+ * guidelines index, and filename guesses for the GAZT transitional guide —
+ * whose "Effective 1 July 2020" text survives only on third-party mirrors
+ * and therefore cannot be cited. Caveat stands. Keeping the 5% band
  * with this caveat beats dropping it: truncating to 15% would misprice every
  * 2018–2020 document, which is the defect this pack exists to avoid.
  *

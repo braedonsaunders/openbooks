@@ -63,6 +63,19 @@ const PT_IVA_DP_2026: TaxReturnPack = {
  * normal band before July 2021 are explicitly refused (see completeness).
  * Lista I / Lista II taxability, DL 347/85 sourcing detail, and the 06-A /
  * recapitulativa developments are out of scope.
+ *
+ * SOURCING: three citations are professional-body mirrors of DSIVA material,
+ * kept as named id-specific exceptions (wave5 proof): `at_dp_modelo_instrucoes`
+ * (the Declaração Periódica form and filling instructions via aproces.org),
+ * `dsiva_oc30118_2010_aplicabilidade` (DSIVA Ofício 30118/2010 via the OCC
+ * accountants' Order mirror) and `dsiva_oc30121_2010_taxa_normal` (DSIVA Ofício
+ * 30121/2010 via APECA). The AT portal's instruções archive holds no
+ * DSIVA-era (pre-AT, 2010) ofícios and the Diário da República PDFs are not
+ * retrievable from this sandbox, so the enabling laws (Lei 12-A/2010 for the
+ * July 2010 bands, Lei 55-A/2010 for the 23% band) could not be re-sourced
+ * from the authority. Both ofício texts were read in full and state exactly
+ * the rates and dates the rows claim; truncating to post-2021 AT ofícios
+ * would delete the whole Continente history, so the mirrors stay named.
  */
 export const PORTUGAL_TAX_PACK: CountryTaxPackDefinition = {
   code: "PT_INDIRECT_TAX",
@@ -95,7 +108,7 @@ export const PORTUGAL_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "at_dp_modelo_instrucoes",
-      title: "Declaração Periódica de IVA — official form and filling instructions (Portaria 988/2009 model; Quadros 03/04/06, campos 1–96)",
+      title: "Declaração Periódica de IVA — official form and filling instructions (Quadros 03/04/06, campos 1–96), via professional-body mirror",
       url: "https://www.aproces.org/wp-content/uploads/2019/10/IVA-declaracao_periodica_IVA.pdf",
       asOf: "2026-09-18",
     },
