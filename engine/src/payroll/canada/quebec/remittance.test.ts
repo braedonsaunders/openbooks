@@ -24,7 +24,7 @@ import { RQ_REMITTANCE_SCHEDULE } from "./remittance.ts";
 
 test("the CA pack declares the Revenu Québec schedule for its RQ vendor", () => {
   const schedules = payrollPack("CA").remittanceSchedules ?? [];
-  assert.equal(schedules.length, 1);
+  assert.equal(schedules.length, 2);
   assert.equal(schedules[0], RQ_REMITTANCE_SCHEDULE);
   assert.equal(RQ_REMITTANCE_SCHEDULE.vendorSettingsKey, "rqRemittancePartyId");
   assert.equal(RQ_REMITTANCE_SCHEDULE.authority, "Revenu Québec");
@@ -61,7 +61,6 @@ test("the RQ schedule moves deadlines on the Québec calendar", () => {
 
 test("the RQ schedule is in force for current periods", () => {
   assert.equal(remittanceScheduleInForce("rqRemittancePartyId", "2026-07-31"), RQ_REMITTANCE_SCHEDULE);
-  assert.equal(remittanceScheduleInForce("craRemittancePartyId", "2026-07-31"), null);
   assert.equal(remittanceScheduleInForce("rqRemittancePartyId", "2023-12-31"), null);
 });
 
@@ -139,7 +138,10 @@ test("a schedule on an undeclared calendar is refused", () => {
 });
 
 test("frequency settings keys derive from the declared schedules", () => {
-  assert.deepEqual(declaredRemittanceFrequencySettingsKeys(), ["rqRemittanceFrequency"]);
+  assert.deepEqual(declaredRemittanceFrequencySettingsKeys(), [
+    "rqRemittanceFrequency",
+    "craRemittanceFrequency",
+  ]);
 });
 
 test("an unknown frequency resolves to no band — the caller falls back, never guesses", () => {

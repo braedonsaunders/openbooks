@@ -812,6 +812,20 @@ export function scheduledRemittanceDueDateExplained(
             ),
             rule: band.ruleSecondHalf ?? band.rule,
           };
+    case "quarter_month_working_days": {
+      // The quarter-month the period falls in ends on the 7th, 14th, 21st or
+      // month end; the deadline counts workingDays WORKING days from there on
+      // the schedule's own calendar. Counting working days lands on a working
+      // day by construction, so no weekend/holiday shift applies.
+      const periodEnd = day <= 7 ? dayOfMonth(date, 0, 7)
+        : day <= 14 ? dayOfMonth(date, 0, 14)
+        : day <= 21 ? dayOfMonth(date, 0, 21)
+        : monthEnd(date);
+      return {
+        dueDate: addBusinessDays(periodEnd, band.due.workingDays, holidays),
+        rule: band.rule,
+      };
+    }
   }
 }
 

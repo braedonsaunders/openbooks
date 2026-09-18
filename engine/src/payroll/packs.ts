@@ -11,6 +11,7 @@ import { US_OPENING_YTD_FIELDS } from "./us/opening-ytd.ts";
 import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
 import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
+import { CRA_REMITTANCE_SCHEDULE } from "./canada/cra/remittance.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./canada/quebec/remittance.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./us/jurisdictions.ts";
 import {
@@ -932,9 +933,13 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // org-configured CRA remittance vendor.
     remittanceVendorSettingsKey: "craRemittancePartyId",
     // Québec-source amounts remit to Revenu Québec on TPZ-1015.R, on Revenu
-    // Québec's own frequencies — never on the CRA schedule above. See
+    // Québec's own frequencies — never on the CRA schedule below. See
     // engine/src/payroll/canada/quebec/remittance.ts for the transcribed rules.
-    remittanceSchedules: [RQ_REMITTANCE_SCHEDULE],
+    // The CRA timetable itself is declared data too (same shape, same channel):
+    // engine/src/payroll/canada/cra/remittance.ts transcribes the CRA's "When
+    // to remit (pay)" table for the `craRemittancePartyId` destination, so a
+    // CRA bill dates from the schedule in force the way an RQ bill already does.
+    remittanceSchedules: [RQ_REMITTANCE_SCHEDULE, CRA_REMITTANCE_SCHEDULE],
     // T4127 Method 2 ("retroactive pay increase") taxes a retro amount as a
     // BONUS, not as period income — the CRA's own instruction — and Revenu
     // Québec's TP-1015 Appendix 2 says the same for the provincial side. Both
@@ -1658,13 +1663,17 @@ export function employmentJurisdictionsOf(country: string): readonly PayrollJuri
  *   `firstDueDay` of the same-or-offset month, the second half `secondDueDay`
  *   (Revenu Québec twice-monthly: 1st–15th due the 25th, 16th–end due the
  *   10th of next month).
+ * - `quarter_month_working_days` — the month is cut into quarter-month
+ *   periods (the 1st–7th, 8th–14th, 15th–21st, 22nd–month-end) and the period
+ *   the date falls in is due `workingDays` WORKING days after that period's
+ *   end, counted on the schedule's own calendar (the CRA's accelerated
+ *   threshold 2: the 3rd working day after the quarter-month).
  *
- * A deadline landing on a Saturday, Sunday or a holiday of the schedule's
- * declared calendar moves to the next business day — the one shift sentence
- * every fixed-date schedule shares, so it lives on the schedule, not on each
- * rule. A schedule that counts WORKING days (the CRA's accelerated threshold
- * 2) is not expressible here and keeps its bespoke function; extending the
- * union is data work for the pack that needs it, not a branch.
+ * A fixed-date deadline landing on a Saturday, Sunday or a holiday of the
+ * schedule's declared calendar moves to the next business day — the one shift
+ * sentence every fixed-date schedule shares, so it lives on the schedule, not
+ * on each rule. A working-day-counted deadline needs no shift: counting
+ * working days necessarily lands on a working day.
  */
 export type RemittanceDueRule =
   | { kind: "month_day"; day: number; monthsAfterPeriodMonth: number }
@@ -1676,6 +1685,11 @@ export type RemittanceDueRule =
       firstDueMonthOffset: number;
       secondDueDay: number;
       secondDueMonthOffset: number;
+    }
+  | {
+      kind: "quarter_month_working_days";
+      /** Working days after the quarter-month period's end; at least 1. */
+      workingDays: number;
     };
 
 /**
@@ -1871,6 +1885,23 @@ export function allRemittanceSchedules(
       );
     }
     for (const band of schedule.frequencies) {
+      switch (band.due.kind) {
+        case "month_day":
+        case "quarter_day":
+        case "split_month":
+          break;
+        case "quarter_month_working_days":
+          if (!Number.isInteger(band.due.workingDays) || band.due.workingDays < 1) {
+            throw new PayrollPackError(
+              `${where} counts no positive working days for its ${band.frequency} frequency`,
+            );
+          }
+          break;
+        default:
+          throw new PayrollPackError(
+            `${where} declares an unknown due-date rule kind for its ${band.frequency} frequency`,
+          );
+      }
       if (!band.rule?.trim()) {
         throw new PayrollPackError(`${where} states no due-date rule for its ${band.frequency} frequency`);
       }
