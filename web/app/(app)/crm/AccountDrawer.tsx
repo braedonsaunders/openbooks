@@ -6,7 +6,9 @@ import { useTranslations } from 'next-intl'
 import { buildAccountIdentityPatch } from './account-identity-patch'
 import { displayAccountStatusName } from '../../../lib/crm-status-display'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
-import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 
 type Option = { id: string; name: string; lifecycle_stage?: string; is_default?: boolean }
 
@@ -32,33 +34,34 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
     category: profile.category ?? '', annualRevenue: profile.annual_revenue ?? '', employeeCount: profile.employee_count ?? '',
     qualificationScore: profile.qualification_score ?? '', nextActionAt: profile.next_action_at ? String(profile.next_action_at).slice(0, 16) : '',
   })
-  const [busy, setBusy] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  // The save writes two records (identity, then profile) and surfaces the
+  // first refusal: a failed save never discards the draft, and the reason
+  // pins above the fields until the next save. Busy always releases through
+  // the shared path's finally.
+  const { busy, refusal, execute, refuse } = useAppAction()
   const set = (key: string, value: unknown) => setForm((current) => ({ ...current, [key]: value }))
   async function save() {
-    if (!form.displayName.trim()) return toast.error(t('validation.nameRequired'))
-    setBusy(true)
-    setSaveError(null)
-    try {
-      // The parties PATCH is revision-guarded: echo the loaded updated_at or
-      // the first save of a fresh draft 409s as "changed after you opened".
-      // The create path omits isActive (see buildAccountIdentityPatch): the
-      // server auto-activates a named placeholder, while an explicit
-      // isActive flip demands a change reason and would block creation.
-      const identity = await fetch(`/api/parties/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(buildAccountIdentityPatch(party, form)) })
-      const identityBody = await identity.json().catch(() => null) as { error?: string } | null
-      const crm = await fetch(`/api/crm/accounts/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...form, statusId: form.statusId || null, ownerUserId: form.ownerUserId || null, territoryId: form.territoryId || null, leadSourceId: form.leadSourceId || null, nextActionAt: form.nextActionAt || null, isActive: true }) })
-      const crmBody = await crm.json().catch(() => null) as { error?: string } | null
-      if (!identity.ok || !crm.ok) throw new Error(identityBody?.error ?? crmBody?.error ?? undefined)
-      toast.success(tc('feedback.saved'))
-      router.refresh()
-    } catch (error) {
-      // The form keeps every entered value: a failed save never discards
-      // the draft, and the reason pins above the fields until the next save.
-      const message = error instanceof Error && error.message ? error.message : tc('feedback.saveFailed')
-      setSaveError(message)
-      toast.error(message)
-    } finally { setBusy(false) }
+    if (!form.displayName.trim()) {
+      refuse(t('validation.nameRequired'), tc('feedback.saveFailed'))
+      return
+    }
+    const ok = await execute(
+      async () => {
+        // The parties PATCH is revision-guarded: echo the loaded updated_at or
+        // the first save of a fresh draft 409s as "changed after you opened".
+        // The create path omits isActive (see buildAccountIdentityPatch): the
+        // server auto-activates a named placeholder, while an explicit
+        // isActive flip demands a change reason and would block creation.
+        const identity = await fetchAction(`/api/parties/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(buildAccountIdentityPatch(party, form)) })
+        if (!identity.ok) return identity
+        return fetchAction(`/api/crm/accounts/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...form, statusId: form.statusId || null, ownerUserId: form.ownerUserId || null, territoryId: form.territoryId || null, leadSourceId: form.leadSourceId || null, nextActionAt: form.nextActionAt || null, isActive: true }) })
+      },
+      {
+        fallbackMessage: tc('feedback.saveFailed'),
+        successMessage: tc('feedback.saved'),
+      },
+    )
+    if (ok) router.refresh()
   }
   const filteredStatuses = statuses.filter((status) => status.lifecycle_stage === form.lifecycleStage)
   // A stage change retires the previous status: the old value names a status
@@ -70,7 +73,7 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
     setForm((current) => ({ ...current, lifecycleStage: next, statusId: fallback }))
   }
   return <UrlDrawer open closeHref={basePath} size="xl" title={<span className="flex items-center gap-2">{form.displayName || t('accounts.newFallback')}<Badge>{t(`stages.${form.lifecycleStage}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
-    {saveError ? <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{saveError}</p> : null}
+    <ActionAlert error={refusal} fallbackMessage={tc('feedback.saveFailed')} className="mb-4" />
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={t('fields.accountName')}><Input value={form.displayName} onChange={(e) => set('displayName', e.target.value)} disabled={!canManage} /></Field>
       <Field label={t('fields.lifecycleStage')}><Select value={form.lifecycleStage} onChange={(e) => changeStage(e.target.value)} disabled={!canManage}><option value="lead">{t('stages.lead')}</option><option value="prospect">{t('stages.prospect')}</option><option value="customer">{t('stages.customer')}</option></Select></Field>
