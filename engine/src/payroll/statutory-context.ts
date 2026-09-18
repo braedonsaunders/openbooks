@@ -50,6 +50,8 @@ export interface PayrollEmployerLevyFactors {
   wcbAssessable: string;
   ehtAmount: string;
   ehtEarnings: string;
+  hsfAmount: string;
+  hsfEarnings: string;
 }
 
 export const EMPTY_EMPLOYER_LEVY_FACTORS: PayrollEmployerLevyFactors = {
@@ -57,9 +59,11 @@ export const EMPTY_EMPLOYER_LEVY_FACTORS: PayrollEmployerLevyFactors = {
   wcbAssessable: "0",
   ehtAmount: "0",
   ehtEarnings: "0",
+  hsfAmount: "0",
+  hsfEarnings: "0",
 };
 
-/** Phase 8 — pack-declared earnings-assessed employer levies (WCB/EHT for CA). */
+/** Phase 8 — pack-declared earnings-assessed employer levies (WCB/EHT/HSF for CA). */
 export interface PayrollEmployerLevyContext {
   tx: Pick<typeof db, "execute">;
   orgId: string;

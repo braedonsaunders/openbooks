@@ -12,7 +12,8 @@ import type {
 } from "../statutory-context.ts";
 
 /**
- * Phase 8 — CA pack earnings-assessed employer levies: WCB/WSIB and provincial EHT.
+ * Phase 8 — CA pack earnings-assessed employer levies: WCB/WSIB, provincial
+ * EHT, and the Québec health services fund (TP-1015.F-V s. 5).
  */
 export async function applyCaEmployerLevies(
   ctx: PayrollEmployerLevyContext,
@@ -29,6 +30,8 @@ export async function applyCaEmployerLevies(
   let wcbAssessable = "0";
   let ehtAmount = "0";
   let ehtEarnings = "0";
+  let hsfAmount = "0";
+  let hsfEarnings = "0";
 
   const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
     select g.rate_percent, g.max_assessable
@@ -133,5 +136,21 @@ export async function applyCaEmployerLevies(
     }
   }
 
-  return { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings };
+  // Québec health services fund (TP-1015.F-V s. 5): the tenant-entered
+  // rate times the remuneration subject — employment income is generally
+  // subject, so the stub's gross earnings, with no exemption and no cap.
+  // QC-gated twice: the region check below, and the ca_hsf slot which
+  // refuses a rate row for any other province at the write boundary.
+  if (region === "QC") {
+    const hsf = config.hsf(region);
+    if (hsf) {
+      hsfEarnings = grossEarnings();
+      if (cmp(hsfEarnings, "0") > 0) {
+        hsfAmount = mulPercent(hsfEarnings, hsf.rate, 2);
+        pushStatutory("hsf", "employer_contribution", "Health Services Fund", hsfAmount, 280);
+      }
+    }
+  }
+
+  return { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings };
 }
