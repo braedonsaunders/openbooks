@@ -735,6 +735,14 @@
           "zvw": "Zvw a recolher (contribuição patronal de saúde)"
         }
       },
+      "GB": {
+        "title": "Reino Unido — contas oficiais (HMRC)",
+        "description": "Contas de passivo para os valores que o pacote do Reino Unido retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "paye": "PAYE a recolher (imposto de renda)",
+          "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {
