@@ -141,7 +141,10 @@ test('correct creates the correcting revision and voids the posted source', { sk
       expectedUpdatedAt: await revision(id),
       amendmentReason: REASON,
       memo: 'updated memo',
-      lines: [{ accountId: cogs, amount: '900.00', description: 'updated line' }],
+      // 0171 requires settlement on every newly written line (the drawer
+      // sends it); the correction still proves the amount change 875.50 →
+      // 900.00, not the settlement gate.
+      lines: [{ accountId: cogs, amount: '900.00', description: 'updated line', settlementType: 'out_of_pocket' }],
     })
     assert.equal(response.status, 201, JSON.stringify(response.json))
     assert.equal(response.json?.ok, true)
