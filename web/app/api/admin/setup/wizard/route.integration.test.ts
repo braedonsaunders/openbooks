@@ -284,6 +284,12 @@ test(
       await observer.connect();
       observerOpen = true;
       await observer.query("set statement_timeout = '1000ms'");
+      // A raw monitoring session carries no test bypass, so under FORCE RLS
+      // the other tenant's periods are invisible and the probe below reads
+      // NULL. Scope it explicitly (the rate-book concurrent-writer idiom),
+      // session-level: unlike that writer this probe holds no transaction,
+      // so a statement-local set would die with the SELECT itself.
+      await observer.query("select set_config('app.bypass_rls','on',false)");
 
       routeState.authz = null;
       routeState.authzQueue = [authorize(first), authorize(second)];
