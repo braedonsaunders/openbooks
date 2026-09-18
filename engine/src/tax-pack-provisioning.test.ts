@@ -306,13 +306,17 @@ test("the per-return code-set field is read only through packTaxCodesForReturn",
     join("engine", "src", "country-tax-packs", "types.ts"),
     join("engine", "src", "country-tax-packs", "index.ts"),
   ]);
-  const skipDirs = new Set(["node_modules", ".next", "dist", "build", "coverage", ".git"]);
+  // Build output is not source. The blue/green rebuild leaves `.next-old` and
+  // `.next-stage` beside `.next`, and bundled chunks inline the field name, so
+  // a fixed-name skip list reports minified JavaScript as an offending reader.
+  const skipDirs = new Set(["node_modules", "dist", "build", "coverage", ".git"]);
+  const skipDir = (name: string): boolean => skipDirs.has(name) || name.startsWith(".next");
   const offenders: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (!skipDirs.has(entry.name)) walk(path);
+        if (!skipDir(entry.name)) walk(path);
       } else if (/\.[cm]?[tj]sx?$/.test(entry.name) && !owners.has(path)) {
         readFileSync(path, "utf8").split("\n").forEach((line, index) => {
           if (!line.includes(field)) return;
