@@ -122,7 +122,9 @@ test("a raw wipe GUC cannot rewrite posted ledger state, while an authorized san
   try {
     await installer.query("begin");
     await installer.query(authorizationMigration);
-    await installer.query("commit");
+    // Roll back like the two replay tests above: committing here would
+    // persist 0078's guard bodies over every later refinement (0166/0168),
+    // silently downgrading je_guard for the rest of the shard.
   } finally {
     await installer.query("rollback").catch(() => undefined);
     installer.release();
