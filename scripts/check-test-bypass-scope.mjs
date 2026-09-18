@@ -581,7 +581,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/app/api/crm/opportunities/[id]/route-magnitude.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/crm/opportunities/[id]/route-revision.integration.test.ts", { writes: 3, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/documents/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/expenses/[id]/route.integration.test.ts", { writes: 22, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/app/api/expenses/actions/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/expenses/actions/route-resubmit.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/field-tickets/[id]/route-malformed-header.integration.test.ts", { writes: 10, via: "field-tickets.ts -> authz.ts -> auth.ts" }],
