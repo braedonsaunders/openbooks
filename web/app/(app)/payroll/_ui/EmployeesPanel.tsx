@@ -27,7 +27,53 @@ export interface FilingAccountOption {
   id: string
   accountNumber: string
   name: string
-  country: 'CA' | 'US'
+  /** The country pack the account files under — an open string, like the profile's. */
+  country: string
+}
+
+/**
+ * One withholding field a country pack declares, as served by
+ * GET /api/payroll/profiles. Structural mirror of the engine's
+ * PayrollCertificateField — the API contract, not an engine import, so the
+ * editor renders whatever the installed packs declare.
+ */
+export interface DeclaredProfileField {
+  key: string
+  label: string
+  kind: 'choice' | 'count' | 'amount' | 'flag' | 'code'
+  choices?: readonly { value: string; label: string; help?: string }[]
+  decimals?: number
+  min?: string
+  max?: string
+  default?: string
+  required?: boolean
+  help: string
+  storage?: { kind: 'row' } | { kind: 'column'; column: string }
+}
+
+/** One withholding certificate a pack declares, as served with the profiles. */
+export interface DeclaredProfileCertificate {
+  key: string
+  form: string
+  label: string
+  scope: { level: string; region?: string; subRegion?: string }
+  fields: readonly DeclaredProfileField[]
+}
+
+/**
+ * What the profile editor renders for one country pack, as served by
+ * GET /api/payroll/profiles from the pack registry. Subdivisions are the
+ * pack's `regions` coverage; the withholding section is its column-mapped
+ * certificate declarations plus its profile exemption flags.
+ */
+export interface PackProfileDeclaration {
+  subdivisionLabel: string
+  subdivisions: string[]
+  supportedSubdivisions: string[]
+  unsupportedReason: string
+  unsupportedReasons: Record<string, string>
+  certificates: DeclaredProfileCertificate[]
+  exemptionFlags: { column: string; label: string; help: string }[]
 }
 
 export type ProfileRow = {
@@ -38,8 +84,10 @@ export type ProfileRow = {
   schedule_name: string | null
   /** '' only on a blank NEW profile whose default could not be derived from
    *  the employee's subsidiary — the operator must choose; the API refuses
-   *  a save with no country rather than assuming one. */
-  country: 'CA' | 'US' | ''
+   *  a save with no country rather than assuming one. An open string: the
+   *  countries on offer come from the served pack declarations, never a union
+   *  in this file. */
+  country: string
   province: string
   /** The labour jurisdiction whose employment standards govern the employment;
    *  null = derive it from the work region (the answer for almost everyone). */
@@ -50,10 +98,16 @@ export type ProfileRow = {
   provincial_claim_code: number | null
   provincial_claim_amount: string | null
   additional_tax_per_period: string | null
+  prescribed_zone_deduction: string | null
+  authorized_annual_deductions: string | null
+  authorized_federal_credits: string | null
+  authorized_provincial_credits: string | null
   cpp_exempt: boolean
   ei_exempt: boolean
   tax_exempt: boolean
-  filing_status: 'single' | 'married_joint' | 'head_household' | null
+  /** An open string: the allowed answers come from the pack's declared
+   *  certificate choices, never a union in this file. */
+  filing_status: string | null
   multiple_jobs: boolean
   dependent_credits: string | null
   other_income_annual: string | null
@@ -74,15 +128,10 @@ export type ProfileRow = {
 const STUB_DELIVERIES = ['email', 'print', 'both'] as const
 const PAYMENT_METHODS = ['eft', 'cheque'] as const
 
-const PROVINCES = ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT', 'ZZ'] as const
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI',
-  'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN',
-  'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
-  'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA',
-  'WV', 'WI', 'WY',
-] as const
-const FILING_STATUSES = ['single', 'married_joint', 'head_household'] as const
+/** snake_case profile column → camelCase locale namespace (`filing_status` → `filingStatus`). */
+function columnLocaleBase(column: string): string {
+  return column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
+}
 
 export function ProfileEditor(props: {
   profile: ProfileRow
@@ -91,6 +140,11 @@ export function ProfileEditor(props: {
   filingAccounts?: FilingAccountOption[]
   /** country pack → the labour jurisdictions it declares, from the API. */
   labourJurisdictions?: Record<string, LabourJurisdictionOption[]>
+  /** Every known pack, in registry order — the country picker offers exactly these. */
+  countries?: string[]
+  /** country pack → what the editor renders for it: subdivisions, withholding
+   *  certificates, exemption flags. From the API, declared by the packs. */
+  packProfiles?: Record<string, PackProfileDeclaration>
   onClose: () => void
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
@@ -112,6 +166,10 @@ export function ProfileEditor(props: {
   const [provincialClaimCode, setProvincialClaimCode] = useState(p.provincial_claim_code == null ? '' : String(p.provincial_claim_code))
   const [provincialClaimAmount, setProvincialClaimAmount] = useState(p.provincial_claim_amount ?? '')
   const [additionalTax, setAdditionalTax] = useState(p.additional_tax_per_period ?? '')
+  const [prescribedZoneDeduction, setPrescribedZoneDeduction] = useState(p.prescribed_zone_deduction ?? '')
+  const [authorizedAnnualDeductions, setAuthorizedAnnualDeductions] = useState(p.authorized_annual_deductions ?? '')
+  const [authorizedFederalCredits, setAuthorizedFederalCredits] = useState(p.authorized_federal_credits ?? '')
+  const [authorizedProvincialCredits, setAuthorizedProvincialCredits] = useState(p.authorized_provincial_credits ?? '')
   const [cppExempt, setCppExempt] = useState(p.cpp_exempt)
   const [eiExempt, setEiExempt] = useState(p.ei_exempt)
   const [taxExempt, setTaxExempt] = useState(p.tax_exempt)
@@ -137,6 +195,81 @@ export function ProfileEditor(props: {
   // at all until a country is chosen.
   const labourOptions = (country && props.labourJurisdictions?.[country]) || []
 
+  // Everything below renders from the selected pack's declaration — the
+  // subdivision list and label, the withholding certificates, the exemption
+  // flags. No pack means no withholding section: the honest empty state, not
+  // another country's shape.
+  const pack = country ? props.packProfiles?.[country] : undefined
+  const applicableCertificates = (pack?.certificates ?? []).filter(
+    (certificate) =>
+      certificate.scope.level === 'country'
+      || (certificate.scope.level === 'region' && certificate.scope.region === province),
+  )
+  // Every profile column the selected pack answers through — certificate
+  // fields plus exemption flags. Answers held in state for any other column
+  // are nulled on save: carrying one pack's withholding facts on another
+  // pack's profile would be refused on save for labour jurisdictions, and
+  // withholding gets the same rule.
+  const declaredColumns = new Set<string>()
+  for (const certificate of pack?.certificates ?? []) {
+    for (const field of certificate.fields) {
+      if (field.storage?.kind === 'column') declaredColumns.add(field.storage.column)
+    }
+  }
+  for (const flag of pack?.exemptionFlags ?? []) declaredColumns.add(flag.column)
+  const kept = (column: string, value: string | null): string | null =>
+    declaredColumns.has(column) ? value : null
+  const keptCount = (column: string, raw: string): number | null =>
+    raw === '' || !declaredColumns.has(column) ? null : Number(raw)
+
+  // Column → state, so the generic field renderer below can bind whatever the
+  // pack declares without naming a single form's fields.
+  const columnText: Record<string, [string, (value: string) => void]> = {
+    federal_claim_code: [federalClaimCode, setFederalClaimCode],
+    federal_claim_amount: [federalClaimAmount, setFederalClaimAmount],
+    provincial_claim_code: [provincialClaimCode, setProvincialClaimCode],
+    provincial_claim_amount: [provincialClaimAmount, setProvincialClaimAmount],
+    additional_tax_per_period: [additionalTax, setAdditionalTax],
+    prescribed_zone_deduction: [prescribedZoneDeduction, setPrescribedZoneDeduction],
+    authorized_annual_deductions: [authorizedAnnualDeductions, setAuthorizedAnnualDeductions],
+    authorized_federal_credits: [authorizedFederalCredits, setAuthorizedFederalCredits],
+    authorized_provincial_credits: [authorizedProvincialCredits, setAuthorizedProvincialCredits],
+    filing_status: [filingStatus ?? '', (value) => setFilingStatus(value || null)],
+    dependent_credits: [dependentCredits, setDependentCredits],
+    other_income_annual: [otherIncomeAnnual, setOtherIncomeAnnual],
+    deductions_annual: [deductionsAnnual, setDeductionsAnnual],
+    w4_allowances: [w4Allowances, setW4Allowances],
+  }
+  const columnFlag: Record<string, [boolean, (value: boolean) => void]> = {
+    multiple_jobs: [multipleJobs, setMultipleJobs],
+    w4_pre_2020: [w4Pre2020, setW4Pre2020],
+    fica_exempt: [ficaExempt, setFicaExempt],
+    futa_exempt: [futaExempt, setFutaExempt],
+    cpp_exempt: [cppExempt, setCppExempt],
+    ei_exempt: [eiExempt, setEiExempt],
+    tax_exempt: [taxExempt, setTaxExempt],
+  }
+
+  // Display strings: the locale wins where a key exists for the data concept
+  // (keyed by column, never by country), otherwise the pack's declared
+  // English reads as written. A new pack is therefore legible on day one and
+  // localizable later without touching this file — the same arrangement the
+  // pack-cards surface uses.
+  const hasKey = (key: string): boolean => {
+    try {
+      return t.has(key as never)
+    } catch {
+      return false
+    }
+  }
+  const textOf = (key: string, fallback: string): string =>
+    hasKey(key) ? t(key as never) : fallback
+  const countryLabel = (code: string): string => textOf(`country.${code}`, code)
+  const fieldLabel = (column: string | null, fallback: string): string =>
+    column ? textOf(`fields.${columnLocaleBase(column)}`, fallback) : fallback
+  const choiceLabel = (column: string, value: string, fallback: string): string =>
+    textOf(`${columnLocaleBase(column)}.${value}`, fallback)
+
   async function save() {
     setBusy(true)
     try {
@@ -151,23 +284,27 @@ export function ProfileEditor(props: {
           province,
           labourJurisdiction: labourJurisdiction || null,
           payBasis,
-          federalClaimCode: federalClaimCode === '' ? null : Number(federalClaimCode),
-          federalClaimAmount: federalClaimAmount || null,
-          provincialClaimCode: provincialClaimCode === '' ? null : Number(provincialClaimCode),
-          provincialClaimAmount: provincialClaimAmount || null,
-          additionalTaxPerPeriod: additionalTax || null,
-          cppExempt,
-          eiExempt,
-          taxExempt,
-          filingStatus: country === 'US' ? (filingStatus ?? 'single') : null,
-          multipleJobs,
-          dependentCredits: dependentCredits || null,
-          otherIncomeAnnual: otherIncomeAnnual || null,
-          deductionsAnnual: deductionsAnnual || null,
-          w4Pre2020,
-          w4Allowances: w4Allowances === '' ? null : Number(w4Allowances),
-          ficaExempt,
-          futaExempt,
+          federalClaimCode: keptCount('federal_claim_code', federalClaimCode),
+          federalClaimAmount: kept('federal_claim_amount', federalClaimAmount || null),
+          provincialClaimCode: keptCount('provincial_claim_code', provincialClaimCode),
+          provincialClaimAmount: kept('provincial_claim_amount', provincialClaimAmount || null),
+          additionalTaxPerPeriod: kept('additional_tax_per_period', additionalTax || null),
+          prescribedZoneDeduction: kept('prescribed_zone_deduction', prescribedZoneDeduction || null),
+          authorizedAnnualDeductions: kept('authorized_annual_deductions', authorizedAnnualDeductions || null),
+          authorizedFederalCredits: kept('authorized_federal_credits', authorizedFederalCredits || null),
+          authorizedProvincialCredits: kept('authorized_provincial_credits', authorizedProvincialCredits || null),
+          cppExempt: declaredColumns.has('cpp_exempt') && cppExempt,
+          eiExempt: declaredColumns.has('ei_exempt') && eiExempt,
+          taxExempt: declaredColumns.has('tax_exempt') && taxExempt,
+          filingStatus: kept('filing_status', filingStatus),
+          multipleJobs: declaredColumns.has('multiple_jobs') && multipleJobs,
+          dependentCredits: kept('dependent_credits', dependentCredits || null),
+          otherIncomeAnnual: kept('other_income_annual', otherIncomeAnnual || null),
+          deductionsAnnual: kept('deductions_annual', deductionsAnnual || null),
+          w4Pre2020: declaredColumns.has('w4_pre_2020') && w4Pre2020,
+          w4Allowances: keptCount('w4_allowances', w4Allowances),
+          ficaExempt: declaredColumns.has('fica_exempt') && ficaExempt,
+          futaExempt: declaredColumns.has('futa_exempt') && futaExempt,
           vacationPercent: vacationPercent || null,
           vacationMethod,
           filingAccountId: filingAccountId || null,
@@ -187,8 +324,6 @@ export function ProfileEditor(props: {
     }
   }
 
-  const claimCodes = ['', ...Array.from({ length: 11 }, (_, i) => String(i))]
-
   const footer = (
     <div className="flex justify-end gap-2">
       {!props.inline && (
@@ -201,6 +336,125 @@ export function ProfileEditor(props: {
       </Button>
     </div>
   )
+
+  const columnOf = (field: DeclaredProfileField): string | null =>
+    field.storage?.kind === 'column' ? field.storage.column : null
+
+  /**
+   * One non-flag certificate field, bound to its profile column by the
+   * binding maps above. Flags render in the checkbox grid below; a field
+   * whose column has no binding renders nothing — the architecture test
+   * pins that every column the packs declare is bound, so an unbound
+   * column fails the build rather than dropping an answer silently.
+   */
+  const renderBodyField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
+    const id = `pp-${certificate.key}-${field.key}`
+    const column = columnOf(field)
+    if (field.kind === 'flag' || !column) return null
+    if (field.kind === 'choice') {
+      const binding = columnText[column]
+      if (!binding) return null
+      const [value, set] = binding
+      // The pack's declared default is the statutory no-answer position
+      // ("no W-4 on file is withheld as single"), read — never a literal here.
+      const current = value || field.default || ''
+      const showEmpty = !field.required || current === ''
+      return (
+        <div key={field.key}>
+          <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+          <Select id={id} value={current} onChange={(e) => set(e.target.value)}>
+            {showEmpty && <option value="">—</option>}
+            {(field.choices ?? []).map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choiceLabel(column, choice.value, choice.label)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
+    if (field.kind === 'count') {
+      const binding = columnText[column]
+      if (!binding) return null
+      const [value, set] = binding
+      // A narrow band is a codeset the operator picks from (TD1 0–10); a
+      // wide one is typed (W-4 allowances 0–99). The cutoff is presentation,
+      // the band itself is declared.
+      const min = field.min == null ? null : Number(field.min)
+      const max = field.max == null ? null : Number(field.max)
+      const codes = min !== null && max !== null && Number.isInteger(min) && Number.isInteger(max) && max - min <= 10
+        ? Array.from({ length: max - min + 1 }, (_, i) => String(min + i))
+        : null
+      if (codes) {
+        return (
+          <div key={field.key}>
+            <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+            <Select id={id} value={value} onChange={(e) => set(e.target.value)}>
+              <option value="">—</option>
+              {codes.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )
+      }
+      return (
+        <div key={field.key}>
+          <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+          <Input id={id} inputMode="numeric" value={value} onChange={(e) => set(e.target.value)} placeholder="0" />
+        </div>
+      )
+    }
+    const binding = columnText[column]
+    if (!binding) return null
+    const [value, set] = binding
+    return (
+      <div key={field.key}>
+        <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+        <Input
+          id={id}
+          inputMode={field.kind === 'amount' ? 'decimal' : 'text'}
+          value={value}
+          onChange={(e) => set(e.target.value)}
+          placeholder={field.kind === 'amount' ? '0.00' : undefined}
+        />
+      </div>
+    )
+  }
+
+  // Every checkbox in declaration order: the applicable certificates' flag
+  // fields, then the pack's exemption flags, then the generic active toggle.
+  const flagEntries: { id: string; label: string; help: string; checked: boolean; set: (value: boolean) => void }[] = []
+  for (const certificate of applicableCertificates) {
+    for (const field of certificate.fields) {
+      if (field.kind !== 'flag') continue
+      const column = columnOf(field)
+      const binding = column ? columnFlag[column] : undefined
+      if (!column || !binding) continue
+      flagEntries.push({
+        id: `pp-${certificate.key}-${field.key}`,
+        label: fieldLabel(column, field.label),
+        help: field.help,
+        checked: binding[0],
+        set: binding[1],
+      })
+    }
+  }
+  for (const flag of pack?.exemptionFlags ?? []) {
+    const binding = columnFlag[flag.column]
+    if (!binding) continue
+    flagEntries.push({
+      id: `pp-exempt-${flag.column}`,
+      label: fieldLabel(flag.column, flag.label),
+      help: flag.help,
+      checked: binding[0],
+      set: binding[1],
+    })
+  }
+  flagEntries.push({ id: 'pp-active', label: t('fields.isActive'), help: '', checked: isActive, set: setIsActive })
+
   const body = (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -234,7 +488,7 @@ export function ProfileEditor(props: {
               id="pp-country"
               value={country}
               onChange={(e) => {
-                setCountry(e.target.value as ProfileRow['country'])
+                setCountry(e.target.value)
                 // The jurisdiction inside the country is the operator's
                 // choice, never a defaulted capital-of-payroll literal.
                 setProvince('')
@@ -246,23 +500,33 @@ export function ProfileEditor(props: {
               }}
             >
               {country === '' && <option value="" disabled>—</option>}
-              <option value="CA">{t('country.CA')}</option>
-              <option value="US">{t('country.US')}</option>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="pp-province">
-              {country === 'US' ? t('fields.state') : t('fields.province')}
-            </Label>
-            <Select id="pp-province" value={province} onChange={(e) => setProvince(e.target.value)}>
-              {province === '' && <option value="" disabled>—</option>}
-              {(country === 'US' ? US_STATES : PROVINCES).map((code) => (
+              {(props.countries ?? []).map((code) => (
                 <option key={code} value={code}>
-                  {code}
+                  {countryLabel(code)}
                 </option>
               ))}
             </Select>
           </div>
+          {pack && (
+          <div>
+            <Label htmlFor="pp-province">
+              {textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel)}
+            </Label>
+            <Select id="pp-province" value={province} onChange={(e) => setProvince(e.target.value)}>
+              {province === '' && <option value="" disabled>—</option>}
+              {pack.subdivisions.map((code) => {
+                const supported = pack.supportedSubdivisions.includes(code)
+                const reason = (pack.unsupportedReasons[code] ?? pack.unsupportedReason)
+                  .replace(/\{region\}/g, code)
+                return (
+                  <option key={code} value={code} disabled={!supported} title={supported ? undefined : reason}>
+                    {code}
+                  </option>
+                )
+              })}
+            </Select>
+          </div>
+          )}
           {/* The employment-standards override. Blank — the case for almost
               every employment — derives the labour jurisdiction from the work
               region above; it is set only when a different labour jurisdiction
@@ -295,16 +559,6 @@ export function ProfileEditor(props: {
               <option value="hourly">{t('basis.hourly')}</option>
               <option value="salary">{t('basis.salary')}</option>
             </Select>
-          </div>
-          <div>
-            <Label htmlFor="pp-additional">{t('fields.additionalTax')}</Label>
-            <Input
-              id="pp-additional"
-              inputMode="decimal"
-              value={additionalTax}
-              onChange={(e) => setAdditionalTax(e.target.value)}
-              placeholder="0.00"
-            />
           </div>
           {/* Only offered once the employer keeps more than the default
               account; a single-account employer needs no choice. */}
@@ -359,109 +613,20 @@ export function ProfileEditor(props: {
           </div>
         </div>
 
-        {country === 'US' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="pp-filing-status">{t('fields.filingStatus')}</Label>
-              <Select
-                id="pp-filing-status"
-                value={filingStatus ?? 'single'}
-                onChange={(e) => setFilingStatus(e.target.value as ProfileRow['filing_status'])}
-              >
-                {FILING_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {t(`filingStatus.${status}`)}
-                  </option>
-                ))}
-              </Select>
+        {/* Withholding, from the selected pack's declared certificates: the
+            country-level form, plus the subdivision's own form when one is
+            declared for it. A new pack's forms render here with no edit to
+            this file — including forms this build has never heard of. */}
+        {applicableCertificates.map((certificate) => (
+          <div key={certificate.key} className="space-y-3">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {certificate.form} · {certificate.label}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {certificate.fields.map((field) => renderBodyField(certificate, field))}
             </div>
-            <div>
-              <Label htmlFor="pp-dependent-credits">{t('fields.dependentCredits')}</Label>
-              <Input
-                id="pp-dependent-credits"
-                inputMode="decimal"
-                value={dependentCredits}
-                onChange={(e) => setDependentCredits(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pp-other-income">{t('fields.otherIncomeAnnual')}</Label>
-              <Input
-                id="pp-other-income"
-                inputMode="decimal"
-                value={otherIncomeAnnual}
-                onChange={(e) => setOtherIncomeAnnual(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pp-deductions">{t('fields.deductionsAnnual')}</Label>
-              <Input
-                id="pp-deductions"
-                inputMode="decimal"
-                value={deductionsAnnual}
-                onChange={(e) => setDeductionsAnnual(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-            {w4Pre2020 ? (
-              <div>
-                <Label htmlFor="pp-allowances">{t('fields.w4Allowances')}</Label>
-                <Input
-                  id="pp-allowances"
-                  inputMode="numeric"
-                  value={w4Allowances}
-                  onChange={(e) => setW4Allowances(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-            ) : null}
           </div>
-        ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="pp-fed-code">{t('fields.federalClaimCode')}</Label>
-            <Select id="pp-fed-code" value={federalClaimCode} onChange={(e) => setFederalClaimCode(e.target.value)}>
-              {claimCodes.map((code) => (
-                <option key={code} value={code}>
-                  {code === '' ? '—' : code}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="pp-fed-amount">{t('fields.federalClaimAmount')}</Label>
-            <Input
-              id="pp-fed-amount"
-              inputMode="decimal"
-              value={federalClaimAmount}
-              onChange={(e) => setFederalClaimAmount(e.target.value)}
-              placeholder={t('fields.claimAmountHint')}
-            />
-          </div>
-          <div>
-            <Label htmlFor="pp-prov-code">{t('fields.provincialClaimCode')}</Label>
-            <Select id="pp-prov-code" value={provincialClaimCode} onChange={(e) => setProvincialClaimCode(e.target.value)}>
-              {claimCodes.map((code) => (
-                <option key={code} value={code}>
-                  {code === '' ? '—' : code}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="pp-prov-amount">{t('fields.provincialClaimAmount')}</Label>
-            <Input
-              id="pp-prov-amount"
-              inputMode="decimal"
-              value={provincialClaimAmount}
-              onChange={(e) => setProvincialClaimAmount(e.target.value)}
-              placeholder={t('fields.claimAmountHint')}
-            />
-          </div>
-        </div>
-        )}
+        ))}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -488,32 +653,21 @@ export function ProfileEditor(props: {
         </div>
 
         <div className="space-y-2">
-          {(
-            country === 'US'
-              ? ([
-                  ['pp-multiple-jobs', t('fields.multipleJobs'), multipleJobs, setMultipleJobs],
-                  ['pp-w4-pre-2020', t('fields.w4Pre2020'), w4Pre2020, setW4Pre2020],
-                  ['pp-fica-exempt', t('fields.ficaExempt'), ficaExempt, setFicaExempt],
-                  ['pp-futa-exempt', t('fields.futaExempt'), futaExempt, setFutaExempt],
-                  ['pp-tax-exempt', t('fields.fitExempt'), taxExempt, setTaxExempt],
-                  ['pp-active', t('fields.isActive'), isActive, setIsActive],
-                ] as const)
-              : ([
-                  ['pp-cpp-exempt', t('fields.cppExempt'), cppExempt, setCppExempt],
-                  ['pp-ei-exempt', t('fields.eiExempt'), eiExempt, setEiExempt],
-                  ['pp-tax-exempt', t('fields.taxExempt'), taxExempt, setTaxExempt],
-                  ['pp-active', t('fields.isActive'), isActive, setIsActive],
-                ] as const)
-          ).map(([id, label, checked, set]) => (
-            <label key={id} htmlFor={id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          {flagEntries.map((entry) => (
+            <label
+              key={entry.id}
+              htmlFor={entry.id}
+              title={entry.help || undefined}
+              className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200"
+            >
               <input
-                id={id}
+                id={entry.id}
                 type="checkbox"
-                checked={checked}
-                onChange={(e) => set(e.target.checked)}
+                checked={entry.checked}
+                onChange={(e) => entry.set(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
               />
-              {label}
+              {entry.label}
             </label>
           ))}
         </div>

@@ -11,6 +11,13 @@ import {
   PAYROLL_COUNTRY_PACKS,
   payrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
+import {
+  packCertificates,
+  profileColumnChoices,
+  profileColumnCountBounds,
+  type PayrollCertificate,
+} from '@openbooks/engine/src/payroll/certificates.ts'
+import type { PayrollProfileExemptionFlag } from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -27,8 +34,6 @@ export const dynamic = 'force-dynamic'
  * employee. Claim amounts and exemptions are confidential; the whole surface
  * is gated on payroll.manage.
  */
-
-const FILING_STATUSES = new Set(['single', 'married_joint', 'head_household'])
 
 /** employee_payroll_profiles.stub_delivery. */
 const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
@@ -117,10 +122,61 @@ function labourJurisdictionOptions(): Record<string, { key: string; name: string
   return byCountry
 }
 
-function claimCode(value: unknown): number | null | 'invalid' {
+/**
+ * What the profile editor renders, per country pack — served the same way as
+ * `labourJurisdictions`, from the same registry, for the same reason: the
+ * editor must render whatever the installed packs declare, never a
+ * CA-or-US union with hardcoded subdivision lists.
+ *
+ * Subdivisions come from the pack's `regions` coverage (label, known codes,
+ * supported subset with refusal reasons); the withholding section comes from
+ * the pack's column-mapped certificate declarations plus its
+ * `profileExemptionFlags`. Row-backed certificates (state DE 4, IT-2104…)
+ * arrive with the row-backed answers API, a separate pass — the served type
+ * stays `PayrollCertificate[]` so that pass widens the set, not the shape.
+ */
+export interface PackProfileDeclaration {
+  subdivisionLabel: string
+  subdivisions: string[]
+  supportedSubdivisions: string[]
+  unsupportedReason: string
+  unsupportedReasons: Record<string, string>
+  certificates: PayrollCertificate[]
+  exemptionFlags: readonly PayrollProfileExemptionFlag[]
+}
+
+function packProfileDeclarations(): Record<string, PackProfileDeclaration> {
+  const byCountry: Record<string, PackProfileDeclaration> = {}
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    const pack = PAYROLL_COUNTRY_PACKS[country]!
+    byCountry[country] = {
+      subdivisionLabel: pack.regions.label,
+      subdivisions: [...pack.regions.known],
+      supportedSubdivisions: [...pack.regions.supported],
+      unsupportedReason: pack.regions.unsupportedReason,
+      unsupportedReasons: { ...(pack.regions.unsupportedReasons ?? {}) },
+      certificates: packCertificates(country).certificates.filter(
+        (certificate) => certificate.storage === 'profile_columns',
+      ),
+      exemptionFlags: pack.profileExemptionFlags ?? [],
+    }
+  }
+  return byCountry
+}
+
+/**
+ * A column-mapped `count` answer (TD1 claim codes 0–10) against the band the
+ * pack declares for the column. A non-empty answer for a column the pack does
+ * not declare is refused rather than stored where no engine reads it.
+ */
+function claimCode(
+  value: unknown,
+  bounds: { min: number; max: number } | null,
+): number | null | 'invalid' {
   if (value === null || value === undefined || value === '') return null
+  if (!bounds) return 'invalid'
   const n = Number(value)
-  if (!Number.isInteger(n) || n < 0 || n > 10) return 'invalid'
+  if (!Number.isInteger(n) || n < bounds.min || n > bounds.max) return 'invalid'
   return n
 }
 
@@ -186,7 +242,10 @@ export async function GET(req: Request) {
                prof.labour_jurisdiction, prof.pay_basis,
                prof.federal_claim_code, prof.federal_claim_amount,
                prof.provincial_claim_code, prof.provincial_claim_amount,
-               prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+               prof.additional_tax_per_period, prof.prescribed_zone_deduction,
+               prof.authorized_annual_deductions, prof.authorized_federal_credits,
+               prof.authorized_provincial_credits,
+               prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
                prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
                prof.other_income_annual, prof.deductions_annual,
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
@@ -215,6 +274,8 @@ export async function GET(req: Request) {
       filingAccounts: await visibleFilingAccounts(gate),
       labourJurisdictions: labourJurisdictionOptions(),
       defaultCountry,
+      countries: Object.keys(PAYROLL_COUNTRY_PACKS),
+      packProfiles: packProfileDeclarations(),
     })
   }
   const profiles = (await db.execute<Record<string, unknown>>(sql`
@@ -223,7 +284,10 @@ export async function GET(req: Request) {
            prof.labour_jurisdiction, prof.pay_basis,
            prof.federal_claim_code, prof.federal_claim_amount,
            prof.provincial_claim_code, prof.provincial_claim_amount,
-           prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+           prof.additional_tax_per_period, prof.prescribed_zone_deduction,
+           prof.authorized_annual_deductions, prof.authorized_federal_credits,
+           prof.authorized_provincial_credits,
+           prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
            prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
            prof.other_income_annual, prof.deductions_annual,
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
@@ -252,6 +316,8 @@ export async function GET(req: Request) {
     profiles: profiles.rows,
     filingAccounts,
     labourJurisdictions: labourJurisdictionOptions(),
+    countries: Object.keys(PAYROLL_COUNTRY_PACKS),
+    packProfiles: packProfileDeclarations(),
   })
 }
 
@@ -296,15 +362,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: labourProblem }, { status: 422 })
   }
 
+  // Withholding answers are validated against the pack's declared certificate
+  // fields — the W-4's choice set, its 0–99 allowance band — never a hardcoded
+  // copy of one pack's form. An answer for a column the pack does not declare
+  // is refused rather than stored where no engine reads it.
   const filingStatus = body.filingStatus == null || body.filingStatus === ''
     ? null : String(body.filingStatus)
-  if (filingStatus !== null && !FILING_STATUSES.has(filingStatus)) {
+  const filingChoices = profileColumnChoices(country, 'filing_status')
+  if (filingStatus !== null && (!filingChoices || !filingChoices.includes(filingStatus))) {
     return NextResponse.json({ error: 'invalid filingStatus' }, { status: 422 })
   }
   let w4Allowances: number | null = null
   if (body.w4Allowances !== null && body.w4Allowances !== undefined && body.w4Allowances !== '') {
+    const allowanceBounds = profileColumnCountBounds(country, 'w4_allowances')
     const n = Number(body.w4Allowances)
-    if (!Number.isInteger(n) || n < 0 || n > 99) {
+    if (!allowanceBounds || !Number.isInteger(n) || n < allowanceBounds.min || n > allowanceBounds.max) {
       return NextResponse.json({ error: 'invalid w4Allowances' }, { status: 422 })
     }
     w4Allowances = n
@@ -330,10 +402,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid paymentMethod' }, { status: 422 })
   }
 
-  const federalClaimCode = claimCode(body.federalClaimCode)
-  const provincialClaimCode = claimCode(body.provincialClaimCode)
+  const federalClaimBounds = profileColumnCountBounds(country, 'federal_claim_code')
+  const provincialClaimBounds = profileColumnCountBounds(country, 'provincial_claim_code')
+  const federalClaimCode = claimCode(body.federalClaimCode, federalClaimBounds)
+  const provincialClaimCode = claimCode(body.provincialClaimCode, provincialClaimBounds)
   if (federalClaimCode === 'invalid' || provincialClaimCode === 'invalid') {
-    return NextResponse.json({ error: 'claim codes must be 0–10' }, { status: 422 })
+    // Name the band the pack actually declares: a hardcoded 0–10 here would
+    // be a third copy of the TD1's shape.
+    const band = federalClaimCode === 'invalid' ? federalClaimBounds : provincialClaimBounds
+    return NextResponse.json(
+      { error: band ? `claim code must be ${band.min}–${band.max}` : 'claim code is not declared by this pack' },
+      { status: 422 },
+    )
   }
   // TP-1015.3-V carries an AMOUNT (line 10) — Québec has no claim codes, so a
   // code on a QC profile is a data-entry error the engine would have to guess
