@@ -92,15 +92,15 @@ test("AU tax years refuse 2025–26 and 2026–27 by name as drafts", () => {
   assert.equal(AU_PAYROLL_PACK.statutoryRates, AU_PACK_RATES);
 });
 
-test("AU statutory engine refuses the requested year by name", async () => {
+test("AU statutory engine refuses untranscribed years by name", async () => {
   await assert.rejects(
     () =>
       computeAuStatutory({
-        taxYear: 2027,
+        taxYear: 2026,
       } as Parameters<typeof computeAuStatutory>[0]),
     (error: unknown) => {
       assert.ok(error instanceof PayrollPackError);
-      assert.match((error as Error).message, /tax year 2027 has not been transcribed/);
+      assert.match((error as Error).message, /tax year 2026 has not been transcribed/);
       return true;
     },
   );
