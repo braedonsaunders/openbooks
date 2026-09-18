@@ -17,16 +17,19 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
     test(`True Cost primary ledger ${view}: ${scenario}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
       const org=await createScratchOrg();
       try{
-        await db.execute(sql`update accounts set type='cogs' where id=${org.accounts.cogs}`);
+        // A dedicated COGS account: retyping the shared baseline cogs
+        // account is unrestorable — the accounts-type guard (correctly)
+        // refuses the teardown revert while this test's own journal lines
+        // still reference it, which fails the reset and taints the slot.
         const taxBook=randomUUID(),department=randomUUID(),employee=randomUUID(),project=randomUUID(),priorPeriod=randomUUID();
-        const rent=randomUUID(),wages=randomUUID(),applied=randomUUID(),group=randomUUID();
+        const rent=randomUUID(),wages=randomUUID(),applied=randomUUID(),group=randomUUID(),cogs=randomUUID();
         await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
         await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id) select ${priorPeriod},${org.orgId},2026,6,'2026-06','2026-06-01','2026-06-30',false,fiscal_calendar_id from accounting_periods where id=${org.periodId}`);
         await db.execute(sql`insert into departments(id,org_id,name) values (${department},${org.orgId},'Operations')`);
         await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'person','Worker',${org.subsidiaryId})`);
         await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${org.subsidiaryId},'BURDEN','Burden project',${org.customerId},'active',true)`);
         await db.execute(sql`insert into accounts(id,org_id,number,name,type) values
-          (${rent},${org.orgId},'6601','Office rent','expense'),(${wages},${org.orgId},'6602','Wages','expense'),(${applied},${org.orgId},'4901','Burden applied','income_other')`);
+          (${rent},${org.orgId},'6601','Office rent','expense'),(${wages},${org.orgId},'6602','Wages','expense'),(${applied},${org.orgId},'4901','Burden applied','income_other'),(${cogs},${org.orgId},'5001','Cost of goods','cogs')`);
         await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name) values (${group},${org.orgId},'burden','rent','Rent')`);
         await db.execute(sql`insert into account_group_members(org_id,group_id,account_id,dimension) values (${org.orgId},${group},${rent},'burden')`);
         for(const date of ['2026-06-15',org.date])await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,project_id,item_id,department_id,is_billable,cost_rate,status) values (${org.orgId},${employee},${date},10,${project},${org.items.service},${department},true,4,'approved')`);
@@ -38,11 +41,11 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
             (${org.orgId},${id},2,${org.accounts.bank},${org.subsidiaryId},${department},-${amount}::numeric,'CAD',-${amount}::numeric,1)`);
           if(status === 'posted')await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${id}`);
         }
-        for(const [account,amount] of [[rent,'100'],[wages,'40'],[org.accounts.cogs,'30'],[org.accounts.revenue,'-200'],[applied,'-10']])await entry(org.bookId,'posted',org.date,account!,amount!);
+        for(const [account,amount] of [[rent,'100'],[wages,'40'],[cogs,'30'],[org.accounts.revenue,'-200'],[applied,'-10']])await entry(org.bookId,'posted',org.date,account!,amount!);
         await entry(org.bookId,'posted','2026-06-15',rent,'50');
         if(scenario === 'extra books and drafts'){
           for(const [book,status,amount] of [[taxBook,'posted','700'],[org.bookId,'draft','900']] as const){
-            for(const account of [rent,wages,org.accounts.cogs,org.accounts.revenue,applied])await entry(book,status,org.date,account,account === org.accounts.revenue || account === applied ? '-'+amount : amount);
+            for(const account of [rent,wages,cogs,org.accounts.revenue,applied])await entry(book,status,org.date,account,account === org.accounts.revenue || account === applied ? '-'+amount : amount);
             await entry(book,status,'2026-06-15',rent,amount);
           }
         }

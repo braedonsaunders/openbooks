@@ -7,17 +7,18 @@ registerHooks({ resolve(specifier,context,next) {
   return next(specifier,context);
 } });
 const {sql} = await import('drizzle-orm');
-const {db,withOrgContext} = await import('@openbooks/engine/src/db.ts');
+const {db,withBypassContext,withOrgContext} = await import('@openbooks/engine/src/db.ts');
 const {createScratchOrg,createScratchUser,dropScratchOrg} = await import('@openbooks/engine/src/test-fixtures.ts');
 const {paymentStats} = await import('./cash/core');
 for (const side of ['ar','ap'] as const) {
   for (const mode of ['all','restricted','empty'] as const) {
     test(`Payment-history subsidiary scope ${side}: ${mode}`, {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-      const org=await createScratchOrg();
+      const org=await withBypassContext(()=>createScratchOrg());
       try {
-        const actor=await createScratchUser(org.orgId,'History writer','admin');
+        const actor=await withBypassContext(()=>createScratchUser(org.orgId,'History writer','admin'));
         const hidden=randomUUID();const party=side === 'ar' ? org.customerId : org.vendorId;
         const account=side === 'ar' ? org.accounts.ar : org.accounts.ap;
+        await withBypassContext(async()=>{
         await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
         for(const [sub,paidOn] of [[org.subsidiaryId,'2026-07-06'],[hidden,'2026-07-21']]) {
           const invoiceLine=randomUUID();const paymentLine=randomUUID();
@@ -33,6 +34,7 @@ for (const side of ['ar','ap'] as const) {
           await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
             values (${org.orgId},${paymentLine},${invoiceLine},1,1,1,'CAD',1,'CAD',1,'same_currency','History scope regression',${paidOn},${actor},${actor})`);
         }
+        });
         await withOrgContext(org.orgId,async()=>{
           const stats=await paymentStats(side,'2026-07-31',mode === 'all' ? undefined : mode === 'empty' ? [] : [org.subsidiaryId]);
           assert.equal(stats.globalAvg,mode === 'all' ? 13 : mode === 'empty' ? 45 : 5);

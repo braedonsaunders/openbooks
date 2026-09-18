@@ -92,7 +92,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 if (DB) {
   const { sql } = await import('drizzle-orm')
-  const { db, withBypass, env } = await import('@openbooks/engine/src/db.ts')
+  const { db, withBypass, withOrgContext, env } = await import('@openbooks/engine/src/db.ts')
   const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
     '@openbooks/engine/src/test-fixtures.ts',
   )
@@ -166,8 +166,11 @@ if (DB) {
             execute function ${sql.identifier(functionName)}()`)
       })
       try {
+        // deleteApp resolves its row through the ambient scope: unscoped it
+        // silently no-ops (no row found, no audit) and the refusal below
+        // would vacuously pass. The org scope reproduces the route.
         await assert.rejects(
-          deleteApp(fx.org.orgId, fx.actorId, fx.key),
+          withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key)),
           (error: unknown) => /forced app audit failure/.test(errorMessage(error)),
         )
       } finally {
@@ -224,7 +227,7 @@ if (DB) {
     const triggerName = `apps_status_audit_${fx.org.orgId.replaceAll('-', '')}`
     const functionName = `apps_status_audit_fn_${fx.org.orgId.replaceAll('-', '')}`
     try {
-      await setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'disabled')
+      await withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'disabled'))
       const disabled = await withBypass(() => getAppByKey(fx.org.orgId, fx.key))
       assert.equal(disabled?.status, 'disabled')
       const audited = await withBypass(() =>
@@ -254,7 +257,7 @@ if (DB) {
       })
       try {
         await assert.rejects(
-          setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'installed'),
+          withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'installed')),
           (error: unknown) => /forced status audit failure/.test(errorMessage(error)),
         )
       } finally {

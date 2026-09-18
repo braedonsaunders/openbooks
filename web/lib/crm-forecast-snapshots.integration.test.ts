@@ -18,7 +18,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 
 const {randomUUID}=await import('node:crypto');
@@ -29,13 +29,15 @@ const enabled={skip:!process.env.OPENBOOKS_DB_URL};
 const period={periodStart:'2026-07-01',periodEnd:'2026-07-31'};
 const request=(body:Record<string,unknown>)=>new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({...period,...body})});
 async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,actor:string)=>Promise<void>){
- const org=await createScratchOrg();
+ const org=await withBypassContext(()=>createScratchOrg());
  try {
-  const actor=await createScratchUser(org.orgId,'Forecast reviewer','reviewer');
-  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
+  const actor=await withBypassContext(()=>createScratchUser(org.orgId,'Forecast reviewer','reviewer'));
+  await withBypassContext(async()=>{
+   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
+  });
   session.user={id:actor,orgId:org.orgId,name:'Reviewer',email:'reviewer@example.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
-  await ensureCrmDefaults(org.orgId,actor);
+  await withOrgContext(org.orgId,()=>ensureCrmDefaults(org.orgId,actor));
   await withOrgContext(org.orgId,()=>action(org,actor));
  }finally{session.user=null;await dropScratchOrg(org.orgId);}
 }

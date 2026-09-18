@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -42,11 +42,14 @@ function userFor(orgId: string, name: string): SessionUser {
 
 const PROPERTY_PERMS = ['assistant.use', 'ar.read'];
 
+// File-local seed helpers: always fixture writes, so they carry their own
+// bypass. The subsidiaries parent guard reads the parent row through the
+// ambient scope, so unscoped seeds misfire it even for same-org parents.
 async function enablePropertyManagement(orgId: string) {
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb)
     where id=${orgId}
-  `);
+  `));
 }
 
 /** One visible property/lease (monthly rent + past-due invoice) and one hidden pair. */
@@ -120,10 +123,10 @@ async function seedProperty(org: {
 }
 
 test('property assistant reads: register, lease detail, rent roll, arrears, deposits', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   await enablePropertyManagement(org.orgId);
   try {
-    const seed = await seedProperty(org);
+    const seed = await withBypassContext(() => seedProperty(org));
     const restricted = {
       user: userFor(org.orgId, 'Property scope reader'),
       permissions: new Set(PROPERTY_PERMS),
@@ -187,12 +190,12 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
 });
 
 test('property assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   await enablePropertyManagement(orgA.orgId);
   await enablePropertyManagement(orgB.orgId);
   try {
-    const seedA = await seedProperty(orgA);
+    const seedA = await withBypassContext(() => seedProperty(orgA));
     const authzA = {
       user: userFor(orgA.orgId, 'Property org reader'),
       permissions: new Set(PROPERTY_PERMS),

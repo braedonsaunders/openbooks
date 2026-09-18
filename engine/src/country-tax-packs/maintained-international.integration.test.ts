@@ -17,7 +17,10 @@ test(
       const first = await provisionTaxPacks(target.orgId, selections);
       assert.deepEqual(first.packs, selections);
       assert.equal(first.jurisdictionsCreated, 5);
-      assert.equal(first.taxCodesCreated, 5);
+      // Multi-code declarations: AU 1 + NZ 1 + GB 3 (STD/RED/ZERO) + DE 2
+      // (STD/RED) + FR 3 (STD/RED10/RED55) = 10 codes for 5 packs, verified
+      // against the pack sources. Groups stay per-jurisdiction (5).
+      assert.equal(first.taxCodesCreated, 10);
       assert.equal(first.taxGroupsCreated, 5);
       assert.equal(first.registrationsCreated, 5);
 
