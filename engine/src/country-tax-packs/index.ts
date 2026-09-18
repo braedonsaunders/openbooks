@@ -21,6 +21,7 @@ import { INDIA_TAX_PACK } from "./in.ts";
 import { ICELAND_TAX_PACK } from "./is.ts";
 import { ITALY_TAX_PACK } from "./it.ts";
 import { JAPAN_TAX_PACK } from "./jp.ts";
+import { KENYA_TAX_PACK } from "./ke.ts";
 import { KOREA_TAX_PACK } from "./kr.ts";
 import { MEXICO_TAX_PACK } from "./mx.ts";
 import { NETHERLANDS_TAX_PACK } from "./nl.ts";
@@ -80,6 +81,7 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   ICELAND_TAX_PACK,
   CZECHIA_TAX_PACK,
   THAILAND_TAX_PACK,
+  KENYA_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 
