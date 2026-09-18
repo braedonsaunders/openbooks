@@ -762,6 +762,15 @@
           "inps": "INPS à payer (cotisations IVS employé et employeur)"
         }
       },
+      "AU": {
+        "title": "Australie \u2014 comptes l\u00e9gaux ATO",
+        "description": "Comptes de passif pour les montants que le pack australien retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "slots": {
+          "payg": "PAYG \u00e0 payer (imp\u00f4t sur le revenu, Medicare + remboursement STSL)",
+          "super": "Superannuation Guarantee \u00e0 payer (cotisation employeur)",
+          "wcb": "Workers' compensation \u00e0 payer (prime employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

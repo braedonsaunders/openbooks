@@ -762,6 +762,15 @@
           "inps": "INPS payable (employee + employer IVS contributions)"
         }
       },
+      "AU": {
+        "title": "Australia \u2014 ATO statutory accounts",
+        "description": "Liability accounts for the amounts the Australia pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "payg": "PAYG withholding payable (income tax, Medicare levy + STSL repayments)",
+          "super": "Superannuation Guarantee payable (employer contribution)",
+          "wcb": "Workers' compensation payable (employer premium)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {

@@ -762,6 +762,15 @@
           "inps": "INPS未払金（従業員・事業主負担IVS掛金）"
         }
       },
+      "AU": {
+        "title": "\u30aa\u30fc\u30b9\u30c8\u30e9\u30ea\u30a2 \u2014 ATO\u6cd5\u5b9a\u52d8\u5b9a",
+        "description": "\u30aa\u30fc\u30b9\u30c8\u30e9\u30ea\u30a2\u30d1\u30c3\u30af\u304c\u6e90\u6cc9\u5fb4\u53ce\u30fb\u8a08\u4e0a\u3059\u308b\u91d1\u984d\u306e\u8ca0\u50b5\u52d8\u5b9a\u3002\u5404\u9078\u629e\u306f\u5bfe\u8c61\u9805\u76ee\u306e\u5f93\u696d\u54e1\u8ca0\u62c5\u30fb\u4e8b\u696d\u4e3b\u8ca0\u62c5\u306e\u4e21\u65b9\u306b\u9069\u7528\u3055\u308c\u307e\u3059\u3002",
+        "slots": {
+          "payg": "PAYG\u672a\u6255\u91d1\uff08\u6240\u5f97\u7a0e\u30fbMedicare\u30fbSTSL\u8fd4\u6e08\uff09",
+          "super": "Superannuation Guarantee\u672a\u6255\u91d1\uff08\u4e8b\u696d\u4e3b\u62e0\u51fa\uff09",
+          "wcb": "Workers' compensation\u672a\u6255\u91d1\uff08\u4e8b\u696d\u4e3b\u4fdd\u967a\u6599\uff09"
+        }
+      },
       "ratesLink": "事業主が入力する料率 — 失業保険税、医療負担金 — は法定料率タブにあります。"
     },
     "usConfig": {

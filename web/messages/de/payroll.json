@@ -762,6 +762,15 @@
           "inps": "Verbindlichkeiten aus INPS (IVS-Beiträge Arbeitnehmer + Arbeitgeber)"
         }
       },
+      "AU": {
+        "title": "Australien \u2014 gesetzliche ATO-Konten",
+        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das AU-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "payg": "Verbindlichkeiten aus PAYG-Einbehalt (Einkommensteuer, Medicare + STSL-R\u00fcckzahlung)",
+          "super": "Verbindlichkeiten aus Superannuation Guarantee (Arbeitgeberbeitrag)",
+          "wcb": "Verbindlichkeiten aus Workers' compensation (Arbeitgeberpr\u00e4mie)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

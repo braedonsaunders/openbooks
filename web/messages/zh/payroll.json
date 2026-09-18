@@ -762,6 +762,15 @@
           "inps": "INPS应付（雇员和雇主IVS缴款）"
         }
       },
+      "AU": {
+        "title": "\u6fb3\u5927\u5229\u4e9a \u2014 ATO\u6cd5\u5b9a\u79d1\u76ee",
+        "description": "\u6fb3\u5927\u5229\u4e9a\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "slots": {
+          "payg": "PAYG\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\u3001Medicare\uff0bSTSL\u8fd8\u6b3e\uff09",
+          "super": "Superannuation Guarantee\u5e94\u4ed8\uff08\u96c7\u4e3b\u7f34\u6b3e\uff09",
+          "wcb": "Workers' compensation\u5e94\u4ed8\uff08\u96c7\u4e3b\u4fdd\u8d39\uff09"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {
