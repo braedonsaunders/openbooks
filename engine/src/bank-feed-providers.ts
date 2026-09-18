@@ -61,17 +61,80 @@ function exactFeedAmount(value: unknown): string {
   }
 }
 
-async function jsonResponse(res: Response): Promise<{ body: any; raw: Uint8Array }> {
+async function jsonResponse(res: Response): Promise<{ body: unknown; raw: Uint8Array }> {
   const raw = new Uint8Array(await res.arrayBuffer());
   const text = Buffer.from(raw).toString("utf8");
   if (!res.ok) {
     throw new FeedError(`provider responded ${res.status}: ${text.slice(0, 300)}`);
   }
-  return { body: text ? JSON.parse(text) : {}, raw };
+  return { body: text ? (JSON.parse(text) as unknown) : {}, raw };
 }
 
-async function asJson(res: Response): Promise<any> {
+async function asJson(res: Response): Promise<unknown> {
   return (await jsonResponse(res)).body;
+}
+
+/** Narrow an untrusted provider payload to a field bag. Anything that is
+ *  not a JSON object projects to {} so every existing optional-chain read
+ *  keeps its missing-envelope meaning. */
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Read the GoCardless bearer token off an untrusted token payload. Anything
+ *  but a non-empty string fails closed: the old check passed any truthy
+ *  value through into the Authorization header. */
+function gocardlessAccessToken(body: unknown): string {
+  const access = isJsonRecord(body) ? body.access : undefined;
+  if (typeof access !== "string" || access === "") {
+    throw new FeedError("GoCardless did not return an access token");
+  }
+  return access;
+}
+
+/** Project an untrusted provider list field. Missing stays missing (empty);
+ *  a present-but-not-a-list fails closed with a named FeedError instead of
+ *  an accidental TypeError two frames later. */
+function providerTransactionList<T>(value: unknown, provider: string): T[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new FeedError(`${provider} transactions were not a list`);
+  return value as T[];
+}
+
+/** One GoCardless booked-transaction object; every field is optional because
+ *  the provider omits what it does not know and the mapper falls back. */
+export interface GoCardlessTransaction {
+  bookingDate?: string;
+  valueDate?: string;
+  transactionAmount?: { amount?: unknown; currency?: string };
+  remittanceInformationUnstructured?: string;
+  remittanceInformationUnstructuredArray?: string[];
+  creditorName?: string;
+  debtorName?: string;
+  internalTransactionId?: string;
+  transactionId?: string;
+}
+
+/** One Plaid transactions/get transaction object. */
+export interface PlaidTransaction {
+  pending?: boolean;
+  iso_currency_code?: string;
+  amount?: unknown;
+  date?: string;
+  name?: string;
+  merchant_name?: string;
+  transaction_id?: string;
+}
+
+/** One TrueLayer Data API transaction object. */
+export interface TrueLayerTransaction {
+  currency?: string;
+  timestamp?: string;
+  amount?: unknown;
+  description?: string;
+  merchant_name?: string;
+  transaction_id?: string;
+  normalised_provider_transaction_id?: string;
 }
 
 /** Provider credentials must never cross an HTTP redirect boundary. Even a
@@ -120,9 +183,7 @@ async function gocardlessToken(creds: Record<string, string>): Promise<string> {
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ secret_id: creds.secretId, secret_key: creds.secretKey }),
   });
-  const body = await asJson(res);
-  if (!body.access) throw new FeedError("GoCardless did not return an access token");
-  return body.access as string;
+  return gocardlessAccessToken(await asJson(res));
 }
 
 const gocardless: BankFeedAdapter = {
@@ -145,7 +206,9 @@ const gocardless: BankFeedAdapter = {
     const { body, raw } = await jsonResponse(res);
     // Booked only: pendings change or vanish, so importing them would leave
     // statement evidence that can never reconcile at sign-off.
-    const txns: any[] = body?.transactions?.booked ?? [];
+    const payload = isJsonRecord(body) ? body : {};
+    const envelope = isJsonRecord(payload.transactions) ? payload.transactions.booked : undefined;
+    const txns = providerTransactionList<GoCardlessTransaction>(envelope, "GoCardless booked");
     let currency: string | null = null;
     const lines: ParsedStatementLine[] = txns.map((t) => {
       currency ??= t?.transactionAmount?.currency ?? null;
@@ -213,9 +276,9 @@ export function plaidApiBase(environment?: unknown): string {
  * hard page cap throws instead of letting history fall off the end silently.
  */
 export async function plaidFetchAllTransactions(
-  fetchPage: (offset: number) => Promise<{ transactions?: unknown[]; has_more?: boolean }>,
-): Promise<any[]> {
-  const all: unknown[] = [];
+  fetchPage: (offset: number) => Promise<{ transactions?: PlaidTransaction[]; has_more?: boolean }>,
+): Promise<PlaidTransaction[]> {
+  const all: PlaidTransaction[] = [];
   for (let offset = 0, page = 1; ; offset += PLAID_PAGE_SIZE, page += 1) {
     if (page > PLAID_MAX_PAGES) {
       throw new FeedError(
@@ -268,7 +331,13 @@ const plaid: BankFeedAdapter = {
       });
       const { body, raw } = await jsonResponse(res);
       rawResponses.push(raw);
-      return body;
+      const payload = isJsonRecord(body) ? body : {};
+      return {
+        transactions: Array.isArray(payload.transactions)
+          ? (payload.transactions as PlaidTransaction[])
+          : undefined,
+        has_more: Boolean(payload.has_more),
+      };
     });
     let currency: string | null = null;
     // Settled only: pending authorizations change amount, post under a new
@@ -318,7 +387,11 @@ const truelayer: BankFeedAdapter = {
     );
     const { body, raw } = await jsonResponse(res);
     let currency: string | null = null;
-    const lines: ParsedStatementLine[] = (body.results ?? []).map((t: any) => {
+    const txns = providerTransactionList<TrueLayerTransaction>(
+      isJsonRecord(body) ? body.results : undefined,
+      "TrueLayer",
+    );
+    const lines: ParsedStatementLine[] = txns.map((t) => {
       currency ??= t.currency ?? null;
       return {
         postedOn: (t.timestamp || sinceIso).slice(0, 10),

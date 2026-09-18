@@ -355,7 +355,12 @@ async function gateProvenance(id: string): Promise<{
   delegatedFromUserId: string | null;
   onBehalfOfUserId: string | null;
 }> {
-  const r = (await db.execute<any>(sql`
+  const r = (await db.execute<{
+    assigneeUserId: string | null;
+    decidedBy: string | null;
+    delegatedFromUserId: string | null;
+    onBehalfOfUserId: string | null;
+  }>(sql`
     select assignee_user_id as "assigneeUserId", decided_by as "decidedBy",
            delegated_from_user_id as "delegatedFromUserId", on_behalf_of_user_id as "onBehalfOfUserId"
       from flow_gates where id = ${id}

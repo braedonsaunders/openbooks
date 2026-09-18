@@ -340,7 +340,12 @@ test(
       const bill = await createRemittanceBill(org.orgId, actorId, {
         partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31",
       });
-      const billDoc = ((await db.execute<Record<string, any>>(sql`
+      const billDoc = ((await db.execute<{
+        status: string;
+        total: string;
+        due_date: string;
+        custom: Record<string, unknown> | null;
+      }>(sql`
         select status, total, due_date, custom from documents where id = ${bill.documentId}
       `))).rows[0]!;
       assert.equal(billDoc.status, "draft");

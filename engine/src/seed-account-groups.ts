@@ -48,8 +48,8 @@ async function main() {
         where account_groups.org_id = ${orgId}
       `);
     }
-    const c: any = await db.execute(sql`select count(*)::int n from account_groups where dimension=${dimension}`);
-    console.log(`${dimension} groups:`, c.rows[0].n);
+    const c = await db.execute<{ n: number }>(sql`select count(*)::int n from account_groups where dimension=${dimension}`);
+    console.log(`${dimension} groups:`, c.rows[0]!.n);
   }
   process.exit(0);
 }

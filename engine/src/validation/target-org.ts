@@ -26,7 +26,9 @@ async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
     try { return await fn(); } catch (e) {
       last = e;
       const chain: string[] = [];
-      for (let c: any = e; c; c = c.cause) chain.push(String(c?.message ?? ""));
+      for (let c: unknown = e; c; c = (c as { cause?: unknown })?.cause) {
+        chain.push(String((c as { message?: unknown })?.message ?? ""));
+      }
       if (!/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(chain.join(" "))) throw e;
       await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
     }

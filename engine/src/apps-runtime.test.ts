@@ -164,9 +164,9 @@ test("records access works when the adapter is present", async () => {
     adapters: fakeAdapters(true),
   });
   assert.equal(r.status, "ok");
-  const rows = r.response!.body as any[];
-  assert.equal(rows[0].typeKey, "equipment");
-  assert.deepEqual(rows[0].filters, { status: "active" });
+  const rows = r.response!.body as Array<{ typeKey: unknown; filters: unknown }>;
+  assert.equal(rows[0]!.typeKey, "equipment");
+  assert.deepEqual(rows[0]!.filters, { status: "active" });
 });
 
 test("governance budget stops a runaway handler", async () => {
@@ -258,9 +258,9 @@ test("journal.create round-trips input and post flag through the adapter", async
   assert.equal(r.status, "ok");
   assert.equal(calls.length, 2);
   assert.equal(calls[0]!.post, false);
-  assert.equal((calls[0]!.input as any).memo, "m");
+  assert.equal((calls[0]!.input as { memo?: unknown }).memo, "m");
   assert.equal(calls[1]!.post, true);
-  const body = r.response!.body as any;
+  const body = r.response!.body as { draft: { documentNumber: unknown }; posted: { entryId: unknown } };
   assert.equal(body.draft.documentNumber, "JE-0001");
   assert.equal(body.posted.entryId, "e1");
 });
@@ -297,8 +297,15 @@ test("platform schema and CRUD functions round-trip through the governed adapter
     adapters: withPlatform(fakeAdapters()),
   });
   assert.equal(r.status, "ok");
-  const body = r.response!.body as any;
-  assert.equal(body.schema[0].key, "items");
+  const body = r.response!.body as {
+    schema: Array<{ key: unknown }>;
+    list: { options: { q: unknown } };
+    get: { id: unknown };
+    create: { name: unknown };
+    update: { name: unknown };
+    deleted: { ok: unknown };
+  };
+  assert.equal(body.schema[0]!.key, "items");
   assert.equal(body.list.options.q, "widget");
   assert.equal(body.get.id, "i1");
   assert.equal(body.create.name, "Widget");

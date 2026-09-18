@@ -214,14 +214,14 @@ async function insertScriptDraft(
     // JE- sequence via the ONE canonical allocator (engine/src/document-numbering.ts).
     const documentNumber = await allocateDocumentNumber(tx, orgId, "journal", "JE-");
 
-    const ins = (await tx.execute(sql`
+    const ins = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
                              memo, reference_number, subtotal, tax_total, total, created_by, custom)
       values (${orgId}, 'journal', ${documentNumber}, ${subsidiaryId}, ${v.documentDate}, ${currency},
               ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId},
               ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb)
-      returning id`)) as any;
-    const id = String(ins.rows[0].id);
+      returning id`));
+    const id = String(ins.rows[0]!.id);
 
     for (let i = 0; i < v.lines.length; i++) {
       const l = v.lines[i]!;
@@ -232,8 +232,8 @@ async function insertScriptDraft(
         values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
     }
-    const num = (await tx.execute(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`)) as any;
-    return { id, documentNumber: String(num.rows[0].document_number) };
+    const num = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`));
+    return { id, documentNumber: String(num.rows[0]!.document_number) };
   });
 }
 

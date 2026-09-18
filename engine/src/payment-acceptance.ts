@@ -104,7 +104,7 @@ type FetchFn = (url: string, init: {
   headers: Record<string, string>;
   body?: string;
   redirect: "error";
-}) => Promise<{ status: number; json: () => Promise<any> }>;
+}) => Promise<{ status: number; json: () => Promise<unknown> }>;
 
 // Pure delegation: the FetchFn type above requires redirect: "error" on every
 // call site, so the refusal is enforced structurally rather than here.
@@ -116,6 +116,30 @@ const DEFAULT_ACCEPTANCE_API_BASES = {
   adyen: "https://checkout-test.adyen.com/v71",
   gocardless: "https://api-sandbox.gocardless.com",
 } as const satisfies Record<AcceptanceProvider, string>;
+
+/** Narrow an untrusted provider payload to a field bag. Anything that is
+ *  not a JSON object projects to {} so every existing optional read keeps
+ *  its missing-envelope meaning. */
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Read our link token off an untrusted event object. A present-but-not-a-
+ *  string reference fails closed to null instead of flowing a foreign type
+ *  into attempt resolution. */
+function stringLinkToken(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+/** Project an untrusted provider field onto a field bag ({} when absent). */
+function jsonObject(value: unknown): Record<string, unknown> {
+  return isJsonRecord(value) ? value : {};
+}
+
+/** Read one provider JSON body as a field bag, consuming the response once. */
+async function fetchJsonBody(res: { json: () => Promise<unknown> }): Promise<Record<string, unknown>> {
+  return jsonObject(await res.json());
+}
 
 function invalidProviderEndpoint(provider: AcceptanceProvider): PaymentAcceptanceError {
   return new PaymentAcceptanceError(`${provider} API endpoint is not allowlisted`);
@@ -298,50 +322,60 @@ function verifiedWebhook(events: WebhookEvent[]): WebhookVerification {
  *  null when acceptance does not act on its type. Same exactness contract as
  *  the Adyen item normalizer: un-normalizable fields throw to the caller's
  *  quarantine instead of settling on coerced data. */
-function normalizeStripeNotification(event: any): WebhookEvent | null {
-  const obj = event?.data?.object ?? {};
+function normalizeStripeNotification(event: unknown): WebhookEvent | null {
+  const root = isJsonRecord(event) ? event : {};
+  const data = isJsonRecord(root.data) ? root.data : {};
+  const obj = isJsonRecord(data.object) ? data.object : {};
+  const metadata = isJsonRecord(obj.metadata) ? obj.metadata.link_token : undefined;
+  const linkToken = stringLinkToken(obj.client_reference_id) ?? stringLinkToken(metadata);
+  const type = root.type;
   if (
-    event?.type === "checkout.session.completed" ||
-    event?.type === "checkout.session.async_payment_succeeded"
+    type === "checkout.session.completed" ||
+    type === "checkout.session.async_payment_succeeded"
   ) {
     // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
     // settling on that would post a receipt for money not yet collected.
     const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
     const settled =
-      event.type === "checkout.session.async_payment_succeeded" ||
+      type === "checkout.session.async_payment_succeeded" ||
       paymentStatus === "paid" ||
       paymentStatus === "no_payment_required";
     const currency = typeof obj.currency === "string" ? obj.currency.toUpperCase() : null;
     return {
       externalRef: String(obj.id ?? ""),
       intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      linkToken,
       status: settled ? "succeeded" : "processing",
       // Stripe's amount_total is expressed in the currency's smallest unit.
       // Zero-decimal currencies (for example JPY) therefore arrive as whole
       // major units, while two-decimal currencies arrive as cents. Convert
       // both forms into OpenBooks' four-decimal money scale exactly.
+      // The assertion is compile-time only: the value flows into BigInt
+      // unchanged, so its SyntaxError/RangeError branches (pinned by the
+      // quarantine tests) still classify un-normalizable amounts.
       paidAmount:
         settled && obj.amount_total != null
-          ? fromMinorUnits(BigInt(obj.amount_total), currency ?? "USD")
+          ? fromMinorUnits(BigInt(obj.amount_total as string | number | bigint | boolean), currency ?? "USD")
           : null,
       paidCurrency: settled ? currency : null,
-      raw: event,
+      raw: root,
     };
   }
-  if (event?.type === "checkout.session.async_payment_failed") {
+  if (type === "checkout.session.async_payment_failed") {
     return {
       externalRef: String(obj.id ?? ""),
       intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      linkToken,
       status: "failed",
-      raw: event,
+      raw: root,
     };
   }
-  if (event?.type === "checkout.session.expired") {
-    return { externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event };
+  if (type === "checkout.session.expired") {
+    // No metadata fallback here: expired sessions only ever resolved on the
+    // direct client reference.
+    return { externalRef: String(obj.id ?? ""), linkToken: stringLinkToken(obj.client_reference_id), status: "cancelled", raw: root };
   }
-  if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
+  if (type === "charge.refunded" || type === "charge.dispute.created") {
     // Checkout stores the session id as external_ref and persists
     // payment_intent onto event_payload. Refund/dispute objects are keyed
     // by the intent, so both refs must be set: externalRef for a later
@@ -351,7 +385,7 @@ function normalizeStripeNotification(event: any): WebhookEvent | null {
       externalRef: String(obj.payment_intent ?? obj.id ?? ""),
       intentRef: intent,
       status: "refunded",
-      raw: event,
+      raw: root,
     };
   }
   return null;
@@ -377,22 +411,25 @@ function verifyStripeWebhookDelivery(
   // (below) makes processing idempotent.
   const skew = Date.now() / 1000 - Number(parts.t);
   if (skew < -300 || skew > 86_400) return invalidWebhook();
-  let event;
+  let event: unknown;
   try {
     event = JSON.parse(rawBody);
   } catch {
     return verifiedWebhook([]);
   }
+  const body = isJsonRecord(event) ? event : {};
   // Authenticated content may still be un-normalizable; that quarantines the
   // delivery's single item exactly like an unparseable body does above.
   try {
     const normalized = normalizeStripeNotification(event);
     return normalized ? verifiedWebhook([normalized]) : verifiedWebhook([]);
   } catch (error) {
+    const data = isJsonRecord(body.data) ? body.data : {};
+    const object = isJsonRecord(data.object) ? data.object : {};
     logPaymentWebhookItemMalformed(
       "stripe",
-      String(event?.data?.object?.id ?? ""),
-      String(event?.type ?? ""),
+      String(object.id ?? ""),
+      String(body.type ?? ""),
       error,
     );
     return verifiedWebhook([]);
@@ -422,9 +459,11 @@ const stripeAdapter: PaymentProviderAdapter = {
       headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
       body: params.toString(),
     });
-    const json = await res.json();
-    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe checkout failed: ${json?.error?.message ?? res.status}`);
-    if (!json?.id || !json?.url) throw new PaymentAcceptanceError("stripe checkout returned no session url");
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe checkout failed: ${jsonObject(json.error).message ?? res.status}`);
+    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+      throw new PaymentAcceptanceError("stripe checkout returned no session url");
+    }
     return { redirectUrl: json.url, externalRef: json.id };
   },
   verifyWebhookDelivery: verifyStripeWebhookDelivery,
@@ -464,30 +503,50 @@ function adyenScalarString(value: unknown): string | null {
   return null;
 }
 
-function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: any): WebhookEvent | null {
+/** One Adyen NotificationRequestItem; every field is optional because the
+ *  provider omits what does not apply to the event code. */
+interface AdyenNotificationItem extends Record<string, unknown> {
+  pspReference?: unknown;
+  originalReference?: unknown;
+  merchantAccountCode?: unknown;
+  merchantReference?: unknown;
+  amount?: unknown;
+  eventCode?: unknown;
+  success?: unknown;
+  additionalData?: unknown;
+}
+
+function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: AdyenNotificationItem): WebhookEvent | null {
   const eventCode = adyenScalarString(item.eventCode);
   const successFlag = normalizeAdyenSuccessFlag(adyenScalarString(item.success) ?? item.success);
+  const linkToken = stringLinkToken(item.merchantReference);
+  const amount = isJsonRecord(item.amount) ? item.amount : undefined;
+  const amountValue = amount?.value;
+  const amountCurrency = amount?.currency;
   if (eventCode === "AUTHORISATION" && successFlag === "true") {
     return {
       externalRef: String(item.pspReference ?? ""),
-      linkToken: item.merchantReference ?? null,
+      linkToken,
       status: "succeeded",
+      // The assertion is compile-time only: the value flows into BigInt
+      // unchanged, so its SyntaxError/RangeError branches (pinned by the
+      // quarantine tests) still classify un-normalizable amounts.
       paidAmount:
-        item.amount?.value != null && item.amount?.currency
-          ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
+        amountValue != null && amountCurrency
+          ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
           : null,
       paidCurrency:
-        typeof item.amount?.currency === "string"
-          ? item.amount.currency.toUpperCase()
+        typeof amountCurrency === "string"
+          ? amountCurrency.toUpperCase()
           : null,
       raw: payload,
     };
   }
   if (eventCode === "AUTHORISATION") {
-    return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload };
+    return { externalRef: String(item.pspReference ?? ""), linkToken, status: "failed", raw: payload };
   }
   if (eventCode === "CANCELLATION" || eventCode === "CANCEL_OR_REFUND") {
-    return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload };
+    return { externalRef: String(item.pspReference ?? ""), linkToken, status: "refunded", raw: payload };
   }
   return null;
 }
@@ -498,32 +557,39 @@ function verifyAdyenWebhookDelivery(
   secrets: ProviderSecrets,
 ): WebhookVerification {
   if (!secrets.webhookSecret) return invalidWebhook(); // webhookSecret = base64 HMAC key
-  let payload;
+  let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
   } catch {
     return invalidWebhook();
   }
-  const items = Array.isArray(payload?.notificationItems)
-    ? payload.notificationItems.map((entry: any) => entry?.NotificationRequestItem).filter(Boolean)
+  const body = isJsonRecord(payload) ? payload : {};
+  const items = Array.isArray(body.notificationItems)
+    ? body.notificationItems.map((entry: unknown) => (isJsonRecord(entry) ? entry.NotificationRequestItem : undefined)).filter(Boolean)
     : [];
   if (items.length === 0) return invalidWebhook();
   const keyBytes = Buffer.from(secrets.webhookSecret, "base64");
   const events: WebhookEvent[] = [];
-  for (const item of items) {
+  for (const rawItem of items) {
+    // Non-object items cannot carry a signature; project them to {} so the
+    // delivery-wide authentication below fails exactly as it did when every
+    // field read came back undefined.
+    const item: AdyenNotificationItem = isJsonRecord(rawItem) ? rawItem : {};
+    const amount = isJsonRecord(item.amount) ? item.amount : undefined;
+    const additionalData = isJsonRecord(item.additionalData) ? item.additionalData : undefined;
     // Adyen signs the concatenation of these fields with HMAC-SHA256 → base64.
     const message = [
       item.pspReference ?? "",
       item.originalReference ?? "",
       item.merchantAccountCode ?? "",
       item.merchantReference ?? "",
-      item.amount?.value ?? "",
-      item.amount?.currency ?? "",
+      amount?.value ?? "",
+      amount?.currency ?? "",
       item.eventCode ?? "",
       item.success ?? "",
     ].join(":");
     const expected = createHmac("sha256", keyBytes).update(message, "utf8").digest("base64");
-    const provided = item.additionalData?.["metadata.hmacSignature"] ?? item.additionalData?.hmacSignature;
+    const provided = additionalData?.["metadata.hmacSignature"] ?? additionalData?.hmacSignature;
     // Authentication is delivery-wide: never process a valid item from a
     // payload that also contains an item whose signature cannot be verified.
     if (!provided || !safeEqual(expected, String(provided))) return invalidWebhook();
@@ -532,7 +598,7 @@ function verifyAdyenWebhookDelivery(
     // must neither crash the delivery boundary nor starve its signed siblings,
     // and settlement never runs on best-effort-parsed amounts.
     try {
-      const event = normalizeAdyenNotificationItem(payload, item);
+      const event = normalizeAdyenNotificationItem(body, item);
       if (event) events.push(event);
     } catch (error) {
       logPaymentWebhookItemMalformed("adyen", String(item.pspReference ?? ""), String(item.eventCode ?? ""), error);
@@ -563,9 +629,11 @@ const adyenAdapter: PaymentProviderAdapter = {
         mode: "hosted",
       }),
     });
-    const json = await res.json();
-    if (res.status >= 400) throw new PaymentAcceptanceError(`adyen session failed: ${json?.message ?? res.status}`);
-    if (!json?.id || !json?.url) throw new PaymentAcceptanceError("adyen returned no session url");
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`adyen session failed: ${json.message ?? res.status}`);
+    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+      throw new PaymentAcceptanceError("adyen returned no session url");
+    }
     return { redirectUrl: json.url, externalRef: json.id };
   },
   verifyWebhookDelivery: verifyAdyenWebhookDelivery,
@@ -641,9 +709,11 @@ const gocardlessAdapter: PaymentProviderAdapter = {
         },
       }),
     });
-    const br = await brRes.json();
-    const brId = br?.billing_requests?.id;
-    if (brRes.status >= 400 || !brId) throw new PaymentAcceptanceError(`gocardless billing request failed: ${br?.error?.message ?? brRes.status}`);
+    const br = await fetchJsonBody(brRes);
+    const brId = jsonObject(br.billing_requests).id;
+    if (brRes.status >= 400 || typeof brId !== "string" || !brId) {
+      throw new PaymentAcceptanceError(`gocardless billing request failed: ${jsonObject(br.error).message ?? brRes.status}`);
+    }
     const flowRes = await fetchFn(`${base}/billing_request_flows`, {
       method: "POST",
       redirect: "error",
@@ -656,9 +726,11 @@ const gocardlessAdapter: PaymentProviderAdapter = {
         },
       }),
     });
-    const flow = await flowRes.json();
-    const url = flow?.billing_request_flows?.authorisation_url;
-    if (flowRes.status >= 400 || !url) throw new PaymentAcceptanceError(`gocardless flow failed: ${flow?.error?.message ?? flowRes.status}`);
+    const flow = await fetchJsonBody(flowRes);
+    const url = jsonObject(flow.billing_request_flows).authorisation_url;
+    if (flowRes.status >= 400 || typeof url !== "string" || !url) {
+      throw new PaymentAcceptanceError(`gocardless flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`);
+    }
     return { redirectUrl: url, externalRef: brId };
   },
   verifyWebhookDelivery: verifyGoCardlessWebhookDelivery,
@@ -2097,10 +2169,12 @@ export async function testAcceptanceConnection(
         redirect: "error",
         headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}` },
       });
-      const json = await res.json();
+      const json = await fetchJsonBody(res);
+      const profileName = jsonObject(json.business_profile).name;
+      const errorMessage = jsonObject(json.error).message;
       return res.status < 400
-        ? { ok: true, detail: `connected${json?.business_profile?.name ? ` — ${json.business_profile.name}` : ""}` }
-        : { ok: false, detail: json?.error?.message ?? `HTTP ${res.status}` };
+        ? { ok: true, detail: `connected${profileName ? ` — ${profileName}` : ""}` }
+        : { ok: false, detail: typeof errorMessage === "string" ? errorMessage : `HTTP ${res.status}` };
     }
     if (provider === "adyen") {
       if (!secrets.apiKey || !secrets.merchantAccount) return { ok: false, detail: "API key and merchant account are required" };
@@ -2111,10 +2185,10 @@ export async function testAcceptanceConnection(
         headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
         body: JSON.stringify({ merchantAccount: secrets.merchantAccount }),
       });
-      const json = await res.json();
+      const json = await fetchJsonBody(res);
       return res.status < 400
-        ? { ok: true, detail: `connected — ${Array.isArray(json?.paymentMethods) ? json.paymentMethods.length : 0} payment methods` }
-        : { ok: false, detail: json?.message ?? `HTTP ${res.status}` };
+        ? { ok: true, detail: `connected — ${Array.isArray(json.paymentMethods) ? json.paymentMethods.length : 0} payment methods` }
+        : { ok: false, detail: typeof json.message === "string" ? json.message : `HTTP ${res.status}` };
     }
     // gocardless
     if (!secrets.apiKey) return { ok: false, detail: "no access token configured" };

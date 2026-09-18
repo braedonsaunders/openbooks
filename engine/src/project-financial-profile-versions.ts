@@ -29,8 +29,12 @@ const TOTAL_COST_COMPONENTS = new Set([
   "overhead",
 ]);
 
-function object(value: unknown, name: string): Record<string, any> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function object(value: unknown, name: string): Record<string, unknown> {
+  if (!isRecord(value)) {
     throw new Error(`${name} must be an object`);
   }
   return value;
@@ -253,7 +257,9 @@ export function assertValidProjectFinancialProfile(
   }
   for (const [index, raw] of profile.layout.entries()) {
     const line = object(raw, `layout[${index}]`);
-    if (!MEASURES.has(line.measure)) throw new Error(`layout[${index}].measure is invalid`);
+    if (typeof line.measure !== "string" || !MEASURES.has(line.measure)) {
+      throw new Error(`layout[${index}].measure is invalid`);
+    }
     oneOf(line.variant, ["line", "subtotal", "total"], `layout[${index}].variant`);
     if (line.label !== undefined && (typeof line.label !== "string" || line.label.length > 200)) {
       throw new Error(`layout[${index}].label is invalid`);

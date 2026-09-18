@@ -505,7 +505,15 @@ export async function submitPayApplication(
       if (!updated.rows.length) throw new ConstructionBillingError("A draw line does not belong to this application");
     }
 
-    const linesRes = (await tx.execute<any>(sql`
+    const linesRes = (await tx.execute<{
+      sov_line_id: string;
+      scheduled_value: string | null;
+      previous_completed: string | null;
+      previous_materials_stored: string | null;
+      this_period_completed: string | null;
+      materials_stored: string | null;
+      retainage_percent: string | null;
+    }>(sql`
       select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
              pal.this_period_completed, pal.materials_stored,
              sl.scheduled_value, sl.retainage_percent
@@ -613,7 +621,14 @@ export async function generatePayApplicationInvoice(
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const appRes = (await tx.execute<any>(sql`
+    const appRes = (await tx.execute<{
+      project_id: string;
+      application_number: number;
+      period_end: string;
+      kind: string;
+      status: string;
+      retainage_percent: string;
+    }>(sql`
       select * from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
     `));
     const app = appRes.rows[0];
@@ -624,7 +639,12 @@ export async function generatePayApplicationInvoice(
     }
     await assertApplicationProcedure(tx, orgId, app.project_id);
 
-    const projRes = (await tx.execute<any>(sql`
+    const projRes = (await tx.execute<{
+      id: string;
+      customer_id: string | null;
+      subsidiary_id: string | null;
+      currency: string;
+    }>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
         from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
        where p.id = ${app.project_id} and p.org_id = ${orgId}
@@ -633,7 +653,17 @@ export async function generatePayApplicationInvoice(
     if (!project) throw new ConstructionBillingError("Project not found");
     if (!project.customer_id) throw new ConstructionBillingError("The project has no customer to invoice");
 
-    const linesRes = (await tx.execute<any>(sql`
+    const linesRes = (await tx.execute<{
+      sov_line_id: string;
+      scheduled_value: string | null;
+      previous_completed: string | null;
+      previous_materials_stored: string | null;
+      this_period_completed: string | null;
+      materials_stored: string | null;
+      description: string;
+      income_account_id: string | null;
+      retainage_percent: string | null;
+    }>(sql`
       select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
              pal.this_period_completed, pal.materials_stored,
              sl.description, sl.scheduled_value, sl.income_account_id, sl.retainage_percent

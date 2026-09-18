@@ -296,7 +296,16 @@ test("an authenticated adyen delivery quarantines an un-normalizable item and pr
     `);
 
     const keyBytes = Buffer.from(webhookSecret, "base64");
-    const signItem = (item: Record<string, any>) => {
+    const signItem = (item: {
+      pspReference?: unknown;
+      originalReference?: unknown;
+      merchantAccountCode?: unknown;
+      merchantReference?: unknown;
+      amount?: { value?: unknown; currency?: unknown };
+      eventCode?: unknown;
+      success?: unknown;
+      additionalData?: Record<string, unknown>;
+    }) => {
       const message = [
         item.pspReference ?? "",
         item.originalReference ?? "",

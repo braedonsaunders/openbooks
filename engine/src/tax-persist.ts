@@ -4,6 +4,7 @@ import {
   computeLineTaxes,
   TaxCalculationError,
   type ComputedTaxComponent,
+  type TaxCalculationType,
   type TaxComponentConfig,
 } from "./tax.ts";
 import { cmp } from "./money.ts";
@@ -45,7 +46,19 @@ export async function loadTaxComponentConfig(
   dateIso: string,
   runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
-  const r = (await runner.execute<Record<string, any>>(sql`
+  const r = (await runner.execute<{
+    id: string;
+    code: string;
+    effective_rate: string | null;
+    recoverable_percent: string | null;
+    calculation_type: TaxCalculationType;
+    price_includes_tax: boolean;
+    compound_on_previous: boolean;
+    rounding_scale: number;
+    collected_account_id: string | null;
+    paid_account_id: string | null;
+    withholding_account_id: string | null;
+  }>(sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent, tc.calculation_type,
            tc.price_includes_tax, tc.compound_on_previous, tc.rounding_scale,
