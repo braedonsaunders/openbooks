@@ -321,7 +321,7 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
     const state = lines.filter((l) => l.system_key === 'state_income_tax').reduce((t, l) => t + Number(l.amount), 0)
     assert.ok(state > 0, 'the CA fixture genuinely withholds California PIT')
     assert.ok(federal > 0, 'the CA fixture genuinely withholds federal FIT')
-    const record = await loadPdfRecordValues('pay_stub', org.orgId, stubId)
+    const record = await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub', org.orgId, stubId))
     assert.ok(record)
     assert.equal(cents(parseMoney(record.values.ytd_tax)), cents(federal + state))
     const oracle = await ytdOracle(org.orgId, employee, 2026, '2026-07-21', 'USD')
