@@ -1196,6 +1196,13 @@ async function snapshotScratchOrg(org: ScratchOrg, tables: readonly string[]): P
 }
 
 /**
+ * Sentinel: abort a reset delete-pass transaction so the pass retries whole.
+ * Thrown inside the pass when committing would violate a deferred link (see
+ * below); caught by the pass loop, which continues. Never escapes the loop.
+ */
+const RESET_PASS_RETRY = "scratch-fixture-reset-pass-retry";
+
+/**
  * Reset a leased tenant without dropping its bootstrap spine. Test-created
  * rows are removed in one committed, retrying server-side pass while the
  * known bootstrap ids remain. Any row that cannot be removed is an error: the
@@ -1207,93 +1214,169 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
   let remaining = [...tables].filter((table) => table !== "orgs");
   const errors = new Map<string, string>();
+  const coreSet = new Set<string>(CORE_A);
 
   for (let pass = 0; pass < 10 && remaining.length > 0; pass += 1) {
-    const failed = await db.transaction(async (tx) => {
-      await setTeardownGucs(tx);
-      // This is a dedicated disposable database owned by the CI job. Deferring
-      // every trigger (including immutable-evidence and FK trigger functions)
-      // for this one transaction makes the whole-tenant snapshot restore
-      // independent of table order, while the post-transaction snapshot
-      // comparison remains fail-closed. No application or shared DB path can
-      // enable pooling without the database marker checked above.
-      await tx.execute(sql`set local session_replication_role = replica`);
-      await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
-      const failures: { table: string; error: string }[] = [];
+    // Delete tail tables before the interlocked core, mirroring the full
+    // teardown's phase order (generic passes, then TxA/TxB): a tail child
+    // (capture runs, allocations) referencing a core parent must go first,
+    // and inside the core the curated children-first order keeps
+    // lines-before-entries-before-documents. Alphabetical order deletes
+    // documents while entries still reference them and fails the whole pass
+    // at COMMIT on the deferred document/entry link instead of converging.
+    const remainingSet = new Set(remaining);
+    const ordered = [
+      ...remaining.filter((t) => !coreSet.has(t)),
+      ...CORE_A.filter((t) => remainingSet.has(t)),
+    ];
+    let failed: { table: string; error: string }[];
+    try {
+      failed = await db.transaction(async (tx) => {
+        await setTeardownGucs(tx);
+        // This is a dedicated disposable database owned by the CI job. The reset
+        // must run as the test login, which is deliberately NOT a superuser (so
+        // tenant RLS stays enforced for every pooled query) — so replica mode
+        // is unavailable and the reset follows the same recipe as the validated
+        // full teardown below: the org is flagged sandbox (the wipe guards check
+        // env_kind as well as the GUCs), kernel immutability guards are
+        // satisfied by the amend/sandbox-wipe GUCs, the two genuine
+        // document/entry FK cycles are deferred, unconditional evidence guards
+        // are disabled by name (table ownership suffices), and the per-table
+        // savepoint loop converges over FK order exactly like
+        // genericDeletePasses. The closing transaction below restores
+        // env_kind='production' for the next lease. No application or shared DB
+        // path can enable pooling without the database marker checked above.
+        await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
+        await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
+        const failures: { table: string; error: string }[] = [];
 
-      // These guards are intentionally unconditional. Disable only the named
-      // test-evidence triggers for this transaction, exactly as full teardown
-      // does, and re-enable them before commit.
-      for (const { table, trigger } of GUARDED_EVIDENCE) {
-        if (!tables.includes(table)) continue;
-        await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
-      }
-      const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
-      if (hasBankFiles) {
-        await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
-        await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
-        await tx.execute(sql`delete from pay_run_bank_files where org_id = ${org.orgId}`);
-      }
-      await tx.execute(sql`delete from file_blobs where version_id in
-        (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${org.orgId})`);
-      await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${org.orgId})`);
-      if (hasBankFiles) {
-        await tx.execute(sql.raw(`alter table public."file_blobs" enable trigger payroll_bank_file_blob_immutable`));
-        await tx.execute(sql.raw(`alter table public."pay_run_bank_files" enable trigger pay_run_bank_file_immutable`));
-      }
-      await tx.execute(sql`delete from tax_group_members where tax_group_id in
-        (select id from tax_groups where org_id = ${org.orgId})`);
-      // Password-reset tokens predate tenant scoping: they carry only user_id
-      // and intentionally have no FK, so the user-scoped recycle below would
-      // otherwise leave an orphaned credential record behind — the same purge
-      // the full destructive teardown runs in its prep transaction.
-      await tx.execute(sql`delete from auth_password_resets
-        where user_id in (select id from users where org_id = ${org.orgId})`);
-      await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
-      await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
-      for (const [index, table] of remaining.entries()) {
-        const savepoint = `scratch_fixture_reset_${pass}_${index}`;
-        await tx.execute(sql.raw(`savepoint ${savepoint}`));
-        try {
-          const target = `public.${quoteIdentifier(table)}`;
-          const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
-          const tableColumns = columns.get(table) ?? [];
-          if (tableColumns.includes("id")) {
-            await tx.execute(sql`
-              delete from ${sql.raw(target)} as target
-               where target.org_id = ${org.orgId}
-                 and not exists (select 1 from ${sql.raw(snapshot)} as baseline where baseline.id = target.id)`);
-          } else {
-            // A handful of join/projection tables are keyed by composite
-            // columns and have no synthetic id. Compare every nullable column
-            // with IS NOT DISTINCT FROM, then restore missing template rows;
-            // the savepoint/pass machinery keeps FK ordering recoverable.
-            const match = rowMatch(tableColumns, "target", "baseline");
-            const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
-            await tx.execute(sql.raw(
-              `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
-            ));
-            await tx.execute(sql.raw(
-              `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
-            ));
-          }
-          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-        } catch (error) {
-          // PostgreSQL aborts a transaction after any statement error. A
-          // savepoint creates a real subtransaction so one FK-blocked table
-          // can be deferred to the next deterministic pass without poisoning
-          // the committed reset transaction.
-          await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
-          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-          failures.push({ table, error: String(error) });
+        // These guards are intentionally unconditional. Disable only the named
+        // test-evidence triggers for this transaction, exactly as full teardown
+        // does, and re-enable them before commit.
+        for (const { table, trigger } of GUARDED_EVIDENCE) {
+          if (!tables.includes(table)) continue;
+          await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
         }
-      }
-      for (const { table, trigger } of GUARDED_EVIDENCE) {
-        if (!tables.includes(table)) continue;
-        await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
-      }
-      return failures;
-    });
+        const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
+        if (hasBankFiles) {
+          await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
+          await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
+          await tx.execute(sql`delete from pay_run_bank_files where org_id = ${org.orgId}`);
+        }
+        await tx.execute(sql`delete from file_blobs where version_id in
+          (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${org.orgId})`);
+        await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${org.orgId})`);
+        if (hasBankFiles) {
+          await tx.execute(sql.raw(`alter table public."file_blobs" enable trigger payroll_bank_file_blob_immutable`));
+          await tx.execute(sql.raw(`alter table public."pay_run_bank_files" enable trigger pay_run_bank_file_immutable`));
+        }
+        // Capture evidence guards are unconditional (no sandbox-wipe bypass), so
+        // without replica mode the reset must handle them exactly as the full
+        // teardown does: disable the specific guard triggers, delete children
+        // before items, re-enable — all inside this one transaction, and only
+        // when such rows exist (the ALTER needs table ownership). Trigger on
+        // rows in ANY of the five tables: tests often delete the items while
+        // runs/fields remain, and a remaining run still references its document.
+        {
+          const captureTables = [
+            "ap_capture_items",
+            "ap_capture_fields",
+            "ap_capture_runs",
+            "ap_capture_corrections",
+            "ap_capture_events",
+          ].filter((t) => tables.includes(t));
+          let captureRows = false;
+          for (const t of captureTables) {
+            const probe = await tx.execute(sql`select 1 as x from ${qualified(t)} where org_id = ${org.orgId} limit 1`);
+            if (probe.rows.length > 0) {
+              captureRows = true;
+              break;
+            }
+          }
+          if (captureRows) {
+            for (const [table, trigger] of [
+              ["ap_capture_fields", "ap_capture_fields_append_only"],
+              ["ap_capture_runs", "ap_capture_runs_immutable"],
+              ["ap_capture_corrections", "ap_capture_corrections_append_only"],
+              ["ap_capture_events", "ap_capture_events_append_only"],
+            ] as const) {
+              if (!tables.includes(table)) continue;
+              await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+              await tx.execute(sql`delete from ${qualified(table)} where org_id = ${org.orgId}`);
+              await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+            }
+            if (tables.includes("ap_capture_items")) {
+              await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
+            }
+          }
+        }
+        await tx.execute(sql`delete from tax_group_members where tax_group_id in
+          (select id from tax_groups where org_id = ${org.orgId})`);
+        // Password-reset tokens predate tenant scoping: they carry only user_id
+        // and intentionally have no FK, so the user-scoped recycle below would
+        // otherwise leave an orphaned credential record behind — the same purge
+        // the full destructive teardown runs in its prep transaction.
+        await tx.execute(sql`delete from auth_password_resets
+          where user_id in (select id from users where org_id = ${org.orgId})`);
+        await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
+        await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
+        for (const [index, table] of ordered.entries()) {
+          const savepoint = `scratch_fixture_reset_${pass}_${index}`;
+          await tx.execute(sql.raw(`savepoint ${savepoint}`));
+          try {
+            const target = `public.${quoteIdentifier(table)}`;
+            const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+            const tableColumns = columns.get(table) ?? [];
+            if (tableColumns.includes("id")) {
+              await tx.execute(sql`
+                delete from ${sql.raw(target)} as target
+                 where target.org_id = ${org.orgId}
+                   and not exists (select 1 from ${sql.raw(snapshot)} as baseline where baseline.id = target.id)`);
+            } else {
+              // A handful of join/projection tables are keyed by composite
+              // columns and have no synthetic id. Compare every nullable column
+              // with IS NOT DISTINCT FROM, then restore missing template rows;
+              // the savepoint/pass machinery keeps FK ordering recoverable.
+              const match = rowMatch(tableColumns, "target", "baseline");
+              const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
+              await tx.execute(sql.raw(
+                `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
+              ));
+              await tx.execute(sql.raw(
+                `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
+              ));
+            }
+            await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+          } catch (error) {
+            // PostgreSQL aborts a transaction after any statement error. A
+            // savepoint creates a real subtransaction so one FK-blocked table
+            // can be deferred to the next deterministic pass without poisoning
+            // the committed reset transaction.
+            await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
+            await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+            failures.push({ table, error: String(error) });
+          }
+        }
+        for (const { table, trigger } of GUARDED_EVIDENCE) {
+          if (!tables.includes(table)) continue;
+          await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+        }
+        const doomNames = failures.map((f) => f.table);
+        if (doomNames.includes("documents") && !doomNames.includes("journal_entries")) {
+          // Entries were deleted while documents survive: the deferred
+          // posted_entry link would fail this pass at COMMIT and roll the
+          // entries delete back with it. Retry the whole pass instead — the
+          // rollback restores the entries too, and a later pass clears the
+          // documents' remaining referencer first. Transactional DDL (the
+          // trigger disables above) rolls back as well, so nothing leaks.
+          throw new Error(RESET_PASS_RETRY);
+        }
+        return failures;
+      });
+    } catch (err) {
+      if ((err as Error).message !== RESET_PASS_RETRY) throw err;
+      continue;
+    }
     for (const table of remaining) errors.delete(table);
     for (const failure of failed) errors.set(failure.table, failure.error);
     const failedNames = failed.map((failure) => failure.table);
@@ -1318,6 +1401,12 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
     const failed = await db.transaction(async (tx) => {
       await setTeardownGucs(tx);
+      // Baseline documents and their source entries reference each other, so
+      // reinserting the template in any fixed table order deadlocks without
+      // replica mode. Both links are DEFERRABLE: defer exactly those two, the
+      // same pair the full teardown defers, and constraint checks move to
+      // commit when both sides are present again.
+      await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
       const failures: { table: string; error: string }[] = [];
       for (const [index, table] of restoreRemaining.entries()) {
         const tableColumns = columns.get(table) ?? [];
