@@ -771,6 +771,21 @@
           "wcb": "Workers' compensation por pagar (prima del empleador)"
         }
       },
+      "DE": {
+        "title": "Alemania \u2014 cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete DE retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "lohnsteuer": "Lohnsteuer por pagar (impuesto sobre la renta)",
+          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag por pagar (recargo sobre el impuesto sobre la renta)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer por pagar (impuesto eclesi\u00e1stico elegido por el empleado)",
+          "kv": "KV por pagar (Krankenversicherung de empleado y empleador)",
+          "rv": "RV por pagar (Rentenversicherung de empleado y empleador)",
+          "av": "AV por pagar (Arbeitslosenversicherung de empleado y empleador)",
+          "pv": "PV por pagar (Pflegeversicherung de empleado y empleador)",
+          "umlage": "Umlage por pagar (U1, U2 e Insolvenzgeldumlage del empleador)",
+          "unfall": "Berufsgenossenschaft por pagar (seguro de accidentes del empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

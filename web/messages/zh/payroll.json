@@ -771,6 +771,21 @@
           "wcb": "Workers' compensation\u5e94\u4ed8\uff08\u96c7\u4e3b\u4fdd\u8d39\uff09"
         }
       },
+      "DE": {
+        "title": "\u5fb7\u56fd \u2014 \u6cd5\u5b9a\u79d1\u76ee",
+        "description": "\u5fb7\u56fd\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "slots": {
+          "lohnsteuer": "Lohnsteuer\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\uff09",
+          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\u9644\u52a0\u8d39\uff09",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer\u5e94\u4ed8\uff08\u96c7\u5458\u9009\u5b9a\u7684\u6559\u4f1a\u7a0e\uff09",
+          "kv": "KV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bKrankenversicherung\uff09",
+          "rv": "RV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bRentenversicherung\uff09",
+          "av": "AV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bArbeitslosenversicherung\uff09",
+          "pv": "PV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bPflegeversicherung\uff09",
+          "umlage": "Umlage\u5e94\u4ed8\uff08\u96c7\u4e3bU1\u3001U2\u3001Insolvenzgeldumlage\uff09",
+          "unfall": "Berufsgenossenschaft\u5e94\u4ed8\uff08\u96c7\u4e3b\u4e8b\u6545\u4fdd\u9669\uff09"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {

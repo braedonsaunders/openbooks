@@ -771,6 +771,21 @@
           "wcb": "Workers' compensation a recolher (pr\u00eamio do empregador)"
         }
       },
+      "DE": {
+        "title": "Alemanha \u2014 contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Alemanha ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "slots": {
+          "lohnsteuer": "Lohnsteuer a recolher (imposto de renda)",
+          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag a recolher (sobretaxa do imposto de renda)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer a recolher (imposto eclesi\u00e1stico optado pelo funcion\u00e1rio)",
+          "kv": "KV a recolher (Krankenversicherung de funcion\u00e1rio e empregador)",
+          "rv": "RV a recolher (Rentenversicherung de funcion\u00e1rio e empregador)",
+          "av": "AV a recolher (Arbeitslosenversicherung de funcion\u00e1rio e empregador)",
+          "pv": "PV a recolher (Pflegeversicherung de funcion\u00e1rio e empregador)",
+          "umlage": "Umlage a recolher (U1, U2 e Insolvenzgeldumlage do empregador)",
+          "unfall": "Berufsgenossenschaft a recolher (seguro de acidentes do empregador)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {
