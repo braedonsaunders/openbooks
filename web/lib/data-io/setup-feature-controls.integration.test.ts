@@ -4,7 +4,7 @@ import test from 'node:test';
 registerHooks({resolve(specifier,context,next){if(specifier==='server-only')return{shortCircuit:true,url:'data:text/javascript,export {}'};return next(specifier,context)}});
 const {sql}=await import('drizzle-orm');
 const {default:pg}=await import('pg');
-const {db,withOrgTransaction}=await import('@openbooks/engine/src/db.ts');
+const {db,withOrgContext,withOrgTransaction}=await import('@openbooks/engine/src/db.ts');
 const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/test-fixtures.ts');
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
@@ -57,10 +57,16 @@ for(const mode of ['insert','upsert'] as const){
    const resource=setupResource(SETUP_ENTITY_BY_KEY.get('item-rate-books')!,org.orgId);
    const body={code:'FENCED',name:'Fenced import',isDefault:true,isActive:true};
    if(mode==='upsert')assert.equal((await resource.write([body],'insert',{orgId:org.orgId,actorId,dryRun:false})).created,1);
-   const before=(await db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`)).rows;
+   const before=(await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows;
    await holder.connect();await holder.query('begin');
    await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`openbooks:feature-gate:${org.orgId}`]);
-   await holder.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"projects\":false}'::jsonb) where id=$1",[org.orgId]);
+   // The holder is a raw concurrent session outside the test bypass: scope it
+   // explicitly so its disable actually stages (unscoped it matches zero rows
+   // under RLS and the import sails through). Assert the footprint so a blind
+   // holder fails fast instead of passing a vacuous gate.
+   await holder.query("select set_config('app.bypass_rls','on',true)");
+   const staged=await holder.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"projects\":false}'::jsonb) where id=$1",[org.orgId]);
+   assert.equal(staged.rowCount,1,'concurrent holder must stage the feature disable');
    const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
    const request=resource.write([{...body,name:'Must be refused'}],mode,{orgId:org.orgId,actorId,dryRun:false});pending=request;void request.catch(()=>{});
    let blocked=false;const deadline=Date.now()+10000;
@@ -71,7 +77,7 @@ for(const mode of ['insert','upsert'] as const){
    }
    assert.ok(blocked,'import queues at the authoritative feature fence');await holder.query('commit');
    const outcome=await request;assert.equal(outcome.failed,1);assert.equal(outcome.created,0);assert.equal(outcome.updated,0);
-   assert.deepEqual((await db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`)).rows,before);
+   assert.deepEqual((await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows,before);
   }finally{await holder.query('rollback').catch(()=>{});await pending?.catch(()=>{});await holder.end();await dropScratchOrg(org.orgId);}
  });
 }
