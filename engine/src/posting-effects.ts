@@ -218,31 +218,42 @@ export async function claimPostingEffectsForDocument(
 }
 
 async function claimNextDuePostingEffects(now: Date): Promise<PostingEffectsRow | null> {
-  const claimed = await db.execute<PostingEffectsRow>(sql`
-    update posting_effects as claimed
-       set status='running',
-           attempt_count=attempt_count+1,
-           locked_at=${now},
-           lease_token=gen_random_uuid(),
-           last_attempt_at=${now},
-           finished_at=null,
-           error=null,
-           updated_at=now()
-      from (
-        select id from posting_effects
-         where status in ('pending','failed')
-           and attempt_count < ${MAX_POSTING_EFFECTS_ATTEMPTS}
-           and next_attempt_at <= ${now}
-         order by next_attempt_at
-         for update skip locked
-         limit 1
-      ) as due
-     where claimed.id = due.id
-     returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
-               claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
-               claimed.lease_token
-  `);
-  return claimed.rows[0] ?? null;
+  // The locking read and the claim write share one transaction: the row lock
+  // from SELECT .. FOR UPDATE SKIP LOCKED is held until commit, so a
+  // concurrent drain skips this row instead of double-claiming it. Do not
+  // fold the locking subquery back into a single UPDATE..FROM — PostgreSQL
+  // re-evaluates the SKIP LOCKED subquery per outer row, so one call marks
+  // every due row running (stranding all but the first until lease recovery)
+  // while returning only the first.
+  return db.transaction(async (tx) => {
+    const due = await tx.execute<{ id: string }>(sql`
+      select id from posting_effects
+       where status in ('pending','failed')
+         and attempt_count < ${MAX_POSTING_EFFECTS_ATTEMPTS}
+         and next_attempt_at <= ${now}
+       order by next_attempt_at
+       for update skip locked
+       limit 1
+    `);
+    const id = due.rows[0]?.id;
+    if (!id) return null;
+    const claimed = await tx.execute<PostingEffectsRow>(sql`
+      update posting_effects as claimed
+         set status='running',
+             attempt_count=attempt_count+1,
+             locked_at=${now},
+             lease_token=gen_random_uuid(),
+             last_attempt_at=${now},
+             finished_at=null,
+             error=null,
+             updated_at=now()
+       where claimed.id = ${id}
+       returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
+                 claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
+                 claimed.lease_token
+    `);
+    return claimed.rows[0] ?? null;
+  });
 }
 
 export async function markPostingEffectsSucceeded(
