@@ -22,7 +22,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { getAuthz } = await import("./authz");
 const { sentinelData } = await import("./analytics/sentinel-data");
@@ -33,29 +33,31 @@ const { GET: drilldown } = await import("../app/api/analytics/sentinel/benford/r
 for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
   for (const mode of ["restricted", "empty", "no audit grant", "all"] as const) {
     test(`Sentinel access ${boundary}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-      const org = await createScratchOrg();
+      const org = await withBypassContext(() => createScratchOrg());
       try {
-        const actor = await createScratchUser(org.orgId, "Forensic reviewer", "forensic_reviewer");
+        const actor = await withBypassContext(() => createScratchUser(org.orgId, "Forensic reviewer", "forensic_reviewer"));
         const restriction = mode === "all" || mode === "no audit grant" ? { mode: "all" }
           : { mode: "list", subsidiaryIds: mode === "empty" ? [] : [org.subsidiaryId] };
         const permissions = ["reports.read", "assistant.use", ...(mode === "no audit grant" ? [] : ["admin.audit.read"])];
-        await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
-          where org_id=${org.orgId} and key='forensic_reviewer'`);
+        await withBypassContext(() => db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+          where org_id=${org.orgId} and key='forensic_reviewer'`));
         state.user = { id: actor, orgId: org.orgId, name: "Forensic reviewer", email: "forensics@scratch.test", roles: [], isSuperAdmin: false,
           envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
         state.period = { from: org.date, to: org.date, label: "Audit day" };
         const hiddenSubsidiary = randomUUID();
-        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-          values (${hiddenSubsidiary},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
-        for (const [subsidiaryId, amount, number] of [[org.subsidiaryId, "100", "VISIBLE-SPEND"], [hiddenSubsidiary, "999", "HIDDEN-SPEND"]]) {
-          const id = randomUUID();
-          await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency)
-            values (${id},${org.orgId},'customer_credit',${number},${org.date},${org.customerId},${subsidiaryId},'CAD')`);
-          await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount)
-            values (${org.orgId},${id},1,${org.accounts.revenue},1,${amount},${amount})`);
-        }
-        await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,at)
-          values (${org.orgId},'bank_accounts',${randomUUID()},'delete','{"before":{"routing":"PRIVATE-ROUTING-EVIDENCE"}}'::jsonb,${actor},${org.date}::date + interval '12 hours')`);
+        await withBypassContext(async () => {
+          await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+            values (${hiddenSubsidiary},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
+          for (const [subsidiaryId, amount, number] of [[org.subsidiaryId, "100", "VISIBLE-SPEND"], [hiddenSubsidiary, "999", "HIDDEN-SPEND"]]) {
+            const id = randomUUID();
+            await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency)
+              values (${id},${org.orgId},'customer_credit',${number},${org.date},${org.customerId},${subsidiaryId},'CAD')`);
+            await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount)
+              values (${org.orgId},${id},1,${org.accounts.revenue},1,${amount},${amount})`);
+          }
+          await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,at)
+            values (${org.orgId},'bank_accounts',${randomUUID()},'delete','{"before":{"routing":"PRIVATE-ROUTING-EVIDENCE"}}'::jsonb,${actor},${org.date}::date + interval '12 hours')`);
+        });
         await withOrgContext(org.orgId, async () => {
           const authz = await getAuthz();
           assert.ok(authz);

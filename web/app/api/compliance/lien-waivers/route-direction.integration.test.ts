@@ -31,7 +31,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { POST: create } = await import("./route");
@@ -84,7 +84,9 @@ test("lien-waiver creation rejects an unrecognised direction", { skip: !process.
     for (const [direction, expected] of [["received", "received"], ["issued", "issued"], [undefined, "received"]] as const) {
       const body = { ...base };
       if (direction !== undefined) Object.assign(body, { direction });
-      const created = await create(json(body));
+      // The route's feature gate reads org settings through the ambient
+      // scope, as the middleware provides in production.
+      const created = await withOrgContext(org.orgId, () => create(json(body)));
       assert.equal(created.status, 200, `direction ${String(direction)}: ${JSON.stringify(await created.clone().json())}`);
       const { id } = (await created.json()) as { id: string };
       assert.equal(await directionOf(org.orgId, id), expected);
@@ -94,7 +96,7 @@ test("lien-waiver creation rejects an unrecognised direction", { skip: !process.
     // opposite instrument.
     const before = await waiverCount(org.orgId);
     for (const direction of ["issued ", "ISSUED", "Receive", "receivd", 7]) {
-      const refused = await create(json({ ...base, direction }));
+      const refused = await withOrgContext(org.orgId, () => create(json({ ...base, direction })));
       assert.equal(refused.status, 400, `direction ${JSON.stringify(direction)} must be rejected`);
     }
     assert.equal(await waiverCount(org.orgId), before, "a refused waiver must not be created");

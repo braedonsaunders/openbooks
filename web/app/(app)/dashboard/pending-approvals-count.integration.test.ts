@@ -22,7 +22,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
@@ -44,34 +44,37 @@ function authzFor(orgId: string, userId: string): Authz {
 }
 
 test("dashboard pending-approvals tile counts the unified worklist, not just gates", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await seedApprovalFlow(org.orgId, {
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+    await withBypassContext(() => seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
-    });
+    }));
     // One gated document (visible through its gate).
-    const gatedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", gatedId);
+    const gatedId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
+    await withOrgContext(org.orgId, () => submitForApproval("vendor_bill", gatedId));
     // One gateless document in pending_approval with no flow run behind it.
-    const gatelessId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
+    const gatelessId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
+    await withBypassContext(() => db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
       submitted_at=now(), updated_by=${actors.submitterId}, updated_at=now()
-      where id=${gatelessId} and org_id=${org.orgId}`);
+      where id=${gatelessId} and org_id=${org.orgId}`));
     // One status-based pay run awaiting approval.
     const runId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into payment_runs
         (id, org_id, run_number, bank_account_id, subsidiary_id, method,
          direction, purpose, currency, status, payment_count, total_amount,
          submitted_at, submitted_by, created_by, updated_by)
       values (${runId}, ${org.orgId}, 'P06-DASH', ${org.accounts.bank}, ${org.subsidiaryId}, 'eft',
               'outbound', 'vendor_payments', 'CAD', 'pending_approval', 1,
-              '250.0000', now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})`);
+              '250.0000', now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})`));
 
-    const metrics = await loadDashboardMetrics(authzFor(org.orgId, actors.approver1Id));
+    // The tile reader takes its org from the authz object but its SQL runs
+    // through the ambient connection scope, exactly as the dashboard route
+    // provides in production.
+    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actors.approver1Id)));
     assert.equal(metrics.pendingApprovals, 3, "tile must count gate + gateless document + pay run");
   } finally {
     await dropScratchOrg(org.orgId);
