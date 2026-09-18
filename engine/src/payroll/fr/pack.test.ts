@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem } from "../certificates.ts";
+import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
   payrollTaxYearProblem,
   registerPayrollTaxYears,
@@ -8,6 +9,43 @@ import {
 } from "../tax-years.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
+import { frPasEditionForVersement } from "./tables-2026.ts";
+
+/** Minimal adapter context: no certificates answered, June versement. */
+function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
+  return {
+    tx: null as never,
+    orgId: "org",
+    documentId: "doc",
+    employeePartyId: "emp",
+    employeeName: "Test",
+    taxYear,
+    country: "FR",
+    region: "FR",
+    run: { pay_date: "2026-06-15" },
+    emp: {},
+    filingAccountId: null,
+    periodsPerYear: 12,
+    income: "2000.00",
+    nonPeriodic: "0",
+    pensionable: "2000.00",
+    insurable: "0",
+    deduction: () => "0",
+    pushStatutory: () => {},
+    storedCertificates: [],
+    certificateFor: () => null,
+    bool: () => false,
+    assertRegionSupported: () => {},
+    employerLevies: {
+      wcbAmount: "0",
+      wcbAssessable: "0",
+      ehtAmount: "0",
+      ehtEarnings: "0",
+      hsfAmount: "0",
+      hsfEarnings: "0",
+    },
+  };
+}
 
 test("FR skeleton pack exists and is not installable", () => {
   assert.equal(FR_PAYROLL_PACK.country, "FR");
@@ -66,6 +104,16 @@ test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
     ["personnalise", "individualise", "non_personnalise"],
   );
   assert.equal(certificateDeclarationProblem(cert), null);
+  // Domicile is a required choice with NO default: the three grilles differ
+  // and an undeclared domicile must not fall through to grille I.
+  const domicile = cert.fields.find((field) => field.key === "domicile");
+  assert.equal(domicile?.kind, "choice");
+  assert.equal(domicile?.default, undefined);
+  assert.equal(domicile?.required, true);
+  assert.deepEqual(
+    domicile?.choices?.map((choice) => choice.value),
+    ["metropole_hors_france", "guadeloupe_reunion_martinique", "guyane_mayotte"],
+  );
 });
 
 test("FR withholding declares one national region, unimplemented by name", () => {
@@ -80,25 +128,47 @@ test("FR withholding declares one national region, unimplemented by name", () =>
   assert.ok(region.citation.length > 0);
 });
 
-test("FR refuses the untranscribed 2026 year by name", () => {
-  assert.equal(
-    FR_TAX_YEARS.editions.filter((edition) => edition.status === "published").length,
-    0,
+test("FR 2026 is transcribed, with both edition boundaries and citations", () => {
+  const published = FR_TAX_YEARS.editions.filter((edition) => edition.status === "published");
+  assert.equal(published.length, 2);
+  assert.deepEqual(
+    published.map((edition) => [edition.year, edition.effectiveFrom]),
+    [[2026, "2026-01-01"], [2026, "2026-05-01"]],
   );
+  for (const edition of published) {
+    assert.match(edition.citation, /BOI-BAREME-000037/);
+  }
   registerPayrollTaxYears(FR_TAX_YEARS);
   try {
-    const problem = payrollTaxYearProblem("FR", 2026);
-    assert.equal(problem?.kind, "missing");
-    assert.match(problem?.message ?? "", /2026/);
+    assert.equal(payrollTaxYearProblem("FR", 2026), null);
+    for (const year of [2025, 2027]) {
+      const problem = payrollTaxYearProblem("FR", year);
+      assert.equal(problem?.kind, "missing", `${year} refuses`);
+      assert.match(problem?.message ?? "", new RegExp(String(year)));
+    }
   } finally {
     unregisterPayrollTaxYears("FR");
   }
 });
 
-test("FR computeStatutory refuses instead of calculating", async () => {
+test("FR edition resolution: May-2025 grids Jan–Apr, May-2026 grids from May", () => {
+  assert.equal(frPasEditionForVersement("2026-01-01"), "may2025");
+  assert.equal(frPasEditionForVersement("2026-04-30"), "may2025");
+  assert.equal(frPasEditionForVersement("2026-05-01"), "may2026");
+  assert.equal(frPasEditionForVersement("2026-12-31"), "may2026");
+  assert.throws(() => frPasEditionForVersement("2025-12-31"));
+  assert.throws(() => frPasEditionForVersement("2027-01-01"));
+});
+
+test("FR computeStatutory refuses untranscribed years and undeclared domiciles", async () => {
+  // No domicile may fall through to grille I: the adapter refuses first.
   await assert.rejects(
-    () => FR_PAYROLL_PACK.computeStatutory(),
-    /not installable/,
+    () => FR_PAYROLL_PACK.computeStatutory(makeCtx(2026)),
+    /domicile/,
+  );
+  await assert.rejects(
+    () => FR_PAYROLL_PACK.computeStatutory(makeCtx(2027)),
+    /has not been transcribed/,
   );
 });
 

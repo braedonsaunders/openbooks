@@ -1,5 +1,4 @@
-import { PayrollPackError } from "../payroll-error.ts";
-import { type PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../packs.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,
@@ -7,6 +6,7 @@ import type {
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import { computeFrStatutory } from "./compute-statutory.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -19,7 +19,9 @@ import { FR_TAX_YEARS } from "./rates.ts";
  * "country">`, asserted below) so it registers unchanged once Orchestrate
  * opens the union. `installable: false` until a tax year is transcribed.
  *
- * Declared from primary sources; no 2026 barème is transcribed here:
+ * Declared from primary sources; calendar 2026 PAS grille I (métropole) is
+ * transcribed in ./tables-2026.ts and computed in ./compute-statutory.ts.
+ * Cotisation rates are not transcribed, so the pack stays `installable: false`:
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
  * - Social contributions: collected by URSSAF (C. séc. soc. art. L213-1);
@@ -111,6 +113,22 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
   storage: "certificate_rows",
   fields: [
     {
+      key: "domicile",
+      label: "Domicile fiscal (grille applicable)",
+      kind: "choice",
+      choices: [
+        { value: "metropole_hors_france", label: "Métropole ou hors de France (grille I)" },
+        { value: "guadeloupe_reunion_martinique", label: "Guadeloupe, Réunion, Martinique (grille II — non transcrite)" },
+        { value: "guyane_mayotte", label: "Guyane, Mayotte (grille III — non transcrite)" },
+      ],
+      // No default, required: the three grilles differ by domicile
+      // (BOI-IR-PAS-20-20-30-10 §90) and an undeclared domicile must not
+      // fall through to grille I. The engine refuses anything but
+      // metropole_hors_france by name.
+      required: true,
+      help: "Résidence principale à la date du versement. Seule la grille I (métropole ou hors de France) est transcrite ; les grilles II et III sont refusées par l'employeur.",
+    },
+    {
       key: "taux_option",
       label: "Option de taux",
       kind: "choice",
@@ -153,8 +171,9 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       label: "Prélèvement à la source (national)",
       implemented: false,
       unimplementedReason:
-        "the FR payroll pack has transcribed no PAS barème — 2026 refused by name on taxYears. "
-        + "Transcribe the year's grille into engine/src/payroll/fr/ first.",
+        "the FR payroll pack computes PAS only (2026 grille I barème, métropole): "
+        + "no cotisation rate is transcribed, so no full payslip is right. "
+        + "See FR_REFUSED_2026 in engine/src/payroll/fr/tables-2026.ts.",
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
       // not PAS — a separate mechanism the skeleton does not implement either.
       taxesNonresidentWages: true,
@@ -300,11 +319,6 @@ export const FR_PAYROLL_PACK = {
   taxYears: FR_TAX_YEARS,
   certificates: () => FR_CERTIFICATES,
   withholding: () => FR_WITHHOLDING,
-  computeStatutory: async (): Promise<Record<string, string>> => {
-    throw new PayrollPackError(
-      "the FR payroll pack is not installable: no PAS barème or URSSAF parameters are transcribed "
-      + "(2026 refused by name on taxYears). Transcribe the year's tables into engine/src/payroll/fr/ first.",
-    );
-  },
+  computeStatutory: computeFrStatutory,
   statutoryEngineLabel: "PAS",
 } satisfies Omit<PayrollCountryPack, "country"> & { country: "FR" };
