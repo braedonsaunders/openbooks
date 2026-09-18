@@ -1,5 +1,4 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
-import { env } from "./db.ts";
 
 /**
  * Secret sealing (AES-256-GCM), engine-level so BOTH the web app (sealing on a
@@ -14,7 +13,9 @@ import { env } from "./db.ts";
 const ENC_PREFIX = "enc:v1:";
 
 function dataKey(): Buffer {
-  const raw = env.OPENBOOKS_DATA_KEY;
+  // Live read: db.ts snapshots the environment at module evaluation, so a
+  // snapshot read misses OPENBOOKS_DATA_KEY assigned after that import.
+  const raw = process.env.OPENBOOKS_DATA_KEY;
   if (!raw) {
     throw new Error(
       "OPENBOOKS_DATA_KEY is not set — required to encrypt stored connection secrets (32-byte key, hex or base64)",

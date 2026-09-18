@@ -10,7 +10,6 @@ import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
 import {
   db,
-  env,
   withBypass,
   withBypassContext,
 } from "@openbooks/engine/src/db.ts";
@@ -67,7 +66,10 @@ export const LOGIN_CHALLENGE_COOKIE = "ob_login_challenge";
 const TTL_S = 14 * 24 * 3600;
 const DUMMY_PASSWORD_HASH = "01010101010101010101010101010101:105ba60fca19c5323503bb2f317fc26b63fdfaf6575712e44694fcb0917fa196192bea677d6ff71b01e784e576b631d15a931a4ae569446f7f7f37917dd2d25f";
 function sessionSecret(): string {
-  return requireSessionSecret(env);
+  // Live read (requireSessionSecret defaults to process.env): db.ts snapshots
+  // the environment at module evaluation, so a snapshot read misses
+  // SESSION_SECRET assigned after that import.
+  return requireSessionSecret();
 }
 
 export type AuthMethod = "password" | "oidc";

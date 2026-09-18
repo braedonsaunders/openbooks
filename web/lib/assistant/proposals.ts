@@ -1,6 +1,5 @@
 import "server-only";
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
-import { env } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "../authz";
 
 /**
@@ -15,13 +14,16 @@ let cachedKey: Buffer | undefined;
 
 function proposalKey(): Buffer {
   if (cachedKey) return cachedKey;
-  if (!env.SESSION_SECRET) {
+  // Live read: engine db.ts snapshots the environment at module evaluation,
+  // so a snapshot read misses SESSION_SECRET assigned after that import.
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
     throw new Error("SESSION_SECRET is required to sign assistant write proposals");
   }
   cachedKey = Buffer.from(
     hkdfSync(
       "sha256",
-      Buffer.from(env.SESSION_SECRET),
+      Buffer.from(secret),
       Buffer.alloc(0),
       Buffer.from("openbooks.proposal.v1"),
       32,

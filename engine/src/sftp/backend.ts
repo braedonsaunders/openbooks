@@ -112,7 +112,8 @@ function client(): S3Client {
     s3 = new S3Client({
       endpoint: env.S3_ENDPOINT,
       region: env.S3_REGION || "us-east-1",
-      credentials: { accessKeyId: env.S3_ACCESS_KEY_ID!, secretAccessKey: env.S3_SECRET_ACCESS_KEY! },
+      // Credentials are read live: db.ts snapshots the environment at module evaluation.
+      credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! },
       forcePathStyle: true,
     });
   }
@@ -202,7 +203,9 @@ function localRoot(): string {
  * tenants just create a server in the UI and get a folder under their prefix.
  */
 export function appStorageKind(): "s3" | "local" {
-  return env.S3_ENDPOINT && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY && env.S3_BUCKET ? "s3" : "local";
+  // Live reads, matching client() above: db.ts snapshots the environment at
+  // module evaluation, so snapshot reads miss values assigned after import.
+  return process.env.S3_ENDPOINT && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY && process.env.S3_BUCKET ? "s3" : "local";
 }
 export function appBucket(): string | null {
   return env.S3_BUCKET ?? null;

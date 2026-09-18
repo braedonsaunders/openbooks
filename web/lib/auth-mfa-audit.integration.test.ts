@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
 
 registerHooks({ resolve(specifier, context, next) {
@@ -15,8 +15,10 @@ for (const action of ["mfa_enabled", "mfa_disabled", "mfa_recovery_rotated"] as 
   for (const failAudit of [false, true]) {
     test(`${action} ${failAudit ? "rolls back when its audit write fails" : "retains attributable non-secret audit evidence"}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
       const org = await withBypassContext(() => createScratchOrg());
-      const previousSecret = env.SESSION_SECRET;
-      env.SESSION_SECRET = randomBytes(32).toString("hex");
+      // web/lib/auth.ts reads the session secret live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+const previousSecret = process.env.SESSION_SECRET;
+      process.env.SESSION_SECRET = randomBytes(32).toString("hex");
       const triggerName = "mfa_audit_" + randomUUID().replaceAll("-", "");
       let triggerInstalled = false;
       try {
@@ -105,8 +107,8 @@ for (const action of ["mfa_enabled", "mfa_disabled", "mfa_recovery_rotated"] as 
           await db.execute(sql.raw(`drop trigger if exists "${triggerName}" on audit_log`));
           await db.execute(sql.raw(`drop function if exists public."${triggerName}"()`));
         });
-        if (previousSecret === undefined) delete env.SESSION_SECRET;
-        else env.SESSION_SECRET = previousSecret;
+        if (previousSecret === undefined) delete process.env.SESSION_SECRET;
+        else process.env.SESSION_SECRET = previousSecret;
         await withBypassContext(() => dropScratchOrg(org.orgId));
       }
     });

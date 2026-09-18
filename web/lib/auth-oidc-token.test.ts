@@ -5,11 +5,10 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { verifyOidcIdToken } from "./auth-oidc-token";
 
-// auth-oidc.ts is server-only (it pulls the engine's env snapshot and the
-// session-secret policy), so the runner cannot import it as-is. The marker
-// package gates only RSC bundling; shimming it to an empty module lets these
-// tests exercise the production flow directly. node's test runner isolates
-// each file in its own process, so the hook cannot leak elsewhere.
+// auth-oidc.ts is server-only, so the runner cannot import it as-is. The
+// marker package gates only RSC bundling; shimming it to an empty module lets
+// these tests exercise the production flow directly. node's test runner
+// isolates each file in its own process, so the hook cannot leak elsewhere.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
@@ -20,16 +19,16 @@ registerHooks({
 });
 
 const { beginOidcAuthorization, completeOidcAuthorization } = await import("./auth-oidc");
-const { env } = await import("@openbooks/engine/src/db.ts");
 
-// config() reads the module-load env snapshot; the fixed test command supplies
-// no OIDC values, so seed them here once (each test file runs in its own
-// process). NODE_ENV=test lets assertSecureEndpoint accept the loopback
-// provider origins these tests stand up.
-env.SESSION_SECRET = "oidc-flow-signing-secret-for-tests";
-env.OPENBOOKS_OIDC_CLIENT_ID = "openbooks-test";
-env.OPENBOOKS_OIDC_CLIENT_SECRET = "oidc-client-secret";
-env.OPENBOOKS_APP_URL = "https://books.example.test";
+// auth-oidc reads its config live from process.env (never the engine db.ts
+// module-evaluation snapshot); the fixed test command supplies no OIDC
+// values, so seed them here once (each test file runs in its own process).
+// NODE_ENV=test lets assertSecureEndpoint accept the loopback provider
+// origins these tests stand up.
+process.env.SESSION_SECRET = "oidc-flow-signing-secret-for-tests";
+process.env.OPENBOOKS_OIDC_CLIENT_ID = "openbooks-test";
+process.env.OPENBOOKS_OIDC_CLIENT_SECRET = "oidc-client-secret";
+process.env.OPENBOOKS_APP_URL = "https://books.example.test";
 
 function token(claimOverrides: Record<string, unknown> = {}) {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -122,7 +121,7 @@ async function close(server: Server): Promise<void> {
 /** Drive one real authorization-code exchange against a loopback provider:
  *  discovery, begin (minting the signed flow cookie), then the token POST. */
 async function exchange(issuerOrigin: string): Promise<void> {
-  env.OPENBOOKS_OIDC_ISSUER = issuerOrigin;
+  process.env.OPENBOOKS_OIDC_ISSUER = issuerOrigin;
   const begin = await beginOidcAuthorization(null);
   const authorizeUrl = new URL(begin.url);
   const state = authorizeUrl.searchParams.get("state");
@@ -277,7 +276,7 @@ async function startProvider(options: ProviderOptions) {
       const nowEpoch = Math.floor(Date.now() / 1000);
       minted = token({
         iss: issuerOrigin,
-        aud: env.OPENBOOKS_OIDC_CLIENT_ID,
+        aud: process.env.OPENBOOKS_OIDC_CLIENT_ID,
         nonce,
         iat: nowEpoch,
         exp: nowEpoch + 3_600,
@@ -303,7 +302,7 @@ test("OIDC token exchange refuses redirected JWKS after the secret was sent", as
         redirectTarget: `${attackerOrigin}/attacker-keys`,
       });
       try {
-        env.OPENBOOKS_OIDC_ISSUER = provider.issuer;
+        process.env.OPENBOOKS_OIDC_ISSUER = provider.issuer;
         const begin = await beginOidcAuthorization(null);
         provider.mint(new URL(begin.url).searchParams.get("nonce")!);
         const state = new URL(begin.url).searchParams.get("state")!;
@@ -324,7 +323,7 @@ test("normal OIDC responses pass: the client secret reaches only the token endpo
   for (const branch of ["client_secret_basic", "client_secret_post"] as const) {
     const provider = await startProvider({ branch });
     try {
-      env.OPENBOOKS_OIDC_ISSUER = provider.issuer;
+      process.env.OPENBOOKS_OIDC_ISSUER = provider.issuer;
       const begin = await beginOidcAuthorization(null);
       const authorizeUrl = new URL(begin.url);
       const state = authorizeUrl.searchParams.get("state")!;
@@ -341,17 +340,17 @@ test("normal OIDC responses pass: the client secret reaches only the token endpo
       assert.equal(provider.tokenRequests.length, 1);
       const seen = provider.tokenRequests[0]!;
       const expectedBasic = `Basic ${Buffer.from(
-        `${encodeURIComponent(env.OPENBOOKS_OIDC_CLIENT_ID!)}:${encodeURIComponent(env.OPENBOOKS_OIDC_CLIENT_SECRET!)}`,
+        `${encodeURIComponent(process.env.OPENBOOKS_OIDC_CLIENT_ID!)}:${encodeURIComponent(process.env.OPENBOOKS_OIDC_CLIENT_SECRET!)}`,
       ).toString("base64")}`;
       if (branch === "client_secret_basic") {
         assert.equal(seen.authorization, expectedBasic);
         assert.equal(seen.body.get("client_secret"), null);
       } else {
         assert.equal(seen.authorization, "");
-        assert.equal(seen.body.get("client_secret"), env.OPENBOOKS_OIDC_CLIENT_SECRET);
+        assert.equal(seen.body.get("client_secret"), process.env.OPENBOOKS_OIDC_CLIENT_SECRET);
       }
       assert.equal(seen.body.get("grant_type"), "authorization_code");
-      assert.equal(seen.body.get("client_id"), env.OPENBOOKS_OIDC_CLIENT_ID);
+      assert.equal(seen.body.get("client_id"), process.env.OPENBOOKS_OIDC_CLIENT_ID);
       assert.ok(seen.body.get("code_verifier"));
     } finally {
       await provider.close();

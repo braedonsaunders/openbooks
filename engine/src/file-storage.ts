@@ -16,8 +16,9 @@ function s3(): S3Client {
     endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION || "us-east-1",
     credentials: {
-      accessKeyId: env.S3_ACCESS_KEY_ID!,
-      secretAccessKey: env.S3_SECRET_ACCESS_KEY!,
+      // Live reads: db.ts snapshots the environment at module evaluation.
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
     },
     forcePathStyle: true,
     // Only send integrity checksums when an operation requires them (e.g.

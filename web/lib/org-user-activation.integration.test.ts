@@ -11,12 +11,14 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, env } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { resolveActiveEnv, accessibleProductionOrgs, rebaseUuid } = await import("./org-access");
 const { currentUser, makeEnvToken, SESSION_COOKIE, ACTIVE_ENV_COOKIE_NAME } = await import("./auth");
 const { sessionSigningInput } = await import("./auth-token-format");
-env.SESSION_SECRET = "org-access-activation-test-secret-32";
+// web/lib/auth.ts reads the session secret live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+process.env.SESSION_SECRET = "org-access-activation-test-secret-32";
 
 for (const superAdmin of [false, true]) {
 for (const kind of ["production", "preview", "sandbox"] as const) {
@@ -52,7 +54,7 @@ for (const kind of ["production", "preview", "sandbox"] as const) {
             const sessionId = randomUUID();
             const expiry = Math.floor(Date.now() / 1000) + 3600;
             const payload = `v2.${sessionId}.${homeId}.${expiry}`;
-            const token = `${payload}.${createHmac("sha256", env.SESSION_SECRET!).update(sessionSigningInput(payload)).digest("base64url")}`;
+            const token = `${payload}.${createHmac("sha256", process.env.SESSION_SECRET!).update(sessionSigningInput(payload)).digest("base64url")}`;
             await db.execute(sql`insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at) values (${sessionId},${homeId},${createHash('sha256').update(token).digest('hex')},'password',${new Date(expiry * 1000)})`);
             cookieValues.set(SESSION_COOKIE, token);
             cookieValues.set(ACTIVE_ENV_COOKIE_NAME, makeEnvToken(target.orgId));

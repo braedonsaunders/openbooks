@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, env } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/db.ts'
 
 /**
  * Customer-signing links: a compact HMAC token
@@ -14,7 +14,11 @@ import { db, env } from '@openbooks/engine/src/db.ts'
 const b64u = (b: Buffer) => b.toString('base64url')
 
 function sign(payload: string): string {
-  return b64u(createHmac('sha256', env.SESSION_SECRET!).update(payload).digest())
+  // Live read: engine db.ts snapshots the environment at module evaluation,
+  // so a snapshot read misses SESSION_SECRET assigned after that import.
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET is required to sign field-ticket tokens');
+  return b64u(createHmac('sha256', secret).update(payload).digest())
 }
 
 export function mintSigningToken(
