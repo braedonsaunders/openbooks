@@ -40,7 +40,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -49,50 +49,54 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 const { POST } = await import("./reopen/route.ts");
 
 const post = (body: Record<string, unknown>) =>
-  POST(
-    new Request("http://audit.local/api/timesheets/reopen", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+  withOrgContext(state.user.orgId, () =>
+    POST(
+      new Request("http://audit.local/api/timesheets/reopen", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function seedApprovedWeek() {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const employeeId = randomUUID();
   const headerId = randomUUID();
   const timeEntryId = randomUUID();
-  await db.execute(sql`
-    insert into parties
-      (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values
-      (${employeeId}, ${org.orgId}, 'employee', 'Reopen Worker',
-       ${org.subsidiaryId}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
-    insert into timesheet_weeks
-      (id, org_id, employee_party_id, week_start, status,
-       approved_by, approved_at, created_by, updated_by)
-    values
-      (${headerId}, ${org.orgId}, ${employeeId}, '2026-07-12',
-       'approved', ${actorId}, now(), ${actorId}, ${actorId})
-  `);
-  await db.execute(sql`
-    insert into time_entries
-      (id, org_id, employee_party_id, worked_on, hours,
-       status, approved_by, approved_at, is_billable, costing_basis,
-       custom, created_by, updated_by)
-    values
-      (${timeEntryId}, ${org.orgId}, ${employeeId}, '2026-07-15',
-       '4.0000', 'approved', ${actorId}, now(), false, 'actual',
-       '{}'::jsonb, ${actorId}, ${actorId})
-  `);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into parties
+        (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values
+        (${employeeId}, ${org.orgId}, 'employee', 'Reopen Worker',
+         ${org.subsidiaryId}, true, '{}'::jsonb)
+    `);
+    await db.execute(sql`
+      insert into timesheet_weeks
+        (id, org_id, employee_party_id, week_start, status,
+         approved_by, approved_at, created_by, updated_by)
+      values
+        (${headerId}, ${org.orgId}, ${employeeId}, '2026-07-12',
+         'approved', ${actorId}, now(), ${actorId}, ${actorId})
+    `);
+    await db.execute(sql`
+      insert into time_entries
+        (id, org_id, employee_party_id, worked_on, hours,
+         status, approved_by, approved_at, is_billable, costing_basis,
+         custom, created_by, updated_by)
+      values
+        (${timeEntryId}, ${org.orgId}, ${employeeId}, '2026-07-15',
+         '4.0000', 'approved', ${actorId}, now(), false, 'actual',
+         '{}'::jsonb, ${actorId}, ${actorId})
+    `);
+  });
   return { org, actorId, employeeId, headerId, timeEntryId };
 }
 
 async function auditRows(orgId: string, headerId: string) {
-  return (
+  return withOrgContext(orgId, async () => (
     await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
@@ -101,13 +105,15 @@ async function auditRows(orgId: string, headerId: string) {
          and row_id = ${headerId}
        order by at, id
     `)
-  ).rows;
+  ).rows);
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedApprovedWeek>>) {
-  await db.execute(sql`
-    delete from time_entries where org_id = ${fixture.org.orgId}
-  `);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      delete from time_entries where org_id = ${fixture.org.orgId}
+    `);
+  });
   await dropScratchOrg(fixture.org.orgId);
 }
 
