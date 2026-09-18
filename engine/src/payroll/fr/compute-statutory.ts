@@ -45,7 +45,7 @@
  * line. Never floating point.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
   FR_PAS_METROPOLE_MAY2025,
