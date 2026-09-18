@@ -235,7 +235,26 @@ test("missing declared rates refuse naming the scope point", async () => {
   );
 });
 
-test("wrapper pushes five lines and returns TI/SOMMA factors", async () => {
+test("payable TI/somma refuse by name: no credit channel, no factor workaround", async () => {
+  // Annual 8.400: somma 7,1% x ~7.628 = 541,59 — owed but unpayable
+  // without a credit line, so the pass refuses instead of emitting factors.
+  const { ctx } = fakeCtx({ income: "700.00", pensionable: "700.00" });
+  await assert.rejects(
+    computeItStatutoryWithRates(ctx, {
+      regionalRate: "1.23",
+      municipalRate: "0.8",
+      municipalExemption: null,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ItPayrollRefusal);
+      assert.match((error as Error).message, /somma/);
+      assert.match((error as Error).message, /credit/);
+      return true;
+    },
+  );
+});
+
+test("wrapper pushes five lines and no payout factors", async () => {
   const { ctx, pushed } = fakeCtx({});
   const factors = await computeItStatutoryWithRates(ctx, {
     regionalRate: "1.23",
@@ -245,10 +264,11 @@ test("wrapper pushes five lines and returns TI/SOMMA factors", async () => {
   assert.equal(factors["I"], "2500.00");
   assert.equal(factors["PI"], "2500.00");
   // Annual 30.000: IRPEF netta 3.221,63/12, INPS matches the golden.
+  // TI and somma are 0 here, so the pass completes; payable amounts refuse.
   assert.equal(factors["IRPEF"], "268.4700");
   assert.equal(factors["INPS_W"], "229.7500");
-  assert.ok("TI" in factors);
-  assert.ok("SOMMA" in factors);
+  assert.ok(!("TI" in factors));
+  assert.ok(!("SOMMA" in factors));
   assert.deepEqual(pushed.map((p) => [p.systemKey, p.sequence]), [
     ["income_tax", 110],
     ["regional_surtax", 115],
