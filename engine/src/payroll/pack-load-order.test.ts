@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -45,4 +47,54 @@ test("every registered pack loads before the registry is entered", () => {
       `${country} registry entry`,
     );
   }
+});
+
+test("no pack file imports a runtime binding out of packs.ts", () => {
+  // F-reg-002, four times over. `packs.ts` imports every country pack to build
+  // PAYROLL_COUNTRY_PACKS, so a pack importing a RUNTIME binding back out of it
+  // closes a load-order-dependent cycle: whichever pack the import order reaches
+  // first crashes with "Cannot access 'X' before initialization".
+  //
+  // It kept coming back because PayrollPackError lived in packs.ts for the whole
+  // life of the project and payroll-error.ts is new — so every new pack file
+  // reached for the old home. Round 1 found it in 2 packs; the parent checked and
+  // found 5; the registration shard found a 6th in au/tax-year-2027.ts; and three
+  // more arrived with the DE and FR engines (de/pap.ts, fr/tables-2026.ts,
+  // fr/compute-statutory.ts). A runtime probe only catches the pack the current
+  // order happens to hit first, so this scan is the thing that actually holds.
+  //
+  // TYPE-only imports from packs.ts are fine — they are erased at runtime.
+  const root = join("engine", "src", "payroll");
+  const offenders: string[] = [];
+  for (const country of readdirSync(root, { withFileTypes: true })) {
+    if (!country.isDirectory()) continue;
+    const dir = join(root, country.name);
+    const walk = (at: string): void => {
+      for (const entry of readdirSync(at, { withFileTypes: true })) {
+        const path = join(at, entry.name);
+        if (entry.isDirectory()) { walk(path); continue; }
+        if (!/\.[cm]?tsx?$/.test(entry.name)) continue;
+        // Test files are leaf CONSUMERS: nothing imports them, so they cannot be
+        // part of the registry's cycle. gb/pack.test.ts legitimately imports the
+        // runtime `taxYearFor` from packs.ts.
+        if (/\.test\.[cm]?tsx?$/.test(entry.name)) continue;
+        for (const [index, line] of readFileSync(path, "utf8").split("\n").entries()) {
+          if (!/from\s+"\.\.\/packs\.ts"/.test(line)) continue;
+          if (/^\s*import\s+type\s/.test(line)) continue;
+          const braced = /^\s*import\s*\{(.*)\}/.exec(line);
+          const runtime = braced
+            ? braced[1]!.split(",").map((s) => s.trim()).filter((s) => s && !s.startsWith("type "))
+            : [];
+          if (runtime.length > 0) offenders.push(`${path}:${index + 1}: ${line.trim()}`);
+        }
+      }
+    };
+    walk(dir);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "import runtime bindings from a leaf (payroll-error.ts), never from packs.ts:\n"
+      + offenders.join("\n"),
+  );
 });

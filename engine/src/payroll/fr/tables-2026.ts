@@ -1,5 +1,5 @@
 import { toUnits } from "../../money.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 /**
  * Transcribed DGFiP tables for calendar year 2026.

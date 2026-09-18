@@ -93,7 +93,7 @@
  * MSONST/MOSONST/MRE4SONST/STSMIN/MSOLZSTS (sonstige Bezüge) likewise.
  */
 
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 export const DE_PAP_2026_SOURCE = {
   url: "https://www.bundesfinanzministerium.de/Content/DE/Downloads/Steuern/Steuerarten/Lohnsteuer/Programmablaufplan/2025-11-12-PAP-2026-anlage-1.pdf?__blob=publicationFile",
