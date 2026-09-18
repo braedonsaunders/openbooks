@@ -38,6 +38,17 @@ const DK_MOMS_2026: TaxReturnPack = {
  * so the return carries only the 25% standard code. The 25% rate history is
  * left-truncated at 2026: skat.dk attests the current 25% rate, and the
  * 1 January 1992 origin is not cited from skat.dk, so no origin is claimed.
+ * The origin is identified but not transcribable from here: Statistics
+ * Denmark's "Skatter og afgifter" rate table (verified in the 1999 edition)
+ * dates the 25% rate from 01.01.1992 under Lov nr. 891 af 21. december 1991
+ * (replacing 22% in force to 31.12.1991). That act is attested on
+ * Retsinformation and the table on dst.dk, but neither host is in the wave5
+ * approved primary-source list and this shard may not edit the wave tests —
+ * so the band is left out rather than cited off-allowlist. skat.dk itself
+ * was searched: its rates archive carries no VAT subject and no history
+ * article states the 1992 changeover. The next person with an approved
+ * Retsinformation citation (or an allowlist addition) can prepend a single
+ * {25, 1992-01-01} open row.
  * Zero-rated newspaper supplies are NOT declared as a code: no agency source
  * for the zero band was fetched. Exempt supplies (health, education,
  * passenger transport and the like) are not a 0% code.
