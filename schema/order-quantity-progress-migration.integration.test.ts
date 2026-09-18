@@ -5,6 +5,18 @@
  * alter a table column while the governed query view depends on it, so this
  * suite builds the genuine pre-0064 catalog, runs the real bootstrap, and
  * checks both the schema values and the view contract that bootstrap repairs.
+ *
+ * Structural note: production bootstrap ALWAYS migrates fully before it
+ * provisions org defaults, so provisioning only ever sees the current schema.
+ * Faking the post-0064 ledger and then running a FULL bootstrap creates a
+ * state production never produces (frozen schema + current engine) and breaks
+ * for any future migration that adds a column provisioning writes. The suite
+ * therefore splits the proof: an isolated schema-only scratch exercises
+ * 0064's repair with the tail faked (via the existing production
+ * OPENBOOKS_RESTORE_TARGET schema-only mode, no orgs, no provisioning), while
+ * a data-upgrade scratch with real rows runs the FULL tail plus provisioning
+ * with no faked ledger. A static guard allowlists the one reviewed explicit
+ * view rebuild after 0064 (0161) so a silent rebuild forces a test update.
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -48,6 +60,26 @@ const postMigrationFiles = publishedFiles
   .slice(migrationIndex + 1)
   .map((name) => ({ name, body: readFileSync(join(generatedDir, name), "utf8") }));
 
+// Reviewed explicit rebuilds of the governed document_lines view after 0064.
+// 0161 widens the view with the allocation distribution stamps; any NEW entry
+// here must be a reviewed migration, and any new explicit rebuild without an
+// allowlist update fails this suite by construction.
+const REVIEWED_DOCUMENT_LINES_VIEW_REBUILDS = [
+  "0161_allocation_query_catalog.sql",
+];
+
+function explicitDocumentLinesViewRebuilds(
+  files: Array<{ name: string; body: string }>,
+): string[] {
+  return files
+    .filter(
+      (file) =>
+        file.body.includes("CREATE VIEW openbooks_query.document_lines")
+        || /DROP VIEW[^;]*openbooks_query\.document_lines/.test(file.body),
+    )
+    .map((file) => file.name);
+}
+
 type ViewMetadata = {
   owner: string;
   acl: string[] | null;
@@ -56,7 +88,10 @@ type ViewMetadata = {
   columnComments: Array<{ name: string; comment: string | null }>;
 };
 
-async function runBootstrap(databaseUrl: string): Promise<void> {
+async function runBootstrap(
+  databaseUrl: string,
+  options?: { restoreTarget?: boolean },
+): Promise<void> {
   await execFileAsync(
     process.execPath,
     ["--import", "tsx", "scripts/bootstrap.ts"],
@@ -73,6 +108,11 @@ async function runBootstrap(databaseUrl: string): Promise<void> {
         // Ownership transfer refuses without OPENBOOKS_RUNTIME_DB_URL, which
         // is deliberately blank here, so inheriting it fails the bootstrap.
         OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
+        // The isolated scratch uses the existing production schema-only mode:
+        // migrate + currencies, no org, no provisioning. That is the honest
+        // way to exercise 0064's repair without provisioning against a frozen
+        // schema production never produces. NOT a test backdoor flag.
+        OPENBOOKS_RESTORE_TARGET: options?.restoreTarget ? "1" : "",
         ORG_CURRENCY: "USD",
         ORG_COUNTRY: "US",
         OPENBOOKS_DATA_KEY:
@@ -148,16 +188,9 @@ async function dropScratchDatabase(scratch: Awaited<ReturnType<typeof createScra
   await scratch.control.end().catch(() => undefined);
 }
 
-test(
-  "0064 upgrades and replays without losing the governed view contract",
-  { skip: !DB, timeout: 300_000 },
-  async () => {
-    const baseUrl = new URL(ADMIN_DB_URL());
-    const upgrade = await createScratchDatabase(baseUrl, "upgrade");
-    const fresh = await createScratchDatabase(baseUrl, "fresh");
-    try {
-      // Bootstrap establishes these roles before a migration can mention them.
-      await upgrade.control.query(`do $$ begin
+async function ensureReplayRoles(control: pg.Client): Promise<void> {
+  // Bootstrap establishes these roles before a migration can mention them.
+  await control.query(`do $$ begin
         if not exists (select 1 from pg_roles where rolname = 'openbooks_read') then
           create role openbooks_read nologin;
         end if;
@@ -168,20 +201,120 @@ test(
           create role quantity_view_reader nologin;
         end if;
       end $$;`);
-      await upgrade.client.query("select set_config('app.bypass_rls', 'on', false)");
-      for (const file of preMigrationFiles) {
-        await upgrade.client.query(file.body);
+}
+
+test(
+  "no later migration silently rebuilds the governed document_lines view",
+  { timeout: 60_000 },
+  async () => {
+    assert.deepEqual(
+      explicitDocumentLinesViewRebuilds(postMigrationFiles),
+      REVIEWED_DOCUMENT_LINES_VIEW_REBUILDS,
+      "a new explicit rebuild of openbooks_query.document_lines needs review here",
+    );
+  },
+);
+
+test(
+  "0064 upgrades and replays without losing the governed view contract",
+  { skip: !DB, timeout: 300_000 },
+  async () => {
+    const baseUrl = new URL(ADMIN_DB_URL());
+    const isolated = await createScratchDatabase(baseUrl, "isolated");
+    const upgrade = await createScratchDatabase(baseUrl, "upgrade");
+    const fresh = await createScratchDatabase(baseUrl, "fresh");
+    try {
+      for (const scratch of [isolated, upgrade]) {
+        await ensureReplayRoles(scratch.control);
+        await scratch.client.query("select set_config('app.bypass_rls', 'on', false)");
+        for (const file of preMigrationFiles) {
+          await scratch.client.query(file.body);
+        }
       }
+
+      // Isolated repair proof: schema-only scratch with the tail faked so ONLY
+      // 0064 runs. Zero orgs + OPENBOOKS_RESTORE_TARGET keeps bootstrap on its
+      // production migrate-only path (no provisioning), which is the only
+      // honest way to hold the schema at 0064: production never provisions
+      // against a frozen schema. The separate data-upgrade scratch below runs
+      // the real tail with provisioning.
+      await isolated.client.query(`
+        create table public._applied_migrations (
+          filename text primary key,
+          sha256 text not null,
+          applied_at timestamptz not null default now()
+        )`);
+      // Keep the isolated scratch focused on 0064. Later migrations are marked
+      // at their published digests so they cannot rebuild this view after the
+      // repair (the data-upgrade and empty-database runs below exercise the
+      // full tail for real, and the static guard above pins the allowlisted
+      // explicit rebuilds).
+      for (const file of [...preMigrationFiles, ...postMigrationFiles]) {
+        const digest = createHash("sha256")
+          .update(file.body)
+          .digest("hex");
+        await isolated.client.query(
+          `insert into public._applied_migrations (filename, sha256) values ($1, $2)`,
+          [`generated/${file.name}`, digest],
+        );
+      }
+
+      await isolated.client.query(
+        "comment on view openbooks_query.document_lines is 'quantity-view-contract'",
+      );
+      await isolated.client.query(
+        "comment on column openbooks_query.document_lines.quantity_fulfilled is 'fulfilled-contract'",
+      );
+      await isolated.client.query(
+        "comment on column openbooks_query.document_lines.quantity_billed is 'billed-contract'",
+      );
+      await isolated.client.query(
+        "grant select on table openbooks_query.document_lines to quantity_view_reader",
+      );
+      const before = await readViewMetadata(isolated.client);
+
+      await runBootstrap(isolated.url, { restoreTarget: true });
+      const after = await readViewMetadata(isolated.client);
+      assert.deepEqual(after, before, "owner, ACL, options, and comments survive the repair");
+
+      const isolatedType = await isolated.client.query<{ precision: number; scale: number }>(
+        `select numeric_precision as precision, numeric_scale as scale
+           from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'document_lines'
+            and column_name = 'quantity_fulfilled'`,
+      );
+      assert.deepEqual(isolatedType.rows[0], { precision: 28, scale: 8 });
+      const isolatedView = await isolated.client.query<{ predicate: string }>(
+        `select pg_get_viewdef('openbooks_query.document_lines'::regclass, true) as predicate`,
+      );
+      assert.match(isolatedView.rows[0]!.predicate, /openbooks_query_org_id\(\)/);
+
+      // A second schema-only bootstrap sees the exact ledger digest and must
+      // leave the repaired catalog untouched rather than dropping the view again.
+      await runBootstrap(isolated.url, { restoreTarget: true });
+      assert.deepEqual(await readViewMetadata(isolated.client), before);
+      const isolatedRetry = await isolated.client.query<{ precision: number; scale: number }>(
+        `select numeric_precision as precision, numeric_scale as scale
+           from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'document_lines'
+            and column_name = 'quantity_fulfilled'`,
+      );
+      assert.deepEqual(isolatedRetry.rows[0], { precision: 28, scale: 8 });
+
+      // Data-upgrade proof: real rows through the REAL tail. Only the pre-0064
+      // ledger is seeded, so bootstrap applies 0064 plus every later migration
+      // and then provisions org defaults against the current schema — exactly
+      // the production order. Nothing is faked, so future provisioning columns
+      // cannot break this path.
       await upgrade.client.query(`
         create table public._applied_migrations (
           filename text primary key,
           sha256 text not null,
           applied_at timestamptz not null default now()
         )`);
-      // Keep the upgrade scratch focused on 0064. Later migrations are marked
-      // at their published digests so they cannot rebuild this view after the
-      // repair (the separate empty-database run below exercises the full tail).
-      for (const file of [...preMigrationFiles, ...postMigrationFiles]) {
+      for (const file of preMigrationFiles) {
         const digest = createHash("sha256")
           .update(file.body)
           .digest("hex");
@@ -231,23 +364,7 @@ test(
         [lineA, lineB, orgA, orgB, documentA, documentB, accountA, accountB],
       );
 
-      await upgrade.client.query(
-        "comment on view openbooks_query.document_lines is 'quantity-view-contract'",
-      );
-      await upgrade.client.query(
-        "comment on column openbooks_query.document_lines.quantity_fulfilled is 'fulfilled-contract'",
-      );
-      await upgrade.client.query(
-        "comment on column openbooks_query.document_lines.quantity_billed is 'billed-contract'",
-      );
-      await upgrade.client.query(
-        "grant select on table openbooks_query.document_lines to quantity_view_reader",
-      );
-      const before = await readViewMetadata(upgrade.client);
-
       await runBootstrap(upgrade.url);
-      const after = await readViewMetadata(upgrade.client);
-      assert.deepEqual(after, before, "owner, ACL, options, and comments survive the repair");
 
       const progress = await upgrade.client.query<{
         fulfilledPrecision: number;
@@ -292,6 +409,15 @@ test(
       assert.equal(shape.fulfilled, "0.12340000");
       assert.equal(shape.billed, "0.00010000");
 
+      // Provisioning ran against the current schema (production order), so the
+      // current engine defaults exist for the upgraded org. A frozen schema
+      // would have failed before reaching this read.
+      const crmDefaults = await upgrade.client.query<{ count: string }>(
+        `select count(*)::text as count from public.crm_opportunity_statuses where org_id = $1`,
+        [orgA],
+      );
+      assert.equal(crmDefaults.rows[0]!.count, "6");
+
       const highPrecisionLine = randomUUID();
       await upgrade.client.query(
         `insert into document_lines
@@ -325,7 +451,6 @@ test(
       // A second real bootstrap sees the exact ledger digest and must leave the
       // repaired catalog untouched rather than dropping the view again.
       await runBootstrap(upgrade.url);
-      assert.deepEqual(await readViewMetadata(upgrade.client), before);
       const retryType = await upgrade.client.query<{ precision: number; scale: number }>(
         `select numeric_precision as precision, numeric_scale as scale
            from information_schema.columns
@@ -334,6 +459,10 @@ test(
             and column_name = 'quantity_fulfilled'`,
       );
       assert.deepEqual(retryType.rows[0], { precision: 28, scale: 8 });
+      const retryView = await upgrade.client.query<{ predicate: string }>(
+        `select pg_get_viewdef('openbooks_query.document_lines'::regclass, true) as predicate`,
+      );
+      assert.match(retryView.rows[0]!.predicate, /openbooks_query_org_id\(\)/);
 
       // The same published chain must also work on a genuinely empty database.
       await runBootstrap(fresh.url);
@@ -350,6 +479,7 @@ test(
       );
       assert.match(freshView.rows[0]!.predicate, /openbooks_query_org_id\(\)/);
     } finally {
+      await dropScratchDatabase(isolated);
       await dropScratchDatabase(upgrade);
       await dropScratchDatabase(fresh);
     }
