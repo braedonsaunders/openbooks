@@ -33,7 +33,7 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH } = await import('./route.ts')
@@ -43,14 +43,16 @@ async function fixture() {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(settings, '{features}',
-      coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const activityId = (await db.execute<{ id: string }>(sql`
-    insert into crm_activities (org_id, kind, status, subject, duration_minutes)
-    values (${org.orgId}, 'call', 'open', 'Probe call', 30)
-    returning id`)).rows[0]!.id
+  const activityId = await withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
+       where id = ${org.orgId}`)
+    return (await db.execute<{ id: string }>(sql`
+      insert into crm_activities (org_id, kind, status, subject, duration_minutes)
+      values (${org.orgId}, 'call', 'open', 'Probe call', 30)
+      returning id`)).rows[0]!.id
+  })
   return { org, activityId }
 }
 
@@ -70,10 +72,12 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
   }
 }
 
-async function duration(activityId: string): Promise<number | null> {
-  const rows = (await db.execute<{ duration_minutes: number | null }>(sql`
-    select duration_minutes from crm_activities where id = ${activityId}`)).rows
-  return rows[0]!.duration_minutes
+async function duration(orgId: string, activityId: string): Promise<number | null> {
+  return await withOrgContext(orgId, async () => {
+    const rows = (await db.execute<{ duration_minutes: number | null }>(sql`
+      select duration_minutes from crm_activities where id = ${activityId}`)).rows
+    return rows[0]!.duration_minutes
+  })
 }
 
 test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, async () => {
@@ -81,7 +85,7 @@ test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, as
   try {
     const result = await patch(activityId, { durationMinutes: '99999999999999999999' })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await duration(activityId), 30)
+    assert.equal(await duration(org.orgId, activityId), 30)
   } finally {
     await dropScratchOrg(org.orgId)
   }
@@ -92,7 +96,7 @@ test('PATCH still saves an ordinary duration', { skip: !DB }, async () => {
   try {
     const result = await patch(activityId, { durationMinutes: 45 })
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal(await duration(activityId), 45)
+    assert.equal(await duration(org.orgId, activityId), 45)
   } finally {
     await dropScratchOrg(org.orgId)
   }

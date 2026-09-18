@@ -42,7 +42,7 @@ const { transactionResource } = (await import('./transaction-resources.ts')) as 
 )
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
   '@openbooks/engine/src/test-fixtures.ts'
 )
@@ -65,23 +65,27 @@ interface Fixture {
  */
 async function fixture(): Promise<Fixture> {
   const o = await createScratchOrg()
-  const revenueNo = (
+  // The data-io import above leaves the ambient scope RLS-enforced with no
+  // tenant: seed writes go through the bypass, reads through the org.
+  const revenueNo = await withOrgContext(o.orgId, async () => (
     await db.execute<{ number: string }>(
-      sql`select number from accounts where id = ${o.accounts.revenue}`,
+      sql`select number from accounts where id = ${o.accounts.revenue} and org_id = ${o.orgId}`,
     )
-  ).rows[0]?.number
+  ).rows[0]?.number)
   assert.ok(revenueNo)
-  await db.execute(sql`update parties set short_code = 'ACME' where id = ${o.customerId}`)
+  await withBypassContext(async () => {
+    await db.execute(sql`update parties set short_code = 'ACME' where id = ${o.customerId}`)
+  })
   return { orgId: o.orgId, date: o.date, revenueNo, customerId: o.customerId, rootId: o.subsidiaryId }
 }
 
 async function addSubsidiary(fx: Fixture, name: string): Promise<string> {
-  const [row] = (
+  const [row] = await withBypassContext(async () => (
     await db.execute<{ id: string }>(sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country)
       values (${fx.orgId}, ${fx.rootId}, ${name}, 'CAD', 'CA')
       returning id`)
-  ).rows
+  ).rows)
   assert.ok(row?.id)
   return row.id
 }
@@ -89,19 +93,21 @@ async function addSubsidiary(fx: Fixture, name: string): Promise<string> {
 async function writeInvoice(fx: Fixture, row: Record<string, unknown>) {
   const cfg = DOC_KINDS.customer_invoice
   assert.ok(cfg)
-  return transactionResource(cfg, fx.orgId).write([row], 'insert', {
+  // The call under test resolves subsidiaries and posts through the ambient
+  // scope: run it inside the caller's tenant.
+  return withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).write([row], 'insert', {
     orgId: fx.orgId,
     actorId: randomUUID(),
     dryRun: false,
-  })
+  }))
 }
 
 async function storedSubsidiaryId(fx: Fixture, documentNumber: string): Promise<string | null> {
-  const [row] = (
+  const [row] = await withOrgContext(fx.orgId, async () => (
     await db.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from documents
        where org_id = ${fx.orgId} and document_number = ${documentNumber}`)
-  ).rows
+  ).rows)
   return row?.subsidiary_id ?? null
 }
 
@@ -203,7 +209,7 @@ test(
       assert.equal(created.failed, 0)
       const cfg = DOC_KINDS.customer_invoice
       assert.ok(cfg)
-      const exported = await transactionResource(cfg, fx.orgId).read()
+      const exported = await withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).read())
       const row = (exported.rows as Record<string, unknown>[]).find(
         (r) => r.documentNumber === 'SUB-4',
       )
@@ -218,12 +224,12 @@ test(
         { created: replay.created, failed: replay.failed, errors: replay.errors },
         { created: 1, failed: 0, errors: [] },
       )
-      const [copy] = (
+      const [copy] = await withOrgContext(fx.orgId, async () => (
         await db.execute<{ subsidiary_id: string | null }>(sql`
           select subsidiary_id from documents
            where org_id = ${fx.orgId} and document_number <> 'SUB-4'
              and kind = 'customer_invoice'`)
-      ).rows
+      ).rows)
       assert.equal(copy?.subsidiary_id, westId)
     } finally {
       await dropScratchOrgReporting(fx.orgId)

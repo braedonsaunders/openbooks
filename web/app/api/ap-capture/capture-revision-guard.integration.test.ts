@@ -16,7 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH } = await import('./[id]/route')
 
@@ -30,8 +30,13 @@ const { PATCH } = await import('./[id]/route')
 test('a stale capture revision refuses instead of reverting a newer correction', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
   try {
-    const actor = await createScratchUser(org.orgId, 'Capture reviewer', 'reviewer')
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    // createScratchUser seeds app_roles outside any bypass of its own; scope
+    // the call (and every seed write below) explicitly now that importing the
+    // route module has replaced the ambient test bypass process-wide.
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Capture reviewer', 'reviewer'))
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    })
     session.user = { id: actor, orgId: org.orgId, name: 'Reviewer', email: 'reviewer@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
     const folder = randomUUID(), file = randomUUID(), capture = randomUUID()
     const normalized = {
@@ -39,13 +44,15 @@ test('a stale capture revision refuses instead of reverting a newer correction',
       purchaseOrderNumber: null, currency: 'CAD', subtotal: '100.0000', taxTotal: '0.0000', total: '100.0000', memo: null,
       lines: [{ description: 'Expense', productCode: null, quantity: '1.0000', unit: null, unitPrice: '100.0000', amount: '100.0000', taxAmount: '0.0000', accountId: org.accounts.cogs, itemId: null, purchaseOrderLineId: null, confidence: null }],
     }
-    await db.execute(sql`insert into folders(id,org_id,name) values (${folder},${org.orgId},'Capture evidence')`)
-    await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes) values (${file},${org.orgId},${folder},'occ.pdf','application/pdf',0)`)
-    await db.execute(sql`insert into ap_capture_items(id,org_id,file_id,status,original_filename,content_hash,document_kind,normalized,vendor_candidate_id,created_by,updated_by)
-      values (${capture},${org.orgId},${file},'needs_review','occ.pdf',${randomUUID()},'vendor_bill',${JSON.stringify(normalized)}::jsonb,${org.vendorId},${actor},${actor})`)
-    const revision = async () => (await db.execute<{ updatedAt: string }>(sql`
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into folders(id,org_id,name) values (${folder},${org.orgId},'Capture evidence')`)
+      await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes) values (${file},${org.orgId},${folder},'occ.pdf','application/pdf',0)`)
+      await db.execute(sql`insert into ap_capture_items(id,org_id,file_id,status,original_filename,content_hash,document_kind,normalized,vendor_candidate_id,created_by,updated_by)
+        values (${capture},${org.orgId},${file},'needs_review','occ.pdf',${randomUUID()},'vendor_bill',${JSON.stringify(normalized)}::jsonb,${org.vendorId},${actor},${actor})`)
+    })
+    const revision = async () => withOrgContext(org.orgId, async () => (await db.execute<{ updatedAt: string }>(sql`
       select (revision_seq)::text as "updatedAt"
-        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt
+        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt)
     const patch = (body: object) => withOrgContext(org.orgId, () => PATCH(new Request('http://occ.local/api/ap-capture/' + capture, {
       method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, ...body }),
     }), { params: Promise.resolve({ id: capture }) }))
@@ -58,9 +65,9 @@ test('a stale capture revision refuses instead of reverting a newer correction',
     const tabB = await patch({ expectedUpdatedAt: stale, normalized: { ...normalized, total: '99.0000', subtotal: '99.0000' } })
     assert.equal(tabB.status, 409)
     // The live row is exactly what tab A wrote — no silent revert.
-    const live = (await db.execute<{ vendor: unknown; total: unknown }>(sql`
+    const live = await withOrgContext(org.orgId, async () => (await db.execute<{ vendor: unknown; total: unknown }>(sql`
       select normalized->>'vendorName' as vendor, normalized->>'total' as total
-        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!
+        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!)
     assert.equal(live.vendor, 'Tab A vendor')
     assert.equal(live.total, '100.0000')
     // A missing token is rejected before any work happens.
