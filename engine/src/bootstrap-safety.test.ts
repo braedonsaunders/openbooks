@@ -78,3 +78,37 @@ test("bundled bootstrap cannot launch the project-type seed CLI twice", () => {
   assert.match(projectTypeSeed, /isSeedProjectTypesCli\(process\.argv\[1\]\)/);
   assert.match(projectTypeSeed, /seed-project-types\\\./);
 });
+
+test("test ownership transfer is explicit, production-refused, and verified", () => {
+  // The transfer exists so test logins are RLS-subject constrained owners
+  // rather than exempt bootstrap superusers. Each interlock below is load
+  // bearing: without the explicit variable a typo'd CI config silently keeps
+  // the exempt posture; without the production refusal it could divest a live
+  // database; without the ownership proof a partial transfer looks complete.
+  assert.match(
+    bootstrap,
+    /OPENBOOKS_TEST_OWNERSHIP_TRANSFER !== "1"/,
+  );
+  assert.match(
+    bootstrap,
+    /OPENBOOKS_TEST_OWNERSHIP_TRANSFER is refused in production/,
+  );
+  assert.match(bootstrap, /OPENBOOKS_TEST_OWNERSHIP_TRANSFER requires OPENBOOKS_RUNTIME_DB_URL/);
+  assert.match(bootstrap, /owner to ' \|\| quote_ident\(\$1\)/);
+  assert.match(bootstrap, /alter database .* owner to/i);
+  assert.match(bootstrap, /alter schema public owner to/i);
+  assert.match(
+    bootstrap,
+    /ownership transfer incomplete; RLS nexus objects not owned by/,
+  );
+  // The transfer runs after seeds and before the runtime-role proof, so the
+  // fail-closed/tenant proof attests the transferred state, not the pre-state.
+  assert.ok(
+    bootstrap.indexOf("await transferTestOwnershipToRuntimeRole") <
+      bootstrap.indexOf("await verifyRuntimeDatabaseRole"),
+  );
+  assert.ok(
+    bootstrap.indexOf("await seedAdmin") <
+      bootstrap.indexOf("await transferTestOwnershipToRuntimeRole"),
+  );
+});

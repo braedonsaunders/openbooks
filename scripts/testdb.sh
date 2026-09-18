@@ -182,6 +182,7 @@ build_template() {
     OPENBOOKS_DB_URL="$(url_for "$STAGING")" \
     OPENBOOKS_RUNTIME_DB_URL="$(runtime_url_for "$STAGING")" \
     OPENBOOKS_DB_PASSWORD="$RUNTIME_PASS" \
+    OPENBOOKS_TEST_OWNERSHIP_TRANSFER=1 \
     OPENBOOKS_DATA_KEY=${OPENBOOKS_DATA_KEY:-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f} \
     SESSION_SECRET=${SESSION_SECRET:-openbooks-test-secret-not-production} \
     ORG_COUNTRY=${ORG_COUNTRY:-US} ORG_CURRENCY=${ORG_CURRENCY:-USD} \
@@ -238,7 +239,12 @@ check_template_freshness() {
 
 print_env() {
   local db=$1
-  echo "export OPENBOOKS_DB_URL='$(url_for "$db")'"
+  # Tests connect as the constrained runtime role (the template transferred
+  # ownership to it at build): superuser sessions bypass every RLS policy, so
+  # a superuser OPENBOOKS_DB_URL would make isolation assertions vacuous.
+  # Interactive superuser psql is still one flag away (PGPASSWORD below is the
+  # superuser password): psql -U openbooks -h 127.0.0.1 -p "$PORT" "$db".
+  echo "export OPENBOOKS_DB_URL='$(runtime_url_for "$db")'"
   echo "export OPENBOOKS_RUNTIME_DB_URL='$(runtime_url_for "$db")'"
   echo "export OPENBOOKS_DB_PASSWORD='${RUNTIME_PASS}'"
   echo "export PGPASSWORD='${SUPERPASS}'"
