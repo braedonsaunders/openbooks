@@ -358,6 +358,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0170_forecast_snapshot_org_target.sql",
     "0171_expense_line_settlement_type.sql",
     "0172_tax_return_form_notice_key.sql",
+    "0174_payroll_employer_levy_opening.sql",
     "0175_payroll_country_pack_open.sql",
   ]);
   assert.deepEqual(
