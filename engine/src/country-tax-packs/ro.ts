@@ -77,12 +77,6 @@ export const ROMANIA_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://static.anaf.ro/static/3/Cluj/20260220114126_cj_d300_20feb2026.pdf",
       asOf: "2026-08-01",
     },
-    {
-      id: "sovos_ro_vat_aug2025",
-      title: "Sovos 18.08.2025 (corroboration) — standard 19% to 21%, 5% and 9% consolidated to 11% from 1 August 2025, with exceptions",
-      url: "https://sovos.com/regulatory-updates/vat/romania-raises-vat-rates-effective-august-1/",
-      asOf: "2026-08-01",
-    },
   ],
   jurisdictions: [],
   returnPacks: [RO_D300_2025],
