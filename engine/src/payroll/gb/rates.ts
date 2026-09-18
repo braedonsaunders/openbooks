@@ -113,6 +113,60 @@ export const GB_RUK_BANDS: readonly GbRukBand[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// PAYE income tax (Scotland: its own six-band starter..top structure)
+// ---------------------------------------------------------------------------
+
+/**
+ * Scottish bands in TAXABLE-pay space (pay above the Personal Allowance /
+ * code free pay), transcribed from the employer rates page's Scotland section
+ * AND Tax Tables B-D 2026/27 PDF p.3 — the two agree to the pound.
+ *
+ * Employer rates page (Scotland): "Starter tax rate 19% Up to £3,967",
+ * "Basic tax rate 20% From £3,968 to £16,956", "Intermediate tax rate 21%
+ * From £16,957 to £31,092", "Higher tax rate 42% From £31,093 to £62,430",
+ * "Advanced tax rate 45% From £62,431 to £125,140", "Top tax rate 48%
+ * Above £125,140" ("Annual earnings the rate applies to (above the PAYE
+ * threshold)"). Tax Tables B-D PDF p.3: "Scottish starter rate 19% on
+ * taxable income £1 to £3,967", "Scottish basic rate 20% on taxable income
+ * £3,968 to £16,956", "Scottish intermediate rate 21% on taxable income
+ * £16,957 to £31,092", "Scottish higher rate 42% on taxable income £31,093
+ * to £62,430", "Scottish advanced rate 45% on taxable income £62,431 to
+ * £125,140", "Scottish top rate 48% on taxable income £125,141 and above".
+ *
+ * Cross-check (gross-income space) from https://www.gov.uk/scottish-income-tax
+ * "Current rates" table: "Up to £12,570 0%", "£12,571 to £16,537 19%",
+ * "£16,538 to £29,526 20%", "£29,527 to £43,662 21%", "£43,663 to £75,000
+ * 42%", "£75,001 to £125,140 45%", "over £125,140 48%". Each top is exactly
+ * £12,570 above the taxable-space top (16,537 = 12,570 + 3,967; 29,526 =
+ * 12,570 + 16,956; 43,662 = 12,570 + 31,092; 75,000 = 12,570 + 62,430) —
+ * the two pages agree, so no Budget papers are needed.
+ *
+ * The Personal Allowance is reserved (UK-wide): the Scottish page prices
+ * "if you have a standard Personal Allowance of £12,570" and sends the
+ * over-£125,140 rule to the UK-wide /income-tax-rates/income-over-100000
+ * page ("You do not get a Personal Allowance if you earn over £125,140"),
+ * and the employer page prints the same £12,570 standard allowance under
+ * its Scotland heading. Scotland sets bands, not the allowance — the engine
+ * reads the S-prefix code's free pay exactly as it reads 1257L's, and NIC
+ * stays UK-wide (the employer NIC tables are printed once, not per nation).
+ */
+export interface GbSctBand {
+  /** Taxable pay the band tops out at, or null for the top band. */
+  readonly upTo: string | null;
+  /** Whole-percent rate, as a decimal fraction string. */
+  readonly rate: string;
+}
+
+export const GB_SCT_BANDS: readonly GbSctBand[] = [
+  { upTo: "3967", rate: "0.19" },
+  { upTo: "16956", rate: "0.20" },
+  { upTo: "31092", rate: "0.21" },
+  { upTo: "62430", rate: "0.42" },
+  { upTo: "125140", rate: "0.45" },
+  { upTo: null, rate: "0.48" },
+];
+
+// ---------------------------------------------------------------------------
 // Class 1 National Insurance, category A (the standard category letter)
 // ---------------------------------------------------------------------------
 
@@ -232,17 +286,13 @@ export const GB_AE_QUALIFYING_BAND_LOWER = "6240";
 export const GB_AE_QUALIFYING_BAND_UPPER = "50270";
 
 /**
- * Tax-year support: the 2026/27 rUK edition is transcribed above.
- * `regionsWithOwnTables` keeps SCT: Scotland sets its own bands (see the
- * module header), and no SCT edition is transcribed here — that is a named
- * follow-up, not an oversight. The 2026/27 Scottish bands ARE now
- * primary-published (the employer rates page prints starter 19% to £3,967
- * through top 48% above £125,140, cross-checked against
- * https://www.gov.uk/scottish-income-tax: 19% £12,571–£16,537, 20%
- * £16,538–£29,526, 21% £29,527–£43,662, 42% £43,663–£75,000, 45%
- * £75,001–£125,140, 48% over £125,140), so the follow-up needs no Budget
- * papers — but S-prefix routing is a second engine surface and stays out of
- * this shard by explicit order.
+ * Tax-year support: the 2026/27 rUK edition AND the 2026/27 SCT edition are
+ * transcribed above. `regionsWithOwnTables` keeps SCT: Scotland sets its own
+ * bands under the Scotland Act 1998, so a year is loaded for SCT only when a
+ * published edition naming SCT exists (the Quebec TP-1015 pattern) — no
+ * silent rUK fall-through. The SCT edition's bands are primary-published on
+ * both the employer rates page and https://www.gov.uk/scottish-income-tax
+ * (see GB_SCT_BANDS); S-prefix code routing rides it.
  */
 export const GB_TAX_YEARS: PayrollTaxYearSupport = {
   country: "GB",
@@ -256,6 +306,18 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
         + "(published 30 January 2026, last updated 1 September 2026)",
       status: "published",
     },
+    {
+      year: GB_TAX_YEAR,
+      region: "SCT",
+      label: "Rates and thresholds for employers 2026 to 2027 (Scotland bands)",
+      effectiveFrom: GB_TAX_YEAR_START,
+      citation:
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 "
+        + "(Scotland section; starter 19% to £3,967 through top 48% above £125,140), "
+        + "cross-checked against https://www.gov.uk/scottish-income-tax current-rates table "
+        + "and Tax Tables B-D 2026/27 PDF p.3 (see GB_SCT_BANDS)",
+      status: "published",
+    },
   ],
   regionsWithOwnTables: ["SCT"],
   ratesModule: "engine/src/payroll/gb/rates.ts",
@@ -263,9 +325,6 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
     files: [],
     barrels: [],
     steps: [
-      "Transcribe the Scottish bands from "
-        + "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 "
-        + "as an SCT edition with S-prefix code routing.",
       "Add NIC category letters beyond A once a category-letter input channel exists.",
       "Add the published edition(s) to GB_TAX_YEARS.editions.",
     ],

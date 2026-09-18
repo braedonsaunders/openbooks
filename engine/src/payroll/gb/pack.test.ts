@@ -85,15 +85,20 @@ test("slots are PAYE plus employee/employer NIC only — no loan, no pension", (
 });
 
 test("2026/27 IS transcribed with its edition stamp, and the pack is installable", () => {
-  assert.equal(GB_TAX_YEARS.editions.length, 1);
+  assert.equal(GB_TAX_YEARS.editions.length, 2);
   const [edition] = GB_TAX_YEARS.editions;
   assert.equal(edition!.year, 2026);
   assert.equal(edition!.effectiveFrom, "2026-04-06");
   assert.match(edition!.citation, /rates-and-thresholds-for-employers-2026-to-2027/);
   assert.equal(edition!.status, "published");
   assert.ok(GB_TAX_YEARS.regionsWithOwnTables.includes("SCT"));
-  // SCT publishes separately and has no edition: no silent rUK fall-through.
-  assert.ok(!GB_TAX_YEARS.editions.some((entry) => entry.region === "SCT"));
+  // SCT publishes separately and now HAS a 2026/27 edition naming it: a year
+  // is loaded for SCT only through that edition — no silent rUK fall-through.
+  const sct = GB_TAX_YEARS.editions.find((entry) => entry.region === "SCT");
+  assert.equal(sct?.year, 2026);
+  assert.equal(sct?.status, "published");
+  assert.equal(sct?.effectiveFrom, "2026-04-06");
+  assert.match(sct?.citation ?? "", /scottish-income-tax/);
   assert.equal(GB_PACK.installable, true);
   assert.equal(GB_PACK.statutoryCurrency, "GBP");
   assert.equal(GB_PACK_RATES.country, "GB");
