@@ -49,6 +49,24 @@ const VN_GTGT_01: TaxReturnPack = {
  * 48 takes effect). Earlier 8% windows are not transcribed here by order:
  * VN-VAT-RED8 below is untouched.
  *
+ * Operative language (the mirror PDF carries the full enacted text, not a
+ * summary — masthead QUỐC HỘI through Điều 16 with signatures — quoted so a
+ * reader without the document can check it):
+ * - Điều 8. Thuế suất: "Mức thuế suất 0% áp dụng đối với hàng hóa, dịch vụ
+ *   xuất khẩu ..." / "Mức thuế suất 5% áp dụng đối với hàng hóa, dịch vụ
+ *   sau đây: a) Nước sạch phục vụ sản xuất và sinh hoạt; ..." / "Mức thuế
+ *   suất 10% áp dụng đối với hàng hóa, dịch vụ không quy định tại khoản 1
+ *   và khoản 2 Điều này." (0% on exports; 5% on the listed goods starting
+ *   with clean water; 10% residual on everything else.)
+ * - Điều 15. Hiệu lực thi hành: "Luật này có hiệu lực thi hành từ ngày
+ *   01 tháng 01 năm 2009." (in force from 01/01/2009), replacing the 1997
+ *   VAT law.
+ * - Law 48/2024, Điều 18.3 (Công báo): "Luật Thuế giá trị gia tăng số
+ *   13/2008/QH12 đã được sửa đổi, bổ sung một số điều theo Luật số
+ *   31/2013/QH13, Luật số 71/2014/QH13 và Luật số 106/2016/QH13 hết hiệu
+ *   lực kể từ ngày Luật này có hiệu lực thi hành." (13/2008 as amended
+ *   repealed when Law 48 takes effect, 01/07/2025 per Điều 18.1).
+ *
  * The temporary 8% cut is its own code, VN-VAT-RED8: Nghị định
  * 174/2025/NĐ-CP (implementing Nghị quyết 204/2025/QH15) applies 8% from
  * 2025-07-01 through 2026-12-31 to goods and services otherwise at 10%,
