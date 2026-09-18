@@ -37,6 +37,7 @@ import { SINGAPORE_TAX_PACK } from "./sg.ts";
 import { THAILAND_TAX_PACK } from "./th.ts";
 import { TURKIYE_TAX_PACK } from "./tr.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
+import { VIETNAM_TAX_PACK } from "./vn.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
 import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
@@ -84,6 +85,7 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   THAILAND_TAX_PACK,
   KENYA_TAX_PACK,
   PHILIPPINES_TAX_PACK,
+  VIETNAM_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 
