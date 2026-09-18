@@ -132,6 +132,10 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     "www.resmigazete.gov.tr",
     "financnisprava.gov.cz",
     "adisspr.mfcr.cz",
+    // e-Sbírka — the state's official legislation portal (zákon č.
+    // 349/2023 Sb. consolidation act for the Czechia 12%/books origin).
+    // A stronger host than either agency page: the enacted instrument.
+    "www.e-sbirka.cz",
   ]);
   // Mirrored primary documents, id-specific and never host-wide: the document
   // is the authority's own file and only the host is secondary. Each entry
