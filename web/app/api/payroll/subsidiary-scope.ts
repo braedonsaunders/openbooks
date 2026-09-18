@@ -1,7 +1,11 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { roeSourceScope } from '@openbooks/engine/src/payroll-yearend.ts'
-import type { PayrollFilingData } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import {
+  yearEndFiling,
+  type PayrollFilingData,
+  type PayrollYearEndFiling,
+} from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
@@ -113,6 +117,24 @@ export async function guardPayrollFilingData(
   )
 }
 
+/**
+ * Which ownership proves a filing's rows, from the filing's declared deadline
+ * class — annual slips by their pay runs, quarterly aggregates by their
+ * filing accounts, separation events by current employment plus sources.
+ * Null for anything the registry does not declare: the guard fails closed.
+ * A sixth filing routes itself by declaring itself; no pair is enumerated.
+ */
+export function filingGuardKind(
+  country: string,
+  filing: string,
+): 'annual' | 'quarterly' | 'separation' | null {
+  try {
+    return yearEndFiling(country, filing).cadence
+  } catch {
+    return null
+  }
+}
+
 /** Same guard for stored amendment rows, where only opaque row ids are kept. */
 export async function guardPayrollFilingRowIds(
   gate: Authz,
@@ -123,12 +145,26 @@ export async function guardPayrollFilingRowIds(
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
-  const parsed = rowIds.map((rowId) => parsePayrollRow(country, filing, rowId))
+  let declared: PayrollYearEndFiling
+  try {
+    declared = yearEndFiling(country, filing)
+  } catch {
+    return notFound()
+  }
+  const parsed = rowIds.map((rowId) => declared.parseRowId(rowId))
   if (parsed.some((row) => row === null)) return notFound()
-  if (country === 'US' && filing === '941') return guardPayroll941Rows(gate, rowIds, taxYear)
-  const employeeDenied = await guardPayrollFilingEmployees(gate, country, filing, parsed.flatMap((row) => row!.employees), taxYear)
-  if (employeeDenied) return employeeDenied
+  // The FILING's declared deadline class decides which ownership proves the
+  // rows — no (country, filing) pair is enumerated here: a sixth filing is
+  // guarded by declaring itself. A future separation filing with different
+  // sources than the ROE needs its own executor — cadence routes it to the
+  // ROE's, loudly documented here, rather than to a wrong one silently.
+  const kind = filingGuardKind(country, filing)
+  if (kind === null) return notFound()
+  if (kind === 'quarterly') return guardPayroll941Rows(gate, country, rowIds, taxYear)
   const employees = parsed.flatMap((row) => row!.employees)
+  if (kind === 'separation') return guardPayrollRoeEmployees(gate, employees)
+  const employeeDenied = await guardPayrollFilingEmployees(gate, country, employees, taxYear)
+  if (employeeDenied) return employeeDenied
   const accounts = parsed.flatMap((row) => row!.accounts)
   if (employees.length > 0 && accounts.length === 0) return null
   return guardPayrollFilingAccounts(gate, accounts, true)
@@ -137,6 +173,7 @@ export async function guardPayrollFilingRowIds(
 /** Account-only quarter rows still contain source payroll owned by legal entities. */
 async function guardPayroll941Rows(
   gate: Authz,
+  country: string,
   rowIds: readonly string[],
   taxYear: number,
 ): Promise<Response | null> {
@@ -156,7 +193,7 @@ async function guardPayroll941Rows(
       join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
       left join documents d on d.org_id = r.org_id and d.id = r.document_id
      where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
-       and s.country = 'US' and r.run_status in ('committed', 'voided')
+       and s.country = ${country} and r.run_status in ('committed', 'voided')
        and (${sql.join(requested.map(row => sql`(
          s.filing_account_id is not distinct from ${row.account}::uuid
          and extract(quarter from s.pay_date)::int = ${row.quarter}
@@ -182,21 +219,17 @@ async function guardPayroll941Rows(
  * Annual slips derive ownership from original pay-run documents in the requested
  * year. Check the whole employee/year: annual caps and opening carry-in can
  * affect several account/province rows. A transfer must not move that evidence.
- * ROE uses current employment details and a period window that can cross years;
- * it requires both current-profile and original-source visibility.
+ * (Separation filings take the ROE path from the cadence dispatch above —
+ * they use current employment details and a period window that can cross
+ * years, requiring both current-profile and original-source visibility.)
  */
 async function guardPayrollFilingEmployees(
   gate: Authz,
   country: string,
-  filing: string,
   employeeIds: readonly string[],
   taxYear: number,
 ): Promise<Response | null> {
   if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
-  const annual = (country === 'CA' && (filing === 't4' || filing === 'rl1'))
-    || (country === 'US' && filing === 'w2')
-  if (country === 'CA' && filing === 'roe') return guardPayrollRoeEmployees(gate, employeeIds)
-  if (!annual) return guardPayrollEmployees(gate, employeeIds)
   const ids = [...new Set(employeeIds)]
   if (ids.length === 0) return null
   const rows = (await db.execute<{ employeeId: string; subsidiaryId: string | null }>(sql`
@@ -263,34 +296,23 @@ export function payrollRowScope(
   return parsePayrollRow(country, filing, rowId)
 }
 
+/**
+ * One filing's row grammar, read off its declaration — the pack owns its row
+ * shape, so this module holds no per-filing parsing at all. Unknown
+ * (country, filing) pairs and undeclared grammars fail closed.
+ */
 function parsePayrollRow(
   country: string,
   filing: string,
   rowId: string,
 ): { employees: string[]; accounts: string[] } | null {
-  const parts = rowId.split(':')
-  if (country === 'CA' && filing === 't4' && parts.length === 3 && isUuid(parts[0]!)) {
-    if (parts[2] && !isUuid(parts[2])) return null
-    return { employees: [parts[0]!], accounts: parts[2] ? [parts[2]] : [] }
+  let declared: PayrollYearEndFiling
+  try {
+    declared = yearEndFiling(country, filing)
+  } catch {
+    return null
   }
-  if (country === 'CA' && filing === 'roe' && isUuid(rowId)) {
-    return { employees: [rowId], accounts: [] }
-  }
-  // Québec's RL-1 population is one row per employee, just like the ROE;
-  // unlike T4 its row key is the employee UUID without province/account
-  // suffixes.
-  if (country === 'CA' && filing === 'rl1' && isUuid(rowId)) {
-    return { employees: [rowId], accounts: [] }
-  }
-  if (country === 'US' && filing === 'w2' && parts.length === 2 && isUuid(parts[0]!)) {
-    if (parts[1] && !isUuid(parts[1])) return null
-    return { employees: [parts[0]!], accounts: parts[1] ? [parts[1]] : [] }
-  }
-  if (country === 'US' && filing === '941' && parts.length === 2
-    && (!parts[0] || isUuid(parts[0])) && /^[1-4]$/.test(parts[1]!)) {
-    return { employees: [], accounts: parts[0] ? [parts[0]] : [] }
-  }
-  return null
+  return declared.parseRowId(rowId)
 }
 
 async function guardPayrollSubsidiaryOrRoot(

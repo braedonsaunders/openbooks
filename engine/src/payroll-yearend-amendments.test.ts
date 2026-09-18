@@ -965,6 +965,9 @@ test(
           columns: [{ key: "marker", label: "Marker" }],
           rows: [{ rowId: "row-1", marker: await readMarker() }],
         }),
+        // The snapshot rows are opaque markers, not subsidiary-scoped
+        // entities: nothing parses them, and the guard fails them closed.
+        parseRowId: () => null,
         slip: {
           build: async () => ({
             formCode: "ZZ_SNAPSHOT",
@@ -1066,6 +1069,9 @@ test(
             rows: [{ rowId: "row-1", marker }],
           };
         },
+        // Snapshot rows are opaque markers, not subsidiary-scoped entities:
+        // nothing parses them, and the guard fails them closed.
+        parseRowId: () => null,
         amendment: {
           supported: true,
           revisions: ["amended"],
@@ -1146,6 +1152,8 @@ test(
         key: filingKey,
         label: "Repeatable-read correction filing",
         cadence: "annual",
+        // Opaque marker rows, as above: nothing parses them.
+        parseRowId: () => null,
         population: async () => {
           populationCalls += 1;
           // Calls 1 and 2 issue the original and validate the amendment. Pause
@@ -1494,6 +1502,8 @@ async function raceFilingFixture(filingKey: string) {
       key: filingKey,
       label: "Race filing",
       cadence: "annual",
+      // Opaque marker rows, as above: nothing parses them.
+      parseRowId: () => null,
       population: async () => ({
         rowKey: "rowId",
         columns: [{ key: "marker", label: "Marker" }],

@@ -304,6 +304,31 @@ export type PayrollFilingAmendment =
     Promise<{ label: string; fingerprint: string }[]>;
   };
 
+/**
+ * A filing row id resolved to the subsidiary-scoped entities that own it.
+ * Employees are checked against their legal entity (current profile for
+ * separation events, original pay-run documents for annual slips); accounts
+ * against the filing account's entity, with unassigned aggregates falling
+ * back to the root boundary.
+ */
+export interface PayrollFilingRowScope {
+  employees: string[];
+  accounts: string[];
+}
+
+/**
+ * The lax UUID shape the web layer guards `[id]` params with (any hex
+ * version nibble — ids are opaque here, not validated). One definition for
+ * every filing's row grammar, so a stricter copy cannot 404 another pack's
+ * real rows.
+ */
+const FILING_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** True when the value has the row-id UUID shape. */
+export function isFilingRowUuid(value: string): boolean {
+  return FILING_ROW_UUID_RE.test(value);
+}
+
 export interface PayrollYearEndFiling {
   /** Stable key within the pack ("t4", "roe", "941", "w2", "p60"). */
   key: string;
@@ -312,13 +337,28 @@ export interface PayrollYearEndFiling {
   /**
    * The filing's deadline class. Required — the surfaces split on it (the
    * year-end page shows annual + quarterly; separation filings live on the
-   * Separations surface and the termination run's Finish step).
+   * Separations surface and the termination run's Finish step). The
+   * subsidiary-scope guard splits on it too: annual slips are owned by their
+   * pay runs, quarterly aggregates by their filing accounts, separation
+   * events by current employment plus sources — so the guard executes the
+   * declared kind and no (country, filing) pair is ever enumerated in
+   * generic code again.
    */
   cadence: PayrollFilingCadence;
   description?: string;
   emptyText?: string;
   /** The rows that belong on this filing for the year. */
   population(orgId: string, taxYear: number): Promise<PayrollFilingData>;
+  /**
+   * The filing's row-key grammar, as the inverse of whatever its population
+   * builds (`employee:province:account`, a bare employee id, `account:quarter`
+   * …). REQUIRED, like `cadence`: the subsidiary-scope guard parses every row
+   * id through this before authorizing a byte, so a filing whose grammar lives
+   * only in its builder cannot be guarded — and a sixth filing arrives as a
+   * pack change, never a guard change. Null for anything that is not one of
+   * this filing's rows.
+   */
+  parseRowId(rowId: string): PayrollFilingRowScope | null;
   /** One row rendered as its statutory slip, when the pack declares it. */
   slip?: PayrollFilingSlip;
   /** The electronic file, when the pack produces one. */
@@ -397,6 +437,7 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
   for (const filing of declaration.yearEnd) {
     assertCadence(declaration.country, filing);
     assertAmendment(declaration.country, filing);
+    assertRowShape(declaration.country, filing);
   }
   const filingKeys = declaration.yearEnd.map((filing) => filing.key);
   if (new Set(filingKeys).size !== filingKeys.length) {
@@ -419,6 +460,7 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
 export function registerYearEndFiling(country: string, filing: PayrollYearEndFiling): void {
   assertCadence(country, filing);
   assertAmendment(country, filing);
+  assertRowShape(country, filing);
   const pack = payrollPackFilings(country); // refuses an undeclared pack by name
   const declared = pack.yearEnd.find((existing) => existing.key === filing.key);
   if (declared) {
@@ -432,6 +474,22 @@ export function registerYearEndFiling(country: string, filing: PayrollYearEndFil
     );
   }
   EXTRA_FILINGS.set(country, [...(EXTRA_FILINGS.get(country) ?? []), filing]);
+}
+
+/**
+ * A filing that cannot parse its own row ids cannot be guarded: the
+ * subsidiary-scope guard authorizes bytes by row, so an unparseable row is a
+ * row that ships unscoped. Refused at registration, by name.
+ */
+function assertRowShape(country: string, filing: PayrollYearEndFiling): void {
+  if (typeof filing.parseRowId !== "function") {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing declares no row-key grammar — declare `
+      + "parseRowId(rowId) so the subsidiary-scope guard can resolve every row to the "
+      + "entities that own it (a filing whose grammar lives only in its builder cannot "
+      + "be guarded)",
+    );
+  }
 }
 
 /** A filing without a declared cadence cannot be routed to a surface. */
