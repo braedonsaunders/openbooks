@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { ActionError, fetchAction, readActionResult } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -306,10 +309,11 @@ export function OrderDrawer({
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
-  // A convert refusal pins here (role=alert) until the next action —
-  // a toast alone never survives attention (F-t03-001).
-  const [actionError, setActionError] = useState<string | null>(null)
+  // Saves, statuses, issues, deletes and converts run on the shared action
+  // path: a refusal pins here (role=alert) until the next action — a toast
+  // alone never survives attention (F-t03-001) — AND toasts, and busy always
+  // releases through the package's finally.
+  const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
 
   // Optimistic-concurrency token (documents.updated_at). Every mutating
   // request echoes it; the server refuses any mutation whose view of the
@@ -449,7 +453,10 @@ export function OrderDrawer({
         body: JSON.stringify({ ...payload, expectedUpdatedAt: revisionRef.current }),
       }),
       setState: setSaveState,
-      onError: (message) => toast.error(message ?? t('actionFailed')),
+      // The callback-style helper cannot return its refusal into execute:
+      // pin and toast it through the same refusal state instead, so saves
+      // and issues share one presentation with every other action.
+      onError: (message) => refuse(message, t('actionFailed')),
     })
     if (saved) {
       // Adopt the server's post-save revision so the next mutation (e.g. an
@@ -461,21 +468,23 @@ export function OrderDrawer({
   }
 
   async function save() {
-    setBusy(true)
-    try {
+    // persistDraft pins and toasts its own refusal through the shared state,
+    // so the save reports success-shaped around it: a second pin here would
+    // overwrite the specific reason with the generic fallback.
+    await execute(async () => {
       const saved = await persistDraft()
-      if (!saved) return
+      if (!saved) return { ok: true as const, status: 200, data: null }
       setTotals({ subtotal: saved.doc.subtotal, taxTotal: saved.doc.tax_total, total: saved.doc.total })
       setMode('view')
       router.refresh()
-    } finally {
-      setBusy(false)
-    }
+      return { ok: true as const, status: 200, data: null }
+    }, { fallbackMessage: t('actionFailed') })
   }
 
   function cancel() {
     resetForm()
     setDirty(false)
+    clearRefusal()
     setSaveState('saved')
     setMode('view')
   }
@@ -485,61 +494,87 @@ export function OrderDrawer({
     reason?: string,
     creditOverrideReason?: string,
   ) {
-    setBusy(true)
-    const res = await fetch(`${apiBase}/${doc.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status,
-        reason,
-        creditOverrideReason,
-        expectedUpdatedAt: revisionRef.current,
-      }),
-    })
-    const data = await res.json()
-    setBusy(false)
-    if (!res.ok) {
+    await execute<{
+      doc?: { updated_at?: unknown }
+      approvalPending?: boolean
+      voidPending?: boolean
+    } | { creditOverrideNeeded: true }>(async () => {
+      const res = await fetch(`${apiBase}/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          reason,
+          creditOverrideReason,
+          expectedUpdatedAt: revisionRef.current,
+        }),
+      })
+      const result = await readActionResult<{
+        doc?: { updated_at?: unknown }
+        approvalPending?: boolean
+        voidPending?: boolean
+      }>(res)
       if (
-        status === 'approved'
+        !result.ok
+        && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
+        && status === 'approved'
         && kind === 'sales_order'
         && canOverrideCredit
         && !creditOverrideReason
-        && data.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
       ) {
-        const overrideReason = await promptDialog({
-          title: t('creditOverrideTitle'),
-          label: t('creditOverrideReasonLabel'),
-          placeholder: t('creditOverrideReasonPlaceholder'),
-          confirmLabel: t('creditOverrideConfirm'),
-        })
-        if (overrideReason) await setStatus(status, reason, overrideReason)
-        return
+        // Not a refusal: the override prompt supersedes the pin, so carry a
+        // marker through the success path instead of letting execute pin it.
+        return { ok: true as const, status: res.status, data: { creditOverrideNeeded: true as const } }
       }
-      toast.error(data.error ?? t('actionFailed'))
-      return
-    }
-    if (data.doc?.updated_at != null) revisionRef.current = revisionOf(data.doc.updated_at)
-    if (data.approvalPending || data.voidPending) {
-      toast.success(tCommon('actions.submitForApproval'))
-    } else {
-      toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
-    }
-    router.refresh()
+      return result
+    }, {
+      fallbackMessage: t('actionFailed'),
+      onOk: async (data) => {
+        if ('creditOverrideNeeded' in data) {
+          const overrideReason = await promptDialog({
+            title: t('creditOverrideTitle'),
+            label: t('creditOverrideReasonLabel'),
+            placeholder: t('creditOverrideReasonPlaceholder'),
+            confirmLabel: t('creditOverrideConfirm'),
+          })
+          if (overrideReason) await setStatus(status, reason, overrideReason)
+          return
+        }
+        if (data.doc?.updated_at != null) revisionRef.current = revisionOf(data.doc.updated_at)
+        if (data.approvalPending || data.voidPending) {
+          toast.success(tCommon('actions.submitForApproval'))
+        } else {
+          toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
+        }
+        router.refresh()
+      },
+    })
   }
 
   async function issue() {
     // Persist any pending edits first so the server sees the latest lines.
-    setBusy(true)
-    try {
-      await issueSavedOrder({
-        persistDraft,
-        requestApproval: () => setStatus('approved'),
-      })
-    } catch {
-      toast.error(t('actionFailed'))
-    } finally {
-      setBusy(false)
-    }
+    // persistDraft and setStatus pin and toast their own refusals through the
+    // shared state, so the issue reports success-shaped around them: a second
+    // pin here would overwrite their specific reason with the generic
+    // fallback. Only a helper-shaped throw — a bug, not a refusal — pins.
+    await execute(async () => {
+      try {
+        await issueSavedOrder({
+          persistDraft,
+          requestApproval: () => setStatus('approved'),
+        })
+        return { ok: true as const, status: 200, data: null }
+      } catch (detail) {
+        return {
+          ok: false as const,
+          error: new ActionError({
+            kind: 'unexpected',
+            serverMessage: null,
+            detail: detail instanceof Error ? detail.message : String(detail),
+          }),
+        }
+      }
+    }, { fallbackMessage: t('actionFailed') })
   }
 
   async function voidOrder() {
@@ -572,20 +607,22 @@ export function OrderDrawer({
       }))
     )
       return
-    setBusy(true)
-    const res = await fetch(`${apiBase}/${doc.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
-    })
-    if (res.ok) {
-      toast.success(t('toastDeleted'))
-      router.push(meta.base)
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('actionFailed'))
-      setBusy(false)
-    }
+    await execute(
+      () =>
+        fetchAction(`${apiBase}/${doc.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
+        }),
+      {
+        fallbackMessage: t('actionFailed'),
+        successMessage: t('toastDeleted'),
+        onOk: () => {
+          router.push(meta.base)
+          router.refresh()
+        },
+      },
+    )
   }
 
   async function convert(
@@ -593,43 +630,55 @@ export function OrderDrawer({
     label: string,
     creditOverrideReason?: string,
   ) {
-    setBusy(true)
-    setActionError(null)
-    const res = await fetch(`${apiBase}/${doc.id}/convert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        targetKind,
-        creditOverrideReason,
-        expectedUpdatedAt: revisionRef.current,
-      }),
-    })
-    const data = await res.json()
-    setBusy(false)
-    if (!res.ok) {
+    await execute<{
+      kind: string
+      id: string
+      documentNumber: string
+    } | { creditOverrideNeeded: true }>(async () => {
+      const res = await fetch(`${apiBase}/${doc.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetKind,
+          creditOverrideReason,
+          expectedUpdatedAt: revisionRef.current,
+        }),
+      })
+      const result = await readActionResult<{
+        kind: string
+        id: string
+        documentNumber: string
+      }>(res)
       if (
-        targetKind === 'sales_order'
+        !result.ok
+        && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
+        && targetKind === 'sales_order'
         && canOverrideCredit
         && !creditOverrideReason
-        && data.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
       ) {
-        const overrideReason = await promptDialog({
-          title: t('creditOverrideTitle'),
-          label: t('creditOverrideReasonLabel'),
-          placeholder: t('creditOverrideReasonPlaceholder'),
-          confirmLabel: t('creditOverrideConfirm'),
-        })
-        if (overrideReason) await convert(targetKind, label, overrideReason)
-        return
+        // Not a refusal: the override prompt supersedes the pin, so carry a
+        // marker through the success path instead of letting execute pin it.
+        return { ok: true as const, status: res.status, data: { creditOverrideNeeded: true as const } }
       }
-      const message = data.error ?? t('convertFailed')
-      setActionError(message)
-      toast.error(message)
-      return
-    }
-    toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
-    router.push(targetHref(data.kind, data.id))
-    router.refresh()
+      return result
+    }, {
+      fallbackMessage: t('convertFailed'),
+      onOk: async (data) => {
+        if ('creditOverrideNeeded' in data) {
+          const overrideReason = await promptDialog({
+            title: t('creditOverrideTitle'),
+            label: t('creditOverrideReasonLabel'),
+            placeholder: t('creditOverrideReasonPlaceholder'),
+            confirmLabel: t('creditOverrideConfirm'),
+          })
+          if (overrideReason) await convert(targetKind, label, overrideReason)
+          return
+        }
+        toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
+        router.push(targetHref(data.kind, data.id))
+        router.refresh()
+      },
+    })
   }
 
   // -- line warehouse picker (F-t07-003) ------------------------------------
@@ -883,11 +932,7 @@ export function OrderDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {actionError ? (
-          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-            {actionError}
-          </p>
-        ) : null}
+        <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
