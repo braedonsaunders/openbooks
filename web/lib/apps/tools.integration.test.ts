@@ -151,7 +151,9 @@ async function makeFixture(): Promise<Fixture> {
 async function withFixture(run: (fx: Fixture) => Promise<void>): Promise<void> {
   const fx = await makeFixture()
   try {
-    await run(fx)
+    // Assistant tool subjects resolve their app and registry from the
+    // ambient tenant scope, exactly as a production request would carry it.
+    await withOrgContext(fx.orgId, () => run(fx))
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId))
     await withBypass(() => dropScratchOrg(fx.otherOrgId))
@@ -171,7 +173,7 @@ test('registry exposes installed tools only to actors holding the grant intersec
   const limitedTools = await buildToolRegistryAsync(fx.limitedAuthz)
   assert.ok(!(READ_TOOL in limitedTools), 'records.read-gated tool is hidden without the permission')
   assert.ok(MUTATING_TOOL in limitedTools, 'grant-free tool stays visible')
-  const otherTools = await buildToolRegistryAsync(fx.otherOrgAuthz)
+  const otherTools = await withOrgContext(fx.otherOrgId, () => buildToolRegistryAsync(fx.otherOrgAuthz))
   assert.ok(!(READ_TOOL in otherTools) && !(MUTATING_TOOL in otherTools), 'another org sees nothing')
 }))
 

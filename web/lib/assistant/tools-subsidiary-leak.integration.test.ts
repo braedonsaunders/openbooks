@@ -35,20 +35,23 @@ const { executeAssistantTool } = await import('./registry');
 const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "assistant.use"];
 
 async function seedScopedOrg() {
-  const org = await createScratchOrg();
-  const actor = await createScratchUser(org.orgId, 'Scope prober', 'scope_prober');
-  const hidden = randomUUID();
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(PROBE_PERMS)}::jsonb, subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
-  state.user = { id: actor, orgId: org.orgId, name: 'Scope prober', email: 'probe@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
-  return { org, actor, hidden };
+  const org = await withBypassContext(() => createScratchOrg());
+  const seeded = await withBypassContext(async () => {
+    const actor = await createScratchUser(org.orgId, 'Scope prober', 'scope_prober');
+    const hidden = randomUUID();
+    await db.execute(sql`update app_roles set permissions=${JSON.stringify(PROBE_PERMS)}::jsonb, subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
+    return { actor, hidden };
+  });
+  state.user = { id: seeded.actor, orgId: org.orgId, name: 'Scope prober', email: 'probe@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seeded.actor };
+  return { org, actor: seeded.actor, hidden: seeded.hidden };
 }
 
 /** One draft document carrying a label in its number; drafts are listable. */
 async function seedDocument(orgId: string, subsidiaryId: string, kind: string, number: string, total = '100'): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
-    values (${id},${orgId},${kind},'draft',${number},${subsidiaryId},'2026-07-15','CAD',${total},'0',${total})`);
+  await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
+    values (${id},${orgId},${kind},'draft',${number},${subsidiaryId},'2026-07-15','CAD',${total},'0',${total})`));
   return id;
 }
 
@@ -57,7 +60,7 @@ for (const mode of ['restricted', 'all'] as const) {
     const { org, hidden } = await seedScopedOrg();
     try {
       if (mode === 'all') {
-        await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+        await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
       }
       for (const sub of [org.subsidiaryId, hidden] as const) {
         const label = sub === org.subsidiaryId ? 'VISIBLE' : 'HIDDEN';
@@ -95,20 +98,22 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
   try {
     const { postDocument } = await import('@openbooks/engine/src/posting.ts');
     const parties: Record<string, string> = {};
-    for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
-      const partyId = randomUUID();
-      await db.execute(sql`insert into parties(id,org_id,kind,display_name) values (${partyId},${org.orgId},'customer',${`${label} Customer`})`);
-      await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`);
-      parties[label] = partyId;
-      const id = randomUUID();
-      const total = label === 'VISIBLE' ? '1000' : '9000';
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
-        values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
-      await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
-        values (${org.orgId},${id},1,${org.accounts.revenue},'1',${total},${total},'0','0',${actor})`);
-      await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
-      await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    }
+    await withBypassContext(async () => {
+      for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
+        const partyId = randomUUID();
+        await db.execute(sql`insert into parties(id,org_id,kind,display_name) values (${partyId},${org.orgId},'customer',${`${label} Customer`})`);
+        await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`);
+        parties[label] = partyId;
+        const id = randomUUID();
+        const total = label === 'VISIBLE' ? '1000' : '9000';
+        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+          values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
+        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
+          values (${org.orgId},${id},1,${org.accounts.revenue},'1',${total},${total},'0','0',${actor})`);
+        await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
+        await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      }
+    });
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);
@@ -134,11 +139,13 @@ test('project_profitability scopes projects to the caller subsidiary', { skip: !
   const { org, hidden } = await seedScopedOrg();
   try {
     const ids: Record<string, string> = {};
-    for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
-      const id = randomUUID();
-      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${id},${org.orgId},${sub},${`${label} Project`})`);
-      ids[label] = id;
-    }
+    await withBypassContext(async () => {
+      for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
+        const id = randomUUID();
+        await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${id},${org.orgId},${sub},${`${label} Project`})`);
+        ids[label] = id;
+      }
+    });
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);
@@ -162,16 +169,18 @@ test('project_profitability hides hidden-subsidiary source documents on a visibl
   const { org, hidden } = await seedScopedOrg();
   const projectId = randomUUID();
   try {
-    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${projectId},${org.orgId},${org.subsidiaryId},'Visible Detail Project')`);
-    const documentId = randomUUID();
-    await db.execute(sql`insert into documents(
-      id,org_id,kind,status,document_number,subsidiary_id,project_id,party_id,document_date,currency,subtotal,tax_total,total
-    ) values (
-      ${documentId},${org.orgId},'vendor_bill','draft','HIDDEN-PROJECT-DOC',${hidden},${projectId},${org.vendorId},'2026-07-15','CAD','900','0','900'
-    )`);
-    await db.execute(sql`insert into document_lines(
-      org_id,document_id,line_number,account_id,amount,tax_amount,project_id,subsidiary_id
-    ) values (${org.orgId},${documentId},1,${org.accounts.cogs},'900','0',${projectId},${hidden})`);
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${projectId},${org.orgId},${org.subsidiaryId},'Visible Detail Project')`);
+      const documentId = randomUUID();
+      await db.execute(sql`insert into documents(
+        id,org_id,kind,status,document_number,subsidiary_id,project_id,party_id,document_date,currency,subtotal,tax_total,total
+      ) values (
+        ${documentId},${org.orgId},'vendor_bill','draft','HIDDEN-PROJECT-DOC',${hidden},${projectId},${org.vendorId},'2026-07-15','CAD','900','0','900'
+      )`);
+      await db.execute(sql`insert into document_lines(
+        org_id,document_id,line_number,account_id,amount,tax_amount,project_id,subsidiary_id
+      ) values (${org.orgId},${documentId},1,${org.accounts.cogs},'900','0',${projectId},${hidden})`);
+    });
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);
@@ -214,9 +223,9 @@ for (const mode of ['restricted', 'all'] as const) {
     // for entries the listing itself could never return.
     const { org, hidden } = await seedScopedOrg();
     try {
-      await db.execute(sql`update app_roles set permissions=${JSON.stringify([...PROBE_PERMS, 'gl.read'])}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+      await withBypassContext(() => db.execute(sql`update app_roles set permissions=${JSON.stringify([...PROBE_PERMS, 'gl.read'])}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
       if (mode === 'all') {
-        await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+        await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
       }
       // Fully visible entry: header and line in the visible subsidiary.
       const fullyVisible = randomUUID();

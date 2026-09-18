@@ -20,12 +20,12 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
 test('banking assistant reads hide reconciliation data outside the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   const hidden = randomUUID();
   const hiddenAccount = randomUUID();
   const statementId = randomUUID();
@@ -45,32 +45,34 @@ test('banking assistant reads hide reconciliation data outside the caller subsid
     homeUserId: userId,
   };
   try {
-    await db.execute(sql`
-      insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
-      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden bank entity','CAD','CA',true,false)
-    `);
-    await db.execute(sql`
-      insert into accounts(id,org_id,number,name,type,is_active,reconcilable,currency_restriction,subsidiary_id)
-      values (${hiddenAccount},${org.orgId},'9900','Hidden cash','asset_bank',true,true,'CAD',${hidden})
-    `);
-    await db.execute(sql`
-      insert into bank_statements(id,org_id,account_id,source,statement_date,closing_balance,raw_file_ref)
-      values (${statementId},${org.orgId},${hiddenAccount},'scope-fixture','2026-07-31','1250','scope-fixture.raw')
-    `);
-    await db.execute(sql`
-      insert into bank_statement_lines(
-        id,org_id,statement_id,line_number,posted_on,amount,currency,description,match_status,account_id
-      ) values (
-        ${statementLineId},${org.orgId},${statementId},1,'2026-07-15','1250','CAD','Hidden transfer','unmatched',${hiddenAccount}
-      )
-    `);
-    await db.execute(sql`
-      insert into reconciliations(
-        id,org_id,account_id,through_date,statement_balance,status,currency
-      ) values (
-        ${reconciliationId},${org.orgId},${hiddenAccount},'2026-07-31','1250','in_progress','CAD'
-      )
-    `);
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
+        values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden bank entity','CAD','CA',true,false)
+      `);
+      await db.execute(sql`
+        insert into accounts(id,org_id,number,name,type,is_active,reconcilable,currency_restriction,subsidiary_id)
+        values (${hiddenAccount},${org.orgId},'9900','Hidden cash','asset_bank',true,true,'CAD',${hidden})
+      `);
+      await db.execute(sql`
+        insert into bank_statements(id,org_id,account_id,source,statement_date,closing_balance,raw_file_ref)
+        values (${statementId},${org.orgId},${hiddenAccount},'scope-fixture','2026-07-31','1250','scope-fixture.raw')
+      `);
+      await db.execute(sql`
+        insert into bank_statement_lines(
+          id,org_id,statement_id,line_number,posted_on,amount,currency,description,match_status,account_id
+        ) values (
+          ${statementLineId},${org.orgId},${statementId},1,'2026-07-15','1250','CAD','Hidden transfer','unmatched',${hiddenAccount}
+        )
+      `);
+      await db.execute(sql`
+        insert into reconciliations(
+          id,org_id,account_id,through_date,statement_balance,status,currency
+        ) values (
+          ${reconciliationId},${org.orgId},${hiddenAccount},'2026-07-31','1250','in_progress','CAD'
+        )
+      `);
+    });
     const authz = {
       user,
       permissions: new Set(['assistant.use', 'banking.read', 'banking.reconcile']),

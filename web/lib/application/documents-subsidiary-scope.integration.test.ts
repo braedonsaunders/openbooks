@@ -19,7 +19,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { postDocument } = await import("@openbooks/engine/src/posting.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
@@ -31,42 +31,44 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function postedBill(org: Awaited<ReturnType<typeof createScratchOrg>>, actor: string, subsidiaryId: string, number: string): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
-    values (${id},${org.orgId},'vendor_bill','draft',${number},${subsidiaryId},${org.vendorId},${org.date},${org.date},'CAD','1','100','0','100',${actor})`);
-  await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
-    values (${org.orgId},${id},1,${org.accounts.cogs},'1','100','100','0','0',${actor})`);
-  await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
-  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+      values (${id},${org.orgId},'vendor_bill','draft',${number},${subsidiaryId},${org.vendorId},${org.date},${org.date},'CAD','1','100','0','100',${actor})`);
+    await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
+      values (${org.orgId},${id},1,${org.accounts.cogs},'1','100','100','0','0',${actor})`);
+    await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
+    await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  });
   return id;
 }
 
 async function revisionOf(orgId: string, id: string): Promise<string> {
-  const r = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`));
+  const r = (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`)));
   return r.rows[0]!.revision;
 }
 
 async function documentCounts(orgId: string): Promise<{ bills: number; statuses: string[] }> {
-  const r = (await db.execute<{ status: string; subsidiary_id: string }>(sql`
-    select status::text, subsidiary_id::text from documents where org_id = ${orgId} and kind = 'vendor_bill' order by created_at`));
+  const r = (await withOrgContext(orgId, () => db.execute<{ status: string; subsidiary_id: string }>(sql`
+    select status::text, subsidiary_id::text from documents where org_id = ${orgId} and kind = 'vendor_bill' order by created_at`)));
   return { bills: r.rows.length, statuses: r.rows.map((row) => `${row.status}:${row.subsidiary_id}`) };
 }
 
 test("a restricted actor cannot re-home a correction into an out-of-scope subsidiary", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, "Restricted corrector", "restricted_corrector");
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Restricted corrector", "restricted_corrector"));
     const hidden = randomUUID();
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`));
     // The scratch fixture opens only 2026-07; the correction's void dates its
     // reversal on the business day, so open the current month as well.
     const today = new Date();
     const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString().slice(0, 10);
     const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
     if (monthStart !== "2026-07-01") {
-      await db.execute(sql`insert into accounting_periods(org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+      await withBypassContext(() => db.execute(sql`insert into accounting_periods(org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         select ${org.orgId},${today.getUTCFullYear()},${today.getUTCMonth() + 1},${monthStart.slice(0, 7)},${monthStart},${monthEnd},false,fiscal_calendar_id
-          from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`);
+          from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`));
     }
     const sourceId = await postedBill(org, actor, org.subsidiaryId, "SRC-BILL");
     const context = (allowed: Set<string> | null): ApplicationContext => ({

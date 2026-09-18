@@ -11,7 +11,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { financialHealth, DEFAULT_BENCHMARKS } = await import("./analytics/financial-health");
 
@@ -25,13 +25,15 @@ const cases = [
 ];
 for (const scenario of cases) {
   test(`Financial Health period-end headcount: ${scenario.name}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
       const employee = randomUUID();
-      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
-        values (${employee},${org.orgId},'person','Historical employee',${org.subsidiaryId})`);
-      await db.execute(sql`insert into employee_roles(org_id,party_id,hired_on,terminated_on)
-        values (${org.orgId},${employee},${scenario.hired},${scenario.terminated})`);
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
+          values (${employee},${org.orgId},'person','Historical employee',${org.subsidiaryId})`);
+        await db.execute(sql`insert into employee_roles(org_id,party_id,hired_on,terminated_on)
+          values (${org.orgId},${employee},${scenario.hired},${scenario.terminated})`);
+      });
       await withOrgContext(org.orgId, async () => {
         const data = await financialHealth({ from: "2026-07-01", to: "2026-07-31", label: "July" }, DEFAULT_BENCHMARKS, org.orgId, null);
         assert.equal(data.figures.headcount, scenario.expected);
