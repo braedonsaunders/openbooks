@@ -22,6 +22,7 @@ import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/s
 import { NewViewButton } from '../../app/(app)/knowledge/views/NewViewButton'
 import { ViewStudio } from '../../app/(app)/knowledge/views/ViewStudio'
 import { EmptyState } from '@openbooks/ui'
+import { Pagination } from '../pagination'
 import { DashboardNameCell } from '../../app/(app)/insights/dashboards/sections'
 import { NewDashboardButton } from '../../app/(app)/insights/dashboards/NewDashboardButton'
 import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
@@ -768,6 +769,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       bulk={props.bulk === true}
       showAssignee={props.showAssignee === true}
       actionsEnabled={props.actionsEnabled === true}
+    />
+  ),
+  'approvals-pagination': (props) => (
+    <Pagination
+      basePath="/approvals"
+      currentParams={stringRecord(props, 'params') ?? {}}
+      total={num(props, 'total') ?? 0}
+      page={num(props, 'page') ?? 1}
+      perPage={num(props, 'perPage') ?? 25}
     />
   ),
 

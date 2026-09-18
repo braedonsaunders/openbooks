@@ -2,9 +2,16 @@
 
 // Approval worklist table for flow gates. Owns the bulk-selection state
 // (select-all + per-row checkboxes) and the Approve/Reject-selected actions,
-// which POST to /api/flows/gates/bulk (per-item server-side iteration, no batch
-// cap) and summarize the per-row results in one toast. Single-row actions stay
-// on GateActions.
+// which POST to /api/flows/gates/bulk (per-item server-side iteration,
+// capped at APPROVALS_BULK_BATCH_MAX items per request) and summarize the
+// per-row results in one toast. Single-row actions stay on GateActions.
+//
+// Selection is page-scoped by construction: the loader serves one
+// server-side page (perPage never exceeds the bulk batch ceiling, so a page
+// selection always fits a single bulk request), select-all means every
+// selectable row ON THIS PAGE, and the toolbar says so. Page navigation
+// remounts this component, which clears the selection rather than acting on
+// rows the user can no longer see.
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -22,6 +29,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
+import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import { GateActions, type DelegateOption } from './GateActions'
 
 export interface ApprovalRow {
@@ -119,6 +127,12 @@ export function ApprovalsTable({
       (r): r is ApprovalRow & { gateId: string } => visibleSelected.has(r.key) && r.gateId != null,
     )
     if (chosen.length === 0) return
+    // Unreachable while the loader caps the page at the batch ceiling, but
+    // a whole-batch 400 must never silently become "nothing happened".
+    if (chosen.length > APPROVALS_BULK_BATCH_MAX) {
+      toast.error(t('bulk.tooMany', { count: APPROVALS_BULK_BATCH_MAX }))
+      return
+    }
     // A signature-required gate must be approved individually (each needs its
     // own typed attestation) — bulk approve can't collect one.
     if (decision === 'approved' && chosen.some((r) => r.signatureRequired)) {
@@ -170,7 +184,7 @@ export function ApprovalsTable({
       {bulk && visibleSelected.size > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/40">
           <span className="text-sm font-medium text-teal-800 dark:text-teal-300">
-            {t('bulk.selected', { count: visibleSelected.size })}
+            {t('bulk.selectedOnPage', { count: visibleSelected.size })}
           </span>
           <span className="ml-auto flex items-center gap-2">
             <Button size="sm" disabled={busy} onClick={() => runBulk('approved')}>
@@ -199,7 +213,7 @@ export function ApprovalsTable({
                   className="h-4 w-4 accent-teal-600"
                   checked={allSelected}
                   onChange={toggleAll}
-                  aria-label={t('bulk.selectAll')}
+                  aria-label={t('bulk.selectAllOnPage')}
                 />
               </TableHead>
             ) : null}

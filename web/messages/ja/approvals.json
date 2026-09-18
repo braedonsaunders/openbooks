@@ -49,9 +49,10 @@
     "days": "{days}日"
   },
   "bulk": {
-    "selected": "{count} 件選択中",
-    "selectAll": "すべて選択",
     "selectRow": "{document} を選択",
+    "selectedOnPage": "このページで {count} 件選択中",
+    "selectAllOnPage": "このページをすべて選択",
+    "tooMany": "一度に選択できるのは {count} 件までです",
     "approveSelected": "選択項目を承認",
     "rejectSelected": "選択項目を却下",
     "rejectTitle": "{count} 件の承認を却下しますか?",
