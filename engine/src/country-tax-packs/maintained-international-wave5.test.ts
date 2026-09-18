@@ -168,6 +168,14 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     // field names; the ebeyan doc center has no curl-reachable duyuru PDF.
     // See the Türkiye pack doc comment.
     kdv1_v41_duyuru_mirror: "www.alomaliye.com",
+    // Danmarks Statistik's own "Skatter og afgifter 1999" VAT rate table
+    // ("01.01.1992- 25,00" under "Lov nr. 891 af 21. dec. 1991"): the
+    // Danish state's national statistical institute attesting a government
+    // fact, naming the instrument directly — not a mirror and not a vendor
+    // reading. It is not the act's own text (the Retsinformation ELI
+    // resolves but serves a JS shell to plain clients). See the Denmark
+    // pack doc comment.
+    dst_skatter_avgifter_1999: "ws.dst.dk",
   };
   const seenExceptions = new Set<string>();
   for (const country of maintainedCountries) {

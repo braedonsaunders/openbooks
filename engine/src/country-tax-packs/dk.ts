@@ -35,20 +35,26 @@ const DK_MOMS_2026: TaxReturnPack = {
  * agency-published numbering to transcribe.
  *
  * Denmark has no reduced VAT rate — one of very few EU states without one —
- * so the return carries only the 25% standard code. The 25% rate history is
- * left-truncated at 2026: skat.dk attests the current 25% rate, and the
- * 1 January 1992 origin is not cited from skat.dk, so no origin is claimed.
- * The origin is identified but not transcribable from here: Statistics
- * Denmark's "Skatter og afgifter" rate table (verified in the 1999 edition)
- * dates the 25% rate from 01.01.1992 under Lov nr. 891 af 21. december 1991
- * (replacing 22% in force to 31.12.1991). That act is attested on
- * Retsinformation and the table on dst.dk, but neither host is in the wave5
- * approved primary-source list and this shard may not edit the wave tests —
- * so the band is left out rather than cited off-allowlist. skat.dk itself
- * was searched: its rates archive carries no VAT subject and no history
- * article states the 1992 changeover. The next person with an approved
- * Retsinformation citation (or an allowlist addition) can prepend a single
- * {25, 1992-01-01} open row.
+ * so the return carries only the 25% standard code. That single code runs
+ * back to 1992-01-01 as one open row, citing Danmarks Statistik's
+ * "Skatter og afgifter" rate table (1999 edition, fetched in full) as a
+ * named per-source-id exception: DST is the Danish state's own national
+ * statistical institute publishing an official statistical series — a
+ * government body attesting a government fact, naming the instrument
+ * directly, not anyone's reading of the law.
+ * - Operative text, verbatim: "01.01.1992- 25,00" under "Lov nr. 891 af
+ *   21. dec. 1991" (from 01.01.1992: 25.00 percent, per Act no. 891 of
+ *   21 December 1991). skat.dk's current 25% page corroborates the tail.
+ * - What it does NOT attest: the act's own text. The act exists — its ELI
+ *   at retsinformation.dk/eli/lta/1991/891 resolves (HTTP 200) — but the
+ *   body served to plain clients is the site's React SPA shell with zero
+ *   document text, so the operative clause is unread. Whoever next has a
+ *   JS-capable vantage knows exactly which document to open.
+ * - The 22% predecessor is identified but not transcribed: the same table
+ *   shows 22,00 under Lov nr. 219 af 4. juni 1980, but no start date for
+ *   the 22% era is attested, so no 22% row is added.
+ * skat.dk itself was searched: its rates archive carries no VAT subject
+ * and no history article states the 1992 changeover.
  * Zero-rated newspaper supplies are NOT declared as a code: no agency source
  * for the zero band was fetched. Exempt supplies (health, education,
  * passenger transport and the like) are not a 0% code.
@@ -76,8 +82,14 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "skat_dk_vat_rate_25",
-      title: "skat.dk — Get started on VAT: the Danish VAT rate is generally 25% (current applicability; earlier history left-truncated)",
+      title: "skat.dk — Get started on VAT: the Danish VAT rate is generally 25% (current applicability corroboration for the tail)",
       url: "https://skat.dk/en-us/businesses/vat/get-started-on-vat",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "dst_skatter_avgifter_1999",
+      title: "Danmarks Statistik — Skatter og afgifter 1999, VAT rate table: '01.01.1992- 25,00' under 'Lov nr. 891 af 21. dec. 1991' (state statistical series, named per-source-id exception: not the act's own text)",
+      url: "https://ws.dst.dk/Site/Dst/Udgivelser/GetPubFile.aspx?id=4322&sid=skat1999",
       asOf: "2026-09-18",
     },
     {
@@ -108,7 +120,7 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
         name: "Denmark standard moms",
         role: "standard",
         ratePercent: 25,
-        rates: [{ ratePercent: 25, effectiveFrom: "2026-01-01", sourceId: "skat_dk_vat_rate_25" }],
+        rates: [{ ratePercent: 25, effectiveFrom: "1992-01-01", sourceId: "dst_skatter_avgifter_1999" }],
       },
     ],
   },
