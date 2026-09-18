@@ -360,8 +360,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0172_tax_return_form_notice_key.sql",
     "0174_payroll_employer_levy_opening.sql",
     "0175_payroll_country_pack_open.sql",
-    "0173_platform_settings.sql",
-    "0175_crm_cost_and_stage_policy.sql",
     "0176_pay_component_system_key_shape.sql",
   ]);
   assert.deepEqual(
