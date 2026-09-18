@@ -54,6 +54,11 @@ async function setAuditFailureMode(mode: "forced" | "allow"): Promise<void> {
   await withBypassContext(async () => {
     await db.execute(sql`
       drop trigger if exists force_api_key_event_failure on api_key_events`);
+    // The blocker function is shared schema state, not tenant rows, so the
+    // pool reset never removes it: drop it here or a leftover from a run as
+    // another role owns it and every later forced mode dies on must-be-owner.
+    await db.execute(sql`
+      drop function if exists openbooks_test_fail_api_key_events()`);
     if (mode === "forced") {
       await db.execute(sql`
         create or replace function openbooks_test_fail_api_key_events() returns trigger
