@@ -14,7 +14,7 @@
 // (workspace packages, next/*) are missed, as are writes after a mid-file
 // hooks.deregister() + lazy web re-import.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codeOnly, parseWiring, resolveReal, staticImports, stringBindings } from "./check-test-mock-surface.mjs";
 
@@ -803,6 +803,13 @@ export function reinstallPos(code, text, path, root) {
 }
 
 export function scanFile(path, root = ROOT) {
+  // scanTree always hands us absolute paths, but an ad-hoc caller checking one
+  // file naturally types a repo-relative one — and that resolves against the
+  // process cwd, not the repo. Run from anywhere but the repo root and the read
+  // below misses, so the file reports ZERO findings and reads CLEAN. That false
+  // green has already been offered as proof once. Resolve against the repo root
+  // so a one-off check cannot disagree with scanTree about the same file.
+  if (!isAbsolute(path)) path = resolve(root, path);
   const raw = readCached(path);
   if (raw === null || !TEST_RE.test(path.split("/").pop())) return [];
   const chain = exposureChain(path, root);
