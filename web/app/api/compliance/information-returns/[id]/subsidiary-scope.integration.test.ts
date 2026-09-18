@@ -89,9 +89,9 @@ test('information-return by-id routes fail closed on another entity\'s filing', 
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`)
     })
     await restrict(org.orgId, [org.subsidiaryId])
-    const hiddenFiling = await ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: hidden, currency: 'USD', actorId: actor })
-    const rootFiling = await ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: null, currency: 'USD', actorId: actor })
-    const visibleFiling = await ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: org.subsidiaryId, currency: 'USD', actorId: actor })
+    const hiddenFiling = await withOrgContext(org.orgId, () => ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: hidden, currency: 'USD', actorId: actor }))
+    const rootFiling = await withOrgContext(org.orgId, () => ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: null, currency: 'USD', actorId: actor }))
+    const visibleFiling = await withOrgContext(org.orgId, () => ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: org.subsidiaryId, currency: 'USD', actorId: actor }))
     state.user = {
       id: actor,
       orgId: org.orgId,

@@ -137,9 +137,9 @@ test("the overview sorts by findings descending", { skip: !DB }, async () => {
 });
 
 test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = await createScratchUser(org.orgId, "Overview Admin", "admin");
+    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Overview Admin", "admin"));
     asManager(org.orgId);
     await withBypassContext(() =>
       saveSetupAgentPolicy(org.orgId, userId, "accounting", {

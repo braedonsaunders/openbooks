@@ -11,7 +11,7 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption } =
   await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
@@ -23,19 +23,19 @@ test(
   "native UUIDv7 filing accounts retain their entity authorization and invalid suffixes fail closed",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const fx = await seedAdoption();
+    const fx = await withBypassContext(() => seedAdoption());
     try {
-      await db.execute(
+      await withBypassContext(() => db.execute(
         sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
-      );
+      ));
       const hidden = randomUUID();
-      await db.execute(
+      await withBypassContext(() => db.execute(
         sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Hidden filing entity','CAD','CA')`,
-      );
+      ));
       const account = (
-        await db.execute<{ id: string }>(
+        await withBypassContext(() => db.execute<{ id: string }>(
           sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'CA','ca_rp','123456789RP0001','Native filing account',${hidden}) returning id`,
-        )
+        ))
       ).rows[0]!.id;
       assert.equal(
         account[14],
@@ -53,13 +53,13 @@ test(
         accounts: [account],
       });
       assert.equal(
-        (await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026))
+        (await withOrgContext(fx.orgId, () => guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026)))
           ?.status,
         404,
       );
       assert.equal(
         (
-          await guardPayrollFilingData(
+          await withOrgContext(fx.orgId, () => guardPayrollFilingData(
             gate,
             "CA",
             "t4",
@@ -69,15 +69,15 @@ test(
               rows: [{ rowId }],
             },
             2026,
-          )
+          ))
         )?.status,
         404,
       );
-      await db.execute(
+      await withBypassContext(() => db.execute(
         sql`update payroll_filing_accounts set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${account}`,
-      );
+      ));
       assert.equal(
-        await guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026),
+        await withOrgContext(fx.orgId, () => guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026)),
         null,
         "visible native account remains usable",
       );
@@ -90,21 +90,21 @@ test(
         assert.equal(payrollRowScope(country, filing, malformed), null);
         assert.equal(
           (
-            await guardPayrollFilingRowIds(
+            await withOrgContext(fx.orgId, () => guardPayrollFilingRowIds(
               gate,
               country,
               filing,
               [malformed],
               2026,
-            )
+            ))
           )?.status,
           404,
         );
       }
       const employee = (
-        await db.execute<{ id: string }>(
+        await withBypassContext(() => db.execute<{ id: string }>(
           sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${fx.orgId},'person','Native payroll employee',${fx.subsidiaryId}) returning id`,
-        )
+        ))
       ).rows[0]!.id;
       assert.equal(employee[14], "7");
       for (const filing of ["roe", "rl1"])
