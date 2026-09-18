@@ -23,6 +23,7 @@ import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
 import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
 export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxCodeRole, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
+export { assertPackCodeRateSchedule, packGuardToday, packRatesCoveringDate } from "./rate-schedule.ts";
 
 export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   CANADA_TAX_PACK,
