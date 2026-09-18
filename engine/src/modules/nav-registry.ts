@@ -90,15 +90,6 @@ export const NAV_MODULES: NavModule[] = [
     group: 'my-work',
     requiredPermission: 'ap.approve',
   },
-  // The in-app inbox. Strictly self-scoped (your rows, your org), so it
-  // carries no permission — every signed-in person has one.
-  {
-    key: 'notifications',
-    href: '/notifications',
-    label: 'Notifications',
-    iconKey: 'bell',
-    group: 'my-work',
-  },
   {
     key: 'documents',
     href: '/documents',
