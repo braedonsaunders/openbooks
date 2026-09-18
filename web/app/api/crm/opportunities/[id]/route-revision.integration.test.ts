@@ -32,37 +32,39 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { GET, PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = (await seedFlowActors(org.orgId)).adminId
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(settings, '{features}',
-      coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const statusId = (await db.execute<{ id: string }>(sql`
-    insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
-    values (${org.orgId}, 'open', 'Open', 10, false, false, true)
-    returning id`)).rows[0]!.id
-  const itemA = (await db.execute<{ id: string }>(sql`
-    insert into items (org_id, kind, name, is_active)
-    values (${org.orgId}, 'service', 'Revision Item A', true)
-    returning id`)).rows[0]!.id
-  const itemB = (await db.execute<{ id: string }>(sql`
-    insert into items (org_id, kind, name, is_active)
-    values (${org.orgId}, 'service', 'Revision Item B', true)
-    returning id`)).rows[0]!.id
-  const oppId = (await db.execute<{ id: string }>(sql`
-    insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency)
-    values (${org.orgId}, 'OPP-REV-001', 'Revision Opp', ${statusId}, 'CAD')
-    returning id`)).rows[0]!.id
-  return { org, statusId, itemA, itemB, oppId }
+  return withBypassContext(async () => {
+    const org = await createScratchOrg()
+    state.orgId = org.orgId
+    state.actorId = (await seedFlowActors(org.orgId)).adminId
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
+       where id = ${org.orgId}`)
+    const statusId = (await db.execute<{ id: string }>(sql`
+      insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
+      values (${org.orgId}, 'open', 'Open', 10, false, false, true)
+      returning id`)).rows[0]!.id
+    const itemA = (await db.execute<{ id: string }>(sql`
+      insert into items (org_id, kind, name, is_active)
+      values (${org.orgId}, 'service', 'Revision Item A', true)
+      returning id`)).rows[0]!.id
+    const itemB = (await db.execute<{ id: string }>(sql`
+      insert into items (org_id, kind, name, is_active)
+      values (${org.orgId}, 'service', 'Revision Item B', true)
+      returning id`)).rows[0]!.id
+    const oppId = (await db.execute<{ id: string }>(sql`
+      insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency)
+      values (${org.orgId}, 'OPP-REV-001', 'Revision Opp', ${statusId}, 'CAD')
+      returning id`)).rows[0]!.id
+    return { org, statusId, itemA, itemB, oppId }
+  })
 }
 
 async function read(id: string) {
