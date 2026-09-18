@@ -232,7 +232,7 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     );
     assert.ok(rows.rows.every((r) => r.country === null));
     const systemKeys = new Set(rows.rows.map((r) => r.system_key));
-    for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "hsf", "fit", "ss"]) {
+    for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "fit", "ss"]) {
       assert.ok(!systemKeys.has(caOnly), `${caOnly} seeded for a ZZ org`);
     }
     // No vacation entitlement plan either: ZZ declares no vacation accrual.
@@ -259,61 +259,125 @@ test("statutory liabilities resolve through the slot's own legacy key — synthe
   };
   await withFreedonia(() => {
     // The synthetic slot resolves with no generic-layer knowledge of it.
-    assert.equal(legacyStatutoryLiabilityAccount("zz_tax", settings), "acct-zz");
+    assert.equal(legacyStatutoryLiabilityAccount("zz_tax", settings, "ZZ"), "acct-zz");
     // Its internal accrual has no legacy key: component account or refusal.
-    assert.equal(legacyStatutoryLiabilityAccount("holiday_accrual", settings), null);
+    assert.equal(legacyStatutoryLiabilityAccount("holiday_accrual", settings, "ZZ"), null);
   });
   // The CA merges are the PACK's declarations, preserved exactly: CPP2 rides
   // the CPP payable and QPIP the EI payable, because those slots say so.
-  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings), "acct-tax");
-  assert.equal(legacyStatutoryLiabilityAccount("cpp", settings), "acct-cpp");
-  assert.equal(legacyStatutoryLiabilityAccount("cpp2", settings), "acct-cpp");
-  assert.equal(legacyStatutoryLiabilityAccount("ei", settings), "acct-ei");
-  assert.equal(legacyStatutoryLiabilityAccount("qpip", settings), "acct-ei");
-  assert.equal(legacyStatutoryLiabilityAccount("vacation_accrual", settings), "acct-vac");
-  // Slots with no legacy key (WCB, EHT, HSF, the whole US pack) resolve null.
-  for (const key of ["wcb", "eht", "hsf", "fit", "ss", "medicare", "futa", "suta", "nonsense"]) {
-    assert.equal(legacyStatutoryLiabilityAccount(key, settings), null, key);
+  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, "CA"), "acct-tax");
+  assert.equal(legacyStatutoryLiabilityAccount("cpp", settings, "CA"), "acct-cpp");
+  assert.equal(legacyStatutoryLiabilityAccount("cpp2", settings, "CA"), "acct-cpp");
+  assert.equal(legacyStatutoryLiabilityAccount("ei", settings, "CA"), "acct-ei");
+  assert.equal(legacyStatutoryLiabilityAccount("qpip", settings, "CA"), "acct-ei");
+  assert.equal(legacyStatutoryLiabilityAccount("vacation_accrual", settings, "CA"), "acct-vac");
+  // Slots with no legacy key (WCB, EHT, the whole US pack) resolve null.
+  for (const key of ["wcb", "eht", "nonsense"]) {
+    assert.equal(legacyStatutoryLiabilityAccount(key, settings, "CA"), null, key);
   }
+  for (const key of ["fit", "ss", "medicare", "futa", "suta", "nonsense"]) {
+    assert.equal(legacyStatutoryLiabilityAccount(key, settings, "US"), null, key);
+  }
+  // A row naming no country carries no pack declaration, whatever its key.
+  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, null), null);
+  assert.equal(legacyStatutoryLiabilityAccount("income_tax", settings, "XX"), null);
 });
 
 test("'never remitted' is a component declaration, not the spelling of vacation_accrual", async () => {
-  assert.deepEqual(statutoryRemittanceDeclaration().internalAccrualSystemKeys, ["vacation_accrual"]);
+  assert.deepEqual(statutoryRemittanceDeclaration("CA").internalAccrualSystemKeys, ["vacation_accrual"]);
+  assert.deepEqual(statutoryRemittanceDeclaration("US").internalAccrualSystemKeys, []);
   await withFreedonia(() => {
-    const declaration = statutoryRemittanceDeclaration();
-    assert.deepEqual(
-      [...declaration.internalAccrualSystemKeys].sort(),
-      ["holiday_accrual", "vacation_accrual"],
-    );
-    // The statutory vendor fallback is per pack: CA names its CRA vendor key,
-    // ZZ names its own, the US declares none, and WCB (external) has no
-    // fallback at all.
-    assert.equal(declaration.vendorSettingsKeyBySystemKey.get("cpp"), "craRemittancePartyId");
-    assert.equal(declaration.vendorSettingsKeyBySystemKey.get("income_tax"), "craRemittancePartyId");
+    const declaration = statutoryRemittanceDeclaration("ZZ");
+    assert.deepEqual(declaration.internalAccrualSystemKeys, ["holiday_accrual"]);
+    // The statutory vendor fallback is per pack: ZZ names its own vendor key,
+    // CA's CRA key lives on the CA declaration, the US pack declares none,
+    // and WCB (external) has no fallback at all.
     assert.equal(declaration.vendorSettingsKeyBySystemKey.get("zz_tax"), "zzRemittancePartyId");
-    assert.equal(declaration.vendorSettingsKeyBySystemKey.get("fit"), null);
-    assert.equal(declaration.vendorSettingsKeyBySystemKey.has("wcb"), false);
-    assert.equal(declaration.vendorSettingsKeyBySystemKey.has("vacation_accrual"), false);
+    assert.equal(declaration.vendorSettingsKeyBySystemKey.has("income_tax"), false);
+    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("cpp"), "craRemittancePartyId");
+    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("income_tax"), "craRemittancePartyId");
+    assert.equal(statutoryRemittanceDeclaration("US").vendorSettingsKeyBySystemKey.get("fit"), null);
+    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("wcb"), false);
+    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("vacation_accrual"), false);
   });
 });
 
-test("a system key two packs declare differently is a refusal, never a coin toss", () => {
+test("a system key one pack declares both ways is a refusal, never a coin toss", () => {
   PAYROLL_COUNTRY_PACKS.ZZ = {
     ...FREEDONIA,
     statutorySlots: [
+      ...FREEDONIA.statutorySlots,
       {
-        key: "vacation",
+        key: "levy",
         components: [
-          // CA declares vacation_accrual internal; this pack claims it remits.
-          { code: "ZVAC", name: "Vacation levy", systemKey: "vacation_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "tax_authority" },
+          // ZZ declares holiday_accrual internal; this slot claims it remits.
+          { code: "ZVAC", name: "Vacation levy", systemKey: "holiday_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "tax_authority" },
         ],
       },
     ],
   };
   try {
-    assert.throws(() => statutoryRemittanceDeclaration(), /internal_accrual and remittable/);
+    assert.throws(
+      () => statutoryRemittanceDeclaration("ZZ"),
+      /the ZZ payroll pack declares holiday_accrual both internal_accrual and remittable/,
+    );
   } finally {
     delete PAYROLL_COUNTRY_PACKS.ZZ;
+  }
+});
+
+test("two packs sharing a system key resolve country-first — never a cross-pack refusal", () => {
+  // Two sovereign tax authorities routinely give the same withholding the
+  // same system key with different vendors (GB and IE both call theirs
+  // `paye`; CA and IT both declare `income_tax`, one with no vendor key).
+  // Those are two correct descriptions of two jurisdictions: each pack's
+  // declaration resolves its own, and neither constrains the other.
+  const zy = "ZY" as PayrollCountryPack["country"];
+  PAYROLL_COUNTRY_PACKS.ZZ = {
+    ...FREEDONIA,
+    installable: true,
+    remittanceVendorSettingsKey: null,
+    statutorySlots: [
+      ...FREEDONIA.statutorySlots,
+      {
+        key: "shared",
+        legacySettingsKey: "zzSharedPayableAccountId",
+        components: [
+          { code: "ZSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+        ],
+      },
+    ],
+  };
+  PAYROLL_COUNTRY_PACKS.ZY = {
+    ...FREEDONIA,
+    country: zy,
+    installable: true,
+    remittanceVendorSettingsKey: "zyRemittancePartyId",
+    statutorySlots: [
+      {
+        key: "shared",
+        legacySettingsKey: "zySharedPayableAccountId",
+        components: [
+          { code: "YSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+        ],
+      },
+    ],
+  };
+  try {
+    const zz = statutoryRemittanceDeclaration("ZZ");
+    const zyp = statutoryRemittanceDeclaration("ZY");
+    assert.equal(zz.vendorSettingsKeyBySystemKey.get("shared_levy"), null);
+    assert.equal(zyp.vendorSettingsKeyBySystemKey.get("shared_levy"), "zyRemittancePartyId");
+    assert.equal(zz.legacyLiabilitySettingsKeyBySystemKey.get("shared_levy"), "zzSharedPayableAccountId");
+    assert.equal(zyp.legacyLiabilitySettingsKeyBySystemKey.get("shared_levy"), "zySharedPayableAccountId");
+    // The installed packs resolve exactly as before the new arrivals.
+    assert.equal(
+      statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("income_tax"),
+      "craRemittancePartyId",
+    );
+  } finally {
+    delete PAYROLL_COUNTRY_PACKS.ZZ;
+    delete PAYROLL_COUNTRY_PACKS.ZY;
   }
 });
 

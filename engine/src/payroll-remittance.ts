@@ -15,12 +15,14 @@ import {
 import { PayrollError } from "./payroll-error.ts";
 import {
   allRemittanceSchedules,
+  PAYROLL_COUNTRY_PACKS,
   remittanceBandForAverage,
   remittanceFrequencyBand,
   remittanceScheduleInForce,
   statutoryRemittanceDeclaration,
   type PayrollRemittanceFrequencyBand,
   type PayrollRemittanceSchedule,
+  type StatutoryRemittanceDeclaration,
 } from "./payroll/packs.ts";
 import {
   payrollSubsidiaryInScope,
@@ -185,7 +187,6 @@ export async function payrollRemittanceSummary(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
   executor: RemittanceExecutor = db,
 ): Promise<RemittanceGroup[]> {
-  const declaration = statutoryRemittanceDeclaration();
   const rawSettings = await rawPayrollSettings(orgId, executor);
   // No org-wide unknown-filing-account refusal here: one legacy run must not
   // poison the summary for the rest. Stubs whose filing account was never
@@ -193,21 +194,32 @@ export async function payrollRemittanceSummary(
   // (hasUnknownFilingAccount); only bill creation for a flagged group fails
   // closed, until those stubs are reconciled.
   const filingAccount = sql`s.filing_account_id`;
-  // '' can never be a declared key, so the coalesce keeps user components
-  // (null system_key) in the summary whatever the exclusion list holds.
-  const internalAccruals = `{${declaration.internalAccrualSystemKeys.join(",")}}`;
+  // One pack's declaration per component country, resolved country-first: two
+  // packs may give the same withholding the same system key, so the country
+  // stamped on the component row picks the pack. A row naming no country (or
+  // none with a pack) carries no pack declaration — every lookup misses, as
+  // for a system key no pack declares.
+  const declarations = new Map<string, StatutoryRemittanceDeclaration | null>();
+  const declarationFor = (country: string | null): StatutoryRemittanceDeclaration | null => {
+    if (!country) return null;
+    const hit = declarations.get(country);
+    if (hit !== undefined) return hit;
+    const found = PAYROLL_COUNTRY_PACKS[country] ? statutoryRemittanceDeclaration(country) : null;
+    declarations.set(country, found);
+    return found;
+  };
   // Grouped by the STUB's snapshot province as well as by component: a
   // component whose pack declares a region-scoped remittance vendor (QPP and
   // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
   // destination, and rows that resolve to the same vendor are re-merged per
   // component in groupRemittanceRows.
-  const rows = (await executor.execute<{
+  const queried = (await executor.execute<{
       component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
-      system_key: string | null; remittance_party_id: string | null;
+      system_key: string | null; country: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
       filingUnknown: boolean; province: string; amount: string;
     }>(sql`
-    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
+    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
            -- Historical accrual evidence only. Current component or statutory
            -- account setup cannot establish where an older liability accrued.
            l.liability_account_id,
@@ -222,14 +234,20 @@ export async function payrollRemittanceSummary(
       join documents source_document on source_document.id=r.document_id and source_document.org_id=r.org_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution')
-       and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
-     group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
+     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
   `));
-  if (rows.rows.length === 0) return [];
-  if (rows.rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
+  // Internal accruals never remit, and each pack declares its own — so the
+  // exclusion is per component country, not per system key. Rows with no
+  // system key (user components) always stay in the summary.
+  const rows = queried.rows.filter((row) =>
+    row.system_key == null
+    || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
+  );
+  if (rows.length === 0) return [];
+  if (rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
     throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
   }
 
@@ -263,9 +281,10 @@ export async function payrollRemittanceSummary(
     const vendor = rawSettings[settingsKey];
     return typeof vendor === "string" && vendor ? vendor : null;
   };
-  const resolveDestination = (row: (typeof rows.rows)[0]): { partyId: string | null; vendorKey: string | null } => {
+  const resolveDestination = (row: (typeof rows)[number]): { partyId: string | null; vendorKey: string | null } => {
+    const packDeclaration = row.system_key ? declarationFor(row.country) : null;
     const regionalKey = row.system_key
-      ? declaration.regionalVendorSettingsKeyBySystemKey.get(row.system_key)?.[row.province]
+      ? packDeclaration?.regionalVendorSettingsKeyBySystemKey.get(row.system_key)?.[row.province]
       : undefined;
     // The regional key is provenance even when the org has not configured the
     // vendor yet: an unconfigured RQ destination is still an RQ destination —
@@ -273,18 +292,18 @@ export async function payrollRemittanceSummary(
     if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
     if (row.remittance_party_id) return { partyId: row.remittance_party_id, vendorKey: null };
     const vendorKey = row.system_key
-      ? declaration.vendorSettingsKeyBySystemKey.get(row.system_key)
+      ? packDeclaration?.vendorSettingsKeyBySystemKey.get(row.system_key)
       : undefined;
     if (!vendorKey) return { partyId: null, vendorKey: null };
     return { partyId: settingsVendor(vendorKey), vendorKey };
   };
-  const resolveParty = (row: (typeof rows.rows)[0]): string | null => resolveDestination(row).partyId;
-  const resolveVendorKey = (row: (typeof rows.rows)[0]): string | null => resolveDestination(row).vendorKey;
-  const resolveAccount = (row: (typeof rows.rows)[0]): string | null =>
+  const resolveParty = (row: (typeof rows)[number]): string | null => resolveDestination(row).partyId;
+  const resolveVendorKey = (row: (typeof rows)[number]): string | null => resolveDestination(row).vendorKey;
+  const resolveAccount = (row: (typeof rows)[number]): string | null =>
     row.liability_account_id;
 
   const groups = groupRemittanceRows({
-    rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
+    rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
   });
 
   // One group, one destination, one schedule. Provenance first: rows that
@@ -473,6 +492,8 @@ export type RemittanceRow = {
   name: string;
   kind: "deduction" | "employer_contribution";
   system_key: string | null;
+  /** The component row's pack country — picks the pack whose declaration governs the row. */
+  country: string | null;
   remittance_party_id: string | null;
   liability_account_id: string | null;
   filing_account_id: string | null;
