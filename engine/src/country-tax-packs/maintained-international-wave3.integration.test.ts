@@ -17,7 +17,9 @@ test(
       const first = await provisionTaxPacks(target.orgId, selections);
       assert.deepEqual(first.packs, selections);
       assert.equal(first.jurisdictionsCreated, 4);
-      assert.equal(first.taxCodesCreated, 4);
+      // Four packs declare five codes: IN/ZA/AE one each plus JP's
+      // STD/RED pair. One-code-per-pack predates the JP reduced code.
+      assert.equal(first.taxCodesCreated, 5);
       assert.equal(first.taxGroupsCreated, 4);
       assert.equal(first.registrationsCreated, 4);
 
@@ -25,6 +27,13 @@ test(
         const forms = (await db.execute(sql`
           select code from tax_return_forms
            where org_id = ${target.orgId} and code in ('IN_GSTR3B', 'ZA_VAT201', 'AE_VAT201', 'JP_CONSUMPTION')
+           order by code
+        `)).rows as Array<{ code: string }>;
+        // The installer must create exactly the declared set: no fewer
+        // (a dropped reduced-rate code) and no more (a duplicated insert).
+        const declared = (await db.execute(sql`
+          select code from tax_codes
+           where org_id = ${target.orgId}
            order by code
         `)).rows as Array<{ code: string }>;
         const codes = (await db.execute(sql`
@@ -50,10 +59,17 @@ test(
             (select count(*)::int from tax_registrations where org_id = ${target.orgId} and is_active) as registrations,
             (select count(*)::int from tax_report_lines where org_id = ${target.orgId} and report_code in ('IN_GSTR3B', 'ZA_VAT201', 'AE_VAT201', 'JP_CONSUMPTION')) as lines
         `)).rows[0] as { registrations: number; lines: number };
-        return { forms, codes, manifests, counts };
+        return { forms, codes, declared, manifests, counts };
       });
 
       assert.deepEqual(state.forms.map((row) => row.code), ["AE_VAT201", "IN_GSTR3B", "JP_CONSUMPTION", "ZA_VAT201"]);
+      assert.deepEqual(state.declared.map((row) => row.code), [
+        "AE-VAT-STD",
+        "IN-GST-18",
+        "JP-CT-RED",
+        "JP-CT-STD",
+        "ZA-VAT-STD",
+      ]);
       assert.deepEqual(state.codes.map((row) => [row.code, row.rateCount]), [
         ["AE-VAT-STD", 1],
         ["IN-GST-18", 1],
@@ -67,7 +83,9 @@ test(
       assert.equal(state.manifests.find((row) => row.country === "AE")?.standardRates, "complete");
       assert.equal(state.manifests.find((row) => row.country === "JP")?.standardRates, "complete");
       assert.equal(state.counts.registrations, 4);
-      assert.equal(state.counts.lines, 71);
+      // 71 statutory boxes plus 2 workpaper rows fanned out over JP-CT-RED;
+      // every (report, line, code) triple is distinct.
+      assert.equal(state.counts.lines, 73);
 
       const second = await provisionTaxPacks(target.orgId, selections);
       assert.equal(second.jurisdictionsCreated, 0);
