@@ -10,6 +10,7 @@ import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type Ro
 import type {
   PayrollFilingCorrectionRow,
   PayrollFilingData,
+  PayrollFilingRowScope,
   PayrollFilingSlipData,
   PayrollPackFilings,
   PayrollYearEndFiling,
@@ -28,6 +29,30 @@ import { rl1Filing } from "./quebec/rl1-filing.ts";
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The T4 row grammar, as the inverse of t4Population's
+ * `employee:province:account` construction. Owned HERE, beside the builder —
+ * the subsidiary-scope guard parses through the declaration, never its own
+ * copy of this shape.
+ */
+export function parseT4RowId(rowId: string): PayrollFilingRowScope | null {
+  const parts = rowId.split(":");
+  const employee = parts[0] ?? "";
+  const account = parts[2] ?? "";
+  if (parts.length !== 3 || !UUID_RE.test(employee)) return null;
+  if (account && !UUID_RE.test(account)) return null;
+  return { employees: [employee], accounts: account ? [account] : [] };
+}
+
+/**
+ * The ROE row grammar: a bare employee id, matching roePopulation's rowKey.
+ * Owned here for the same reason as the T4's.
+ */
+export function parseRoeRowId(rowId: string): PayrollFilingRowScope | null {
+  if (!UUID_RE.test(rowId)) return null;
+  return { employees: [rowId], accounts: [] };
+}
 
 /** Block 16 reason labels, per the Service Canada ROE instructions. */
 const ROE_REASON_LABELS: Record<RoeReasonCode, string> = {
@@ -434,6 +459,7 @@ function buildCaPackFilings(): PayrollPackFilings {
         + "(boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
       emptyText: "No committed Canadian pay stubs for this year.",
       population: (orgId, taxYear) => t4Population(orgId, taxYear),
+      parseRowId: parseT4RowId,
       slip: { build: (orgId, taxYear, rowId) => t4Slip(orgId, taxYear, rowId) },
       amendment: t4Amendment(),
       download: {
@@ -462,6 +488,7 @@ function buildCaPackFilings(): PayrollPackFilings {
         + "for issue to include an employee in the ROE Web file.",
       emptyText: "No employees with interrupted earnings this year.",
       population: (orgId, taxYear) => roePopulation(orgId, taxYear),
+      parseRowId: parseRoeRowId,
       slip: { build: (orgId, taxYear, rowId) => roeSlip(orgId, taxYear, rowId) },
       // An ROE IS amendable at Service Canada — but only by quoting the SERIAL
       // NUMBER Service Canada assigned to the original, which is issued on

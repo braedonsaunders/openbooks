@@ -1,5 +1,7 @@
 import {
+  isFilingRowUuid,
   registerYearEndFiling,
+  type PayrollFilingRowScope,
   type PayrollFilingSlipData,
   type PayrollYearEndFiling,
 } from "../../../payroll-filing-registry.ts";
@@ -37,6 +39,16 @@ import { PayrollError } from "../../../payroll-run.ts";
  * idempotent on the identical declaration).
  */
 let cached: PayrollYearEndFiling | null = null;
+
+/**
+ * The RL-1 row grammar: a bare employee id, matching rl1Population's rowKey.
+ * Owned HERE, beside the builder — the subsidiary-scope guard parses through
+ * the declaration, never its own copy of this shape.
+ */
+export function parseRl1RowId(rowId: string): PayrollFilingRowScope | null {
+  if (!isFilingRowUuid(rowId)) return null;
+  return { employees: [rowId], accounts: [] };
+}
 
 /** One employee's RL-1, box by box — the form's own codes and French titles. */
 async function rl1Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
@@ -81,6 +93,7 @@ export function rl1Filing(): PayrollYearEndFiling {
       + RL1_UNSUPPORTED_BOXES,
     emptyText: "No committed Québec pay stubs for this year.",
     population: (orgId, taxYear) => rl1Population(orgId, taxYear),
+    parseRowId: parseRl1RowId,
     slip: { build: (orgId, taxYear, rowId) => rl1Slip(orgId, taxYear, rowId) },
     downloadRefusal: RL1_XML_DOWNLOAD_REFUSAL,
     // Revenu Québec's amended/cancelled RL-1 is its OWN shape — the "R" record

@@ -3,7 +3,13 @@ import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import { form941Worksheet, w2Slips } from "../../payroll-yearend.ts";
 import { build941X, buildW2c } from "../../payroll-w2c.ts";
-import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import { isFilingRowUuid } from "../../payroll-filing-registry.ts";
+import type {
+  PayrollFilingData,
+  PayrollFilingRowScope,
+  PayrollFilingSlipData,
+  PayrollPackFilings,
+} from "../../payroll-filing-registry.ts";
 
 /**
  * The US pack's filing declaration: the Form 941 quarterly worksheet and the
@@ -21,6 +27,35 @@ import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } fro
  * subledger withholds them — `state_income_tax` lines on committed stubs —
  * but no per-state slip line reports them back.
  */
+/**
+ * The Form 941 row grammar, as the inverse of form941Population's
+ * `account:quarter` construction (the account empty for the unassigned
+ * aggregate). Owned HERE, beside the builder — the subsidiary-scope guard
+ * parses through the declaration, never its own copy of this shape.
+ */
+export function parse941RowId(rowId: string): PayrollFilingRowScope | null {
+  const parts = rowId.split(":");
+  const account = parts[0] ?? "";
+  const quarter = parts[1] ?? "";
+  if (parts.length !== 2 || (account && !isFilingRowUuid(account)) || !/^[1-4]$/.test(quarter)) {
+    return null;
+  }
+  return { employees: [], accounts: account ? [account] : [] };
+}
+
+/**
+ * The W-2 row grammar, as the inverse of w2Population's
+ * `employee:account` construction. Owned here for the same reason.
+ */
+export function parseW2RowId(rowId: string): PayrollFilingRowScope | null {
+  const parts = rowId.split(":");
+  const employee = parts[0] ?? "";
+  const account = parts[1] ?? "";
+  if (parts.length !== 2 || !isFilingRowUuid(employee)) return null;
+  if (account && !isFilingRowUuid(account)) return null;
+  return { employees: [employee], accounts: account ? [account] : [] };
+}
+
 export const W2_GAPS = [
   "state wages and state income tax withheld (W-2 boxes 15-20) are not reported per state of employment — " +
     "state tax is withheld on committed stubs but has no slip line; file state wages from payroll records",
@@ -173,6 +208,7 @@ function buildUsPackFilings(): PayrollPackFilings {
       description: "Form 941 quarterly worksheet for US-pack employees, one return per EIN.",
       emptyText: "No committed US pay stubs for this year.",
       population: (orgId, taxYear) => form941Population(orgId, taxYear),
+      parseRowId: parse941RowId,
       slip: { build: (orgId, taxYear, rowId) => form941Slip(orgId, taxYear, rowId) },
       downloadRefusal:
         "the US pack produces no Form 941 e-file — the worksheet is the source data; "
@@ -200,6 +236,7 @@ function buildUsPackFilings(): PayrollPackFilings {
       description: "W-2 box data for US-pack employees, filed per EIN.",
       emptyText: "No committed US pay stubs for this year.",
       population: (orgId, taxYear) => w2Population(orgId, taxYear),
+      parseRowId: parseW2RowId,
       slip: { build: (orgId, taxYear, rowId) => w2Slip(orgId, taxYear, rowId) },
       downloadRefusal:
         "the US pack does not produce the SSA EFW2 electronic W-2 file — the box data "

@@ -50,6 +50,9 @@ const ZZ_FILINGS: PayrollPackFilings = {
       cadence: "annual",
       emptyText: "No committed ZZ pay stubs for this year.",
       population: async () => EMPTY_POPULATION,
+      // Fixture rows are opaque: nothing parses them, and the guard fails
+      // them closed — the same stand-in every ZZ double below declares.
+      parseRowId: () => null,
       download: {
         label: "Download P60 file",
         build: async () => ({ filename: "P60.xml", contentType: "application/xml", body: "<p60/>" }),
@@ -110,17 +113,18 @@ test("a jurisdiction filing registers onto an existing pack (the RL-1 path)", wi
     label: "Full payment submission",
     cadence: "quarterly",
     population: async () => EMPTY_POPULATION,
+    parseRowId: () => null,
     amendment: ZZ_AMENDMENT,
   });
   assert.deepEqual(payrollPackFilings("ZZ").yearEnd.map((filing) => filing.key), ["p60", "fps"]);
   // A duplicate key is two declarations of one statutory filing — refused.
   assert.throws(
-    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT }),
+    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, parseRowId: () => null, amendment: ZZ_AMENDMENT }),
     /already declares a "p60" filing/,
   );
   // Registering onto a pack nobody declared refuses by name.
   assert.throws(
-    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT }),
+    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, parseRowId: () => null, amendment: ZZ_AMENDMENT }),
     /no payroll pack declares filings for XX/,
   );
 }));
