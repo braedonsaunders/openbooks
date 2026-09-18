@@ -105,6 +105,22 @@ test("Germany uses the official 2026 UStVA identifiers and preserves the tempora
   const codes = new Set(definition.returnPacks[0]!.boxes.map((box) => box.lineCode));
   for (const code of ["81", "86", "87", "41", "66", "61", "62", "67", "83"]) assert.ok(codes.has(code));
   assert.ok(definition.sources.some((source) => source.id === "bmf_ustva_2026" && source.url.includes("2025-12-29")));
+  const deSet = packTaxCodesForReturn(definition, "DE_USTVA");
+  assert.deepEqual(deSet.map((entry) => [entry.code, entry.role ?? null]), [
+    ["DE-VAT-STD", "standard"],
+    ["DE-VAT-RED", "reduced"],
+  ]);
+  const redRates = deSet[1]!.rates ?? [];
+  assert.deepEqual(redRates.map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]), [
+    ["1968-01-01", "1968-06-30", 5],
+    ["1968-07-01", "1977-12-31", 5.5],
+    ["1978-01-01", "1979-06-30", 6],
+    ["1979-07-01", "1983-06-30", 6.5],
+    ["1983-07-01", "2020-06-30", 7],
+    ["2020-07-01", "2020-12-31", 5],
+    ["2021-01-01", null, 7],
+  ]);
+  assertContiguous(redRates);
 });
 
 test("France is provisionable without overstating territorial completeness", () => {

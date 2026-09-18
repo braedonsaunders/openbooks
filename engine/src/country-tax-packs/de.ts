@@ -65,11 +65,13 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
   jurisdictions: [],
   returnPacks: [DE_USTVA_2026],
   returnPackTaxCodes: {
-    DE_USTVA: {
-      code: "DE-VAT-STD",
-      name: "Germany standard VAT",
-      ratePercent: 19,
-      rates: [
+    DE_USTVA: [
+      {
+        code: "DE-VAT-STD",
+        name: "Germany standard VAT",
+        ratePercent: 19,
+        role: "standard",
+        rates: [
         { ratePercent: 10, effectiveFrom: "1968-01-01", effectiveTo: "1968-06-30", sourceId: "bmf_vat_rate_history_2026" },
         { ratePercent: 11, effectiveFrom: "1968-07-01", effectiveTo: "1977-12-31", sourceId: "bmf_vat_rate_history_2026" },
         { ratePercent: 12, effectiveFrom: "1978-01-01", effectiveTo: "1979-06-30", sourceId: "bmf_vat_rate_history_2026" },
@@ -80,7 +82,23 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
         { ratePercent: 19, effectiveFrom: "2007-01-01", effectiveTo: "2020-06-30", sourceId: "bmf_vat_rate_history_2026" },
         { ratePercent: 16, effectiveFrom: "2020-07-01", effectiveTo: "2020-12-31", sourceId: "bmf_vat_rate_history_2026" },
         { ratePercent: 19, effectiveFrom: "2021-01-01", sourceId: "bmf_vat_rate_history_2026" },
-      ],
-    },
+        ],
+      },
+      {
+        code: "DE-VAT-RED",
+        name: "Germany reduced VAT",
+        ratePercent: 7,
+        role: "reduced",
+        rates: [
+          { ratePercent: 5, effectiveFrom: "1968-01-01", effectiveTo: "1968-06-30", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 5.5, effectiveFrom: "1968-07-01", effectiveTo: "1977-12-31", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 6, effectiveFrom: "1978-01-01", effectiveTo: "1979-06-30", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 6.5, effectiveFrom: "1979-07-01", effectiveTo: "1983-06-30", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 7, effectiveFrom: "1983-07-01", effectiveTo: "2020-06-30", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 5, effectiveFrom: "2020-07-01", effectiveTo: "2020-12-31", sourceId: "bmf_vat_rate_history_2026" },
+          { ratePercent: 7, effectiveFrom: "2021-01-01", sourceId: "bmf_vat_rate_history_2026" },
+        ],
+      },
+    ],
   },
 };
