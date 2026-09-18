@@ -1,17 +1,16 @@
 /**
- * The Italy payroll pack (skeleton).
+ * The Italy payroll pack: 2025 computes end to end.
  *
  * Declares every statutory levy Italy withholds or accrues on dependent
  * employment — national IRPEF, the domicile region's addizionale regionale,
  * the domicile comune's addizionale comunale, and INPS employee/employer
  * contributions — plus the CU/770 filings, the detrazioni certificate, the
- * 20-region coverage (all refused until transcribed), and the national
- * festivity calendar.
+ * 20-region coverage, and the national festivity calendar.
  *
- * `installable: false` until a tax year is transcribed: 2026 is refused by
- * name (see rates.ts — L. 199/2025 rewrote the second IRPEF bracket and the
- * AdE page is internally inconsistent). Nothing here computes; the
- * statutory pass refuses with the year and the missing module.
+ * `installable: true` for 2025 (transcribed in tax-year-2025.ts, proven by
+ * the tax-year-2025 goldens); 2026 is refused by name (see rates.ts —
+ * L. 199/2025 rewrote the second IRPEF bracket and the AdE page is
+ * internally inconsistent).
  *
  * Registration shape: `country` is the string "IT", which does not yet
  * typecheck against `PayrollCountry` (packs.ts:190, still 'CA' | 'US'). The
@@ -37,7 +36,7 @@ export type ItPayrollPackDeclaration = Omit<PayrollCountryPack, "country"> & {
 
 export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   country: "IT",
-  installable: false,
+  installable: true,
   // IRPEF produces EUR; the Italian tax year is the calendar year
   // (periodo d'imposta = anno solare).
   statutoryCurrency: "EUR",
@@ -45,14 +44,16 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   regions: {
     label: "regione",
     known: IT_REGION_CODES,
-    // DERIVED in spirit: nothing is transcribed, so every withholding entry
-    // is implemented:false and nothing is supported. A region gains support
-    // by transcribing its surcharge tables, never by editing this list.
+    // Stays [] by choice, not by gap: the addizionale regionale is a
+    // tenant-declared rate, not a withholding table per region, so no region
+    // has "its own tables" to support — the engine computes every domicile
+    // identically from the declared rate (withholding.implemented is true
+    // for all 20). Listing regions here would claim per-region tables exist.
     supported: [],
     unsupportedReason:
-      "addizionale regionale/comunale withholding for {region} is not implemented by the IT payroll "
-      + "pack: no tax-year edition is transcribed, so the region's surcharge tables cannot be computed. "
-      + "See engine/src/payroll/it/rates.ts.",
+      "no IT regione publishes its own withholding tables: the addizionale regionale/comunale for "
+      + "{region} computes from the tenant-declared rate (see engine/src/payroll/it/rates.ts), so the "
+      + "region is not listed as supported — the engine still withholds for it once the rate is entered.",
   },
   jurisdictions: IT_JURISDICTIONS,
   // Withholdings are paid through Modello F24 to the Agenzia delle Entrate —
