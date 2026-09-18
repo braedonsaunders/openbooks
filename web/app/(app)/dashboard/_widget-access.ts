@@ -35,6 +35,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-cash-runway': ['banking.read'],
   'kpi-items-to-reconcile': BANKING,
   'kpi-expenses-awaiting-approval': ['expenses.read'],
+  'list-close-readiness': ['close.run'],
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,

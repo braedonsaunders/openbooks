@@ -253,6 +253,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'list-close-readiness': {
+    id: 'list-close-readiness',
+    category: 'kpi',
+    labelKey: 'widgets.closeReadiness',
+    descriptionKey: 'catalog.closeReadiness',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 4 },
+    rolesShown: ['admin', 'controller', 'accountant'],
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

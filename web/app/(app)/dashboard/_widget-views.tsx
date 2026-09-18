@@ -187,6 +187,8 @@ export function WidgetCard({
       return <InProgressList documents={data.draftDocuments} />
     case 'personal-inbox':
       return <PendingApprovalsList approvals={data.myApprovalList} title={t('widgets.myApprovals')} />
+    case 'list-close-readiness':
+      return <CloseReadinessList runs={data.closeRuns} />
     default:
       return (
         <CardShell title={widgetId}>
@@ -516,6 +518,72 @@ function PartyBalanceList({
             </div>
           </li>
         ))}
+      </ul>
+    </CardShell>
+  )
+}
+
+function CloseReadinessList({
+  runs,
+}: {
+  runs: DashboardMetrics['closeRuns']
+}) {
+  const t = useTranslations('dashboard')
+  const tc = useTranslations('close')
+  // Canonical workspace labels; an unknown status/stage renders raw rather
+  // than guessing a translation (the recent-entries precedent, F-t01-009).
+  const statusLabel = (status: string) =>
+    tc.has(`runStatus.${status}` as never) ? tc(`runStatus.${status}` as never) : status
+  const stageLabel = (stage: string | null) =>
+    stage === null ? null : tc.has(`stages.${stage}` as never) ? tc(`stages.${stage}` as never) : stage
+  const statusVariant = (status: string): 'success' | 'warning' | 'outline' =>
+    status === 'closed' || status === 'published'
+      ? 'success'
+      : status === 'in_progress' || status === 'review'
+        ? 'warning'
+        : 'outline'
+  if (runs.length === 0) {
+    return (
+      <CardShell title={t('widgets.closeReadiness')} icon={<CalendarCheck size={14} />} href="/close">
+        <div className="flex h-full flex-col items-center justify-center gap-1 py-6 text-center">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            {t('widgets.closeReadinessEmpty')}
+          </span>
+          <span className="px-4 text-xs text-slate-400 dark:text-slate-500">
+            {t('catalog.closeReadiness')}
+          </span>
+        </div>
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell title={t('widgets.closeReadiness')} icon={<CalendarCheck size={14} />} href="/close">
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {runs.map((r) => {
+          const stage = stageLabel(r.stage)
+          return (
+            <li key={r.id}>
+              <Link
+                href="/close"
+                className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {r.period}
+                    </span>
+                    <Badge variant={statusVariant(r.status)}>{statusLabel(r.status)}</Badge>
+                  </div>
+                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    {r.book}
+                    {stage ? ` · ${stage}` : null}
+                    {r.targetCloseDate ? ` · ${new Date(`${r.targetCloseDate}T12:00:00Z`).toLocaleDateString()}` : null}
+                  </div>
+                </div>
+              </Link>
+            </li>
+          )
+        })}
       </ul>
     </CardShell>
   )
