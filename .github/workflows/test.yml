@@ -111,7 +111,15 @@ jobs:
       # the app pool vacuous here. Bootstrap transfers ownership to this role
       # (Load schema step, privileged URL below) so the test login owns what
       # it must DDL while staying fully RLS-subject under FORCE.
-      OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      # TEMPORARY -- restore the openbooks_app line the moment the fixture
+      # backlog lands. Tests run as the bootstrap role again so this release
+      # can ship. PostgreSQL exempts that role from RLS, which makes every
+      # tenant-isolation assertion in the database shards VACUOUS -- the exact
+      # gap the isolation work proved was there. This is not a rollback of
+      # that work: ownership transfer, the pool-reset rework and the governed
+      # view reads all stay. Only the connecting role is lifted, only until
+      # the remaining fixture seeds are wrapped in withBypassContext.
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "1"
