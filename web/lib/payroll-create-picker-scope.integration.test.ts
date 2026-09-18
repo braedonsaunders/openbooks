@@ -35,7 +35,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
 // The page LOADER. What this test checks is which schedules and which
@@ -50,23 +50,25 @@ type PickerProps = { schedules: RunSchedule[]; finalPayCandidates: FinalPayCandi
 
 for (const surface of ["employee", "schedule"] as const) {
   test(`payroll creation ${surface} picker scopes server-rendered data`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const fx = await seedAdoption();
+    const fx = await withBypassContext(() => seedAdoption());
     try {
       const childId = randomUUID();
       const childScheduleId = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA')`);
-      await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
-      await db.execute(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId}`);
-      await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
-        select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
-        from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-      await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+          values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA')`);
+        await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
+        await db.execute(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId}`);
+        await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
+          select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
+          from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+        await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+      });
       const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]) } as Authz;
       const read = async (scope: Set<string> | null, scheduleIds: string[], employeeVisible: boolean) => {
         state.gate = { ...gate, allowedSubsidiaryIds: scope };
-        const props = (await loadPayRuns({})).newRun as PickerProps;
+        const props = (await withOrgContext(fx.orgId, () => loadPayRuns({}))).newRun as PickerProps;
         assert.ok(props);
         if (surface === "schedule") assert.deepEqual(new Set(props.schedules.map((row) => row.id)), new Set(scheduleIds));
         else assert.deepEqual(props.finalPayCandidates, employeeVisible ? [{
