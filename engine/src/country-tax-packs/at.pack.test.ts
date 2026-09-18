@@ -1,75 +1,102 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { AUSTRIA_TAX_PACK } from "./at.ts";
 import { packReturnCodesWithTaxCodes, packTaxCodesForReturn } from "./index.ts";
+import type { CountryTaxCodeDefinition, EffectiveTaxRate } from "./types.ts";
 
 const pack = AUSTRIA_TAX_PACK;
+const RETURN_CODE = "AT_U30";
 
-// Pack found by country, version pin, single return pack.
-assert.equal(pack.country, "AT");
-assert.equal(pack.code, "AT_INDIRECT_TAX");
-assert.equal(pack.version, "2026.08.01");
-assert.equal(pack.countryTaxType, "vat");
-assert.equal(pack.parentReturnPackCode, "AT_U30");
-assert.equal(pack.returnPacks.length, 1);
-
-const ret = pack.returnPacks[0];
-assert.equal(ret.code, "AT_U30");
-assert.equal(ret.defaultFrequency, "monthly");
-assert.equal(ret.submissionChannel, "portal_manual");
-assert.equal(ret.governmentFormat, "portal_entry");
-assert.ok(ret.submissionUrl.startsWith("https://"), "submissionUrl is https");
-
-// Box line codes present: U30 Kennzahlen plus the two OB workpaper boxes.
-const byLine = new Map(ret.boxes.map((b) => [b.lineCode, b]));
-for (const kz of ["000", "022", "029", "006", "060", "095", "OB_OUTPUT", "OB_INPUT"]) {
-  assert.ok(byLine.has(kz), `box ${kz} present`);
+function theReturn(): (typeof pack.returnPacks)[number] {
+  const value = pack.returnPacks[0];
+  assert.ok(value, "AT pack must declare its U30 return");
+  return value;
 }
-const obOut = byLine.get("OB_OUTPUT");
-const obIn = byLine.get("OB_INPUT");
-assert.equal(obOut?.basis, "tax_collected");
-assert.equal(obOut?.glMap, "sales");
-assert.equal(obIn?.basis, "tax_paid");
-assert.equal(obIn?.glMap, "purchases");
 
-// Jurisdictions: USt is federal, no subnational VAT.
-assert.equal(pack.jurisdictions.length, 0);
-
-// Return-pack tax codes: keyed by our return, primary code is the standard one.
-assert.deepEqual(packReturnCodesWithTaxCodes(pack), ["AT_U30"]);
-const codes = packTaxCodesForReturn(pack, "AT_U30");
-assert.ok(codes.length > 0, "non-empty code set");
-assert.equal(codes[0].code, "AT-VAT-STD");
-assert.equal(codes[0].role, "standard");
-assert.equal(codes[0].ratePercent, 20);
-const byCode = new Map(codes.map((c) => [c.code, c]));
-assert.equal(byCode.get("AT-VAT-RED10")?.role, "reduced");
-assert.equal(byCode.get("AT-VAT-RED10")?.ratePercent, 10);
-assert.equal(byCode.get("AT-VAT-RED13")?.role, "reduced");
-assert.equal(byCode.get("AT-VAT-RED13")?.ratePercent, 13);
-assert.equal(byCode.get("AT-VAT-ENCLAVE")?.role, undefined);
-assert.equal(byCode.get("AT-VAT-ENCLAVE")?.ratePercent, 19);
-
-// Every sourceId resolves; rate history is contiguous per code.
-const sourceIds = new Set(pack.sources.map((s) => s.id));
-assert.ok(sourceIds.size === pack.sources.length, "source ids unique");
-for (const s of pack.sources) {
-  assert.ok(s.url.startsWith("https://"), `source ${s.id} url is https`);
-  assert.ok(s.asOf.length > 0, `source ${s.id} has asOf`);
+function byCode(): Map<string, CountryTaxCodeDefinition> {
+  return new Map(packTaxCodesForReturn(pack, RETURN_CODE).map((code) => [code.code, code]));
 }
-for (const c of codes) {
-  assert.ok(c.rates && c.rates.length > 0, `${c.code} has rates`);
-  const sorted = [...(c.rates ?? [])].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1));
-  for (const r of sorted) {
-    assert.ok(sourceIds.has(r.sourceId), `${c.code} sourceId ${r.sourceId} resolves`);
+
+test("AT pack is the maintained-pack shape: one return, pinned version", () => {
+  assert.equal(pack.country, "AT");
+  assert.equal(pack.code, "AT_INDIRECT_TAX");
+  assert.equal(pack.version, "2026.08.01");
+  assert.equal(pack.countryTaxType, "vat");
+  assert.equal(pack.parentReturnPackCode, RETURN_CODE);
+  assert.equal(pack.returnPacks.length, 1);
+
+  const ret = theReturn();
+  assert.equal(ret.code, RETURN_CODE);
+  assert.equal(ret.defaultFrequency, "monthly");
+  assert.equal(ret.submissionChannel, "portal_manual");
+  assert.equal(ret.governmentFormat, "portal_entry");
+  assert.ok(ret.submissionUrl.startsWith("https://"), "submissionUrl is https");
+});
+
+test("the U30 carries the real Kennzahlen plus the two OB workpaper boxes", () => {
+  const boxes = new Map(theReturn().boxes.map((box) => [box.lineCode, box]));
+  for (const kz of ["000", "022", "029", "006", "060", "095", "OB_OUTPUT", "OB_INPUT"]) {
+    assert.ok(boxes.has(kz), `box ${kz} present`);
   }
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const cur = sorted[i];
-    const nxt = sorted[i + 1];
-    assert.ok(cur.effectiveTo, `${c.code} non-terminal rate has effectiveTo`);
-    const dayAfter = new Date(`${cur.effectiveTo}T00:00:00Z`);
-    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-    assert.equal(nxt.effectiveFrom, dayAfter.toISOString().slice(0, 10), `${c.code} history contiguous`);
-  }
-}
+  assert.equal(boxes.get("OB_OUTPUT")?.basis, "tax_collected");
+  assert.equal(boxes.get("OB_OUTPUT")?.glMap, "sales");
+  assert.equal(boxes.get("OB_INPUT")?.basis, "tax_paid");
+  assert.equal(boxes.get("OB_INPUT")?.glMap, "purchases");
+});
 
-console.log(`AT pack OK: ${ret.code}, ${ret.boxes.length} boxes, ${codes.length} codes, ${pack.sources.length} sources`);
+test("USt is federal: no subnational jurisdictions", () => {
+  assert.equal(pack.jurisdictions.length, 0);
+});
+
+test("the code set is keyed by the U30 and led by the standard band", () => {
+  assert.deepEqual(packReturnCodesWithTaxCodes(pack), [RETURN_CODE]);
+  const codes = packTaxCodesForReturn(pack, RETURN_CODE);
+  assert.ok(codes.length > 0, "non-empty code set");
+
+  const standard = codes[0];
+  assert.ok(standard, "the set must lead with a code");
+  assert.equal(standard.code, "AT-VAT-STD");
+  assert.equal(standard.role, "standard");
+  assert.equal(standard.ratePercent, 20);
+
+  const map = byCode();
+  assert.equal(map.get("AT-VAT-RED10")?.role, "reduced");
+  assert.equal(map.get("AT-VAT-RED10")?.ratePercent, 10);
+  assert.equal(map.get("AT-VAT-RED13")?.role, "reduced");
+  assert.equal(map.get("AT-VAT-RED13")?.ratePercent, 13);
+  // Jungholz/Mittelberg sit in the German customs union and are neither the
+  // Austrian standard nor an Austrian reduced band, so they carry no role.
+  assert.equal(map.get("AT-VAT-ENCLAVE")?.role, undefined);
+  assert.equal(map.get("AT-VAT-ENCLAVE")?.ratePercent, 19);
+});
+
+test("every source is https with an asOf, and every sourceId resolves", () => {
+  const sourceIds = new Set(pack.sources.map((source) => source.id));
+  assert.equal(sourceIds.size, pack.sources.length, "source ids unique");
+  for (const source of pack.sources) {
+    assert.ok(source.url.startsWith("https://"), `source ${source.id} url is https`);
+    assert.ok(source.asOf.length > 0, `source ${source.id} has asOf`);
+  }
+  for (const code of packTaxCodesForReturn(pack, RETURN_CODE)) {
+    const rates: readonly EffectiveTaxRate[] = code.rates ?? [];
+    assert.ok(rates.length > 0, `${code.code} has rates`);
+    for (const rate of rates) {
+      assert.ok(sourceIds.has(rate.sourceId), `${code.code} sourceId ${rate.sourceId} resolves`);
+    }
+  }
+});
+
+test("each band's rate history is contiguous", () => {
+  for (const code of packTaxCodesForReturn(pack, RETURN_CODE)) {
+    const sorted = [...(code.rates ?? [])].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1));
+    for (let index = 0; index < sorted.length - 1; index++) {
+      const current = sorted[index];
+      const next = sorted[index + 1];
+      assert.ok(current && next, "contiguity walk stays in bounds");
+      assert.ok(current.effectiveTo, `${code.code} non-terminal rate has effectiveTo`);
+      const dayAfter = new Date(`${current.effectiveTo}T00:00:00Z`);
+      dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+      assert.equal(next.effectiveFrom, dayAfter.toISOString().slice(0, 10), `${code.code} history contiguous`);
+    }
+  }
+});
