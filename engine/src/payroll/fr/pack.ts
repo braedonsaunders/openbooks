@@ -22,8 +22,8 @@ import { FR_TAX_YEARS } from "./rates.ts";
  * Declared from primary sources; calendar 2026 PAS grille I (métropole) is
  * transcribed in ./tables-2026.ts and the 2026 URSSAF cotisation rates in
  * ./cotisations-2026.ts, both computed in ./compute-statutory.ts. The pack
- * stays `installable: false` (AGIRC-ARRCO unobtainable, tenant-declared
- * rates without an engine channel):
+ * stays `installable: false` until the parity harness lands (APEC and
+ * tenant-declared rates without an engine channel stay refused by name):
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
  * - Social contributions: collected by URSSAF (C. séc. soc. art. L213-1);
@@ -73,12 +73,18 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
   {
     key: "retraite_comp",
     components: [
-      // AGIRC-ARRCO complementary pension, tranches 1 et 2, both shares.
+      // AGIRC-ARRCO complementary pension, tranches 1 et 2, both shares,
+      // plus the CEG (general balance) and CET (technical balance, only
+      // above the plafond) contributions priced by the same engine.
       // Remittance is "external": the destination is the employer's own
       // caisse de retraite, configured per component — never the URSSAF/DGFiP
       // vendor, whatever the collection channel.
       { code: "ARRCO", name: "Retraite complémentaire (salariale)", systemKey: "arrco", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "external" },
       { code: "ARRCO-ER", name: "Retraite complémentaire (employeur)", systemKey: "arrco", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "external" },
+      { code: "CEG", name: "Contribution d'équilibre général (salariale)", systemKey: "ceg", kind: "deduction", sequence: 141, assessedOn: "earnings", remittance: "external" },
+      { code: "CEG-ER", name: "Contribution d'équilibre général (employeur)", systemKey: "ceg", kind: "employer_contribution", sequence: 241, assessedOn: "earnings", remittance: "external" },
+      { code: "CET", name: "Contribution d'équilibre technique (salariale)", systemKey: "cet", kind: "deduction", sequence: 142, assessedOn: "earnings", remittance: "external" },
+      { code: "CET-ER", name: "Contribution d'équilibre technique (employeur)", systemKey: "cet", kind: "employer_contribution", sequence: 242, assessedOn: "earnings", remittance: "external" },
     ],
   },
   {
@@ -176,10 +182,10 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       label: "Prélèvement à la source (national)",
       implemented: false,
       unimplementedReason:
-        "the FR payroll pack computes PAS (2026 grille I barème, métropole) "
-        + "and the 2026 URSSAF cotisations, but AGIRC-ARRCO rates are "
-        + "unobtainable and tenant-declared AT/MP/versement-mobilité rates "
-        + "have no engine channel, so no full payslip is right. "
+        "the FR payroll pack computes PAS (2026 grille I barème, métropole), "
+        + "the 2026 URSSAF cotisations and the AGIRC-ARRCO T1/T2 + CEG + CET, "
+        + "but APEC (cadres only) and tenant-declared AT/MP/versement-mobilité "
+        + "rates have no engine channel, so no full payslip is right. "
         + "See FR_REFUSED_2026 in engine/src/payroll/fr/tables-2026.ts and "
         + "FR_COTISATION_REFUSALS_2026 in engine/src/payroll/fr/cotisations-2026.ts.",
       // Non-residents face the specific retenue à la source (CGI art. 182 A),

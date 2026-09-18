@@ -262,7 +262,9 @@ export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "Alsace-Moselle cotisation salariale maladie supplémentaire 1,30 % (transcribed above): needs a workplace-department channel no pack carries",
   "AT/MP (Taux notifié par la Carsat) and versement mobilité (commune-dependent): tenant-declared by design, never table-supplied",
   "FNAL without a known effectif: employerEmployeeCount absent — the 0,10 % plafonné vs 0,50 % déplafonné choice cannot be made",
-  "AGIRC-ARRCO T1/T2 both shares: no obtainable page carries the rates (not on the URSSAF tables page; agirc-arrco.fr unreachable from this vantage)",
+  "AGIRC-ARRCO T1/T2 both shares, CEG and CET: transcribed in ./retraite-2026.ts and computed",
+  "APEC 0,06 % (transcribed in ./retraite-2026.ts): cadres only — no pack channel carries the employee's cadre status",
+  "AGIRC-ARRCO split modified by accord collectif: the page allows a collective agreement to modify the regulated 60/40 — the engine applies 60/40 with no tenant-override channel",
   "Brut/net-imposable bridge: the stub supplies one earnings figure, used as brut for cotisations and as net imposable for PAS — the déductible-CSG bridge between them is not modelled",
 ];
 
