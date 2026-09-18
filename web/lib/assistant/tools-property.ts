@@ -7,6 +7,7 @@ import {
 } from "@openbooks/engine/src/property-management.ts";
 import { add, cmp, sum } from "@openbooks/engine/src/money.ts";
 import { isFeatureEnabled } from "../features";
+import { withOrgContext } from "@openbooks/engine/src/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
 import { dateInput, uuidInput, num, capList } from "./tools-shared";
@@ -29,7 +30,10 @@ import { dateInput, uuidInput, num, capList } from "./tools-shared";
 const FEATURE_ERROR = "propertyManagement_feature_disabled";
 
 async function featureOff(orgId: string): Promise<boolean> {
-  return !(await isFeatureEnabled(orgId, "propertyManagement"));
+  // The gate answers for the caller's org, so read through that org's RLS
+  // window: ambient scope can be a different org, whose window hides this
+  // org's row and misreports an enabled org as disabled (off by default).
+  return !(await withOrgContext(orgId, () => isFeatureEnabled(orgId, "propertyManagement")));
 }
 
 type Workspace = Awaited<ReturnType<typeof propertyManagementWorkspace>>;

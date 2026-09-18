@@ -24,7 +24,7 @@ test(
       assert.equal(first.taxGroupsCreated, 5);
       assert.equal(first.registrationsCreated, 5);
 
-      const state = await withOrgContext(target.orgId, async () => {
+      const readState = () => withOrgContext(target.orgId, async () => {
         const forms = (await db.execute(sql`
           select code from tax_return_forms
            where org_id = ${target.orgId} and code in ('AU_BAS_GST', 'NZ_GST101A', 'GB_VAT100', 'DE_USTVA', 'FR_CA3')
@@ -54,8 +54,17 @@ test(
             (select count(*)::int from tax_registrations where org_id = ${target.orgId} and is_active) as registrations,
             (select count(*)::int from tax_report_lines where org_id = ${target.orgId} and report_code in ('AU_BAS_GST', 'NZ_GST101A', 'GB_VAT100', 'DE_USTVA', 'FR_CA3')) as lines
         `)).rows[0] as { registrations: number; lines: number };
-        return { forms, codes, manifests, counts };
+        const linesByForm = (await db.execute(sql`
+          select report_code as "reportCode", count(*)::int as n
+            from tax_report_lines
+           where org_id = ${target.orgId}
+             and report_code in ('AU_BAS_GST', 'NZ_GST101A', 'GB_VAT100', 'DE_USTVA', 'FR_CA3')
+           group by report_code
+           order by report_code
+        `)).rows as Array<{ reportCode: string; n: number }>;
+        return { forms, codes, manifests, counts, linesByForm };
       });
+      const state = await readState();
 
       assert.deepEqual(state.forms.map((row) => row.code), ["AU_BAS_GST", "DE_USTVA", "FR_CA3", "GB_VAT100", "NZ_GST101A"]);
       assert.deepEqual(state.codes.map((row) => [row.code, row.rateCount]), [
@@ -69,13 +78,30 @@ test(
       assert.ok(state.manifests.every((row) => row.version === "2026.08.01" && row.status === "active"));
       assert.equal(state.manifests.find((row) => row.country === "FR")?.standardRates, "partial");
       assert.equal(state.counts.registrations, 5);
-      assert.equal(state.counts.lines, 52);
+      // Report lines fan out one row per eligible tax code (filing sums each
+      // box per line_code across its codes' postings), verified against the
+      // pack sources: AU 5 plain + 2 glMap x 1 code, NZ 9 + 2 x 1,
+      // GB 5 + 4 x 3 codes, DE 9 + 2 x 2, FR 12 + 2 x 3 = 66 rows for
+      // 52 declared boxes.
+      assert.equal(state.counts.lines, 66);
+      assert.deepEqual(state.linesByForm.map((row) => [row.reportCode, row.n]), [
+        ["AU_BAS_GST", 7],
+        ["DE_USTVA", 13],
+        ["FR_CA3", 18],
+        ["GB_VAT100", 17],
+        ["NZ_GST101A", 11],
+      ]);
 
       const second = await provisionTaxPacks(target.orgId, selections);
       assert.equal(second.jurisdictionsCreated, 0);
       assert.equal(second.taxCodesCreated, 0);
       assert.equal(second.taxGroupsCreated, 0);
       assert.equal(second.registrationsCreated, 0);
+      // The rerun deletes and reinserts each form's lines: the evidence must
+      // be exactly restored, not doubled or dropped.
+      const rerun = await readState();
+      assert.equal(rerun.counts.lines, 66);
+      assert.equal(rerun.counts.registrations, 5);
     } finally {
       await withBypass(() => dropScratchOrg(target.orgId));
     }
