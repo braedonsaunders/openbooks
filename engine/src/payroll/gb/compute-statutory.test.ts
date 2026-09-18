@@ -1,0 +1,253 @@
+/**
+ * GB computeStatutory wrapper tests — run with `node --import tsx
+ * engine/src/payroll/gb/compute-statutory.test.ts`.
+ *
+ * The arithmetic lives in calculate.ts (see parity.test.ts); these prove the
+ * wrapper's plumbing: edition refusal on BOTH sides of 2026/27, the SCT
+ * guard, the P6/P9 code requirement, the cumulative completeness gate, and
+ * the pushed lines plus GB factor keys. The database is a hand-rolled fake:
+ * tests that must not read YTD fail the fake's `execute` loudly, proving
+ * the no-DB paths touch nothing.
+ */
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { db } from "../../db.ts";
+import type {
+  PayrollStatutoryComputeContext,
+  PushStatutoryFn,
+} from "../statutory-context.ts";
+import { computeGbStatutory } from "./compute-statutory.ts";
+
+type Tx = Pick<typeof db, "execute">;
+
+interface Pushed {
+  systemKey: string;
+  kind: string;
+  description: string;
+  amount: string;
+  sequence: number;
+}
+
+function refusingTx(): Tx {
+  return {
+    execute: async () => {
+      throw new Error("database touched on a path that must not read YTD");
+    },
+  } as unknown as Tx;
+}
+
+function stubTx(rows: Record<string, unknown>): Tx {
+  return {
+    execute: async () => ({ rows: [rows] }),
+  } as unknown as Tx;
+}
+
+const EMPTY_YTD = {
+  taxable: "0",
+  addpay: "0",
+  tax: "0",
+  stub_count: "0",
+  first_pay: null,
+};
+
+function certificateForCodes(
+  codes: Record<string, Record<string, string | null>>,
+): PayrollStatutoryComputeContext["certificateFor"] {
+  return ((key: string) => {
+    const answers = codes[key];
+    if (!answers) return null;
+    return {
+      certificate: { key },
+      onFile: true,
+      effectiveFrom: null,
+      answers,
+      missing: [],
+    };
+  }) as unknown as PayrollStatutoryComputeContext["certificateFor"];
+}
+
+function gbContext(overrides: {
+  payDate?: string;
+  taxYear?: number;
+  region?: string;
+  tx?: Tx;
+  codes?: Record<string, Record<string, string | null>>;
+  income?: string;
+  pensionable?: string;
+  pushed?: Pushed[];
+}): { ctx: PayrollStatutoryComputeContext; pushed: Pushed[] } {
+  const pushed: Pushed[] = overrides.pushed ?? [];
+  const pushStatutory = ((
+    systemKey: string,
+    kind: "deduction" | "employer_contribution",
+    description: string,
+    amount: string,
+    sequence: number,
+  ) => {
+    pushed.push({ systemKey, kind, description, amount, sequence });
+  }) as PushStatutoryFn;
+  const ctx = {
+    tx: overrides.tx ?? refusingTx(),
+    orgId: "org",
+    documentId: "doc",
+    employeePartyId: "emp",
+    employeeName: "Test Employee",
+    taxYear: overrides.taxYear ?? 2026,
+    country: "GB",
+    region: overrides.region ?? "ENG",
+    run: { pay_date: overrides.payDate ?? "2026-04-06" },
+    emp: {},
+    filingAccountId: null,
+    periodsPerYear: 12,
+    income: overrides.income ?? "0",
+    nonPeriodic: "0",
+    pensionable: overrides.pensionable ?? "0",
+    insurable: "0",
+    deduction: () => "0",
+    pushStatutory,
+    storedCertificates: [],
+    certificateFor: certificateForCodes(overrides.codes ?? {}),
+    bool: (value: string | null | undefined) => value === "true",
+    assertRegionSupported: () => {},
+    employerLevies: {},
+  } as unknown as PayrollStatutoryComputeContext;
+  return { ctx, pushed };
+}
+
+const NOTICE_1257L = {
+  gb_tax_code_notice: { tax_code: "1257L", non_cumulative: null },
+};
+
+test("pay dates before and after 2026/27 throw without touching the database", async () => {
+  for (const payDate of ["2026-04-05", "2025-06-06", "2027-04-06", "2028-01-01"]) {
+    const { ctx } = gbContext({ payDate, codes: NOTICE_1257L });
+    await assert.rejects(() => computeGbStatutory(ctx), /no transcribed tables/, payDate);
+  }
+});
+
+test("Scotland is refused by name", async () => {
+  const { ctx } = gbContext({ region: "SCT", codes: NOTICE_1257L });
+  await assert.rejects(() => computeGbStatutory(ctx), /Scotland.*refused by name|SCT/);
+});
+
+test("a missing coding notice is refused, naming the P6/P9", async () => {
+  const { ctx } = gbContext({ codes: {} });
+  await assert.rejects(() => computeGbStatutory(ctx), /gb_tax_code_notice/);
+});
+
+test("an inoperable code is refused by name", async () => {
+  const { ctx } = gbContext({
+    codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
+  });
+  await assert.rejects(() => computeGbStatutory(ctx), /S1257L/);
+});
+
+test("NT pushes zeros and reads nothing", async () => {
+  const { ctx, pushed } = gbContext({
+    income: "5000",
+    pensionable: "5000",
+    codes: { gb_tax_code_notice: { tax_code: "NT", non_cumulative: null } },
+  });
+  const factors = await computeGbStatutory(ctx);
+  // NIC still prices £5,000 monthly: (4,189 − 1,048) × 8% = £251.28 plus
+  // (5,000 − 4,189) × 2% = £16.22 = £267.50; employer (5,000 − 417) × 15%.
+  assert.deepEqual(
+    pushed.map((line) => [line.systemKey, line.kind, line.amount]),
+    [
+      ["paye", "deduction", "0.0000"],
+      ["nic", "deduction", "267.5000"],
+      ["nic", "employer_contribution", "687.4500"],
+    ],
+  );
+  assert.equal(factors.GB_TAX, "0.0000");
+});
+
+test("BR prices the whole period with no YTD read", async () => {
+  const { ctx, pushed } = gbContext({
+    income: "3200",
+    pensionable: "3200",
+    codes: { gb_tax_code_notice: { tax_code: "BR", non_cumulative: null } },
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.deepEqual(
+    pushed.map((line) => [line.systemKey, line.kind, line.amount]),
+    [
+      ["paye", "deduction", "640.0000"],
+      ["nic", "deduction", "172.1600"],
+      ["nic", "employer_contribution", "417.4500"],
+    ],
+  );
+  assert.deepEqual(factors, {
+    GB_TAXABLE: "3200.0000",
+    GB_ADDPAY: "0.0000",
+    GB_TAX: "640.0000",
+  });
+});
+
+test("cumulative 1257L in month 1 prices from zero priors", async () => {
+  const { ctx, pushed } = gbContext({
+    tx: stubTx(EMPTY_YTD),
+    income: "2250",
+    pensionable: "2250",
+    codes: NOTICE_1257L,
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.deepEqual(
+    pushed.map((line) => [line.systemKey, line.kind, line.amount]),
+    [
+      ["paye", "deduction", "240.5000"],
+      ["nic", "deduction", "96.1600"],
+      ["nic", "employer_contribution", "274.9500"],
+    ],
+  );
+  assert.equal(factors.GB_TAXABLE, "2250.0000");
+  assert.equal(factors.GB_TAX, "240.5000");
+});
+
+test("cumulative 1257L after month 1 with no record is refused", async () => {
+  const { ctx } = gbContext({
+    payDate: "2026-11-06",
+    tx: stubTx(EMPTY_YTD),
+    income: "2250",
+    pensionable: "2250",
+    codes: NOTICE_1257L,
+  });
+  await assert.rejects(() => computeGbStatutory(ctx), /complete in-year record/);
+});
+
+test("declaration A certifies the empty record", async () => {
+  // Month 8 with first-year pay of £9,000: free pay to date £8,380, taxable
+  // £620, due £124.00 — the A declaration makes zero priors the truth.
+  const { ctx, pushed } = gbContext({
+    payDate: "2026-11-06",
+    tx: stubTx(EMPTY_YTD),
+    income: "9000",
+    pensionable: "2250",
+    codes: {
+      ...NOTICE_1257L,
+      gb_starter_checklist: { starter_declaration: "A", student_loan_plan: "none" },
+    },
+  });
+  await computeGbStatutory(ctx);
+  assert.equal(pushed[0]!.amount, "124.0000");
+});
+
+test("stubs spanning the year start price with priors applied", async () => {
+  const { ctx, pushed } = gbContext({
+    payDate: "2026-06-06",
+    tx: stubTx({
+      taxable: "2250.0000",
+      addpay: "0",
+      tax: "240.5000",
+      stub_count: "1",
+      first_pay: "2026-04-06",
+    }),
+    income: "2250",
+    pensionable: "2250",
+    codes: NOTICE_1257L,
+  });
+  await computeGbStatutory(ctx);
+  // Free pay to date £3,142.50; cumulative £4,500; taxable £1,357.50;
+  // liability £271.50 less £240.50 paid = £31.00.
+  assert.equal(pushed[0]!.amount, "31.0000");
+});

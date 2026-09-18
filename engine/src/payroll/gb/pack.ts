@@ -13,13 +13,20 @@
  *
  * What the pack declares:
  * - statutory slots: PAYE income tax, Class 1 NIC employee (primary) and
- *   employer (secondary). Student-loan / postgraduate-loan and workplace
- *   pension are REFUSED by name (see jurisdictions.ts header): thresholds
- *   located, no engine, no slot.
+ *   employer (secondary), computed end to end for 2026/27. Student-loan /
+ *   postgraduate-loan and workplace pension are REFUSED by name (see
+ *   jurisdictions.ts header): no slot, no engine. The Employment Allowance
+ *   (£10,500) is tenant-entered, never computed (conditional eligibility).
  * - fiscal tax year opening 6 April, named for the opening year (2026/27).
- * - four nations, none supported; Scotland with its own refusal reason.
- * - starter checklist + P6/P9 coding-notice certificates (not a W-4 clone).
- * - `installable: false` until a year is transcribed (GB_TAX_YEARS).
+ * - four nations, three supported (ENG/WLS/NIR share the rUK bands);
+ *   Scotland refused by name with its own reason.
+ * - starter checklist + P6/P9 coding-notice certificates (not a W-4 clone):
+ *   the tax code rides the notice and the engine operates it — 1257L
+ *   cumulative, W1/M1/X period-only, BR/D0/D1 flat, 0T/NT, K with its 50%
+ *   cap — refusing every other code by name (see tax-codes.ts).
+ * - `installable: true`: the 2026/27 rUK edition is transcribed, the engine
+ *   reads it, and the parity harness (parity.test.ts) proves it to the
+ *   penny against HMRC's own worked examples.
  *
  * Wiring checklist for Orchestrate (one entry, no other file changes):
  *   1. Open `PayrollCountry` (packs.ts:190) to the registry keys.
@@ -114,9 +121,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   country: typeof GB_COUNTRY_CODE;
 } = {
   country: GB_COUNTRY_CODE,
-  // No transcribed year (GB_TAX_YEARS.editions is empty): known to
-  // validation, refused for install.
-  installable: false,
+  // 2026/27 rUK edition transcribed (GB_TAX_YEARS), engine behind it,
+  // parity harness green: installable, pending registry wiring by Orchestrate.
+  installable: true,
   statutorySlots: GB_STATUTORY_SLOTS,
   // PAYE and NIC are remitted to the HMRC Accounts Office on the employer's
   // PAYE reference — no single org-configured statutory vendor exists the way

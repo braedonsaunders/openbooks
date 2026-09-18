@@ -40,24 +40,29 @@ export const GB_NATION_NAMES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Which nations the GB engine withholds income tax for: none yet. Every
- * nation is known and every nation is unsupported, and Scotland carries its
- * own reason — its bands are set in Edinburgh, not London, so "the PAYE
- * tables are not transcribed" would mislead a Glasgow operator into waiting
- * on HMRC for numbers only Holyrood can publish.
+ * Which nations the GB engine withholds income tax for: England, Wales and
+ * Northern Ireland, whose shared rUK bands are transcribed in rates.ts from
+ * HMRC's employer tables (the England/NI and Wales tables are identical).
+ * Scotland carries its own reason — its bands are set in Edinburgh, not
+ * London. The 2026/27 Scottish bands ARE now primary-published (the employer
+ * rates page prints starter 19% to £3,967 through top 48% above £125,140,
+ * agreeing with https://www.gov.uk/scottish-income-tax), so a follow-up
+ * shard can transcribe them as an SCT edition with S-prefix code routing;
+ * falling through to the rUK bands meanwhile would be wrong money for every
+ * Scottish employee, hence the named refusal.
  */
 export const GB_REGIONS: PayrollRegionCoverage = {
   label: "nation",
   known: [...GB_NATIONS],
-  supported: [],
+  supported: ["ENG", "WLS", "NIR"],
   unsupportedReason:
-    "PAYE income tax withholding for {region} is not implemented by the GB payroll pack: "
-    + "the 2026/27 HMRC tables are located but not transcribed into engine/src/payroll/gb/ "
-    + "(see GB_TAX_YEARS).",
+    "PAYE income tax withholding for {region} is not implemented by the GB payroll pack.",
   unsupportedReasons: {
     SCT: "Scottish income tax withholding for SCT is not implemented by the GB payroll pack: "
-      + "Scotland sets its own starter/basic/intermediate/higher/advanced/top bands, and the "
-      + "2026/27 Scottish bands are not transcribed into engine/src/payroll/gb/ (see GB_TAX_YEARS).",
+      + "Scotland sets its own starter/basic/intermediate/higher/advanced/top bands under the "
+      + "Scotland Act 1998, and no SCT edition is transcribed into engine/src/payroll/gb/ "
+      + "(see GB_TAX_YEARS) — operating an S-prefix code against the rUK bands would be wrong "
+      + "money for every Scottish employee.",
   },
 };
 
@@ -192,14 +197,15 @@ export const GB_CERTIFICATES: PayrollPackCertificates = {
 // Withholding nations
 // ===========================================================================
 
-function gbRegion(nation: string, label: string): PayrollRegionWithholding {
+function gbRegion(nation: string, label: string, implemented: boolean): PayrollRegionWithholding {
   return {
     region: nation,
     label,
-    implemented: false,
-    unimplementedReason:
-      `PAYE withholding for ${label} is not implemented: the 2026/27 tables are located `
-      + "but not transcribed (see GB_TAX_YEARS).",
+    implemented,
+    unimplementedReason: implemented
+      ? undefined
+      : `PAYE withholding for ${label} is not implemented: Scotland prices against its own `
+      + "bands and no SCT edition is transcribed (see GB_TAX_YEARS).",
     // NOT ESTABLISHED: whether the nation withholds from nonresidents' wages
     // earned there, and what it requires of a resident's out-of-nation wages.
     // Declared `unknown` (twice) rather than guessed, so a cross-border
@@ -223,9 +229,9 @@ function gbRegion(nation: string, label: string): PayrollRegionWithholding {
 export const GB_WITHHOLDING: PayrollPackWithholding = {
   country: "GB",
   regions: [
-    gbRegion("ENG", "England PAYE"),
-    gbRegion("SCT", "Scotland PAYE"),
-    gbRegion("WLS", "Wales PAYE"),
-    gbRegion("NIR", "Northern Ireland PAYE"),
+    gbRegion("ENG", "England PAYE", true),
+    gbRegion("SCT", "Scotland PAYE", false),
+    gbRegion("WLS", "Wales PAYE", true),
+    gbRegion("NIR", "Northern Ireland PAYE", true),
   ],
 };

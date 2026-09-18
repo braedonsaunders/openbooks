@@ -1,20 +1,16 @@
 /**
- * GB pack skeleton tests — pure, no database.
+ * GB pack declaration tests — pure, no database.
  *
- * What these prove: the pack declares its nations, certificates, slots and
- * refusals through the existing pack channels, transcribes NOTHING (no bands,
- * no thresholds, no rates anywhere in `engine/src/payroll/gb/`), and refuses
- * every calculation by name. Run with `node --import tsx
+ * What these prove: the pack declares its nations, certificates, slots,
+ * transcribed 2026/27 edition and refusals through the existing pack
+ * channels. The 2026/27 rUK tables ARE transcribed (rates.ts), the engine
+ * reads them (compute-statutory.ts), and parity.test.ts proves the numbers;
+ * Scotland stays refused by name. Run with `node --import tsx
  * engine/src/payroll/gb/pack.test.ts`.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { taxYearFor } from "../packs.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "../statutory-context.ts";
-import { computeGbStatutory } from "./compute-statutory.ts";
 import { gbPackFilings } from "./filings.ts";
 import {
   GB_CERTIFICATES,
@@ -22,29 +18,31 @@ import {
   GB_WITHHOLDING,
 } from "./jurisdictions.ts";
 import { GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
-import { GB_COUNTRY_CODE, GB_PACK } from "./pack.ts";
+import { GB_PACK } from "./pack.ts";
 
-test("GB nations are known and none are supported, with Scotland refused by name", () => {
+test("GB nations are known, rUK supported, Scotland refused by name", () => {
   assert.deepEqual(GB_REGIONS.known, ["ENG", "SCT", "WLS", "NIR"]);
-  assert.deepEqual(GB_REGIONS.supported, []);
-  assert.match(GB_REGIONS.unsupportedReason, /not transcribed/);
+  assert.deepEqual(GB_REGIONS.supported, ["ENG", "WLS", "NIR"]);
   const scottish = GB_REGIONS.unsupportedReasons?.SCT ?? "";
   assert.match(scottish, /Scottish/);
   assert.match(scottish, /SCT/);
+  assert.match(scottish, /no SCT edition is transcribed/);
 });
 
-test("withholding declares four unimplemented nations and guesses no cross-border rule", () => {
+test("withholding implements rUK nations, refuses Scotland, guesses no cross-border rule", () => {
   assert.equal(GB_WITHHOLDING.country, "GB");
   assert.deepEqual(
     GB_WITHHOLDING.regions.map((region) => region.region),
     ["ENG", "SCT", "WLS", "NIR"],
   );
   for (const region of GB_WITHHOLDING.regions) {
-    assert.equal(region.implemented, false, region.region);
+    assert.equal(region.implemented, region.region !== "SCT", region.region);
     assert.equal(region.residentWithholding, "unknown", region.region);
     assert.equal(region.residentWithholdingImplemented, false, region.region);
     assert.deepEqual(region.subRegions, [], region.region);
   }
+  const scotland = GB_WITHHOLDING.regions.find((region) => region.region === "SCT")!;
+  assert.match(scotland.unimplementedReason ?? "", /no SCT edition is transcribed/);
 });
 
 test("certificates are a starter checklist and a coding notice, not a W-4 clone", () => {
@@ -86,12 +84,30 @@ test("slots are PAYE plus employee/employer NIC only — no loan, no pension", (
   }
 });
 
-test("no year is transcribed and the pack is not installable", () => {
-  assert.deepEqual(GB_TAX_YEARS.editions, []);
+test("2026/27 IS transcribed with its edition stamp, and the pack is installable", () => {
+  assert.equal(GB_TAX_YEARS.editions.length, 1);
+  const [edition] = GB_TAX_YEARS.editions;
+  assert.equal(edition!.year, 2026);
+  assert.equal(edition!.effectiveFrom, "2026-04-06");
+  assert.match(edition!.citation, /rates-and-thresholds-for-employers-2026-to-2027/);
+  assert.equal(edition!.status, "published");
   assert.ok(GB_TAX_YEARS.regionsWithOwnTables.includes("SCT"));
-  assert.equal(GB_PACK.installable, false);
+  // SCT publishes separately and has no edition: no silent rUK fall-through.
+  assert.ok(!GB_TAX_YEARS.editions.some((entry) => entry.region === "SCT"));
+  assert.equal(GB_PACK.installable, true);
   assert.equal(GB_PACK.statutoryCurrency, "GBP");
   assert.equal(GB_PACK_RATES.country, "GB");
+});
+
+test("the Employment Allowance is tenant-entered, never a computed constant", () => {
+  assert.deepEqual(
+    GB_PACK_RATES.slots.map((slot) => slot.key),
+    ["gb_employment_allowance"],
+  );
+  const [slot] = GB_PACK_RATES.slots;
+  assert.equal(slot!.scope, "org");
+  assert.equal(slot!.fields[0]!.max, "10500");
+  assert.match(slot!.variesBecause, /single-director/);
 });
 
 test("the GB tax year opens 6 April and is named for the opening year", () => {
@@ -110,37 +126,4 @@ test("filings declare the PAYE program type and no year-end return yet", () => {
   assert.deepEqual(filings.yearEnd, []);
 });
 
-function gbContext(overrides: { taxYear: number }): PayrollStatutoryComputeContext {
-  return {
-    tx: {},
-    orgId: "org",
-    documentId: "doc",
-    employeePartyId: "emp",
-    employeeName: "Test Employee",
-    taxYear: overrides.taxYear,
-    country: GB_COUNTRY_CODE,
-    region: "ENG",
-    run: {},
-    emp: {},
-    filingAccountId: null,
-    periodsPerYear: 12,
-    income: "0",
-    nonPeriodic: "0",
-    pensionable: "0",
-    insurable: "0",
-    deduction: () => "0",
-    pushStatutory: (() => {}) as unknown as PushStatutoryFn,
-    storedCertificates: [],
-    certificateFor: () => null,
-    bool: () => false,
-    assertRegionSupported: () => {},
-    employerLevies: {},
-  } as unknown as PayrollStatutoryComputeContext;
-}
 
-test("computeGbStatutory refuses the untranscribed year by name", async () => {
-  await assert.rejects(
-    computeGbStatutory(gbContext({ taxYear: 2026 })),
-    /no transcribed.*tables for 2026/,
-  );
-});
