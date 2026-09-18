@@ -93,7 +93,7 @@ test('partyless control balances surface as an explicit row and tie the control 
       assert.ok(detail.rows.every((row) => row.partyId !== null))
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -121,7 +121,7 @@ test('settlement dust lands on the right party and the total still ties (F-t08-0
       assert.equal(customer.total, '-0.0100')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -141,7 +141,7 @@ test('a clean subledger reads exactly as before: no residual rows (F-t08-004/006
       )
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -165,6 +165,6 @@ test('AP residual presents credit-normal control positive and names the vendor (
       assert.equal(stray.current, '75.0000')
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

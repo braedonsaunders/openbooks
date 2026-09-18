@@ -116,6 +116,6 @@ test('open AR counts only unpaid lines and renders dates as dates', { skip: !pro
     assert.equal(Number(row[linesIdx]), 2, 'only lines with remaining balance count (paid invoice + consumed payments excluded)')
     assert.equal(row[dueIdx], '2026-06-30', 'oldest due date renders as a date, never a datetime')
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

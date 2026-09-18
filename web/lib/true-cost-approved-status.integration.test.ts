@@ -41,6 +41,6 @@ test('true cost labour bases count approved time only', { skip: !process.env.OPE
       assert.equal(data.kpis.billedHours, 8)
     })
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
