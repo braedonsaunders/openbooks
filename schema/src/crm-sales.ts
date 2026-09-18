@@ -32,6 +32,22 @@ export const crmOpportunityStatuses = pgTable(
     isWon: boolean("is_won").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * What entering this stage requires (0175). The status declares the
+     * policy; `validateOpportunityStageTransition` in engine/src/crm-math.ts
+     * is the single enforcement point every writer calls, so the board, the
+     * drawer, imports and scripts refuse the same transitions identically.
+     *
+     * The column default is false — a new stage gates nothing until somebody
+     * configures it — but 0175 backfills `requiresWinLossReason` on every
+     * existing closed-and-not-won status, and `ensureCrmDefaults` seeds it on
+     * the default Closed-lost stage, so the loss-reason rule the edit route
+     * used to hard-code survives as configuration rather than as code.
+     */
+    requiresLines: boolean("requires_lines").notNull().default(false),
+    requiresPrimaryContact: boolean("requires_primary_contact").notNull().default(false),
+    requiresPositiveAmount: boolean("requires_positive_amount").notNull().default(false),
+    requiresWinLossReason: boolean("requires_win_loss_reason").notNull().default(false),
     ...auditColumns,
   },
   (t) => [
@@ -133,12 +149,28 @@ export const crmOpportunityLines = pgTable(
     amount: money("amount").notNull().default("0"),
     probability: integer("probability"),
     expectedAmount: money("expected_amount").notNull().default("0"),
+    /**
+     * Expected cost, in the opportunity's currency (0175). NULLABLE on
+     * purpose: "cost not recorded" and "cost is zero" are different facts —
+     * zero reports a 100% margin, absent reports no margin — and every line
+     * written before 0175 is uncosted. `costAmount` is the stored extension
+     * of `unitCost`, rounded by the writer exactly as `amount` extends
+     * `unitPrice`, so a reader never re-derives it.
+     *
+     * Cost may exceed price: a deal sold below cost is a real deal and the
+     * one a margin report most needs to show.
+     */
+    unitCost: money("unit_cost"),
+    costAmount: money("cost_amount"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("crm_opportunity_lines_number").on(t.opportunityId, t.lineNumber),
     index("crm_opportunity_lines_opportunity").on(t.opportunityId),
     check("crm_opportunity_line_values", sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.amount} >= 0 and ${t.expectedAmount} >= 0 and (${t.probability} is null or (${t.probability} >= 0 and ${t.probability} <= 100))`),
+    // All-or-nothing: cost_amount is a derivation of unit_cost, so a row with
+    // one and not the other carries a derivation nobody can reproduce.
+    check("crm_opportunity_line_cost", sql`(${t.unitCost} is null or ${t.unitCost} >= 0) and (${t.costAmount} is null or ${t.costAmount} >= 0) and ((${t.unitCost} is null) = (${t.costAmount} is null))`),
   ],
 );
 

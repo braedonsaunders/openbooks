@@ -363,6 +363,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0175_payroll_country_pack_open.sql",
     "0176_pay_component_system_key_shape.sql",
     "0177_payroll_employer_levy_opening_rls.sql",
+    "0178_crm_cost_and_stage_policy.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1768,8 +1769,6 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
   // is reviewed and pinned — the historical snapshot itself never changes.
   // Allocation kernel (fleet A10): read sees rules/runs/lineage, manage
   // authors rules and drivers, run executes, approve decides gates.
-  // In-app issue reporting (0173): filing sends generalized report text OUT
-  // of the installation, so a legacy API key must not acquire it silently.
   const postSnapshotAdditions = [
     "allocations.read",
     "allocations.manage",

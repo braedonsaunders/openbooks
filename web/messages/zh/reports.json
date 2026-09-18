@@ -614,6 +614,22 @@
       "allocation_lineage": {
         "label": "分摊溯源",
         "description": "将每个分摊行追溯至规则版本、来源期间、科目及维度，并列示动因份额与金额。需要分摊权限。"
+      },
+      "crm_opportunities": {
+        "label": "商机",
+        "description": "包含阶段、关单日期、金额、概率及负责人的销售商机信息。"
+      },
+      "crm_opportunity_lines": {
+        "label": "商机明细",
+        "description": "销售商机中的产品和服务行，包含数量、单价、金额、成本及品类关联。"
+      },
+      "crm_account_profiles": {
+        "label": "CRM账户与线索",
+        "description": "包含生命周期阶段、资格评估、行业分类及销售区域的客户画像。"
+      },
+      "crm_activities": {
+        "label": "CRM跟进活动",
+        "description": "涵盖任务、通话、日程、邮件与跟进笔记的客户互动记录。"
       }
     },
     "columns": {
@@ -771,38 +787,6 @@
         "default_cost": "默认成本",
         "description": "描述",
         "recovery_account": "成本回收科目"
-      },
-      "inventory_lot_movements": {
-        "lot_number": "批次号",
-        "expires_on": "到期日",
-        "item": "物料",
-        "item_code": "物料编码",
-        "item_name": "物料名称",
-        "movement_kind": "变动类型",
-        "kind": "变动类型",
-        "moved_at": "变动日期",
-        "quantity": "数量",
-        "unit_cost": "单位成本",
-        "total_value": "总价值",
-        "location": "库位",
-        "location_code": "库存库位",
-        "status": "过账状态",
-        "document_number": "单据号",
-        "party_name": "往来方",
-        "document_date": "交易日期",
-        "memo": "备注",
-        "reversal_reason": "冲销原因",
-        "movement_id": "变动（ID）",
-        "lot_id": "批次（ID）",
-        "item_id": "物料（ID）",
-        "document_id": "交易（ID）",
-        "document_kind": "单据类型",
-        "stock_location_id": "库存库位（ID）",
-        "document_line_id": "交易行（ID）",
-        "journal_entry_id": "分录（ID）",
-        "transaction_entry_id": "交易分录（ID）",
-        "paired_movement_id": "配对变动（ID）",
-        "reverses_movement_id": "被冲销变动（ID）"
       },
       "inventory_lot_movements": {
         "lot_number": "批次号",
@@ -1074,6 +1058,106 @@
         "amount": "金额",
         "residual": "残差",
         "created_at": "创建时间"
+      },
+      "crm_opportunities": {
+        "opportunity_number": "商机编号",
+        "title": "商机标题",
+        "party_name": "客户账户",
+        "contact_name": "主要联系人",
+        "owner_name": "所有人",
+        "sales_team_name": "销售团队",
+        "lead_source_name": "线索来源",
+        "status_name": "阶段",
+        "status_key": "阶段标识",
+        "is_closed": "已关闭",
+        "is_won": "已赢单",
+        "forecast_category": "预测类别",
+        "probability": "成交概率 (%)",
+        "currency": "币种",
+        "projected_amount": "预计金额",
+        "weighted_amount": "加权金额",
+        "range_low": "预期下限",
+        "range_high": "预期上限",
+        "expected_close_date": "预计关单日期",
+        "next_step": "下一步计划",
+        "win_loss_reason": "赢单/输单原因",
+        "description": "说明",
+        "subsidiary": "附属公司",
+        "department": "部门",
+        "location": "地点",
+        "class": "分类",
+        "created_at": "创建时间",
+        "id": "ID",
+        "party_id": "客户实体 (ID)"
+      },
+      "crm_opportunity_lines": {
+        "opportunity_number": "商机编号",
+        "opportunity_title": "商机标题",
+        "line_number": "行号",
+        "item_name": "商品或服务",
+        "item_code": "物料编码",
+        "description": "说明",
+        "quantity": "数量",
+        "unit": "单位",
+        "unit_price": "单价",
+        "amount": "金额",
+        "unit_cost": "单位成本",
+        "cost_amount": "成本金额",
+        "gross_profit": "毛利润",
+        "probability": "成交概率 (%)",
+        "expected_amount": "期望金额",
+        "party_name": "客户账户",
+        "owner_name": "所有人",
+        "status_name": "阶段",
+        "expected_close_date": "预计关单日期",
+        "currency": "币种",
+        "created_at": "创建时间",
+        "id": "ID",
+        "opportunity_id": "商机 (ID)"
+      },
+      "crm_account_profiles": {
+        "party_name": "客户账户",
+        "lifecycle_stage": "生命周期阶段",
+        "status_name": "阶段",
+        "is_qualified": "已认定合格",
+        "is_closed": "已关闭",
+        "owner_name": "所有人",
+        "territory_name": "销售区域",
+        "lead_source_name": "线索来源",
+        "industry": "行业",
+        "category": "类别",
+        "annual_revenue": "年营业额",
+        "employee_count": "员工规模",
+        "qualification_score": "资质评分",
+        "email": "电子邮箱",
+        "phone": "联系电话",
+        "website": "公司网站",
+        "subsidiary": "附属公司",
+        "next_action_at": "下次跟进时间",
+        "last_activity_at": "最后互动时间",
+        "qualified_at": "认定时间",
+        "converted_at": "转化时间",
+        "acquired_on": "建档日期",
+        "is_active": "已启用",
+        "created_at": "创建时间",
+        "id": "ID",
+        "party_id": "客户实体 (ID)"
+      },
+      "crm_activities": {
+        "kind": "类型",
+        "status": "状态",
+        "subject": "主题",
+        "priority": "优先级",
+        "owner_name": "所有人",
+        "assigned_name": "指派给",
+        "starts_at": "开始时间",
+        "ends_at": "结束时间",
+        "due_at": "截止时间",
+        "completed_at": "完成时间",
+        "duration_minutes": "时长 (分钟)",
+        "is_private": "私密活动",
+        "created_at": "创建时间",
+        "id": "ID"
       }
     },
     "enumValues": {
@@ -1265,6 +1349,22 @@
     "payroll-parallel-run-totals": {
       "name": "并行核算组成部分合计",
       "description": "同一对账的汇总版：按组成部分列示原服务商支付总额、本系统计算额与差异——以便将期间差异归因至产生差异的组成部分。"
+    },
+    "crm-pipeline-summary": {
+      "name": "按阶段汇总管道商机",
+      "description": "按阶段与币种细分的未结商机金额、数量及加权预期汇总。"
+    },
+    "crm-forecast-by-owner": {
+      "name": "按负责人统计管道预测",
+      "description": "按销售代表与预测类别细分的预计金额与加权预测分析。"
+    },
+    "crm-win-loss-analysis": {
+      "name": "商机赢单与输单复盘",
+      "description": "已关单商机的赢单/输单结果、原因及成交金额综合分析。"
+    },
+    "crm-lead-conversion-funnel": {
+      "name": "线索阶段与来源概览",
+      "description": "按生命周期阶段、跟进状态与获客渠道细分的客户分布统计。"
     }
   },
   "generalLedger": {

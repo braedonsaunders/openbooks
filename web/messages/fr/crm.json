@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "Piste", "prospect": "Prospect", "customer": "Client" },
+  "stages": {
+    "lead": "Piste",
+    "prospect": "Prospect",
+    "customer": "Client"
+  },
   "fields": {
     "accountName": "Nom du compte",
     "lifecycleStage": "Étape du cycle de vie",
@@ -42,6 +46,10 @@
     "description": "Description",
     "quantity": "Quantité",
     "unitPrice": "Prix unitaire",
+    "unitCost": "Coût unitaire",
+    "lineCost": "Coût de ligne",
+    "grossProfit": "Marge brute",
+    "grossMargin": "Pourcentage de marge",
     "winLossReason": "Motif du gain ou de la perte",
     "number": "Numéro",
     "projectedAmount": "Montant prévu",
@@ -110,7 +118,10 @@
     "high": "Élevée",
     "urgent": "Urgente"
   },
-  "relatedTypes": { "account": "Compte", "opportunity": "Occasion" },
+  "relatedTypes": {
+    "account": "Compte",
+    "opportunity": "Occasion"
+  },
   "opportunities": {
     "title": "Occasions",
     "description": "Gérer les étapes du pipeline, les fourchettes de revenus, les équipes, les produits et les documents de vente.",
@@ -121,6 +132,9 @@
     "emptyDescription": "Créez une occasion pour alimenter le pipeline.",
     "lines": "Produits et services",
     "addLine": "Ajouter une ligne",
+    "totalCost": "Coût total",
+    "costNotRecorded": "Non chiffré",
+    "partiallyCosted": "{costed} sur {total} lignes ont un coût — la marge globale apparaîtra une fois chaque ligne chiffrée.",
     "selectItem": "Sélectionner un article",
     "createEstimate": "Créer un devis",
     "estimateCreated": "Devis créé",
@@ -242,7 +256,11 @@
       "isDefault": "Par défaut",
       "isActive": "Actif",
       "rulesHint": "Facultatif. Chaque règle compare un champ à une valeur pour router les pistes ici. Champs : region, country, annualRevenue. Opérateurs : equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]"
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "requiresLines": "Lignes obligatoires",
+      "requiresPrimaryContact": "Contact principal obligatoire",
+      "requiresPositiveAmount": "Montant positif obligatoire",
+      "requiresWinLossReason": "Motif gain/perte obligatoire"
     },
     "states": {
       "active": "Actif",
@@ -297,5 +315,7 @@
     "titleRequired": "Saisissez un titre d’occasion.",
     "lossReasonRequired": "Un motif de clôture est requis pour les opportunités perdues"
   },
-  "feedback": { "createFailed": "Le brouillon n’a pas pu être créé." }
+  "feedback": {
+    "createFailed": "Le brouillon n’a pas pu être créé."
+  }
 }

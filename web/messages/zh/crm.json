@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "线索", "prospect": "潜在客户", "customer": "客户" },
+  "stages": {
+    "lead": "线索",
+    "prospect": "潜在客户",
+    "customer": "客户"
+  },
   "fields": {
     "accountName": "客户名称",
     "lifecycleStage": "生命周期阶段",
@@ -42,6 +46,10 @@
     "description": "说明",
     "quantity": "数量",
     "unitPrice": "单价",
+    "unitCost": "单位成本",
+    "lineCost": "行成本",
+    "grossProfit": "毛利润",
+    "grossMargin": "毛利率",
     "winLossReason": "赢单/丢单原因",
     "number": "编号",
     "projectedAmount": "预测金额",
@@ -110,7 +118,10 @@
     "high": "高",
     "urgent": "紧急"
   },
-  "relatedTypes": { "account": "客户", "opportunity": "商机" },
+  "relatedTypes": {
+    "account": "客户",
+    "opportunity": "商机"
+  },
   "opportunities": {
     "title": "商机",
     "description": "管理销售管道阶段、收入区间、团队、产品和销售单据。",
@@ -121,6 +132,9 @@
     "emptyDescription": "创建商机以开始搭建销售管道。",
     "lines": "产品和服务",
     "addLine": "添加明细行",
+    "totalCost": "总成本",
+    "costNotRecorded": "未核算成本",
+    "partiallyCosted": "{costed}/{total} 行已核算成本 — 全部核算后将显示商机毛利率。",
     "selectItem": "选择项目",
     "createEstimate": "创建报价单",
     "estimateCreated": "报价单已创建",
@@ -242,7 +256,11 @@
       "isClosed": "已成交状态",
       "isWon": "赢单状态",
       "isDefault": "默认",
-      "isActive": "启用"
+      "isActive": "启用",
+      "requiresLines": "必须包含明细行",
+      "requiresPrimaryContact": "必须指定主要联系人",
+      "requiresPositiveAmount": "必须为正金额",
+      "requiresWinLossReason": "必须填写赢单/输单原因"
     },
     "states": {
       "active": "启用",
@@ -250,8 +268,14 @@
       "yes": "是",
       "no": "否"
     },
-    "matchModes": { "all": "匹配所有规则", "any": "匹配任一规则" },
-    "targetTypes": { "user": "销售代表", "team": "销售团队" },
+    "matchModes": {
+      "all": "匹配所有规则",
+      "any": "匹配任一规则"
+    },
+    "targetTypes": {
+      "user": "销售代表",
+      "team": "销售团队"
+    },
     "validation": {
       "nameRequired": "请输入名称。",
       "invalidRules": "分派规则必须是有效的 JSON 数组。"
@@ -291,5 +315,7 @@
     "titleRequired": "请输入商机标题。",
     "lossReasonRequired": "关闭为输单需要填写输单原因"
   },
-  "feedback": { "createFailed": "无法创建草稿。" }
+  "feedback": {
+    "createFailed": "无法创建草稿。"
+  }
 }

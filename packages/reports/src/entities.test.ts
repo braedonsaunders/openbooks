@@ -98,3 +98,38 @@ test('every inventory lot movement join is pinned to the base organization', () 
   assert.match(compiled.text, /WHERE im\.org_id = \$1/)
   assert.deepEqual(compiled.values, ['00000000-0000-4000-8000-000000000001'])
 })
+
+test('crm entities declare crm featureKey, permissions, and safe scope', () => {
+  const crmKeys = ['crm_opportunities', 'crm_opportunity_lines', 'crm_account_profiles', 'crm_activities'] as const
+  for (const key of crmKeys) {
+    const entity = REPORT_ENTITY_MAP[key]
+    assert.ok(entity, `CRM entity ${key} must exist in catalog`)
+    assert.equal(entity.featureKey, 'crm')
+    assert.ok(entity.requiredPermission?.startsWith('crm.'), `${key} permission must be in crm domain`)
+  }
+
+  const opp = REPORT_ENTITY_MAP.crm_opportunities!
+  assert.equal(opp.requiredPermission, 'crm.opportunities.read')
+  assert.deepEqual(opp.subsidiaryScope, { column: 'o.subsidiary_id', sharedNull: true })
+  assert.equal(opp.currencyColumn, 'currency')
+  assert.equal(opp.defaultPeriodField, 'expected_close_date')
+
+  const oppLines = REPORT_ENTITY_MAP.crm_opportunity_lines!
+  assert.equal(oppLines.requiredPermission, 'crm.opportunities.read')
+  assert.deepEqual(oppLines.subsidiaryScope, { column: 'o.subsidiary_id', sharedNull: true })
+  assert.equal(oppLines.currencyColumn, 'currency')
+
+  const profiles = REPORT_ENTITY_MAP.crm_account_profiles!
+  assert.equal(profiles.requiredPermission, 'crm.accounts.read')
+  assert.deepEqual(profiles.subsidiaryScope, { column: 'p.subsidiary_id', sharedNull: true })
+  assert.equal(profiles.defaultPeriodField, 'created_at')
+
+  const activities = REPORT_ENTITY_MAP.crm_activities!
+  assert.equal(activities.requiredPermission, 'crm.activities.read')
+  assert.equal(activities.subsidiaryScope, null)
+  assert.deepEqual(activities.baseFilter, {
+    combinator: 'and',
+    rules: [{ field: 'is_private', op: 'is_false' }],
+  })
+})
+

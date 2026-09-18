@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "Lead", "prospect": "Prospect", "customer": "Cliente" },
+  "stages": {
+    "lead": "Lead",
+    "prospect": "Prospect",
+    "customer": "Cliente"
+  },
   "fields": {
     "accountName": "Nome da conta",
     "lifecycleStage": "Estágio do ciclo de vida",
@@ -42,6 +46,10 @@
     "description": "Descrição",
     "quantity": "Quantidade",
     "unitPrice": "Preço unitário",
+    "unitCost": "Custo unitário",
+    "lineCost": "Custo da linha",
+    "grossProfit": "Lucro bruto",
+    "grossMargin": "Margem bruta",
     "winLossReason": "Motivo de ganho/perda",
     "number": "Número",
     "projectedAmount": "Valor projetado",
@@ -110,7 +118,10 @@
     "high": "Alta",
     "urgent": "Urgente"
   },
-  "relatedTypes": { "account": "Conta", "opportunity": "Oportunidade" },
+  "relatedTypes": {
+    "account": "Conta",
+    "opportunity": "Oportunidade"
+  },
   "opportunities": {
     "title": "Oportunidades",
     "description": "Gerencie estágios de pipeline, faixas de receita, equipes, produtos e documentos de venda.",
@@ -121,6 +132,9 @@
     "emptyDescription": "Crie uma oportunidade para começar a construir o pipeline.",
     "lines": "Produtos e serviços",
     "addLine": "Adicionar linha",
+    "totalCost": "Custo total",
+    "costNotRecorded": "Sem custo registrado",
+    "partiallyCosted": "{costed} de {total} linhas possuem custo — a margem do negócio será calculada quando todas as linhas tiverem custo.",
     "selectItem": "Selecione um item",
     "createEstimate": "Criar orçamento",
     "estimateCreated": "Orçamento criado",
@@ -242,7 +256,11 @@
       "isClosed": "Status fechado",
       "isWon": "Status ganho",
       "isDefault": "Padrão",
-      "isActive": "Ativo"
+      "isActive": "Ativo",
+      "requiresLines": "Exigir itens",
+      "requiresPrimaryContact": "Exigir contato principal",
+      "requiresPositiveAmount": "Exigir valor positivo",
+      "requiresWinLossReason": "Exigir motivo de ganho/perda"
     },
     "states": {
       "active": "Ativo",
@@ -250,8 +268,14 @@
       "yes": "Sim",
       "no": "Não"
     },
-    "matchModes": { "all": "Corresponder a todas as regras", "any": "Corresponder a qualquer regra" },
-    "targetTypes": { "user": "Representante de vendas", "team": "Equipe de vendas" },
+    "matchModes": {
+      "all": "Corresponder a todas as regras",
+      "any": "Corresponder a qualquer regra"
+    },
+    "targetTypes": {
+      "user": "Representante de vendas",
+      "team": "Equipe de vendas"
+    },
     "validation": {
       "nameRequired": "Informe um nome.",
       "invalidRules": "As regras de roteamento devem ser um array JSON válido."
@@ -291,5 +315,7 @@
     "titleRequired": "Informe um título de oportunidade.",
     "lossReasonRequired": "Um motivo de perda é obrigatório para fechar como perdida"
   },
-  "feedback": { "createFailed": "Não foi possível criar o rascunho." }
+  "feedback": {
+    "createFailed": "Não foi possível criar o rascunho."
+  }
 }

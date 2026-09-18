@@ -8,8 +8,10 @@ import { crmSharedScope } from '../../../../lib/crm-scope'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 import { loadOpportunity } from '../../../../lib/crm'
 import type { OpportunityDrawer } from '../OpportunityDrawer'
+import type { KanbanOpportunity, KanbanStatus } from '../OpportunityKanban'
 
 /**
  * The opportunity list, split into a loader and a spec.
@@ -37,8 +39,13 @@ export interface OpportunitiesData {
   newLabel: string
   createFailed: string
   canManage: boolean
+  viewMode: 'board' | 'list'
   currentParams: Record<string, string | string[] | undefined>
   drawer: OpportunityDrawerProps | null
+  board: {
+    statuses: KanbanStatus[]
+    opportunities: KanbanOpportunity[]
+  } | null
 }
 
 export async function loadOpportunities(
@@ -48,6 +55,121 @@ export async function loadOpportunities(
   const manage = can(authz, 'crm.opportunities.manage')
   const t = await getTranslations('crm')
   const openId = pickString(sp.opportunity)
+  const viewMode: 'board' | 'list' = pickString(sp.view) === 'board' ? 'board' : 'list'
+
+  let board: OpportunitiesData['board'] = null
+  if (viewMode === 'board') {
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+    const [statusesResult, opportunitiesResult] = await Promise.all([
+      db.execute<{
+        id: string
+        key: string
+        name: string
+        sequence: number
+        probability: number
+        default_forecast_category: string
+        is_closed: boolean
+        is_won: boolean
+      }>(sql`
+        select id, key, name, sequence, probability, default_forecast_category, is_closed, is_won
+          from crm_opportunity_statuses
+         where org_id = ${authz.user.orgId} and is_active
+         order by sequence`),
+      db.execute<{
+        id: string
+        opportunity_number: string
+        title: string
+        party_id: string | null
+        party_name: string | null
+        primary_contact_id: string | null
+        contact_name: string | null
+        owner_user_id: string | null
+        owner_name: string | null
+        sales_team_name: string | null
+        status_id: string
+        forecast_category: string
+        probability: number
+        currency: string
+        projected_amount: string
+        weighted_amount: string
+        expected_close_date: string | null
+        next_step: string | null
+        win_loss_reason: string | null
+        updated_at: string
+        revision_token: string
+        last_activity_at: string | null
+        lines_count: number
+      }>(sql`
+        select o.id, o.opportunity_number, o.title, o.party_id, p.display_name as party_name,
+               o.primary_contact_id, c.name as contact_name, o.owner_user_id, u.name as owner_name,
+               st.name as sales_team_name, o.status_id,
+               o.forecast_category, o.probability, o.currency,
+               o.projected_amount::text, o.weighted_amount::text, o.expected_close_date::text, o.next_step,
+               o.win_loss_reason, o.updated_at::text,
+               ${documentRevisionCounterSql(sql`o.revision_seq`)} as revision_token,
+               (select max(coalesce(a.starts_at, a.due_at, a.created_at))::text
+                  from crm_activities a
+                  join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
+                 where l.org_id = o.org_id and l.subject_kind = 'opportunity' and l.subject_id = o.id) as last_activity_at,
+               (select count(*)::int from crm_opportunity_lines where opportunity_id = o.id and org_id = o.org_id) as lines_count
+          from crm_opportunities o
+          join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+          left join parties p on p.id = o.party_id and p.org_id = o.org_id
+          left join contacts c on c.id = o.primary_contact_id and c.org_id = o.org_id
+          left join users u on u.id = o.owner_user_id
+          left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
+         where o.org_id = ${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)}
+         order by o.expected_close_date nulls last, o.created_at desc
+         limit 500`),
+    ])
+
+    const kanbanStatuses: KanbanStatus[] = statusesResult.rows.map((row) => ({
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      sequence: row.sequence,
+      probability: row.probability,
+      defaultForecastCategory: row.default_forecast_category,
+      isClosed: row.is_closed,
+      isWon: row.is_won,
+    }))
+
+    const kanbanOpportunities: KanbanOpportunity[] = opportunitiesResult.rows.map((row) => {
+      const activeTimestamp = row.last_activity_at || row.updated_at
+      const isStagnant =
+        activeTimestamp ? new Date(activeTimestamp).getTime() < fourteenDaysAgo : false
+
+      return {
+        id: row.id,
+        opportunityNumber: row.opportunity_number,
+        title: row.title,
+        partyId: row.party_id,
+        partyName: row.party_name,
+        primaryContactId: row.primary_contact_id,
+        contactName: row.contact_name,
+        ownerUserId: row.owner_user_id,
+        ownerName: row.owner_name,
+        salesTeamName: row.sales_team_name,
+        statusId: row.status_id,
+        forecastCategory: row.forecast_category,
+        probability: row.probability,
+        currency: row.currency,
+        projectedAmount: row.projected_amount ?? '0',
+        weightedAmount: row.weighted_amount ?? '0',
+        expectedCloseDate: row.expected_close_date,
+        nextStep: row.next_step,
+        winLossReason: row.win_loss_reason,
+        updatedAt: row.revision_token || row.updated_at,
+        isStagnant,
+        linesCount: row.lines_count ?? 0,
+      }
+    })
+
+    board = {
+      statuses: kanbanStatuses,
+      opportunities: kanbanOpportunities,
+    }
+  }
 
   let drawer: OpportunityDrawerProps | null = null
   if (openId && isUuid(openId)) {
@@ -108,8 +230,10 @@ export async function loadOpportunities(
     newLabel: t('opportunities.new'),
     createFailed: t('feedback.createFailed'),
     canManage: manage,
+    viewMode,
     currentParams: sp,
     drawer,
+    board,
   }
 }
 
@@ -128,6 +252,15 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
       failed: data.createFailed,
     },
   }
+  const viewSwitcher = {
+    widget: 'opportunity-view-switcher',
+    props: {
+      view: data.viewMode,
+    },
+  }
+
+  const isBoard = data.viewMode === 'board' && data.board
+
   return page({
     route: '/crm/opportunities',
     layout: 'list',
@@ -135,18 +268,30 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newOpportunity.widget, newOpportunity.props, f('canManage'))],
+        actions: [
+          widget(viewSwitcher.widget, viewSwitcher.props),
+          widget(newOpportunity.widget, newOpportunity.props, f('canManage')),
+        ],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'opportunity',
-        sp: data.currentParams,
-        emptyAction: data.canManage ? newOpportunity : null,
-        drawer: data.drawer
-          ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]
-          : [],
-      }),
+      isBoard
+        ? widgetBlock('opportunity-kanban-board', {
+            statuses: data.board!.statuses,
+            opportunities: data.board!.opportunities,
+            canManage: data.canManage,
+            drawer: data.drawer
+              ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]
+              : [],
+          })
+        : widgetBlock('entity-list-view', {
+            recordType: 'opportunity',
+            sp: data.currentParams,
+            emptyAction: data.canManage ? newOpportunity : null,
+            drawer: data.drawer
+              ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]
+              : [],
+          }),
     ],
   })
 }

@@ -614,6 +614,22 @@
       "allocation_lineage": {
         "label": "Trazabilidad de repartos",
         "description": "Cada línea repartida vinculada a su versión de regla, período fuente, cuenta y dimensiones, con participación del inductor e importe. Requiere el permiso de reparto."
+      },
+      "crm_opportunities": {
+        "label": "Oportunidades",
+        "description": "Oportunidades de venta con etapas, fechas previstas de cierre, importes, probabilidades y propietarios."
+      },
+      "crm_opportunity_lines": {
+        "label": "Líneas de oportunidad",
+        "description": "Artículos y servicios de oportunidades con cantidades, precios, importes, costes y referencias."
+      },
+      "crm_account_profiles": {
+        "label": "Cuentas y clientes potenciales",
+        "description": "Perfiles de relación con etapas de ciclo de vida, cualificación, sector y territorio de ventas."
+      },
+      "crm_activities": {
+        "label": "Actividades de CRM",
+        "description": "Actividades comerciales y de relación como tareas, llamadas, reuniones, correos y notas."
       }
     },
     "columns": {
@@ -771,38 +787,6 @@
         "default_cost": "Costo predeterminado",
         "description": "Descripción",
         "recovery_account": "Cuenta de recuperación"
-      },
-      "inventory_lot_movements": {
-        "lot_number": "Número de lote",
-        "expires_on": "Fecha de vencimiento",
-        "item": "Artículo",
-        "item_code": "Código del artículo",
-        "item_name": "Nombre del artículo",
-        "movement_kind": "Tipo de movimiento",
-        "kind": "Tipo de movimiento",
-        "moved_at": "Fecha del movimiento",
-        "quantity": "Cantidad",
-        "unit_cost": "Costo unitario",
-        "total_value": "Valor total",
-        "location": "Ubicación",
-        "location_code": "Ubicación de inventario",
-        "status": "Estado de contabilización",
-        "document_number": "N.º de documento",
-        "party_name": "Tercero",
-        "document_date": "Fecha de la transacción",
-        "memo": "Memo",
-        "reversal_reason": "Motivo de reversión",
-        "movement_id": "Movimiento (id)",
-        "lot_id": "Lote (id)",
-        "item_id": "Artículo (id)",
-        "document_id": "Transacción (id)",
-        "document_kind": "Tipo de documento",
-        "stock_location_id": "Ubicación de inventario (id)",
-        "document_line_id": "Línea de transacción (id)",
-        "journal_entry_id": "Asiento (id)",
-        "transaction_entry_id": "Asiento de transacción (id)",
-        "paired_movement_id": "Movimiento vinculado (id)",
-        "reverses_movement_id": "Movimiento revertido (id)"
       },
       "inventory_lot_movements": {
         "lot_number": "Número de lote",
@@ -1074,6 +1058,106 @@
         "amount": "Importe",
         "residual": "Residual",
         "created_at": "Creado el"
+      },
+      "crm_opportunities": {
+        "opportunity_number": "Oportunidad #",
+        "title": "Título",
+        "party_name": "Cuenta",
+        "contact_name": "Contacto principal",
+        "owner_name": "Propietario",
+        "sales_team_name": "Equipo de ventas",
+        "lead_source_name": "Fuente de captación",
+        "status_name": "Etapa",
+        "status_key": "Clave de etapa",
+        "is_closed": "Cerrado",
+        "is_won": "Ganado",
+        "forecast_category": "Categoría de previsión",
+        "probability": "Probabilidad (%)",
+        "currency": "Moneda",
+        "projected_amount": "Importe proyectado",
+        "weighted_amount": "Importe ponderado",
+        "range_low": "Rango inferior",
+        "range_high": "Rango superior",
+        "expected_close_date": "Fecha prevista de cierre",
+        "next_step": "Siguiente paso",
+        "win_loss_reason": "Motivo de ganancia/pérdida",
+        "description": "Descripción",
+        "subsidiary": "Filial",
+        "department": "Departamento",
+        "location": "Ubicación",
+        "class": "Clase",
+        "created_at": "Creado el",
+        "id": "ID",
+        "party_id": "Tercero (ID)"
+      },
+      "crm_opportunity_lines": {
+        "opportunity_number": "Oportunidad #",
+        "opportunity_title": "Título de oportunidad",
+        "line_number": "Nº línea",
+        "item_name": "Artículo",
+        "item_code": "Código de artículo",
+        "description": "Descripción",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "unit_price": "Precio unitario",
+        "amount": "Importe",
+        "unit_cost": "Coste unitario",
+        "cost_amount": "Importe de coste",
+        "gross_profit": "Beneficio bruto",
+        "probability": "Probabilidad (%)",
+        "expected_amount": "Importe esperado",
+        "party_name": "Cuenta",
+        "owner_name": "Propietario",
+        "status_name": "Etapa",
+        "expected_close_date": "Fecha prevista de cierre",
+        "currency": "Moneda",
+        "created_at": "Creado el",
+        "id": "ID",
+        "opportunity_id": "Oportunidad (ID)"
+      },
+      "crm_account_profiles": {
+        "party_name": "Cuenta",
+        "lifecycle_stage": "Etapa de ciclo de vida",
+        "status_name": "Etapa",
+        "is_qualified": "Cualificado",
+        "is_closed": "Cerrado",
+        "owner_name": "Propietario",
+        "territory_name": "Territorio",
+        "lead_source_name": "Fuente de captación",
+        "industry": "Sector",
+        "category": "Categoría",
+        "annual_revenue": "Ingresos anuales",
+        "employee_count": "Nº de empleados",
+        "qualification_score": "Puntuación de cualificación",
+        "email": "Correo electrónico",
+        "phone": "Teléfono",
+        "website": "Sitio web",
+        "subsidiary": "Filial",
+        "next_action_at": "Próxima acción el",
+        "last_activity_at": "Última actividad el",
+        "qualified_at": "Cualificado el",
+        "converted_at": "Convertido el",
+        "acquired_on": "Adquirido el",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "ID",
+        "party_id": "Tercero (ID)"
+      },
+      "crm_activities": {
+        "kind": "Tipo",
+        "status": "Estado",
+        "subject": "Asunto",
+        "priority": "Prioridad",
+        "owner_name": "Propietario",
+        "assigned_name": "Asignado a",
+        "starts_at": "Empieza el",
+        "ends_at": "Termina el",
+        "due_at": "Vence el",
+        "completed_at": "Completado el",
+        "duration_minutes": "Duración (minutos)",
+        "is_private": "Privado",
+        "created_at": "Creado el",
+        "id": "ID"
       }
     },
     "enumValues": {
@@ -1248,6 +1332,22 @@
     "payroll-parallel-run-totals": {
       "name": "Totales del ciclo paralelo por componente",
       "description": "La misma conciliación acumulada: por componente, lo que pagó en total el proveedor anterior, lo que calcula esta nómina y la diferencia, para atribuir una diferencia del período a los componentes que la produjeron."
+    },
+    "crm-pipeline-summary": {
+      "name": "Resumen de pipeline por etapa",
+      "description": "Importes de pipeline, recuento y valores ponderados desglosados por etapa y moneda."
+    },
+    "crm-forecast-by-owner": {
+      "name": "Previsión de pipeline por propietario",
+      "description": "Valores proyectados y ponderados de oportunidades desglosados por representante y categoría."
+    },
+    "crm-win-loss-analysis": {
+      "name": "Análisis de ganancias y pérdidas",
+      "description": "Resultados de oportunidades cerradas, motivos de ganancia o pérdida y totales agrupados."
+    },
+    "crm-lead-conversion-funnel": {
+      "name": "Ciclo de vida y fuentes de leads",
+      "description": "Perfiles de CRM categorizados por etapa de ciclo de vida, estado y fuente de captación."
     }
   },
   "generalLedger": {

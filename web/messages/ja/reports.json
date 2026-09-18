@@ -614,6 +614,22 @@
       "allocation_lineage": {
         "label": "配賦系統",
         "description": "配賦された各行をルールバージョン、配賦元期間、勘定、分析軸にひも付け、ドライバー按分率と金額を示します。配賦権限が必要です。"
+      },
+      "crm_opportunities": {
+        "label": "商談",
+        "description": "ステージ、完了予定日、金額、確度、担当者別の商談パイプライン。"
+      },
+      "crm_opportunity_lines": {
+        "label": "商談明細",
+        "description": "商談に含まれる商品・サービス品目の数量、単価、金額、原価情報。"
+      },
+      "crm_account_profiles": {
+        "label": "CRM取引先＆リード",
+        "description": "ライフサイクルステージ、評価スコア、業種、テリトリー別の顧客プロファイル。"
+      },
+      "crm_activities": {
+        "label": "CRMアクティビティ",
+        "description": "タスク、通話、商談イベント、メール、メモ等の顧客対応履歴。"
       }
     },
     "columns": {
@@ -771,38 +787,6 @@
         "default_cost": "デフォルト原価",
         "description": "説明",
         "recovery_account": "原価回収勘定"
-      },
-      "inventory_lot_movements": {
-        "lot_number": "ロット番号",
-        "expires_on": "有効期限",
-        "item": "品目",
-        "item_code": "品目コード",
-        "item_name": "品目名",
-        "movement_kind": "変動種別",
-        "kind": "変動種別",
-        "moved_at": "変動日",
-        "quantity": "数量",
-        "unit_cost": "単位原価",
-        "total_value": "合計金額",
-        "location": "拠点",
-        "location_code": "在庫拠点",
-        "status": "記帳ステータス",
-        "document_number": "書類番号",
-        "party_name": "取引先",
-        "document_date": "取引日",
-        "memo": "摘要",
-        "reversal_reason": "取消理由",
-        "movement_id": "変動（ID）",
-        "lot_id": "ロット（ID）",
-        "item_id": "品目（ID）",
-        "document_id": "取引（ID）",
-        "document_kind": "書類種別",
-        "stock_location_id": "在庫拠点（ID）",
-        "document_line_id": "取引明細（ID）",
-        "journal_entry_id": "仕訳（ID）",
-        "transaction_entry_id": "取引仕訳（ID）",
-        "paired_movement_id": "対になる変動（ID）",
-        "reverses_movement_id": "取消対象変動（ID）"
       },
       "inventory_lot_movements": {
         "lot_number": "ロット番号",
@@ -1074,6 +1058,106 @@
         "amount": "金額",
         "residual": "残差",
         "created_at": "作成日時"
+      },
+      "crm_opportunities": {
+        "opportunity_number": "商談番号",
+        "title": "件名",
+        "party_name": "取引先名",
+        "contact_name": "主担当者",
+        "owner_name": "所有者",
+        "sales_team_name": "営業チーム",
+        "lead_source_name": "リード獲得元",
+        "status_name": "ステージ",
+        "status_key": "ステージキー",
+        "is_closed": "完了",
+        "is_won": "成約",
+        "forecast_category": "予測カテゴリ",
+        "probability": "確度 (%)",
+        "currency": "通貨",
+        "projected_amount": "予測金額",
+        "weighted_amount": "加重金額",
+        "range_low": "想定下限",
+        "range_high": "想定上限",
+        "expected_close_date": "完了予定日",
+        "next_step": "次のアクション",
+        "win_loss_reason": "成約/失注理由",
+        "description": "説明",
+        "subsidiary": "子会社",
+        "department": "部門",
+        "location": "拠点",
+        "class": "クラス",
+        "created_at": "作成日時",
+        "id": "ID",
+        "party_id": "取引先 (ID)"
+      },
+      "crm_opportunity_lines": {
+        "opportunity_number": "商談番号",
+        "opportunity_title": "商談名",
+        "line_number": "行番号",
+        "item_name": "品目名",
+        "item_code": "品目コード",
+        "description": "説明",
+        "quantity": "数量",
+        "unit": "単位",
+        "unit_price": "単価",
+        "amount": "金額",
+        "unit_cost": "単位原価",
+        "cost_amount": "原価額",
+        "gross_profit": "粗利益",
+        "probability": "確度 (%)",
+        "expected_amount": "期待金額",
+        "party_name": "取引先名",
+        "owner_name": "所有者",
+        "status_name": "ステージ",
+        "expected_close_date": "完了予定日",
+        "currency": "通貨",
+        "created_at": "作成日時",
+        "id": "ID",
+        "opportunity_id": "商談 (ID)"
+      },
+      "crm_account_profiles": {
+        "party_name": "取引先名",
+        "lifecycle_stage": "ライフサイクルステージ",
+        "status_name": "ステージ",
+        "is_qualified": "認定済み",
+        "is_closed": "完了",
+        "owner_name": "所有者",
+        "territory_name": "テリトリー",
+        "lead_source_name": "リード獲得元",
+        "industry": "業種",
+        "category": "カテゴリ",
+        "annual_revenue": "年間売上高",
+        "employee_count": "従業員数",
+        "qualification_score": "評価スコア",
+        "email": "メールアドレス",
+        "phone": "電話番号",
+        "website": "ウェブサイト",
+        "subsidiary": "子会社",
+        "next_action_at": "次回アクション予定",
+        "last_activity_at": "最終アクティビティ",
+        "qualified_at": "認定日時",
+        "converted_at": "転換日時",
+        "acquired_on": "獲得日",
+        "is_active": "有効",
+        "created_at": "作成日時",
+        "id": "ID",
+        "party_id": "取引先 (ID)"
+      },
+      "crm_activities": {
+        "kind": "種別",
+        "status": "ステータス",
+        "subject": "件名",
+        "priority": "優先度",
+        "owner_name": "所有者",
+        "assigned_name": "割当先",
+        "starts_at": "開始日時",
+        "ends_at": "終了日時",
+        "due_at": "期限",
+        "completed_at": "完了日時",
+        "duration_minutes": "所要時間(分)",
+        "is_private": "非公開",
+        "created_at": "作成日時",
+        "id": "ID"
       }
     },
     "enumValues": {
@@ -1265,6 +1349,22 @@
     "payroll-parallel-run-totals": {
       "name": "並行計算の項目別合計",
       "description": "同じ照合の集計版：項目ごとに旧ベンダーの支払総額・自社計算額・差異を示し、期間差異を生んだ項目に帰属させます。"
+    },
+    "crm-pipeline-summary": {
+      "name": "ステージ別パイプライン概要",
+      "description": "ステージおよび通貨別の商談パイプライン合計、件数、加重予測額。"
+    },
+    "crm-forecast-by-owner": {
+      "name": "担当者別パイプライン予測",
+      "description": "営業担当者および予測カテゴリごとの予測額・加重額一覧。"
+    },
+    "crm-win-loss-analysis": {
+      "name": "成約・失注分析",
+      "description": "完了した商談の勝敗結果、理由、合計金額の分析レポート。"
+    },
+    "crm-lead-conversion-funnel": {
+      "name": "リード獲得元＆ステージ概要",
+      "description": "ライフサイクルステージ、ステータス、獲得経路別のプロファイル集計。"
     }
   },
   "generalLedger": {

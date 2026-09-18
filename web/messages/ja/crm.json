@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "リード", "prospect": "見込み客", "customer": "得意先" },
+  "stages": {
+    "lead": "リード",
+    "prospect": "見込み客",
+    "customer": "得意先"
+  },
   "fields": {
     "accountName": "アカウント名",
     "lifecycleStage": "ライフサイクルステージ",
@@ -42,6 +46,10 @@
     "description": "説明",
     "quantity": "数量",
     "unitPrice": "単価",
+    "unitCost": "単位原価",
+    "lineCost": "行原価",
+    "grossProfit": "粗利益",
+    "grossMargin": "粗利率",
     "winLossReason": "受注/失注理由",
     "number": "番号",
     "projectedAmount": "予測金額",
@@ -110,7 +118,10 @@
     "high": "高",
     "urgent": "緊急"
   },
-  "relatedTypes": { "account": "アカウント", "opportunity": "商談" },
+  "relatedTypes": {
+    "account": "アカウント",
+    "opportunity": "商談"
+  },
   "opportunities": {
     "title": "商談",
     "description": "パイプラインステージ、売上レンジ、チーム、製品、営業ドキュメントを管理します。",
@@ -121,6 +132,9 @@
     "emptyDescription": "商談を作成してパイプラインの構築を開始します。",
     "lines": "製品とサービス",
     "addLine": "明細を追加",
+    "totalCost": "総原価",
+    "costNotRecorded": "未計上",
+    "partiallyCosted": "{costed}/{total} 行の原価が入力済みです — すべての明細が揃うと案件利益率が表示されます。",
     "selectItem": "品目を選択",
     "createEstimate": "見積を作成",
     "estimateCreated": "見積を作成しました",
@@ -242,7 +256,11 @@
       "isClosed": "成約ステータス",
       "isWon": "受注ステータス",
       "isDefault": "デフォルト",
-      "isActive": "有効"
+      "isActive": "有効",
+      "requiresLines": "明細必須",
+      "requiresPrimaryContact": "主担当者必須",
+      "requiresPositiveAmount": "正の金額必須",
+      "requiresWinLossReason": "成約/失注理由必須"
     },
     "states": {
       "active": "有効",
@@ -250,8 +268,14 @@
       "yes": "はい",
       "no": "いいえ"
     },
-    "matchModes": { "all": "すべてのルールに一致", "any": "いずれかのルールに一致" },
-    "targetTypes": { "user": "営業担当者", "team": "営業チーム" },
+    "matchModes": {
+      "all": "すべてのルールに一致",
+      "any": "いずれかのルールに一致"
+    },
+    "targetTypes": {
+      "user": "営業担当者",
+      "team": "営業チーム"
+    },
     "validation": {
       "nameRequired": "名前を入力してください。",
       "invalidRules": "ルーティングルールは有効なJSON配列である必要があります。"
@@ -291,5 +315,7 @@
     "titleRequired": "商談のタイトルを入力してください。",
     "lossReasonRequired": "失注としてクローズするには失注理由が必要です"
   },
-  "feedback": { "createFailed": "下書きを作成できませんでした。" }
+  "feedback": {
+    "createFailed": "下書きを作成できませんでした。"
+  }
 }

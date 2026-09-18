@@ -2,6 +2,19 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritorySubject } from "./crm-math.ts";
 
+/**
+ * The stage gate lives in crm-math.ts because it is pure and this module is
+ * not (it imports the database). Re-exported here so a caller reaching for
+ * "the CRM engine" finds it without having to know which half it lives in,
+ * and so a unit test can import it without dragging a connection along.
+ */
+export {
+  validateOpportunityStageTransition,
+  type OpportunityStagePolicy,
+  type OpportunityStageRefusal,
+  type OpportunityStageSubject,
+} from "./crm-math.ts";
+
 type SqlExecutor = Pick<typeof db, "execute">;
 
 async function crmFeatureEnabled(executor: SqlExecutor, orgId: string): Promise<boolean> {
@@ -24,13 +37,25 @@ const DEFAULT_ACCOUNT_STATUSES = [
   ["customer", "inactive", "Inactive", false, true, false],
 ] as const;
 
+/**
+ * Suggested starting stages, not the model: every one of these is an ordinary
+ * per-organization row an administrator can rename, reorder, retire or replace
+ * (crm_opportunity_statuses). Nothing in the product may branch on these keys.
+ *
+ * The last field is the stage's entry policy (migration 0175). Only the
+ * loss-reason gate is seeded, and only on Closed lost, so a fresh organization
+ * ends up with exactly the rules 0175 backfills onto an upgraded one. Every
+ * other gate stays off until somebody configures it: shipping an opinion about
+ * what Proposal requires would impose on new tenants a policy that existing
+ * tenants never agreed to.
+ */
 const DEFAULT_OPPORTUNITY_STATUSES = [
-  ["qualification", "Qualification", 10, "upside", false, false, true],
-  ["discovery", "Discovery", 25, "upside", false, false, false],
-  ["proposal", "Proposal", 50, "most_likely", false, false, false],
-  ["negotiation", "Negotiation", 75, "most_likely", false, false, false],
-  ["closed_won", "Closed won", 100, "worst_case", true, true, false],
-  ["closed_lost", "Closed lost", 0, "omitted", true, false, false],
+  ["qualification", "Qualification", 10, "upside", false, false, true, false],
+  ["discovery", "Discovery", 25, "upside", false, false, false, false],
+  ["proposal", "Proposal", 50, "most_likely", false, false, false, false],
+  ["negotiation", "Negotiation", 75, "most_likely", false, false, false, false],
+  ["closed_won", "Closed won", 100, "worst_case", true, true, false, false],
+  ["closed_lost", "Closed lost", 0, "omitted", true, false, false, true],
 ] as const;
 
 /** Idempotent tenant bootstrap; safe to call before every CRM draft. */
@@ -49,11 +74,14 @@ export async function ensureCrmDefaults(
       on conflict (org_id, lifecycle_stage, key) do nothing`);
   }
   for (let sequence = 0; sequence < DEFAULT_OPPORTUNITY_STATUSES.length; sequence++) {
-    const [key, name, probability, category, closed, won, isDefault] = DEFAULT_OPPORTUNITY_STATUSES[sequence]!;
+    const [key, name, probability, category, closed, won, isDefault, requiresWinLossReason] =
+      DEFAULT_OPPORTUNITY_STATUSES[sequence]!;
     await executor.execute(sql`
       insert into crm_opportunity_statuses
-        (org_id, key, name, sequence, probability, default_forecast_category, is_closed, is_won, is_default, created_by, updated_by)
-      values (${orgId}, ${key}, ${name}, ${sequence}, ${probability}, ${category}, ${closed}, ${won}, ${isDefault}, ${actorId}, ${actorId})
+        (org_id, key, name, sequence, probability, default_forecast_category, is_closed, is_won, is_default,
+         requires_win_loss_reason, created_by, updated_by)
+      values (${orgId}, ${key}, ${name}, ${sequence}, ${probability}, ${category}, ${closed}, ${won}, ${isDefault},
+              ${requiresWinLossReason}, ${actorId}, ${actorId})
       on conflict (org_id, key) do nothing`);
   }
 }

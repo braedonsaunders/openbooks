@@ -1193,6 +1193,194 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'created_at', direction: 'desc' },
   },
+  {
+    key: 'crm_opportunities',
+    label: 'Opportunities',
+    category: 'crm',
+    description:
+      'Sales opportunities with stages, expected close dates, amounts, probabilities, and account ownership.',
+    from: `crm_opportunities o
+      JOIN crm_opportunity_statuses s ON s.id = o.status_id AND s.org_id = o.org_id
+      LEFT JOIN parties p ON p.id = o.party_id AND p.org_id = o.org_id
+      LEFT JOIN contacts c ON c.id = o.primary_contact_id AND c.org_id = o.org_id
+      LEFT JOIN users u ON u.id = o.owner_user_id AND u.org_id = o.org_id
+      LEFT JOIN crm_sales_teams st ON st.id = o.sales_team_id AND st.org_id = o.org_id
+      LEFT JOIN crm_lead_sources ls ON ls.id = o.lead_source_id AND ls.org_id = o.org_id
+      LEFT JOIN subsidiaries sub ON sub.id = o.subsidiary_id AND sub.org_id = o.org_id
+      LEFT JOIN departments dep ON dep.id = o.department_id AND dep.org_id = o.org_id
+      LEFT JOIN locations loc ON loc.id = o.location_id AND loc.org_id = o.org_id
+      LEFT JOIN classes cls ON cls.id = o.class_id AND cls.org_id = o.org_id`,
+    orgColumn: 'o.org_id',
+    subsidiaryScope: { column: 'o.subsidiary_id', sharedNull: true },
+    currencyColumn: 'currency',
+    featureKey: 'crm',
+    requiredPermission: 'crm.opportunities.read',
+    defaultPeriodField: 'expected_close_date',
+    columns: [
+      { key: 'opportunity_number', label: 'Opportunity #', kind: 'text', expr: 'o.opportunity_number' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'o.title' },
+      { key: 'party_name', label: 'Account', kind: 'text', expr: 'p.display_name' },
+      { key: 'contact_name', label: 'Primary contact', kind: 'text', expr: 'c.name' },
+      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
+      { key: 'sales_team_name', label: 'Sales team', kind: 'text', expr: 'st.name' },
+      { key: 'lead_source_name', label: 'Lead source', kind: 'text', expr: 'ls.name' },
+      { key: 'status_name', label: 'Stage', kind: 'text', expr: 's.name' },
+      { key: 'status_key', label: 'Stage key', kind: 'text', expr: 's.key' },
+      { key: 'is_closed', label: 'Closed', kind: 'boolean', expr: 's.is_closed', options: BOOLEAN_OPTIONS },
+      { key: 'is_won', label: 'Won', kind: 'boolean', expr: 's.is_won', options: BOOLEAN_OPTIONS },
+      {
+        key: 'forecast_category', label: 'Forecast category', kind: 'enum', expr: 'o.forecast_category',
+        options: ['omitted', 'worst_case', 'most_likely', 'upside'],
+      },
+      { key: 'probability', label: 'Probability (%)', kind: 'number', expr: 'o.probability' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'o.currency' },
+      { key: 'projected_amount', label: 'Projected amount', kind: 'money', expr: 'o.projected_amount', txnCurrency: true },
+      { key: 'weighted_amount', label: 'Weighted amount', kind: 'money', expr: 'o.weighted_amount', txnCurrency: true },
+      { key: 'range_low', label: 'Range low', kind: 'money', expr: 'o.range_low', txnCurrency: true },
+      { key: 'range_high', label: 'Range high', kind: 'money', expr: 'o.range_high', txnCurrency: true },
+      { key: 'expected_close_date', label: 'Expected close date', kind: 'date', expr: 'o.expected_close_date' },
+      { key: 'next_step', label: 'Next step', kind: 'text', expr: 'o.next_step' },
+      { key: 'win_loss_reason', label: 'Win/loss reason', kind: 'text', expr: 'o.win_loss_reason' },
+      { key: 'description', label: 'Description', kind: 'text', expr: 'o.description' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
+      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'o.created_at' },
+      { key: 'id', label: 'Opportunity (id)', kind: 'uuid', expr: 'o.id' },
+      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'o.party_id' },
+    ],
+    defaultSort: { column: 'expected_close_date', direction: 'asc' },
+  },
+  {
+    key: 'crm_opportunity_lines',
+    label: 'Opportunity lines',
+    category: 'crm',
+    description:
+      'Line items on sales opportunities with quantities, rates, amounts, cost, and item references.',
+    from: `crm_opportunity_lines ol
+      JOIN crm_opportunities o ON o.id = ol.opportunity_id AND o.org_id = ol.org_id
+      JOIN crm_opportunity_statuses s ON s.id = o.status_id AND s.org_id = o.org_id
+      LEFT JOIN items it ON it.id = ol.item_id AND it.org_id = ol.org_id
+      LEFT JOIN parties p ON p.id = o.party_id AND p.org_id = o.org_id
+      LEFT JOIN users u ON u.id = o.owner_user_id AND u.org_id = o.org_id`,
+    orgColumn: 'ol.org_id',
+    subsidiaryScope: { column: 'o.subsidiary_id', sharedNull: true },
+    currencyColumn: 'currency',
+    featureKey: 'crm',
+    requiredPermission: 'crm.opportunities.read',
+    defaultPeriodField: 'expected_close_date',
+    columns: [
+      { key: 'opportunity_number', label: 'Opportunity #', kind: 'text', expr: 'o.opportunity_number' },
+      { key: 'opportunity_title', label: 'Opportunity title', kind: 'text', expr: 'o.title' },
+      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'ol.line_number' },
+      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
+      { key: 'description', label: 'Description', kind: 'text', expr: 'ol.description' },
+      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'ol.quantity' },
+      { key: 'unit', label: 'Unit', kind: 'text', expr: 'ol.unit' },
+      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'ol.unit_price', txnCurrency: true },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'ol.amount', txnCurrency: true },
+      { key: 'unit_cost', label: 'Unit cost', kind: 'money', expr: 'coalesce(ol.unit_cost, 0)', txnCurrency: true },
+      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'coalesce(ol.cost_amount, 0)', txnCurrency: true },
+      { key: 'gross_profit', label: 'Gross profit', kind: 'money', expr: '(ol.amount - coalesce(ol.cost_amount, 0))', txnCurrency: true },
+      { key: 'probability', label: 'Probability (%)', kind: 'number', expr: 'coalesce(ol.probability, o.probability)' },
+      { key: 'expected_amount', label: 'Expected amount', kind: 'money', expr: 'ol.expected_amount', txnCurrency: true },
+      { key: 'party_name', label: 'Account', kind: 'text', expr: 'p.display_name' },
+      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
+      { key: 'status_name', label: 'Stage', kind: 'text', expr: 's.name' },
+      { key: 'expected_close_date', label: 'Expected close date', kind: 'date', expr: 'o.expected_close_date' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'o.currency' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'ol.created_at' },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'ol.id' },
+      { key: 'opportunity_id', label: 'Opportunity (id)', kind: 'uuid', expr: 'ol.opportunity_id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'crm_account_profiles',
+    label: 'CRM accounts & leads',
+    category: 'crm',
+    description:
+      'Relationship profiles with lifecycle stages (lead, prospect, customer), qualification, industry, and routing territory.',
+    from: `crm_account_profiles cp
+      JOIN parties p ON p.id = cp.party_id AND p.org_id = cp.org_id
+      LEFT JOIN crm_account_statuses s ON s.id = cp.status_id AND s.org_id = cp.org_id
+      LEFT JOIN users u ON u.id = cp.owner_user_id AND u.org_id = cp.org_id
+      LEFT JOIN crm_sales_territories t ON t.id = cp.territory_id AND t.org_id = cp.org_id
+      LEFT JOIN crm_lead_sources ls ON ls.id = cp.lead_source_id AND ls.org_id = cp.org_id
+      LEFT JOIN subsidiaries sub ON sub.id = p.subsidiary_id AND sub.org_id = p.org_id`,
+    orgColumn: 'cp.org_id',
+    subsidiaryScope: { column: 'p.subsidiary_id', sharedNull: true },
+    featureKey: 'crm',
+    requiredPermission: 'crm.accounts.read',
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'party_name', label: 'Account name', kind: 'text', expr: 'p.display_name' },
+      {
+        key: 'lifecycle_stage', label: 'Lifecycle stage', kind: 'enum', expr: 'cp.lifecycle_stage',
+        options: ['lead', 'prospect', 'customer'],
+      },
+      { key: 'status_name', label: 'Status', kind: 'text', expr: 's.name' },
+      { key: 'is_qualified', label: 'Qualified', kind: 'boolean', expr: 's.is_qualified', options: BOOLEAN_OPTIONS },
+      { key: 'is_closed', label: 'Closed', kind: 'boolean', expr: 's.is_closed', options: BOOLEAN_OPTIONS },
+      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
+      { key: 'territory_name', label: 'Territory', kind: 'text', expr: 't.name' },
+      { key: 'lead_source_name', label: 'Lead source', kind: 'text', expr: 'ls.name' },
+      { key: 'industry', label: 'Industry', kind: 'text', expr: 'cp.industry' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 'cp.category' },
+      { key: 'annual_revenue', label: 'Annual revenue', kind: 'money', expr: 'cp.annual_revenue' },
+      { key: 'employee_count', label: 'Employees', kind: 'number', expr: 'cp.employee_count' },
+      { key: 'qualification_score', label: 'Qualification score', kind: 'number', expr: 'cp.qualification_score' },
+      { key: 'email', label: 'Email', kind: 'text', expr: 'p.email' },
+      { key: 'phone', label: 'Phone', kind: 'text', expr: 'p.phone' },
+      { key: 'website', label: 'Website', kind: 'text', expr: 'p.website' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'next_action_at', label: 'Next action at', kind: 'timestamp', expr: 'cp.next_action_at' },
+      { key: 'last_activity_at', label: 'Last activity at', kind: 'timestamp', expr: 'cp.last_activity_at' },
+      { key: 'qualified_at', label: 'Qualified at', kind: 'timestamp', expr: 'cp.qualified_at' },
+      { key: 'converted_at', label: 'Converted at', kind: 'timestamp', expr: 'cp.converted_at' },
+      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'cp.acquired_on' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'cp.is_active', options: BOOLEAN_OPTIONS },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'cp.created_at' },
+      { key: 'id', label: 'Profile (id)', kind: 'uuid', expr: 'cp.id' },
+      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'cp.party_id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'crm_activities',
+    label: 'CRM activities',
+    category: 'crm',
+    description:
+      'Sales and relationship activities including tasks, calls, events, emails, and notes.',
+    from: `crm_activities a
+      LEFT JOIN users ou ON ou.id = a.owner_user_id AND ou.org_id = a.org_id
+      LEFT JOIN users au ON au.id = a.assigned_user_id AND au.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    subsidiaryScope: null,
+    featureKey: 'crm',
+    requiredPermission: 'crm.activities.read',
+    baseFilter: { combinator: 'and', rules: [{ field: 'is_private', op: 'is_false' }] },
+    defaultPeriodField: 'starts_at',
+    columns: [
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'a.kind', options: ['task', 'call', 'event', 'email', 'note'] },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: ['planned', 'in_progress', 'completed', 'cancelled'] },
+      { key: 'subject', label: 'Subject', kind: 'text', expr: 'a.subject' },
+      { key: 'priority', label: 'Priority', kind: 'enum', expr: 'a.priority', options: ['low', 'normal', 'high', 'urgent'] },
+      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'ou.name' },
+      { key: 'assigned_name', label: 'Assigned to', kind: 'text', expr: 'au.name' },
+      { key: 'starts_at', label: 'Starts at', kind: 'timestamp', expr: 'a.starts_at' },
+      { key: 'ends_at', label: 'Ends at', kind: 'timestamp', expr: 'a.ends_at' },
+      { key: 'due_at', label: 'Due at', kind: 'timestamp', expr: 'a.due_at' },
+      { key: 'completed_at', label: 'Completed at', kind: 'timestamp', expr: 'a.completed_at' },
+      { key: 'duration_minutes', label: 'Duration (minutes)', kind: 'number', expr: 'a.duration_minutes' },
+      { key: 'is_private', label: 'Private', kind: 'boolean', expr: 'a.is_private', options: BOOLEAN_OPTIONS },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
+      { key: 'id', label: 'Activity (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(

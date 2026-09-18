@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { computeOpportunityTotals } from '@openbooks/engine/src/crm-math.ts'
+import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
 
 type Option = { id: string; name: string }
@@ -17,14 +19,33 @@ type OpportunityRow = {
   probability: string | number; currency: string; next_step: string | null; description: string | null;
   win_loss_reason: string | null; opportunity_number: string; status_name: string; updated_at: string;
 }
-type OpportunityLineRow = { item_id: string | null; description: string | null; quantity: string | number; unit: string | null; unit_price: string | number }
-type OpportunityLineForm = { itemId: string; description: string; quantity: string; unit: string; unitPrice: string }
+type OpportunityLineRow = { item_id: string | null; description: string | null; quantity: string | number; unit: string | null; unit_price: string | number; unit_cost?: string | number | null }
+/** `unitCost` empty means "not costed", which is not the same as '0'. */
+type OpportunityLineForm = { itemId: string; description: string; quantity: string; unit: string; unitPrice: string; unitCost: string }
 type OpportunityData = { opportunity: OpportunityRow; lines: OpportunityLineRow[] }
 
 export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, teams, sources, items, currencies, closeHref, canManage, multiCurrency = false }: { data: OpportunityData; statuses: Option[]; accounts: Option[]; contacts: ContactOption[]; owners: Option[]; teams: Option[]; sources: Option[]; items: Option[]; currencies:{code:string;name:string}[]; closeHref:string; canManage:boolean; multiCurrency?: boolean }) {
   const t=useTranslations('crm'); const tc=useTranslations('common'); const router=useRouter(); const row=data.opportunity
   const [form,setForm]=useState({ title:row.title==='New opportunity'?'':row.title, partyId:row.party_id??'', primaryContactId:row.primary_contact_id??'', ownerUserId:row.owner_user_id??'', salesTeamId:row.sales_team_id??'', statusId:row.status_id, leadSourceId:row.lead_source_id??'', expectedCloseDate:row.expected_close_date??'', forecastCategory:row.forecast_category, probability:String(row.probability), currency:row.currency, nextStep:row.next_step??'', description:row.description??'', winLossReason:row.win_loss_reason??'' })
-  const [lines,setLines]=useState<OpportunityLineForm[]>(data.lines.map((line)=>({itemId:line.item_id??'',description:line.description??'',quantity:String(line.quantity),unit:line.unit??'',unitPrice:String(line.unit_price)})))
+  const [lines,setLines]=useState<OpportunityLineForm[]>(data.lines.map((line)=>({itemId:line.item_id??'',description:line.description??'',quantity:String(line.quantity),unit:line.unit??'',unitPrice:String(line.unit_price),unitCost:line.unit_cost==null?'':String(line.unit_cost)})))
+  // Live margin through the SAME engine function the route persists with, so
+  // the figure on screen is the figure that will be stored rather than a
+  // second implementation that agrees until it doesn't. The math refuses
+  // malformed decimals, which is exactly what a half-typed number is, so a
+  // throw here means "not computable yet" and the panel shows nothing.
+  const totals=useMemo(()=>{
+    try {
+      return computeOpportunityTotals(
+        lines.map((line)=>({quantity:line.quantity.trim(),unitPrice:line.unitPrice.trim(),unitCost:line.unitCost.trim()===''?null:line.unitCost.trim()})),
+        Number.isInteger(Number(form.probability))?Number(form.probability):0,
+      )
+    } catch { return null }
+  },[lines,form.probability])
+  const showMoney=(value:string)=>`${formatMoney(value)} ${form.currency}`
+  // Two different reasons produce no margin — no cost recorded, or no revenue
+  // to divide by — and neither is 0%. Both read as "—" rather than as a number
+  // nobody can act on.
+  const showPercent=(value:string|null)=>value===null?'—':`${Number(value).toFixed(1)}%`
   const [busy,setBusy]=useState(false); const [lossReasonError,setLossReasonError]=useState(false); const set=(key:string,value:unknown)=>setForm(current=>({...current,[key]:value}))
   // Opaque optimistic-concurrency token: the opportunity's canonical revision
   // when this drawer opened. Every save sends it; a 409 surfaces the server's
@@ -53,8 +74,19 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
       <Field label={t('fields.leadSource')}><Select value={form.leadSourceId} onChange={e=>set('leadSourceId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{sources.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <div className="sm:col-span-3"><Field label={t('fields.nextStep')}><Input value={form.nextStep} onChange={e=>set('nextStep',e.target.value)} disabled={!canManage}/></Field></div>
     </div>
-    <section className="mt-7"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">{t('opportunities.lines')}</h3>{canManage?<Button variant="outline" size="sm" onClick={()=>setLines(current=>[...current,{itemId:'',description:'',quantity:'1',unit:'',unitPrice:'0'}])}><Plus size={14}/>{t('opportunities.addLine')}</Button>:null}</div><div className="overflow-x-auto rounded-md border dark:border-slate-800"><Table><TableHeader><TableRow><TableHead>{t('fields.item')}</TableHead><TableHead>{t('fields.description')}</TableHead><TableHead>{t('fields.quantity')}</TableHead><TableHead>{t('fields.unitPrice')}</TableHead><TableHead/></TableRow></TableHeader><TableBody>{lines.map((line,index)=><TableRow key={index}><TableCell><Select value={line.itemId} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,itemId:e.target.value}:v))} disabled={!canManage}><option value="">{t('opportunities.selectItem')}</option>{items.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></TableCell><TableCell><Input value={line.description} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,description:e.target.value}:v))}/></TableCell><TableCell><Input className="w-24 text-right tabular-nums" value={line.quantity} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,quantity:e.target.value}:v))}/></TableCell><TableCell><Input className="w-32 text-right tabular-nums" value={line.unitPrice} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,unitPrice:e.target.value}:v))}/></TableCell><TableCell>{canManage?<Button variant="ghost" size="icon" aria-label={tc('actions.delete')} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}><Trash2 size={15}/></Button>:null}</TableCell></TableRow>)}</TableBody></Table></div></section>
+    <section className="mt-7"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">{t('opportunities.lines')}</h3>{canManage?<Button variant="outline" size="sm" onClick={()=>setLines(current=>[...current,{itemId:'',description:'',quantity:'1',unit:'',unitPrice:'0',unitCost:''}])}><Plus size={14}/>{t('opportunities.addLine')}</Button>:null}</div><div className="overflow-x-auto rounded-md border dark:border-slate-800"><Table><TableHeader><TableRow><TableHead>{t('fields.item')}</TableHead><TableHead>{t('fields.description')}</TableHead><TableHead>{t('fields.quantity')}</TableHead><TableHead>{t('fields.unitPrice')}</TableHead><TableHead>{t('fields.unitCost')}</TableHead><TableHead className="text-right">{t('fields.lineCost')}</TableHead><TableHead className="text-right">{t('fields.grossProfit')}</TableHead><TableHead className="text-right">{t('fields.grossMargin')}</TableHead><TableHead/></TableRow></TableHeader><TableBody>{lines.map((line,index)=>{const math=totals?.lines[index]??null;return <TableRow key={index}><TableCell><Select value={line.itemId} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,itemId:e.target.value}:v))} disabled={!canManage}><option value="">{t('opportunities.selectItem')}</option>{items.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></TableCell><TableCell><Input value={line.description} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,description:e.target.value}:v))}/></TableCell><TableCell><Input className="w-24 text-right tabular-nums" value={line.quantity} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,quantity:e.target.value}:v))}/></TableCell><TableCell><Input className="w-32 text-right tabular-nums" value={line.unitPrice} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,unitPrice:e.target.value}:v))}/></TableCell><TableCell><Input className="w-32 text-right tabular-nums" value={line.unitCost} placeholder={t('opportunities.costNotRecorded')} onChange={e=>setLines(current=>current.map((v,i)=>i===index?{...v,unitCost:e.target.value}:v))} disabled={!canManage}/></TableCell><TableCell className="text-right tabular-nums">{math?.costAmount?showMoney(math.costAmount):'—'}</TableCell><TableCell className="text-right tabular-nums">{math?.grossProfit?showMoney(math.grossProfit):'—'}</TableCell><TableCell className="text-right tabular-nums">{showPercent(math?.grossMarginPercent??null)}</TableCell><TableCell>{canManage?<Button variant="ghost" size="icon" aria-label={tc('actions.delete')} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}><Trash2 size={15}/></Button>:null}</TableCell></TableRow>})}</TableBody></Table></div>
+      {totals&&totals.lineCount>0?<div className="mt-3 flex flex-wrap items-start gap-x-8 gap-y-2 rounded-md border px-4 py-3 text-sm dark:border-slate-800">
+        <Summary label={t('fields.projectedAmount')} value={showMoney(totals.projectedAmount)}/>
+        <Summary label={t('fields.weightedAmount')} value={showMoney(totals.weightedAmount)}/>
+        <Summary label={t('opportunities.totalCost')} value={totals.totalCost?showMoney(totals.totalCost):'—'}/>
+        <Summary label={t('fields.grossProfit')} value={totals.grossProfit?showMoney(totals.grossProfit):'—'}/>
+        <Summary label={t('fields.grossMargin')} value={showPercent(totals.grossMarginPercent)}/>
+        {/* Say WHY the rollup is blank. A margin that is simply missing reads
+            as a bug; "3 of 5 lines costed" reads as work left to do. */}
+        {totals.isFullyCosted?null:<p className="basis-full text-xs text-slate-500 dark:text-slate-400">{t('opportunities.partiallyCosted',{costed:totals.costedLineCount,total:totals.lineCount})}</p>}
+      </div>:null}</section>
     <div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label={t('fields.description')}><Textarea rows={5} value={form.description} onChange={e=>set('description',e.target.value)} disabled={!canManage}/></Field><Field label={t('fields.winLossReason')}><Textarea rows={5} value={form.winLossReason} onChange={e=>{set('winLossReason',e.target.value);setLossReasonError(false)}} disabled={!canManage} aria-invalid={lossReasonError}/>{lossReasonError?<p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('validation.lossReasonRequired')}</p>:null}</Field></div>
   </UrlDrawer>
 }
 function Field({label,children}:{label:string;children:React.ReactNode}){return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>}
+function Summary({label,value}:{label:string;value:string}){return <div className="space-y-0.5"><div className="text-xs text-slate-500 dark:text-slate-400">{label}</div><div className="font-medium tabular-nums">{value}</div></div>}

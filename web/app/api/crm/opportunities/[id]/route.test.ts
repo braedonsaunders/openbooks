@@ -22,6 +22,10 @@ interface RouteState {
   firstLockReady: (() => void) | null
   txStatusValid: boolean
   txStatusClosed: boolean
+  /** Stage-entry policy flags (migration 0175) carried by the status rows. */
+  statusPolicy: Record<string, boolean>
+  /** Opportunity lines already stored, for gates that count them. */
+  storedLines: number
   txInvalidReference: string | null
   loaded: Record<string, unknown> | null
   sequence: number
@@ -44,6 +48,8 @@ const routeState: RouteState = {
   firstLockReady: null,
   txStatusValid: true,
   txStatusClosed: false,
+  statusPolicy: {},
+  storedLines: 0,
   txInvalidReference: null,
   loaded: null,
   sequence: 0,
@@ -109,7 +115,9 @@ const mockSources = new Map<string, string>([
       const text = sqlText(query)
       state.calls.push({ kind: 'execute', text })
       if (text.includes('from crm_opportunities')) return { rows: [${JSON.stringify(staleOpportunity)}] }
-      if (text.includes('from crm_opportunity_statuses')) return { rows: [{ is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely' }] }
+      if (text.includes('from crm_opportunity_statuses')) return { rows: [{ is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely', ...state.statusPolicy }] }
+      if (text.includes('count(*)') && text.includes('crm_opportunity_lines')) return { rows: [{ count: state.storedLines }] }
+      if (text.includes('from items')) return { rows: [{ ok: 1, is_active: true }] }
       if (text.includes('from currencies')) return { rows: [{ code: 'USD' }] }
       if (text.includes('from parties') || text.includes('from contacts') || text.includes('from users') || text.includes('from crm_sales_teams') || text.includes('from crm_lead_sources')) return { rows: [{ ok: 1 }] }
       return { rows: [] }
@@ -153,12 +161,15 @@ const mockSources = new Map<string, string>([
             ownsLock = true
             return { rows: state.opportunity ? [state.opportunity] : [] }
           }
+          if (text.includes('count(*)') && text.includes('crm_opportunity_lines')) {
+            return { rows: [{ count: state.storedLines }] }
+          }
           if (text.includes('from contacts') && text.includes('party_id')) {
             const matches = state.lockedContactMatches.shift() ?? true
             return { rows: matches ? [{ ok: 1 }] : [] }
           }
           if (text.includes('from crm_opportunity_statuses')) {
-            return { rows: state.txStatusValid ? [state.txStatusClosed ? { is_closed: true, is_won: false, probability: 0, default_forecast_category: 'most_likely' } : { is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely' }] : [] }
+            return { rows: state.txStatusValid ? [state.txStatusClosed ? { is_closed: true, is_won: false, probability: 0, default_forecast_category: 'most_likely', ...state.statusPolicy } : { is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely', ...state.statusPolicy }] : [] }
           }
           if (text.includes('from parties') || text.includes('from contacts') || text.includes('from users') || text.includes('from crm_sales_teams') || text.includes('from crm_lead_sources') || text.includes('from currencies') || text.includes('from items')) {
             if (state.txInvalidReference && text.includes('from ' + state.txInvalidReference)) return { rows: [] }
@@ -218,7 +229,20 @@ const mockSources = new Map<string, string>([
   ['mock:crm', `
     export async function promoteCrmAccount() {}
   `],
+  ['mock:crm-scope', `
+    export function crmOpportunityScope() { return '' }
+    export function crmSharedScope() { return '' }
+  `],
+  // The stage gate is re-exported from the REAL engine module rather than
+  // restated here. A hand-written stub of a policy resolver would let the
+  // route keep passing this file while the rule it enforces drifted away from
+  // the one the product actually applies, which is the whole failure mode the
+  // single resolver exists to prevent. It is pure (no database), so borrowing
+  // it costs nothing.
   ['mock:crm-math', `
+    export { validateOpportunityStageTransition } from ${JSON.stringify(
+      new URL('../../../../../../engine/src/crm-math.ts', import.meta.url).href,
+    )}
     export function computeOpportunityTotals(lines, probability) {
       return { lines, projectedAmount: '0.00', weightedAmount: '0.00', probability }
     }
@@ -265,6 +289,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/features', 'mock:features'],
   ['../../../../../lib/crm', 'mock:crm-loader'],
+  ['../../../../../lib/crm-scope', 'mock:crm-scope'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
   ['@/lib/api/json', 'mock:json'],
@@ -311,6 +336,8 @@ function reset(lockedContactMatches: boolean[] = [true]): void {
   routeState.firstLockReady = null
   routeState.txStatusValid = true
   routeState.txStatusClosed = false
+  routeState.statusPolicy = {}
+  routeState.storedLines = 0
   routeState.txInvalidReference = null
   routeState.loaded = { id: OPPORTUNITY_ID, party_id: PARTY_B, primary_contact_id: CONTACT_ID }
   routeState.sequence = 0
@@ -559,4 +586,105 @@ test('an untitled stub without an account stays inactive', async () => {
 
   assert.equal(response.status, 200)
   assert.equal(updateActiveFlag(), false)
+})
+
+test('a closed-lost stage that declares no reason requirement no longer forces one', async () => {
+  // The whole point of 0175: this rule used to be hard-coded as "closed and
+  // not won", so no organization could hold a different policy. With the flag
+  // off, the same closed-lost transition saves.
+  reset()
+  routeState.txStatusClosed = true
+
+  const response = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 200)
+})
+
+test('a stage that declares a reason requirement refuses without one, before any write', async () => {
+  reset()
+  routeState.txStatusClosed = true
+  routeState.statusPolicy = { requires_win_loss_reason: true }
+
+  const response = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 422)
+  // Wording pinned: the drawer highlights the loss-reason field by matching it.
+  assert.deepEqual(await response.json(), { error: 'a loss reason is required' })
+  assert.equal(routeState.txWrites, 0)
+})
+
+test('a declared reason requirement is satisfied by a reason', async () => {
+  reset()
+  routeState.txStatusClosed = true
+  routeState.statusPolicy = { requires_win_loss_reason: true }
+
+  const response = await patch({ statusId: STATUS_B_ID, winLossReason: 'Lost on price', expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 200)
+})
+
+test('a stage that requires lines counts the ones already stored, not just the submitted ones', async () => {
+  // A stage move that sends no `lines` array must still be gated: the board
+  // drags a card without touching line detail, and a gate that only inspected
+  // the payload would wave those through.
+  reset()
+  routeState.statusPolicy = { requires_lines: true }
+  routeState.storedLines = 0
+
+  const refused = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
+  assert.equal(refused.status, 422)
+  assert.deepEqual(await refused.json(), { error: 'this stage requires at least one line' })
+  assert.equal(routeState.txWrites, 0)
+
+  reset()
+  routeState.statusPolicy = { requires_lines: true }
+  routeState.storedLines = 2
+  const allowed = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
+  assert.equal(allowed.status, 200)
+})
+
+test('a stage that requires a primary contact refuses when the contact is being cleared', async () => {
+  reset()
+  routeState.statusPolicy = { requires_primary_contact: true }
+
+  const response = await patch({ primaryContactId: null, expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'this stage requires a primary contact' })
+  assert.equal(routeState.txWrites, 0)
+})
+
+test('an ungated stage never pays for the stored-line count', async () => {
+  // Most saves are into stages that declare nothing; they must not run a
+  // query whose answer cannot change the outcome.
+  reset()
+
+  const response = await patch({ title: 'Ordinary save', expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 200)
+  assert.ok(
+    !routeState.calls.some((call) => call.text.includes('count(*)') && call.text.includes('crm_opportunity_lines')),
+    'an ungated stage must not count lines',
+  )
+})
+
+test('the line write carries the cost columns', async () => {
+  // This harness stubs the math, so it can prove the wiring and nothing more:
+  // that a saved line reaches the insert with unit_cost and cost_amount on it.
+  // What those values should BE — absence vs zero, the extension's rounding,
+  // the margin — is asserted in engine/src/crm-math.test.ts against the real
+  // function, which is the only place those answers actually come from.
+  reset()
+
+  const response = await patch({
+    lines: [{ itemId: PARTY_A, quantity: '2', unitPrice: '50', unitCost: '30' }],
+    expectedUpdatedAt: REVISION,
+  })
+
+  assert.equal(response.status, 200)
+  const insert = routeState.calls.find(
+    (call) => call.kind === 'tx-execute' && call.text.includes('insert into crm_opportunity_lines'),
+  )
+  assert.ok(insert, 'the line must be written')
+  assert.match(insert.text, /unit_cost, cost_amount/)
 })

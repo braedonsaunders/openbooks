@@ -46,6 +46,10 @@
     "description": "Descripción",
     "quantity": "Cantidad",
     "unitPrice": "Precio unitario",
+    "unitCost": "Coste unitario",
+    "lineCost": "Coste de línea",
+    "grossProfit": "Beneficio bruto",
+    "grossMargin": "Margen bruto",
     "winLossReason": "Motivo de ganancia o pérdida",
     "number": "Número",
     "projectedAmount": "Importe previsto",
@@ -114,7 +118,10 @@
     "high": "Alta",
     "urgent": "Urgente"
   },
-  "relatedTypes": { "account": "Cuenta", "opportunity": "Oportunidad" },
+  "relatedTypes": {
+    "account": "Cuenta",
+    "opportunity": "Oportunidad"
+  },
   "opportunities": {
     "title": "Oportunidades",
     "description": "Gestiona etapas del canal, rangos de ingresos, equipos, productos y documentos de venta.",
@@ -125,6 +132,9 @@
     "emptyDescription": "Crea una oportunidad para comenzar a desarrollar el canal.",
     "lines": "Productos y servicios",
     "addLine": "Añadir línea",
+    "totalCost": "Coste total",
+    "costNotRecorded": "Sin coste registrado",
+    "partiallyCosted": "{costed} de {total} líneas tienen coste — el margen del acuerdo se mostrará cuando todas tengan coste.",
     "selectItem": "Seleccionar un artículo",
     "createEstimate": "Crear presupuesto",
     "estimateCreated": "Presupuesto creado",
@@ -246,7 +256,11 @@
       "isDefault": "Predeterminado",
       "isActive": "Activo",
       "rulesHint": "Opcional. Cada regla compara un campo con un valor para dirigir prospectos aquí. Campos: region, country, annualRevenue. Operadores: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]"
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "requiresLines": "Exigir líneas",
+      "requiresPrimaryContact": "Exigir contacto principal",
+      "requiresPositiveAmount": "Exigir importe positivo",
+      "requiresWinLossReason": "Exigir motivo de ganancia/pérdida"
     },
     "states": {
       "active": "Activo",
@@ -301,5 +315,7 @@
     "titleRequired": "Introduce un título para la oportunidad.",
     "lossReasonRequired": "Se requiere un motivo de pérdida para cerrar como perdida"
   },
-  "feedback": { "createFailed": "No se pudo crear el borrador." }
+  "feedback": {
+    "createFailed": "No se pudo crear el borrador."
+  }
 }
