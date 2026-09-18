@@ -1002,23 +1002,39 @@ async function applyRowLevelSecurity(): Promise<void> {
             applied_at = now()
     `);
   }
-  const unprotected = (await db.execute<{ table_name: string }>(sql`
-    select c.relname as table_name
+  // Three conditions, not one. ENABLE alone is not isolation: without FORCE
+  // the table OWNER is exempt, and the owning role is what CI and several
+  // tooling paths connect as -- so an unprotected table looks protected in
+  // every test. And a table with RLS on but no policy denies everyone, which
+  // is a different failure that also must not reach a booting app.
+  const unprotected = (await db.execute<{ table_name: string; reason: string }>(sql`
+    select c.relname as table_name,
+           case
+             when not c.relrowsecurity then 'row-level security not enabled'
+             when not c.relforcerowsecurity then 'FORCE not set (table owner would bypass)'
+             else 'no policy defined'
+           end as reason
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind = 'r'
-       and not c.relrowsecurity
        and exists (
          select 1 from information_schema.columns col
           where col.table_schema = 'public'
             and col.table_name = c.relname
             and col.column_name = 'org_id')
+       and (
+         not c.relrowsecurity
+         or not c.relforcerowsecurity
+         or not exists (
+           select 1 from pg_policies p
+            where p.schemaname = 'public' and p.tablename = c.relname)
+       )
   `));
   // Fail loudly rather than booting an app whose tenant isolation has a hole.
   if (unprotected.rows.length > 0) {
     throw new Error(
-      `row-level security missing on: ${unprotected.rows.map((r) => r.table_name).join(", ")}`,
+      `row-level security incomplete on: ${unprotected.rows.map((r) => `${r.table_name} (${r.reason})`).join(", ")}`,
     );
   }
   console.log(
