@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { AUSTRIA_TAX_PACK } from "./at.ts";
+import { packReturnCodesWithTaxCodes, packTaxCodesForReturn } from "./index.ts";
 
 const pack = AUSTRIA_TAX_PACK;
 
@@ -34,10 +35,8 @@ assert.equal(obIn?.glMap, "purchases");
 assert.equal(pack.jurisdictions.length, 0);
 
 // Return-pack tax codes: keyed by our return, primary code is the standard one.
-const keys = Object.keys(pack.returnPackTaxCodes);
-assert.deepEqual(keys, ["AT_U30"]);
-const raw = pack.returnPackTaxCodes["AT_U30"];
-const codes = Array.isArray(raw) ? [...raw] : [raw];
+assert.deepEqual(packReturnCodesWithTaxCodes(pack), ["AT_U30"]);
+const codes = packTaxCodesForReturn(pack, "AT_U30");
 assert.ok(codes.length > 0, "non-empty code set");
 assert.equal(codes[0].code, "AT-VAT-STD");
 assert.equal(codes[0].role, "standard");

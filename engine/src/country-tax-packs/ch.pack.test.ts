@@ -1,23 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SWITZERLAND_TAX_PACK } from "./ch.ts";
+import { packTaxCodesForReturn } from "./index.ts";
 import type { CountryTaxCodeDefinition, EffectiveTaxRate } from "./types.ts";
 
 const pack = SWITZERLAND_TAX_PACK;
 const RETURN_CODE = "CH_MWST_ABRECHNUNG";
 
-function isTaxCodeSet(
-  entry: CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[],
-): entry is readonly CountryTaxCodeDefinition[] {
-  return Array.isArray(entry);
-}
-
 function codesForReturn(): readonly CountryTaxCodeDefinition[] {
-  const entry: CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[] | undefined =
-    pack.returnPackTaxCodes[RETURN_CODE];
-  if (!entry) throw new Error(`missing returnPackTaxCodes for ${RETURN_CODE}`);
-  if (isTaxCodeSet(entry)) return entry;
-  return [entry];
+  const codes = packTaxCodesForReturn(pack, RETURN_CODE);
+  assert.ok(codes.length > 0, `${RETURN_CODE} declares no tax codes`);
+  return codes;
 }
 
 function assertContiguous(rates: readonly EffectiveTaxRate[], code: string): void {
