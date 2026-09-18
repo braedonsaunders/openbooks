@@ -146,6 +146,7 @@ export function suspectRun(rawRun) {
 // extend this list only with a reason naming the backslash in the text.
 export const ALLOWLIST = [
   { file: "engine/src/sync/readme-accuracy.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom: must match a literal backslash to escape it" },
+  { file: "engine/src/payroll/au/tax-year-2027.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
   { file: "web/app/(app)/analytics/_ui/CashTimeline.test.tsx", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
   { file: "web/lib/accounts-hygiene.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
   { file: "web/lib/data-io/import-route.test.ts", snippet: "[.*+?${}()|[", reason: "escapeRegExp idiom" },
