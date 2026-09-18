@@ -96,8 +96,13 @@ function authzFor(orgId: string, userId: string): Authz {
   };
 }
 
+interface PendingDoc {
+  docId: string;
+  number: string;
+}
+
 /** A posted invoice awaiting a gateless document approval (no flow run). */
-async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{ docId: string; number: string }> {
+async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<PendingDoc> {
   const doc = randomUUID();
   const entry = randomUUID();
   const number = `UNION-${doc.slice(0, 8)}`;
@@ -113,8 +118,13 @@ async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{
   return { docId: doc, number };
 }
 
+interface PendingBudget {
+  budgetId: string;
+  name: string;
+}
+
 /** A budget submitted through the direct maker/checker path (no flow run). */
-async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<{ budgetId: string; name: string }> {
+async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<PendingBudget> {
   const budget = randomUUID();
   const name = `UNION-BUDGET-${budget.slice(0, 8)}`;
   await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
