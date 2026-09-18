@@ -78,7 +78,10 @@ interface Crm360Fixture {
 }
 
 async function seed(): Promise<Crm360Fixture> {
-  const org = await createScratchOrg();
+  // createScratchOrg is bypass-safe on all three of its paths, but the
+  // author-time guard matches on name, so scope it explicitly rather than
+  // carry a baseline entry for an exposure that cannot happen.
+  const org = await withBypassContext(() => createScratchOrg());
   const fx = await withBypassContext(async () => {
     const restrictedUserId = await createScratchUser(org.orgId, 'CRM reviewer', 'crm360_reviewer');
     await db.execute(sql`update app_roles set permissions='["crm.accounts.read"]'::jsonb,
