@@ -161,35 +161,59 @@ export function DashboardGrid({
 
   const presentIds = useMemo(() => new Set(layout.map((w) => w.id)), [layout])
 
+  // The cell that was just added, so the grid can scroll it into view and
+  // hold a highlight ring on it. Adding appends at the bottom — off-screen on
+  // a tall dashboard — and without this the click reads as "nothing
+  // happened" and the user adds the widget twice.
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const cellRefs = useRef(new Map<string, HTMLDivElement>())
+
+  useEffect(() => {
+    if (!flashId) return
+    cellRefs.current.get(flashId)?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'nearest',
+    })
+    const t = setTimeout(() => setFlashId((cur) => (cur === flashId ? null : cur)), 2400)
+    return () => clearTimeout(t)
+  }, [flashId, layout])
+
+  // Single bottom-append path for every add flow (registry widgets, library
+  // cards, apps). The duplicate check lives INSIDE the functional update: the
+  // palette removes a placed item on re-render, but a rapid double-click lands
+  // twice on the same render and the outer guard alone would append twice.
+  const addWidgetAtBottom = useCallback(
+    (id: string, w: number, h: number) => {
+      if (presentIds.has(id)) return
+      setLayout((prev) => {
+        if (prev.some((x) => x.id === id)) return prev
+        const maxY = prev.reduce((m, x) => Math.max(m, x.y + x.h), 0)
+        return [...prev, { id, x: 0, y: maxY, w, h }]
+      })
+      setFlashId(id)
+    },
+    [presentIds],
+  )
+
   const handleAdd = useCallback(
     (meta: WidgetMeta) => {
-      if (presentIds.has(meta.id)) return
-      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
-      setLayout((prev) => [
-        ...prev,
-        { id: meta.id, x: 0, y: maxY, w: meta.defaultSize.w, h: meta.defaultSize.h },
-      ])
+      addWidgetAtBottom(meta.id, meta.defaultSize.w, meta.defaultSize.h)
     },
-    [layout, presentIds],
+    [addWidgetAtBottom],
   )
 
   const handleAddCard = useCallback(
     (card: { id: string }) => {
-      if (presentIds.has(card.id)) return
-      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
-      setLayout((prev) => [...prev, { id: card.id, x: 0, y: maxY, w: 4, h: 4 }])
+      addWidgetAtBottom(card.id, 4, 4)
     },
-    [layout, presentIds],
+    [addWidgetAtBottom],
   )
 
   const handleAddApp = useCallback(
     (app: DashboardApp) => {
-      const id = appWidgetId(app.key)
-      if (presentIds.has(id)) return
-      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
-      setLayout((prev) => [...prev, { id, x: 0, y: maxY, w: 4, h: 3 }])
+      addWidgetAtBottom(appWidgetId(app.key), 4, 3)
     },
-    [layout, presentIds],
+    [addWidgetAtBottom],
   )
 
   const handleRemove = useCallback((id: string) => {
@@ -319,9 +343,19 @@ export function DashboardGrid({
             {layout.map((w) => {
               const node = nodeFor(w.id)
               return (
-                <div key={w.id} className="group/cell">
+                <div
+                  key={w.id}
+                  ref={(el) => {
+                    if (el) cellRefs.current.set(w.id, el)
+                    else cellRefs.current.delete(w.id)
+                  }}
+                  className="group/cell"
+                >
                   <div
-                    className="relative h-full w-full"
+                    className={
+                      'relative h-full w-full rounded-xl' +
+                      (flashId === w.id ? ' ring-2 ring-inset ring-teal-500' : '')
+                    }
                     onClickCapture={
                       mode === 'edit'
                         ? (e) => {
