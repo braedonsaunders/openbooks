@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
 import { ScheduleEditor, type ScheduleRow } from '../../../../ScheduleEditor'
 
-type RunRow = {
+export type RunRow = {
   id: string
   trigger: string
   status: string

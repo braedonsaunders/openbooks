@@ -46,8 +46,32 @@ interface SubsidiaryOpt {
   name: string
   depth: number
 }
+/**
+ * The project row as this drawer reads it. The loader selects the whole row;
+ * these are the columns the surface touches, with driver types (uuids arrive
+ * as strings, `date` columns as ISO-date strings, jsonb parsed).
+ */
+interface ProjectRecord {
+  id: string
+  code: string | null
+  name: string
+  is_active: boolean
+  custom: Record<string, unknown> | null
+  customer_id: string | null
+  foreman_id: string | null
+  manager_id: string | null
+  status: string
+  customer_po_number: string | null
+  starts_on: string | null
+  ends_on: string | null
+  notes: string | null
+  subsidiary_id: string | null
+  subsidiary_include_children: boolean
+  project_type_id: string | null
+  invoicing_preference: unknown
+}
 interface ProjectPayload {
-  project: Record<string, any>
+  project: ProjectRecord
   contractValue: string | null
   customerName: string | null
   foremanName: string | null
@@ -184,7 +208,7 @@ export function ProjectDrawer({
   )
   const [notes, setNotes] = useState<string>(pr.notes ?? '')
   const [custom, setCustom] = useState<Record<string, unknown>>(
-    (pr.custom as Record<string, unknown> | null) ?? {},
+    pr.custom ?? {},
   )
   const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
   const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? '')
@@ -271,7 +295,7 @@ export function ProjectDrawer({
     setEndsOn(pr.ends_on ?? '')
     setContractValue(payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '')
     setNotes(pr.notes ?? '')
-    setCustom((pr.custom as Record<string, unknown> | null) ?? {})
+    setCustom(pr.custom ?? {})
     setSubsidiaryId(pr.subsidiary_id ?? '')
     setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
   }

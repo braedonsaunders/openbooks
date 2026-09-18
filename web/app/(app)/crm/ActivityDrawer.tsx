@@ -6,7 +6,32 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 
-export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: any; owners: any[]; accounts: unknown[]; opportunities: any[]; closeHref: string; canManage: boolean }) {
+/** One activity row as the drawer reads it: stamps arrive as Dates. */
+export interface ActivityRecord {
+  id: string
+  kind: string
+  status: string
+  priority: string
+  subject: string
+  body: string | null
+  assigned_user_id: string | null
+  starts_at: Date | string | null
+  ends_at: Date | string | null
+  due_at: Date | string | null
+}
+
+export interface ActivityLink { subject_kind: string; subject_id: string }
+
+export interface ActivityDrawerData {
+  activity: ActivityRecord
+  links: ActivityLink[]
+}
+
+export interface ActivityOwnerOption { id: string; name: string }
+export interface ActivityAccountOption { id: string; name: string }
+export interface ActivityOpportunityOption { id: string; opportunity_number: string; title: string }
+
+export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: ActivityDrawerData; owners: ActivityOwnerOption[]; accounts: ActivityAccountOption[]; opportunities: ActivityOpportunityOption[]; closeHref: string; canManage: boolean }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -24,7 +49,9 @@ export function ActivityDrawer({ data, owners, accounts, opportunities, closeHre
       toast.success(tc('feedback.saved')); router.refresh()
     } catch { toast.error(tc('feedback.saveFailed')) } finally { setBusy(false) }
   }
-  const related = form.subjectKind === 'opportunity' ? opportunities : accounts
+  const related = form.subjectKind === 'opportunity'
+    ? opportunities.map((o) => ({ id: o.id, label: `${o.opportunity_number} · ${o.title}` }))
+    : accounts.map((a) => ({ id: a.id, label: a.name }))
   return <UrlDrawer open closeHref={closeHref} size="lg" title={<span className="flex items-center gap-2">{form.subject || t('activities.newFallback')}<Badge>{t(`activityKinds.${form.kind}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={t('fields.activityType')}><Select value={form.kind} onChange={(e) => set('kind', e.target.value)} disabled={!canManage}>{['task','call','event','email','note'].map((v) => <option key={v} value={v}>{t(`activityKinds.${v}`)}</option>)}</Select></Field>
@@ -36,7 +63,7 @@ export function ActivityDrawer({ data, owners, accounts, opportunities, closeHre
       <Field label={t('fields.end')}><Input type="datetime-local" value={form.endsAt} onChange={(e) => set('endsAt', e.target.value)} disabled={!canManage} /></Field>
       <Field label={t('fields.due')}><Input type="datetime-local" value={form.dueAt} onChange={(e) => set('dueAt', e.target.value)} disabled={!canManage} /></Field>
       <Field label={t('fields.relatedType')}><Select value={form.subjectKind} onChange={(e) => { set('subjectKind', e.target.value); set('subjectId', '') }} disabled={!canManage}><option value="account">{t('relatedTypes.account')}</option><option value="opportunity">{t('relatedTypes.opportunity')}</option></Select></Field>
-      <Field label={t('fields.relatedRecord')}><Select value={form.subjectId} onChange={(e) => set('subjectId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{related.map((o) => <option key={o.id} value={o.id}>{o.name ?? `${o.opportunity_number} · ${o.title}`}</option>)}</Select></Field>
+      <Field label={t('fields.relatedRecord')}><Select value={form.subjectId} onChange={(e) => set('subjectId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{related.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</Select></Field>
       <div className="sm:col-span-2"><Field label={t('fields.notes')}><Textarea rows={8} value={form.body} onChange={(e) => set('body', e.target.value)} disabled={!canManage} /></Field></div>
     </div>
   </UrlDrawer>

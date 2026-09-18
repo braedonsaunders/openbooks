@@ -13,7 +13,7 @@ export function StartCloseButton({
   defaultBookId,
 }: {
   periodId: string;
-  books: any[];
+  books: { id: string; name: string }[];
   defaultBookId?: string;
 }) {
   const t = useTranslations("close");

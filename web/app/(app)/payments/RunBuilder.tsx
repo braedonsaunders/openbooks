@@ -16,7 +16,7 @@ import { SortTh } from '../../../components/sortable-th'
  * pagination of the underlying list.
  */
 
-export interface RunBill {
+export interface RunBill extends Record<string, unknown> {
   id: string
   document_number: string
   vendor: string

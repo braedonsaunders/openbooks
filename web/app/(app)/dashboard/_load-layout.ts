@@ -34,16 +34,16 @@ async function loadAssignedRoleDefault(
     roleKeys.map((key, index) => sql`when role_key = ${key} then ${index}`),
     sql` `,
   )
-  const res = (await db.execute(sql`
+  const res = await db.execute<{ role_key: string; layout: DashboardLayoutData }>(sql`
     select role_key, layout
       from role_dashboard_layouts
      where org_id = ${authz.user.orgId} and role_key in (${roleMembership})
      order by case ${rolePriority} else ${roleKeys.length} end
      limit 1
-  `)) as any
+  `)
   if (!res.rows[0]) return null
   return {
-    layout: res.rows[0].layout as DashboardLayoutData,
+    layout: res.rows[0].layout,
     sourceKey: dashboardSourceKeyForRole(res.rows[0].role_key),
   }
 }
@@ -88,12 +88,12 @@ export async function loadDashboardLayout(
     hiddenQuickActionIdsForOrg(authz.user.orgId),
   ])
 
-  const res = (await db.execute(sql`
+  const res = await db.execute<{ layout: unknown; source_role: string | null; is_customised: boolean }>(sql`
     select layout, source_role, is_customised
       from user_dashboard_layouts
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
      limit 1
-  `)) as any
+  `)
 
   const row = res.rows[0]
   if (!row || row.source_role !== fallback.sourceKey) {
@@ -107,7 +107,10 @@ export async function loadDashboardLayout(
   if (!parsed.success || parsed.data.widgets.length === 0) {
     return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
   }
-  const storedQuickActions = (row.layout as Partial<DashboardLayoutData>).quickActions
+  const storedQuickActions =
+    typeof row.layout === 'object' && row.layout !== null && 'quickActions' in row.layout
+      ? row.layout.quickActions
+      : undefined
   return {
     layout: {
       widgets: clampToWidgetMinimums(parsed.data.widgets),

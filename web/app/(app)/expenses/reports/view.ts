@@ -97,17 +97,17 @@ export async function loadExpenseReports(
   const openReport = expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId) : null
   const pickers = openReport
     ? await Promise.all([
-        db.execute(sql`
+        db.execute<{ id: string; display_name: string }>(sql`
           select p.id, p.display_name from parties p
            where p.is_active and p.org_id = ${authz.user.orgId}
              and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
-           order by p.display_name limit 2000`) as any,
-        db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
+           order by p.display_name limit 2000`),
+        db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`),
         cardOptions(authz.user.orgId),
         taxCodeOptions(authz.user.orgId),
         taxGroupOptions(authz.user.orgId),
-        db.execute(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`) as any,
-        db.execute(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name limit 2000`) as any,
+        db.execute<{ id: string; name: string }>(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`),
+        db.execute<{ id: string; name: string }>(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name limit 2000`),
         loadFieldDefs('documents', 'expense_report'),
         loadFieldDefs('document_lines', 'expense_report'),
         customSegmentOptions(authz.user.orgId),

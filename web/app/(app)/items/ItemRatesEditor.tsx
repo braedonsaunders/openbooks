@@ -12,7 +12,7 @@ interface Tier { unitCode: string; unitName: string; baseQuantity: string; costR
 interface RateData {
   books: { id: string; code: string; name: string; currency: string; is_default: boolean }[]
   profile: { base_unit: string; pricing_policy: string; invoice_presentation: string } | null
-  versions: { id: string; rate_book_id: string; rate_book_name: string; effective_from: string; effective_to: string | null; status: string; tiers: any[] }[]
+  versions: { id: string; rate_book_id: string; rate_book_name: string; effective_from: string; effective_to: string | null; status: string; tiers: Tier[] }[]
   timeTypes: { id: string; name: string; bill_multiplier: string }[]
 }
 

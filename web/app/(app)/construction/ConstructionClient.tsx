@@ -634,6 +634,43 @@ function ChangeOrdersSection({
   );
 }
 
+/** Billing/retainage actions answer untyped JSON; the fields this view reads
+ *  from a successful response. */
+interface ConstructionActionResult {
+  invoiceId: string | undefined
+  documentNumber: string | undefined
+  currentDue: string | number | undefined
+  retainage: string | number | undefined
+  amount: string | number | undefined
+}
+
+function asActionResult(value: unknown): ConstructionActionResult {
+  const blank = {
+    invoiceId: undefined,
+    documentNumber: undefined,
+    currentDue: undefined,
+    retainage: undefined,
+    amount: undefined,
+  }
+  if (typeof value !== "object" || value === null) return blank
+  const fields = new Map<string, unknown>(Object.entries(value))
+  const text = (key: string): string | undefined => {
+    const field = fields.get(key)
+    return typeof field === "string" ? field : undefined
+  }
+  const decimal = (key: string): string | number | undefined => {
+    const field = fields.get(key)
+    return typeof field === "string" || typeof field === "number" ? field : undefined
+  }
+  return {
+    invoiceId: text("invoiceId"),
+    documentNumber: text("documentNumber"),
+    currentDue: decimal("currentDue"),
+    retainage: decimal("retainage"),
+    amount: decimal("amount"),
+  }
+}
+
 function PayApplicationsSection({
   projectId,
   apps,
@@ -670,10 +707,10 @@ function PayApplicationsSection({
   }
 
   async function bill(appId: string) {
-    const result = (await onChange({ action: "billPayApp", payApplicationId: appId })) as any;
-    if (result?.invoiceId) {
+    const result = asActionResult(await onChange({ action: "billPayApp", payApplicationId: appId }));
+    if (result.invoiceId) {
       setMsg(t("billedMessage", {
-        number: result.documentNumber,
+        number: result.documentNumber ?? "",
         currentDue: money(result.currentDue),
         retainage: money(result.retainage),
       }));
@@ -893,9 +930,9 @@ function RetainageSection({
   const [periodEnd, setPeriodEnd] = useState("");
 
   async function release() {
-    const result = (await onChange({ action: "releaseRetainage", projectId, amount, periodEnd })) as any;
-    if (result?.invoiceId) {
-      setMsg(t("createdMessage", { number: result.documentNumber, amount: money(result.amount) }));
+    const result = asActionResult(await onChange({ action: "releaseRetainage", projectId, amount, periodEnd }));
+    if (result.invoiceId) {
+      setMsg(t("createdMessage", { number: result.documentNumber ?? "", amount: money(result.amount) }));
       setAmount("");
       setPeriodEnd("");
       setFormOpen(false);

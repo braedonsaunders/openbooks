@@ -97,7 +97,7 @@ async function click(button: HTMLButtonElement) {
 
 function data(displayName: string) {
   return {
-    party: { id: PARTY_ID, display_name: displayName, email: null, phone: null, website: null },
+    party: { id: PARTY_ID, display_name: displayName, email: null, phone: null, website: null, is_active: true, updated_at: '2026-01-01T00:00:00.000000Z' },
     crm: {
       profile: {
         lifecycle_stage: "lead",

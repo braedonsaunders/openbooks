@@ -57,14 +57,14 @@ export async function PaymentsSection({
         ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
         : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
     const [parties, banks] = await Promise.all([
-      db.execute(sql`
+      db.execute<{ id: string; display_name: string }>(sql`
         select id, display_name from parties p
          where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
-         order by display_name limit 2000`) as any,
-      db.execute(sql`
+         order by display_name limit 2000`),
+      db.execute<{ id: string; number: string | null; name: string }>(sql`
         select id, number, name from accounts
          where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-         order by number nulls last, name`) as any,
+         order by number nulls last, name`),
     ])
     const openItems: OpenItemClient[] =
       openPayment.doc.status === 'draft' && openPayment.doc.party_id
@@ -82,7 +82,7 @@ export async function PaymentsSection({
     drawer = (
       <PaymentDrawer
         payment={(openPayment)}
-        key={(openPayment as any).doc.id}
+        key={String(openPayment.doc.id)}
         initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
         initialOpenItems={openItems}
         parties={parties.rows}

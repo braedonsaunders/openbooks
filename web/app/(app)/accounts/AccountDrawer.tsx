@@ -41,6 +41,61 @@ const TYPE_KEYS: Record<string, string> = {
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950'
 const fieldClass = 'space-y-1.5'
 
+/** The account row: `accounts` columns as the loader hands them. Column
+ *  nullability per schema (`number` is nullable, `monetary` is nullable,
+ *  `required_dimensions`/`custom` are JSONB). */
+interface AccountRow extends Record<string, unknown> {
+  id: string
+  number: string | null
+  name: string
+  type: string
+  description: string | null
+  parent_id: string | null
+  subsidiary_id: string | null
+  is_summary: boolean
+  is_active: boolean
+  currency_restriction: string | null
+  eliminate: boolean
+  reconcilable: boolean
+  required_dimensions: string[]
+  custom: Record<string, unknown>
+  subsidiary_include_children: boolean
+  monetary: boolean | null
+}
+
+function isStringMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+/** Narrow the loader's untyped account row to the fields this drawer reads.
+ *  Loader rows always carry the schema shapes here, so valid payloads pass
+ *  through unchanged. */
+function asAccountRow(raw: Record<string, unknown>): AccountRow {
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null
+  return {
+    ...raw,
+    id: text(raw.id) ?? '',
+    number: text(raw.number),
+    name: text(raw.name) ?? '',
+    type: text(raw.type) ?? '',
+    description: text(raw.description),
+    parent_id: text(raw.parent_id),
+    subsidiary_id: text(raw.subsidiary_id),
+    is_summary: raw.is_summary === true,
+    is_active: raw.is_active === true,
+    currency_restriction: text(raw.currency_restriction),
+    eliminate: raw.eliminate === true,
+    reconcilable: raw.reconcilable === true,
+    required_dimensions: Array.isArray(raw.required_dimensions)
+      ? raw.required_dimensions.filter((dim): dim is string => typeof dim === 'string')
+      : [],
+    custom: isStringMap(raw.custom) ? raw.custom : {},
+    subsidiary_include_children: raw.subsidiary_include_children !== false,
+    monetary: typeof raw.monetary === 'boolean' ? raw.monetary : null,
+  }
+}
+
 export function AccountDrawer({
   payload,
   parents,
@@ -75,7 +130,7 @@ export function AccountDrawer({
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
   const router = useRouter()
-  const account = payload.account as Record<string, any>
+  const account = asAccountRow(payload.account)
   const requestIdRef = useRef<string | null>(null)
 
   const initial = useMemo(() => ({
@@ -92,8 +147,8 @@ export function AccountDrawer({
     subsidiaryIncludeChildren: account.subsidiary_include_children !== false,
     reconcilable: account.reconcilable === true,
     monetary: typeof account.monetary === 'boolean' ? String(account.monetary) : '',
-    requiredDimensions: Array.isArray(account.required_dimensions) ? account.required_dimensions as string[] : [],
-    custom: (account.custom ?? {}) as Record<string, unknown>,
+    requiredDimensions: account.required_dimensions,
+    custom: account.custom,
   }), [account, createMode])
   const [form, setForm] = useState(initial)
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')

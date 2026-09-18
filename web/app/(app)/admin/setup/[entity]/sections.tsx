@@ -221,15 +221,15 @@ export async function SetupDrawerSlot({
         or coalesce(cast(effective_to as text), '') ilike ${taxRateSearch}
       )` : sql``}`
     const [rateRowsRes, rateCountRes, childRefs] = await Promise.all([
-      db.execute(sql`
+      db.execute<TaxRateRow>(sql`
         select id, rate_percent, effective_from, effective_to
           from tax_rates ${taxRateFilter}
          order by effective_from desc
-         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`) as any,
+         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`),
       (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`)),
       loadRefOptions(taxRateEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    taxRateRows = rateRowsRes.rows as TaxRateRow[]
+    taxRateRows = rateRowsRes.rows
     taxRateTotal = Number(rateCountRes.rows[0]?.n ?? 0)
     taxRateRefOptions = childRefs
 
@@ -283,15 +283,15 @@ export async function SetupDrawerSlot({
         or coalesce(formula, '') ilike ${taxBoxSearch}
       )` : sql``}`
     const [boxRowsRes, boxCountRes, childRefs] = await Promise.all([
-      db.execute(sql`
+      db.execute<TaxReturnBoxRow>(sql`
         select id, report_code, line_code, label, basis, formula, tax_code_id
           from tax_report_lines ${taxBoxFilter}
          order by report_code, sequence, line_code
-         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`) as any,
+         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`),
       (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`)),
       loadRefOptions(taxBoxEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    taxBoxRows = boxRowsRes.rows as TaxReturnBoxRow[]
+    taxBoxRows = boxRowsRes.rows
     taxBoxTotal = Number(boxCountRes.rows[0]?.n ?? 0)
     taxBoxRefOptions = childRefs
 
@@ -351,15 +351,15 @@ export async function SetupDrawerSlot({
         or name ilike ${segValSearch}
       )` : sql``}`
     const [valRowsRes, valCountRes, childRefs] = await Promise.all([
-      db.execute(sql`
+      db.execute<SegmentValueRow>(sql`
         select id, code, name, is_active
           from segment_values ${segValFilter}
          order by name
-         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`) as any,
+         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`),
       (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`)),
       loadRefOptions(segValEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    segValRows = valRowsRes.rows as SegmentValueRow[]
+    segValRows = valRowsRes.rows
     segValTotal = Number(valCountRes.rows[0]?.n ?? 0)
     segValRefOptions = childRefs
 

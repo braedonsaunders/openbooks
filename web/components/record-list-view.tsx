@@ -88,7 +88,7 @@ export async function RecordListView({
   /** Action shown in the empty state (usually the New button). */
   emptyAction?: ReactNode
   /** Per-row actions for the `_actions` column, if the view includes it. */
-  renderRowActions?: (row: any) => ReactNode
+  renderRowActions?: (row: Record<string, unknown>) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
   const source = listSource(recordType)
@@ -180,15 +180,15 @@ export async function RecordListView({
       select d.status, count(*) as n from documents d
        where ${statusCountWhere}
        group by d.status`)),
-    db.execute(sql`
+    db.execute<{ n: string }>(sql`
       select count(*) as n from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         ${joins}
-       where ${where}`) as any,
+       where ${where}`),
   ])
-  const rows = rowsRes.rows as any[]
+  const rows = rowsRes.rows as Record<string, unknown>[]
   const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
-  const filteredTotal = Number(totalRow.rows[0].n)
+  const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
 
   const statusOptions = statusCounts.rows.map((r) => ({
     value: String(r.status),
@@ -232,7 +232,7 @@ export async function RecordListView({
     return option ? (option.labelKey ? label(option.labelKey) : option.value) : value.replace(/_/g, ' ')
   }
 
-  const cell = (row: any, c: ListColDesc) => {
+  const cell = (row: Record<string, unknown>, c: ListColDesc) => {
     const v = row[c.key]
     // Entity drill-through columns (party → vendor/customer/employee, funding
     // account → account) declared by the source.
@@ -264,7 +264,7 @@ export async function RecordListView({
         return (
           <TableCell key={c.key} className="font-mono text-[13px] font-semibold">
             <div className="flex items-center gap-2">
-              {source.multiKind ? <DocTypeBadge kind={row.kind} /> : null}
+              {source.multiKind ? <DocTypeBadge kind={String(row.kind)} /> : null}
               <Link
                 href={(openHref(String(row.id)))}
                 className="text-teal-700 hover:underline dark:text-teal-300"
@@ -274,12 +274,16 @@ export async function RecordListView({
             </div>
           </TableCell>
         )
-      case 'amount':
+      case 'amount': {
+        // Amount cells come from numeric columns (driver strings/numbers);
+        // String() round-trips both exactly, so formatting is unchanged.
+        const rowCurrency = row.currency
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v, { currency: row.currency })}
+            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(String(v), { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined })}
           </TableCell>
         )
+      }
       case 'status':
         return (
           <TableCell key={c.key}>
@@ -399,7 +403,7 @@ export async function RecordListView({
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.id}>{cols.map((c) => cell(row, c))}</TableRow>
+                <TableRow key={String(row.id)}>{cols.map((c) => cell(row, c))}</TableRow>
               ))}
             </TableBody>
           </Table>

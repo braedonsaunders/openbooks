@@ -16,6 +16,45 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
  * now profile-driven: the project's project type supplies the P&L measure
  * definitions + layout, and resolveProjectFinancials computes the measures.
  */
+
+/**
+ * Charge documents with their billable rollup. `lines` is a `count(*)`, so
+ * the driver hands back a string; numerics arrive as strings too.
+ */
+type ChargeDocumentRow = {
+  id: string
+  documentNumber: string
+  documentDate: string
+  status: string
+  cost: string
+  billValue: string
+  lines: string | number
+  billed: boolean | null
+}
+
+type ChargeItemRow = {
+  id: string
+  name: string
+  defaultCost: string | null
+  defaultRate: string | null
+}
+
+type ChargeEquipmentRow = {
+  id: string
+  name: string
+  unitNumber: string
+  itemId: string | null
+}
+
+type ChargeOperatorRow = { id: string; displayName: string }
+
+type RecognitionStatusRow = {
+  contract_id: string | null
+  percent_complete: string | number | null
+  allocated_price: string | number | null
+  override_raw: string
+  recognized: string | number
+}
 export async function loadProjectCockpit(
   orgId: string,
   projectId: string,
@@ -35,7 +74,7 @@ export async function loadProjectCockpit(
     listBillingRequests(orgId, projectId),
     fieldTicketsEnabled ? listBillableFieldTickets(orgId, projectId) : Promise.resolve([]),
     resolveInvoicingPreference(orgId, projectId),
-    db.execute(sql`
+    db.execute<ChargeDocumentRow>(sql`
       select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
              d.total::numeric(19,4) as cost,
              coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
@@ -44,14 +83,14 @@ export async function loadProjectCockpit(
         from documents d left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
        group by d.id order by d.document_date desc, d.document_number desc`),
-    db.execute(sql`
+    db.execute<ChargeItemRow>(sql`
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active
          ${inventoryEnabled ? sql`` : sql`and kind not in ('inventory', 'assembly', 'kit')`}
          ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
        order by name limit 2000`),
     equipmentEnabled
-      ? db.execute(sql`
+      ? db.execute<ChargeEquipmentRow>(sql`
       select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
         from equipment_units where org_id = ${orgId} and status = 'active'
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
@@ -61,14 +100,14 @@ export async function loadProjectCockpit(
     // employees — the same population payroll pays, because that is who an
     // equipment incentive can actually reach.
     equipmentEnabled
-      ? db.execute(sql`
+      ? db.execute<ChargeOperatorRow>(sql`
       select p.id, p.display_name as "displayName"
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
        where p.org_id = ${orgId} and er.is_active and er.terminated_on is null
        order by p.display_name limit 2000`)
       : Promise.resolve({ rows: [] }),
-    db.execute(sql`
+    db.execute<RecognitionStatusRow>(sql`
       select c.id as contract_id, o.percent_complete, o.allocated_price,
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
              coalesce((select sum(l.recognized_amount)
@@ -99,14 +138,14 @@ export async function loadProjectCockpit(
       : Promise.resolve({ rows: [] }),
   ])
 
-  const charges = (chargeRes as unknown as { rows: any[] }).rows
-  const items = (itemRes as unknown as { rows: any[] }).rows
-  const equipment = (equipmentRes as unknown as { rows: any[] }).rows
-  const operators = (operatorRes as unknown as { rows: any[] }).rows
+  const charges = chargeRes.rows
+  const items = itemRes.rows
+  const equipment = equipmentRes.rows
+  const operators = operatorRes.rows
 
   // Recognition status for the Financials tab card — shown for fixed-price /
   // percent-complete project types; posting stays with the central run.
-  const recRow = (recognizedRes as unknown as { rows: any[] }).rows[0]
+  const recRow = recognizedRes.rows[0]
   const recognitionPolicy = projectType.invoicingProfile.recognition
   let recognition = null
   if (recognitionPolicy === 'percent_complete_cost') {

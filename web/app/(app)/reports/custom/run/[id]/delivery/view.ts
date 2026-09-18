@@ -9,7 +9,8 @@ import { requirePermission } from '../../../../../../../lib/authz'
 import { canRunReportEntity } from '../../../../../../../lib/report-authz'
 import { isUuid } from '../../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
-import type { DeliveryPanel } from './DeliveryPanel'
+import type { DeliveryPanel, RunRow } from './DeliveryPanel'
+import type { ScheduleRow } from '../../../../ScheduleEditor'
 
 /**
  * Delivery management for one saved report, split into a loader and a spec.
@@ -60,14 +61,14 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
     : definition.name
 
   const [schedules, recentRuns] = await Promise.all([
-    db.execute<any>(sql`
+    db.execute<ScheduleRow>(sql`
       select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
              timezone, recipient_emails, next_run_at, active
         from report_schedules
        where org_id = ${authz.user.orgId} and definition_id = ${id}
        order by next_run_at
     `),
-    db.execute<any>(sql`
+    db.execute<RunRow>(sql`
       select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
              exists(select 1 from report_run_artifacts a where a.run_id=r.id and a.org_id=r.org_id) as artifact_available,
              count(d.id)::int as delivery_total,

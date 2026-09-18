@@ -14,7 +14,7 @@ import { Pagination } from '../../../../../components/pagination'
 import { SearchInput } from '../../../../../components/search-input'
 import { mergeHref } from '../../../../../lib/list-params'
 
-export interface TaxRateRow {
+export interface TaxRateRow extends Record<string, unknown> {
   id: string
   rate_percent: string
   effective_from: string

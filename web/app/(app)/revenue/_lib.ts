@@ -57,12 +57,23 @@ export interface ContractPayload {
  * recognition schedule lines — the operational drill-down for the drawer.
  */
 export async function loadContract(id: string, orgId: string): Promise<ContractPayload | null> {
-  const cRes = (await db.execute<any>(sql`
+  const cRes = await db.execute<{
+    id: string
+    contract_number: string
+    status: string
+    currency: string | null
+    total_transaction_price: string
+    starts_on: string | null
+    ends_on: string | null
+    customer: string
+    sourceInvoiceId: string | null
+    sourceInvoiceNumber: string | null
+  }>(sql`
     select c.id, c.contract_number, c.status, c.currency, c.total_transaction_price, c.starts_on, c.ends_on,
            coalesce(p.display_name, '—') as customer
       from revenue_contracts c
       left join parties p on p.id = c.customer_id and p.org_id = c.org_id
-     where c.id = ${id} and c.org_id = ${orgId}`))
+     where c.id = ${id} and c.org_id = ${orgId}`)
   const contract = cRes.rows[0]
   if (!contract) return null
 
@@ -80,14 +91,26 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
   contract.sourceInvoiceId = invRes.rows[0]?.id ?? null
   contract.sourceInvoiceNumber = invRes.rows[0]?.document_number ?? null
 
-  const oRes = (await db.execute<any>(sql`
+  const oRes = await db.execute<{
+    id: string
+    description: string
+    allocated_price: string
+    recognition_starts_on: string | null
+    recognition_ends_on: string | null
+    status: string
+    fair_value_flag: 'below_range' | 'above_range' | null
+    fair_value_low: string | null
+    fair_value_high: string | null
+    method: string
+    rule_name: string
+  }>(sql`
     select o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
            o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name
       from performance_obligations o
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.contract_id = ${id} and o.org_id = ${orgId}
-     order by o.created_at`))
+     order by o.created_at`)
 
   const obligations: ObligationRow[] = []
   for (const o of oRes.rows) {

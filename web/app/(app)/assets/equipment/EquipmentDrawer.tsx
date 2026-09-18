@@ -12,8 +12,41 @@ import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer }
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { confirmDialog } from '../../../../lib/confirm'
 type Opt = { id: string; name: string; code?: string | null; number?: string | null };
+/**
+ * The loaded unit + KPI metrics as serialized through widget props: uuids as
+ * strings, `date` columns as ISO-date strings, numerics as ledger strings.
+ */
+interface EquipmentUnitRow {
+  id: string
+  subsidiary_id: string
+  unit_number: string
+  name: string
+  description: string | null
+  status: string
+  charge_item_id: string | null
+  fixed_asset_id: string | null
+  rate_book_id: string | null
+  purchase_price: string
+  acquired_on: string | null
+  in_service_on: string | null
+  serial_number: string | null
+  capacity_quantity: string | null
+  capacity_unit: string | null
+  charge_item_name: string | null
+  rate_book_name: string | null
+  fixed_asset_number: string | null
+  fixed_asset_cost: string | null
+}
+interface EquipmentMetricsRow {
+  usage: string
+  recovery: string
+  billable: string
+  billed_revenue: string
+  direct_costs: string
+  depreciation: string
+}
 export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage, closeHref = '/assets/equipment', fixedAssetsEnabled = false, projectsEnabled = false }: {
-  payload: any; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean; closeHref?: string
+  payload: { unit: EquipmentUnitRow; metrics: EquipmentMetricsRow }; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean; closeHref?: string
   /** Capitalize writes a fixed-asset row — hide that action while Fixed Assets is off. */
   fixedAssetsEnabled?: boolean
   /** Rate books are labor pricing — hide that picker while Projects is off. */

@@ -6,8 +6,8 @@ import { FxProviderForm } from './FxProviderForm'
 export async function FxProviderPage({ orgId }: { orgId: string }) {
   const [config, currencies, recommended, lastRun] = await Promise.all([
     readFxProviderConfigView(orgId),
-    db.execute(sql`select code, name from currencies order by code`) as any,
-    (db.execute(sql`
+    db.execute<{ code: string; name: string }>(sql`select code, name from currencies order by code`),
+    (db.execute<{ code: string }>(sql`
       select code from (
         select base_currency as code, 0 as priority from orgs where id = ${orgId}
         union all
@@ -27,7 +27,7 @@ export async function FxProviderPage({ orgId }: { orgId: string }) {
     <FxProviderForm
       initial={config ? JSON.parse(JSON.stringify(config)) : null}
       currencies={currencies.rows}
-      recommendedCurrencies={recommended.rows.map((row: any) => row.code)}
+      recommendedCurrencies={recommended.rows.map((row) => row.code)}
       lastRun={lastRun.rows[0] ? JSON.parse(JSON.stringify(lastRun.rows[0])) : null}
     />
   )

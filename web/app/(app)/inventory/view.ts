@@ -87,14 +87,14 @@ export async function loadInventory(
   const pickers =
     showDrawer && canManage
       ? await Promise.all([
-          db.execute(sql`
+          db.execute<{ id: string; code: string | null; name: string | null }>(sql`
           select it.id, it.code, it.name from items it
             join item_inventory_profiles p on p.item_id = it.id and p.org_id = it.org_id
-           where it.org_id = ${orgId} and it.is_active order by it.name`) as any,
-          db.execute(sql`select id, code from stock_locations where org_id = ${orgId} and is_active order by code`) as any,
-          db.execute(
+           where it.org_id = ${orgId} and it.is_active order by it.name`),
+          db.execute<{ id: string; code: string | null }>(sql`select id, code from stock_locations where org_id = ${orgId} and is_active order by code`),
+          db.execute<{ id: string; number: string | null; name: string | null }>(
             sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
-          ) as any,
+          ),
         ])
       : null
 

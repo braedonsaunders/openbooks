@@ -73,6 +73,16 @@ const LINK = 'text-teal-700 hover:underline dark:text-teal-300'
 const NUMBER_CELL = 'font-mono text-[13px] font-semibold'
 const MUTED = 'text-slate-500 dark:text-slate-400'
 const NUMERIC_CELL = 'tabular-nums'
+
+/** A `custom_records` list row: `data` is the JSONB document (object by
+ *  convention — every writer stores a map), narrowed at each use site. */
+type CustomRecordRow = {
+  id: string
+  record_number: string
+  data: unknown
+  status: string
+  created_at: Date
+}
 const DASH_CLASS = 'text-slate-400 dark:text-slate-500'
 
 export interface RecordModuleColumn {
@@ -208,14 +218,14 @@ export async function loadRecordWorkspace(
           })()
 
   const [rows, statusCounts, filterCounts] = await Promise.all([
-    (db.execute(sql`
+    (db.execute<CustomRecordRow>(sql`
       select r.id, r.record_number, r.data, r.status, r.created_at
         from custom_records r
        where ${where}
        order by ${sortColumn} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.created_at desc
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
     `)),
-    (db.execute(sql`
+    (db.execute<{ status: string; n: string }>(sql`
       select r.status, count(*) as n from custom_records r
        where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
        group by r.status
@@ -238,14 +248,14 @@ export async function loadRecordWorkspace(
   const filtered = Boolean(status || listParams.q || activeFieldFilters.length > 0)
   const filteredTotal = filtered
     ? Number(
-        ((await db.execute(sql`select count(*) as n from custom_records r where ${where}`)) as any)
-          .rows[0].n,
+        (await db.execute<{ n: string }>(sql`select count(*) as n from custom_records r where ${where}`))
+          .rows[0]?.n ?? 0,
       )
     : total
 
   const labels = await resolveEntityLabels(
     sections,
-    rows.rows.map((r: any) => r.data),
+    rows.rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
   )
 
   const loadedOpenRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null
@@ -257,7 +267,7 @@ export async function loadRecordWorkspace(
     ? loadedOpenRecord
     : null
 
-  const statusOptions = statusCounts.rows.map((r: any) => ({
+  const statusOptions = statusCounts.rows.map((r) => ({
     value: r.status,
     label: (RECORD_STATUSES as readonly string[]).includes(r.status)
       ? tc(`status.${r.status}`)
@@ -308,7 +318,7 @@ export async function loadRecordWorkspace(
     })),
     columnStatus: tc('labels.status'),
     columnCreated: tc('labels.created'),
-    rows: rows.rows.map((r: any) => {
+    rows: rows.rows.map((r) => {
       const data = (r.data ?? {}) as Record<string, unknown>
       const cells: Record<string, string> = {}
       for (const f of columns) cells[f.id] = formatFieldValue(f, data[f.id], labels, display)

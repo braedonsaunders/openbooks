@@ -122,11 +122,14 @@ function payload() {
       unit_number: "EX-003",
       description: "",
       status: "draft",
-      subsidiary_id: null,
+      subsidiary_id: randomUUID(),
       charge_item_id: null,
       charge_item_name: null,
       fixed_asset_id: null,
       fixed_asset_number: null,
+      fixed_asset_cost: null,
+      rate_book_id: null,
+      rate_book_name: null,
       purchase_price: "120000",
       acquired_on: null,
       in_service_on: null,
@@ -134,7 +137,7 @@ function payload() {
       capacity_quantity: null,
       capacity_unit: null,
     },
-    metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0" },
+    metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0" },
   };
 }
 

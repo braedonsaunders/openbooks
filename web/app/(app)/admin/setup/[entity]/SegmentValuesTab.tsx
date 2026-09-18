@@ -15,7 +15,7 @@ import { Pagination } from '../../../../../components/pagination'
 import { SearchInput } from '../../../../../components/search-input'
 import { mergeHref } from '../../../../../lib/list-params'
 
-export interface SegmentValueRow {
+export interface SegmentValueRow extends Record<string, unknown> {
   id: string
   code: string | null
   name: string

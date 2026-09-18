@@ -9,6 +9,7 @@ import { CodeEditor } from '@/components/code-editor'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { dateTime } from '../../../../lib/format'
 import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from '../../../../lib/script-kinds'
+import type { ScriptDetailRow, ScriptRunRow } from './view'
 
 // Enum values with their message keys under admin.scripts, translated at render.
 const TRIGGERS: { value: string; labelKey: string }[] = [
@@ -130,8 +131,8 @@ export function ScriptDrawer({
   runs,
   customTypes,
 }: {
-  script: Record<string, any> | null
-  runs: Record<string, any>[]
+  script: ScriptDetailRow | null
+  runs: ScriptRunRow[]
   /** Published custom record types (for kind narrowing): { key, name }. */
   customTypes: { key: string; name: string }[]
 }) {

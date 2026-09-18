@@ -156,18 +156,18 @@ export async function loadCrmSetup(
 
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const [usersResult, teamsResult, orgResult, currenciesResult] =
-    (await Promise.all([
-      db.execute(
+    await Promise.all([
+      db.execute<{ id: string; name: string }>(
         sql`select id,name from users where org_id=${orgId} and is_active order by name`,
       ),
-      db.execute(
+      db.execute<{ id: string; name: string }>(
         sql`select id,name from crm_sales_teams where org_id=${orgId} and is_active order by name`,
       ),
-      db.execute(sql`select base_currency from orgs where id=${orgId}`),
+      db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${orgId}`),
       multiCurrency
-        ? db.execute(sql`select code,name from currencies order by code`)
+        ? db.execute<{ code: string; name: string }>(sql`select code,name from currencies order by code`)
         : Promise.resolve({ rows: [] }),
-    ])) as unknown as [any, any, any, any]
+    ])
 
   const rowParam = pickString(sp.row)
   const creating = rowParam === 'new'

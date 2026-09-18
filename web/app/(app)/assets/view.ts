@@ -44,6 +44,19 @@ import type { AssetDrawer } from './AssetDrawer'
 
 type AssetDrawerProps = Parameters<typeof AssetDrawer>[0]
 
+/** Picker rows for the asset drawer: books, categories, GL accounts (number
+ *  is nullable), tax regimes with their pool classes, and methods. */
+type AssetBookRow = { id: string; name: string; is_primary: boolean }
+type AssetCategoryRow = { id: string; name: string }
+type AssetAccountRow = { id: string; number: string | null; name: string }
+type AssetTaxRegimeRow = {
+  code: string
+  name: string
+  class_attribute: string
+  classes: { code: string; name: string }[]
+}
+type AssetMethodRow = { id: string; code: string; name: string }
+
 export interface AssetsData {
   title: string
   description: string
@@ -120,7 +133,7 @@ export async function loadAssets(
   const [multiSub, allSubsidiaries, depreciationBooks] = await Promise.all([
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
-    db.execute(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc, code`) as any,
+    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc, code`),
   ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
@@ -138,17 +151,17 @@ export async function loadAssets(
         perPage: 25,
       }),
       Promise.all([
-        db.execute(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`) as any,
-        db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`) as any,
-        db.execute(sql`
+        db.execute<AssetCategoryRow>(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`),
+        db.execute<AssetAccountRow>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`),
+        db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
                    filter (where c.class_code is not null), '[]'::jsonb) as classes
             from tax_regimes r
             left join tax_pool_classes c on c.org_id=r.org_id and c.regime=r.code and c.is_active
            where r.org_id=${orgId} and r.is_active
-           group by r.code,r.name,r.class_attribute order by r.name`) as any,
-        db.execute(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`) as any,
+           group by r.code,r.name,r.class_attribute order by r.name`),
+        db.execute<AssetMethodRow>(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`),
       ]),
       loadFieldDefs('fixed_assets'),
     ])

@@ -161,8 +161,99 @@ export function clearedDistributionFields(): DistributionLineFields {
   }
 }
 export interface DocPayload {
-  doc: Record<string, any>
-  lines: Record<string, any>[]
+  doc: Record<string, unknown>
+  lines: Record<string, unknown>[]
+}
+
+/** The document header: `documents` plus the loader's joins. Dates, uuids
+ *  and numerics arrive from the driver as strings; nullable columns,
+ *  left-join columns and kind-specific extras stay nullable. Column
+ *  nullability per schema (`balance_due` is loader-computed, so it also
+ *  accepts numbers). */
+export interface DocumentDoc extends Record<string, unknown> {
+  id: string
+  status: string
+  currency: string
+  kind: string
+  payment_card_id: string | null
+  reference_number: string | null
+  party_name: string | null
+  memo: string | null
+  due_date: string | null
+  document_date: string | null
+  billing_method: string | null
+  updated_at: string
+  project_id: string | null
+  posting_date: string | null
+  payment_hold_reason: string | null
+  location_id: string | null
+  is_final_invoice: boolean
+  internal_notes: string | null
+  expected_pay_date: string | null
+  entry_id: string | null
+  department_id: string | null
+  class_id: string | null
+  balance_due: string | number | null
+  total: string
+  tax_total: string
+  subtotal: string
+  subsidiary_id: string | null
+  party_id: string | null
+  extra_dims: Record<string, string>
+  document_number: string | null
+  custom: Record<string, unknown>
+}
+
+/** Narrow a loader's untyped document row to the header fields this drawer
+ *  reads. Loader rows always carry strings (or string maps for
+ *  custom/extra_dims) here, so valid payloads pass through unchanged. */
+export function asDocumentDoc(raw: Record<string, unknown>): DocumentDoc {
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null
+  const dims = (value: unknown): Record<string, string> =>
+    isLineMap(value)
+      ? Object.fromEntries(
+          Object.entries(value).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : {}
+  const decimal = (value: unknown): string | number | null =>
+    typeof value === 'string' || typeof value === 'number' ? value : null
+  return {
+    ...raw,
+    id: text(raw.id) ?? '',
+    status: text(raw.status) ?? '',
+    currency: text(raw.currency) ?? '',
+    kind: text(raw.kind) ?? '',
+    payment_card_id: text(raw.payment_card_id),
+    reference_number: text(raw.reference_number),
+    party_name: text(raw.party_name),
+    memo: text(raw.memo),
+    due_date: text(raw.due_date),
+    document_date: text(raw.document_date),
+    billing_method: text(raw.billing_method),
+    updated_at: text(raw.updated_at) ?? '',
+    project_id: text(raw.project_id),
+    posting_date: text(raw.posting_date),
+    payment_hold_reason: text(raw.payment_hold_reason),
+    location_id: text(raw.location_id),
+    is_final_invoice: raw.is_final_invoice === true,
+    internal_notes: text(raw.internal_notes),
+    expected_pay_date: text(raw.expected_pay_date),
+    entry_id: text(raw.entry_id),
+    department_id: text(raw.department_id),
+    class_id: text(raw.class_id),
+    balance_due: decimal(raw.balance_due),
+    total: text(raw.total) ?? '0',
+    tax_total: text(raw.tax_total) ?? '0',
+    subtotal: text(raw.subtotal) ?? '0',
+    subsidiary_id: text(raw.subsidiary_id),
+    party_id: text(raw.party_id),
+    extra_dims: dims(raw.extra_dims),
+    document_number: text(raw.document_number),
+    custom: isLineMap(raw.custom) ? raw.custom : {},
+  }
 }
 
 /** Any request that carries one exact revision token as fence evidence.
@@ -562,23 +653,32 @@ export function applyQtyPriceToRows<Row extends QtyPriceRow>(prev: Row[], next: 
   })
 }
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
+/** Line text columns are uuids/text-or-null; numerics are handled with String(). */
+function lineText(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+function isLineMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
-    accountId: l.account_id ?? '',
-    itemId: l.item_id ?? '',
-    description: l.description ?? '',
+    accountId: lineText(l.account_id),
+    itemId: lineText(l.item_id),
+    description: lineText(l.description),
     quantity: l.quantity != null ? String(l.quantity) : '',
-    unit: l.unit ?? '',
+    unit: lineText(l.unit),
     unitPrice: l.unit_price != null ? String(l.unit_price) : '',
     costRate: l.cost_rate != null ? String(l.cost_rate) : '',
     billRate: l.bill_rate != null ? String(l.bill_rate) : '',
     billAmount: l.bill_amount != null ? String(l.bill_amount) : '',
     isBillable: l.is_billable === true,
-    departmentId: l.department_id ?? '',
-    projectId: l.project_id ?? '',
-    locationId: l.location_id ?? '',
-    classId: l.class_id ?? '',
-    stockLocationId: l.stock_location_id ?? '',
+    departmentId: lineText(l.department_id),
+    projectId: lineText(l.project_id),
+    locationId: lineText(l.location_id),
+    classId: lineText(l.class_id),
+    stockLocationId: lineText(l.stock_location_id),
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
@@ -586,8 +686,10 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
     ...distributionFieldsOf(l),
   }
-  for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
+  const custom = isLineMap(l.custom) ? l.custom : null
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
   return row
 }
 
@@ -775,7 +877,7 @@ export function DocumentDrawer({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const doc = payload.doc
+  const doc = asDocumentDoc(payload.doc)
   const hrefForDocument = (targetId: string, form?: string) => documentDrawerHref({
     pathname, query: searchParams.toString(), basePath, currentId: String(doc.id),
     targetId, kind: config.kind, related: relatedNavigation, form,
@@ -824,13 +926,16 @@ export function DocumentDrawer({
   const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
-  const transferFromPayload = (source: DocPayload) => isTransfer
-    ? {
-        toAccount: source.lines[0]?.account_id ?? '',
-        fromAccount: source.lines[1]?.account_id ?? '',
-        amount: source.lines[0]?.amount != null ? String(source.lines[0].amount) : '',
-      }
-    : null
+  const transferFromPayload = (
+    source: DocPayload,
+  ): { toAccount: string; fromAccount: string; amount: string } | null =>
+    isTransfer
+      ? {
+          toAccount: lineText(source.lines[0]?.account_id),
+          fromAccount: lineText(source.lines[1]?.account_id),
+          amount: source.lines[0]?.amount != null ? String(source.lines[0].amount) : '',
+        }
+      : null
   const initialTransfer = transferFromPayload(payload)
   const [transfer, setTransfer] = useState(initialTransfer)
 
@@ -1401,7 +1506,7 @@ export function DocumentDrawer({
   function resetForm(source: DocPayload) {
     rehydratingPersistedPayload.current = true
     setRehydrationEpoch((epoch) => epoch + 1)
-    const sourceDoc = source.doc
+    const sourceDoc = asDocumentDoc(source.doc)
     setPartyId(sourceDoc.party_id ?? '')
     setPaymentCardId(sourceDoc.payment_card_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
@@ -2292,7 +2397,7 @@ export function DocumentDrawer({
       title={
         <DocumentDrawerTitle
           kind={config.kind}
-          documentNumber={displayDocumentNumber(doc.document_number, (doc as { reference_number?: unknown }).reference_number)}
+          documentNumber={displayDocumentNumber(doc.document_number, doc.reference_number)}
           statusLabel={STATUS_KEYS[displayStatus]
             ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
             : String(displayStatus).replace('_', ' ')}
@@ -2404,7 +2509,7 @@ export function DocumentDrawer({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>
               <FieldLabel fieldName={t('drawer.transferAmount')}>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
-              {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount, { currency: doc.currency })}</p>}
+              {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(lineText(payload.lines[0]?.amount), { currency: doc.currency })}</p>}
             </div>
             <div className={field}>
               <FieldLabel fieldName={t('drawer.toAccount')}>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>

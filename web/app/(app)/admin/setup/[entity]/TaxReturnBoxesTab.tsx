@@ -15,7 +15,7 @@ import { Pagination } from '../../../../../components/pagination'
 import { SearchInput } from '../../../../../components/search-input'
 import { mergeHref } from '../../../../../lib/list-params'
 
-export interface TaxReturnBoxRow {
+export interface TaxReturnBoxRow extends Record<string, unknown> {
   id: string
   report_code: string
   line_code: string
