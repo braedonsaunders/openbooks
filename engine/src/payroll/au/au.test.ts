@@ -81,12 +81,14 @@ test("AU withholding refuses every region and levies no state income tax", () =>
   assert.equal(AU_PAYROLL_PACK.withholding(), AU_WITHHOLDING);
 });
 
-test("AU tax years refuse 2025–26 and 2026–27 by name as drafts", () => {
+test("AU tax years publish 2026–27 and still refuse 2025–26 by name", () => {
   assert.equal(AU_TAX_YEARS.country, "AU");
   const byYear = new Map(AU_TAX_YEARS.editions.map((edition) => [edition.year, edition]));
   assert.equal(byYear.get(2026)?.status, "draft");
-  assert.equal(byYear.get(2027)?.status, "draft");
   assert.equal(byYear.get(2026)?.effectiveFrom, "2025-07-01");
+  assert.equal(byYear.get(2027)?.status, "published");
+  assert.equal(byYear.get(2027)?.effectiveFrom, "2026-07-01");
+  assert.match(byYear.get(2027)?.citation ?? "", /F2026L00716/);
   assert.equal(AU_PAYROLL_PACK.taxYears, AU_TAX_YEARS);
   assert.equal(AU_PACK_RATES.country, "AU");
   assert.equal(AU_PAYROLL_PACK.statutoryRates, AU_PACK_RATES);
