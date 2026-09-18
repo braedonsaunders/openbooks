@@ -7,6 +7,8 @@ import {
   ArrowUpRight,
   AlertTriangle,
   BookOpen,
+  CalendarCheck,
+  CalendarClock,
   CircleDollarSign,
   ClipboardList,
   FileText,
@@ -45,6 +47,9 @@ export function WidgetCard({
       })
     : null
   const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
+  // A stock tile's hint stays stable when its average is unavailable (a pruned
+  // or legacy payload): the DSO/DPO qualifier appends, never replaces.
+  const stockHint = (base: string, extra: string | null) => (extra ? `${base} · ${extra}` : base)
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -79,11 +84,19 @@ export function WidgetCard({
     case 'kpi-cash-balance':
       return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
     case 'kpi-open-receivables':
-      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={withAsOf(t('metricContext.outstanding'))} />
+      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={withAsOf(stockHint(t('metricContext.outstanding'), data.receivablesDso === null ? null : t('metricContext.dso', { days: Math.round(data.receivablesDso) })))} />
     case 'kpi-overdue-receivables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-open-payables':
-      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={withAsOf(t('metricContext.outstanding'))} />
+      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={withAsOf(stockHint(t('metricContext.outstanding'), data.payablesDpo === null ? null : t('metricContext.dpo', { days: Math.round(data.payablesDpo) })))} />
+    case 'kpi-expected-receipts-30d':
+      return data.expectedReceipts30d === null
+        ? <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value="—" href="/ar" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
+        : <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value={money(data.expectedReceipts30d, { currency: data.baseCurrency })} href="/ar" tone="teal" hint={withAsOf(t('metricContext.next30Days'))} />
+    case 'kpi-bills-due-30d':
+      return data.expectedPayments30d === null
+        ? <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value="—" href="/ap" tone="amber" hint={withAsOf(t('metricContext.noData'))} />
+        : <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value={money(data.expectedPayments30d, { currency: data.baseCurrency })} href="/ap" tone="amber" hint={withAsOf(t('metricContext.next30Days'))} />
     case 'kpi-overdue-payables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-revenue-mtd':

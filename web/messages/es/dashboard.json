@@ -30,7 +30,9 @@
     "agentFindings": "Hallazgos de agentes",
     "revenue": "Ingresos",
     "netIncome": "Resultado neto",
-    "grossMargin": "Margen bruto"
+    "grossMargin": "Margen bruto",
+    "expectedReceipts": "Cobros previstos",
+    "expectedPayments": "Pagos previstos"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -43,7 +45,10 @@
     "agentClear": "Sin pendientes",
     "asOf": "Al {date}",
     "monthToDate": "Mes hasta la fecha",
-    "noData": "Sin datos"
+    "noData": "Sin datos",
+    "next30Days": "Próximos 30 días",
+    "dso": "DSO {days}",
+    "dpo": "DPO {days}"
   },
   "categories": {
     "kpi": "Indicadores clave",
@@ -72,7 +77,9 @@
     "agentFindings": "Hallazgos abiertos de agentes en segundo plano: ir al panel.",
     "revenue": "Ingresos registrados en el mes hasta la fecha, en moneda base.",
     "netIncome": "Ingresos menos costes y gastos del mes hasta la fecha.",
-    "grossMargin": "Beneficio bruto y margen del mes hasta la fecha."
+    "grossMargin": "Beneficio bruto y margen del mes hasta la fecha.",
+    "expectedReceipts": "Cobros de clientes previstos para los próximos 30 días, en moneda base.",
+    "expectedPayments": "Pagos a proveedores previstos para los próximos 30 días, en moneda base."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

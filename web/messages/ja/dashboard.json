@@ -30,7 +30,9 @@
     "agentFindings": "エージェントの指摘",
     "revenue": "収益",
     "netIncome": "純利益",
-    "grossMargin": "粗利率"
+    "grossMargin": "粗利率",
+    "expectedReceipts": "入金予定",
+    "expectedPayments": "支払予定"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -43,7 +45,10 @@
     "agentLastRun": "前回実行 {date}",
     "agentClear": "問題なし",
     "monthToDate": "月初来",
-    "noData": "データなし"
+    "noData": "データなし",
+    "next30Days": "今後30日間",
+    "dso": "DSO {days}",
+    "dpo": "DPO {days}"
   },
   "categories": {
     "kpi": "ヘッドライン",
@@ -72,7 +77,9 @@
     "agentFindings": "バックグラウンドエージェントの指摘を開く — ワークベンチへ移動します。",
     "revenue": "月初来の計上収益（基軸通貨）。",
     "netIncome": "月初来の収益から原価・費用を差し引いた利益。",
-    "grossMargin": "月初来の売上総利益と利益率。"
+    "grossMargin": "月初来の売上総利益と利益率。",
+    "expectedReceipts": "今後30日間の入金見込み（基軸通貨）。",
+    "expectedPayments": "今後30日間の支払見込み（基軸通貨）。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

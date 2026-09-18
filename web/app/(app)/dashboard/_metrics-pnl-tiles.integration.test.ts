@@ -105,6 +105,9 @@ test("P&L tiles read one MTD profitAndLoss call and exclude out-of-window postin
     const readers: DashboardMoneyReaders = {
       bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
       openItems: (async () => []) as DashboardMoneyReaders["openItems"],
+      paymentStats: (async () => {
+        throw new Error("paymentStats must not run here");
+      }) as DashboardMoneyReaders["paymentStats"],
       profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
         calls += 1;
         return canonicalProfitAndLoss(...args);
@@ -143,6 +146,9 @@ test("a multi-functional MTD scope refuses into nulls, never zeros", { skip: !DB
     const readers: DashboardMoneyReaders = {
       bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
       openItems: (async () => []) as DashboardMoneyReaders["openItems"],
+      paymentStats: (async () => {
+        throw new Error("paymentStats must not run here");
+      }) as DashboardMoneyReaders["paymentStats"],
       profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
         calls.push("profitAndLoss");
         return canonicalProfitAndLoss(...args);
@@ -174,6 +180,9 @@ test("P&L readers never run without reports.read", { skip: !DB }, async () => {
     const readers: DashboardMoneyReaders = {
       bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
       openItems: (async () => []) as DashboardMoneyReaders["openItems"],
+      paymentStats: (async () => {
+        throw new Error("paymentStats must not run here");
+      }) as DashboardMoneyReaders["paymentStats"],
       profitAndLoss: (async () => {
         throw new Error("profitAndLoss must not run for a denied widget");
       }) as DashboardMoneyReaders["profitAndLoss"],

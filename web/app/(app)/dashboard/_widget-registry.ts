@@ -192,6 +192,24 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'kpi-expected-receipts-30d': {
+    id: 'kpi-expected-receipts-30d',
+    category: 'ar',
+    labelKey: 'widgets.expectedReceipts',
+    descriptionKey: 'catalog.expectedReceipts',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-bills-due-30d': {
+    id: 'kpi-bills-due-30d',
+    category: 'ap',
+    labelKey: 'widgets.expectedPayments',
+    descriptionKey: 'catalog.expectedPayments',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

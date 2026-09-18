@@ -30,7 +30,9 @@
     "agentFindings": "Agent findings",
     "revenue": "Revenue",
     "netIncome": "Net income",
-    "grossMargin": "Gross margin"
+    "grossMargin": "Gross margin",
+    "expectedReceipts": "Expected receipts",
+    "expectedPayments": "Upcoming payments"
   },
   "metricContext": {
     "today": "Posted today",
@@ -43,7 +45,10 @@
     "agentClear": "All clear",
     "asOf": "As of {date}",
     "monthToDate": "Month to date",
-    "noData": "No data"
+    "noData": "No data",
+    "next30Days": "Next 30 days",
+    "dso": "DSO {days}",
+    "dpo": "DPO {days}"
   },
   "categories": {
     "kpi": "Headlines",
@@ -72,7 +77,9 @@
     "agentFindings": "Open background-agent findings — jump to the workbench.",
     "revenue": "Revenue posted month to date, in base currency.",
     "netIncome": "Revenue minus cost and expenses, month to date.",
-    "grossMargin": "Gross profit and margin, month to date."
+    "grossMargin": "Gross profit and margin, month to date.",
+    "expectedReceipts": "Predicted customer receipts in the next 30 days, in base currency.",
+    "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

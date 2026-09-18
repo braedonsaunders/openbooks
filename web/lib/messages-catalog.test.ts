@@ -965,9 +965,20 @@ test('money widget copy ships translated in every locale', () => {
     'dashboard.catalog.grossMargin',
     'dashboard.metricContext.monthToDate',
     'dashboard.metricContext.noData',
+    'dashboard.widgets.expectedReceipts',
+    'dashboard.widgets.expectedPayments',
+    'dashboard.catalog.expectedReceipts',
+    'dashboard.catalog.expectedPayments',
+    'dashboard.metricContext.next30Days',
   ] as const
+  // Reviewed identicals: an acronym plus a bare number renders the same in
+  // every locale by design (the MRR/Cron precedent) — pinned exact.
+  const identicalByFact = new Set([
+    'dashboard.metricContext.dso|DSO {days}',
+    'dashboard.metricContext.dpo|DPO {days}',
+  ])
   const source = flattenCatalog('en')
-  for (const key of keys) {
+  for (const key of [...keys, ...[...identicalByFact].map((entry) => entry.split('|')[0]!)]) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
   }
@@ -980,7 +991,11 @@ test('money widget copy ships translated in every locale', () => {
       assert.ok(value && value.trim(), `${locale} is missing ${key}`)
       assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
     }
-    const drift = (keys as readonly string[]).filter((key) => {
+    for (const entry of identicalByFact) {
+      const [key, term] = entry.split('|') as [string, string]
+      assert.equal(catalog.get(key), term, `${locale}:${key} must stay the reviewed identical term`)
+    }
+    const drift = [...(keys as readonly string[]), ...[...identicalByFact].map((entry) => entry.split('|')[0]!)].filter((key) => {
       const expected = tokens(source.get(key) ?? '')
       const actual = tokens(catalog.get(key) ?? '')
       return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
