@@ -15,12 +15,31 @@ import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
  * view). Fetches per-entity on open via /api/analytics/drill — never a
  * preloaded window.
  */
+export interface DrillReconRow {
+  label: string
+  /** Waterfall-signed: recognized = invoiced + every row. */
+  amount: number
+}
+
 export interface DrillTarget {
   kind: 'account' | 'party'
   id: string
   name: string
   /** Optional context line under the title (e.g. account number, tier). */
   sub?: string
+  /**
+   * Optional invoiced→recognized bridge (customer drill only). Labels arrive
+   * translated from the caller so this shared drawer stays namespace-dumb;
+   * rendered as a reconciliation section above the transaction list.
+   */
+  recon?: {
+    title: string
+    invoicedLabel: string
+    invoiced: number
+    recognizedLabel: string
+    recognized: number
+    rows: DrillReconRow[]
+  } | null
 }
 
 interface DrillEntry {
@@ -120,6 +139,31 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
           </div>
         ))}
       </div>
+
+      {/* Revenue reconciliation (customer drill carries the bridge) */}
+      {target.recon ? (
+        <div className="border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+          <p className="mb-1.5 text-[10px] font-medium tracking-wider text-slate-400 uppercase dark:text-slate-500">{target.recon.title}</p>
+          <dl className="space-y-1 text-xs">
+            <div className="flex items-center justify-between">
+              <dt className="text-slate-500 dark:text-slate-400">{target.recon.invoicedLabel}</dt>
+              <dd className="font-medium text-slate-700 tabular-nums dark:text-slate-200">{money(target.recon.invoiced)}</dd>
+            </div>
+            {target.recon.rows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between">
+                <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
+                <dd className={cn('tabular-nums', row.amount < 0 ? 'text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200')}>
+                  {row.amount < 0 ? `−${money(-row.amount)}` : `+${money(row.amount)}`}
+                </dd>
+              </div>
+            ))}
+            <div className="flex items-center justify-between border-t border-slate-100 pt-1 dark:border-slate-800">
+              <dt className="font-medium text-slate-700 dark:text-slate-200">{target.recon.recognizedLabel}</dt>
+              <dd className="font-semibold text-slate-800 tabular-nums dark:text-slate-100">{money(target.recon.recognized)}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
 
       {/* View pills + search */}
       <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">

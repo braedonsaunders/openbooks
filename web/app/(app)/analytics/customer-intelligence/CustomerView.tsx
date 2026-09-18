@@ -161,8 +161,28 @@ export function CustomerView({
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const intel = data.intelligence
-  const openCustomer = (r: Pick<CustomerRow, 'id' | 'name' | 'invoices' | 'revenue'>) =>
-    setDrill({ kind: 'party', id: r.id, name: r.name, sub: t('drill.invoicesRevenue', { invoices: r.invoices, revenue: money(r.revenue) }) })
+  const openCustomer = (r: Pick<CustomerRow, 'id' | 'name' | 'invoices' | 'revenue' | 'invoicedRevenue' | 'recon'>) =>
+    setDrill({
+      kind: 'party', id: r.id, name: r.name, sub: t('drill.invoicesRevenue', { invoices: r.invoices, revenue: money(r.revenue) }),
+      // Waterfall-signed rows (recognized = invoiced + rows): the bridge
+      // stores gap contributions (invoiced − recognized), so the display
+      // negates each leg. Deferrals subtract from invoiced; recognition adds back.
+      recon: {
+        title: t('recon.title'),
+        invoicedLabel: t('table.invoiced'),
+        invoiced: r.invoicedRevenue,
+        recognizedLabel: t('table.revenue'),
+        recognized: r.revenue,
+        rows: [
+          { label: t('recon.tax'), amount: -r.recon.tax },
+          { label: t('recon.credits'), amount: -r.recon.credits },
+          { label: t('recon.deferred'), amount: -r.recon.timingDeferred },
+          { label: t('recon.recognized'), amount: r.recon.timingRecognized },
+          { label: t('recon.voids'), amount: -r.recon.voids },
+          { label: t('recon.other'), amount: -r.recon.other },
+        ],
+      },
+    })
 
   return (
     <div className="space-y-5">
@@ -357,6 +377,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
         <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">{r.healthScore}</span>
       </td>
       <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
+      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.invoicedRevenue)}</td>
       <td className="px-4 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</td>
       <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></td>
       <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></td>
@@ -372,6 +393,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
       <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
       <th className="px-4 py-2 text-center font-medium">{t('table.health')}</th>
       <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+      <th className="px-4 py-2 text-right font-medium">{t('table.invoiced')}</th>
       <th className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</th>
       <th className="px-4 py-2 text-center font-medium">{t('table.segment')}</th>
       <th className="px-4 py-2 text-center font-medium">{t('table.churn')}</th>
@@ -405,7 +427,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
+              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
@@ -427,7 +449,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
                           className="cursor-pointer border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/40"
                           onClick={() => setCollapsed((prev) => { const next = new Set(prev); next.has(label) ? next.delete(label) : next.add(label); return next })}
                         >
-                          <td colSpan={8} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <td colSpan={9} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                             <span className="mr-1.5 inline-block align-middle text-slate-400">{isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
                             {label}
                             <span className="ml-2 font-normal text-slate-400">{t('groupSummary', { count: set.length, revenue: money(rev) })}</span>
@@ -613,6 +635,7 @@ function LifetimeTab({
       <div className={projectsEnabled ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-2 gap-3'}>
         <KpiCard icon={Gem} accent="violet" label={t('kpi.totalProjectedClv')} value={money(k.projectedClv)} sub={t('sub.avgPerCustomer', { amount: money(k.avgClv) })} />
         <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.periodRevenue')} value={money(k.totalRevenue)} sub={t('sub.clvBase')} />
+        <KpiCard icon={FileText} accent="sky" label={t('kpi.totalInvoiced')} value={money(k.totalInvoiced)} sub={t('sub.invoiced')} />
         {projectsEnabled ? (
           <>
             <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(profitability.summary.totalGrossProfit)} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
