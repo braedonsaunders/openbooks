@@ -64,7 +64,8 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // Each pack's own pack.ts carries the sourcing comment for its lines:
   // GB PAYE (taxable pay after pension deductions, gb/pack.ts PAYE slot);
   // DE LST (Lohnsteuer on zu versteuerndes Einkommen) and SOLI (a surcharge
-  // on the LST itself, so it moves with it) (de/pack.ts);
+  // on the LST itself, so it moves with it) plus KIST (Kirchenlohnsteuer on
+  // the PAP BK base, which is itself LST-derived) (de/pack.ts);
   // FR PAS (CGI art. 204 A: rate x net imposable, fr/pack.ts:53-54);
   // IE PAYE (cumulative PAYE on taxable pay after pension deductions per the
   // RPN, ie/pack.ts:66-68); AU PAYG (salary-sacrificed amounts move the one
@@ -74,7 +75,7 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // NL LH (grondslag reduced by employee pension contributions, nl/pack.ts:148-151);
   // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93).
   assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
-    "GB/PAYE", "DE/LST", "DE/SOLI", "FR/PAS", "IE/PAYE", "AU/PAYG",
+    "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/PAYE", "AU/PAYG",
     "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
     "NL/LH", "ES/IRPF"]);
 });
