@@ -710,7 +710,8 @@
           "qpip": "QPIP por pagar (Quebec)",
           "vacation": "Vacaciones por pagar",
           "wcb": "Compensación laboral por pagar (WCB/WSIB)",
-          "eht": "Impuesto de salud del empleador por pagar"
+          "eht": "Impuesto de salud del empleador por pagar",
+          "hsf": "Fondo de servicios de salud por pagar (Quebec)"
         }
       },
       "US": {

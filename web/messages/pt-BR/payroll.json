@@ -710,7 +710,8 @@
           "qpip": "QPIP a recolher (Quebec)",
           "vacation": "Férias a pagar",
           "wcb": "Seguro de acidentes de trabalho a pagar (WCB/WSIB)",
-          "eht": "Imposto de saúde do empregador a recolher"
+          "eht": "Imposto de saúde do empregador a recolher",
+          "hsf": "Fundo de serviços de saúde a recolher (Quebec)"
         }
       },
       "US": {

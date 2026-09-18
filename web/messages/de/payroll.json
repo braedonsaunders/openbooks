@@ -710,7 +710,8 @@
           "qpip": "QPIP verbindlich (Quebec)",
           "vacation": "Urlaub verbindlich",
           "wcb": "Unfallversicherung verbindlich (WCB/WSIB)",
-          "eht": "Arbeitgeber-Gesundheitssteuer verbindlich"
+          "eht": "Arbeitgeber-Gesundheitssteuer verbindlich",
+          "hsf": "Health Services Fund verbindlich (Quebec)"
         }
       },
       "US": {
