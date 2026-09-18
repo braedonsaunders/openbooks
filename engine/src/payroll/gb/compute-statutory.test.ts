@@ -125,9 +125,37 @@ test("pay dates before and after 2026/27 throw without touching the database", a
   }
 });
 
-test("Scotland is refused by name", async () => {
+test("an S-less code on an SCT run is refused by name, never fallen through", async () => {
   const { ctx } = gbContext({ region: "SCT", codes: NOTICE_1257L });
-  await assert.rejects(() => computeGbStatutory(ctx), /Scotland.*refused by name|SCT/);
+  await assert.rejects(() => computeGbStatutory(ctx), /S-prefix|SCT/);
+});
+
+test("SCT with an S-code prices the Scottish bands end to end", async () => {
+  // Month 1, £2,250, S1257L cumulative from zero priors: free pay 1,047.50,
+  // taxable 1,202.50, all in the 19% starter band → £228.475 → £228.47
+  // (half down). NIC is the same UK-wide schedule as rUK.
+  const { ctx, pushed } = gbContext({
+    region: "SCT",
+    tx: stubTx(EMPTY_YTD),
+    income: "2250",
+    pensionable: "2250",
+    codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(pushed[0]!.amount, "228.4700");
+  assert.equal(factors.GB_TAX, "228.4700");
+});
+
+test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
+  const { ctx, pushed } = gbContext({
+    region: "ENG",
+    income: "3200",
+    pensionable: "3200",
+    codes: { gb_tax_code_notice: { tax_code: "SBR", non_cumulative: null } },
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(pushed[0]!.amount, "640.0000");
+  assert.equal(factors.GB_TAX, "640.0000");
 });
 
 test("a missing coding notice is refused, naming the P6/P9", async () => {
@@ -137,9 +165,9 @@ test("a missing coding notice is refused, naming the P6/P9", async () => {
 
 test("an inoperable code is refused by name", async () => {
   const { ctx } = gbContext({
-    codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
+    codes: { gb_tax_code_notice: { tax_code: "SK475", non_cumulative: null } },
   });
-  await assert.rejects(() => computeGbStatutory(ctx), /S1257L/);
+  await assert.rejects(() => computeGbStatutory(ctx), /SK475/);
 });
 
 test("NT pushes zeros and reads nothing", async () => {

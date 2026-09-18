@@ -2,11 +2,11 @@
  * GB pack declaration tests — pure, no database.
  *
  * What these prove: the pack declares its nations, certificates, slots,
- * transcribed 2026/27 edition and refusals through the existing pack
- * channels. The 2026/27 rUK tables ARE transcribed (rates.ts), the engine
- * reads them (compute-statutory.ts), and parity.test.ts proves the numbers;
- * Scotland stays refused by name. Run with `node --import tsx
- * engine/src/payroll/gb/pack.test.ts`.
+ * transcribed 2026/27 editions and refusals through the existing pack
+ * channels. The 2026/27 rUK AND SCT tables ARE transcribed (rates.ts), the
+ * engine reads them (compute-statutory.ts), and the parity harnesses prove
+ * the numbers; an S-less code on SCT is still refused by name. Run with
+ * `node --import tsx engine/src/payroll/gb/pack.test.ts`.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -20,29 +20,27 @@ import {
 import { GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
 import { GB_PACK } from "./pack.ts";
 
-test("GB nations are known, rUK supported, Scotland refused by name", () => {
+test("GB nations are known, all four supported through their own editions", () => {
   assert.deepEqual(GB_REGIONS.known, ["ENG", "SCT", "WLS", "NIR"]);
-  assert.deepEqual(GB_REGIONS.supported, ["ENG", "WLS", "NIR"]);
-  const scottish = GB_REGIONS.unsupportedReasons?.SCT ?? "";
-  assert.match(scottish, /Scottish/);
-  assert.match(scottish, /SCT/);
-  assert.match(scottish, /no SCT edition is transcribed/);
+  assert.deepEqual(GB_REGIONS.supported, ["ENG", "WLS", "NIR", "SCT"]);
+  // No per-region refusal remains: SCT loads only through its own edition.
+  assert.equal(GB_REGIONS.unsupportedReasons?.SCT, undefined);
 });
 
-test("withholding implements rUK nations, refuses Scotland, guesses no cross-border rule", () => {
+test("withholding implements all four nations, guesses no cross-border rule", () => {
   assert.equal(GB_WITHHOLDING.country, "GB");
   assert.deepEqual(
     GB_WITHHOLDING.regions.map((region) => region.region),
     ["ENG", "SCT", "WLS", "NIR"],
   );
   for (const region of GB_WITHHOLDING.regions) {
-    assert.equal(region.implemented, region.region !== "SCT", region.region);
+    assert.equal(region.implemented, true, region.region);
     assert.equal(region.residentWithholding, "unknown", region.region);
     assert.equal(region.residentWithholdingImplemented, false, region.region);
     assert.deepEqual(region.subRegions, [], region.region);
   }
   const scotland = GB_WITHHOLDING.regions.find((region) => region.region === "SCT")!;
-  assert.match(scotland.unimplementedReason ?? "", /no SCT edition is transcribed/);
+  assert.equal(scotland.unimplementedReason, undefined);
 });
 
 test("certificates are a starter checklist and a coding notice, not a W-4 clone", () => {
