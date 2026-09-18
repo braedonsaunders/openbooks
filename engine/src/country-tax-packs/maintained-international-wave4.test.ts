@@ -109,6 +109,12 @@ test("fourth-wave evidence remains restricted to official government and tax-aut
     "podatki-arch.mf.gov.pl",
     "api.sejm.gov.pl",
     "www.skatteverket.se",
+    // Svensk författningssamling — the official Swedish statute book. SFS
+    // 2026:118 enacts the temporary 6% food rate and SFS 2026:119 reverts it,
+    // so the sunset band's END date is attested by enacted law rather than by
+    // an announcement that could be superseded.
+    "svenskforfattningssamling.se",
+    "www.svenskforfattningssamling.se",
     "nts.go.kr",
     "mofe.go.kr",
   ]);
