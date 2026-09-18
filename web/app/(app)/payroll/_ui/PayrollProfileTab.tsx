@@ -8,6 +8,7 @@ import {
   ProfileEditor,
   type FilingAccountOption,
   type LabourJurisdictionOption,
+  type PackProfileDeclaration,
   type ProfileRow,
   type ScheduleOption,
 } from './EmployeesPanel'
@@ -26,10 +27,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
     labourJurisdictions: Record<string, LabourJurisdictionOption[]>
+    countries: string[]
+    packProfiles: Record<string, PackProfileDeclaration>
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, schedules: [], filingAccounts: [],
-    labourJurisdictions: {}, defaultCountry: '',
+    labourJurisdictions: {}, countries: [], packProfiles: {}, defaultCountry: '',
   })
   const [version, setVersion] = useState(0)
 
@@ -41,6 +44,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
         const j = await res.json()
         if (!res.ok) throw new Error(j.error ?? 'failed')
         if (!cancelled) {
+          // The country the API derived, accepted only when it names a pack
+          // the API itself declares — never a closed union in this file.
+          const countries: string[] = Array.isArray(j.countries) ? j.countries.map(String) : []
+          const defaultCountry: string = countries.includes(String(j.defaultCountry ?? ''))
+            ? String(j.defaultCountry)
+            : ''
           setState({
             status: 'ready',
             profile: j.profile,
@@ -48,10 +57,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
             filingAccounts: j.filingAccounts ?? [],
             // The packs' declared labour jurisdictions, per country pack.
             labourJurisdictions: j.labourJurisdictions ?? {},
+            countries,
+            packProfiles: j.packProfiles ?? {},
             // The API derives this from the employee's own legal entity (or
             // the root subsidiary, or the org's sole installed pack) —
             // '' when nothing answers, and then the operator chooses.
-            defaultCountry: j.defaultCountry === 'CA' || j.defaultCountry === 'US' ? j.defaultCountry : '',
+            defaultCountry,
           })
         }
       } catch (e) {
@@ -98,11 +109,20 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     // jurisdiction unless somebody says otherwise.
     labour_jurisdiction: null,
     pay_basis: 'hourly',
+    // Claim-code 1s are the pre-existing blank shape (withheld at the basic
+    // personal amount, exactly as a profile saved with empty codes); changing
+    // them would alter T4127 money for untouched new profiles, which is a
+    // CA-pack decision, not a country-agnosticism fix. Undeclared columns are
+    // nulled on save, so these are inert for any other pack.
     federal_claim_code: 1,
     federal_claim_amount: null,
     provincial_claim_code: 1,
     provincial_claim_amount: null,
     additional_tax_per_period: null,
+    prescribed_zone_deduction: null,
+    authorized_annual_deductions: null,
+    authorized_federal_credits: null,
+    authorized_provincial_credits: null,
     cpp_exempt: false,
     ei_exempt: false,
     tax_exempt: false,
@@ -130,6 +150,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
       schedules={state.schedules}
       filingAccounts={state.filingAccounts}
       labourJurisdictions={state.labourJurisdictions}
+      countries={state.countries}
+      packProfiles={state.packProfiles}
       onClose={() => {}}
       onSaved={() => setVersion((v) => v + 1)}
     />
