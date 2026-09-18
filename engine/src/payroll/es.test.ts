@@ -10,7 +10,7 @@ import test from "node:test";
 import { ES_PAYROLL_PACK } from "./es/pack.ts";
 import { ES_CERTIFICATES } from "./es/certificates.ts";
 import { ES_WITHHOLDING } from "./es/withholding.ts";
-import { ES_PACK_RATES, ES_TAX_YEARS } from "./es/rates.ts";
+import { ES_PACK_RATES, ES_TAX_YEARS, ratesForPayDate } from "./es/rates.ts";
 import { esPackFilings } from "./es/filings.ts";
 import { computeEsStatutory } from "./es/compute-statutory.ts";
 import {
@@ -88,7 +88,7 @@ test("ES certificate is the real Modelo 145, not a W-4/TD1 clone", () => {
   assert.equal(ES_PAYROLL_PACK.certificates(), ES_CERTIFICATES);
 });
 
-test("ES 2026 is refused by name on taxYears", () => {
+test("ES 2026 is transcribed with two editions split at 10 September", () => {
   // ES_TAX_YEARS now ships on the registered ES pack, so the declaration is
   // already visible via the registry; register only when it is not.
   let registered = false;
@@ -103,12 +103,16 @@ test("ES 2026 is refused by name on taxYears", () => {
     );
   }
   try {
-    assert.deepEqual(ES_PAYROLL_PACK.taxYears.editions, []);
-    const problem = payrollTaxYearProblem("ES", 2026);
-    assert.notEqual(problem, null);
-    assert.equal(problem?.kind, "missing");
-    assert.match(problem?.message ?? "", /2026/);
-    assert.match(problem?.message ?? "", /engine\/src\/payroll\/es\/rates\.ts/);
+    assert.equal(ES_PAYROLL_PACK.taxYears.editions.length, 2);
+    assert.equal(payrollTaxYearProblem("ES", 2026), null);
+    // A date either side of the September boundary resolves differently.
+    assert.equal(ratesForPayDate("2026-09-09").edition, "2026-early");
+    assert.equal(ratesForPayDate("2026-09-10").edition, "2026");
+    assert.equal(ratesForPayDate("2026-09-09").laPalmaExcepcional, false);
+    assert.equal(ratesForPayDate("2026-09-10").laPalmaExcepcional, true);
+    // Both sides outside 2026 throw — never extrapolate, never clamp.
+    assert.throws(() => ratesForPayDate("2025-12-31"), /no transcribed tables/);
+    assert.throws(() => ratesForPayDate("2027-01-01"), /no transcribed tables/);
   } finally {
     if (registered) unregisterPayrollTaxYears("ES");
   }
