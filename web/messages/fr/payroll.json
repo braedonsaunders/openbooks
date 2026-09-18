@@ -710,7 +710,8 @@
           "qpip": "QPIP à payer (Québec)",
           "vacation": "Vacances à payer",
           "wcb": "Indemnisation des accidents du travail à payer (CAT/CSST)",
-          "eht": "Impôt-santé des employeurs à payer"
+          "eht": "Impôt-santé des employeurs à payer",
+          "hsf": "Fonds des services de santé à payer (Québec)"
         }
       },
       "US": {
