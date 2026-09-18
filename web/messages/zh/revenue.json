@@ -49,5 +49,18 @@
     "postedStatus": "已过账",
     "plannedStatus": "计划",
     "fairValueOutOfRange": "超出公允价值区间（{low} – {high}）"
+  },
+  "cancel": {
+    "button": "取消确认",
+    "drawerHint": "要提前终止本合同吗？请取消确认，而不是作废发票。",
+    "reasonTitle": "取消收入确认",
+    "reasonLabel": "取消原因",
+    "reasonPlaceholder": "请说明取消剩余义务的原因",
+    "confirmTitle": "取消本合同的确认？",
+    "confirmBody": "已过账的确认分录将被冲销，剩余计划将被终止，发票 {invoice} 将作废。此操作不可撤销。",
+    "confirm": "取消确认",
+    "failed": "取消失败",
+    "done": "确认已取消",
+    "submitted": "取消已提交审批"
   }
 }

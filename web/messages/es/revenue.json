@@ -49,5 +49,18 @@
     "postedStatus": "Contabilizado",
     "plannedStatus": "Planeado",
     "fairValueOutOfRange": "Fuera del rango de valor razonable ({low} – {high})"
+  },
+  "cancel": {
+    "button": "Cancelar el reconocimiento",
+    "drawerHint": "¿Termina este contrato antes de tiempo? Cancele su reconocimiento en lugar de anular la factura.",
+    "reasonTitle": "Cancelar el reconocimiento de ingresos",
+    "reasonLabel": "Motivo de la cancelación",
+    "reasonPlaceholder": "Describa por qué se cancela la obligación restante",
+    "confirmTitle": "¿Cancelar el reconocimiento de este contrato?",
+    "confirmBody": "Los asientos de reconocimiento contabilizados se revertirán, el plan restante se retirará y la factura {invoice} se anulará. Esta acción no se puede deshacer.",
+    "confirm": "Cancelar el reconocimiento",
+    "failed": "Error al cancelar",
+    "done": "Reconocimiento cancelado",
+    "submitted": "Cancelación enviada para su aprobación"
   }
 }

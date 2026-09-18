@@ -711,7 +711,7 @@ export async function completeRequestedDocumentVoid(
         `));
         if (dependentSubledger.rows[0]?.inventory || dependentSubledger.rows[0]?.revenue) {
           throw new DocumentVoidError(
-            "this transaction has inventory or revenue-recognition subledger activity — use the dedicated return/cancellation workflow",
+            "this transaction has inventory or revenue-recognition subledger activity — use the dedicated return/cancellation workflow: revenue contracts cancel from Revenue → contract → Cancel recognition (POST /api/revenue/cancel-recognition)",
           );
         }
 
