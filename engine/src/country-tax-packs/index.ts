@@ -32,6 +32,7 @@ import { ROMANIA_TAX_PACK } from "./ro.ts";
 import { SAUDI_ARABIA_TAX_PACK } from "./sa.ts";
 import { SWEDEN_TAX_PACK } from "./se.ts";
 import { SINGAPORE_TAX_PACK } from "./sg.ts";
+import { THAILAND_TAX_PACK } from "./th.ts";
 import { TURKIYE_TAX_PACK } from "./tr.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
@@ -78,6 +79,7 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   COLOMBIA_TAX_PACK,
   ICELAND_TAX_PACK,
   CZECHIA_TAX_PACK,
+  THAILAND_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 
