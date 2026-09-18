@@ -72,6 +72,37 @@ test("the SUI rate is declared per FILING ACCOUNT, and FUTA per region", () => {
   assert.deepEqual([...statutoryRateSlot("CA", "ca_eht").regions ?? []], ["BC", "MB", "NL", "ON"]);
 });
 
+test("the QC health services fund is declared per region, rate-only, QC-only", () => {
+  // TP-1015.F-V s. 5 / Revenu Québec "Total Payroll Threshold and Health
+  // Services Fund Contribution Rate" (2026): the HSF rate is a function of
+  // the employer's own total payroll and sector class — no pack constant can
+  // supply it — and there is no annual exemption, so the slot carries a rate
+  // and nothing else, for QC only.
+  const hsf = statutoryRateSlot("CA", "ca_hsf");
+  assert.equal(hsf.scope, "region");
+  assert.deepEqual([...hsf.regions ?? []], ["QC"]);
+  assert.deepEqual([...hsf.systemKeys], ["hsf"]);
+  assert.deepEqual(hsf.fields.map((field) => field.key), ["rate"]);
+  // The 2026 publication's other-sector rate, pasted: 1.65 × earnings.
+  assert.deepEqual(
+    canonicalStatutoryRateValues(hsf, { rate: "1.65" }),
+    { rate: "1.6500" },
+  );
+  assert.match(
+    statutoryRateProblem({
+      country: "CA", rateKey: "ca_hsf", region: "ON", taxYear: 2026, filingAccountId: null,
+    }) ?? "",
+    /not levied in ON/,
+    "an HSF rate belongs to QC employment, never to another province",
+  );
+  assert.equal(
+    statutoryRateProblem({
+      country: "CA", rateKey: "ca_hsf", region: "QC", taxYear: 2026, filingAccountId: null,
+    }),
+    null,
+  );
+});
+
 test("an undeclared pack or slot is refused by name, never defaulted", () => {
   assert.throws(() => packRates("ZZ"), /declares no statutory rate slots/);
   assert.throws(() => statutoryRateSlot("US", "us_paid_family"), /declares no "us_paid_family"/);

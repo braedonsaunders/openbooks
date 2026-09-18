@@ -1204,6 +1204,18 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
           { code: "EHT", name: "Employer Health Tax", systemKey: "eht", kind: "employer_contribution", sequence: 270, assessedOn: "earnings", remittance: "external" },
         ],
       },
+      {
+        key: "hsf",
+        components: [
+          // TP-1015.F-V s. 5: the tenant-entered HSF rate times the
+          // remuneration subject (employment income is generally subject —
+          // an earnings measure, no exemption, no cap). QC employment only,
+          // remitted to Revenu Québec on TPZ-1015.R like QPP/QPIP — declared
+          // per region for the same reason, so the declaration stays on the
+          // component, not in the remittance module.
+          { code: "HSF", name: "Health Services Fund", systemKey: "hsf", kind: "employer_contribution", sequence: 280, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+        ],
+      },
     ],
     applyEmployerLevies: applyCaEmployerLevies,
     computeStatutory: computeCaStatutory,

@@ -232,7 +232,7 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     );
     assert.ok(rows.rows.every((r) => r.country === null));
     const systemKeys = new Set(rows.rows.map((r) => r.system_key));
-    for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "fit", "ss"]) {
+    for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "hsf", "fit", "ss"]) {
       assert.ok(!systemKeys.has(caOnly), `${caOnly} seeded for a ZZ org`);
     }
     // No vacation entitlement plan either: ZZ declares no vacation accrual.
@@ -271,8 +271,8 @@ test("statutory liabilities resolve through the slot's own legacy key — synthe
   assert.equal(legacyStatutoryLiabilityAccount("ei", settings), "acct-ei");
   assert.equal(legacyStatutoryLiabilityAccount("qpip", settings), "acct-ei");
   assert.equal(legacyStatutoryLiabilityAccount("vacation_accrual", settings), "acct-vac");
-  // Slots with no legacy key (WCB, EHT, the whole US pack) resolve null.
-  for (const key of ["wcb", "eht", "fit", "ss", "medicare", "futa", "suta", "nonsense"]) {
+  // Slots with no legacy key (WCB, EHT, HSF, the whole US pack) resolve null.
+  for (const key of ["wcb", "eht", "hsf", "fit", "ss", "medicare", "futa", "suta", "nonsense"]) {
     assert.equal(legacyStatutoryLiabilityAccount(key, settings), null, key);
   }
 });

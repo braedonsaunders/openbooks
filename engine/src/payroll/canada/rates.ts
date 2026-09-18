@@ -868,9 +868,51 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * Québec health services fund (HSF). ONE province levies it, but the rate is
+ * still tenant-entered: under TP-1015.F-V s. 5 it is a function of the
+ * employer's own total payroll (2026 threshold $7.8M for a reduced rate) and
+ * sector class (other / primary-and-manufacturing / public sector at 4.26%),
+ * which no pack can know from one employee's stub. There is no annual
+ * exemption — the contribution is the rate times the remuneration subject —
+ * so the slot carries a rate and nothing else.
+ *
+ * Source: Revenu Québec, "Total Payroll Threshold and Health Services Fund
+ * Contribution Rate" (2026 table: other-sector 1.65% floor rising by
+ * 1.2662 + (0.3838 × total payroll ÷ 1,000,000) to 4.26%;
+ * primary-and-manufacturing 1.25% floor rising by
+ * 0.8074 + (0.4426 × total payroll ÷ 1,000,000) to 4.26%) and
+ * "Remuneration Subject to the Contribution to the Health Services Fund"
+ * (employment income is generally subject).
+ */
+const CA_HSF_SLOT: PayrollStatutoryRateSlot = {
+  key: "ca_hsf",
+  label: "Health services fund",
+  scope: "region",
+  systemKeys: ["hsf"],
+  regions: ["QC"],
+  citation:
+    "Revenu Québec, TP-1015.F-V s. 5 · \"Total Payroll Threshold and Health "
+    + "Services Fund Contribution Rate\" (2026 table) · \"Remuneration Subject "
+    + "to the Contribution to the Health Services Fund\"",
+  variesBecause:
+    "The health services fund rate depends on the employer's total payroll for "
+    + "the year and its sector class — figures no published table can supply "
+    + "for this employer.",
+  fields: [
+    {
+      key: "rate", label: "Rate (%)", kind: "percent", decimals: 4,
+      min: "0", max: "10", required: true,
+      help: "As a percent, as Revenu Québec states it: 1.65 is 1.65%. Your rate depends on "
+        + "total payroll and sector class — look it up in Revenu Québec's \"Total Payroll "
+        + "Threshold and Health Services Fund Contribution Rate\" table for the year.",
+    },
+  ],
+};
+
 export const CA_PACK_RATES: PayrollPackRates = {
   country: "CA",
-  slots: [CA_EHT_SLOT],
+  slots: [CA_EHT_SLOT, CA_HSF_SLOT],
   /**
    * The pre-scoping shape: `orgs.settings.payroll.ca.eht` held one enabled flag,
    * one rate and one exemption, applied to Ontario only. Reproduced exactly —

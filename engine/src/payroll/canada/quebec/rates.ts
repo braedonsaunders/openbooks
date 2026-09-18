@@ -32,7 +32,10 @@
  *   - s. 2.2 cumulative averaging (commission employees) — unimplemented, as
  *     T4127 Option 2 is.
  *   - s. 5 health services fund (employer contribution by total payroll) — an
- *     employer levy outside the source-deduction stub, published as a gap.
+ *     employer levy outside the source-deduction stub, computed in
+ *     engine/src/payroll/canada/employer-levies.ts at the tenant-entered
+ *     ca_hsf QC rate (the stub cannot see the employer's total-payroll
+ *     band, so the band itself is never derived here).
  */
 
 import { QC_EXTRA_EDITIONS } from "./editions.ts";

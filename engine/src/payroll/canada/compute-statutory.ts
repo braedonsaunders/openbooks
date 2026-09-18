@@ -84,7 +84,7 @@ export async function computeCaStatutory(
     periodsPerYear: P, income, nonPeriodic, pensionable, insurable, deduction,
     pushStatutory, bool, assertRegionSupported, employerLevies,
   } = ctx;
-  const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings } = employerLevies;
+  const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings } = employerLevies;
 
   assertRegionSupported(region);
 
@@ -152,5 +152,6 @@ export async function computeCaStatutory(
     QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
     ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
     ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
+    ...(cmp(hsfEarnings, "0") > 0 ? { HSF: hsfAmount, HSF_EARN: hsfEarnings } : {}),
   };
 }

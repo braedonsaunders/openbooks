@@ -72,7 +72,7 @@ test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer s
     ["cpp", "deduction"], ["cpp2", "deduction"], ["ei", "deduction"], ["qpip", "deduction"],
     ["cpp", "employer_contribution"], ["ei", "employer_contribution"],
     ["qpip", "employer_contribution"], ["wcb", "employer_contribution"],
-    ["eht", "employer_contribution"],
+    ["eht", "employer_contribution"], ["hsf", "employer_contribution"],
   ] as const) {
     assert.equal(statutoryAssessment("CA", systemKey, kind), "earnings", `${systemKey}/${kind}`);
   }
