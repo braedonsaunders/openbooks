@@ -130,6 +130,14 @@ for (const operation of ['impairment', 'disposal'] as const) {
     try {
       const f = await seed(org);
       await writer.connect();
+      // A raw client carries no AsyncLocalStorage scope: without the tenant
+      // GUCs the RLS policy matches zero rows, the UPDATE locks nothing, and
+      // the lifecycle call never blocks. Scope it like a real tenant
+      // connection so the held row lock is real.
+      await writer.query(
+        "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)",
+        [org.orgId],
+      );
       await writer.query('begin');
       await writer.query('update asset_categories set accumulated_depreciation_account_id=$1 where id=$2', [org.accounts.taxOutput, f.categoryId]);
       const pid = (await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;

@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -44,10 +44,10 @@ const TIME_PERMS = ['assistant.use', 'time.read'];
 const PROJECT_PERMS = ['assistant.use', 'projects.read'];
 
 async function enableFeature(orgId: string, key: string) {
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object(${key}::text,true))
     where id=${orgId}
-  `);
+  `));
 }
 
 /** Employee + submitted week, approved billable project time, and a field ticket. */
@@ -59,41 +59,43 @@ async function seedTime(org: { orgId: string; subsidiaryId: string }) {
   const hiddenEmployee = randomUUID();
   const project = randomUUID();
   const ticketDoc = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
-    values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden time entity','CAD','CA',true,false)
-  `);
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
-    values (${employee}, ${orgId}, 'employee', 'Harbour Foreman', true, '{}'::jsonb, ${rootSubsidiary}),
-           (${hiddenEmployee}, ${orgId}, 'employee', 'Hidden Worker', true, '{}'::jsonb, ${hiddenSubsidiary})
-  `);
-  await db.execute(sql`
-    insert into projects(id,org_id,name,subsidiary_id,is_active)
-    values (${project},${orgId},'Harbourview Tower',${rootSubsidiary},true)
-  `);
-  await db.execute(sql`
-    insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status)
-    values (${randomUUID()},${orgId},${employee},'2026-09-13','submitted')
-  `);
-  await db.execute(sql`
-    insert into time_entries(id,org_id,employee_party_id,worked_on,hours,status,is_billable,project_id,billing_status,cost_rate,bill_rate)
-    values (${randomUUID()},${orgId},${employee},'2026-09-14','8','submitted',true,${project},'unbilled','50','100'),
-           (${randomUUID()},${orgId},${employee},'2026-09-15','8','approved',true,${project},'unbilled','50','100')
-  `);
-  await db.execute(sql`
-    insert into documents(id,org_id,kind,document_number,document_date,currency,total,open_balance,status,subsidiary_id,project_id)
-    values (${ticketDoc},${orgId},'field_ticket','FT-1001','2026-09-14','CAD','0','0','draft',${rootSubsidiary},${project})
-  `);
-  await db.execute(sql`
-    insert into field_tickets(document_id,org_id,period,period_start,period_end,foreman_party_id)
-    values (${ticketDoc},${orgId},'weekly','2026-09-13','2026-09-19',${employee})
-  `);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
+      values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden time entity','CAD','CA',true,false)
+    `);
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
+      values (${employee}, ${orgId}, 'employee', 'Harbour Foreman', true, '{}'::jsonb, ${rootSubsidiary}),
+             (${hiddenEmployee}, ${orgId}, 'employee', 'Hidden Worker', true, '{}'::jsonb, ${hiddenSubsidiary})
+    `);
+    await db.execute(sql`
+      insert into projects(id,org_id,name,subsidiary_id,is_active)
+      values (${project},${orgId},'Harbourview Tower',${rootSubsidiary},true)
+    `);
+    await db.execute(sql`
+      insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status)
+      values (${randomUUID()},${orgId},${employee},'2026-09-13','submitted')
+    `);
+    await db.execute(sql`
+      insert into time_entries(id,org_id,employee_party_id,worked_on,hours,status,is_billable,project_id,billing_status,cost_rate,bill_rate)
+      values (${randomUUID()},${orgId},${employee},'2026-09-14','8','submitted',true,${project},'unbilled','50','100'),
+             (${randomUUID()},${orgId},${employee},'2026-09-15','8','approved',true,${project},'unbilled','50','100')
+    `);
+    await db.execute(sql`
+      insert into documents(id,org_id,kind,document_number,document_date,currency,total,open_balance,status,subsidiary_id,project_id)
+      values (${ticketDoc},${orgId},'field_ticket','FT-1001','2026-09-14','CAD','0','0','draft',${rootSubsidiary},${project})
+    `);
+    await db.execute(sql`
+      insert into field_tickets(document_id,org_id,period,period_start,period_end,foreman_party_id)
+      values (${ticketDoc},${orgId},'weekly','2026-09-13','2026-09-19',${employee})
+    `);
+  });
   return { employee, hiddenEmployee, project, ticketDoc };
 }
 
 test('time assistant reads: week, search, project time, unbilled, tickets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   await enableFeature(org.orgId, 'fieldTickets');
   try {
     const seed = await seedTime(org);
@@ -169,8 +171,8 @@ test('time assistant reads: week, search, project time, unbilled, tickets', { sk
 });
 
 test('time assistant reads isolate orgs and honor the feature flags', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   await enableFeature(orgA.orgId, 'fieldTickets');
   try {
     const seedA = await seedTime(orgA);
@@ -195,10 +197,10 @@ test('time assistant reads isolate orgs and honor the feature flags', { skip: !p
       // fieldTickets defaults off: org B has no ticket surface at all.
       assert.deepEqual(crossTicket, { ok: false, error: 'fieldTickets_feature_disabled' });
     });
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"timeTracking":false}'::jsonb)
       where id=${orgA.orgId}
-    `);
+    `));
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(timeAuthzA, 'search_timesheets', {});
       assert.deepEqual(off, { ok: false, error: 'timeTracking_feature_disabled' });

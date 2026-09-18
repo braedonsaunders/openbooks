@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { openItems } = await import('./open-items')
@@ -52,10 +52,10 @@ test('open items reconstruct remaining as of the forecast date', { skip: !env.OP
         values (${scratch.orgId}, ${payLine}, ${invLine}, '100', '2026-09-10', '100', '100', 'CAD', '100', 'CAD',
           '1', 'same_currency', 'FORECAST-TEST')`)
     })
-    const august = await openItems(scratch.orgId, 'ar', '2026-08-31')
+    const august = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-08-31'))
     assert.equal(august.length, 1)
     assert.equal(august[0]?.remaining, '100.0000')
-    const september = await openItems(scratch.orgId, 'ar', '2026-09-30')
+    const september = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-09-30'))
     assert.equal(september.length, 0)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))

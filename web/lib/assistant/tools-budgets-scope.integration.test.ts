@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
@@ -47,35 +47,37 @@ async function seedScenario(
   status = 'draft',
 ): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-    values (${id}, ${orgId}, ${bookId}, 2026, ${`Plan ${status}`}, 'budget', 'draft')
-  `);
-  if (status !== 'draft') {
-    // The scenario guard requires approved scenarios to carry lines, each
-    // flip must bump the revision by exactly one, and approval runs through
-    // pending_approval (draft -> pending_approval -> approved).
-    await seedLines(orgId, id, subsidiaryId, revenueId, cogsId, periodId);
-    for (const next of ['pending_approval', status]) {
-      await db.execute(sql`update budget_scenarios set status = ${next}, revision = revision + 1 where id = ${id} and org_id = ${orgId}`);
-      if (next === status) break;
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
+      values (${id}, ${orgId}, ${bookId}, 2026, ${`Plan ${status}`}, 'budget', 'draft')
+    `);
+    if (status !== 'draft') {
+      // The scenario guard requires approved scenarios to carry lines, each
+      // flip must bump the revision by exactly one, and approval runs through
+      // pending_approval (draft -> pending_approval -> approved).
+      await seedLines(orgId, id, subsidiaryId, revenueId, cogsId, periodId);
+      for (const next of ['pending_approval', status]) {
+        await db.execute(sql`update budget_scenarios set status = ${next}, revision = revision + 1 where id = ${id} and org_id = ${orgId}`);
+        if (next === status) break;
+      }
     }
-  }
+  });
   return id;
 }
 
 async function seedLines(orgId: string, scenarioId: string, subsidiaryId: string, revenueId: string, cogsId: string, periodId: string) {
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, note)
     values (${orgId}, ${scenarioId}, ${revenueId}, ${periodId}, ${subsidiaryId}, '1000.0000', 'seed revenue'),
            (${orgId}, ${scenarioId}, ${cogsId}, ${periodId}, ${subsidiaryId}, '400.0000', null)
-  `);
+  `));
 }
 
 test('budget workspace read reuses the page loader; writes are revision-checked', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const scenarioId = await seedScenario(
       org.orgId, org.bookId, org.subsidiaryId, org.accounts.revenue, org.accounts.cogs, org.periodId,
     );
@@ -159,10 +161,10 @@ test('budget workspace read reuses the page loader; writes are revision-checked'
 });
 
 test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const draftId = await seedScenario(
       org.orgId, org.bookId, org.subsidiaryId, org.accounts.revenue, org.accounts.cogs, org.periodId, 'draft',
     );
@@ -170,10 +172,10 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
       org.orgId, org.bookId, org.subsidiaryId, org.accounts.revenue, org.accounts.cogs, org.periodId, 'approved',
     );
     const stranger = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${stranger}, ${org.orgId}, ${org.subsidiaryId}, 'Stranger Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    `);
+    `));
     const writer = appCtx(org.orgId, actors.adminId, ['budgets.manage']);
     const cell = { accountId: org.accounts.revenue, periodId: org.periodId, amount: '10.0000' };
     // Approved scenarios are locked by the service and its trigger.
@@ -213,7 +215,7 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
       /forbidden/,
     );
     // Another org's scenario reads as missing.
-    const otherActors = await seedFlowActors(other.orgId);
+    const otherActors = await withBypassContext(() => seedFlowActors(other.orgId));
     await assert.rejects(
       executeApplicationTool(
         applicationTool('update_budget_cells')!,
@@ -223,11 +225,11 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
       /not_found/,
     );
     // Module off matches the routes' fence.
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"budgets":false}'::jsonb, true)
        where id = ${org.orgId}
-    `);
+    `));
     try {
       await assert.rejects(
         executeApplicationTool(applicationTool('update_budget_cells')!, writer, {
@@ -246,11 +248,11 @@ test('budget writes refuse locked scenarios, bad scope, and foreign orgs', { ski
         });
       });
     } finally {
-      await db.execute(sql`
+      await withBypassContext(() => db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"budgets":true}'::jsonb, true)
          where id = ${org.orgId}
-      `);
+      `));
     }
   } finally {
     await dropScratchOrg(org.orgId);
