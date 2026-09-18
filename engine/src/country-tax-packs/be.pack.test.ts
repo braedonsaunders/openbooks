@@ -60,7 +60,7 @@ test("Belgium declares three rate bands with resolving sources and contiguous hi
   }
   assert.deepEqual(
     codes.find((code) => code.code === "BE-VAT-STD")!.rates,
-    [{ ratePercent: 21, effectiveFrom: "1996-01-01", sourceId: "mondaq_1996_changeover" }],
+    [{ ratePercent: 21, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
   );
 });
 

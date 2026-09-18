@@ -37,6 +37,13 @@ const BE_VAT_PERIODIC_2026: TaxReturnPack = {
  * band is declared: the periodic declaration carries no 0% output base grid
  * (01/02/03 cover 6%/12%/21%), even though a 0% rate exists in rate tables.
  * VAT is federal: Flanders, Wallonia and Brussels levy no VAT.
+ *
+ * Rate histories open at the FPS VAT-rates applicability page (verified
+ * 2026-09-18), not at the 1996 20.5%-to-21% changeover: FPS publishes no
+ * rate history, so the Linklaters-via-Mondaq changeover note, the OECD
+ * Consumption Tax Trends summary and the Microsoft box cross-reference
+ * were dropped rather than blessed. A shorter FPS-sourced history beats a
+ * longer one resting on a law firm's summary.
  */
 export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
   code: "BE_INDIRECT_TAX",
@@ -68,22 +75,10 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-08-01",
     },
     {
-      id: "ms_intervat_boxes",
-      title: "Microsoft Learn — INTERVAT declaration box table (secondary cross-reference for grilles 01/02/03, 54, 59, 71/72)",
-      url: "https://learn.microsoft.com/en-us/dynamics365/finance/localizations/belgium/emea-bel-intervat-tax-declaration",
-      asOf: "2026-08-01",
-    },
-    {
-      id: "oecd_rate_history_1996",
-      title: "OECD Consumption Tax Trends Belgium — 21% standard since 1996 (20.5% in 1995); reduced 6%/12% bands in force",
-      url: "https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/consumption-tax-trends/consumption-tax-trends-belgium.pdf",
-      asOf: "2026-08-01",
-    },
-    {
-      id: "mondaq_1996_changeover",
-      title: "Linklaters via Mondaq (1995) — 20.5% to 21% on 1 January 1996; 6%/12% bands unchanged (left-truncated applicability, not origin)",
-      url: "https://www.mondaq.com/audit/38/tax-law---new-standard-vat-rate-in-belgium",
-      asOf: "2026-08-01",
+      id: "fps_vat_rates",
+      title: "FPS Finance — VAT rates: standard 21% (R03), intermediate 12% (R02), reduced 6% (R01); zero rate (R00) for exceptional goods and services (applicability, not origin)",
+      url: "https://finance.belgium.be/en/enterprises/vat/vat-obligation/rates-and-calculation/vat-rates",
+      asOf: "2026-09-18",
     },
   ],
   jurisdictions: [],
@@ -95,21 +90,21 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
         name: "Belgium standard VAT",
         ratePercent: 21,
         role: "standard",
-        rates: [{ ratePercent: 21, effectiveFrom: "1996-01-01", sourceId: "mondaq_1996_changeover" }],
+        rates: [{ ratePercent: 21, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
       },
       {
         code: "BE-VAT-RED12",
         name: "Belgium reduced VAT 12%",
         ratePercent: 12,
         role: "reduced",
-        rates: [{ ratePercent: 12, effectiveFrom: "1996-01-01", sourceId: "mondaq_1996_changeover" }],
+        rates: [{ ratePercent: 12, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
       },
       {
         code: "BE-VAT-RED6",
         name: "Belgium reduced VAT 6%",
         ratePercent: 6,
         role: "reduced",
-        rates: [{ ratePercent: 6, effectiveFrom: "1996-01-01", sourceId: "mondaq_1996_changeover" }],
+        rates: [{ ratePercent: 6, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
       },
     ],
   },
