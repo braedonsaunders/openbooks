@@ -244,6 +244,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'kpi-expenses-awaiting-approval': {
+    id: 'kpi-expenses-awaiting-approval',
+    category: 'kpi',
+    labelKey: 'widgets.expensesAwaitingApproval',
+    descriptionKey: 'catalog.expensesAwaitingApproval',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
