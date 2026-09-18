@@ -69,19 +69,45 @@ export const NETHERLANDS_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://download.belastingdienst.nl/belastingdienst/docs/toelichting_bij_btw_aangifte_ob0731t62fd.pdf",
       asOf: "2026-08-01",
     },
+    {
+      id: "wet_ob_1968_article_9_reduced_6",
+      title: "Wettenbank — Wet op de omzetbelasting 1968, article 9 (6% verlaagd tarief, verified in force 2005–2018)",
+      url: "https://wetten.overheid.nl/BWBR0002629/2018-10-01",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "netherlands_vat_reduced_9_2019",
+      title: "Official Gazette — Belastingplan 2019 raising the reduced VAT rate from 6% to 9% (article XXIV, in force 2019-01-01)",
+      url: "https://zoek.officielebekendmakingen.nl/stb-2018-504.html",
+      asOf: "2026-09-18",
+    },
   ],
   jurisdictions: [],
   returnPacks: [NL_OB_2026],
   returnPackTaxCodes: {
-    NL_OB: {
-      code: "NL-VAT-STD",
-      name: "Netherlands standard VAT",
-      ratePercent: 21,
-      rates: [
-        { ratePercent: 17.5, effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
-        { ratePercent: 19, effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
-        { ratePercent: 21, effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
-      ],
-    },
+    NL_OB: [
+      {
+        code: "NL-VAT-STD",
+        name: "Netherlands standard VAT",
+        ratePercent: 21,
+        role: "standard",
+        rates: [
+          { ratePercent: 17.5, effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
+          { ratePercent: 19, effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
+          { ratePercent: 21, effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
+        ],
+      },
+      {
+        code: "NL-VAT-RED",
+        name: "Netherlands reduced VAT",
+        ratePercent: 9,
+        role: "reduced",
+        rates: [
+          // Earliest Wettenbank version verified in force; pre-2005 reduced-rate origin not transcribed.
+          { ratePercent: 6, effectiveFrom: "2005-01-01", effectiveTo: "2018-12-31", sourceId: "wet_ob_1968_article_9_reduced_6" },
+          { ratePercent: 9, effectiveFrom: "2019-01-01", sourceId: "netherlands_vat_reduced_9_2019" },
+        ],
+      },
+    ],
   },
 };
