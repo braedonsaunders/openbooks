@@ -239,9 +239,11 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // paying a made-up number. `holidayPay: null` would falsely state that no
   // statutory holiday pay exists.
   jurisdictions: [],
-  // All loonheffing is remitted to the Belastingdienst under the employer's
-  // loonheffingennummer, per aangiftetijdvak (maand or vier weken).
-  remittanceVendorSettingsKey: "belastingdienstRemittancePartyId",
+  // Loonheffing remits to the Belastingdienst under the employer's
+  // loonheffingennummer, but payroll settings only store cra/rq today.
+  // A key naming a field that does not exist looks wired. Null until
+  // Orchestrate adds a Belastingdienst remittance-party settings field.
+  remittanceVendorSettingsKey: null,
   // No remittance schedule is declared: the aangifte/betaling due-date rule
   // is not transcribed, and the field is optional. A guessed timetable would
   // date real vendor bills.
