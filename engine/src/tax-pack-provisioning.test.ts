@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./tax-pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
-import { COUNTRY_TAX_PACKS, countryTaxPackForReturn } from "./country-tax-packs/index.ts";
+import {
+  COUNTRY_TAX_PACKS,
+  countryTaxPackForReturn,
+  packReturnCodesWithTaxCodes,
+  packTaxCodesForReturn,
+  primaryPackTaxCode,
+} from "./country-tax-packs/index.ts";
 import type { EffectiveTaxRate } from "./country-tax-packs/types.ts";
 
 test("every default tax code has an explicit effective-dated rate schedule", () => {
@@ -54,9 +60,11 @@ test("country packs have unique identities and immutable-version metadata", () =
       assert.equal(new Date(`${source.asOf}T00:00:00Z`).toISOString().slice(0, 10), source.asOf);
     }
     const knownSources = new Set(sourceIds);
-    for (const [code, definition] of Object.entries(pack.returnPackTaxCodes)) {
-      for (const rate of definition.rates ?? []) {
-        assert.ok(knownSources.has(rate.sourceId), `${pack.code}/${code} references unknown source ${rate.sourceId}`);
+    for (const code of packReturnCodesWithTaxCodes(pack)) {
+      for (const definition of packTaxCodesForReturn(pack, code)) {
+        for (const rate of definition.rates ?? []) {
+          assert.ok(knownSources.has(rate.sourceId), `${pack.code}/${code} references unknown source ${rate.sourceId}`);
+        }
       }
     }
     for (const jurisdiction of pack.jurisdictions) {
@@ -147,9 +155,11 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
   const pack = COUNTRY_TAX_PACKS.find((entry) => entry.country === "US")!;
   const noStatewideSalesTax = new Set(["AK", "DE", "MT", "NH", "OR"]);
   const detailedByRegion = new Map(
-    pack.jurisdictions.flatMap((jurisdiction) => jurisdiction.returnPackCode
-      ? [[jurisdiction.region, pack.returnPackTaxCodes[jurisdiction.returnPackCode]] as const]
-      : []),
+    pack.jurisdictions.flatMap((jurisdiction) => {
+      if (!jurisdiction.returnPackCode) return [];
+      const primary = primaryPackTaxCode(pack, jurisdiction.returnPackCode);
+      return primary ? [[jurisdiction.region, primary] as const] : [];
+    }),
   );
   const reviewDate = pack.version.replaceAll(".", "-");
 

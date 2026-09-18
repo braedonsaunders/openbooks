@@ -9,6 +9,9 @@ import {
   countryTaxPack,
   countryTaxPackForReturn,
   jurisdictionSelectionKey,
+  packReturnCodesWithTaxCodes,
+  packTaxCodesForReturn,
+  primaryPackTaxCode,
   resolveJurisdictionSelection,
 } from "./country-tax-packs/index.ts";
 import type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxPackDefinition } from "./country-tax-packs/index.ts";
@@ -50,14 +53,30 @@ function packRateSchedule(
 export type DefaultTaxCode = CountryTaxCodeDefinition;
 
 /**
- * The standard tax code seeded per pack. One code per jurisdiction at its
- * headline rate — a working starting point the user refines (extra rate bands,
- * local/district rates, exemptions). US state rates are the STATE base rate only;
- * local/district rates are layered on per the workpaper.
+ * Headline tax code per return for readers that predate multi-code sets
+ * (selection checks, catalog readiness, registrations). Derived through the
+ * pack normalizers, so single-code packs keep their exact historical primary.
+ * Provisioning installs the FULL declared set and never reads this map.
  */
 export const PACK_DEFAULT_CODES: Record<string, DefaultTaxCode> = {
-  ...Object.fromEntries(COUNTRY_TAX_PACKS.flatMap((pack) => Object.entries(pack.returnPackTaxCodes))),
+  ...Object.fromEntries(
+    COUNTRY_TAX_PACKS.flatMap((pack) =>
+      packReturnCodesWithTaxCodes(pack).flatMap((code) => {
+        const primary = primaryPackTaxCode(pack, code);
+        return primary ? [[code, primary] as const] : [];
+      }),
+    ),
+  ),
 };
+
+/**
+ * Every tax code a return declares, in pack order. Empty when the return
+ * declares nothing (the install loop then skips it, as before).
+ */
+function packTaxCodeSet(returnPackCode: string): readonly DefaultTaxCode[] {
+  const localization = countryTaxPackForReturn(returnPackCode);
+  return localization ? packTaxCodesForReturn(localization, returnPackCode) : [];
+}
 
 export interface SupportedSubJurisdiction {
   /** A detailed return-pack code, or a JURISDICTION:<ISO-3166-2> setup key. */
@@ -512,73 +531,80 @@ async function provisionTaxPacksInTenant(
                   ${actorId})`);
       }
 
-      const def = PACK_DEFAULT_CODES[pack.code];
-      if (!def) continue;
+      const defs = packTaxCodeSet(pack.code);
+      if (defs.length === 0) continue;
 
-      // Tax code (idempotent) + its rate.
-      const inserted = (await tx.execute<{ id: string }>(sql`
-        insert into tax_codes (org_id, code, name, jurisdiction_id, country, region, applies_to, is_active, created_by, updated_by)
-        select ${orgId}, ${def.code}, ${def.name}, ${jurisdictionId}, ${j.country}, ${j.region ?? null}, 'both', true, ${actorId}, ${actorId}
-         where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${def.code})
-        returning id`));
-      let codeId = inserted.rows[0]?.id ?? null;
-      if (codeId) {
-        taxCodesCreated++;
-        await tx.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_codes', ${codeId}, 'insert',
-                  ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { code: def.code, name: def.name, jurisdictionCode: j.code, country: j.country, region: j.region ?? null, appliesTo: "both", isActive: true } })}::jsonb,
-                  ${actorId})`);
-        if (!def.rates?.length) {
-          throw new Error(`country pack ${pack.code} does not define an effective-dated rate schedule for ${def.code}`);
-        }
-        for (const rate of def.rates) {
-          const insertedRate = (await tx.execute<{ id: string }>(sql`
-            insert into tax_rates
-              (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
-            values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
-            returning id`));
+      // Tax codes (idempotent) + their rates — every code the return declares,
+      // each with its own effective-dated schedule.
+      const codeIds: string[] = [];
+      for (const def of defs) {
+        const inserted = (await tx.execute<{ id: string }>(sql`
+          insert into tax_codes (org_id, code, name, jurisdiction_id, country, region, applies_to, is_active, created_by, updated_by)
+          select ${orgId}, ${def.code}, ${def.name}, ${jurisdictionId}, ${j.country}, ${j.region ?? null}, 'both', true, ${actorId}, ${actorId}
+           where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${def.code})
+          returning id`));
+        let codeId = inserted.rows[0]?.id ?? null;
+        if (codeId) {
+          taxCodesCreated++;
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
-                    ${JSON.stringify({ source: "tax_setup", pack: pack.code, taxCode: def.code, after: rate })}::jsonb,
+            values (${orgId}, 'tax_codes', ${codeId}, 'insert',
+                    ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { code: def.code, name: def.name, jurisdictionCode: j.code, country: j.country, region: j.region ?? null, appliesTo: "both", isActive: true } })}::jsonb,
                     ${actorId})`);
+          if (!def.rates?.length) {
+            throw new Error(`country pack ${pack.code} does not define an effective-dated rate schedule for ${def.code}`);
+          }
+          for (const rate of def.rates) {
+            const insertedRate = (await tx.execute<{ id: string }>(sql`
+              insert into tax_rates
+                (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
+              values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
+              returning id`));
+            await tx.execute(sql`
+              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+              values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
+                      ${JSON.stringify({ source: "tax_setup", pack: pack.code, taxCode: def.code, after: rate })}::jsonb,
+                      ${actorId})`);
+          }
+        } else {
+          const existing = (await tx.execute<{ id: string }>(sql`
+            select id from tax_codes where org_id = ${orgId} and code = ${def.code} limit 1`));
+          codeId = existing.rows[0]?.id ?? null;
         }
-      } else {
-        const existing = (await tx.execute<{ id: string }>(sql`
-          select id from tax_codes where org_id = ${orgId} and code = ${def.code} limit 1`));
-        codeId = existing.rows[0]?.id ?? null;
-      }
-      if (!codeId || !jurisdictionId) {
-        throw new Error(`tax code ${def.code} could not be created or resolved`);
-      }
-      const staleCode = await refreshPackCodeRatesIfUnused({
-        tx,
-        orgId,
-        codeId,
-        jurisdictionId,
-        country: j.country,
-        region: j.region ?? null,
-        packCode: pack.code,
-        actorId,
-        definition: def,
-      });
-      if (staleCode) {
-        staleUsedCodes.push(staleCode);
-      } else {
-        await assertTaxCodeMatchesPack(tx, {
+        if (!codeId || !jurisdictionId) {
+          throw new Error(`tax code ${def.code} could not be created or resolved`);
+        }
+        const staleCode = await refreshPackCodeRatesIfUnused({
+          tx,
           orgId,
           codeId,
           jurisdictionId,
           country: j.country,
           region: j.region ?? null,
+          packCode: pack.code,
+          actorId,
           definition: def,
         });
+        if (staleCode) {
+          staleUsedCodes.push(staleCode);
+        } else {
+          await assertTaxCodeMatchesPack(tx, {
+            orgId,
+            codeId,
+            jurisdictionId,
+            country: j.country,
+            region: j.region ?? null,
+            definition: def,
+          });
+        }
+        codeIds.push(codeId);
       }
 
-      // Tax group bundling the jurisdiction's code — ready for compound cases
-      // (extra rate bands / local taxes applied together on a line).
+      // Tax group bundling the jurisdiction's codes — every declared code, so
+      // compound cases (extra rate bands / local taxes on one line) install
+      // together. Member sequence follows pack declaration order.
       const groupCode = `${j.code}-TAX`;
+      const groupTaxCodes = defs.map((def) => def.code);
       const grp = (await tx.execute<{ id: string }>(sql`
         insert into tax_groups (org_id, code, name, is_active)
         select ${orgId}, ${groupCode}, ${`${j.name} tax`}, true
@@ -589,18 +615,20 @@ async function provisionTaxPacksInTenant(
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'tax_groups', ${grp.rows[0].id}, 'insert',
-                  ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { code: groupCode, name: `${j.name} tax`, taxCodes: [def.code], isActive: true } })}::jsonb,
+                  ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { code: groupCode, name: `${j.name} tax`, taxCodes: groupTaxCodes, isActive: true } })}::jsonb,
                   ${actorId})`);
       }
       const groupId =
         grp.rows[0]?.id ??
         ((await tx.execute<{ id: string }>(sql`select id from tax_groups where org_id = ${orgId} and code = ${groupCode} limit 1`))).rows[0]?.id ??
         null;
-      if (groupId && codeId) {
-        await tx.execute(sql`
-          insert into tax_group_members (tax_group_id, tax_code_id, sequence)
-          select ${groupId}, ${codeId}, 1
-           where not exists (select 1 from tax_group_members where tax_group_id = ${groupId} and tax_code_id = ${codeId})`);
+      if (groupId) {
+        for (const [sequence, codeId] of codeIds.entries()) {
+          await tx.execute(sql`
+            insert into tax_group_members (tax_group_id, tax_code_id, sequence)
+            select ${groupId}, ${codeId}, ${sequence + 1}
+             where not exists (select 1 from tax_group_members where tax_group_id = ${groupId} and tax_code_id = ${codeId})`);
+        }
       }
     }
 
