@@ -593,7 +593,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/module-home/purchasing-subsidiaryless-scope.integration.test.ts", { writes: 8, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/order-billed-unwind.integration.test.ts", { writes: 4, via: "order-cycle.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/order-read-scope.integration.test.ts", { writes: 8, via: "handlers.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/payroll-filing-history.integration.test.ts", { writes: 9, via: "route.ts -> subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/primary-book-history.integration.test.ts", { writes: 21, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/project-billing-accounting.integration.test.ts", { writes: 46, via: "bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/recurring-controls.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
