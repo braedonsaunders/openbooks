@@ -1,18 +1,22 @@
 import "server-only";
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
-import { env } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "../authz";
 import { canonicalJson } from "../application/idempotency-core";
 
 let cachedKey: Buffer | undefined;
 function commandKey(): Buffer {
   if (cachedKey) return cachedKey;
-  if (!env.SESSION_SECRET) {
+  // Read the signing secret live from process.env. Engine db.ts snapshots the
+  // environment at module evaluation for pool config, so reading the secret
+  // through its snapshot misses any value assigned after that import (the
+  // suite preload imports db.ts before test files assign SESSION_SECRET).
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
     throw new Error("SESSION_SECRET is required to sign assistant application commands");
   }
   cachedKey = Buffer.from(hkdfSync(
     "sha256",
-    Buffer.from(env.SESSION_SECRET),
+    Buffer.from(secret),
     Buffer.alloc(0),
     Buffer.from("openbooks.assistant-application-command.v1"),
     32,
