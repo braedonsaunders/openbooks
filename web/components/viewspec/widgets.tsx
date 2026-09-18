@@ -68,6 +68,10 @@ import {
 import { AdminRolesTable } from '../../app/(app)/admin/roles/sections'
 import { NewRoleButton } from '../../app/(app)/admin/roles/RoleEditor'
 import { AuditRowsTable, AuditEventFlyout, AuditDocsLink } from '../../app/(app)/admin/audit/sections'
+import {
+  NotificationsInbox,
+  NotificationsMarkAllRead,
+} from '../../app/(app)/notifications/NotificationsInbox'
 import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
@@ -329,7 +333,7 @@ import { NewAssetRedirect } from '../../app/(app)/assets/NewAssetRedirect'
 import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
 import { AssetDrawer } from '../../app/(app)/assets/AssetDrawer'
 import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
-import { Gauge, History, Camera } from 'lucide-react'
+import { Gauge, History, Camera, BellRing } from 'lucide-react'
 import { DateRangeFilter } from '../date-range-filter'
 import {
   ForecastSectionHeading,
@@ -692,7 +696,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const renderer = action ? WIDGET_REGISTRY[action] : undefined
     // Icons are components, so the spec names one from a closed map rather
     // than carrying it — same rule as every other component reference.
-    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera />, 'shield-check': <ShieldCheck />, 'scroll-text': <ScrollText />, trash: <Trash2 /> }
+    const icons: Record<string, ReactNode> = { 'key-round': <KeyRound />, building: <Building2 />, users: <Users />, mail: <Mail />, activity: <Activity />, send: <Send />, 'check-circle': <CheckCircle2 />, gauge: <Gauge />, camera: <Camera />, 'shield-check': <ShieldCheck />, 'scroll-text': <ScrollText />, trash: <Trash2 />, bell: <BellRing /> }
     const iconKey = str(props, 'icon')
     return (
       <EmptyState
@@ -949,6 +953,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     if (!drawer) return null
     return <AuditEventFlyout event={drawer.event} closeHref={drawer.closeHref} />
   },
+
+  /* --- notifications inbox ---------------------------------------------------- */
+  /** Not a `table` block: the inbox is a read/unread list whose rows mark
+   *  themselves read on the way to the record they point at. */
+  'notifications-inbox': (props) => (
+    <NotificationsInbox
+      rows={(props.rows as ComponentProps<typeof NotificationsInbox>['rows']) ?? []}
+    />
+  ),
+  'notifications-mark-all-read': (props) => (
+    <NotificationsMarkAllRead unread={num(props, 'unread') ?? 0} />
+  ),
 
   /* --- banking cockpit ------------------------------------------------------- */
   /** A widget, not a slot: the LOADER already did the roster's server work and

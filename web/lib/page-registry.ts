@@ -1468,6 +1468,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/notifications': {
+    route: '/notifications',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/notifications/view')
+      return {
+        load: (input) => m.loadNotifications(input.searchParams ?? {}),
+        spec: (data) => m.notificationsSpec(data as never),
+      }
+    },
+  },
   '/parties': {
     route: '/parties',
     segments: [],

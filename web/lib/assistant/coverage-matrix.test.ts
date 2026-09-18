@@ -171,10 +171,20 @@ const MATRIX: Entry[] = [
   { prefix: "forms", uncovered: "no application service: form template publish persists inline" },
   { prefix: "internal/reports/render", tools: ["run_report"], note: "same execution basis as run_report" },
   { prefix: "internal", uncovered: "no application service: internal publish endpoints" },
+  { prefix: "feedback", uncovered: "assistant surface: the in-app issue reporter's own triage turn" },
 ];
 
-/** The allowlist must only shrink: lower this as gap-fill commits land. */
-const UNCOVERED_BUDGET = 34;
+/**
+ * The allowlist must only shrink: lower this as gap-fill commits land.
+ *
+ * 34 → 35 on 2026-09-17 for `feedback`, and that is NOT a gap-fill
+ * regression: the in-app issue reporter is a second, deliberately scoped
+ * assistant surface (@braedonsaunders/appkit-feedback), covered by exactly
+ * the same reasoning as the `assistant` entry beside it. A tool that files
+ * product issues on the reporter's behalf is not a gap to fill — the
+ * reporter's whole design is that a PERSON describes the defect.
+ */
+const UNCOVERED_BUDGET = 35;
 
 const REASON_VOCABULARY = [
   "no application service:",

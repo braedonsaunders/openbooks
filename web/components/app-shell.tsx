@@ -15,7 +15,7 @@ import { TopNav } from './top-nav'
 import { GlobalSearch } from './global-search'
 import { TopbarSearchToggle } from './topbar-search-toggle'
 import { AccountMenu } from './account-menu'
-import { NotificationsBell } from './notifications-bell'
+import { FeedbackLauncher } from './feedback-launcher'
 import type { WorkspaceEnvironments } from '../lib/environments'
 import { MobileNavProvider } from './mobile-nav'
 import { MobileNavToggle } from './mobile-nav-toggle'
@@ -36,6 +36,7 @@ export function AppShell({
   canManageParties,
   canReadActivities,
   canManageWages,
+  feedback,
   children,
 }: {
   account: {
@@ -56,6 +57,12 @@ export function AppShell({
   canManageParties: boolean
   canReadActivities: boolean
   canManageWages: boolean
+  /**
+   * In-app issue reporting, or null when the reader may not report or the
+   * operator has not finished configuring a destination — a report control
+   * that can only fail is worse than no control.
+   */
+  feedback: { appVersion: string } | null
   children: React.ReactNode
 }) {
   const topbar = navMode === 'topbar'
@@ -92,7 +99,7 @@ export function AppShell({
               {docsItem ? <HeaderNavLink item={docsItem} /> : null}
               {appItem ? <AppLauncherLink item={appItem} /> : null}
               <GlobalCreateMenu permissions={createPermissions} />
-              <NotificationsBell />
+              {feedback ? <FeedbackLauncher appVersion={feedback.appVersion} /> : null}
               <AccountMenu
                 name={account.name}
                 email={account.email}

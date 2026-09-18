@@ -129,10 +129,26 @@
     "currentHint": "Tema: {theme} (haga clic para cambiar)"
   },
   "notifications": {
-    "ariaLabel": "Notificaciones",
     "title": "Notificaciones",
-    "empty": "Estás al día",
-    "markAllRead": "Marcar todo como leído"
+    "description": "Aprobaciones, asignaciones, recordatorios y todo lo demás que el sistema le ha enviado.",
+    "tabs": {
+      "unread": "No leídas ({count})",
+      "all": "Todo"
+    },
+    "kindLabel": "Tipo",
+    "kinds": {
+      "approval": "Aprobación",
+      "flow": "Flujo",
+      "close": "Cierre",
+      "void_superseded": "Pago sustituido"
+    },
+    "markAllRead": "Marcar todo como leído",
+    "markRead": "Marcar como leído",
+    "readLabel": "Leído",
+    "emptyTitle": "Aún no hay nada",
+    "emptyDescription": "Las notificaciones llegan cuando un flujo, una aprobación o una automatización de cierre le necesita.",
+    "emptyUnreadTitle": "Estás al día",
+    "emptyUnreadDescription": "No hay nada sin leer. Cambie a Todo para ver lo ya leído."
   },
   "routeState": {
     "featureOffTitle": "La función {name} está desactivada",
@@ -151,5 +167,29 @@
     "notFoundDescription": "La página que busca no existe o usted no tiene acceso a ella.",
     "backToDashboard": "Ir al panel",
     "backToSignIn": "Ir al inicio de sesión"
+  },
+  "feedback": {
+    "launcherAria": "Informar de un problema",
+    "title": "Informar de un problema",
+    "description": "Describa qué ha fallado. Buscaremos una respuesta conocida en la ayuda y, si se trata de un defecto, crearemos un informe de producto.",
+    "close": "Cerrar",
+    "placeholder": "¿Qué ha ocurrido?",
+    "send": "Enviar",
+    "sending": "Comprobando…",
+    "pageChip": "Esta página",
+    "removePage": "Quitar el contexto de la página",
+    "thatHelped": "Esto me ha ayudado",
+    "stillABug": "Sigue siendo un error",
+    "continue": "Continuar",
+    "filedTitle": "Informe creado",
+    "filedBody": "Se ha creado un informe de producto generalizado. Los datos personales y de la empresa se eliminaron antes.",
+    "openIssue": "Abrir informe",
+    "strippedHeading": "Eliminado antes de enviarlo",
+    "unavailableTitle": "No se puede informar",
+    "unavailableBody": "No se ha podido completar el informe. Inténtelo de nuevo en un momento.",
+    "workingHelp": "Consultando la ayuda…",
+    "workingIssues": "Buscando un problema conocido…",
+    "workingFile": "Creando un informe de producto…",
+    "workingDefault": "Revisando su informe…"
   }
 }

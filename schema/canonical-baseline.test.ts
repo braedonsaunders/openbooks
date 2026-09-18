@@ -358,6 +358,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0170_forecast_snapshot_org_target.sql",
     "0171_expense_line_settlement_type.sql",
     "0172_tax_return_form_notice_key.sql",
+    "0173_platform_settings.sql",
     "0174_payroll_employer_levy_opening.sql",
     "0175_payroll_country_pack_open.sql",
     "0176_pay_component_system_key_shape.sql",
@@ -1767,11 +1768,14 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
   // is reviewed and pinned — the historical snapshot itself never changes.
   // Allocation kernel (fleet A10): read sees rules/runs/lineage, manage
   // authors rules and drivers, run executes, approve decides gates.
+  // In-app issue reporting (0173): filing sends generalized report text OUT
+  // of the installation, so a legacy API key must not acquire it silently.
   const postSnapshotAdditions = [
     "allocations.read",
     "allocations.manage",
     "allocations.run",
     "allocations.approve",
+    "feedback.use",
   ];
   assert.deepEqual(
     snapshot,

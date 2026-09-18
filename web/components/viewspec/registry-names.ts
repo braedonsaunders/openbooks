@@ -258,6 +258,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-timesheet',
   'new-view',
   'no-grants-body',
+  'notifications-inbox',
+  'notifications-mark-all-read',
   'opening-balances-grid',
   'opportunity-drawer',
   'optional-badge',
