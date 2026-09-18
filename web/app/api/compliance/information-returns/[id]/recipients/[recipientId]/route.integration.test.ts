@@ -386,7 +386,8 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
     // The freeze bypasses the service on purpose (raw client with session
     // bypass GUCs, mirroring a committed-outside writer); the wrapper keeps
     // that scope visible to the bypass-scope guard.
-    await withBypassContext(() => holder.query(
+    const freeze = holder;
+    await withBypassContext(() => freeze.query(
       `update information_return_filings
           set status = 'finalized', finalized_at = now(), finalized_by = $1,
               payer_snapshot = $2::jsonb
