@@ -2,7 +2,7 @@ import { createPlatformNav } from '@braedonsaunders/appkit-superadmin'
 
 /** OpenBooks operator console: shared AppKit chrome plus the acting-user grants page. */
 export const OPENBOOKS_PLATFORM_NAV = createPlatformNav({
-  modules: ['overview', 'tenants', 'users', 'emailLog'],
+  modules: ['overview', 'tenants', 'users', 'feedback', 'emailLog'],
   extras: [
     {
       id: 'access',
@@ -16,6 +16,7 @@ export const OPENBOOKS_PLATFORM_NAV = createPlatformNav({
   descriptions: {
     tenants: 'Every production company, sandbox, and preview environment',
     users: 'Global operator view of production identities and privileges',
+    feedback: 'Where in-app product reports are filed, for the whole deployment',
     emailLog: 'Delivery evidence across every organization',
   },
   workspaceHref: '/',

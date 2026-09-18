@@ -142,6 +142,12 @@ export const PERMISSION_CATALOGUE = [
   // File Cabinet — document management (browse, upload, move, rename, version)
   "documents.read",
   "documents.manage",
+  // In-app issue reporting. A separate key because filing a report sends
+  // generalized text OUT of the installation to the operator's product
+  // tracker; an organization that does not want its people doing that
+  // withholds this without touching anything else. Granted to every built-in
+  // role: whoever hits a defect is whoever should be able to report it.
+  "feedback.use",
   // Admin
   "parties.read",
   "parties.manage",
@@ -406,6 +412,11 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "feedback",
+    labelKey: "permissions.groups.feedback",
+    permissions: [{ key: "feedback.use", labelKey: permissionLabelKey("feedback.use") }],
+  },
+  {
     key: "admin",
     labelKey: "permissions.groups.admin",
     permissions: [
@@ -562,6 +573,7 @@ export const BUILT_IN_ROLES: Record<
       "expenses.read",
       "expenses.create",
       "documents.read",
+      "feedback.use",
       "documents.manage",
       "data.export",
       "data.import",
@@ -619,6 +631,7 @@ export const BUILT_IN_ROLES: Record<
       "assistant.use",
       "assistant.write",
       "documents.read",
+      "feedback.use",
       "documents.manage",
       "data.export",
       "data.import",
@@ -653,6 +666,7 @@ export const BUILT_IN_ROLES: Record<
       "time.approve",
       "assistant.use",
       "documents.read",
+      "feedback.use",
       "data.export",
       "apps.use",
     ],
@@ -660,7 +674,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -671,7 +685,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
-      "insights.read", "documents.read", "data.export", "data.import", "assistant.use",
+      "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
     ],
   },
   sales_rep: {
@@ -683,7 +697,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
-      "documents.read", "data.export", "assistant.use",
+      "documents.read", "feedback.use", "data.export", "assistant.use",
     ],
   },
 };

@@ -12,6 +12,7 @@
 @import './appkit-bridge.css';
 @import '@braedonsaunders/appkit-scheduling/styles.css';
 @import '@braedonsaunders/appkit-errors/styles.css';
+@import '@braedonsaunders/appkit-feedback/styles.css';
 
 @layer base {
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare

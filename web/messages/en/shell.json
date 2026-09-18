@@ -129,10 +129,26 @@
     "currentHint": "Theme: {theme} (click to change)"
   },
   "notifications": {
-    "ariaLabel": "Notifications",
     "title": "Notifications",
-    "empty": "You're all caught up",
-    "markAllRead": "Mark all read"
+    "description": "Approvals, assignments, reminders, and everything else the system has sent you.",
+    "tabs": {
+      "unread": "Unread ({count})",
+      "all": "Everything"
+    },
+    "kindLabel": "Type",
+    "kinds": {
+      "approval": "Approval",
+      "flow": "Flow",
+      "close": "Period close",
+      "void_superseded": "Payment superseded"
+    },
+    "markAllRead": "Mark all read",
+    "markRead": "Mark read",
+    "readLabel": "Read",
+    "emptyTitle": "Nothing here yet",
+    "emptyDescription": "Notifications arrive when a flow, an approval, or a close automation needs you.",
+    "emptyUnreadTitle": "You're all caught up",
+    "emptyUnreadDescription": "Nothing unread. Switch to Everything to see what you have already read."
   },
   "routeState": {
     "errorTitle": "Something went wrong",
@@ -151,5 +167,29 @@
     "operatorDescription": "The platform console is reserved for platform operators. Your organization's settings live under Administration.",
     "backToDashboard": "Go to dashboard",
     "backToSignIn": "Go to sign in"
+  },
+  "feedback": {
+    "launcherAria": "Report an issue",
+    "title": "Report an issue",
+    "description": "Describe what went wrong. We will check the help centre for a known answer, then file a product report if it is a defect.",
+    "close": "Close",
+    "placeholder": "What happened?",
+    "send": "Send",
+    "sending": "Checking…",
+    "pageChip": "This page",
+    "removePage": "Remove page context",
+    "thatHelped": "That helped",
+    "stillABug": "Still a bug",
+    "continue": "Continue",
+    "filedTitle": "Report filed",
+    "filedBody": "A generalized product issue was created. Personal and company details were removed first.",
+    "openIssue": "Open issue",
+    "strippedHeading": "Removed before filing",
+    "unavailableTitle": "Unable to report",
+    "unavailableBody": "The report could not be completed. Try again in a moment.",
+    "workingHelp": "Checking the help centre…",
+    "workingIssues": "Looking for a known issue…",
+    "workingFile": "Filing a product issue…",
+    "workingDefault": "Reviewing your report…"
   }
 }

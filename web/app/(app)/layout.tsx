@@ -12,6 +12,7 @@ import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 import { orgInfo } from '../../lib/data'
 import { isFeatureEnabled } from '../../lib/features'
+import { isFeedbackReady } from '../../lib/feedback/config'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { BusinessDateProvider } from '../../components/business-date-provider'
 import { MoneyProvider } from '../../components/money-provider'
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled, feedbackConfigured] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
@@ -37,8 +38,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isFeatureEnabled(authz.user.orgId, 'expenses'),
     isFeatureEnabled(authz.user.orgId, 'projects'),
     isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
+    // Installation-level, not a tenant feature: the operator configures one
+    // issue destination for the whole deployment (web/lib/feedback/config.ts).
+    isFeedbackReady(),
   ])
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
+  const feedbackReady = feedbackConfigured && can(authz, 'feedback.use')
   const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
 
@@ -101,6 +106,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           canManageParties={can(authz, 'parties.manage')}
           canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
+          feedback={feedbackReady ? { appVersion: process.env.OPENBOOKS_VERSION || 'development' } : null}
           >
             {authz.user.envKind !== 'production' && (
               <SandboxBanner name={authz.user.sandboxName} kind={authz.user.envKind} />

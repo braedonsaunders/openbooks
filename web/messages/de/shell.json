@@ -129,10 +129,26 @@
     "currentHint": "Design: {theme} (zum Ändern klicken)"
   },
   "notifications": {
-    "ariaLabel": "Benachrichtigungen",
     "title": "Benachrichtigungen",
-    "empty": "Sie sind auf dem neuesten Stand",
-    "markAllRead": "Alle als gelesen markieren"
+    "description": "Genehmigungen, Zuweisungen, Erinnerungen und alles andere, was das System Ihnen gesendet hat.",
+    "tabs": {
+      "unread": "Ungelesen ({count})",
+      "all": "Alle"
+    },
+    "kindLabel": "Art",
+    "kinds": {
+      "approval": "Genehmigung",
+      "flow": "Flow",
+      "close": "Periodenabschluss",
+      "void_superseded": "Zahlung ersetzt"
+    },
+    "markAllRead": "Alle als gelesen markieren",
+    "markRead": "Als gelesen markieren",
+    "readLabel": "Gelesen",
+    "emptyTitle": "Noch nichts vorhanden",
+    "emptyDescription": "Benachrichtigungen erscheinen, wenn ein Flow, eine Genehmigung oder eine Abschlussautomatisierung Sie benötigt.",
+    "emptyUnreadTitle": "Sie sind auf dem neuesten Stand",
+    "emptyUnreadDescription": "Nichts Ungelesenes. Wechseln Sie zu Alle, um bereits Gelesenes zu sehen."
   },
   "routeState": {
     "featureOffTitle": "{name} ist deaktiviert",
@@ -151,5 +167,29 @@
     "notFoundDescription": "Die gesuchte Seite existiert nicht oder Sie haben keinen Zugriff darauf.",
     "backToDashboard": "Zum Dashboard",
     "backToSignIn": "Zur Anmeldung"
+  },
+  "feedback": {
+    "launcherAria": "Problem melden",
+    "title": "Problem melden",
+    "description": "Beschreiben Sie, was schiefgelaufen ist. Wir prüfen zuerst die Hilfe auf eine bekannte Antwort und legen anschließend einen Produktbericht an, wenn es ein Fehler ist.",
+    "close": "Schließen",
+    "placeholder": "Was ist passiert?",
+    "send": "Senden",
+    "sending": "Wird geprüft…",
+    "pageChip": "Diese Seite",
+    "removePage": "Seitenkontext entfernen",
+    "thatHelped": "Das hat geholfen",
+    "stillABug": "Weiterhin ein Fehler",
+    "continue": "Weiter",
+    "filedTitle": "Bericht angelegt",
+    "filedBody": "Es wurde ein verallgemeinerter Produktbericht erstellt. Personen- und Unternehmensangaben wurden zuvor entfernt.",
+    "openIssue": "Bericht öffnen",
+    "strippedHeading": "Vor dem Anlegen entfernt",
+    "unavailableTitle": "Melden nicht möglich",
+    "unavailableBody": "Die Meldung konnte nicht abgeschlossen werden. Versuchen Sie es gleich erneut.",
+    "workingHelp": "Hilfe wird durchsucht…",
+    "workingIssues": "Suche nach einem bekannten Problem…",
+    "workingFile": "Produktbericht wird angelegt…",
+    "workingDefault": "Ihre Meldung wird geprüft…"
   }
 }

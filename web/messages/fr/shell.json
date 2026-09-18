@@ -129,10 +129,26 @@
     "currentHint": "Thème : {theme} (cliquez pour changer)"
   },
   "notifications": {
-    "ariaLabel": "Notifications",
     "title": "Notifications",
-    "empty": "Vous êtes à jour",
-    "markAllRead": "Tout marquer comme lu"
+    "description": "Approbations, affectations, rappels et tout ce que le système vous a envoyé.",
+    "tabs": {
+      "unread": "Non lues ({count})",
+      "all": "Tout"
+    },
+    "kindLabel": "Type",
+    "kinds": {
+      "approval": "Approbation",
+      "flow": "Flux",
+      "close": "Clôture",
+      "void_superseded": "Paiement remplacé"
+    },
+    "markAllRead": "Tout marquer comme lu",
+    "markRead": "Marquer comme lu",
+    "readLabel": "Lu",
+    "emptyTitle": "Rien pour l'instant",
+    "emptyDescription": "Les notifications arrivent lorsqu'un flux, une approbation ou une automatisation de clôture a besoin de vous.",
+    "emptyUnreadTitle": "Vous êtes à jour",
+    "emptyUnreadDescription": "Aucune notification non lue. Passez à Tout pour revoir celles déjà lues."
   },
   "routeState": {
     "featureOffTitle": "La fonctionnalité {name} est désactivée",
@@ -151,5 +167,29 @@
     "notFoundDescription": "La page recherchée n’existe pas ou vous n’y avez pas accès.",
     "backToDashboard": "Aller au tableau de bord",
     "backToSignIn": "Aller à l’ouverture de session"
+  },
+  "feedback": {
+    "launcherAria": "Signaler un problème",
+    "title": "Signaler un problème",
+    "description": "Décrivez ce qui n’a pas fonctionné. Nous chercherons une réponse connue dans l’aide, puis déposerons un rapport produit s’il s’agit d’un défaut.",
+    "close": "Fermer",
+    "placeholder": "Que s’est-il passé ?",
+    "send": "Envoyer",
+    "sending": "Vérification…",
+    "pageChip": "Cette page",
+    "removePage": "Retirer le contexte de la page",
+    "thatHelped": "Cela m’a aidé",
+    "stillABug": "C’est toujours un bogue",
+    "continue": "Continuer",
+    "filedTitle": "Rapport déposé",
+    "filedBody": "Un rapport produit généralisé a été créé. Les informations personnelles et celles de l’entreprise ont été retirées au préalable.",
+    "openIssue": "Ouvrir le rapport",
+    "strippedHeading": "Retiré avant le dépôt",
+    "unavailableTitle": "Signalement impossible",
+    "unavailableBody": "Le signalement n’a pas pu aboutir. Réessayez dans un instant.",
+    "workingHelp": "Consultation de l’aide…",
+    "workingIssues": "Recherche d’un problème connu…",
+    "workingFile": "Dépôt d’un rapport produit…",
+    "workingDefault": "Analyse de votre signalement…"
   }
 }

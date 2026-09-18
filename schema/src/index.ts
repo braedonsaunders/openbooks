@@ -33,6 +33,7 @@ export * from "./subcontracts";
 export * from "./wip-billing";
 export * from "./property-management";
 export * from "./iam";
+export * from "./platform";
 export * from "./api";
 export * from "./application-operations";
 export * from "./nav";

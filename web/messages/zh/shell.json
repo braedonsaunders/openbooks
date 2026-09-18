@@ -129,10 +129,26 @@
     "currentHint": "主题：{theme}（点击更改）"
   },
   "notifications": {
-    "ariaLabel": "通知",
     "title": "通知",
-    "empty": "您已处理完所有事项",
-    "markAllRead": "全部标为已读"
+    "description": "审批、分配、提醒，以及系统发送给您的其他所有内容。",
+    "tabs": {
+      "unread": "未读（{count}）",
+      "all": "全部"
+    },
+    "kindLabel": "类型",
+    "kinds": {
+      "approval": "审批",
+      "flow": "流程",
+      "close": "期末结账",
+      "void_superseded": "付款已被取代"
+    },
+    "markAllRead": "全部标为已读",
+    "markRead": "标为已读",
+    "readLabel": "已读",
+    "emptyTitle": "暂无内容",
+    "emptyDescription": "当流程、审批或结账自动化需要您处理时，通知会显示在这里。",
+    "emptyUnreadTitle": "您已处理完所有事项",
+    "emptyUnreadDescription": "没有未读通知。切换到“全部”可查看已读内容。"
   },
   "routeState": {
     "featureOffTitle": "{name}尚未启用",
@@ -151,5 +167,29 @@
     "notFoundDescription": "所找页面不存在，或您无权访问。",
     "backToDashboard": "前往仪表板",
     "backToSignIn": "前往登录"
+  },
+  "feedback": {
+    "launcherAria": "反馈问题",
+    "title": "反馈问题",
+    "description": "请描述出现的问题。我们会先在帮助中心查找已知答案，如果确认是缺陷，再提交产品问题报告。",
+    "close": "关闭",
+    "placeholder": "发生了什么？",
+    "send": "发送",
+    "sending": "正在检查…",
+    "pageChip": "当前页面",
+    "removePage": "移除页面信息",
+    "thatHelped": "这解决了我的问题",
+    "stillABug": "仍然是缺陷",
+    "continue": "继续",
+    "filedTitle": "已提交问题报告",
+    "filedBody": "已创建一份概括性的产品问题报告，个人信息和公司信息已事先移除。",
+    "openIssue": "打开问题",
+    "strippedHeading": "提交前已移除",
+    "unavailableTitle": "无法反馈",
+    "unavailableBody": "本次反馈未能完成，请稍后重试。",
+    "workingHelp": "正在查询帮助中心…",
+    "workingIssues": "正在查找已知问题…",
+    "workingFile": "正在提交产品问题…",
+    "workingDefault": "正在分析您的反馈…"
   }
 }

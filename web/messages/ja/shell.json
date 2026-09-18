@@ -129,10 +129,26 @@
     "currentHint": "テーマ: {theme}（クリックで変更）"
   },
   "notifications": {
-    "ariaLabel": "通知",
     "title": "通知",
-    "empty": "未読はありません",
-    "markAllRead": "すべて既読にする"
+    "description": "承認、割り当て、リマインダーなど、システムから届いたすべての通知です。",
+    "tabs": {
+      "unread": "未読（{count}）",
+      "all": "すべて"
+    },
+    "kindLabel": "種類",
+    "kinds": {
+      "approval": "承認",
+      "flow": "フロー",
+      "close": "決算締め",
+      "void_superseded": "支払いの差し替え"
+    },
+    "markAllRead": "すべて既読にする",
+    "markRead": "既読にする",
+    "readLabel": "既読",
+    "emptyTitle": "まだ何もありません",
+    "emptyDescription": "フロー、承認、決算の自動処理で対応が必要になると通知が届きます。",
+    "emptyUnreadTitle": "未読はありません",
+    "emptyUnreadDescription": "未読の通知はありません。「すべて」に切り替えると既読の通知を確認できます。"
   },
   "routeState": {
     "featureOffTitle": "{name}は無効です",
@@ -151,5 +167,29 @@
     "notFoundDescription": "お探しのページは存在しないか、アクセス権がありません。",
     "backToDashboard": "ダッシュボードへ移動",
     "backToSignIn": "サインインへ移動"
+  },
+  "feedback": {
+    "launcherAria": "問題を報告",
+    "title": "問題を報告",
+    "description": "発生した問題をご記入ください。まずヘルプセンターで既知の回答を確認し、不具合であれば製品の問題として登録します。",
+    "close": "閉じる",
+    "placeholder": "何が起きましたか？",
+    "send": "送信",
+    "sending": "確認中…",
+    "pageChip": "このページ",
+    "removePage": "ページ情報を削除",
+    "thatHelped": "解決しました",
+    "stillABug": "やはり不具合です",
+    "continue": "続ける",
+    "filedTitle": "報告を登録しました",
+    "filedBody": "内容を一般化した製品の問題を登録しました。個人情報と会社情報は事前に削除されています。",
+    "openIssue": "問題を開く",
+    "strippedHeading": "登録前に削除した内容",
+    "unavailableTitle": "報告できません",
+    "unavailableBody": "報告を完了できませんでした。しばらくしてからもう一度お試しください。",
+    "workingHelp": "ヘルプセンターを確認中…",
+    "workingIssues": "既知の問題を検索中…",
+    "workingFile": "製品の問題を登録中…",
+    "workingDefault": "報告内容を確認中…"
   }
 }

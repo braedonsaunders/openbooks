@@ -253,6 +253,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'new-timesheet': { props: ['href', 'label'] },
   'new-view': { props: ['recordType'] },
   'no-grants-body': { props: [] },
+  'notifications-inbox': { props: ['rows'] },
+  'notifications-mark-all-read': { props: ['unread'] },
   'opening-balances-grid': { props: ['canManage', 'components', 'currentYear', 'fields', 'initial', 'year'] },
   'opportunity-drawer': { props: ['drawer'] },
   'optional-badge': { props: ['label', 'variant'] },

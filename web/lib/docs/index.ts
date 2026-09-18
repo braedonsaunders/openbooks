@@ -28,6 +28,7 @@ import { scriptingEngine, scriptingApiReference } from './articles/scripting'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
 import { netSuiteBridge } from './articles/netsuite-bridge'
 import { auditLog } from './articles/audit-log'
+import { issueReporting } from './articles/issue-reporting'
 import { recordCustomization } from './articles/record-customization'
 import { customizationArticles } from './articles/customization'
 import { platformArticles } from './articles/platform'
@@ -200,6 +201,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'roles-and-permissions': 'administration-organization',
   'data-imports': 'administration-data',
   'audit-log': 'administration-data',
+  'issue-reporting': 'administration-organization',
   'file-cabinet': 'administration-data',
   'record-customization': 'administration-customize',
   'custom-records': 'administration-customize',
@@ -269,6 +271,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   dataImports,
   auditLog,
   fileCabinet,
+  issueReporting,
 ]
 
 export const DOC_ARTICLES: DocArticle[] = RAW_DOC_ARTICLES.map((article) => {

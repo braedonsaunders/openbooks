@@ -129,10 +129,26 @@
     "currentHint": "Tema: {theme} (clique para mudar)"
   },
   "notifications": {
-    "ariaLabel": "Notificações",
     "title": "Notificações",
-    "empty": "Você está em dia",
-    "markAllRead": "Marcar tudo como lido"
+    "description": "Aprovações, atribuições, lembretes e tudo o mais que o sistema lhe enviou.",
+    "tabs": {
+      "unread": "Não lidas ({count})",
+      "all": "Tudo"
+    },
+    "kindLabel": "Tipo",
+    "kinds": {
+      "approval": "Aprovação",
+      "flow": "Fluxo",
+      "close": "Fechamento",
+      "void_superseded": "Pagamento substituído"
+    },
+    "markAllRead": "Marcar tudo como lido",
+    "markRead": "Marcar como lido",
+    "readLabel": "Lido",
+    "emptyTitle": "Nada por aqui ainda",
+    "emptyDescription": "As notificações chegam quando um fluxo, uma aprovação ou uma automação de fechamento precisa de você.",
+    "emptyUnreadTitle": "Você está em dia",
+    "emptyUnreadDescription": "Nada não lido. Mude para Tudo para ver o que já foi lido."
   },
   "routeState": {
     "featureOffTitle": "O recurso {name} está desativado",
@@ -151,5 +167,29 @@
     "notFoundDescription": "A página procurada não existe ou você não tem acesso a ela.",
     "backToDashboard": "Ir ao painel",
     "backToSignIn": "Ir ao login"
+  },
+  "feedback": {
+    "launcherAria": "Relatar um problema",
+    "title": "Relatar um problema",
+    "description": "Descreva o que deu errado. Vamos procurar uma resposta conhecida na ajuda e, se for um defeito, registrar um relato de produto.",
+    "close": "Fechar",
+    "placeholder": "O que aconteceu?",
+    "send": "Enviar",
+    "sending": "Verificando…",
+    "pageChip": "Esta página",
+    "removePage": "Remover o contexto da página",
+    "thatHelped": "Isso ajudou",
+    "stillABug": "Ainda é um erro",
+    "continue": "Continuar",
+    "filedTitle": "Relato registrado",
+    "filedBody": "Um relato de produto generalizado foi criado. Os dados pessoais e da empresa foram removidos antes.",
+    "openIssue": "Abrir o relato",
+    "strippedHeading": "Removido antes do registro",
+    "unavailableTitle": "Não foi possível relatar",
+    "unavailableBody": "Não foi possível concluir o relato. Tente novamente em instantes.",
+    "workingHelp": "Consultando a ajuda…",
+    "workingIssues": "Procurando um problema conhecido…",
+    "workingFile": "Registrando um relato de produto…",
+    "workingDefault": "Analisando o seu relato…"
   }
 }
