@@ -1,0 +1,831 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+const TEST_RE = /\.test\.(ts|tsx|mts|mjs|js|jsx)$/;
+const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build"]);
+
+export function collectTestFiles(root = ROOT) {
+  const out = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      if (SKIP_DIRS.has(entry)) continue;
+      const path = join(dir, entry);
+      const stat = statSync(path);
+      if (stat.isDirectory()) walk(path);
+      else if (TEST_RE.test(entry)) out.push(path);
+    }
+  };
+  for (const sub of ["engine/src", "web", "packages", "schema", "e2e", "scripts"]) {
+    try {
+      if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
+    } catch { /* optional tree absent */ }
+  }
+  return out;
+}
+
+const fileCache = new Map();
+export function readCached(path) {
+  if (!fileCache.has(path)) {
+    try {
+      fileCache.set(path, readFileSync(path, "utf8"));
+    } catch {
+      fileCache.set(path, null);
+    }
+  }
+  return fileCache.get(path);
+}
+
+// Cross-file caches: module graphs are heavily shared across test files, so
+// lexing/parsing/resolution results are memoized for the process lifetime.
+const codeCache = new Map();
+const importsCache = new Map();
+const exportsCache = new Map();
+const resolveCache = new Map();
+export function clearCaches() {
+  fileCache.clear();
+  codeCache.clear();
+  importsCache.clear();
+  exportsCache.clear();
+  resolveCache.clear();
+}
+
+function existingTs(path) {
+  for (const candidate of [path, `${path}.ts`, `${path}.tsx`, `${path}.mts`, `${path}.js`, `${path}.mjs`, join(path, "index.ts"), join(path, "index.tsx")]) {
+    try {
+      if (statSync(candidate).isFile()) return candidate;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+export function webRootFor(fromFile, root = ROOT) {
+  let dir = dirname(fromFile);
+  while (dir.startsWith(root) && dir !== root) {
+    try {
+      if (statSync(join(dir, "package.json")).isFile()) {
+        const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+        if (pkg.name === "web" || (pkg.name === "openbooks" && dir === root)) return dir === root ? join(root, "web") : dir;
+      }
+    } catch { /* keep climbing */ }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return join(root, "web");
+}
+
+export function resolveReal(spec, fromFile, root = ROOT) {
+  if (!spec || spec === "server-only" || spec.startsWith("node:") || spec.startsWith("data:") || spec.startsWith("mock:")) return null;
+  for (const [alias, target] of [["@openbooks/engine/src/", "engine/src/"], ["@openbooks/schema/src/", "schema/src/"]]) {
+    if (spec.startsWith(alias)) return existingTs(join(root, target + spec.slice(alias.length)));
+  }
+  if (spec.startsWith("@/")) {
+    const webRoot = webRootFor(fromFile, root);
+    const withoutQuery = spec.split("?")[0];
+    return existingTs(join(webRoot, withoutQuery.slice(2)));
+  }
+  if (spec.startsWith("./") || spec.startsWith("../")) {
+    return existingTs(join(dirname(fromFile), spec.split("?")[0]));
+  }
+  return null;
+}
+
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^\n\\:"'`])\/\/[^\n]*/g, "$1");
+}
+
+// Code-only projection: replaces comments, string contents, and template
+// literal text with spaces (newlines preserved). ${} expression contents are
+// real code and are kept. The import/export scanners must never see words
+// inside inert text — a fixture template containing the word "import" is the
+// exact phantom this checker exists to prevent.
+export function codeOnly(src) {
+  const out = [];
+  const n = src.length;
+  let i = 0;
+  // Single/double-quoted contents are kept verbatim: import specifiers live
+  // in them. Only template text and comments are inert.
+  const push = (char) => out.push(char === "\n" ? "\n" : " ");
+  const copyString = (quote) => {
+    out.push(quote);
+    i++;
+    while (i < n) {
+      const char = src[i];
+      out.push(char);
+      if (char === "\\") {
+        out.push(src[i + 1] ?? "");
+        i += 2;
+        continue;
+      }
+      i++;
+      if (char === quote || (char === "\n" && quote !== "`")) return;
+    }
+  };
+  const skipTemplate = () => {
+    out.push("`");
+    i++;
+    while (i < n) {
+      const char = src[i];
+      if (char === "\\") { push(char); push(src[i + 1] ?? ""); i += 2; continue; }
+      if (char === "`") { out.push("`"); i++; return; }
+      if (char === "$" && src[i + 1] === "{") {
+        out.push("${");
+        i += 2;
+        skipBraced();
+        continue;
+      }
+      push(char);
+      i++;
+    }
+  };
+  const skipBraced = () => {
+    let depth = 1;
+    while (i < n && depth > 0) {
+      const char = src[i];
+      if (char === "'" || char === '"') { copyString(char); continue; }
+      if (char === "`") { skipTemplate(); continue; }
+      if (char === "/" && src[i + 1] === "/") {
+        while (i < n && src[i] !== "\n") { push(src[i]); i++; }
+        continue;
+      }
+      if (char === "/" && src[i + 1] === "*") {
+        push("/"); push("*"); i += 2;
+        while (i < n && !(src[i] === "*" && src[i + 1] === "/")) { push(src[i]); i++; }
+        push("*"); push("/"); i += 2;
+        continue;
+      }
+      if (char === "{") depth++;
+      if (char === "}") {
+        depth--;
+        if (depth === 0) { out.push("}"); i++; return; }
+      }
+      out.push(char);
+      i++;
+    }
+  };
+  while (i < n) {
+    const char = src[i];
+    if (char === "'" || char === '"') { copyString(char); continue; }
+    if (char === "`") { skipTemplate(); continue; }
+    if (char === "/" && src[i + 1] === "/") {
+      while (i < n && src[i] !== "\n") { push(src[i]); i++; }
+      continue;
+    }
+    if (char === "/" && src[i + 1] === "*") {
+      push("/"); push("*"); i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) { push(src[i]); i++; }
+      if (i < n) { push("*"); push("/"); i += 2; }
+      continue;
+    }
+    out.push(char);
+    i++;
+  }
+  return out.join("");
+}
+
+// Top-level `const NAME = 'literal'` string bindings, so variable dynamic
+// imports (`await import(routeUrl)` with `routeUrl = './route.ts?tag'`) and
+// `new URL('./x?tag', import.meta.url)` SUT loads resolve. Template bindings
+// keep only the static prefix before the first ${}.
+export function stringBindings(code) {
+  const bindings = new Map();
+  for (const match of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(`((?:\\\`|(?!\`).)*?)`|(['"])((?:\\\4|(?!\4).)*?)\4)/g)) {
+    const raw = match[3] !== undefined ? match[3] : match[5];
+    const prefix = raw.split("${")[0].replace(/\\(['"`\\])/g, "$1");
+    if (prefix) bindings.set(match[1], prefix);
+  }
+  return bindings;
+}
+
+// Static + dynamic imports. Dynamic specs may be literals, bound variable
+// names, or templates (static prefix used). Returns
+// [{spec, names:Set(orig names), dynamic, reexport, star}].
+export function staticImports(src) {
+  const out = [];
+  const clean = stripComments(src);
+  const bindings = stringBindings(clean);
+  const resolveDynamic = (raw) => {
+    const trimmed = raw.trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(trimmed) && bindings.has(trimmed)) return bindings.get(trimmed);
+    if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) return null;
+    return trimmed;
+  };
+  // Brace depth before a position, for dynamic-import laziness. String
+  // contents are skipped (an unbalanced brace in a message must not demote
+  // a top-level import); braces inside regex literals can still miscount,
+  // which only ever demotes toward lazy.
+  const depthAt = (index) => {
+    let depth = 0;
+    let k = 0;
+    while (k < index) {
+      const char = clean[k];
+      if (char === "'" || char === '"') {
+        const quote = char;
+        k++;
+        while (k < index && clean[k] !== quote) {
+          if (clean[k] === "\\") k++;
+          k++;
+        }
+        k++;
+        continue;
+      }
+      if (char === "{") depth++;
+      else if (char === "}") depth--;
+      k++;
+    }
+    return depth;
+  };
+  for (const match of clean.matchAll(/import\s*\(\s*([^)]*?)\)/g)) {
+    const inner = match[1].trim();
+    const literal = inner.match(/^(['"])((?:\\\1|(?!\1).)+)\1$/);
+    const template = inner.match(/^`((?:\\\`|(?!\`).)*)`$/);
+    let spec = null;
+    if (literal) spec = literal[2].replace(/\\(['"`\\])/g, "$1");
+    else if (template) spec = template[1].split("${")[0].replace(/\\(['"`\\])/g, "$1");
+    else spec = resolveDynamic(inner);
+    if (!spec) continue;
+    // The `?tag` SUT load and any top-level dynamic import always execute,
+    // so their subtrees are static. Nested dynamic imports may never run.
+    const alwaysRuns = spec.includes("?") || depthAt(match.index) === 0;
+    out.push({ spec, names: new Set(), dynamic: !alwaysRuns, reexport: false, star: false });
+  }
+  for (const match of clean.matchAll(/import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g)) {
+    const clause = (match[1] ?? "").trim();
+    if (/^\s*type[\s{]/.test(clause)) continue;
+    const names = new Set();
+    let star = false;
+    if (clause) {
+      const named = clause.match(/\{([^}]*)\}/);
+      if (named) {
+        for (const part of named[1].split(",")) {
+          const trimmed = part.trim();
+          if (!trimmed || trimmed.startsWith("type ")) continue;
+          const name = trimmed.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+[A-Za-z_$][\w$]*)?\s*$/);
+          if (name) names.add(name[1]);
+        }
+      }
+      if (/\*\s*as\s/.test(clause)) star = true;
+    }
+    out.push({ spec: match[3], names, dynamic: false, reexport: false, star });
+  }
+  for (const match of clean.matchAll(/export\s+(?:\{[^}]*\}|\*[^;]*?)\s+from\s+(['"])((?:\\\1|(?!\1).)+)\1/g)) {
+    const statement = match[0];
+    if (/^\s*export\s+type\s/.test(statement)) continue;
+    const names = new Set();
+    let star = false;
+    if (/\*\s*from/.test(statement)) star = true;
+    else {
+      const named = statement.match(/\{([^}]*)\}/);
+      if (named) {
+        for (const part of named[1].split(",")) {
+          const trimmed = part.trim();
+          if (!trimmed || trimmed.startsWith("type ")) continue;
+          const name = trimmed.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+[A-Za-z_$][\w$]*)?\s*$/);
+          if (name) names.add(name[1]);
+        }
+      }
+    }
+    out.push({ spec: match[2], names, dynamic: false, reexport: true, star });
+  }
+  return out;
+}
+
+// Runtime (value) exports of a module source: function/const/let/var/class
+// names plus `export {}` members. Type-only exports are excluded.
+export function moduleExports(src) {
+  const names = new Set();
+  const clean = stripComments(src);
+  for (const match of clean.matchAll(/export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/g)) names.add(match[1]);
+  for (const match of clean.matchAll(/export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) names.add(match[1]);
+  for (const match of clean.matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const part of match[1].split(",")) {
+      const trimmed = part.trim().replace(/^type\s+/, "");
+      if (!trimmed) continue;
+      const name = trimmed.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/);
+      if (name) names.add(name[2] ?? name[1]);
+    }
+  }
+  return names;
+}
+
+function specMatcher(object, method, literal) {
+  const value = literal.replace(/\\(['"`\\])/g, "$1");
+  if (method === "exact") return { kind: "exact", value };
+  if (method === "endsWith") return { kind: "suffix", value };
+  if (method === "startsWith") return { kind: "prefix", value };
+  return { kind: "substr", value };
+}
+
+// Every parentURL alternative in a condition: `includes('a') ||
+// includes('b')` scopes the rule to BOTH parents, so each alternative
+// becomes its own rule on expansion (one missed disjunct leaves its edge
+// falsely real — e.g. a merge-route importer the analyzer routed to the real
+// authz subtree while the runtime mock served it).
+function parentMatchers(condition) {
+  const out = [];
+  const push = (match) => {
+    const parent = specMatcher(null, match[1], match[2]);
+    if (!out.some((seen) => JSON.stringify(seen) === JSON.stringify(parent))) out.push(parent);
+  };
+  for (const re of [
+    /parentURL\?\.\s*(endsWith|startsWith|includes)\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
+    /parentURL\s*\.\s*(endsWith|startsWith|includes)\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
+    /parentURL\s*(?:\?\?|\|\|)\s*[^()]+\)\s*\.\s*(endsWith|startsWith|includes)\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
+  ]) {
+    for (const match of condition.matchAll(re)) push(match);
+  }
+  return out;
+}
+
+// The consequence expression of `if (...)` starting at `from`. String-aware
+// brace matching, so braces inside messages (including data: URLs) cannot
+// end the span early. Works for blocks, single returns with object literals,
+// and bare calls under ASI style (no trailing semicolon).
+function consequence(src, from) {
+  let i = from;
+  while (i < src.length && /\s/.test(src[i])) i++;
+  if (src[i] !== "{") {
+    // Single statement: brace-match an object literal when one opens the
+    // statement, otherwise run to the line end (ASI) or semicolon.
+    if (/return\b/.test(src.slice(i, i + 7))) {
+      const open = src.indexOf("{", i);
+      const newline = src.indexOf("\n", i);
+      const semi = src.indexOf(";", i);
+      const lineEnd = Math.min(newline < 0 ? Infinity : newline, semi < 0 ? Infinity : semi);
+      if (open >= 0 && open < lineEnd) i = open;
+      else return lineEnd === Infinity ? "" : src.slice(from, lineEnd + 1);
+    } else {
+      const newline = src.indexOf("\n", i);
+      const semi = src.indexOf(";", i);
+      const lineEnd = Math.min(newline < 0 ? Infinity : newline, semi < 0 ? Infinity : semi);
+      return lineEnd === Infinity ? "" : src.slice(from, lineEnd + 1);
+    }
+  }
+  let depth = 0;
+  let quote = null;
+  const start = i;
+  while (i < src.length) {
+    const char = src[i];
+    if (quote) {
+      if (char === "\\") { i += 2; continue; }
+      if (char === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (char === "'" || char === '"') { quote = char; i++; continue; }
+    if (char === "{") depth++;
+    if (char === "}") {
+      depth--;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+    i++;
+  }
+  return "";
+}
+
+// Shim helpers: `const virtual = (source) => ({ shortCircuit: true, url:
+// 'data:...' + ... })` factories whose call in a rule consequence replaces
+// the module with a data: stub. The consequence only shows `return
+// virtual('export {}')`, so the data: URL never appears at the rule site.
+function shimHelpers(src) {
+  const helpers = new Set();
+  const returnsStub = (body) =>
+    /shortCircuit\s*:\s*true/.test(body) && /url\s*:\s*['"`]data:/.test(body);
+  for (const match of src.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\(?\s*\{/g)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    while (end < src.length) {
+      if (src[end] === "{") depth++;
+      else if (src[end] === "}") {
+        depth--;
+        if (depth === 0) break;
+      }
+      end++;
+    }
+    if (returnsStub(src.slice(open, end))) helpers.add(match[1]);
+  }
+  for (const match of src.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    while (end < src.length) {
+      if (src[end] === "{") depth++;
+      else if (src[end] === "}") {
+        depth--;
+        if (depth === 0) break;
+      }
+      end++;
+    }
+    if (returnsStub(src.slice(open, end))) helpers.add(match[1]);
+  }
+  return helpers;
+}
+
+// Outer parent guards: `if (context.parentURL?.includes("X")) { ...
+// if (specifier === "Y") ... }`. The inner specifier rule only fires under
+// the outer guard; without it the analyzer routes every importer's Y to the
+// mock — over-mocking that hides real subtrees and forges needs the mock
+// never serves at runtime (e.g. view-permission suites scoping next-intl
+// mocks to one view.ts while the analyzer blamed them for getLocale
+// imported by an unrelated analytics module).
+function outerParentGuards(src) {
+  const guards = [];
+  for (const match of src.matchAll(/if\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    let closed = false;
+    for (; end < src.length; end++) {
+      if (src[end] === "(") depth++;
+      else if (src[end] === ")") {
+        depth--;
+        if (depth === 0) { closed = true; break; }
+      }
+    }
+    if (!closed) continue;
+    const condition = src.slice(match.index, end + 1);
+    if (!/parentURL/.test(condition) || /\bspecifier\b/.test(condition)) continue;
+    const alternatives = parentMatchers(condition);
+    if (alternatives.length === 0) continue;
+    const block = consequence(src, end + 1);
+    if (!block) continue;
+    const blockEnd = src.indexOf(block, end + 1) + block.length;
+    for (const parent of alternatives) guards.push({ start: match.index, end: blockEnd, parent });
+  }
+  return guards;
+}
+
+// Wiring rules from a test file's resolve hook. Ordered; first match wins.
+// Rule: {spec:{kind,value}, parent:{kind,value?}, mock:string|null}
+// mock === null means shimmed to a non-mock (data:/real rewrite) — cut, no needs.
+export function parseWiring(src) {
+  const rules = [];
+  const helpers = shimHelpers(src);
+  const guards = outerParentGuards(src);
+  // Literal [real, mock:X] pairs (Map literals, arrays) and .set('real','mock:X').
+  for (const match of src.matchAll(/\[\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\]/g)) {
+    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  }
+  for (const match of src.matchAll(/\.set\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\)/g)) {
+    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  }
+  // Object-literal wiring: const mocks = { 'real': 'mock:X', ... }; mocks[specifier].
+  for (const match of src.matchAll(/['"`]([^'"`]+)['"`]\s*:\s*['"`]mock:([^'"`]+)['"`]/g)) {
+    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  }
+  // Conditional specifier tests: every `specifier === 'X'` /
+  // endsWith / startsWith / includes / match('X') test inside an `if`
+  // condition shares the if's consequence. Scanning the whole condition (not
+  // just a leading test) models `||`-chained alternatives
+  // (`if (specifier === 'a' || specifier === 'b')`, where only the first
+  // disjunct used to become a rule and the second edge stayed falsely real)
+  // and parentURL-first wirings (`if (parentURL... && specifier...)`, where
+  // no rule used to exist at all and data-shimmed subtrees stayed falsely
+  // load-bearing).
+  const specTest = /specifier\s*\.?\s*(===|!==|endsWith|startsWith|includes|match)\s*(\(\s*['"`]([^'"`]+)['"`]\s*\)|['"`]([^'"`]+)['"`])/g;
+  for (const match of src.matchAll(/if\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    let closed = false;
+    for (; end < src.length; end++) {
+      if (src[end] === "(") depth++;
+      else if (src[end] === ")") {
+        depth--;
+        if (depth === 0) { closed = true; break; }
+      }
+    }
+    if (!closed) continue;
+    const condition = src.slice(match.index, end + 1);
+    const tests = [...condition.matchAll(specTest)];
+    if (tests.length === 0) continue;
+    const block = consequence(src, end + 1);
+    if (!block) continue;
+    const mock = block.match(/url:\s*['"`]mock:([^'"`]+)['"`]/);
+    // Data-URL shims ('server-only', 'next/...') cut the edge with no needs.
+    // A bare nextResolve() rewrite stays real — only mock/data returns cut.
+    let shim = /url:\s*['"`](data:|https?:)/.test(block);
+    if (!shim && helpers.size > 0) {
+      // `return virtual('export {}')`: the stub factory hides the data: URL.
+      const call = block.match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/) ??
+        src.slice(end + 1, end + 201).match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/);
+      if (call && helpers.has(call[1])) shim = true;
+    }
+    if (!mock && !shim) continue;
+    // One rule per specifier alternative per parent alternative: every
+    // disjunct shares the if's consequence, and first-match-wins is
+    // unaffected since expanded siblings conclude identically.
+    let parents = parentMatchers(condition + block.slice(0, 200));
+    if (parents.length === 0) {
+      // Nested guard: the specifier test sits inside an outer
+      // `if (parentURL...)` block, so the rule only fires for those parents.
+      // Innermost span wins; same-span alternatives are all kept.
+      let innerStart = -1;
+      for (const guard of guards) {
+        if (match.index > guard.start && match.index < guard.end) {
+          if (guard.start > innerStart) {
+            innerStart = guard.start;
+            parents = [];
+          }
+          if (guard.start === innerStart &&
+            !parents.some((seen) => JSON.stringify(seen) === JSON.stringify(guard.parent))) {
+            parents.push(guard.parent);
+          }
+        }
+      }
+    }
+    if (parents.length === 0) parents = [{ kind: "any" }];
+    for (const test of tests) {
+      const method = test[1];
+      if (method === "!==") continue;
+      const literal = test[3] ?? test[4] ?? "";
+      const spec = method === "==="
+        ? { kind: "exact", value: literal }
+        : method === "match"
+          ? { kind: "unparseable-regex", value: literal }
+          : specMatcher(null, method, literal);
+      for (const parent of parents) {
+        rules.push({
+          spec,
+          parent,
+          mock: mock ? mock[1] : null,
+          shimmed: !mock,
+        });
+      }
+    }
+  }
+  return rules;
+}
+
+function specMatches(rule, spec) {
+  if (rule.kind === "exact") return spec === rule.value;
+  if (rule.kind === "suffix") return spec.endsWith(rule.value);
+  if (rule.kind === "prefix") return spec.startsWith(rule.value);
+  if (rule.kind === "substr") return spec.includes(rule.value);
+  return false;
+}
+
+function parentMatches(rule, parentURL) {
+  if (!rule || rule.kind === "any") return true;
+  if (!parentURL) return true;
+  return specMatches(rule, parentURL);
+}
+
+// One template-literal unescape pass: a mock body embedded in the test file
+// as `...` source reaches the loader with \` → `, \$ → $, \\ → \ and the
+// usual single escapes decoded. Lexing must see the effective module source,
+// or inner templates misalign the lexer and hide real exports.
+export function unescapeTemplate(body) {
+  let out = "";
+  let i = 0;
+  const hex = (digits) => {
+    let value = 0;
+    for (const digit of digits) {
+      const parsed = parseInt(digit, 16);
+      if (Number.isNaN(parsed)) return null;
+      value = value * 16 + parsed;
+    }
+    return String.fromCharCode(value);
+  };
+  while (i < body.length) {
+    const char = body[i];
+    if (char !== "\\") { out += char; i++; continue; }
+    const next = body[i + 1];
+    if (next === undefined) { out += "\\"; i++; continue; }
+    if (next === "n") { out += "\n"; i += 2; continue; }
+    if (next === "r") { out += "\r"; i += 2; continue; }
+    if (next === "t") { out += "\t"; i += 2; continue; }
+    if (next === "b") { out += "\b"; i += 2; continue; }
+    if (next === "f") { out += "\f"; i += 2; continue; }
+    if (next === "v") { out += "\v"; i += 2; continue; }
+    if (next === "\n") { i += 2; continue; }
+    if (next === "0" && !/[0-9]/.test(body[i + 2] ?? "")) { out += "\0"; i += 2; continue; }
+    if (next === "x" && /^[0-9a-fA-F]{2}$/.test(body.slice(i + 2, i + 4))) {
+      out += hex(body.slice(i + 2, i + 4)); i += 4; continue;
+    }
+    if (next === "u") {
+      const braced = body.slice(i + 2).match(/^\{([0-9a-fA-F]+)\}/);
+      if (braced) { out += String.fromCodePoint(parseInt(braced[1], 16)); i += 3 + braced[1].length; continue; }
+      if (/^[0-9a-fA-F]{4}$/.test(body.slice(i + 2, i + 6))) {
+        out += hex(body.slice(i + 2, i + 6)); i += 6; continue;
+      }
+    }
+    out += next;
+    i += 2;
+  }
+  return out;
+}
+
+// Mock source bodies: ['mock:X', `...`] | ["mock:X", "..."] | .set('mock:X', `...`)
+export function mockBlocks(src, raw) {
+  const blocks = new Map();
+  // Bodies slice from `raw` (same length as the projection): the projection
+  // blanks template text, but a mock body IS code at runtime and must be
+  // parsed whole. Offsets line up because the projection preserves length.
+  const source = raw ?? src;
+  // The structure scan runs on the raw text (true escapes, true nesting);
+  // offsets line up with the projection because it preserves length.
+  const takeTemplate = (start) => {
+    let i = start;
+    let depth = 0;
+    while (i < source.length) {
+      const char = source[i];
+      if (char === "\\") { i += 2; continue; }
+      if (char === "`" && depth === 0) break;
+      if (char === "$" && source[i + 1] === "{") { depth++; i += 2; continue; }
+      if (char === "}" && depth > 0) { depth--; i++; continue; }
+      i++;
+    }
+    return source.slice(start, i);
+  };
+  for (const match of src.matchAll(/\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
+    if (!blocks.has(match[1])) blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+  }
+  for (const match of src.matchAll(/\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*(['"])((?:\\\2|(?!\2).)*)\2\s*\]/g)) {
+    if (!blocks.has(match[1])) blocks.set(match[1], match[3].replace(/\\(['"`\\])/g, "$1"));
+  }
+  for (const match of src.matchAll(/\.set\(\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
+    if (!blocks.has(match[1])) blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+  }
+  return blocks;
+}
+
+export function matchRule(rules, spec, parentURL) {
+  for (const rule of rules) {
+    if (rule.spec.kind === "unparseable-regex") continue;
+    if (specMatches(rule.spec, spec) && parentMatches(rule.parent, parentURL)) return rule;
+  }
+  return null;
+}
+
+// Check one test file. Returns {gaps, lazy, unmodeled, deadMocks}.
+// gaps: [{spec, mock, names, via}] — static needs the mock does not provide.
+export function cachedCode(path) {
+  if (!codeCache.has(path)) {
+    const src = readCached(path);
+    codeCache.set(path, src === null ? null : codeOnly(src));
+  }
+  return codeCache.get(path);
+}
+
+export function cachedImports(path) {
+  if (!importsCache.has(path)) {
+    const code = cachedCode(path);
+    importsCache.set(path, code === null ? [] : staticImports(code));
+  }
+  return importsCache.get(path);
+}
+
+export function cachedExports(path) {
+  if (!exportsCache.has(path)) {
+    const code = cachedCode(path);
+    exportsCache.set(path, code === null ? new Set() : moduleExports(code));
+  }
+  return exportsCache.get(path);
+}
+
+export function cachedResolve(spec, fromFile, root = ROOT) {
+  const key = `${fromFile}::${spec}::${root}`;
+  if (!resolveCache.has(key)) resolveCache.set(key, resolveReal(spec, fromFile, root));
+  return resolveCache.get(key);
+}
+
+export function checkFile(path, root = ROOT) {
+  const src = readCached(path);
+  const empty = { gaps: [], lazy: [], unmodeled: false, deadMocks: [] };
+  if (!src || !src.includes("mock:")) return empty;
+  if (!src.includes("registerHooks")) return empty;
+  // All scanners run on the code-only projection (same length/newlines):
+  // inert template text can never forge wiring, blocks, imports, or exports.
+  const code = cachedCode(path);
+  const rules = parseWiring(code);
+  const blocks = mockBlocks(code, src);
+  if (rules.length === 0 && blocks.size > 0) return { ...empty, unmodeled: true };
+  const needs = new Map(); // mockKey -> Map(name -> via)
+  const lazyNeeds = new Map();
+  const visitedStatic = new Set();
+  const visitedLazy = new Set();
+  const queue = [];
+  const note = (mockKey, name, via, lazy) => {
+    const table = lazy ? lazyNeeds : needs;
+    if (!table.has(mockKey)) table.set(mockKey, new Map());
+    if (!table.get(mockKey).has(name)) table.get(mockKey).set(name, via);
+  };
+  // Queue entries carry laziness: anything reached only through a dynamic
+  // import may never execute, so its needs are warnings, not gaps.
+  const parent = new Map(); // file -> {importer, spec} for chains
+  const enqueue = (file, lazy, via) => {
+    if (!file) return;
+    // A lazily-reached module re-processed on a static path upgrades to
+    // static: its needs fail the build, not merely warn.
+    if (lazy && (visitedStatic.has(file) || visitedLazy.has(file))) return;
+    if (!lazy && visitedStatic.has(file)) return;
+    (lazy ? visitedLazy : visitedStatic).add(file);
+    if (via !== undefined && !parent.has(file)) parent.set(file, via);
+    queue.push({ file, lazy });
+  };
+  const chainTo = (file) => {
+    const links = [file.replace(root + "/", "")];
+    let cursor = file;
+    const seenChain = new Set([file]);
+    while (parent.get(cursor)) {
+      const { importer, spec } = parent.get(cursor);
+      links[0] = `${importer} -[${spec}]-> ${links[0]}`;
+      cursor = `${root}/${importer}`;
+      if (seenChain.has(cursor)) break;
+      seenChain.add(cursor);
+    }
+    return links[0];
+  };
+  for (const imp of cachedImports(path)) {
+    const rule = matchRule(rules, imp.spec, path);
+    if (rule) {
+      if (rule.mock) for (const name of imp.names) note(rule.mock, name, path, imp.dynamic);
+      continue;
+    }
+    enqueue(cachedResolve(imp.spec, path, root), imp.dynamic, { importer: path.replace(root + "/", ""), spec: imp.spec });
+  }
+  let guard = 0;
+  while (queue.length > 0) {
+    if (++guard > 6000) break;
+    const { file: current, lazy: parentLazy } = queue.pop();
+    if (readCached(current) === null) continue;
+    for (const imp of cachedImports(current)) {
+      const lazy = parentLazy || imp.dynamic;
+      const rule = matchRule(rules, imp.spec, current);
+      if (rule) {
+        if (rule.mock) {
+          for (const name of imp.names) note(rule.mock, name, current, lazy);
+          if (imp.star) {
+            const target = cachedResolve(imp.spec, current, root);
+            if (target) for (const name of cachedExports(target)) note(rule.mock, name, current, lazy);
+          }
+        }
+        continue;
+      }
+      enqueue(cachedResolve(imp.spec, current, root), lazy, { importer: current.replace(root + "/", ""), spec: imp.spec });
+    }
+  }
+  const gaps = [];
+  for (const [mockKey, names] of needs) {
+    const body = blocks.get(mockKey);
+    if (body === undefined) continue;
+    const have = moduleExports(codeOnly(body));
+    const missing = [...names.keys()].filter((name) => !have.has(name));
+    if (missing.length > 0) {
+      gaps.push({
+        spec: mockKey,
+        names: missing.sort(),
+        via: Object.fromEntries(missing.map((name) => [name, chainTo(names.get(name) ?? path)])),
+      });
+    }
+  }
+  const gapNames = new Set(gaps.flatMap((gap) => gap.names.map((name) => `${gap.spec}::${name}`)));
+  const lazy = [];
+  for (const [mockKey, names] of lazyNeeds) {
+    const body = blocks.get(mockKey);
+    if (body === undefined) continue;
+    const have = moduleExports(codeOnly(body));
+    const missing = [...names.keys()].filter((name) => !have.has(name) && !gapNames.has(`${mockKey}::${name}`));
+    if (missing.length > 0) lazy.push({ spec: mockKey, names: missing.sort() });
+  }
+  return { gaps, lazy, unmodeled: false, deadMocks: [] };
+}
+
+export function checkTree(root = ROOT) {
+  const files = collectTestFiles(root);
+  const report = { files: files.length, gaps: [], lazy: [], unmodeled: [], checked: 0 };
+  for (const file of files) {
+    const result = checkFile(file, root);
+    if (result.unmodeled) report.unmodeled.push(file.replace(root + "/", ""));
+    if (result.gaps.length > 0 || result.lazy.length > 0) report.checked++;
+    for (const gap of result.gaps) report.gaps.push({ file: file.replace(root + "/", ""), ...gap });
+    for (const entry of result.lazy) report.lazy.push({ file: file.replace(root + "/", ""), ...entry });
+  }
+  return report;
+}
+
+const invoked = process.argv[1] ? fileURLToPath(import.meta.url) === join(process.cwd(), process.argv[1]) || process.argv[1].endsWith("check-test-mock-surface.mjs") : false;
+if (invoked) {
+  const root = process.argv[2] ?? ROOT;
+  const report = checkTree(root);
+  for (const gap of report.gaps) {
+    console.log(`${gap.file} [mock:${gap.spec}] missing: ${gap.names.join(", ")}`);
+    for (const name of gap.names) console.log(`    ${name} required by ${gap.via[name]}`);
+  }
+  for (const file of report.unmodeled) {
+    console.log(`${file}: mock wiring not modelable; extend parseWiring or model the file explicitly`);
+  }
+  if (report.lazy.length > 0) {
+    console.error(`lazy notes (reachable only through dynamic import; warnings, not failures): ${report.lazy.length}`);
+    for (const entry of report.lazy.slice(0, 20)) {
+      console.error(`  ${entry.file} [mock:${entry.spec}] lazy-missing: ${entry.names.join(", ")}`);
+    }
+  }
+  console.log(`checked ${report.files} test files; gaps=${report.gaps.length} unmodeled=${report.unmodeled.length}`);
+  process.exit(report.gaps.length > 0 || report.unmodeled.length > 0 ? 1 : 0);
+}
