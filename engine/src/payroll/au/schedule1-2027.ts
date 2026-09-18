@@ -213,6 +213,55 @@ export const AU_SCHEDULE1_SCALE3_STSL_2027: readonly AuSchedule1Row[] = [
 ];
 
 /**
+ * Scale 5 with STSL debt (Schedule 8 combined table) — "Where payee
+ * claimed FULL exemption from Medicare levy in Medicare levy variation
+ * declaration – scale 5 With study and training support loans debt":
+ * "Less than 362 — – –; Less than 721 — 0.1500 54.3462;
+ * Less than 865 — 0.1590 60.8365; Less than 1,282 — 0.3027 185.1923;
+ * Less than 1,337 — 0.3000 181.7308; Less than 2,494 — 0.4500 382.2923;
+ * Less than 2,596 — 0.4700 432.1835; Less than 3,577 — 0.5400 613.9142;
+ * Less than 3,653 — 0.4700 363.4615; 3,653 & over — 0.5500 655.7692".
+ */
+export const AU_SCHEDULE1_SCALE5_STSL_2027: readonly AuSchedule1Row[] = [
+  { lessThan: "362", a: null, b: null },
+  { lessThan: "721", a: "0.1500", b: "54.3462" },
+  { lessThan: "865", a: "0.1590", b: "60.8365" },
+  { lessThan: "1282", a: "0.3027", b: "185.1923" },
+  { lessThan: "1337", a: "0.3000", b: "181.7308" },
+  { lessThan: "2494", a: "0.4500", b: "382.2923" },
+  { lessThan: "2596", a: "0.4700", b: "432.1835" },
+  { lessThan: "3577", a: "0.5400", b: "613.9142" },
+  { lessThan: "3653", a: "0.4700", b: "363.4615" },
+  { lessThan: null, a: "0.5500", b: "655.7692" },
+];
+
+/**
+ * Scale 6 with STSL debt (Schedule 8 combined table) — "Where payee
+ * claimed HALF exemption from Medicare levy in Medicare levy variation
+ * declaration – scale 6 With study and training support loans debt":
+ * "Less than 362 — – –; Less than 721 — 0.1500 54.3462;
+ * Less than 865 — 0.1590 60.8365; Less than 908 — 0.3027 185.1923;
+ * Less than 1,135 — 0.3527 230.6135; Less than 1,282 — 0.3127 185.1923;
+ * Less than 1,337 — 0.3100 181.7308; Less than 2,494 — 0.4600 382.2923;
+ * Less than 2,596 — 0.4800 432.1835; Less than 3,577 — 0.5500 613.9142;
+ * Less than 3,653 — 0.4800 363.4615; 3,653 & over — 0.5600 655.7692".
+ */
+export const AU_SCHEDULE1_SCALE6_STSL_2027: readonly AuSchedule1Row[] = [
+  { lessThan: "362", a: null, b: null },
+  { lessThan: "721", a: "0.1500", b: "54.3462" },
+  { lessThan: "865", a: "0.1590", b: "60.8365" },
+  { lessThan: "908", a: "0.3027", b: "185.1923" },
+  { lessThan: "1135", a: "0.3527", b: "230.6135" },
+  { lessThan: "1282", a: "0.3127", b: "185.1923" },
+  { lessThan: "1337", a: "0.3100", b: "181.7308" },
+  { lessThan: "2494", a: "0.4600", b: "382.2923" },
+  { lessThan: "2596", a: "0.4800", b: "432.1835" },
+  { lessThan: "3577", a: "0.5500", b: "613.9142" },
+  { lessThan: "3653", a: "0.4800", b: "363.4615" },
+  { lessThan: null, a: "0.5600", b: "655.7692" },
+];
+
+/**
  * Schedule 8 STSL component rates for the record: "Tax-free threshold
  * claimed or foreign resident — Less than 1,337 — – –;
  * Less than 2,494 — 0.15 200.5615; Less than 3,577 — 0.17 250.4527;

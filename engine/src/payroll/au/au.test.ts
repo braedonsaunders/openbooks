@@ -52,8 +52,8 @@ test("AU regions list every state and territory as supported federal PAYG", () =
 
 test("AU certificates declare the TFN declaration, not a W-4 clone", () => {
   assert.equal(AU_CERTIFICATES.country, "AU");
-  assert.equal(AU_CERTIFICATES.certificates.length, 1);
-  const [tfn] = AU_CERTIFICATES.certificates;
+  assert.equal(AU_CERTIFICATES.certificates.length, 2);
+  const [tfn, variation] = AU_CERTIFICATES.certificates;
   assert.equal(tfn?.form, "TFN declaration");
   assert.notEqual(tfn?.form, "W-4");
   assert.notEqual(tfn?.form, "TD1");
@@ -62,6 +62,10 @@ test("AU certificates declare the TFN declaration, not a W-4 clone", () => {
   assert.equal(fields.get("tax_free_threshold")?.kind, "flag");
   assert.equal(fields.get("stsl_debt")?.kind, "flag");
   assert.equal(fields.get("residency")?.kind, "choice");
+  assert.equal(variation?.form, "Medicare levy variation declaration");
+  assert.match(variation?.citation ?? "", /QC17088/);
+  const variationFields = new Map((variation?.fields ?? []).map((field) => [field.key, field]));
+  assert.equal(variationFields.get("medicare_exemption")?.kind, "choice");
   assert.equal(AU_PAYROLL_PACK.certificates(), AU_CERTIFICATES);
 });
 

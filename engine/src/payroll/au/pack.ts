@@ -7,13 +7,14 @@
  * workers' compensation — plus the TFN declaration, the STP filing, and
  * named refusals for everything not yet transcribed.
  *
- * `installable: true` since FY 2026–27 transcribes Schedule 1 scales 1–3
- * (with and without the Schedule 8 STSL component) from the registered
- * instrument F2026L00716. Supported: TFN-quoted residents on scales 1–2,
- * foreign residents on scale 3. Refused by name: scale 4 (no TFN), scales
- * 5–6 (Medicare exemption declarations), Schedule 15 (working holiday
- * makers), every other schedule, and non-standard pay frequencies — see
- * AU_REFUSED_2027. The `country` field cannot yet join the `PayrollCountry`
+ * `installable: true` since FY 2026–27 transcribes Schedule 1 scales 1–3,
+ * 5 and 6 (with and without the Schedule 8 STSL component) from the
+ * registered instrument F2026L00716. Supported: TFN-quoted residents on
+ * scales 1–2, foreign residents on scale 3, Medicare-exempt residents on
+ * scales 5–6. Refused by name: scale 4 (no TFN), foreign-plus-exemption,
+ * Schedule 15 (working holiday makers), every other schedule, and
+ * non-standard pay frequencies — see AU_REFUSED_2027. The `country` field
+ * cannot yet join the `PayrollCountry`
  * union (`'CA' | 'US'` at ../packs.ts), so the pack is typed to match that
  * interface in every other respect and registers once Orchestrate opens the
  * union — see packs/proposals/payroll-country-union.md.

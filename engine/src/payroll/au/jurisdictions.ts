@@ -119,9 +119,69 @@ const TFN_DECLARATION: PayrollCertificate = {
   ],
 };
 
+/**
+ * Medicare levy variation declaration (QC17088 in the instrument's Guide to
+ * other relevant documents and links).
+ *
+ * Lodged with the TFN declaration. The answer the pack carries is the
+ * Medicare levy EXEMPTION claim, which selects the withholding scale: a
+ * full exemption takes scale 5 and a half exemption scale 6 — even where
+ * the TFN declaration also claims the tax-free threshold (the instrument's
+ * General example 2 claims the threshold and still applies scale 5 for a
+ * full exemption). A variation declaration that seeks only the family /
+ * spouse low-income levy adjustment (questions 9–12) leaves the scale
+ * where the TFN answers put it; that adjustment itself is refused machinery
+ * (see AU_REFUSED_2027), so the engine applies no WLA.
+ */
+const MEDICARE_VARIATION_DECLARATION: PayrollCertificate = {
+  key: "au_medicare_levy_variation",
+  form: "Medicare levy variation declaration",
+  label: "Medicare levy variation declaration",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "Medicare levy variation declaration — the instrument's Guide to other "
+    + "relevant documents and links lists it under quick code QC17088 "
+    + "(F2026L00716)",
+  summary:
+    "Lodged with the TFN declaration when the employee claims a Medicare "
+    + "levy exemption. A full exemption takes PAYG scale 5, a half exemption "
+    + "scale 6; no claim leaves scales 1–3 selected by the TFN answers.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "medicare_exemption",
+      label: "Medicare levy exemption claimed",
+      kind: "choice",
+      choices: [
+        {
+          value: "none",
+          label: "No exemption",
+          help: "Withheld on the TFN scale (1, 2 or 3).",
+        },
+        {
+          value: "full",
+          label: "Full exemption",
+          help: "Withheld on PAYG scale 5.",
+        },
+        {
+          value: "half",
+          label: "Half exemption",
+          help: "Withheld on PAYG scale 6.",
+        },
+      ],
+      default: "none",
+      required: true,
+      help: "The variation declaration's exemption claim. It selects the "
+        + "PAYG withholding scale, not a rate entered by hand. Family and "
+        + "spouse low-income adjustments on the same form are not applied.",
+    },
+  ],
+};
+
 export const AU_CERTIFICATES: PayrollPackCertificates = {
   country: "AU",
-  certificates: [TFN_DECLARATION],
+  certificates: [TFN_DECLARATION, MEDICARE_VARIATION_DECLARATION],
 };
 
 // ===========================================================================
