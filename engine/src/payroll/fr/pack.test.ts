@@ -73,7 +73,7 @@ test("FR statutory slots are named, assessed, and routable", () => {
   );
   // PAS moves with pre-tax deductions; everything else is rate × salary.
   assert.equal(bySystemKey.get("pas|deduction")?.assessedOn, "taxable_income");
-  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "atmp|employer_contribution"]) {
+  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "atmp|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution"]) {
     assert.equal(bySystemKey.get(key)?.assessedOn, "earnings", key);
   }
   // AGIRC-ARRCO goes to the employer's own caisse, never the statutory vendor.
@@ -183,6 +183,20 @@ test("FR computeStatutory refuses untranscribed years and undeclared domiciles",
     () => FR_PAYROLL_PACK.computeStatutory(makeCtx(2027)),
     /has not been transcribed/,
   );
+});
+
+test("FR tenant-declared rates: AT/MP and versement mobilité ride the SIRET account", () => {
+  const slots = FR_PAYROLL_PACK.statutoryRates.slots;
+  const byKey = new Map(slots.map((slot) => [slot.key, slot]));
+  for (const key of ["fr_atmp", "fr_versement_mobilite"]) {
+    const slot = byKey.get(key);
+    assert.ok(slot, key);
+    assert.equal(slot?.scope, "filing_account");
+    assert.equal(slot?.programType, "fr_siret");
+    assert.deepEqual(slot?.regions, ["FR"]);
+  }
+  assert.deepEqual(byKey.get("fr_atmp")?.systemKeys, ["atmp"]);
+  assert.deepEqual(byKey.get("fr_versement_mobilite")?.systemKeys, ["cdn_er"]);
 });
 
 test("FR employment calendars: 11 national holidays, 13 in Alsace-Moselle", () => {

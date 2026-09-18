@@ -6,10 +6,14 @@ import type { PayrollTaxYearSupport } from "../tax-years.ts";
  * Calendar 2026 is transcribed (PAS grille I, métropole, plus the PASS),
  * as TWO editions: DGFiP replaced the grids mid-year, so January–April
  * versements use the May-2025 grids and May–December versements the
- * May-2026 grids (see ./tables-2026.ts). Contribution RATES are not
- * transcribed — urssaf.fr resets connections and boss.gouv.fr times out
- * from this vantage — so the pack stays `installable: false`: PAS computes,
- * no full payslip is right.
+ * May-2026 grids (see ./tables-2026.ts). The 2026 URSSAF contribution
+ * rates are transcribed in ./cotisations-2026.ts from the browser-rendered
+ * URSSAF taux-secteur-privé and plafonds pages (both verified 200; the
+ * server HTML is a JS shell — "reachable, JS-rendered", not "connection
+ * reset"). The pack stays `installable: false`: PAS and the URSSAF
+ * cotisations compute, but AGIRC-ARRCO rates are on no obtainable page
+ * and tenant-declared AT/MP / versement mobilité rates have no engine
+ * channel — so no full payslip is right.
  */
 export const FR_TAX_YEARS: PayrollTaxYearSupport = {
   country: "FR",

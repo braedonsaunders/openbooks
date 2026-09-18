@@ -20,8 +20,10 @@ import { FR_TAX_YEARS } from "./rates.ts";
  * opens the union. `installable: false` until a tax year is transcribed.
  *
  * Declared from primary sources; calendar 2026 PAS grille I (métropole) is
- * transcribed in ./tables-2026.ts and computed in ./compute-statutory.ts.
- * Cotisation rates are not transcribed, so the pack stays `installable: false`:
+ * transcribed in ./tables-2026.ts and the 2026 URSSAF cotisation rates in
+ * ./cotisations-2026.ts, both computed in ./compute-statutory.ts. The pack
+ * stays `installable: false` (AGIRC-ARRCO unobtainable, tenant-declared
+ * rates without an engine channel):
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
  * - Social contributions: collected by URSSAF (C. séc. soc. art. L213-1);
@@ -83,14 +85,17 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
     key: "patronales",
     components: [
       // Employer contributions collected by URSSAF (C. séc. soc. L213-1):
-      // maladie, allocations familiales, AT/MP, assurance chômage, FNAL/CSA
-      // et versement mobilité. Rate × salary; the AT/MP rate is the
-      // employer-entered `fr_atmp` slot below (notified per establishment).
+      // maladie, vieillesse, allocations familiales, AT/MP, assurance
+      // chômage, AGS, FNAL/CSA/dialogue social et versement mobilité.
+      // Rate × salary; the AT/MP and versement mobilité rates are the
+      // employer-entered slots below (notified per establishment / commune).
       { code: "MAL-ER", name: "Assurance maladie (employeur)", systemKey: "maladie_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "VIEIL-ER", name: "Assurance vieillesse (employeur)", systemKey: "vieillesse_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "FAM-ER", name: "Allocations familiales (employeur)", systemKey: "allocfam_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "ATMP-ER", name: "Accidents du travail / maladies pro. (employeur)", systemKey: "atmp", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "CHOM-ER", name: "Assurance chômage (employeur)", systemKey: "chomage_er", kind: "employer_contribution", sequence: 225, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CDN-ER", name: "FNAL, CSA et versement mobilité (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "AGS-ER", name: "Cotisation AGS (employeur)", systemKey: "ags_er", kind: "employer_contribution", sequence: 226, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "CDN-ER", name: "FNAL, CSA, dialogue social et versement mobilité (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
     ],
   },
 ];
@@ -171,9 +176,12 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       label: "Prélèvement à la source (national)",
       implemented: false,
       unimplementedReason:
-        "the FR payroll pack computes PAS only (2026 grille I barème, métropole): "
-        + "no cotisation rate is transcribed, so no full payslip is right. "
-        + "See FR_REFUSED_2026 in engine/src/payroll/fr/tables-2026.ts.",
+        "the FR payroll pack computes PAS (2026 grille I barème, métropole) "
+        + "and the 2026 URSSAF cotisations, but AGIRC-ARRCO rates are "
+        + "unobtainable and tenant-declared AT/MP/versement-mobilité rates "
+        + "have no engine channel, so no full payslip is right. "
+        + "See FR_REFUSED_2026 in engine/src/payroll/fr/tables-2026.ts and "
+        + "FR_COTISATION_REFUSALS_2026 in engine/src/payroll/fr/cotisations-2026.ts.",
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
       // not PAS — a separate mechanism the skeleton does not implement either.
       taxesNonresidentWages: true,
@@ -215,6 +223,27 @@ const FR_RATES: PayrollPackRates = {
           key: "taux", label: "Taux AT/MP (%)", kind: "percent", decimals: 4,
           min: "0", max: "100", required: true,
           help: "As a percent, as the caisse notifies it: 1.1 is 1.1%. Enter the rate notified for this establishment.",
+        },
+      ],
+    },
+    {
+      key: "fr_versement_mobilite",
+      label: "Taux versement mobilité",
+      // Per commune/authority zone: the rate depends on where the
+      // establishment sits, so it rides the same SIRET filing account as
+      // the AT/MP rate — never a published table.
+      scope: "filing_account",
+      programType: "fr_siret",
+      systemKeys: ["cdn_er"],
+      regions: ["FR"],
+      citation: "urssaf.fr, taux et barèmes — Versement mobilité (effectif de 11 salariés et plus)",
+      variesBecause:
+        "The rate is set per autorité organisatrice de la mobilité from the establishment's commune — a figure no published table can supply.",
+      fields: [
+        {
+          key: "taux", label: "Taux versement mobilité (%)", kind: "percent", decimals: 4,
+          min: "0", max: "100", required: true,
+          help: "As a percent, as the URSSAF versement-mobilité lookup returns it for this establishment's commune.",
         },
       ],
     },
