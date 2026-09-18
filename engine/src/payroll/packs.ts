@@ -9,6 +9,14 @@ import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
 import { US_OPENING_YTD_FIELDS } from "./us/opening-ytd.ts";
 import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
+import { GB_PACK } from "./gb/pack.ts";
+import { DE_PAYROLL_PACK } from "./de/pack.ts";
+import { FR_PAYROLL_PACK } from "./fr/pack.ts";
+import { IE_PAYROLL_PACK } from "./ie/pack.ts";
+import { AU_PAYROLL_PACK } from "./au/pack.ts";
+import { IT_PAYROLL_PACK } from "./it/pack.ts";
+import { NL_PAYROLL_PACK } from "./nl/pack.ts";
+import { ES_PAYROLL_PACK } from "./es/pack.ts";
 import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./canada/cra/remittance.ts";
@@ -1338,6 +1346,14 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     computeStatutory: computeUsStatutory,
     statutoryEngineLabel: "Pub 15-T",
   },
+  GB: GB_PACK,
+  DE: DE_PAYROLL_PACK,
+  FR: FR_PAYROLL_PACK,
+  IE: IE_PAYROLL_PACK,
+  AU: AU_PAYROLL_PACK,
+  IT: IT_PAYROLL_PACK,
+  NL: NL_PAYROLL_PACK,
+  ES: ES_PAYROLL_PACK,
 };
 
 // This is a country-key dictionary: inherited Object names must not pass a

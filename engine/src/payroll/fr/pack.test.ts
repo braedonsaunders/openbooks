@@ -138,7 +138,20 @@ test("FR 2026 is transcribed, with both edition boundaries and citations", () =>
   for (const edition of published) {
     assert.match(edition.citation, /BOI-BAREME-000037/);
   }
-  registerPayrollTaxYears(FR_TAX_YEARS);
+  // FR_TAX_YEARS now ships on the registered FR pack, so the declaration is
+  // already visible via the registry; register only when it is not (a pack
+  // test importing ./pack.ts directly without the registry must keep working).
+  let registered = false;
+  try {
+    registerPayrollTaxYears(FR_TAX_YEARS);
+    registered = true;
+  } catch (error) {
+    assert.match(
+      (error as Error).message,
+      /already declared/,
+      "FR tax years must come from exactly one declaration",
+    );
+  }
   try {
     assert.equal(payrollTaxYearProblem("FR", 2026), null);
     for (const year of [2025, 2027]) {
@@ -147,7 +160,7 @@ test("FR 2026 is transcribed, with both edition boundaries and citations", () =>
       assert.match(problem?.message ?? "", new RegExp(String(year)));
     }
   } finally {
-    unregisterPayrollTaxYears("FR");
+    if (registered) unregisterPayrollTaxYears("FR");
   }
 });
 
