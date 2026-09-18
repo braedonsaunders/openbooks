@@ -1,12 +1,35 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import React from 'react'
+import type { PackProfileDeclaration } from './EmployeesPanel'
+
+// All module setup — including every top-level await — completes before the
+// first test() registration below (canonical registration order).
+const { registerHooks } = await import('node:module')
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'sonner') {
+      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
+    }
+    return next(specifier, context)
+  },
+})
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { NextIntlClientProvider } = await import('next-intl')
+const { ProfileEditor } = await import('./EmployeesPanel')
+// tsx compiles JSX classic: the component under test never imports React
+// (Next provides the automatic runtime in production), so the test bridges it.
+Object.assign(globalThis, { React })
+const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/src/payroll/packs.ts')
+const { packCertificates } = await import('@openbooks/engine/src/payroll/certificates.ts')
 
 const source = readFileSync(new URL('./EmployeesPanel.tsx', import.meta.url), 'utf8')
 // Comments explain history; only code can branch.
 const code = source
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|\s)\/\/.*$/gm, '$1')
+const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
 
 // Country packs DECLARE; the generic layer branches on NOTHING. A third pack
 // must be expressible through the served declarations with no edit here, so no
@@ -30,9 +53,7 @@ test('profile editor names no country in code', () => {
 // declares a column nobody binds would render nothing and save null —
 // silently dropping the operator's answer — so the binding set must cover
 // every column every pack declares, and the build (this test) refuses the gap.
-test('profile editor binds every column the packs declare', async () => {
-  const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/src/payroll/packs.ts')
-  const { packCertificates } = await import('@openbooks/engine/src/payroll/certificates.ts')
+test('profile editor binds every column the packs declare', () => {
   const columns = new Set<string>()
   for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
     const pack = PAYROLL_COUNTRY_PACKS[country]!
@@ -54,23 +75,6 @@ test('profile editor binds every column the packs declare', async () => {
 
 // Exercise the real editor against a country that does not exist: subdivisions,
 // bands, forms and flags must all come from the served declaration.
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
-    }
-    return next(specifier, context)
-  },
-})
-const React = await import('react')
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { ProfileEditor } = await import('./EmployeesPanel')
-import type { PackProfileDeclaration } from './EmployeesPanel'
-const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
-Object.assign(globalThis, { React })
-
 const xxPack: PackProfileDeclaration = {
   subdivisionLabel: 'canton',
   subdivisions: ['ZH', 'AG'],
