@@ -136,6 +136,19 @@ test("France is provisionable without overstating territorial completeness", () 
   assert.ok(definition.sources.some((source) => source.id === "dgfip_ca3_2026" && source.url.includes("/2026/")));
   const codes = new Set(definition.returnPacks[0]!.boxes.map((box) => box.lineCode));
   for (const code of ["A1", "E1", "08", "09", "9B", "16", "19", "20", "23", "25", "TD", "28"]) assert.ok(codes.has(code));
+  const frSet = packTaxCodesForReturn(definition, "FR_CA3");
+  assert.deepEqual(frSet.map((entry) => [entry.code, entry.role ?? null]), [
+    ["FR-VAT-STD", "standard"],
+    ["FR-VAT-RED10", "reduced"],
+    ["FR-VAT-RED55", "reduced"],
+  ]);
+  assert.deepEqual(frSet[1]!.rates, [
+    { ratePercent: 10, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
+  ]);
+  // 5.5% predates the 2014 reform: left-truncated applicability, no origin claim.
+  assert.deepEqual(frSet[2]!.rates, [
+    { ratePercent: 5.5, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
+  ]);
 });
 
 test("maintained sources remain restricted to official government and tax-authority hosts", () => {
