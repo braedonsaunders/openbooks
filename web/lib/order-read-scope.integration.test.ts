@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/test-fixtures.ts'
 import type { Authz } from './authz'
 
@@ -41,21 +41,29 @@ for (const kind of ['quote', 'sales_order', 'purchase_order'] as const) {
   test(`${kind} read never discloses another subsidiary after a concurrent draft rehome`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg()
     try {
-      const actorId = (await seedFlowActors(org.orgId)).adminId
-      const other = randomUUID()
-      const orderId = randomUUID()
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-        coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${other},${org.orgId},${org.subsidiaryId},'Private subsidiary','CAD','CA')`)
-      await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency,status,subtotal,tax_total,total,memo,created_by)
-        values(${orderId},${org.orgId},${kind},'SCOPE-READ',${org.date},${kind === 'purchase_order' ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD','draft',10,0,10,'Visible original',${actorId})`)
-      await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount)
-        values(${org.orgId},${orderId},1,${org.accounts.revenue},'Visible original line',1,10,10)`)
+      // Seed writes run under bypass: the handlers import trips the
+      // process-wide request-org resolver, so ambient writes are RLS-enforced.
+      const seed = await withBypassContext(async () => {
+        const actorId = (await seedFlowActors(org.orgId)).adminId
+        const other = randomUUID()
+        const orderId = randomUUID()
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+          coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+          values(${other},${org.orgId},${org.subsidiaryId},'Private subsidiary','CAD','CA')`)
+        await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency,status,subtotal,tax_total,total,memo,created_by)
+          values(${orderId},${org.orgId},${kind},'SCOPE-READ',${org.date},${kind === 'purchase_order' ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD','draft',10,0,10,'Visible original',${actorId})`)
+        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount)
+          values(${org.orgId},${orderId},1,${org.accounts.revenue},'Visible original line',1,10,10)`)
+        return { actorId, other, orderId }
+      })
+      const { actorId, other, orderId } = seed
       state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['ar.read']),
         allowedSubsidiaryIds: new Set([org.subsidiaryId]) } as Authz
       const get = makeGET({ kind, readPerm: kind === 'purchase_order' ? 'ap.read' : 'ar.read', createPerm: kind === 'purchase_order' ? 'ap.create' : 'ar.create' })
-      const request = () => get(new Request('http://audit.local/orders/' + orderId), { params: Promise.resolve({ id: orderId }) })
+      // The call under test runs org-scoped; ambient reads are RLS-enforced
+      // after the handlers import tripped the request-org resolver.
+      const request = () => withOrgContext(org.orgId, () => get(new Request('http://audit.local/orders/' + orderId), { params: Promise.resolve({ id: orderId }) }))
       assert.equal((await request()).status, 200, 'the original order is visible before the race')
       const paused = deferred<void>()
       const resume = deferred<void>()

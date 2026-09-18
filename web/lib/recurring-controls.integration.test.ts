@@ -19,7 +19,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { withSimClock } = await import("@openbooks/engine/src/clock.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
@@ -32,24 +32,30 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
   test(`recurring controls: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Recurring manager", "recurring_manager");
-      const hidden = randomUUID();
-      await db.execute(sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country)
-        values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden subsidiary','CAD','CA')`);
-      await db.execute(sql`update app_roles set permissions='["documents.manage"]'::jsonb,
-        subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
-        where org_id=${org.orgId} and key='recurring_manager'`);
+      // Seed writes run under bypass: the route imports below trip the
+      // process-wide request-org resolver, so ambient writes are RLS-enforced.
+      const seed = await withBypassContext(async () => {
+        const actor = await createScratchUser(org.orgId, "Recurring manager", "recurring_manager");
+        const hidden = randomUUID();
+        await db.execute(sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country)
+          values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden subsidiary','CAD','CA')`);
+        await db.execute(sql`update app_roles set permissions='["documents.manage"]'::jsonb,
+          subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+          where org_id=${org.orgId} and key='recurring_manager'`);
+        const templates = [randomUUID(), randomUUID()], schedules = [randomUUID(), randomUUID()];
+        for (let index = 0; index < 2; index++) {
+          await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,document_date,currency,party_id,subsidiary_id,created_by)
+            values (${templates[index]!},${org.orgId},'customer_invoice','draft',${`RECUR-${index}`},${org.date},'CAD',${org.customerId},${index ? hidden : org.subsidiaryId},${actor})`);
+          await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
+            values (${org.orgId},${templates[index]!},1,${org.accounts.revenue},'1','100','100','0')`);
+          await db.execute(sql`insert into recurring_schedules (id,org_id,template_document_id,cadence,next_run_on,auto_post,is_active,created_by)
+            values (${schedules[index]!},${org.orgId},${templates[index]!},'monthly',${org.date},false,true,${actor})`);
+        }
+        return { actor, hidden, templates, schedules };
+      });
+      const { actor, hidden, templates, schedules } = seed;
       state.user = { id: actor, orgId: org.orgId, name: "Recurring manager", email: "recurring@scratch.test", roles: [],
         isSuperAdmin: false, envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-      const templates = [randomUUID(), randomUUID()], schedules = [randomUUID(), randomUUID()];
-      for (let index = 0; index < 2; index++) {
-        await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,document_date,currency,party_id,subsidiary_id,created_by)
-          values (${templates[index]!},${org.orgId},'customer_invoice','draft',${`RECUR-${index}`},${org.date},'CAD',${org.customerId},${index ? hidden : org.subsidiaryId},${actor})`);
-        await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
-          values (${org.orgId},${templates[index]!},1,${org.accounts.revenue},'1','100','100','0')`);
-        await db.execute(sql`insert into recurring_schedules (id,org_id,template_document_id,cadence,next_run_on,auto_post,is_active,created_by)
-          values (${schedules[index]!},${org.orgId},${templates[index]!},'monthly',${org.date},false,true,${actor})`);
-      }
       const hiddenParams = { params: Promise.resolve({ id: schedules[1]! }) };
       const visibleParams = { params: Promise.resolve({ id: schedules[0]! }) };
       await withOrgContext(org.orgId, () => withSimClock(org.date, async () => {

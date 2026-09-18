@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, pool, withOrgTransaction } from '@openbooks/engine/src/db.ts';
+import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
 import { postDocument } from '@openbooks/engine/src/posting.ts';
 import { createTransferOrder, receiveInventory, receiveTransferOrder, shipTransferOrder } from '@openbooks/engine/src/inventory.ts';
@@ -33,11 +33,27 @@ function errorText(error: unknown): string {
 async function fixture(run: (org: ScratchOrg, actor: string, nextBook: string) => Promise<void>) {
   const org = await createScratchOrg();
   try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const nextBook = randomUUID();
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${nextBook},${org.orgId},'NEXT','Next',false)`);
-    await run(org, actor, nextBook);
+    // Fixture writes run under the bypass scope: the web-route imports below
+    // trip the process-wide request-org resolver, so ambient writes would be
+    // RLS-enforced (seedFlowActors dies on app_roles; the book insert too).
+    const seed = await withBypassContext(async () => {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const nextBook = randomUUID();
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${nextBook},${org.orgId},'NEXT','Next',false)`);
+      return { actor, nextBook };
+    });
+    await run(org, seed.actor, seed.nextBook);
   } finally { await dropScratchOrgReporting(org.orgId); }
+}
+// Tests that commit a new primary must hand the pool reset a restorable
+// baseline: the reset's restore pass carries no migration exemption, so the
+// history guard would refuse to switch the primary back. Restore in-test
+// under the trusted-migration exemption instead of touching the pool.
+async function restorePrimary(org: ScratchOrg) {
+  await withBypassContext(() => db.transaction(async tx => {
+    await tx.execute(sql`set local openbooks.migration=on`);
+    await tx.execute(sql`update accounting_books set is_primary=(id=${org.bookId}) where org_id=${org.orgId}`);
+  }));
 }
 async function promote(org: ScratchOrg, actor: string, id: string) {
   return withOrgTransaction(org.orgId, async () => {
@@ -47,19 +63,22 @@ async function promote(org: ScratchOrg, actor: string, id: string) {
   });
 }
 async function bill(org: ScratchOrg): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
-    values(${id},${org.orgId},'vendor_bill',${`BOOK-${id}`},${org.vendorId},${org.subsidiaryId},${org.date},${org.date},'CAD',1,'draft',100,0,100)`);
-  await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
-    values(${org.orgId},${id},1,${org.accounts.cogs},1,100,100,0)`);
-  await db.execute(sql`update documents set status='approved' where id=${id}`);
-  return id;
+  return withBypassContext(async () => {
+    const id = randomUUID();
+    await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
+      values(${id},${org.orgId},'vendor_bill',${`BOOK-${id}`},${org.vendorId},${org.subsidiaryId},${org.date},${org.date},'CAD',1,'draft',100,0,100)`);
+    await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
+      values(${org.orgId},${id},1,${org.accounts.cogs},1,100,100,0)`);
+    await db.execute(sql`update documents set status='approved' where id=${id}`);
+    return id;
+  });
 }
 function post(org: ScratchOrg, id: string) {
-  return postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { deferEffects: true });
+  return withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { deferEffects: true }));
 }
 async function entryBook(org: ScratchOrg, id: string) {
-  return (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where org_id=${org.orgId} and id=${id}`)).rows[0]!.book_id;
+  return withOrgContext(org.orgId, async () =>
+    (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where org_id=${org.orgId} and id=${id}`)).rows[0]!.book_id);
 }
 async function waitBlocked(pid: number) {
   for (let n = 0; n < 500; n++) {
@@ -74,8 +93,10 @@ test('primary book reassignment refuses posted history but preserves harmless me
   await assert.rejects(promote(org, actor, next), error => historyError.test(errorText(error)));
   await withOrgTransaction(org.orgId, () => saveSetupBook(entity, org.orgId, actor,
     { name: 'Renamed primary', isPrimary: true, isActive: true }, db, { id: org.bookId }));
-  assert.equal((await db.execute(sql`select name from accounting_books where id=${org.bookId}`)).rows[0]!.name, 'Renamed primary');
-  assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, org.bookId);
+  await withOrgContext(org.orgId, async () => {
+    assert.equal((await db.execute(sql`select name from accounting_books where id=${org.bookId}`)).rows[0]!.name, 'Renamed primary');
+    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, org.bookId);
+  });
 }));
 
 for (const mutation of ['demote', 'promote', 'delete', 'rehome'] as const) {
@@ -85,22 +106,25 @@ for (const mutation of ['demote', 'promote', 'delete', 'rehome'] as const) {
       : mutation === 'promote' ? sql`update accounting_books set is_primary=true where id=${next}`
       : mutation === 'delete' ? sql`delete from accounting_books where id=${org.bookId}`
       : sql`update accounting_books set org_id=${randomUUID()} where id=${org.bookId}`;
-    await assert.rejects(db.execute(change), error => historyError.test(errorText(error)));
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(change)), error => historyError.test(errorText(error)));
   }));
 }
 
 test('empty organization can select a different primary before its first post', enabled, async () => fixture(async (org, actor, next) => {
   await promote(org, actor, next);
   assert.equal(await entryBook(org, await post(org, await bill(org))), next);
+  await restorePrimary(org);
 }));
 
 for (const flag of ['is_active', 'posts_gl'] as const) {
   test(`generic posting refuses primary ${flag}=false without recording history`, enabled, async () => fixture(async (org) => {
     const id = await bill(org);
-    await db.execute(sql`update accounting_books set ${sql.raw(flag)}=false where id=${org.bookId}`);
+    await withBypassContext(() => db.execute(sql`update accounting_books set ${sql.raw(flag)}=false where id=${org.bookId}`));
     await assert.rejects(post(org, id), /active primary posting book/);
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length, 0);
-    assert.equal((await db.execute(sql`select status from documents where id=${id}`)).rows[0]!.status, 'approved');
+    await withOrgContext(org.orgId, async () => {
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select status from documents where id=${id}`)).rows[0]!.status, 'approved');
+    });
   }));
 }
 
@@ -123,6 +147,7 @@ test('setup first: a waiting first post resolves the newly committed primary', e
     release();
     await editing;
     assert.equal(await entryBook(org, await posting), next);
+    await restorePrimary(org);
   } finally { release(); await editing; await posting?.catch(() => {}); }
 }));
 
@@ -159,16 +184,18 @@ test('post first: primary reassignment waits and refuses the newly committed his
 }));
 
 test('in-transit inventory cannot switch accounting representations between ship and receive', enabled, async () => fixture(async (org, actor, next) => {
-  await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '5', unitCost: '10', subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
-  await db.execute(sql`insert into stock_locations(org_id,location_id,code,kind,is_active) values(${org.orgId},${org.locationId},'TRANSIT','transit',true)`);
-  const transfer = await createTransferOrder(org.orgId, actor, { fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2, subsidiaryId: org.subsidiaryId, orderedOn: org.date, inTransitAccountId: org.accounts.clearing, lines: [{ itemId: org.items.fifo, quantity: '2' }] });
-  const shipped = await shipTransferOrder(org.orgId, actor, transfer.id, org.date);
+  await withOrgContext(org.orgId, () => receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '5', unitCost: '10', subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date }));
+  await withBypassContext(() => db.execute(sql`insert into stock_locations(org_id,location_id,code,kind,is_active) values(${org.orgId},${org.locationId},'TRANSIT','transit',true)`));
+  const transfer = await withOrgContext(org.orgId, () => createTransferOrder(org.orgId, actor, { fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2, subsidiaryId: org.subsidiaryId, orderedOn: org.date, inTransitAccountId: org.accounts.clearing, lines: [{ itemId: org.items.fifo, quantity: '2' }] }));
+  const shipped = await withOrgContext(org.orgId, () => shipTransferOrder(org.orgId, actor, transfer.id, org.date));
   await assert.rejects(promote(org, actor, next), error => historyError.test(errorText(error)));
-  const received = await receiveTransferOrder(org.orgId, actor, transfer.id, org.date);
+  const received = await withOrgContext(org.orgId, () => receiveTransferOrder(org.orgId, actor, transfer.id, org.date));
   assert.ok(shipped.entryId); assert.ok(received.entryId);
   assert.equal(await entryBook(org, shipped.entryId), org.bookId);
   assert.equal(await entryBook(org, received.entryId), org.bookId);
-  assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.clearing} and entry_id in (${shipped.entryId},${received.entryId})`)).rows[0]!.amount, '0.0000');
+  await withOrgContext(org.orgId, async () => {
+    assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.clearing} and entry_id in (${shipped.entryId},${received.entryId})`)).rows[0]!.amount, '0.0000');
+  });
 }));
 
 test('direct secondary-book first journal fences a concurrent primary reassignment', enabled, async () => fixture(async (org, _actor, next) => {
@@ -180,7 +207,7 @@ test('direct secondary-book first journal fences a concurrent primary reassignme
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
     await writer.query(`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
       values($1,$2,$3,'FIRST-SECONDARY',$4,$5,'draft','manual')`, [org.orgId, next, org.subsidiaryId, org.date, org.periodId]);
-    change = db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`)
+    change = withOrgContext(org.orgId, () => db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`))
       .then(value => ({ status: 'fulfilled', value }), (reason: unknown) => ({ status: 'rejected', reason }));
     await waitBlocked(pid);
     await writer.query('commit');
@@ -192,27 +219,32 @@ test('direct secondary-book first journal fences a concurrent primary reassignme
 
 test('trusted migration retains its explicit book-copy exemption', enabled, async () => fixture(async (org, _actor, next) => {
   await post(org, await bill(org));
-  await db.transaction(async tx => {
+  await withOrgContext(org.orgId, () => db.transaction(async tx => {
     await tx.execute(sql`set local openbooks.migration=on`);
     await tx.execute(sql`update accounting_books set is_primary=(id=${next}) where org_id=${org.orgId}`);
+  }));
+  await withOrgContext(org.orgId, async () => {
+    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, next);
   });
-  assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, next);
+  await restorePrimary(org);
 }));
 
 for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment posting waits before its book lock so setup cannot deadlock the org fence`, enabled, async () => fixture(async (org, actor, next) => {
   const billId = await bill(org);
   const entry = await post(org, billId);
-  const lineId = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`)).rows[0]!.id;
+  const lineId = await withOrgContext(org.orgId, async () =>
+    (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`)).rows[0]!.id);
   const payment = await withOrgTransaction(org.orgId, () => createPaymentDocument({ orgId: org.orgId, kind: 'vendor_payment', createdBy: actor,
     partyId: org.vendorId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD' }));
   if (path === 'service') {
-    await updateDraftPayment(payment.id, { allocations: [sameCurrencyAllocation(lineId, '100')] }, actor, org.orgId);
-    await db.execute(sql`update documents set status='approved' where id=${payment.id}`);
+    await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, { allocations: [sameCurrencyAllocation(lineId, '100')] }, actor, org.orgId));
+    await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${payment.id}`));
   }
   routeAuth.user = { orgId: org.orgId, id: actor };
   // post-with-applications fences its draft save on the exact document
   // revision: read the token the same lossless way the API surface does.
-  const paymentRevision = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${payment.id}`)).rows[0]!.revision;
+  const paymentRevision = await withOrgContext(org.orgId, async () =>
+    (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${payment.id}`)).rows[0]!.revision);
 
   let entered!: (pid: number) => void;
   let release!: () => void;
@@ -227,10 +259,10 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   let posting: ReturnType<typeof postPaymentWithApplications> | undefined;
   try {
     const pid = await enteredPromise;
-    posting = path === 'service' ? postPaymentWithApplications(payment.id, undefined, actor, 'ui', { deferEffects: true })
-      : postPaymentRoute(new Request('http://audit.local/api/payments/post-with-applications', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    posting = path === 'service' ? withOrgContext(org.orgId, () => postPaymentWithApplications(payment.id, undefined, actor, 'ui', { deferEffects: true }))
+      : withOrgContext(org.orgId, () => postPaymentRoute(new Request('http://audit.local/api/payments/post-with-applications', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: payment.id, expectedUpdatedAt: paymentRevision, allocations: [sameCurrencyAllocation(lineId, '100')] }) }))
-        .then(async response => { const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as { entryId: string }; });
+        .then(async response => { const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as { entryId: string }; }));
     await waitBlocked(pid);
     release();
     const result = await editing;
@@ -284,9 +316,9 @@ test('SQL secondary promotion fails closed while first journal history is uncomm
     await writer.query("select set_config('app.bypass_rls','on',true)");
     await writer.query(`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
       values($1,$2,$3,'SQL-FIRST-RACE',$4,$5,'draft','manual')`, [org.orgId, next, org.subsidiaryId, org.date, org.periodId]);
-    await assert.rejects(db.execute(sql`update accounting_books set is_primary=true where id=${next}`), error => /could not obtain lock/.test(errorText(error)));
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`update accounting_books set is_primary=true where id=${next}`)), error => /could not obtain lock/.test(errorText(error)));
     await writer.query('commit');
-    await assert.rejects(db.execute(sql`update accounting_books set is_primary=true where id=${next}`), error => historyError.test(errorText(error)));
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`update accounting_books set is_primary=true where id=${next}`)), error => historyError.test(errorText(error)));
   } finally { await writer.query('rollback'); writer.release(); }
 }));
 
@@ -311,8 +343,8 @@ test('SQL primary reassignment cannot pass an uncommitted first reconciliation',
     await writer.query("select set_config('app.bypass_rls','on',true)");
     await writer.query(`insert into reconciliations(org_id,account_id,through_date,statement_balance,currency)
       values($1,$2,$3,0,'CAD')`, [org.orgId, org.accounts.bank, org.date]);
-    await assert.rejects(db.execute(sql`update accounting_books set is_primary=true where id=${next}`), error => /could not obtain lock/.test(errorText(error)));
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`update accounting_books set is_primary=true where id=${next}`)), error => /could not obtain lock/.test(errorText(error)));
     await writer.query('commit');
-    await assert.rejects(db.execute(sql`update accounting_books set is_primary=true where id=${next}`), error => historyError.test(errorText(error)));
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`update accounting_books set is_primary=true where id=${next}`)), error => historyError.test(errorText(error)));
   } finally { await writer.query('rollback'); writer.release(); }
 }));
