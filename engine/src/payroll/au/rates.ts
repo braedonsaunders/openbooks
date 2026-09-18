@@ -1,11 +1,11 @@
 /**
  * The AU pack's rate slots and tax-year support.
  *
- * Nothing here transcribes a PAYG withholding table: both the 2025–26 and
- * 2026–27 years are declared as `draft`, which the tax-year layer reports as
- * a refusal naming the year rather than as calculable coverage. Transcribing
- * ATO Schedule 1 (statement of formulas) coefficients is the work that flips
- * a draft to `published`.
+ * FY 2026–27 is transcribed: Schedule 1 (statement of formulas) scales 1–3,
+ * with and without the Schedule 8 STSL component, live in
+ * ./schedule1-2027.ts, quoted from the Federal Register instrument F2026L00716
+ * (the ATO site 403s). FY 2025–26 stays `draft`, which the tax-year layer
+ * reports as a refusal naming the year rather than as calculable coverage.
  */
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollTaxYearSupport } from "../tax-years.ts";
@@ -72,11 +72,13 @@ export const AU_TAX_YEARS: PayrollTaxYearSupport = {
       label: "2026–27",
       effectiveFrom: "2026-07-01",
       citation:
-        "ATO Schedule 1 – Statement of formulas for calculating amounts to "
-        + "be withheld (published 17 June 2026) — "
-        + "https://www.ato.gov.au/tax-rates-and-codes/"
-        + "payg-withholding-schedule-1-statement-of-formulas-for-calculating-amounts-to-be-withheld",
-      status: "draft",
+        "Taxation Administration (Withholding Schedules) Instrument 2026 "
+        + "(F2026L00716), Schedule 1 – Statement of formulas for calculating "
+        + "amounts to be withheld, made by Ben Kelly, Deputy Commissioner of "
+        + "Taxation, 2 June 2026, commencing 1 July 2026 — "
+        + "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/"
+        + "text/original/epub/OEBPS/document_1/document_1.html",
+      status: "published",
     },
   ],
   // PAYG withholding is national: no state publishes its own tables.

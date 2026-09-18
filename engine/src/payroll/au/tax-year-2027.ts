@@ -12,14 +12,14 @@
  * JS-only SPA, and not a 200-with-a-challenge-body. ato.gov.au content is
  * therefore NOT transcribed and NOT cited.
  *
- * What this means for withholding: the ATO's coefficient-based PAYG formulas
- * (scales 1, 2, 5, 6 with a/b coefficients) are refused by name — their
- * coefficients cannot be quoted from this vantage. The engine in
- * ./compute-statutory.ts annualises period pay and applies the legislated
- * annual liability below, then divides back to the period. That is the
- * statute's liability arithmetic, not the ATO's withholding scales, and the
- * pack stays `installable: false` until the Schedule 1 coefficients and an
- * ATO worked example can be quoted.
+ * What this means for withholding: the Schedule 1 coefficient formulas for
+ * scales 1–3 (with and without the Schedule 8 STSL component) are
+ * transcribed in ./schedule1-2027.ts from the registered instrument
+ * F2026L00716, and the engine in ./compute-statutory.ts withholds with the
+ * instrument's own per-period method. The legislated ANNUAL liability below
+ * (Schedule 7 / MLA / HESA) remains the end-of-year truth the withholding
+ * approximates; it is no longer the withholding method. Scales 4–6 and
+ * Schedule 15 are transcribed-or-named refusals (see AU_REFUSED_2027).
  *
  * Money discipline: figures are decimal STRINGS, never floats. The engine
  * consumes them with the repo's bigint-unit helpers (see canada/decimal.ts).
@@ -210,13 +210,16 @@ export function auTablesForPayDate(payDate: string): { readonly taxYear: 2027 } 
  * transcribe, with the reason. The engine quotes these names back.
  */
 export const AU_REFUSED_2027: readonly string[] = [
-  "ATO PAYG withholding scales 1, 2, 5 and 6 (a/b coefficients unquotable: ato.gov.au 403s from this vantage)",
+  "ATO PAYG withholding scale 4 (no TFN quoted: resident 47%, foreign resident 45% — flat-rate cents-ignored withholding the engine does not compute)",
+  "ATO PAYG withholding scales 5 and 6 (full/half Medicare levy exemption via the Medicare levy variation declaration, which the TFN declaration does not carry)",
+  "Medicare levy adjustment (WLA) and Withholding-declaration tax offsets (neither declaration is carried, so both adjustments are nil by the instrument's own conditions)",
+  "ATO Schedule 15 working-holiday-maker withholding (the y = ax formula turns on registered-employer status and year-to-date payments the pack cannot see)",
+  "ATO Schedules 2, 3, 4, 6, 7, 9, 10, 11, 12, 13 and 14 (horticultural/shearing, actors and entertainers, return to work, annuities, unused leave on termination, seniors and pensioners, voluntary agreements, employment termination payments, superannuation lump sums, superannuation income streams, additional withholding agreements)",
   "Medicare levy surcharge tiers 1–3 (thresholds live in the Private Health Insurance Act 2007 and liability turns on daily private patient hospital cover the pack cannot see)",
   "Medicare levy family reduction s8 (needs spouse income and dependant counts not on the TFN declaration)",
   "Medicare levy section-160AAAA rebate thresholds (no such question on the TFN declaration)",
   "Superannuation maximum contributions base dollar figure (2026–27 concessional-cap input unquotable; formula transcribed)",
   "HELP repayable-debt cap (the employee's accumulated HELP debt is not visible to the pack)",
-  "No-TFN withholding rate (Taxation Administration Act Schedule 1 is on the same 403ing host)",
-  "Medicare levy and HELP for foreign residents and working holiday makers (liability turns on Part VIIB of the Assessment Act 1936, not transcribed)",
+  "53-week / 27-fortnight additional withholding (voluntary shortfall top-ups the pack does not apply)",
   "State payroll tax (employer-aggregate state levy, not PAYG — out of scope, not a region of this pack)",
 ];

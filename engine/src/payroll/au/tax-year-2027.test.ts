@@ -78,15 +78,18 @@ test("AU edition resolution accepts FY2026–27 pay dates only", () => {
 test("AU refusals name every untranscribed scale and cap", () => {
   const joined = AU_REFUSED_2027.join("\n");
   for (const name of [
-    "scales 1, 2, 5 and 6",
+    "scale 4",
+    "scales 5 and 6",
+    "Schedule 15",
+    "Schedules 2, 3, 4, 6, 7, 9, 10, 11, 12, 13 and 14",
     "surcharge",
     "family reduction s8",
     "160AAAA",
     "maximum contributions base",
     "repayable-debt",
-    "No-TFN",
+    "53-week",
     "payroll tax",
   ]) {
-    assert.match(joined, new RegExp(name), `refusal missing: ${name}`);
+    assert.match(joined, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `refusal missing: ${name}`);
   }
 });
