@@ -209,16 +209,16 @@ test("withBypassContext actually reaches the database with bypass", { skip: !DB 
 
     // An unscoped read must never see MORE than an explicitly denied session
     // on the same connection string. The old assertion here demanded zero
-    // rows outright, which is unsatisfiable rather than protective: the pool
-    // connects with OPENBOOKS_DB_URL, and in CI and local development that is
-    // the bootstrap role (the service container's POSTGRES_USER), which
-    // PostgreSQL exempts from row security even under FORCE ROW LEVEL
-    // SECURITY — superuser and BYPASSRLS sessions ignore every policy, so no
-    // set_config combination can show them fewer rows. On a constrained
-    // runtime role (production traffic, openbooks_app in CI) the denied count
-    // is zero and this is that original end-to-end proof; on an exempt role
-    // both counts equal the full table by server semantics, and production is
-    // kept honest separately: bootstrap provisions openbooks_app as
+    // rows outright, which is unsatisfiable rather than protective on an
+    // exempt login: PostgreSQL exempts superuser and BYPASSRLS sessions from
+    // row security even under FORCE ROW LEVEL SECURITY, so no set_config
+    // combination can show them fewer rows. Test databases therefore transfer
+    // ownership to the constrained runtime role at provision time, so the
+    // pool login here is RLS-subject and the denied count below is zero —
+    // that is the original end-to-end proof. On a database whose login is
+    // still an exempt bootstrap superuser (an untransferred container), both
+    // counts equal the full table by server semantics; production is kept
+    // honest separately: bootstrap provisions openbooks_app as
     // NOSUPERUSER/NOBYPASSRLS and assertSafeRuntimeDatabaseRole refuses to
     // start a production process on any role that could bypass tenant RLS.
     const denied = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });

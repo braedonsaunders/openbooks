@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money.ts";
+import { runUserSql } from "../sqlapi.ts";
 
 /**
  * Scenario / close harness — turns a migrated company into a verifiable golden
@@ -613,17 +614,28 @@ export async function runScenario(
         const r = await db.execute(sql`select id from documents where id = ${foreign.id}`);
         return r.rows;
       });
-      const seenView = await withOrgContext(orgId, async () => {
-        const r = await db.execute(sql`select id from openbooks_query.documents where id = ${foreign.id}`);
-        return r.rows;
-      });
+      // The governed view scopes by its own temp-table tenant context, which
+      // the app-pool scope above does not establish — reading the view there
+      // returns empty with or without isolation, a vacuous proof. Read it the
+      // way web readers do: runUserSql establishes the temp context and the
+      // tenant GUCs and executes as the SELECT-only role, so the view
+      // predicate and the base-table policies must genuinely agree. (The
+      // committed RLS red-test pins both this mechanism and the table half
+      // with scratch orgs; this probe reuses them against live foreign rows.)
+      if (!/^[0-9a-f-]{36}$/i.test(foreign.id)) {
+        throw new Error("rls probe refused: foreign document id is not a UUID");
+      }
+      const seenView = await runUserSql(
+        `select id from documents where id = '${foreign.id}'`,
+        { orgId },
+      );
       const own = await withOrgContext(orgId, async () => {
         const r = await db.execute<{ n: string }>(sql`
           select count(*) n from documents where org_id = ${orgId}`);
         return Number(r.rows[0]!.n);
       });
-      rlsOk = seenDirect.length === 0 && seenView.length === 0;
-      rlsDetail += `; foreign doc invisible via table=${seenDirect.length === 0} view=${seenView.length === 0}, own docs visible=${own}`;
+      rlsOk = seenDirect.length === 0 && seenView.rowCount === 0;
+      rlsDetail += `; foreign doc invisible via table=${seenDirect.length === 0} view=${seenView.rowCount === 0}, own docs visible=${own}`;
       if (own === 0) rlsDetail += " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
     }
   }
