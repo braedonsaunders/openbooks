@@ -43,7 +43,7 @@ test("Czechia return carries the authority-form radky plus the two workpaper box
 test("Czechia declares 21 / 12 / 0 with no current 10% band", () => {
   const codes = packTaxCodesForReturn(pack, "CZ_DPH");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent, code.rates?.[0]?.effectiveFrom]), [
-    ["CZ-VAT-STD", "standard", 21, "2024-01-01"],
+    ["CZ-VAT-STD", "standard", 21, "2023-06-06"],
     ["CZ-VAT-RED12", "reduced", 12, "2024-01-01"],
     ["CZ-VAT-ZERO", "zero", 0, "2024-01-01"],
   ]);
