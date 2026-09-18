@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -43,10 +43,10 @@ function userFor(orgId: string, name: string): SessionUser {
 const SUB_PERMS = ['assistant.use', 'ar.read'];
 
 async function enableSubscriptionBilling(orgId: string) {
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"subscriptionBilling":true}'::jsonb)
     where id=${orgId}
-  `);
+  `));
 }
 
 const RECUR_PERMS = ['assistant.use', 'documents.manage'];
@@ -61,38 +61,38 @@ async function seedSubscriptions(orgId: string, rootSubsidiary: string, customer
   const hiddenSub = randomUUID();
   const templateDoc = randomUUID();
   const schedule = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into subscription_plans(id,org_id,name,amount,currency_code,interval,interval_count,is_active)
     values (${planMonthly},${orgId},'Harbour Support','100','CAD','monthly',1,true),
            (${planQuarterly},${orgId},'Harbour Platform','300','CAD','quarterly',1,true)
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
     values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden billing entity','CAD','CA',true,false)
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
     values (${hiddenParty}, ${orgId}, 'customer', 'Hidden Subscriber', true, '{}'::jsonb, ${hiddenSubsidiary})
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,dunning_state)
     values (${activeSub},${orgId},${customerId},${planMonthly},'1','active','2026-01-01','2026-11-01','current'),
            (${pausedSub},${orgId},${customerId},${planQuarterly},'2','paused','2026-02-01','2026-12-01','current'),
            (${hiddenSub},${orgId},${hiddenParty},${planMonthly},'1','active','2026-03-01','2026-11-15','overdue')
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,total,status,subsidiary_id)
     values (${templateDoc},${orgId},'customer_invoice','TMPL-001',${customerId},'2026-01-01','CAD','100','draft',${rootSubsidiary})
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into recurring_schedules(id,org_id,template_document_id,cadence,next_run_on,is_active)
     values (${schedule},${orgId},${templateDoc},'monthly','2026-11-01',true)
-  `);
+  `));
   return { planMonthly, planQuarterly, hiddenSubsidiary, hiddenParty, activeSub, pausedSub, hiddenSub, schedule };
 }
 
 test('subscription assistant reads: plans, list, detail, MRR, upcoming', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   await enableSubscriptionBilling(org.orgId);
   try {
     const seed = await seedSubscriptions(org.orgId, org.subsidiaryId, org.customerId);
@@ -171,8 +171,8 @@ test('subscription assistant reads: plans, list, detail, MRR, upcoming', { skip:
 });
 
 test('subscription assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   await enableSubscriptionBilling(orgA.orgId);
   await enableSubscriptionBilling(orgB.orgId);
   try {
@@ -182,7 +182,10 @@ test('subscription assistant reads isolate orgs and honor the feature flag', { s
       permissions: new Set(SUB_PERMS),
       allowedSubsidiaryIds: null as Set<string> | null,
     };
-    await withOrgContext(orgA.orgId, async () => {
+    // The cross-org caller arrives with the caller's own org as the ambient
+    // scope (what production middleware sets from the session); the tool
+    // resolves everything else from authz.user.orgId.
+    await withOrgContext(orgB.orgId, async () => {
       const cross = await executeAssistantTool(
         { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
         'get_subscription',
@@ -190,10 +193,10 @@ test('subscription assistant reads isolate orgs and honor the feature flag', { s
       );
       assert.deepEqual(cross, { ok: false, error: 'subscription_not_found' });
     });
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"subscriptionBilling":false}'::jsonb)
       where id=${orgA.orgId}
-    `);
+    `));
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(authzA, 'list_subscriptions', {});
       assert.deepEqual(off, { ok: false, error: 'subscription_billing_feature_disabled' });
