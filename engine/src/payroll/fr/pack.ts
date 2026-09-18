@@ -1,4 +1,5 @@
-import { PayrollPackError, type PayrollCountryPack } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
+import { type PayrollCountryPack } from "../packs.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,

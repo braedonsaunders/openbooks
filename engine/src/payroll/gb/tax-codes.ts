@@ -33,7 +33,7 @@
  * transcribed here), T (HMRC-review code), J / any unrecognised shape.
  */
 
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 /** A PAYE code the GB engine can operate. Amounts are decimal strings. */
 export type GbTaxCode =

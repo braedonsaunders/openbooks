@@ -31,8 +31,8 @@
  */
 import { sql } from "drizzle-orm";
 import { add, neg } from "../../money.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import {
-  PayrollPackError,
   type PayrollCountryPack,
   type PayrollJurisdiction,
   type PayrollStatutorySlot,

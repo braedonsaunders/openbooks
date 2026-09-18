@@ -8,7 +8,7 @@
  * on this pack, not a second engine.
  */
 import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 const STP_FINALISATION_REFUSAL =
   "AU STP finalisation is declared but not populated: pay-event and "

@@ -6,7 +6,7 @@
  * at `draft` in ./rates.ts — so any calculation would be silent wrong money.
  * The refusal names the year the run asked for.
  */
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 
 export async function computeAuStatutory(
