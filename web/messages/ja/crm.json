@@ -149,6 +149,12 @@
       "closedLost": "失注"
     }
   },
+  "customer360": {
+    "title": "顧客360",
+    "description": "商談パイプライン、売掛金のエージング、与信限度額、DSO、インタラクション履歴を統合表示します。",
+    "emptyTitle": "顧客が見つかりません",
+    "emptyDescription": "顧客を追加すると、顧客360のテレメトリを表示できます。"
+  },
   "forecastCategories": {
     "omitted": "除外",
     "worst_case": "最悪ケース",

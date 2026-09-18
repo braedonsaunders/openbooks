@@ -149,6 +149,12 @@
       "closedLost": "Perdido"
     }
   },
+  "customer360": {
+    "title": "Cliente 360",
+    "description": "Pipeline comercial unificado, aging de recebíveis, limite de crédito, DSO e telemetria de interações.",
+    "emptyTitle": "Nenhum cliente encontrado",
+    "emptyDescription": "Adicione um cliente para ver a telemetria do Cliente 360."
+  },
   "forecastCategories": {
     "omitted": "Omitido",
     "worst_case": "Pior caso",

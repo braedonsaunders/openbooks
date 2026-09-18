@@ -149,6 +149,12 @@
       "closedLost": "Verloren"
     }
   },
+  "customer360": {
+    "title": "Kunden-360",
+    "description": "Einheitliche Vertriebspipeline, Forderungsalterung, Kreditlimit, DSO und Interaktionsverlauf.",
+    "emptyTitle": "Keine Kunden gefunden",
+    "emptyDescription": "Lege einen Kunden an, um seine Kunden-360-Daten zu sehen."
+  },
   "forecastCategories": {
     "omitted": "Ausgelassen",
     "worst_case": "Schlechtester Fall",
