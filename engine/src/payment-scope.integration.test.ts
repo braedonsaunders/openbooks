@@ -322,6 +322,15 @@ for (const mode of ["inactive", "non-posting", "missing"] as const) {
           /active primary posting book/,
         );
         assert.deepEqual(await snapshot(org, payment.id), before);
+        if (mode === "missing") {
+          // Undo the legacy un-set the same way it was seeded: with history
+          // present the guard refuses the pooled-slot reset's is_primary
+          // restore, failing the release after the test itself passed.
+          await db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.migration=on`);
+            await tx.execute(sql`update accounting_books set is_primary=true where id=${org.bookId}`);
+          });
+        }
       } finally {
         await dropScratchOrg(org.orgId);
       }

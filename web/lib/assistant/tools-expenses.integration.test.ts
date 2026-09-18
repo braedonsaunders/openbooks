@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -43,10 +43,10 @@ function userFor(orgId: string, name: string): SessionUser {
 const EXPENSE_PERMS = ['assistant.use', 'expenses.read'];
 
 async function enableFeature(orgId: string, key: string) {
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object(${key}::text,true))
     where id=${orgId}
-  `);
+  `));
 }
 
 /** Draft + pending + posted-reimbursed reports, and one hidden-subsidiary report. */
@@ -64,37 +64,37 @@ async function seedExpenses(org: {
   const pendingReport = randomUUID();
   const postedReport = randomUUID();
   const entry = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
     values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden expense entity','CAD','CA',true,false)
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
     values (${employee}, ${orgId}, 'employee', 'Harbour Engineer', true, '{}'::jsonb, ${rootSubsidiary}),
            (${hiddenEmployee}, ${orgId}, 'employee', 'Hidden Spender', true, '{}'::jsonb, ${hiddenSubsidiary})
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,open_balance)
     values (${draftReport},${orgId},'expense_report','draft','EXP-1001',${rootSubsidiary},${employee},'2026-09-01','CAD','100','0','100','100'),
            (${pendingReport},${orgId},'expense_report','pending_approval','EXP-1002',${rootSubsidiary},${employee},'2026-09-05','CAD','200','0','200','200'),
            (${postedReport},${orgId},'expense_report','draft','EXP-1003',${rootSubsidiary},${employee},'2026-08-10','CAD','300','0','300','0'),
            (${hiddenReport},${orgId},'expense_report','draft','EXP-1004',${hiddenSubsidiary},${hiddenEmployee},'2026-09-01','CAD','400','0','400','400')
-  `);
+  `));
   // Post EXP-1003 through a real balanced entry so its open balance reads reimbursed.
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,source_document_id)
     values (${entry},${orgId},${org.bookId},${rootSubsidiary},${entry},'2026-08-10',${org.periodId},'draft',${postedReport})
-  `);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`
     insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,is_open_item)
     values (${randomUUID()},${orgId},${entry},1,${org.accounts.revenue},${rootSubsidiary},'300','CAD','300','1',${employee},false),
            (${randomUUID()},${orgId},${entry},2,${org.accounts.ar},${rootSubsidiary},'-300','CAD','-300','1',${employee},false)
-  `);
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
-  await db.execute(sql`update documents set status = 'approved' where id = ${postedReport}`);
-  await db.execute(sql`
+  `));
+  await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`));
+  await withBypassContext(() => db.execute(sql`update documents set status = 'approved' where id = ${postedReport}`));
+  await withBypassContext(() => db.execute(sql`
     update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${org.periodId} where id = ${postedReport}
-  `);
+  `));
   return { employee, draftReport, pendingReport, postedReport, hiddenReport };
 }
 
@@ -178,10 +178,10 @@ test('expense assistant reads isolate orgs and honor the feature flag', { skip: 
       );
       assert.deepEqual(cross, { ok: false, error: 'expense_report_not_found' });
     });
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"expenses":false}'::jsonb)
       where id=${orgA.orgId}
-    `);
+    `));
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(authzA, 'list_expense_reports', {});
       assert.deepEqual(off, { ok: false, error: 'expenses_feature_disabled' });

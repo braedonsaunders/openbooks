@@ -21,7 +21,7 @@ const { transactionResource } = (await import('./transaction-resources.ts')) as 
 )
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
   '@openbooks/engine/src/test-fixtures.ts'
 )
@@ -44,8 +44,10 @@ interface Fixture {
 async function fixture(): Promise<Fixture> {
   const o = await createScratchOrg()
   const revenueNo = (
-    await db.execute<{ number: string }>(
-      sql`select number from accounts where id = ${o.accounts.revenue}`,
+    await withOrgContext(o.orgId, () =>
+      db.execute<{ number: string }>(
+        sql`select number from accounts where id = ${o.accounts.revenue}`,
+      ),
     )
   ).rows[0]?.number
   assert.ok(revenueNo)
@@ -55,17 +57,19 @@ async function fixture(): Promise<Fixture> {
 async function writeInvoice(fx: Fixture, row: Record<string, unknown>) {
   const cfg = DOC_KINDS.customer_invoice
   assert.ok(cfg)
-  return transactionResource(cfg, fx.orgId).write([row], 'insert', {
-    orgId: fx.orgId,
-    actorId: randomUUID(),
-    dryRun: false,
-  })
+  return withOrgContext(fx.orgId, () =>
+    transactionResource(cfg, fx.orgId).write([row], 'insert', {
+      orgId: fx.orgId,
+      actorId: randomUUID(),
+      dryRun: false,
+    }),
+  )
 }
 
 async function exportedInvoice(fx: Fixture): Promise<Record<string, unknown>> {
   const cfg = DOC_KINDS.customer_invoice
   assert.ok(cfg)
-  const exported = await transactionResource(cfg, fx.orgId).read()
+  const exported = await withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).read())
   assert.equal(exported.rows.length, 1)
   return { ...(exported.rows[0] as Record<string, unknown>) }
 }
@@ -85,7 +89,7 @@ test(
     try {
       // A resolvable party, so the only friction left is the exporter's own
       // always-emitted currency column on a single-currency org.
-      await db.execute(sql`update parties set short_code = 'ACME' where id = ${fx.customerId}`)
+      await withBypassContext(() => db.execute(sql`update parties set short_code = 'ACME' where id = ${fx.customerId}`))
       const created = await writeInvoice(fx, {
         documentDate: fx.date,
         party: 'ACME',

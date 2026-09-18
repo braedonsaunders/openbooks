@@ -58,6 +58,16 @@ for (const policy of ["inactive", "non-posting", "non-primary"] as const) {
       const entry = (await db.execute<{ book_id: string; status: string }>(sql`
         select book_id,status from journal_entries where org_id=${fx.orgId} and id=${payment.entryId}`)).rows[0]!;
       assert.deepEqual(entry, { book_id: source.book_id, status: "posted" });
+      if (policy === "non-primary") {
+        // Undo the legacy flip the same way it was seeded: with posted
+        // history the guard refuses the pooled-slot reset's is_primary
+        // restore, failing the release after the test itself passed.
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration='on'`);
+          await tx.execute(sql`delete from accounting_books where org_id=${fx.orgId} and code='NEW'`);
+          await tx.execute(sql`update accounting_books set is_primary=true where org_id=${fx.orgId} and id=${source.book_id}`);
+        });
+      }
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
