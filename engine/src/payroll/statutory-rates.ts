@@ -79,8 +79,12 @@ export interface PayrollRateField {
    *   - `amount`  — money (a wage base, an exemption).
    * Stored canonically at `decimals`; never converted between forms, because a
    * silent ×100 is the classic payroll-rate defect.
+   *   - `flag`    — not a number at all: an employer fact the statute makes
+   *     a rate depend on (an exempt class, a sector). Stored canonically as
+   *     "true"/"false"; `decimals`/`min`/`max` do not apply. Rendered as a
+   *     checkbox, never a numeric input.
    */
-  kind: "rate" | "percent" | "amount";
+  kind: "rate" | "percent" | "amount" | "flag";
   /** Canonical scale. Exact — money.ts refuses a value that loses precision. */
   decimals: number;
   /** Inclusive accepted range, as the same kind of number. */
@@ -227,6 +231,17 @@ export function canonicalStatutoryRateValues(
       if (field.required) {
         throw new PayrollPackError(`${slot.label}: ${field.label} is required`);
       }
+      continue;
+    }
+    // Employer facts arrive as booleans from the checkbox or as canonical
+    // strings from storage; anything else is refused rather than coerced,
+    // because a coerced class flag levies the wrong employers.
+    if (field.kind === "flag") {
+      const text = typeof raw === "boolean" ? String(raw) : String(raw).trim();
+      if (text !== "true" && text !== "false") {
+        throw new PayrollPackError(`${slot.label}: ${field.label} must be true or false`);
+      }
+      clean[field.key] = text;
       continue;
     }
     let canonical: string;

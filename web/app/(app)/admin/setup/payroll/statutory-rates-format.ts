@@ -10,6 +10,7 @@ export function formatRateFieldValue(
   value: string,
 ): string {
   if (field.kind === 'percent') return `${value}%`
+  if (field.kind === 'flag') return value === 'true' ? 'Yes' : value === 'false' ? 'No' : value
   if (field.kind !== 'rate') return value
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return value

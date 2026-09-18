@@ -122,6 +122,18 @@ function persistStatutoryRateValues(
         + slot.fields.map((declared) => declared.key).join(', ')
     }
     if (raw == null || (typeof raw === 'string' && raw.trim() === '')) continue
+    // Employer-class flags bypass decimal canonicalization: they are
+    // booleans, and canonicalDecimal would 422 them. The engine's
+    // canonicalStatutoryRateValues re-validates on write, so this boundary
+    // only normalizes the shape, never the truth.
+    if (field.kind === 'flag') {
+      const text = typeof raw === 'boolean' ? String(raw) : String(raw).trim()
+      if (text !== 'true' && text !== 'false') {
+        return `${slot.label}: ${field.label} must be true or false`
+      }
+      persisted[key] = text
+      continue
+    }
     const exact = canonicalDecimal(raw, field.decimals)
     if (exact === null) {
       return `${slot.label}: ${field.label} must be an exact decimal`

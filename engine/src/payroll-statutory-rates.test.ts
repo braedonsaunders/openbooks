@@ -109,6 +109,39 @@ test("declared field scales and ranges are enforced, and unknown keys refused", 
   );
 });
 
+test("flag fields store employer facts as true/false, never coerced", () => {
+  // No built-in slot declares a flag yet: the slot is synthetic, which is
+  // exactly the point — the kind is generic machinery, not a jurisdiction.
+  const slot = {
+    ...statutoryRateSlot("CA", "ca_eht"),
+    key: "synthetic_class",
+    label: "Synthetic class",
+    scope: "org",
+    fields: [{
+      key: "exempt", label: "Exempt class", kind: "flag",
+      decimals: 0, min: "false", max: "true", required: false,
+      help: "synthetic",
+    }],
+  } as const;
+  assert.deepEqual(
+    canonicalStatutoryRateValues(slot, { exempt: true }),
+    { exempt: "true" },
+  );
+  assert.deepEqual(
+    canonicalStatutoryRateValues(slot, { exempt: "false" }),
+    { exempt: "false" },
+  );
+  // "yes", 1 and "True" are all refused: a coerced class flag levies the
+  // wrong employers, so only the canonical pair (and real booleans) pass.
+  for (const raw of ["yes", "1", "True", "FALSE", "0"]) {
+    assert.throws(
+      () => canonicalStatutoryRateValues(slot, { exempt: raw }),
+      /must be true or false/,
+      `flag refuses ${JSON.stringify(raw)}`,
+    );
+  }
+});
+
 test("scope is enforced at the write boundary the pack declaration owns", () => {
   const base = { country: "US", taxYear: 2026, filingAccountId: null };
   assert.equal(

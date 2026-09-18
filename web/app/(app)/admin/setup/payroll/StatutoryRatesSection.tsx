@@ -30,7 +30,7 @@ type Scope = 'org' | 'region' | 'sub_region' | 'filing_account'
 interface RateField {
   key: string
   label: string
-  kind: 'rate' | 'percent' | 'amount'
+  kind: 'rate' | 'percent' | 'amount' | 'flag'
   decimals: number
   min: string
   max: string
@@ -596,6 +596,18 @@ function RateDrawer({
               <Label htmlFor={`rate-field-${field.key}`} help={field.help}>
                 {field.label}
               </Label>
+              {field.kind === 'flag' ? (
+                <input
+                  id={`rate-field-${field.key}`}
+                  type="checkbox"
+                  className="h-4 w-4 accent-teal-600"
+                  checked={draft.values[field.key] === 'true'}
+                  onChange={(e) => onChange({
+                    ...draft,
+                    values: { ...draft.values, [field.key]: e.target.checked ? 'true' : 'false' },
+                  })}
+                />
+              ) : (
               <Input
                 id={`rate-field-${field.key}`}
                 inputMode="decimal"
@@ -605,6 +617,7 @@ function RateDrawer({
                   values: { ...draft.values, [field.key]: e.target.value },
                 })}
               />
+              )}
               {(field.kind === 'rate' || field.kind === 'percent') && (
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {field.kind === 'rate'
