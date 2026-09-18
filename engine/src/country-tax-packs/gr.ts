@@ -69,7 +69,10 @@ const GR_FPA_F2_2024: TaxReturnPack = {
  * (transactions from 1.7.2024): the 23%→24% change of 1.6.2016 and all
  * earlier bands are a named refusal — www.aade.gr and aade.gr answer this
  * sandbox with Akamai 403, so neither AADE nor the Gazette could attest an
- * origin date from here.
+ * origin date from here. Checked 2026-09-18 and left out: Diavgeia
+ * full-text search is degraded (cookie gate plus ADA-only maintenance
+ * mode), so the 2016 implementing circular could not be located; the MOJ
+ * Isokratis VAT-code PDF answers 403 from this sandbox.
  *
  * Box table source: the AADE Φ2 form «050 - Φ.Π.Α. ΕΚΔΟΣΗ 2024» issued
  * under decision A.1058/2024 as mirrored by logistis.gr — it qualifies as
