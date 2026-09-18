@@ -158,29 +158,6 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     // learn.microsoft.com documentation page for the Czech VAT declaration
     // rows and DPHDP3/DPHKH1 formats: no FS-hosted equivalent is reachable.
     // See the Czechia pack doc comment.
-    // 2008 professional circular quoting BKK 2007/13033 (RG 30.12.2007/26742,
-    // 18/8/1 bands valid in 2008): the gazette and mevzuat.gov.tr are
-    // unreachable from this sandbox. See the Türkiye pack doc comment.
-    sirkuler_2008_03_baseline: "www.bilgidenetim.com.tr",
-    // Sovos and TrustUs regulatory pages corroborating the 7346 increase
-    // (18 to 20, 8 to 10, 1 unchanged from 10.07.2023); the Sovos page is
-    // the disclosed path that verified the Resmî Gazete PDF URL, whose PDF
-    // is itself unfetchable from this sandbox (TLS). See the Türkiye pack
-    // doc comment.
-    sovos_tr_kdv_july2023: "sovos.com",
-    trustus_tr_kdv_table: "trustusconsultancy.com",
-    // alomaliye mirror of the GİB KDV1 v41 duyuru corroborating table and
-    // field names; the ebeyan doc center has no curl-reachable duyuru PDF.
-    // See the Türkiye pack doc comment.
-    kdv1_v41_duyuru_mirror: "www.alomaliye.com",
-    // Danmarks Statistik's own "Skatter og afgifter 1999" VAT rate table
-    // ("01.01.1992- 25,00" under "Lov nr. 891 af 21. dec. 1991"): the
-    // Danish state's national statistical institute attesting a government
-    // fact, naming the instrument directly — not a mirror and not a vendor
-    // reading. It is not the act's own text (the Retsinformation ELI
-    // resolves but serves a JS shell to plain clients). See the Denmark
-    // pack doc comment.
-    dst_skatter_avgifter_1999: "ws.dst.dk",
   };
   const seenExceptions = new Set<string>();
   for (const country of maintainedCountries) {
