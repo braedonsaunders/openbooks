@@ -1,21 +1,20 @@
 /**
- * The Netherlands payroll pack (skeleton).
+ * The Netherlands payroll pack (2026 transcribed).
  *
  * Declares what the Belastingdienst actually levies and files, through the
  * existing `PayrollCountryPack` channels and no other: the combined
  * loonheffing withholding (loonbelasting + premie volksverzekeringen AOW/Anw/Wlz,
- * looked up in the witte loonbelastingtabellen), the employer-paid premies
- * werknemersverzekeringen (WW/WIA/ZW) and the werkgeversheffing Zvw, the
- * loonaangifte programme and the jaaropgaaf, and the one employee-filed
- * certificate (see `./certificates.ts`).
+ * priced by the Rekenvoorschriften algorithm rather than looked up row by
+ * row), the employer-paid premies werknemersverzekeringen (WW/WIA) and the
+ * werkgeversheffing Zvw, the loonaangifte programme and the jaaropgaaf, and
+ * the one employee-filed certificate (see `./certificates.ts`).
  *
- * SKELETON: `installable: false` and no tax year is transcribed. The 2026
- * witte tabellen (maand/vierweken/week/dag, standaard) and the 2026 tabellen
- * voor bijzondere beloningen are published by the Belastingdienst but no
- * band is transcribed here — the pack refuses every year by name through
- * `NL_TAX_YEARS` (empty editions) and `computeNlStatutory` throws before it
- * can compute. Transcribing 2026 is the follow-up commit, one sourced table
- * at a time.
+ * 2026 is transcribed in `./rates.ts` (schijventarief, AHK/OUK/AOK/ARK, JGK,
+ * AWf/Aof/Zvw, maximumpremieloon) and computed in `./loonheffing.ts`, proven
+ * by `./loonheffing.test.ts` against the witte maandtabel. Every other year
+ * is refused by name; bonuses are refused by name (the bijzondere tarieven
+ * row-selection rule was not obtainable); herleidingssituaties and
+ * eindheffing tables are not transcribed (see `rates.ts`).
  *
  * Registration is blocked upstream: `PayrollCountry` is still `"CA" | "US"`
  * (`engine/src/payroll/packs.ts`), so this object is typed as the pack with
@@ -31,9 +30,9 @@ import type {
   PayrollRemittanceSchedule,
 } from "../packs.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
-import type { PayrollPackRates } from "../statutory-rates.ts";
-import type { PayrollTaxYearSupport } from "../tax-years.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
+import { computeNlStatutory } from "./loonheffing.ts";
+import { NL_PACK_RATES, NL_TAX_YEARS } from "./rates.ts";
 
 // ---------------------------------------------------------------------------
 // Withholding jurisdictions
@@ -41,11 +40,11 @@ import { NL_CERTIFICATES } from "./certificates.ts";
 
 /**
  * The Netherlands levies no subnational wage tax: one region, one income-tax
- * withholding (the loonheffing), looked up in the national witte tabellen.
- * `implemented: false` with the reason naming the missing transcription —
- * the engine computes nothing until the tables land, and
- * `residentWithholding: "unknown"` because nobody has established the
- * cross-border rule (treaty relief is per employee, not a second withholding).
+ * withholding (the loonheffing), priced by the national Rekenvoorschriften
+ * algorithm for 2026. Loonheffing is national — there are no regions with
+ * their own tables to declare. `residentWithholding: "unknown"` because
+ * nobody has established the cross-border rule (treaty relief is per
+ * employee, not a second withholding).
  */
 const NL_WITHHOLDING: PayrollPackWithholding = {
   country: "NL",
@@ -53,10 +52,7 @@ const NL_WITHHOLDING: PayrollPackWithholding = {
     {
       region: "NL",
       label: "Loonbelasting/premie volksverzekeringen",
-      implemented: false,
-      unimplementedReason:
-        "the 2026 witte loonbelastingtabellen (loonbelasting/premie volksverzekeringen) are not "
-        + "transcribed into engine/src/payroll/nl/ — see NL_TAX_YEARS",
+      implemented: true,
       // Wages earned in the Netherlands are subject to loonheffing whoever
       // earns them; treaty relief is settled per employee, not by skipping
       // the withholding.
@@ -75,49 +71,8 @@ const NL_WITHHOLDING: PayrollPackWithholding = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// Tenant-entered statutory rates
-// ---------------------------------------------------------------------------
-
-/**
- * No tenant-entered rate slots are declared yet. The employer-paid premiums
- * whose percentages the Belastingdienst publishes yearly (AWf hoog/laag by
- * contract type, Aof, Whk/WGA, ZW, werkgeversheffing Zvw) will need slots or
- * edition constants when the tables are transcribed — the Whk percentages in
- * particular are set per employer by beschikking — but declaring a slot now,
- * before the transcription fixes the engine's inputs, would be a shape
- * without a reader.
- */
-const NL_RATES: PayrollPackRates = {
-  country: "NL",
-  slots: [],
-};
-
-// ---------------------------------------------------------------------------
-// Tax years: every year refused by name until transcribed
-// ---------------------------------------------------------------------------
-
-const NL_TAX_YEARS: PayrollTaxYearSupport = {
-  country: "NL",
-  // No published edition is carried: 2026 (and every earlier year) is
-  // refused as "missing" by payrollTaxYearProblem, naming the year and this
-  // module. The publications to transcribe are the witte loonbelastingtabellen
-  // 2026, the 2026 tabellen voor bijzondere beloningen (Handboek §9.3.6), and
-  // the "Tarieven, bedragen en percentages loonheffingen" newsletter.
-  editions: [],
-  regionsWithOwnTables: [],
-  ratesModule: "engine/src/payroll/nl/rates.ts",
-  scaffold: {
-    files: [],
-    barrels: [],
-    steps: [
-      "Transcribe the 2026 witte loonbelastingtabellen (standaard, Nederland) into engine/src/payroll/nl/rates.ts from download.belastingdienst.nl.",
-      "Transcribe the 2026 tabellen voor bijzondere beloningen (Handboek Loonheffingen 2026, paragraaf 9.3.6).",
-      "Transcribe the employer premiums from 'Tarieven, bedragen en percentages loonheffingen vanaf 1 januari 2026'.",
-      "Add a published 2026 edition to NL_TAX_YEARS.editions with the edition label and citation, plus conformance goldens.",
-    ],
-  },
-};
+// NL_RATES (tenant slots: none) and NL_TAX_YEARS (2026 published) live in
+// `./rates.ts` beside the transcribed tables the engine reads.
 
 // ---------------------------------------------------------------------------
 // Filings: the loonaangifte programme and the jaaropgaaf
@@ -149,13 +104,13 @@ function nlPackFilings(): PayrollPackFilings {
           + "loonheffingskorting was applied, and the SV wage base.",
         population: async (): Promise<PayrollFilingData> => {
           throw new PayrollError(
-            "the NL payroll pack populates no jaaropgaaf — its 2026 statutory tables are not "
-            + "transcribed (see NL_TAX_YEARS)",
+            "the NL payroll pack populates no jaaropgaaf — no jaaropgaaf file builder exists "
+            + "(the 2026 withholding figures it would print are transcribed; the file is not)",
           );
         },
         parseRowId: () => null,
         downloadRefusal:
-          "the NL payroll pack produces no jaaropgaaf file — its 2026 statutory tables are not transcribed",
+          "the NL payroll pack produces no jaaropgaaf file — no jaaropgaaf file builder exists",
         amendment: {
           supported: false,
           refusal:
@@ -184,7 +139,7 @@ function nlPackFilings(): PayrollPackFilings {
  */
 export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "NL" } = {
   country: "NL",
-  installable: false,
+  installable: true,
   statutorySlots: [
     {
       key: "loonheffing",
@@ -200,12 +155,17 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
     {
       key: "werknemersverzekeringen",
       components: [
-        // Employer-paid, assessed on the SV-loon (premieloon) and settled
-        // through the loonaangifte with the Belastingdienst (administered by
-        // UWV): WW via the AWf (hoog/laag by contract type), WIA via the
-        // Werkhervattingskas, and ZW. No rates are carried — see NL_RATES.
+        // Employer-paid, assessed on the SV-loon (premieloon, capped at the
+        // maximumpremieloon) and settled through the loonaangifte with the
+        // Belastingdienst (administered by UWV): WW via the AWf (hoog/laag by
+        // declared contract type, 2026: 2,74%/7,74%), WIA via the Aof
+        // basispremie (declared employer size, 2026: 6,27%/7,63%) together
+        // with the differentiated Whk beschikking (one percentage, declared),
+        // and ZW. No fixed ZW percentage is published (Tarieven Tabel 9
+        // carries no ZW row; ZW-flex runs inside the Whk beschikking), so the
+        // ZW component posts nothing — see computeNlStatutory.
         { code: "WW", name: "Werkloosheidswet (AWf)", systemKey: "ww", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "WIA", name: "Arbeidsongeschiktheid (WGA/IVA)", systemKey: "wia", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "WIA", name: "Arbeidsongeschiktheid (Aof + Whk)", systemKey: "wia", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
         { code: "ZW", name: "Ziektewet", systemKey: "zw", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
@@ -225,13 +185,12 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   regions: {
     label: "country",
     known: ["NL"],
-    // The engine computes no Dutch withholding until the witte tabellen are
-    // transcribed: an empty supported list refuses NL by name instead of
-    // approximating it with another country's tables.
-    supported: [],
+    // Loonheffing is national: the engine computes the one Dutch withholding
+    // end to end for 2026, so the country itself is supported and no
+    // subnational region is declared.
+    supported: ["NL"],
     unsupportedReason:
-      "income tax withholding for {region} is not implemented by the NL payroll pack — the 2026 "
-      + "witte loonbelastingtabellen are not transcribed (see NL_TAX_YEARS in engine/src/payroll/nl/)",
+      "income tax withholding for {region} is not implemented by the NL payroll pack",
   },
   // No employment calendar is declared yet: the Dutch statutory facts (BW
   // 7:634 minimum vacation, Wet minimumloon art. 15 vakantiebijslag) are not
@@ -264,19 +223,14 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // no treatment.
   employeeUnionDuesTaxTreatment: null,
   filings: nlPackFilings,
-  statutoryRates: NL_RATES,
+  statutoryRates: NL_PACK_RATES,
   taxYears: NL_TAX_YEARS,
   certificates: () => NL_CERTIFICATES,
   withholding: () => NL_WITHHOLDING,
-  // Phase 9 — refuses until a tax year is transcribed. Required on the type;
-  // unreachable while installable is false.
-  computeStatutory: async (): Promise<Record<string, string>> => {
-    throw new PayrollError(
-      "the NL payroll pack computes nothing — no tax year is transcribed (the 2026 witte "
-      + "loonbelastingtabellen are not in engine/src/payroll/nl/; see NL_TAX_YEARS)",
-    );
-  },
+  // Phase 9 — the 2026 Rekenvoorschriften pass. Refuses any other tax year
+  // by name, and refuses bonuses by name (bijzondere tarieven).
+  computeStatutory: computeNlStatutory,
   statutoryEngineLabel: "Loonbelastingtabellen",
 };
 
-export { NL_CERTIFICATES, NL_RATES, NL_TAX_YEARS, NL_WITHHOLDING };
+export { NL_CERTIFICATES, NL_PACK_RATES as NL_RATES, NL_TAX_YEARS, NL_WITHHOLDING };
