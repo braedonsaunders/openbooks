@@ -45,18 +45,34 @@ const BE_VAT_PERIODIC_2026: TaxReturnPack = {
  * were dropped rather than blessed. A shorter FPS-sourced history beats a
  * longer one resting on a law firm's summary.
  *
- * The changeover is identified but not transcribable from here: the 21%
- * rate applies from 1 January 1996 under the Loi du 22 décembre 1995
- * (M.B. 30.12.1995), replacing 20.5% — sourced so far only to a course
- * Code TVA, so UNVERIFIED at the gazette level. Two blocks: finance.belgium.be
- * serves plain clients a JS/image-captcha challenge (curl) or an empty body
- * (fetcher) as of 2026-09-18, so no deeper FPS history is fetchable; and the
- * Moniteur belge host (ejustice.just.fgov.be, answers 200) is outside the
- * wave4 approved primary-source list, which this shard may not edit. A
- * FLEET-PROPOSE for that host is with Orchestrate; if approved, prepend a
- * single {21, 1996-01-01} open row per code (12% and 6% are long-standing
- * but their own origins still need gazette dates — do not backfill them
- * from the 21% act).
+ * The changeover is IDENTIFIED but its text has never been read by us, so it
+ * is not transcribed. The 21% rate is said to apply from 1 January 1996 under
+ * the Loi du 22 décembre 1995 (M.B. 30.12.1995), replacing 20.5%, but that is
+ * sourced only to a teaching copy of the Code TVA — unverified at gazette
+ * level.
+ *
+ * Both routes to the primary text are closed to automated clients, and the
+ * second one is worth stating precisely because it produced a false positive:
+ *
+ * - finance.belgium.be serves plain clients a JS/image-captcha challenge, so
+ *   no deeper FPS history is fetchable. (Note finances.belgium.be, with the s,
+ *   does load and carries current applicability only.)
+ * - www.ejustice.just.fgov.be — the authority's own Justel/Moniteur host —
+ *   returns HTTP 200 with a large body that is an Imperva bot challenge, NOT
+ *   the law. A 49,663-byte response here was initially read as "a real Justel
+ *   document"; parsing it yields 2,103 characters of "Please enable JavaScript
+ *   to view the page content… What code is in the image?" and a /TSPD/
+ *   endpoint. This was confirmed from an unproxied vantage too, so it is the
+ *   edge WAF refusing non-browser clients generally, not a sandbox artifact.
+ *   The bare apex ejustice.just.fgov.be has no listener at all.
+ *
+ * DO NOT prepend a 1996 band on the strength of a host becoming reachable or
+ * allowlisted. The blocker is not access, it is that nobody has read the
+ * operative sentence. Transcribe it only when someone can quote the language
+ * stating 20,5% → 21% and its commencement date from the instrument itself;
+ * a status code and a byte count are not a citation. The 12% and 6% bands are
+ * long-standing but need their own gazette dates — do not backfill them from
+ * the 21% act.
  */
 export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
   code: "BE_INDIRECT_TAX",
