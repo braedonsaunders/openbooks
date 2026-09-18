@@ -1,6 +1,8 @@
 /**
- * The España payroll pack (`installable: false` — the statutory-account-label
- * gate needs the labels shard; see the ledger).
+ * The España payroll pack (`installable: true` — 2026 computes end to end
+ * and the adapter golden pushes all ten lines through the
+ * declaration-enforcing push path; ES slot labels landed in all seven
+ * locales).
  *
  * Declares IRPF withholding (AEAT) and Seguridad Social employee + employer
  * contributions (TGSS) as statutory slots, the Modelo 145 certificate, the
@@ -62,7 +64,7 @@ const ES_REGIONS: PayrollRegionCoverage = {
 
 export const ES_PAYROLL_PACK: EsPayrollPack = {
   country: "ES",
-  installable: false,
+  installable: true,
   // The AEAT pack computes in euro; IRPF and TGSS settle in euro.
   statutoryCurrency: "EUR",
   // LIRPF art. 12: el período impositivo es el año natural.
@@ -104,13 +106,35 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
     },
     {
       key: "seguridad_social",
+      // ONE slot for every SS cuota: no new slot keys, so the landed
+      // packAccounts.ES.slots labels (irpf, seguridad_social) still cover
+      // everything and the messages-catalog gate stays green. The cost is
+      // one liability account for all SS lines — an operator cannot map
+      // contingencias comunes, desempleo, FOGASA, formación and MEI to
+      // different accounts until a labels round adds split slots.
       components: [
         // Rate × base de cotización against topes máximos/mínimos — no
         // deduction enters the formula. Employee share settles with the TGSS,
         // a different agency from the AEAT pack vendor, hence external with a
         // per-component destination (the CCC-registered TGSS party).
         { code: "SS-CC", name: "Seguridad Social (employee)", systemKey: "ss_cc", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "external" },
-        { code: "SS-CC-ER", name: "Seguridad Social (employer)", systemKey: "ss_cc", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
+        // Orden PJC/297/2026 art. 33.2.a (indefinida): 1,55 % trabajadora.
+        { code: "SS-DES", name: "Desempleo (employee)", systemKey: "ss_des", kind: "deduction", sequence: 121, assessedOn: "earnings", remittance: "external" },
+        // Art. 33.2.c: 0,10 % trabajadora.
+        { code: "SS-FOR", name: "Formación profesional (employee)", systemKey: "ss_for", kind: "deduction", sequence: 122, assessedOn: "earnings", remittance: "external" },
+        // Art. 16: 0,15 % trabajadora.
+        { code: "SS-MEI", name: "MEI (employee)", systemKey: "ss_mei", kind: "deduction", sequence: 123, assessedOn: "earnings", remittance: "external" },
+        // Art. 4.a: 23,60 % empresa. Distinct systemKey from the employee
+        // share — the engine pushes ss_cc_er, never employer-side ss_cc.
+        { code: "SS-CC-ER", name: "Seguridad Social (employer)", systemKey: "ss_cc_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
+        // Art. 33.2.a (indefinida): 5,5 % empresa.
+        { code: "SS-DES-ER", name: "Desempleo (employer)", systemKey: "ss_des_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "external" },
+        // Art. 33.2.b: 0,20 % empresa.
+        { code: "SS-FOGASA-ER", name: "FOGASA (employer)", systemKey: "ss_fogasa_er", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "external" },
+        // Art. 33.2.c: 0,60 % empresa.
+        { code: "SS-FOR-ER", name: "Formación profesional (employer)", systemKey: "ss_for_er", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "external" },
+        // Art. 16: 0,75 % empresa.
+        { code: "SS-MEI-ER", name: "MEI (employer)", systemKey: "ss_mei_er", kind: "employer_contribution", sequence: 214, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],
