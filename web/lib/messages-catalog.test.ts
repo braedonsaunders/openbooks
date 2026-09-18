@@ -2897,7 +2897,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3369, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3367, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3233,8 +3233,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3369
-  const ADMIN_I2_SOURCE_HASH = 'bc6f02ae5f7c256facc6319c2eb64757589ee3b690b23fb5fa6f3e892e110a14'
+  const ADMIN_I2_SOURCE_COUNT = 3367
+  const ADMIN_I2_SOURCE_HASH = '49eba1745fa0ebc4c24c0626c636642ede5d924924b491a416523ca593e345d3'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4446,7 +4446,6 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "de:shell.accountMenu.roles.controller|Controller",
   "de:shell.accountMenu.sandbox|sandbox",
   "de:shell.apps.title|Apps",
-  "de:shell.notifications.kinds.flow|Flow",
   "de:shell.themeToggle.options.system|System",
   "de:sync.drawer.system|System",
   "de:sync.runs.columns.status|Status",
@@ -4631,7 +4630,6 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "fr:nav.modules.continuous-close|Agents",
   "fr:nav.modules.crm-prospects|Prospects",
   "fr:nav.modules.docs|Documentation",
-  "fr:nav.modules.notifications|Notifications",
   "fr:parties.drawer.contactsHeading|Contacts",
   "fr:parties.drawer.currencyPlaceholder|CAD",
   "fr:parties.drawer.shortCodePlaceholder|ACME",
@@ -4731,7 +4729,6 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "fr:shell.globalSearch.groups.transactions|Transactions",
   "fr:shell.mobileNav.menu|Menu",
   "fr:shell.notifications.ariaLabel|Notifications",
-  "fr:shell.notifications.kindLabel|Type",
   "fr:shell.notifications.title|Notifications",
   "fr:sync.netsuite.documentation|Documentation",
   "fr:sync.qbd.documentation|Documentation",
@@ -4972,13 +4969,13 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
-  "nav": 107,
+  "nav": 106,
   "parties": 212,
   "payments": 255,
   "pdfTemplates": 50,
   "purchaseOrders": 55,
   "records": 184,
-  "shell": 145,
+  "shell": 111,
   "tax": 142,
 }
 

@@ -867,7 +867,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 /** Canonical scan order inside each workspace. Kept separate from the module
  * declarations so the information architecture is reviewable in one place. */
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
-  'my-work': ['dashboard', 'approvals', 'notifications', 'assistant', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-leads',
