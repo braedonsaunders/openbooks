@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
+import { assertPackCodeRateSchedule, packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import { SWEDEN_TAX_PACK } from "./se.ts";
 import type { EffectiveTaxRate } from "./types.ts";
 
@@ -39,14 +39,31 @@ test("Sweden filing is quarterly portal entry through the Skatteverket momsdekla
   assert.match(returnPack.submissionUrl, /skatteverket\.se/);
 });
 
-test("Sweden declares the 25/12/6 bands with honest roles and no zero-rated code", () => {
+test("Sweden declares the 25/12/6 bands plus the temporary food 6% band with honest roles and no zero-rated code", () => {
   const codes = packTaxCodesForReturn(SWEDEN_TAX_PACK, "SE_MOMSDEKLARATION");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
     ["SE-VAT-STD", "standard", 25],
     ["SE-VAT-RED12", "reduced", 12],
+    ["SE-VAT-FOOD6", "reduced", 6],
     ["SE-VAT-RED6", "reduced", 6],
   ]);
   assert.ok(!codes.some((code) => code.role === "zero"), "no zero-rated band on the return, so no zero code");
+  const food = codes.find((code) => code.code === "SE-VAT-FOOD6")!;
+  assert.deepEqual(food.rates, [
+    { ratePercent: 6, effectiveFrom: "2026-04-01", effectiveTo: "2027-12-31", sourceId: "sfs_2026_118_food_6_temp" },
+  ]);
+  const sourceIds = new Set(SWEDEN_TAX_PACK.sources.map((source) => source.id));
+  assert.ok(sourceIds.has("sfs_2026_119_food_12_revert"), "the reverting act attesting the 2027-12-31 window end is cited");
+});
+
+test("Sweden temporary food band covers a pinned date inside its window and names the missing successor after it", () => {
+  const codes = packTaxCodesForReturn(SWEDEN_TAX_PACK, "SE_MOMSDEKLARATION");
+  const food = codes.find((code) => code.code === "SE-VAT-FOOD6")!;
+  assertPackCodeRateSchedule("SE_INDIRECT_TAX/SE_MOMSDEKLARATION/SE-VAT-FOOD6", food, "2026-09-18");
+  assert.throws(
+    () => assertPackCodeRateSchedule("SE_INDIRECT_TAX/SE_MOMSDEKLARATION/SE-VAT-FOOD6", food, "2028-01-01"),
+    /successor rate/,
+  );
 });
 
 test("Sweden primary code is the standard 25% band", () => {
