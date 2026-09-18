@@ -62,8 +62,8 @@ export const MEXICO_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "dof_2013_liva_reform",
-      title: "DOF 11-12-2013 LIVA reform decree (hosted copy) — Article 2 border rate repealed, in force 2014-01-01; 16% nationwide applicability from that date",
-      url: "https://www.e-casa.com.mx/dof/2013/dic/11122013_liva.pdf",
+      title: "DOF 11-12-2013 LIVA reform decree itself (nota 5325371) — ARTÍCULO PRIMERO: “se derogan los artículos … 2o.; 2o.-C … de la Ley del Impuesto al Valor Agregado” (“Artículo 2o. (Se deroga)”); same decree TRANSITORIOS Primero (sibling nota 5325373): “El presente Decreto entrará en vigor el 1 de enero de 2014” — 16% nationwide applicability from that date",
+      url: "https://dof.gob.mx/nota_detalle.php?codigo=5325371&fecha=11/12/2013",
       asOf: "2026-09-18",
     },
     {
@@ -74,8 +74,8 @@ export const MEXICO_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "decreto_fronteras_prorroga_2024",
-      title: "Border-stimulus extension decree (December 2024, DOF-text copy) — north vigencia 2019-01-01 to 2025-12-31, south 2021-01-01 to 2025-12-31",
-      url: "https://s575c7bc0b6c81d46.jimcontent.com/download/version/1739383043/module/12073818877/name/DECRETO%20ESTIMULOS%20FISCALES%20IND%20EXPORTADORA.pdf",
+      title: "DOF 24-12-2024 vespertina (nota 5746128) — ARTÍCULO SEGUNDO reforms the north decree transitory: “El presente Decreto entrará en vigor el 1 de enero de 2019 y estará vigente hasta el 31 de diciembre de 2025”; ARTÍCULO TERCERO reforms the south decree transitory: “entrará en vigor el 1 de enero de 2021 y estará vigente hasta el 31 de diciembre de 2025”",
+      url: "https://dof.gob.mx/nota_detalle.php?codigo=5746128&fecha=24/12/2024",
       asOf: "2026-09-18",
     },
     {
