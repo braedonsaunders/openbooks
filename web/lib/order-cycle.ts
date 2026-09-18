@@ -1042,11 +1042,23 @@ export async function convertOrder(
         throw new ConversionError('this order changed after you opened it; reload and review the latest revision', 409)
       }
     }
-    if (targetKind === SALES_FULFILLMENT_KIND) {
-      return fulfillSalesOrderRemainder(orgId, userId, sourceId)
-    }
-    if (targetKind === PURCHASE_RECEIPT_KIND) {
-      return receivePurchaseOrderRemainder(orgId, userId, sourceId)
+    // Physical movements refuse with the engine's InventoryError (short
+    // stock, unwarehoused lines, cross-entity attempts). Those are
+    // operator-actionable business refusals, not server faults: wrap them
+    // as ConversionErrors so the convert route answers 422/403 with the
+    // message the picker needs, the way assign-warehouse already does.
+    try {
+      if (targetKind === SALES_FULFILLMENT_KIND) {
+        return await fulfillSalesOrderRemainder(orgId, userId, sourceId)
+      }
+      if (targetKind === PURCHASE_RECEIPT_KIND) {
+        return await receivePurchaseOrderRemainder(orgId, userId, sourceId)
+      }
+    } catch (error) {
+      if (error instanceof ConversionError) throw error
+      if (error instanceof InventoryOwnershipError) throw new ConversionError(error.message, 403)
+      if (error instanceof InventoryError) throw new ConversionError(error.message, 422)
+      throw error
     }
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
