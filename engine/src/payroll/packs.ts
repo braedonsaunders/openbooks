@@ -138,6 +138,130 @@ export type PayrollRemittanceTreatment = "tax_authority" | "external" | "interna
 export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
 /**
+ * What an employer-aggregate levy's base accumulates. The generic layer sums
+ * non-accrual earning lines by flag — `gross` is every earning, `taxable` is
+ * the taxable subset — reusing the same line flags the per-employee engine
+ * already stamps, so a pack cannot invent a base the run cannot see.
+ */
+export type PayrollAggregateBaseSource = "gross" | "taxable";
+
+/**
+ * Whose total the base is: the whole employer (`org`) or the employer's
+ * payroll in one region (`region`, the stub's employment region). An
+ * exemption shared across regions is several region levies, not one org
+ * levy — the declaration says which.
+ */
+export type PayrollAggregateScope = "org" | "region";
+
+/**
+ * WHEN the levy is assessed. `per_run` accrues on every stub; `annual`
+ * accrues nothing per run and settles at year end, because its defining
+ * input (a qualifying spend) is unknowable until then. The generic layer
+ * enforces the distinction rather than trusting it.
+ */
+export type PayrollAggregateTiming = "per_run" | "annual";
+
+/** One marginal band: base up to `upTo` prices at `percent`; null tops out. */
+export interface PayrollAggregateBand {
+  upTo: string | null;
+  percent: string;
+}
+
+/** The band table for one employer class, selected by an org-scope flag. */
+export interface PayrollAggregateClassBands {
+  flag: string;
+  bands: readonly PayrollAggregateBand[];
+}
+
+/**
+ * How the rate resolves from the employer aggregate — the question the
+ * tenant-entered EHT slot answers with "you tell us", made declarative:
+ *
+ * - `flat_percent` — a published percent (a labour-standards levy);
+ * - `marginal_bands` — the rate is a function of the employer's total base,
+ *   priced marginally so the annual total is order-independent (a
+ *   payroll-bracketed health levy). `classBands` specialize by employer
+ *   class; `bands` is the default when no class matches;
+ * - `tenant_slot` — the agency cannot publish it (an experience- or
+ *   payroll-dependent rate), so the employer configures it per year in the
+ *   named org- or region-scope slot and the generic layer reads it back.
+ */
+export type PayrollAggregateRate =
+  | { kind: "flat_percent"; percent: string }
+  | {
+    kind: "marginal_bands";
+    bands?: readonly PayrollAggregateBand[];
+    classBands?: readonly PayrollAggregateClassBands[];
+  }
+  | { kind: "tenant_slot"; slotKey: string; percentField: string };
+
+/**
+ * The annual room a levy prices against:
+ *
+ * - `none` — every stub's base prices whole (an unthresholded levy);
+ * - `employer_allowance` — the first `amount` of employer base in scope is
+ *   sheltered; the stub prices what lands above the remaining shelter (an
+ *   exemption, a threshold);
+ * - `per_employee_cap` — each employee's first `amount` of base prices; the
+ *   stub prices what fits under the remaining headroom (a per-employee
+ *   earnings cap with year-to-date carry).
+ *
+ * A shelter and a ceiling consume in opposite directions; the assessor
+ * implements both and the threshold test pins the difference.
+ */
+export type PayrollAggregateAllowance =
+  | { kind: "none" }
+  | { kind: "employer_allowance"; amount: string }
+  | { kind: "per_employee_cap"; amount: string };
+
+/**
+ * One contribution levied on the employer aggregate. The stub lines it
+ * produces ride a seeded employer-contribution component under `systemKey`
+ * (the component's `assessedOn` must be `earnings` — enforced at wiring, so
+ * a levy can never point at a deduction-sensitive component and drift
+ * across fixpoint passes). `factorKey` namespaces the YTD factors the room
+ * computation reads back.
+ */
+export interface PayrollEmployerAggregateLevy {
+  /** Stable identity: the commit-fence key and the finding trail. */
+  key: string;
+  label: string;
+  /** Seeded component system key the stub lines post under. */
+  systemKey: string;
+  /** Stub line text. */
+  description: string;
+  /** Stub presentation order. */
+  sequence: number;
+  base: { source: PayrollAggregateBaseSource; scope: PayrollAggregateScope };
+  timing: PayrollAggregateTiming;
+  rate: PayrollAggregateRate;
+  allowance: PayrollAggregateAllowance;
+  /**
+   * Org-scope slot holding the employer-class flags `classBands` selects
+   * on. Required when `classBands` is present — classes that can never
+   * match are refused, not silently unpriced.
+   */
+  classSlotKey?: string;
+  /**
+   * Employer-class exclusion (a sector the statute does not levy): the
+   * org-scope slot flag that zeroes the assessment.
+   */
+  excludedBy?: { slotKey: string; flagField: string };
+  /**
+   * Qualifying-spend offset (training spend against a payroll levy).
+   * Annual timing only: spend is unknowable until year end.
+   */
+  offset?: { kind: "tenant_spend"; slotKey: string; amountField: string };
+  /**
+   * Pack opening-field key carrying this employee's pre-adoption base for a
+   * `per_employee_cap` levy, resolved through the pack's own
+   * `openingYtdFields` registry — the generic layer never names a column.
+   */
+  employeeOpeningFieldKey?: string;
+  factorKey: string;
+}
+
+/**
  * One statutory component of a pack: what the engine seeds, what it pushes a
  * line under, what that line is assessed on, and where the withheld amount is
  * remitted. `assessedOn` and `remittance` are required, so a pack cannot add
@@ -392,6 +516,24 @@ export interface PayrollCountryPack {
   applyEmployerLevies?: (
     ctx: PayrollEmployerLevyContext,
   ) => Promise<PayrollEmployerLevyFactors>;
+  /**
+   * Employer-aggregate levies: contributions assessed on the EMPLOYER as a
+   * whole — its total payroll in scope, its sector or employer class, a
+   * year-versioned allowance or cap, an offsetting qualifying spend — rather
+   * than on any one employee's earnings. Absent when the pack levies none
+   * (both built-in packs absent today; the per-employee path above is
+   * untouched by this channel).
+   *
+   * The declaration is DATA the generic layer computes
+   * (engine/src/payroll/employer-aggregate.ts): what the base is and how the
+   * rate resolves from it. The year arrives as an argument because every
+   * figure here is published per tax year, and the declaration REFUSES a
+   * year it has not transcribed — the same doctrine as the tax-year
+   * editions. LAZY (a closure over the tax year), like `openingYtdFields`.
+   */
+  employerAggregateLevies?: (
+    taxYear: number,
+  ) => readonly PayrollEmployerAggregateLevy[];
   /**
    * Second-order opening year-to-date the pack's statutory engine reads for a
    * mid-year adopter: history the BASE opening columns cannot express because

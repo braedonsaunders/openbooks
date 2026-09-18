@@ -29,6 +29,7 @@ import {
   packSlotState,
   PayrollPackError,
   payrollJurisdictionDeclared,
+  PAYROLL_COUNTRY_PACKS,
   remittanceFrequencyBand,
 } from "./payroll/packs.ts";
 import {
@@ -1013,6 +1014,7 @@ export const STALENESS_INPUT_CLASSES = [
   "settings",
   "ytd",
   "openingBalances",
+  "employerLevyYtd",
 ] as const;
 
 /**
@@ -1201,6 +1203,32 @@ export async function payRunStaleness(
                      and mine.pay_run_document_id = r.document_id
                    where os.org_id = r.org_id
                      and os.pay_run_document_id = other.document_id)) as ytd_changed,
+           -- Employer-scope carry-ins (payroll_employer_levy_opening, 0174) are
+           -- the same fact at employer scope: pre-adoption base a declared
+           -- aggregate levy prices its room against. Scoped to the countries
+           -- on the run's schedule, like the statutory-rates arm above — a
+           -- carry-in for a pack nobody on this run pays under is not this
+           -- run's news. Reported under "openingBalances": it IS an opening
+           -- balance edit.
+           (exists (
+             select 1 from payroll_employer_levy_opening eo
+              where eo.org_id = r.org_id and eo.tax_year = r.tax_year
+                and eo.updated_at > r.calculated_at
+                and exists (
+                  select 1 from employee_payroll_profiles prof
+                   where prof.org_id = r.org_id
+                     and prof.pay_schedule_id = r.pay_schedule_id
+                     and prof.is_active and prof.country = eo.country))
+            or exists (
+             select 1 from audit_log al
+              where al.org_id = r.org_id and al.table_name = 'payroll_employer_levy_opening'
+                and al.at > r.calculated_at
+                and (al.changes->>'taxYear')::int = r.tax_year
+                and exists (select 1 from employee_payroll_profiles prof
+                             where prof.org_id = r.org_id
+                               and prof.pay_schedule_id = r.pay_schedule_id
+                               and prof.is_active
+                               and prof.country = al.changes->>'country'))) or
            -- Statutory carry-ins are the ONLY input for this year's annual
            -- ceilings (payroll-opening-balances.ts). A carry-in saved, changed
            -- or deleted for someone on the run after it was calculated makes
@@ -1234,6 +1262,15 @@ export async function payRunStaleness(
   // A missing run is not a fresh run. Fail closed and say why.
   if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
   if (row.never_calculated) return { stale: false, reasons: [], calculatedAt: null };
+  // Employer-aggregate room consumed elsewhere. The `ytd` arm above only
+  // fires on a SHARED employee, so a committed run on a disjoint roster
+  // sails past it while burning the same threshold allowance — the exact
+  // over-consumption the commit-time levy fence serializes for. This arm is
+  // the fence's other half: gated on a pack declaring per-run aggregate
+  // levies for this year, so years without them behave exactly as before.
+  const employerLevyYtdChanged = await employerLevyRoomConsumed(
+    orgId, documentId, executor, allowedSubsidiaryIds,
+  );
   let selectionChanged = false;
   let exactTimeChanged = false;
   let exactTimeTypesChanged = false;
@@ -1280,6 +1317,7 @@ export async function payRunStaleness(
     row.settings_changed ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
     row.opening_balances_changed ? "openingBalances" : null,
+    employerLevyYtdChanged ? "employerLevyYtd" : null,
   ].filter((r): r is string => r !== null);
   return {
     stale: reasons.length > 0,
@@ -1288,6 +1326,73 @@ export async function payRunStaleness(
       ? row.calculated_at.toISOString()
       : (row.calculated_at ?? null),
   };
+}
+
+/**
+ * Whether another run committed (or voided) employer-aggregate room after
+ * this run calculated. Two queries, both scoped narrow:
+ *
+ * 1. the run's tax year and the countries on its schedule — against which
+ *    the pack declarations are read. A pack that refuses the year (nothing
+ *    transcribed) contributes no levies here: the run could not have
+ *    calculated any, and the refusal must not break the staleness answer
+ *    for the inputs it did read;
+ * 2. only when a per-run aggregate levy is actually declared, whether any
+ *    OTHER run in the year committed or voided after this run calculated.
+ *    No roster join: sharing no employee is exactly the case the `ytd` arm
+ *    misses, and a shared roster already stales through it.
+ */
+async function employerLevyRoomConsumed(
+  orgId: string,
+  documentId: string,
+  executor: Pick<typeof db, "execute">,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<boolean> {
+  const run = (await executor.execute<{
+    tax_year: number; calculated_at: Date | string | null; countries: (string | null)[];
+  }>(sql`
+    select r.tax_year, r.calculated_at,
+           array_remove(array_agg(distinct prof.country), null) as countries
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+      left join employee_payroll_profiles prof
+        on prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+       and prof.is_active
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+     group by r.tax_year, r.calculated_at
+  `));
+  const info = run.rows[0];
+  if (!info || info.calculated_at === null) return false;
+  const roster = new Set(info.countries.filter((c): c is string => c !== null));
+  let declared = false;
+  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+    if (!roster.has(country)) continue;
+    let levies: readonly { timing: string }[];
+    try {
+      levies = pack.employerAggregateLevies?.(info.tax_year) ?? [];
+    } catch {
+      continue;
+    }
+    if (levies.some((levy) => levy.timing === "per_run")) {
+      declared = true;
+      break;
+    }
+  }
+  if (!declared) return false;
+  const calculatedAt = info.calculated_at instanceof Date
+    ? info.calculated_at.toISOString()
+    : info.calculated_at;
+  const consumed = (await executor.execute<{ consumed: boolean }>(sql`
+    select exists (
+      select 1 from pay_runs other
+       where other.org_id = ${orgId} and other.document_id <> ${documentId}
+         and other.tax_year = ${info.tax_year}
+         and other.run_status in ('committed', 'voided')
+         and other.updated_at > ${calculatedAt}
+    ) as consumed
+  `));
+  return consumed.rows[0]!.consumed;
 }
 
 /**
