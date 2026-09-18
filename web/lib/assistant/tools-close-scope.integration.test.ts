@@ -19,7 +19,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { ensureCloseDefaults } = await import('@openbooks/engine/src/close.ts');
 const { executeAssistantTool } = await import('./registry');
@@ -40,11 +40,11 @@ function userFor(orgId: string, userId: string): SessionUser {
 }
 
 test('close assistant reads return the cockpit state for an org-wide close.read caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
-    const defaults = await ensureCloseDefaults(org.orgId, actors.adminId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+    const defaults = await withOrgContext(org.orgId, () => ensureCloseDefaults(org.orgId, actors.adminId));
+    const inserted = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -52,32 +52,32 @@ test('close assistant reads return the cockpit state for an org-wide close.read 
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `));
+    `)));
     const runId = inserted.rows[0]!.id;
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into close_run_tasks
         (org_id, run_id, key, title, workstream, task_type, completion_mode, gate_type, status, sort_order)
       values
         (${org.orgId}, ${runId}, 'reconcile-cash', 'Reconcile cash', 'close', 'checklist', 'manual', 'none', 'done', 1),
         (${org.orgId}, ${runId}, 'accrue-payroll', 'Accrue payroll', 'close', 'checklist', 'manual', 'none', 'open', 2)
-    `);
-    await db.execute(sql`
+    `));
+    await withBypassContext(() => db.execute(sql`
       insert into close_exceptions
         (org_id, run_id, code, category, severity, status, title, message)
       values (${org.orgId}, ${runId}, 'UNRECONCILED', 'banking', 'critical', 'open', 'Cash unreconciled', 'One account is out by a dollar')
-    `);
-    await db.execute(sql`
+    `));
+    await withBypassContext(() => db.execute(sql`
       insert into close_signoffs (org_id, run_id, signoff_type, decision, signed_by)
       values (${org.orgId}, ${runId}, 'review', 'approved', ${actors.adminId})
-    `);
-    await db.execute(sql`
+    `));
+    await withBypassContext(() => db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, module, state, reason)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, 'gl', 'closed', 'scope-fixture')
-    `);
-    await db.execute(sql`
+    `));
+    await withBypassContext(() => db.execute(sql`
       insert into close_reopen_requests (org_id, period_id, book_id, modules, reason, requested_by)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, '["gl"]'::jsonb, 'correct a misposting', ${actors.adminId})
-    `);
+    `));
     const authz = {
       user: userFor(org.orgId, actors.adminId),
       permissions: new Set(['assistant.use', 'close.read', 'close.reopen', 'periods.manage']),
@@ -125,11 +125,11 @@ test('close assistant reads return the cockpit state for an org-wide close.read 
 });
 
 test('close assistant reads fail closed for restricted-subsidiary and unpermitted callers', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
-    const defaults = await ensureCloseDefaults(org.orgId, actors.adminId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+    const defaults = await withOrgContext(org.orgId, () => ensureCloseDefaults(org.orgId, actors.adminId));
+    const inserted = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -137,7 +137,7 @@ test('close assistant reads fail closed for restricted-subsidiary and unpermitte
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `));
+    `)));
     const runId = inserted.rows[0]!.id;
     // A restricted-subsidiary caller holds close.read but the cockpit scope
     // rule (guardCloseScope) denies them — the tools must agree.
@@ -165,12 +165,12 @@ test('close assistant reads fail closed for restricted-subsidiary and unpermitte
 });
 
 test('close run status in another org reads as missing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const first = await createScratchOrg();
-  const second = await createScratchOrg();
+  const first = await withBypassContext(() => createScratchOrg());
+  const second = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(first.orgId);
-    const defaults = await ensureCloseDefaults(first.orgId, actors.adminId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const actors = await withBypassContext(() => seedFlowActors(first.orgId));
+    const defaults = await withOrgContext(first.orgId, () => ensureCloseDefaults(first.orgId, actors.adminId));
+    const inserted = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -178,9 +178,9 @@ test('close run status in another org reads as missing', { skip: !process.env.OP
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `));
+    `)));
     const runId = inserted.rows[0]!.id;
-    const otherActors = await seedFlowActors(second.orgId);
+    const otherActors = await withBypassContext(() => seedFlowActors(second.orgId));
     const authz = {
       user: userFor(second.orgId, otherActors.adminId),
       permissions: new Set(['assistant.use', 'close.read']),

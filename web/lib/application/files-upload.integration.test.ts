@@ -20,7 +20,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
@@ -47,11 +47,11 @@ function ctxFor(orgId: string, userId: string, permissions: string[]): Applicati
 const contentBase64 = Buffer.from("cabinet probe").toString("base64");
 
 test("upload_file writes through cabinet storage, replays idempotently, and enforces folder grants", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   // Real user rows: the idempotency ledger requires the actor to belong to
   // the org. Permissions ride the fabricated context, as in the unit gates.
-  const userId = await createScratchUser(org.orgId, "Upload prober", "upload_prober");
-  const viewerId = await createScratchUser(org.orgId, "Upload viewer", "upload_viewer");
+  const userId = await withBypassContext(() => createScratchUser(org.orgId, "Upload prober", "upload_prober"));
+  const viewerId = await withBypassContext(() => createScratchUser(org.orgId, "Upload viewer", "upload_viewer"));
   const folderId = randomUUID();
   const definition = applicationTool("upload_file");
   assert.ok(definition, "upload_file must be registered");
@@ -96,9 +96,9 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
 
     });
     // A folder id from another org must not resolve, even for a manager.
-    const orgB = await createScratchOrg();
+    const orgB = await withBypassContext(() => createScratchOrg());
     try {
-      const userB = await createScratchUser(orgB.orgId, "Upload outsider", "upload_outsider");
+      const userB = await withBypassContext(() => createScratchUser(orgB.orgId, "Upload outsider", "upload_outsider"));
       await withOrgContext(orgB.orgId, async () => {
         const outsider = ctxFor(orgB.orgId, userB, ["documents.manage"]);
         await assert.rejects(

@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { default: Audit } = await import("../app/(app)/admin/audit/page");
 
@@ -34,12 +34,12 @@ const cases: Array<{ mode: "restricted" | "empty" | "all"; query?: Record<string
 ];
 for (const { mode, query = {}, invalid = false } of cases) {
   test(`company audit viewer scope: ${mode} ${JSON.stringify(query)}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const actor = await createScratchUser(org.orgId, "Scoped auditor", "audit_reviewer");
+      const actor = await withBypassContext(() => createScratchUser(org.orgId, "Scoped auditor", "audit_reviewer"));
       const restriction = mode === "all" ? { mode: "all" } : { mode: "list", subsidiaryIds: mode === "empty" ? [] : [org.subsidiaryId] };
-      await db.execute(sql`update app_roles set permissions='["admin.audit.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
-        where org_id=${org.orgId} and key='audit_reviewer'`);
+      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["admin.audit.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+        where org_id=${org.orgId} and key='audit_reviewer'`));
       session.user = { id: actor, orgId: org.orgId, name: "Scoped auditor", email: "auditor@scratch.test", roles: [], isSuperAdmin: false,
         envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
       const hiddenSubsidiary = randomUUID();
@@ -48,8 +48,8 @@ for (const { mode, query = {}, invalid = false } of cases) {
       // Its retained snapshot and even its presence/count remain disclosures.
       const evidence = { before: { document: { id: randomUUID(), subsidiary_id: hiddenSubsidiary,
         kind: "customer_invoice", number: "PRIVATE-AUDIT-DOCUMENT" }, lines: [{ amount: "98765.4300" }] } };
-      await db.execute(sql`insert into audit_log(id,org_id,table_name,row_id,action,changes,actor_id)
-        values (${eventId},${org.orgId},'documents',${evidence.before.document.id},'delete',${JSON.stringify(evidence)}::jsonb,${actor})`);
+      await withBypassContext(() => db.execute(sql`insert into audit_log(id,org_id,table_name,row_id,action,changes,actor_id)
+        values (${eventId},${org.orgId},'documents',${evidence.before.document.id},'delete',${JSON.stringify(evidence)}::jsonb,${actor})`));
       const invoke = () => withOrgContext(org.orgId, () => Audit({ searchParams: Promise.resolve({ event: eventId, ...query }) }));
       if (mode === "all" && !invalid) {
         const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
