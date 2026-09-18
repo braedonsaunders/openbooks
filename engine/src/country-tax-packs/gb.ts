@@ -57,19 +57,41 @@ export const UNITED_KINGDOM_TAX_PACK: CountryTaxPackDefinition = {
   jurisdictions: [],
   returnPacks: [GB_VAT100],
   returnPackTaxCodes: {
-    GB_VAT100: {
-      code: "GB-VAT-STD",
-      name: "United Kingdom standard VAT",
-      ratePercent: 20,
-      rates: [
-        { ratePercent: 10, effectiveFrom: "1973-04-01", effectiveTo: "1974-07-28", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 8, effectiveFrom: "1974-07-29", effectiveTo: "1979-06-17", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 15, effectiveFrom: "1979-06-18", effectiveTo: "1991-03-31", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 17.5, effectiveFrom: "1991-04-01", effectiveTo: "2008-11-30", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 15, effectiveFrom: "2008-12-01", effectiveTo: "2009-12-31", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 17.5, effectiveFrom: "2010-01-01", effectiveTo: "2011-01-03", sourceId: "hmrc_vat_rate_history" },
-        { ratePercent: 20, effectiveFrom: "2011-01-04", sourceId: "hmrc_vat_rate_history" },
-      ],
-    },
+    GB_VAT100: [
+      {
+        code: "GB-VAT-STD",
+        name: "United Kingdom standard VAT",
+        role: "standard",
+        ratePercent: 20,
+        rates: [
+          { ratePercent: 10, effectiveFrom: "1973-04-01", effectiveTo: "1974-07-28", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 8, effectiveFrom: "1974-07-29", effectiveTo: "1979-06-17", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 15, effectiveFrom: "1979-06-18", effectiveTo: "1991-03-31", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 17.5, effectiveFrom: "1991-04-01", effectiveTo: "2008-11-30", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 15, effectiveFrom: "2008-12-01", effectiveTo: "2009-12-31", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 17.5, effectiveFrom: "2010-01-01", effectiveTo: "2011-01-03", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 20, effectiveFrom: "2011-01-04", sourceId: "hmrc_vat_rate_history" },
+        ],
+      },
+      {
+        code: "GB-VAT-RED",
+        name: "United Kingdom reduced VAT",
+        role: "reduced",
+        ratePercent: 5,
+        rates: [
+          { ratePercent: 8, effectiveFrom: "1994-04-01", effectiveTo: "1997-08-31", sourceId: "hmrc_vat_rate_history" },
+          { ratePercent: 5, effectiveFrom: "1997-09-01", sourceId: "hmrc_vat_rate_history" },
+        ],
+      },
+      {
+        code: "GB-VAT-ZERO",
+        name: "United Kingdom zero-rate VAT",
+        role: "zero",
+        ratePercent: 0,
+        rates: [
+          { ratePercent: 0, effectiveFrom: "1973-04-01", sourceId: "hmrc_vat_rate_history" },
+        ],
+      },
+    ],
   },
 };

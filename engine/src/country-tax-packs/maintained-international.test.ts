@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries } from "../tax-pack-provisioning.ts";
-import { COUNTRY_TAX_PACKS } from "./index.ts";
+import { COUNTRY_TAX_PACKS, packTaxCodesForReturn } from "./index.ts";
 import type { CountryTaxPackDefinition, EffectiveTaxRate } from "./types.ts";
 
 const maintainedCountries = ["AU", "NZ", "GB", "DE", "FR"] as const;
@@ -74,6 +74,26 @@ test("United Kingdom VAT carries HMRC's complete standard-rate history and curre
   assert.match(boxes.find((box) => box.lineCode === "2")!.label, /Northern Ireland/);
   assert.match(boxes.find((box) => box.lineCode === "8")!.label, /Northern Ireland/);
   assert.match(boxes.find((box) => box.lineCode === "9")!.label, /Northern Ireland/);
+});
+
+test("United Kingdom VAT100 carries standard, reduced, and zero-rate codes from HMRC Notice 700", () => {
+  const codes = packTaxCodesForReturn(pack("GB"), "GB_VAT100");
+  assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
+    ["GB-VAT-STD", "standard", 20],
+    ["GB-VAT-RED", "reduced", 5],
+    ["GB-VAT-ZERO", "zero", 0],
+  ]);
+  const reduced = codes.find((code) => code.code === "GB-VAT-RED")!;
+  assert.deepEqual(reduced.rates, [
+    { ratePercent: 8, effectiveFrom: "1994-04-01", effectiveTo: "1997-08-31", sourceId: "hmrc_vat_rate_history" },
+    { ratePercent: 5, effectiveFrom: "1997-09-01", sourceId: "hmrc_vat_rate_history" },
+  ]);
+  assertContiguous(reduced.rates ?? []);
+  const zero = codes.find((code) => code.code === "GB-VAT-ZERO")!;
+  assert.deepEqual(zero.rates, [
+    { ratePercent: 0, effectiveFrom: "1973-04-01", sourceId: "hmrc_vat_rate_history" },
+  ]);
+  assert.equal(PACK_DEFAULT_CODES.GB_VAT100?.code, "GB-VAT-STD");
 });
 
 test("Germany uses the official 2026 UStVA identifiers and preserves the temporary 2020 rate reduction", () => {
