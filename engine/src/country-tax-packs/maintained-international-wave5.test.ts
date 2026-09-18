@@ -4,7 +4,9 @@ import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries } fr
 import { COUNTRY_TAX_PACKS, packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import type { CountryTaxPackDefinition, EffectiveTaxRate } from "./types.ts";
 
-const maintainedCountries = ["PT", "DK", "NO", "SA", "TR", "CZ"] as const;
+// CZ is deliberately absent: its pack is held unregistered pending re-sourcing
+// away from another ERP vendor's documentation. See the BRIEF's held-packs table.
+const maintainedCountries = ["PT", "DK", "NO", "SA", "TR"] as const;
 
 function pack(country: (typeof maintainedCountries)[number]): CountryTaxPackDefinition {
   const value = COUNTRY_TAX_PACKS.find((entry) => entry.country === country);
@@ -150,11 +152,9 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     // Sovos regulatory update on Government Bill 488: the only reachable
     // attestation of the 15%+10% to 12% consolidation and its 2024-01-01
     // date. See the Czechia pack doc comment.
-    sovos_cz_consolidation_2024: "sovos.com",
     // learn.microsoft.com documentation page for the Czech VAT declaration
     // rows and DPHDP3/DPHKH1 formats: no FS-hosted equivalent is reachable.
     // See the Czechia pack doc comment.
-    msft_dynamics_cz_rows: "learn.microsoft.com",
     // 2008 professional circular quoting BKK 2007/13033 (RG 30.12.2007/26742,
     // 18/8/1 bands valid in 2008): the gazette and mevzuat.gov.tr are
     // unreachable from this sandbox. See the Türkiye pack doc comment.
