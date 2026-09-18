@@ -35,7 +35,8 @@
     "expectedPayments": "支払予定",
     "topCustomers": "主要顧客",
     "topVendors": "主要仕入先",
-    "openCount": "{count, plural, one {# 件の未処理} other {# 件の未処理}}"
+    "openCount": "{count, plural, one {# 件の未処理} other {# 件の未処理}}",
+    "runway": "資金繰り期間"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -51,7 +52,11 @@
     "noData": "データなし",
     "next30Days": "今後30日間",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "{date}の週",
+    "noBurn": "正味の流出なし",
+    "cashShortfall": "資金不足",
+    "runwayWeeks": "{weeks, plural, one {# 週間の資金繰り} other {# 週間の資金繰り}}"
   },
   "categories": {
     "kpi": "ヘッドライン",
@@ -84,7 +89,8 @@
     "expectedReceipts": "今後30日間の入金見込み（基軸通貨）。",
     "expectedPayments": "今後30日間の支払見込み（基軸通貨）。",
     "topCustomers": "未収残高の大きい顧客上位5件。",
-    "topVendors": "未払残高の大きい仕入先上位5件。"
+    "topVendors": "未払残高の大きい仕入先上位5件。",
+    "runway": "今後数週間の予測残高と資金繰り期間（基軸通貨）。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

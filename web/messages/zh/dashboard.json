@@ -35,7 +35,8 @@
     "expectedPayments": "预计付款",
     "topCustomers": "主要客户",
     "topVendors": "主要供应商",
-    "openCount": "{count, plural, one {# 笔未结} other {# 笔未结}}"
+    "openCount": "{count, plural, one {# 笔未结} other {# 笔未结}}",
+    "runway": "现金可维持"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -51,7 +52,11 @@
     "noData": "暂无数据",
     "next30Days": "未来30天",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "{date} 当周",
+    "noBurn": "无净流出",
+    "cashShortfall": "现金短缺",
+    "runwayWeeks": "{weeks, plural, one {# 周现金可维持} other {# 周现金可维持}}"
   },
   "categories": {
     "kpi": "要点",
@@ -84,7 +89,8 @@
     "expectedReceipts": "未来30天预计客户回款（本位币）。",
     "expectedPayments": "未来30天预计供应商付款（本位币）。",
     "topCustomers": "排名前五的客户未结余额。",
-    "topVendors": "排名前五的供应商未结余额。"
+    "topVendors": "排名前五的供应商未结余额。",
+    "runway": "未来几周的预计现金与可维持期（本位币）。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

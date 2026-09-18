@@ -35,7 +35,8 @@
     "expectedPayments": "Paiements prévus",
     "topCustomers": "Principaux clients",
     "topVendors": "Principaux fournisseurs",
-    "openCount": "{count, plural, one {# ouvert} other {# ouverts}}"
+    "openCount": "{count, plural, one {# ouvert} other {# ouverts}}",
+    "runway": "Autonomie de trésorerie"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -51,7 +52,11 @@
     "noData": "Aucune donnée",
     "next30Days": "30 prochains jours",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "semaine du {date}",
+    "noBurn": "Aucune consommation nette",
+    "cashShortfall": "Manque de trésorerie",
+    "runwayWeeks": "{weeks, plural, one {# semaine d'autonomie} other {# semaines d'autonomie}}"
   },
   "categories": {
     "kpi": "Indicateurs clés",
@@ -84,7 +89,8 @@
     "expectedReceipts": "Encaissements clients prévus sur les 30 prochains jours, en devise de référence.",
     "expectedPayments": "Paiements fournisseurs prévus sur les 30 prochains jours, en devise de référence.",
     "topCustomers": "Les cinq plus gros soldes clients ouverts.",
-    "topVendors": "Les cinq plus gros soldes fournisseurs ouverts."
+    "topVendors": "Les cinq plus gros soldes fournisseurs ouverts.",
+    "runway": "Trésorerie projetée et autonomie des prochaines semaines, en devise de référence."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",

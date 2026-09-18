@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   FileText,
+  Hourglass,
   Landmark,
   Layers,
   NotebookPen,
@@ -52,6 +53,13 @@ export function WidgetCard({
   // A stock tile's hint stays stable when its average is unavailable (a pruned
   // or legacy payload): the DSO/DPO qualifier appends, never replaces.
   const stockHint = (base: string, extra: string | null) => (extra ? `${base} · ${extra}` : base)
+  // Noon-anchored like the as-of label above: a bare YYYY-MM-DD parses as
+  // UTC midnight and would render a day early west of Greenwich.
+  const fmtDay = (iso: string) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(`${iso}T12:00:00Z`))
+  // Runway weeks read whole past ten, one decimal below — the precise
+  // figure lives behind the tile's link on the banking page.
+  const displayWeeks = (weeks: number) => (weeks >= 10 ? Math.round(weeks) : Math.round(weeks * 10) / 10)
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -99,6 +107,21 @@ export function WidgetCard({
       return data.expectedPayments30d === null
         ? <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value="—" href="/ap" tone="amber" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value={money(data.expectedPayments30d, { currency: data.baseCurrency })} href="/ap" tone="amber" hint={withAsOf(t('metricContext.next30Days'))} />
+    case 'kpi-cash-runway': {
+      // Status is tone as well as text: a shortfall reads rose before a
+      // single word is parsed. The figure is the projected end — where cash
+      // lands at the horizon — with the runway or the shortfall beneath it.
+      const tone = data.runwayStatus === 'critical' ? 'rose' : data.runwayStatus === 'caution' ? 'amber' : 'emerald'
+      if (data.projectedCash === null) {
+        return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value="—" href="/banking/cash" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
+      }
+      const state = data.runwayStatus === 'critical'
+        ? `${t('metricContext.cashShortfall')} · ${t('metricContext.weekOf', { date: fmtDay(data.lowestCashWeek ?? data.asOfDate) })}`
+        : data.runwayWeeks === null
+          ? t('metricContext.noBurn')
+          : t('metricContext.runwayWeeks', { weeks: displayWeeks(Number(data.runwayWeeks)) })
+      return <MetricTile icon={<Hourglass size={15} />} label={t('widgets.runway')} value={money(data.projectedCash, { currency: data.baseCurrency })} href="/banking/cash" tone={tone} hint={withAsOf(state)} />
+    }
     case 'kpi-overdue-payables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-revenue-mtd':

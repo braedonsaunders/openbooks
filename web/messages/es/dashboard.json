@@ -35,7 +35,8 @@
     "expectedPayments": "Pagos previstos",
     "topCustomers": "Principales clientes",
     "topVendors": "Principales proveedores",
-    "openCount": "{count, plural, one {# abierto} other {# abiertos}}"
+    "openCount": "{count, plural, one {# abierto} other {# abiertos}}",
+    "runway": "Autonomía de caja"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -51,7 +52,11 @@
     "noData": "Sin datos",
     "next30Days": "Próximos 30 días",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "semana del {date}",
+    "noBurn": "Sin consumo neto",
+    "cashShortfall": "Déficit de caja",
+    "runwayWeeks": "{weeks, plural, one {# semana de autonomía} other {# semanas de autonomía}}"
   },
   "categories": {
     "kpi": "Indicadores clave",
@@ -84,7 +89,8 @@
     "expectedReceipts": "Cobros de clientes previstos para los próximos 30 días, en moneda base.",
     "expectedPayments": "Pagos a proveedores previstos para los próximos 30 días, en moneda base.",
     "topCustomers": "Los cinco mayores saldos de clientes pendientes.",
-    "topVendors": "Los cinco mayores saldos de proveedores pendientes."
+    "topVendors": "Los cinco mayores saldos de proveedores pendientes.",
+    "runway": "Saldo proyectado y autonomía de las próximas semanas, en moneda base."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

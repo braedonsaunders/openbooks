@@ -74,6 +74,12 @@ function denialSpies(calls: string[]): DashboardMoneyReaders {
       calls.push(`paymentStats:${args[0]}`);
       throw new Error("paymentStats must not run for a denied widget");
     }) as DashboardMoneyReaders["paymentStats"],
+    cashPosition: (async () => {
+      throw new Error("cashPosition must not run for a denied widget");
+    }) as DashboardMoneyReaders["cashPosition"],
+    cashflowConfig: (async () => {
+      throw new Error("cashflowConfig must not run for a denied widget");
+    }) as DashboardMoneyReaders["cashflowConfig"],
   };
 }
 
@@ -135,6 +141,12 @@ test("the visible set — not the permission check — selects the queries", { s
         calls.push(`paymentStats:${args[0]}`);
         return { map: new Map(), globalAvg: 45 };
       }) as DashboardMoneyReaders["paymentStats"],
+      cashPosition: (async () => {
+        throw new Error("cashPosition must not run here");
+      }) as DashboardMoneyReaders["cashPosition"],
+      cashflowConfig: (async () => {
+        throw new Error("cashflowConfig must not run here");
+      }) as DashboardMoneyReaders["cashflowConfig"],
     };
     const allowedId = await withBypass(() => createScratchUser(org.orgId, "AR Reader", "staff"));
     const allowed = authzFor(org.orgId, allowedId as unknown as string, ["dashboard.read", "ar.read"]);
@@ -172,6 +184,14 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
         return { revenue: "0", netIncome: "0", grossProfit: "0" };
       }) as unknown as DashboardMoneyReaders["profitAndLoss"],
       paymentStats: (async (...args: Parameters<DashboardMoneyReaders["paymentStats"]>) => { calls.push(`paymentStats:${args[0]}`); return { map: new Map(), globalAvg: 45 }; }) as DashboardMoneyReaders["paymentStats"],
+      cashPosition: (async () => {
+        calls.push("cashPosition");
+        return { runwayWeeks: "40", runwayStatus: "healthy", projectedEnd: "4300", lowestCash: "4300", lowestWeek: "2026-07-20" };
+      }) as unknown as DashboardMoneyReaders["cashPosition"],
+      cashflowConfig: (async () => {
+        calls.push("cashflowConfig");
+        return { weeklyCap: "0.0000", restrictToSafe: false };
+      }) as DashboardMoneyReaders["cashflowConfig"],
     };
     const fullId = await withBypass(() => createScratchUser(org.orgId, "Full Reader", "admin"));
     const full = authzFor(org.orgId, fullId as unknown as string, ["dashboard.read", "gl.read", "ar.read", "ap.read"]);
@@ -182,6 +202,8 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
     assert.ok(calls.includes("profitAndLoss"), "default still queries the P&L reader");
     assert.ok(calls.includes("paymentStats:ar"), "default still queries AR settlement stats");
     assert.ok(calls.includes("paymentStats:ap"), "default still queries AP settlement stats");
+    assert.ok(calls.includes("cashflowConfig"), "default still reads the cashflow config");
+    assert.ok(calls.includes("cashPosition"), "default still queries the cash position");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
