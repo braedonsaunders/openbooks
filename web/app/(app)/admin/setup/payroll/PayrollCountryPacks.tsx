@@ -39,10 +39,14 @@ export interface PackCoverage {
 
 export function PayrollCountryPacks({
   installedCountries,
+  installable,
   componentCount,
   coverage,
 }: {
   installedCountries: string[]
+  /** Every pack the registry declares installable — the grid renders one card
+   * per entry, so a new pack appears with no component edit. */
+  installable: string[]
   componentCount: number
   coverage: PackCoverage[]
 }) {
@@ -70,7 +74,7 @@ export function PayrollCountryPacks({
     [coverage, monthYear],
   )
 
-  async function install(country: 'CA' | 'US') {
+  async function install(country: string) {
     setBusy(country)
     try {
       const res = await fetch('/api/payroll/settings', {
@@ -90,7 +94,7 @@ export function PayrollCountryPacks({
     }
   }
 
-  async function uninstall(country: 'CA' | 'US') {
+  async function uninstall(country: string) {
     const ok = await confirmDialog({
       title: t('uninstallTitle'),
       message: t('uninstallConfirm'),
@@ -154,18 +158,50 @@ export function PayrollCountryPacks({
     )
   }
 
-  const packCard = (country: 'CA' | 'US', packKey: 'canada' | 'us', bullets: React.ReactNode[]) => {
+  /**
+   * Locale namespace per pack. Pack copy is pack CONTENT, not a country
+   * allowlist: an installable pack with no namespace here still renders —
+   * under its country code with its data-driven lines — the way the setup
+   * wizard already falls back (payroll-pack-display.ts). Adding copy for a
+   * new pack is a translation edit, never a component edit.
+   */
+  const packI18nKey = (country: string) =>
+    ({ CA: 'canada', US: 'us' })[country] ?? country.toLowerCase()
+  const packCopy = (country: string, key: string, fallback: string) => {
+    const namespaced = `${packI18nKey(country)}.${key}`
+    return t.has(namespaced as never) ? t(namespaced as never) : fallback
+  }
+
+  const packCard = (country: string) => {
     const isInstalled = installed.has(country)
+    // Data-driven lines every pack gets: the statutory-engine editions and
+    // the loaded-years coverage, both read off the pack declaration. The
+    // remaining bullets are pack copy where it exists — the same keys in the
+    // same order as the per-pack cards this replaces, so CA/US read
+    // identically and a pack with no copy ships an honest sparse card.
+    const bullets = [
+      <span key="engine">
+        {packCopy(country, 'engine', label('engine', 'Statutory engine'))}{' '}
+        <span className="text-slate-500 dark:text-slate-400">{editionLabels(country).join(' + ')}</span>
+      </span>,
+      coverageLine(country),
+      ...(['coverage', 'components', 'verified', 'config'] as const).flatMap((key) => {
+        const namespaced = `${packI18nKey(country)}.${key}`
+        return t.has(namespaced as never)
+          ? [<span key={key}>{t(namespaced as never)}</span>]
+          : []
+      }),
+    ]
     return (
-      <Card>
+      <Card key={country}>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Globe2 size={18} className="text-slate-400" aria-hidden />
-                {t(`${packKey}.title`)}
+                {packCopy(country, 'title', country)}
               </CardTitle>
-              <CardDescription className="mt-1">{t(`${packKey}.description`)}</CardDescription>
+              <CardDescription className="mt-1">{packCopy(country, 'description', '')}</CardDescription>
             </div>
             {isInstalled ? (
               <Badge variant="success" className="shrink-0">
@@ -215,26 +251,7 @@ export function PayrollCountryPacks({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        {packCard('CA', 'canada', [
-          <span key="engine">
-            {t('canada.engine')}{' '}
-            <span className="text-slate-500 dark:text-slate-400">{editionLabels('CA').join(' + ')}</span>
-          </span>,
-          coverageLine('CA'),
-          t('canada.coverage'),
-          t('canada.components'),
-          t('canada.verified'),
-        ])}
-        {packCard('US', 'us', [
-          <span key="engine">
-            {t('us.engine')}{' '}
-            <span className="text-slate-500 dark:text-slate-400">{editionLabels('US').join(' + ')}</span>
-          </span>,
-          coverageLine('US'),
-          t('us.coverage'),
-          t('us.components'),
-          t('us.config'),
-        ])}
+        {installable.map((country) => packCard(country))}
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
     </div>
