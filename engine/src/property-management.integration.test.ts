@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypassContext } from "./db.ts";
 import { reverseProjectGlEntry } from "./project-recognition.ts";
 import {
   PropertyManagementError,
@@ -222,6 +222,18 @@ for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as cons
       assert.deepEqual(row, { status: "open", actual: null, allocations: 0 });
       assert.equal((await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize")).length, 0);
     } finally {
+      // Undo the deliberately broken book policy under the same sanctioned
+      // migration flag used to represent it: the pooled reset restores the
+      // baseline by re-marking the primary book, and the book-history guard
+      // refuses that repair while journals exist. Leaving the invalid state
+      // behind taints the lease.
+      await withBypassContext(() => db.transaction(async (tx) => {
+        await tx.execute(sql`set local openbooks.migration='on'`);
+        if (policy === "missing") await tx.execute(sql`update accounting_books set is_primary=true where org_id=${fixture.org.orgId} and id=${fixture.org.bookId}`);
+        if (policy === "inactive") await tx.execute(sql`update accounting_books set is_active=true where org_id=${fixture.org.orgId}`);
+        if (policy === "non-posting") await tx.execute(sql`update accounting_books set posts_gl=true where org_id=${fixture.org.orgId}`);
+        if (policy === "ambiguous") await tx.execute(sql`delete from accounting_books where org_id=${fixture.org.orgId} and code='CAM-AMBIGUOUS'`);
+      }));
       await dropScratchOrg(fixture.org.orgId);
     }
   });

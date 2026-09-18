@@ -35,7 +35,7 @@ registerHooks({ resolve(specifier, context, next) {
   return resolved;
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { commitPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
@@ -48,16 +48,16 @@ const { GET, POST } = await import("../app/api/payroll/runs/[id]/bank-file/route
  * scope is opaque — its panel is a 404 and generating its file is refused.
  */
 async function opaqueFixture() {
-  const fx = await seedAdoption();
-  await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
-  const { input } = await calculatedRun(fx);
-  await commitPayRun(input);
+  const fx = await withBypassContext(() => seedAdoption());
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+  const { input } = await withBypassContext(() => calculatedRun(fx));
+  await withOrgContext(fx.orgId, () => commitPayRun(input));
   const hidden = randomUUID();
-  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA')`);
-  await db.execute(sql`update parties set subsidiary_id = ${hidden}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+  await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA')`));
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
   return { fx, documentId: input.documentId };
 }
 
@@ -73,18 +73,18 @@ test("bank-file panel hides a run carrying an out-of-scope employee", { skip: !p
   const { fx, documentId } = await opaqueFixture();
   try {
     state.gate = scopedGate(fx, "payroll.read");
-    const refused = await GET(
+    const refused = await withOrgContext(fx.orgId, () => GET(
       new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file"),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
     assert.deepEqual(await refused.json(), { error: "not found" });
 
     state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
-    const visible = await GET(
+    const visible = await withOrgContext(fx.orgId, () => GET(
       new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file"),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(visible.status, 200, JSON.stringify(await visible.clone().json()).slice(0, 300));
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });
@@ -93,19 +93,19 @@ test("bank-file generate refuses a run carrying an out-of-scope employee", { ski
   const { fx, documentId } = await opaqueFixture();
   try {
     state.gate = scopedGate(fx, "payroll.run");
-    const refused = await POST(
+    const refused = await withOrgContext(fx.orgId, () => POST(
       new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ paymentBankProfileId: randomUUID() }),
       }),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(refused.status, 409, JSON.stringify(await refused.clone().json()));
     assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
-    const artifacts = (await db.execute<{ count: string }>(sql`
+    const artifacts = (await withOrgContext(fx.orgId, () => db.execute<{ count: string }>(sql`
       select count(*) as count from pay_run_bank_files
-       where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}`)).rows[0]!.count;
+       where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}`))).rows[0]!.count;
     assert.equal(artifacts, "0", "a refused generate must not leave a bank-file artifact behind");
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });

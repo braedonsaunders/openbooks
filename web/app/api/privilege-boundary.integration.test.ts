@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { BUILT_IN_ROLES } from "@openbooks/engine/src/permissions.ts";
 import {
   createScratchOrg,
@@ -82,9 +82,9 @@ function req(method: string, body?: unknown): Request {
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function seedViewer(orgId: string): Promise<SessionStub> {
-  const id = await createScratchUser(orgId, "Viewer", "viewer");
-  await db.execute(sql`update app_roles set permissions = ${JSON.stringify(BUILT_IN_ROLES.viewer!.permissions)}::jsonb
-    where org_id = ${orgId} and key = 'viewer'`);
+  const id = await withBypassContext(() => createScratchUser(orgId, "Viewer", "viewer"));
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify(BUILT_IN_ROLES.viewer!.permissions)}::jsonb
+    where org_id = ${orgId} and key = 'viewer'`));
   return {
     id, email: `viewer-${id.slice(0, 8)}@scratch.test`, name: "Viewer",
     roles: [{ key: "viewer", name: "Viewer" }],
@@ -94,9 +94,9 @@ async function seedViewer(orgId: string): Promise<SessionStub> {
 }
 
 async function seedOnePerm(orgId: string): Promise<SessionStub> {
-  const id = await createScratchUser(orgId, "ApReader", "ap_reader");
-  await db.execute(sql`update app_roles set permissions = '["ap.read"]'::jsonb
-    where org_id = ${orgId} and key = 'ap_reader'`);
+  const id = await withBypassContext(() => createScratchUser(orgId, "ApReader", "ap_reader"));
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions = '["ap.read"]'::jsonb
+    where org_id = ${orgId} and key = 'ap_reader'`));
   return {
     id, email: `apr-${id.slice(0, 8)}@scratch.test`, name: "ApReader",
     roles: [{ key: "ap_reader", name: "ap reader" }],
@@ -106,21 +106,21 @@ async function seedOnePerm(orgId: string): Promise<SessionStub> {
 }
 
 test("least-privileged viewer is refused by every mutating route", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     // Enable gated features so refusals prove permission checks, not dormant flags.
-    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"features":{"apiAccess":true}}'::jsonb where id = ${org.orgId}`);
+    await withBypassContext(() => db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"features":{"apiAccess":true}}'::jsonb where id = ${org.orgId}`));
     const viewer = await seedViewer(org.orgId);
     // A draft bill plus a live gate so permission checks (not lookups) decide.
-    const draftId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await seedApprovalFlow(org.orgId, {
+    const draftId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
+    await withBypassContext(() => seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
-    });
-    await submitForApproval("vendor_bill", draftId, actors.submitterId);
-    const gateId = (await db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draftId} order by created_at limit 1`)).rows[0]!.id;
+    }));
+    await withBypassContext(() => submitForApproval("vendor_bill", draftId, actors.submitterId));
+    const gateId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draftId} order by created_at limit 1`))).rows[0]!.id;
 
     setUser(viewer);
     const cells: Array<{ name: string; run: () => Promise<Response> }> = [
@@ -142,7 +142,9 @@ test("least-privileged viewer is refused by every mutating route", { skip: !DB }
       { name: "POST scripts endpoint", run: async () => (await import(HANDLERS.runScript)).POST(req("POST", {}), params({ slug: "nope" })) },
     ];
     for (const cell of cells) {
-      const res = await cell.run();
+      // Scoped like a production request: an unscoped run would fail closed
+      // on the lookup and every refusal below would prove nothing.
+      const res = await withOrgContext(org.orgId, () => cell.run());
       assert.ok(
         res.status === 401 || res.status === 403 || res.status === 404,
         `${cell.name}: viewer must be refused, got ${res.status}`,
@@ -155,17 +157,17 @@ test("least-privileged viewer is refused by every mutating route", { skip: !DB }
 });
 
 test("a single-permission custom role can read but never write outside its grant", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const reader = await seedOnePerm(org.orgId);
-    const draftId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    const draftId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
     setUser(reader);
     const { GET } = (await import(HANDLERS.editDoc)) as typeof import("./documents/[id]/route.ts");
-    const seen = await GET(new Request("http://audit.local/x"), params({ id: draftId }));
+    const seen = await withOrgContext(org.orgId, () => GET(new Request("http://audit.local/x"), params({ id: draftId })));
     assert.equal(seen.status, 200, "ap.read holder reads the bill");
     const { POST } = (await import(HANDLERS.docActions)) as typeof import("./documents/actions/route.ts");
-    const refused = await POST(req("POST", { action: "submit", documentId: draftId }));
+    const refused = await withOrgContext(org.orgId, () => POST(req("POST", { action: "submit", documentId: draftId })));
     assert.ok(refused.status === 401 || refused.status === 403 || refused.status === 404, `submit must be refused, got ${refused.status}`);
   } finally {
     setUser(null);
