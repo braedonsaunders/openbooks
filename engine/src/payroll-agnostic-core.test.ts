@@ -181,8 +181,14 @@ test("a third pack's statutory set is its own declaration — nothing Canadian i
 });
 
 test("an unknown country never falls through to anybody's component set", () => {
-  assert.throws(() => packStatutoryComponents("GB"), PayrollPackError);
+  // "GB" used to stand in for "unknown" here, which stopped being true when the
+  // eight written packs were registered. The invariant under test is about an
+  // UNREGISTERED country, so it needs a code the registry does not hold —
+  // otherwise this passes for the wrong reason the day someone adds that pack.
+  assert.throws(() => packStatutoryComponents("XX"), PayrollPackError);
   assert.throws(() => packStatutoryComponents(""), PayrollPackError);
+  // And prove the premise itself, so the test cannot rot silently again.
+  assert.ok(!(  "XX" in PAYROLL_COUNTRY_PACKS), "XX must stay unregistered for this test to mean anything");
 });
 
 test("contributory bases are a required, asserted declaration", async () => {

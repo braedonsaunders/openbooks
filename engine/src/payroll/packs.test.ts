@@ -75,7 +75,11 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93).
   assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
     "GB/PAYE", "DE/LST", "DE/SOLI", "FR/PAS", "IE/PAYE", "AU/PAYG",
-    "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM", "NL/LH", "ES/IRPF"]);
+    // IT/IRPEF, IT/ADDREG and IT/ADDCOM are absent on purpose: the IT pack is
+    // written and proven but held out of the registry pending F-reg-003 (its
+    // engine needs a runtime helper from the generic layer, which closes a
+    // transitive cycle). Restore all three when IT is registered.
+    "NL/LH", "ES/IRPF"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {

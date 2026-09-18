@@ -1351,7 +1351,16 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   FR: FR_PAYROLL_PACK,
   IE: IE_PAYROLL_PACK,
   AU: AU_PAYROLL_PACK,
-  IT: IT_PAYROLL_PACK,
+  // IT is written, proven (IRPEF 23/35/43, AdE Circ. 4/E Esempi 1-3 to the
+  // penny) and deliberately HELD OUT of the registry pending F-reg-003.
+  // Registering it closes a transitive cycle — packs.ts -> it/pack.ts ->
+  // it/compute-statutory.ts -> ../statutory-rates.ts -> packs.ts — because that
+  // helper imports runtime bindings from here. Every other pack dodges the same
+  // edge only by importing the generic layer TYPE-ONLY; Italy is the first pack
+  // to need actual behaviour (resolveStatutoryRates), which it is right to
+  // reuse rather than reimplement. Orchestrate is inverting the dependency so
+  // those consumers take the pack as a parameter; restore this line then.
+  // IT: IT_PAYROLL_PACK,
   NL: NL_PAYROLL_PACK,
   ES: ES_PAYROLL_PACK,
 };
