@@ -50,9 +50,6 @@ export function WidgetCard({
       })
     : null
   const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
-  // A stock tile's hint stays stable when its average is unavailable (a pruned
-  // or legacy payload): the DSO/DPO qualifier appends, never replaces.
-  const stockHint = (base: string, extra: string | null) => (extra ? `${base} · ${extra}` : base)
   // Noon-anchored like the as-of label above: a bare YYYY-MM-DD parses as
   // UTC midnight and would render a day early west of Greenwich.
   const fmtDay = (iso: string) =>
@@ -93,12 +90,22 @@ export function WidgetCard({
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
       return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
-    case 'kpi-open-receivables':
-      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={withAsOf(stockHint(t('metricContext.outstanding'), data.receivablesDso === null ? null : t('metricContext.dso', { days: Math.round(data.receivablesDso) })))} />
+    case 'kpi-open-receivables': {
+      // F-t02-007 pins the withAsOf(outstanding) shape below: a money tile
+      // must state its cut-off. The DSO qualifier appends after it, never
+      // in place of it.
+      const dso = data.receivablesDso === null ? '' : ` · ${t('metricContext.dso', { days: Math.round(data.receivablesDso) })}`
+      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={`${withAsOf(t('metricContext.outstanding'))}${dso}`} />
+    }
     case 'kpi-overdue-receivables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
-    case 'kpi-open-payables':
-      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={withAsOf(stockHint(t('metricContext.outstanding'), data.payablesDpo === null ? null : t('metricContext.dpo', { days: Math.round(data.payablesDpo) })))} />
+    case 'kpi-open-payables': {
+      // F-t02-007 pins the withAsOf(outstanding) shape below: a money tile
+      // must state its cut-off. The DPO qualifier appends after it, never
+      // in place of it.
+      const dpo = data.payablesDpo === null ? '' : ` · ${t('metricContext.dpo', { days: Math.round(data.payablesDpo) })}`
+      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={`${withAsOf(t('metricContext.outstanding'))}${dpo}`} />
+    }
     case 'kpi-expected-receipts-30d':
       return data.expectedReceipts30d === null
         ? <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value="—" href="/ar" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
