@@ -63,6 +63,14 @@ test("Denmark rate history is contiguous", () => {
   }
 });
 
+test("Denmark single 25% band runs back to 1992 as one open row", () => {
+  const definitions = packTaxCodesForReturn(pack, "DK_MOMS");
+  assert.equal(definitions.length, 1);
+  assert.deepEqual(definitions[0]!.rates, [
+    { ratePercent: 25, effectiveFrom: "1992-01-01", sourceId: "dst_skatter_avgifter_1999" },
+  ]);
+});
+
 test("Denmark primary code is the 25% standard moms code", () => {
   const definitions = packTaxCodesForReturn(pack, "DK_MOMS");
   assert.equal(definitions.length, 1);
