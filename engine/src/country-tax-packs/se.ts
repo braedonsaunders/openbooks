@@ -32,9 +32,25 @@ const SE_MOMSDEKLARATION_2026: TaxReturnPack = {
  * kommuner and regioner levy income tax, not VAT — so jurisdictions is empty.
  * The default filing period is quarterly, but Skatteverket assigns monthly,
  * quarterly, or annual filing by turnover; the pack does not model that
- * threshold. Rate histories are left-truncated to the 2026 applicability
- * Skatteverket publishes (no Skatteverket/SCB origin source found for the
- * 1990 standard-rate change).
+ * threshold. Rate histories run back to 2019-07-01, one row per rate change:
+ * SFS 2019:261 restates 7 kap. 1 § mervärdesskattelagen (1994:200) with the
+ * 25/12/6 bands in force from 2019-07-01, its 12% list already covering
+ * hotels, food, restaurant/catering and repairs and its 6% list books and
+ * papers — the same scope the codes carry today, outside the temporary food
+ * window below. Unchanged values were verified forward through the SFS
+ * 2022:413 restatement (in force 2022-07-01) and the SFS 2023:80 restatement
+ * (in force 2023-04-01), which are named here rather than cited, and across
+ * the 2023 recast: SFS 2023:200 (nya mervärdesskattelagen) entered into force
+ * 2023-07-01 repealing the 1994:200 act with identical 25/12/6 values, and
+ * no 2024–2025 act amends the rate values — the 2026 acts touch 9 kap food
+ * scope only. SFS 2023:200 stays in the sources as the live instrument;
+ * rows cite the earliest attestation. These are continuing-authority rows —
+ * permanent statute restated and recast, not temporary-instrument renewals —
+ * so equal values collapse to one row; the temporary food window stays its
+ * own code. Pre-2019 is a named refusal: the previous restatement
+ * (SFS 2017:1205) is not retrievable from svenskforfattningssamling.se under
+ * its stable path scheme, so the chain stops at 2019:261 rather than
+ * bridging the gap.
  *
  * The temporary food-rate cut is a SEPARATE code, not a closed interval on
  * SE-VAT-RED12: the 12% band covers food, restaurant meals and hotels, but
@@ -104,6 +120,18 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://svenskforfattningssamling.se/sites/default/files/sfs/2026-02/SFS2026-119.pdf",
       asOf: "2026-09-18",
     },
+    {
+      id: "sfs_2019_261_rates_origin",
+      title: "SFS 2019:261 — 7 kap. 1 § mervärdesskattelagen (1994:200): 25/12/6 bands (hotels, food, restaurant/catering, repairs at 12%; books and papers at 6%) in force from 2019-07-01",
+      url: "https://svenskforfattningssamling.se/sites/default/files/sfs/2019-05/SFS2019-261.pdf",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "sfs_2023_200_recast",
+      title: "SFS 2023:200 — nya mervärdesskattelagen: recast in force 2023-07-01 repealing the 1994:200 act with identical 25/12/6 values; live instrument, no row cites it",
+      url: "https://svenskforfattningssamling.se/sites/default/files/sfs/2023-04/SFS2023-200.pdf",
+      asOf: "2026-09-18",
+    },
   ],
   jurisdictions: [],
   returnPacks: [SE_MOMSDEKLARATION_2026],
@@ -114,14 +142,14 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
         name: "Sweden standard VAT 25%",
         ratePercent: 25,
         role: "standard",
-        rates: [{ ratePercent: 25, effectiveFrom: "2026-01-01", sourceId: "skatteverket_rates_applicability_2026" }],
+        rates: [{ ratePercent: 25, effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
       },
       {
         code: "SE-VAT-RED12",
         name: "Sweden reduced VAT 12% — restaurant meals, hotels (and food outside the 2026-04-01–2027-12-31 temporary 6% window)",
         ratePercent: 12,
         role: "reduced",
-        rates: [{ ratePercent: 12, effectiveFrom: "2026-01-01", sourceId: "skatteverket_rates_applicability_2026" }],
+        rates: [{ ratePercent: 12, effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
       },
       {
         code: "SE-VAT-FOOD6",
@@ -135,7 +163,7 @@ export const SWEDEN_TAX_PACK: CountryTaxPackDefinition = {
         name: "Sweden reduced VAT 6% — books, newspapers, passenger transport, cultural admissions",
         ratePercent: 6,
         role: "reduced",
-        rates: [{ ratePercent: 6, effectiveFrom: "2026-01-01", sourceId: "skatteverket_rates_applicability_2026" }],
+        rates: [{ ratePercent: 6, effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
       },
     ],
   },
