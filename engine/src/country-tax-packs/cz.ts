@@ -37,12 +37,18 @@ const CZ_DPH_2026: TaxReturnPack = {
  * (zákon č. 349/2023 Sb.) and the 2024-01-01 effect date.
  *
  * Named refusals:
- * - 2024-01-01 is an applicability left-truncation for the 21% band, not an
- *   origin claim: the standard rate predates it. For the 12% band and the
- *   book exemption the notice does attest genuine origin on that date (the
- *   15% and 10% bands were abolished, § 71i introduced). Earlier history
- *   (the pre-2013 20% standard band, the closed 15%/10% bands, pre-2024
- *   book taxation) is not transcribed.
+ * - The 21% band runs back to 2023-06-06 as a single open row: the
+ *   Financial Administration's Easy-to-read leaflet of that date states the
+ *   three-rate regime ("Základní sazba DPH je 21 % ... První snížená sazba
+ *   DPH je 15 % ... Druhá snížená sazba je 10 % ..."), and the 2024 GFR
+ *   notice corroborates 21% unchanged across the 15%/10%-to-12%
+ *   consolidation — a continuing-authority collapse, so no 2024 boundary
+ *   row. For the 12% band and the book exemption the notice does attest
+ *   genuine origin on 2024-01-01 (the 15% and 10% bands were abolished,
+ *   § 71i introduced). Pre-June-2023 history (the pre-2013 20% standard
+ *   band, the closed 15%/10% bands, pre-2024 book taxation) is not
+ *   transcribed: no older FS leaflet was found (guessed year URLs return
+ *   the site's error page).
  * - The electronic-filing format codes (DPHDP3 for the return, DPHKH1 for
  *   the control statement) are refused: the only fetchable documents naming
  *   them are another vendor's ERP documentation, which is never a source
@@ -86,6 +92,12 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
+      id: "fs_dph_leaflet_2023",
+      title: "Finanční správa — DPH Easy-to-read leaflet 6.6.2023: basic rate 21%, first reduced 15%, second reduced 10% (three-rate regime applicability)",
+      url: "https://financnisprava.gov.cz/assets/cs/prilohy/fs-financni-sprava-cr/EtR_DPH_20230606.pdf",
+      asOf: "2026-09-18",
+    },
+    {
       id: "fs_dph_leaflet_2026",
       title: "Finanční správa — DPH leaflet: 21% basic and 12% reduced rates, books exempt with right of deduction, monthly period, quarterly election, mandatory kontrolní hlášení, EPO registration (applicability, no origin claimed)",
       url: "https://financnisprava.gov.cz/assets/cs/prilohy/fs-financni-sprava-cr/EtR_Dan_z_pridane_hodnoty_2026.pdf",
@@ -107,7 +119,7 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Czechia standard DPH",
         ratePercent: 21,
         role: "standard",
-        rates: [{ ratePercent: 21, effectiveFrom: "2024-01-01", sourceId: "gfr_rate_change_2024" }],
+        rates: [{ ratePercent: 21, effectiveFrom: "2023-06-06", sourceId: "fs_dph_leaflet_2023" }],
       },
       {
         code: "CZ-VAT-RED12",
