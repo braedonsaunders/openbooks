@@ -68,6 +68,16 @@ const verificationBlock = evidenceMigration.slice(
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
+// These suites replay migrations inside a throwaway database they provision
+// themselves: CREATE DATABASE and CREATE ROLE are bootstrap-superuser work, not
+// runtime-role work. CI connects every other step as the constrained owner
+// (openbooks_app) on purpose, so that role deliberately lacks CREATEDB and the
+// provisioning here fails with 42501. Take the admin URL when CI supplies one
+// and fall back to the ordinary URL locally, where they are the same superuser.
+const ADMIN_DB_URL = () =>
+  (process.env.OPENBOOKS_TEST_ADMIN_DB_URL || process.env.OPENBOOKS_DB_URL)!.trim();
+
+
 function postgresFailure(error: unknown): { code?: string; message?: string } | null {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
@@ -100,7 +110,7 @@ function scratch(): Promise<LegacyFixture> {
 }
 
 async function buildScratch(): Promise<LegacyFixture> {
-  const baseUrl = new URL(process.env.OPENBOOKS_DB_URL!.trim());
+  const baseUrl = new URL(ADMIN_DB_URL());
   const databaseName = `openbooks_evidence_upgrade_${randomBytes(4).toString("hex")}`;
 
   // CREATE DATABASE cannot run inside a transaction; the control client talks

@@ -118,6 +118,12 @@ jobs:
       # cannot read a superuser session's pg_temp context table.
       OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      # A handful of migration-replay suites provision a throwaway database of
+      # their own (CREATE DATABASE, CREATE ROLE). That is bootstrap-superuser
+      # work; openbooks_app deliberately cannot do it and fails 42501. Those
+      # suites -- and only those -- read this URL. Product tests keep using the
+      # constrained URL above, so RLS and governed SQL stay honestly enforced.
+      OPENBOOKS_TEST_ADMIN_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "1"
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0

@@ -17,6 +17,16 @@ import pg from "pg";
 
 const execFileAsync = promisify(execFile);
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+// These suites replay migrations inside a throwaway database they provision
+// themselves: CREATE DATABASE and CREATE ROLE are bootstrap-superuser work, not
+// runtime-role work. CI connects every other step as the constrained owner
+// (openbooks_app) on purpose, so that role deliberately lacks CREATEDB and the
+// provisioning here fails with 42501. Take the admin URL when CI supplies one
+// and fall back to the ordinary URL locally, where they are the same superuser.
+const ADMIN_DB_URL = () =>
+  (process.env.OPENBOOKS_TEST_ADMIN_DB_URL || process.env.OPENBOOKS_DB_URL)!.trim();
+
 const root = join(import.meta.dirname, "..");
 const generatedDir = join(root, "schema", "migrations", "generated");
 const migrationName = "0064_order_quantity_progress_precision.sql";
@@ -142,7 +152,7 @@ test(
   "0064 upgrades and replays without losing the governed view contract",
   { skip: !DB, timeout: 300_000 },
   async () => {
-    const baseUrl = new URL(process.env.OPENBOOKS_DB_URL!.trim());
+    const baseUrl = new URL(ADMIN_DB_URL());
     const upgrade = await createScratchDatabase(baseUrl, "upgrade");
     const fresh = await createScratchDatabase(baseUrl, "fresh");
     try {
