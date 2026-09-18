@@ -234,6 +234,24 @@ export interface PayrollOpeningYtdField {
   ceilingKey?: string;
 }
 
+/**
+ * A boolean `employee_payroll_profiles` fact the pack's statutory engine reads
+ * that NO employee-filed certificate sets — so the certificate declarations
+ * cannot carry it and the profile editor would otherwise have nowhere to offer
+ * it. The CA pack declares none: its exemptions (CPP, EI, income tax) are TD1
+ * flag fields. The US pack declares FICA/FUTA exemption here because no form
+ * exists for them (there is no "Form FICA-EXEMPT", so a certificate declaration
+ * would have to lie in its `form`).
+ */
+export interface PayrollProfileExemptionFlag {
+  /** The `employee_payroll_profiles` boolean column holding the answer. */
+  column: string;
+  /** English fallback label; the UI localizes by column and falls back to this. */
+  label: string;
+  /** Operator help, rendered beside the checkbox. */
+  help: string;
+}
+
 export interface PayrollCountryPack {
   country: PayrollCountry;
   installable: boolean;
@@ -335,6 +353,14 @@ export interface PayrollCountryPack {
    * list, which is a statement; silence is not.
    */
   certificates: () => PayrollPackCertificates;
+  /**
+   * Boolean profile facts the pack's engine reads that no employee-filed
+   * certificate sets (see the type). OPTIONAL: absent or empty offers none.
+   * Rendered by the profile editor as checkboxes beside the certificate flag
+   * fields, so a pack's statutory exemptions are all declared in one of
+   * exactly two places — never a third list in UI code.
+   */
+  profileExemptionFlags?: readonly PayrollProfileExemptionFlag[];
   /**
    * Which regions levy income tax, what sits below them, and how each one
    * treats its residents' out-of-region wages
@@ -1056,6 +1082,26 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     statutoryRates: US_PACK_RATES,
     taxYears: US_TAX_YEARS,
     certificates: () => US_CERTIFICATES,
+    // FICA and FUTA exemption are profile FACTS the US engine reads straight
+    // off the profile columns (compute-statutory.ts): no employee-filed form
+    // sets them, so no certificate declares them. The CA pack needs no member
+    // here — its exemptions are TD1 flag fields.
+    profileExemptionFlags: [
+      {
+        column: "fica_exempt",
+        label: "FICA exempt",
+        help: "No Social Security or Medicare tax is withheld or matched for this "
+          + "employee: the employment is exempt under the IRC (for example a "
+          + "qualifying student employee). Income tax withholding is unaffected.",
+      },
+      {
+        column: "futa_exempt",
+        label: "FUTA/SUI exempt",
+        help: "No federal or state unemployment tax is computed for this employee: "
+          + "the employment is exempt under 26 U.S.C. §3306(c). Income tax and "
+          + "FICA withholding are unaffected.",
+      },
+    ],
     withholding: () => US_WITHHOLDING,
     reciprocity: () => US_RECIPROCITY,
     // Withheld FICA dollars the Massachusetts retirement-contribution
