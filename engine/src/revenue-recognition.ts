@@ -1617,13 +1617,20 @@ export async function runRevenueRecognition(
         // the plan. Never post more than what remains genuinely unearned; a
         // fully-credited obligation holds its plan lines, a partially-credited
         // one posts only the remainder (the final line may post partial).
+        // A negative plan line is a same-period correction that reduces earned
+        // revenue — it can never breach the unearned ceiling, so the cap
+        // constrains positive postings only. Capping a correction at an
+        // exhausted remainder would silently drop legitimate evidence.
         const cap = await recognitionUnearnedRemaining(tx, {
           orgId, obligationId: row.obligation_id, bookId: row.book_id, deferredAccountId,
         });
-        if (cmp(cap.remaining, "0") <= 0) {
-          return { status: "credit_capped" as const, credited: cap.credited, row };
+        let posting = planned;
+        if (cmp(planned, "0") > 0) {
+          if (cmp(cap.remaining, "0") <= 0) {
+            return { status: "credit_capped" as const, credited: cap.credited, row };
+          }
+          posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
         }
-        const posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
         if (!row.subsidiary_id || !row.base_currency) {
           throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
         }
