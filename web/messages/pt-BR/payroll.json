@@ -752,6 +752,16 @@
           "usc": "USC a recolher (encargo separado, não imposto de renda)"
         }
       },
+      "IT": {
+        "title": "Itália — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Itália retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "irpef": "IRPEF a recolher (imposto de renda nacional)",
+          "addizionale_regionale": "Addizionale regionale a recolher (sobretaxa regional do IRPEF)",
+          "addizionale_comunale": "Addizionale comunale a recolher (sobretaxa municipal do IRPEF)",
+          "inps": "INPS a recolher (contribuições IVS de funcionário e empregador)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

@@ -19,7 +19,7 @@ import {
   packSlotState,
   PAYROLL_COUNTRY_PACKS,
 } from '@openbooks/engine/src/payroll/packs.ts'
-import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/tax-years.ts'
+import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/packs.ts'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, getAuthz } from '../../../../../lib/authz'

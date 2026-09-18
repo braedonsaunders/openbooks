@@ -17,3 +17,11 @@
  * "../packs.ts"` call sites keep working.
  */
 export class PayrollPackError extends Error {}
+
+/**
+ * A resolved jurisdiction that refuses to compute — unknown country, unknown
+ * region, currency mismatch. Lives here beside PayrollPackError (and
+ * re-exported from `packs.ts`) so leaf modules like `tax-year-math.ts` can
+ * throw it without importing the registry.
+ */
+export class PayrollJurisdictionError extends PayrollPackError {}

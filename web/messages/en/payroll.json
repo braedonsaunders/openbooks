@@ -752,6 +752,16 @@
           "usc": "USC payable (separate charge, not income tax)"
         }
       },
+      "IT": {
+        "title": "Italy — statutory accounts",
+        "description": "Liability accounts for the amounts the Italy pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "irpef": "IRPEF payable (national personal income tax)",
+          "addizionale_regionale": "Regional IRPEF surcharge payable",
+          "addizionale_comunale": "Municipal IRPEF surcharge payable",
+          "inps": "INPS payable (employee + employer IVS contributions)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {

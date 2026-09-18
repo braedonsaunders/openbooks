@@ -80,14 +80,19 @@ test("a run document denominated differently from its own entity is refused", ()
 });
 
 test("an entity in a country with no payroll pack is refused, not defaulted to Canada", () => {
+  // "GB" used to stand in for "unknown" here, which stopped being true when
+  // the country packs were registered (and IT's registration holds the same
+  // risk for any other real code). The invariant is about an UNREGISTERED
+  // country, so it needs a code the registry does not hold.
+  assert.ok(!("XX" in PAYROLL_COUNTRY_PACKS), "XX must stay unregistered for this test to mean anything");
   assert.throws(
     () => resolvePayrollRunContext({
       payDate: "2026-07-21",
-      subsidiary: { id: "sub-gb", name: "Acme UK Ltd", country: "GB", baseCurrency: "GBP" },
+      subsidiary: { id: "sub-xx", name: "Acme XX Ltd", country: "XX", baseCurrency: "GBP" },
     }),
     (error: unknown) =>
       error instanceof PayrollJurisdictionError
-      && /Acme UK Ltd.*registered in GB.*no payroll country pack for GB/s.test(error.message),
+      && /Acme XX Ltd.*registered in XX.*no payroll country pack for XX/s.test(error.message),
   );
 });
 
@@ -264,7 +269,7 @@ test("an unknown country string is a refusal, not a cast to Canada", () => {
   // Canada — including a country whose pack was never written.
   assert.equal(payrollCountry("US"), "US");
   assert.equal(payrollCountry("CA"), "CA");
-  for (const value of ["GB", "", null, undefined, "ca", "USA"]) {
+  for (const value of ["XX", "", null, undefined, "ca", "USA"]) {
     assert.throws(() => payrollCountry(value), PayrollJurisdictionError, String(value));
   }
 });

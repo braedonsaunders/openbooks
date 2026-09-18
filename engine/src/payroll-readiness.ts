@@ -45,7 +45,7 @@ import {
   type StatutoryRatePoint,
   type UnconfiguredStatutoryRate,
 } from "./payroll/statutory-rates.ts";
-import { payrollTaxYearForDate, payrollTaxYearProblem } from "./payroll/tax-years.ts";
+import { packRates, payrollTaxYearForDate, payrollTaxYearProblem } from "./payroll/packs.ts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -786,7 +786,7 @@ async function unconfiguredRatesForRun(
 ): Promise<UnconfiguredStatutoryRate[]> {
   let resolution;
   try {
-    resolution = await resolveStatutoryRates(orgId, country, taxYear);
+    resolution = await resolveStatutoryRates(orgId, packRates(country), taxYear);
   } catch (error) {
     if (error instanceof PayrollPackError) return [];
     throw error;

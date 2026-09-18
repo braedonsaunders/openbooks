@@ -752,6 +752,16 @@
           "usc": "USC à payer (charge distincte de l’impôt sur le revenu)"
         }
       },
+      "IT": {
+        "title": "Italie — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack italien retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "irpef": "IRPEF à payer (impôt national sur le revenu)",
+          "addizionale_regionale": "Addizionale regionale à payer (surtaxe régionale de l’IRPEF)",
+          "addizionale_comunale": "Addizionale comunale à payer (surtaxe communale de l’IRPEF)",
+          "inps": "INPS à payer (cotisations IVS employé et employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

@@ -1,4 +1,5 @@
 import { resolveStatutoryRates } from "../statutory-rates.ts";
+import { US_PACK_RATES } from "./rates.ts";
 
 /**
  * US pack configuration, resolved from the pack's declared rate slots
@@ -13,7 +14,7 @@ export interface UsPayrollConfig {
 }
 
 export async function usPayrollConfig(orgId: string, taxYear: number): Promise<UsPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, "US", taxYear);
+  const rates = await resolveStatutoryRates(orgId, US_PACK_RATES, taxYear);
   return {
     futaRate: (state) => rates.values("us_futa", { region: state })?.rate ?? null,
     sui: (state, filingAccountId) => {

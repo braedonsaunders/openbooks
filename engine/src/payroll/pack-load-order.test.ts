@@ -37,24 +37,10 @@ test("every registered pack loads before the registry is entered", () => {
     ES: ES_PAYROLL_PACK,
   } as const;
   assert.deepEqual(Object.keys(PAYROLL_COUNTRY_PACKS), [
-    // "IT" is held out pending F-reg-003 — see the comment at its registration
-    // site in packs.ts. Restore it here in the same change.
-    "CA", "US", "GB", "DE", "FR", "IE", "AU", "NL", "ES",
+    "CA", "US", "GB", "DE", "FR", "IE", "AU", "IT", "NL", "ES",
   ]);
-  // Held out of the registry, but it must still LOAD cleanly — that is the
-  // load-order property this test exists for, and it is what proves the hold is
-  // a registration decision rather than a broken module.
-  const heldBack = new Set(["IT"]);
   for (const [country, pack] of Object.entries(packs)) {
     assert.equal(pack.country, country, `${country} pack country`);
-    if (heldBack.has(country)) {
-      assert.equal(
-        PAYROLL_COUNTRY_PACKS[country],
-        undefined,
-        `${country} is held out pending F-reg-003 — restore it here and in packs.ts together`,
-      );
-      continue;
-    }
     assert.equal(
       PAYROLL_COUNTRY_PACKS[country]?.country,
       country,

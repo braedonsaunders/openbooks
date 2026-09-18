@@ -752,6 +752,16 @@
           "usc": "Verbindlichkeiten aus USC (separate Abgabe, keine Einkommensteuer)"
         }
       },
+      "IT": {
+        "title": "Italien — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das Italien-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "irpef": "Verbindlichkeiten aus IRPEF (nationale Einkommensteuer)",
+          "addizionale_regionale": "Verbindlichkeiten aus regionaler IRPEF-Zusatzsteuer",
+          "addizionale_comunale": "Verbindlichkeiten aus kommunaler IRPEF-Zusatzsteuer",
+          "inps": "Verbindlichkeiten aus INPS (IVS-Beiträge Arbeitnehmer + Arbeitgeber)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

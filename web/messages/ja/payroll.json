@@ -752,6 +752,16 @@
           "usc": "USC未払金（所得税とは別の累進課金）"
         }
       },
+      "IT": {
+        "title": "イタリア — 法定勘定",
+        "description": "イタリアパックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "irpef": "IRPEF未払金（国の所得税）",
+          "addizionale_regionale": "Addizionale regionale未払金（IRPEF地域付加税）",
+          "addizionale_comunale": "Addizionale comunale未払金（IRPEF市町村付加税）",
+          "inps": "INPS未払金（従業員・事業主負担IVS掛金）"
+        }
+      },
       "ratesLink": "事業主が入力する料率 — 失業保険税、医療負担金 — は法定料率タブにあります。"
     },
     "usConfig": {

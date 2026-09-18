@@ -44,6 +44,7 @@ import { fromUnits, roundDiv, toUnits } from "../../money.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
+import { IT_PACK_RATES } from "./rates.ts";
 import { IT_REGION_CODES } from "./regions.ts";
 import {
   IT_2025_DETRAZIONE_C2,
@@ -468,7 +469,7 @@ export async function computeItStatutory(
       municipalExemption: null,
     });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, "IT", ctx.taxYear);
+  const resolution = await resolveStatutoryRates(ctx.orgId, IT_PACK_RATES, ctx.taxYear);
   const region = ctx.region;
   const cert = ctx.certificateFor("it_detrazioni");
   const comune = cert?.answers["domicilio_comune"] ?? null;

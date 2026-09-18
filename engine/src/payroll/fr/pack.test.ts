@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem } from "../certificates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { FR_PAYROLL_PACK } from "./pack.ts";
 import {
   payrollTaxYearProblem,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
-} from "../tax-years.ts";
-import { FR_PAYROLL_PACK } from "./pack.ts";
+} from "../packs.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 import { frPasEditionForVersement } from "./tables-2026.ts";
 

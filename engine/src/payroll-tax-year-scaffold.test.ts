@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import test, { after, before } from "node:test";
-import { payrollTaxYearSupport } from "./payroll/tax-years.ts";
+import { payrollTaxYearSupport } from "./payroll/packs.ts";
 import { unfilledPaths } from "./payroll/unfilled.ts";
 
 /**
