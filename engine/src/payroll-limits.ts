@@ -87,7 +87,7 @@ function lesser(a: string, b: string): string {
  * the run.
  */
 export interface DisposableEarningsLine {
-  kind: "earning" | "deduction" | "employer_contribution";
+  kind: "earning" | "deduction" | "employer_contribution" | "credit";
   amount: string;
   /**
    * pay_components.include_in_disposable_earnings. Earnings included in the
@@ -135,6 +135,10 @@ export function disposableEarnings(
     else if (line.kind === "deduction") {
       if (excludeProtected && line.protectedDeduction) continue;
       signed.push(neg(normalizeMoney(line.amount)));
+    } else if (line.kind === "credit") {
+      // A refundable credit is take-home pay: it grows the pool a garnishment
+      // is measured against, exactly like an earning.
+      signed.push(normalizeMoney(line.amount));
     }
   }
   return atLeastZero(sum(signed));

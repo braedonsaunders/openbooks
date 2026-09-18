@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, div, formatMoney, sum } from "./money.ts";
+import { add, cmp, div, formatMoney, neg, sum } from "./money.ts";
 import {
   filingAccountRef,
   type FilingAccountRef,
@@ -56,7 +56,7 @@ export interface RemittanceComponentLine {
   componentId: string;
   code: string;
   name: string;
-  kind: "deduction" | "employer_contribution";
+  kind: "deduction" | "employer_contribution" | "credit";
   systemKey: string | null;
   liabilityAccountId: string | null;
   accountLabel: string | null;
@@ -214,7 +214,8 @@ export async function payrollRemittanceSummary(
   // destination, and rows that resolve to the same vendor are re-merged per
   // component in groupRemittanceRows.
   const queried = (await executor.execute<{
-      component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
+      component_id: string; code: string; name: string;
+      kind: "deduction" | "employer_contribution" | "credit";
       system_key: string | null; country: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
       filingUnknown: boolean; province: string; amount: string;
@@ -233,7 +234,7 @@ export async function payrollRemittanceSummary(
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
       join documents source_document on source_document.id=r.document_id and source_document.org_id=r.org_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
-       and l.kind in ('deduction', 'employer_contribution')
+       and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province
@@ -242,10 +243,15 @@ export async function payrollRemittanceSummary(
   // Internal accruals never remit, and each pack declares its own — so the
   // exclusion is per component country, not per system key. Rows with no
   // system key (user components) always stay in the summary.
-  const rows = queried.rows.filter((row) =>
-    row.system_key == null
-    || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
-  );
+  // A `credit` row is money the employer reclaims from the destination, so it
+  // nets AGAINST the group's withholdings (F24 compensation): the summary's
+  // group total is what the employer actually sends, never the gross levy.
+  const rows = queried.rows
+    .filter((row) =>
+      row.system_key == null
+      || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
+    )
+    .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
   if (rows.length === 0) return [];
   if (rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
     throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
@@ -490,7 +496,7 @@ export type RemittanceRow = {
   component_id: string;
   code: string;
   name: string;
-  kind: "deduction" | "employer_contribution";
+  kind: "deduction" | "employer_contribution" | "credit";
   system_key: string | null;
   /** The component row's pack country — picks the pack whose declaration governs the row. */
   country: string | null;

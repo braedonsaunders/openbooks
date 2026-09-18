@@ -171,6 +171,18 @@ test("disposable earnings never go negative and ignore employer accruals", () =>
   ]), "0.0000");
 });
 
+test("a refundable credit grows the pool a garnishment is measured against", () => {
+  // A `credit` line is take-home pay: earnings 1.000 less a 200 deduction
+  // plus a 141.96 credit offers a 941.96 pool, not 800. Without the credit
+  // arm the protection base would understate take-home wherever a pack pays
+  // refundable credits through payroll.
+  assert.equal(disposableEarnings([
+    { kind: "earning", amount: "1000.00" },
+    { kind: "deduction", amount: "200.00" },
+    { kind: "credit", amount: "141.96" },
+  ]), "941.9600");
+});
+
 test("a protected deduction is excluded from the base it is measured against", () => {
   const lines: DisposableEarningsLine[] = [
     { kind: "earning", amount: "1000.00" },

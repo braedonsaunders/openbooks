@@ -29,12 +29,12 @@
  * declared. An unconfigured rate is a refusal naming the scope point — a
  * pack that computes the surtax from a guessed rate is wrong money.
  *
- * Payable TI/somma refuse by name (never factors): the amounts are computed
- * and proven by the goldens, but the pass cannot emit them — pushStatutory
- * accepts only deduction and employer_contribution lines. Clears when the
- * generic layer offers an earnings-credit line kind (FLEET-PROPOSE to
- * Orchestrate): two pack-local credit components plus two pushes, no
- * country branch, and the refusal below is deleted.
+ * The trattamento integrativo and c. 4 somma payouts are pushed as generic
+ * `credit` lines (ti_payout/somma_payout, pack-local components on the IRPEF
+ * slot): money the employer pays the worker and recovers via F24, which is
+ * why the stub lines and the TI/SOMMA factors below carry the same period
+ * amounts — year-to-date reads the factors, so YTD matches cash by
+ * construction.
  *
  * Money: bigint units (1e4) throughout, halves away from zero, via the
  * repo's money.ts — the same discipline as canada/decimal.ts. Ratios are
@@ -419,33 +419,12 @@ export async function computeItStatutoryWithRates(
     isFixedTerm: bool(answers["tempo_determinato"] ?? null),
     isPost1995: bool(answers["anzianita_post_1995"] ?? null),
   });
-  // TI and somma are payouts, not deductions. They cannot travel as
-  // factors — factors accumulate into year-to-date reads while no stub line
-  // pays them, so the stub would underpay by the payout and YTD would claim
-  // it paid. Refuse by name instead. Clears when the generic layer offers an
-  // earnings-credit line kind: the engine will push the period TI/somma as
-  // credit lines (pack-local slot components, no country branch) and return
-  // the factors as computed below.
-  const owed: string[] = [];
-  if (result.trattamentoIntegrativo !== "0.0000") {
-    owed.push(`trattamento integrativo ${result.trattamentoIntegrativo}`);
-  }
-  if (result.somma !== "0.0000") {
-    owed.push(`somma ${result.somma}`);
-  }
-  if (owed.length > 0) {
-    throw new ItPayrollRefusal(
-      `IT 2025 engine computed ${owed.join(" and ")} (annual) for this worker but cannot pay it: `
-      + "pushStatutory accepts only deduction and employer_contribution lines, and there is no "
-      + "earnings-credit kind for statutory payouts. Emitting the amounts as factors would "
-      + "underpay the stub while year-to-date claims them paid. Clears when the generic layer "
-      + "accepts credit lines — see the pack's FLEET-PROPOSE to Orchestrate.",
-    );
-  }
   pushStatutory("income_tax", "deduction", "IRPEF", result.period.irpef, 110);
   pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
   pushStatutory("municipal_surtax", "deduction", "Addizionale comunale all'IRPEF", result.period.addizionaleComunale, 120);
   pushStatutory("inps", "deduction", "INPS — contributi IVS a carico del lavoratore", result.period.inpsWorker, 130);
+  pushStatutory("ti_payout", "credit", "Trattamento integrativo", result.period.trattamentoIntegrativo, 140);
+  pushStatutory("somma_payout", "credit", "Somma di cui al comma 4 (L. 207/2024)", result.period.somma, 145);
   pushStatutory("inps", "employer_contribution", "INPS — contributi IVS a carico del datore", result.period.inpsEmployer, 230);
   return {
     I: income,
@@ -455,6 +434,8 @@ export async function computeItStatutoryWithRates(
     ADDCOM: result.period.addizionaleComunale,
     INPS_W: result.period.inpsWorker,
     INPS_ER: result.period.inpsEmployer,
+    TI: result.period.trattamentoIntegrativo,
+    SOMMA: result.period.somma,
   };
 }
 

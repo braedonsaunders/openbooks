@@ -12,12 +12,12 @@
  * L. 199/2025 rewrote the second IRPEF bracket and the AdE page is
  * internally inconsistent).
  *
- * Known integration gap (refused by name, not approximated): workers owed a
- * trattamento integrativo or c. 4 somma payout refuse in the statutory pass
- * because pushStatutory has no earnings-credit line kind — the amounts would
- * otherwise travel as factors while no stub line pays them. Clears when the
- * generic layer accepts credit lines (FLEET-PROPOSE to Orchestrate, owned
- * outside this pack); the pure engine already computes both payouts.
+ * The trattamento integrativo and c. 4 somma payouts travel as generic
+ * `credit` lines (kind `credit`, assessed on earnings, remitted to the tax
+ * authority for F24 compensation): money the employer pays the employee and
+ * reclaims. They sit in the IRPEF slot because the reclaim lands on the same
+ * F24 liability the withholdings credit — one destination, one account
+ * choice, and the remittance summary nets them against it.
  *
  * Registration shape: `country` is the string "IT", which does not yet
  * typecheck against `PayrollCountry` (packs.ts:190, still 'CA' | 'US'). The
@@ -100,6 +100,12 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
         // IRPEF is assessed on reddito complessivo net of oneri deducibili,
         // so a pre-tax deduction moves it — re-derived by the fixpoint.
         { code: "IRPEF", name: "IRPEF — imposta sul reddito delle persone fisiche", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        // The TI and c. 4 somma payouts: refundable credits the employer pays
+        // the worker and recovers through the F24. Earnings-assessed (computed
+        // from gross), pushed once, never re-derived by the protection
+        // fixpoint — exactly like an earnings line. They INCREASE net pay.
+        { code: "TI", name: "Trattamento integrativo", systemKey: "ti_payout", kind: "credit", sequence: 140, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "SOMMA", name: "Somma di cui al comma 4 (L. 207/2024)", systemKey: "somma_payout", kind: "credit", sequence: 145, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {

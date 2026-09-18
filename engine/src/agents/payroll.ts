@@ -213,7 +213,7 @@ export async function payrollFindings(
              count(distinct s.id) filter (where s.filing_account_source = 'unknown')::int as unknown_filing_stubs,
              coalesce(sum(l.amount) filter (
                where l.liability_account_id is null
-                 and l.kind in ('deduction', 'employer_contribution')
+                 and l.kind in ('deduction', 'employer_contribution', 'credit')
                  and l.amount <> 0), 0)::text as unknown_liability_amount
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -224,7 +224,7 @@ export async function payrollFindings(
       having count(distinct s.id) filter (where s.filing_account_source = 'unknown') > 0
           or coalesce(sum(l.amount) filter (
                where l.liability_account_id is null
-                 and l.kind in ('deduction', 'employer_contribution')
+                 and l.kind in ('deduction', 'employer_contribution', 'credit')
                  and l.amount <> 0), 0) <> 0
        order by min(s.pay_date) desc limit 25
     `));

@@ -287,7 +287,15 @@ export interface PayrollStatutoryComponent {
   name: string;
   /** pay_components.system_key — the key the engine pushes the line under. */
   systemKey: string;
-  kind: "deduction" | "employer_contribution";
+  /**
+   * What the line IS. `deduction` withholds (decreases net),
+   * `employer_contribution` accrues at employer cost (net-neutral), and
+   * `credit` pays a refundable employment credit the employer reclaims from
+   * the tax authority (INCREASES net). A credit is earnings-assessed,
+   * computed from gross, pushed once and never re-derived by the protection
+   * fixpoint; `remittance: "tax_authority"` because the employer reclaims it.
+   */
+  kind: "deduction" | "employer_contribution" | "credit";
   /** pay_components.sequence — presentation order on the stub. */
   sequence: number;
   assessedOn: PayrollAssessedOn;
@@ -1938,7 +1946,7 @@ export function statutoryRateSlot(country: string, slotKey: string): PayrollStat
 export function statutoryAssessment(
   country: string,
   systemKey: string,
-  kind: "deduction" | "employer_contribution",
+  kind: "deduction" | "employer_contribution" | "credit",
 ): PayrollAssessedOn {
   const declared = packStatutoryComponents(country)
     .filter((component) => component.systemKey === systemKey && component.kind === kind);

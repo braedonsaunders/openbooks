@@ -1492,7 +1492,7 @@ export function payRunCalculationSourceChanges(
 export interface CapturedStubLine {
   componentId: string | null;
   systemKey: string | null;
-  kind: "earning" | "deduction" | "employer_contribution";
+  kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string;
   hours: string | null;
   rate: string | null;
@@ -1981,7 +1981,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
  * carries no behavior, only shape.
  */
 interface Line {
-  componentId: string | null; kind: "earning" | "deduction" | "employer_contribution";
+  componentId: string | null;
+  kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string; hours?: string; rate?: string; amount: string;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
   sequence: number;
@@ -2998,7 +2999,13 @@ async function settleDeductionProtection(args: {
     const unprotected = sum(lines
       .filter((l) => l.kind === "deduction" && !protectedLines.includes(l))
       .map((l) => l.amount));
-    const available = add(gross, neg(unprotected));
+    // A refundable credit is take-home pay the protection pool must see: it
+    // raises what the employee would take home (and therefore what a
+    // garnishment measured on net pay may take) exactly like gross does.
+    const credits = sum(lines
+      .filter((l) => l.kind === "credit" && !l.accrualOnly)
+      .map((l) => l.amount));
+    const available = add(add(gross, neg(unprotected)), credits);
     return applyDeductionProtection(
       protectedLines.map((l, index) => ({
         key: String(index),
@@ -3459,7 +3466,13 @@ async function calculateStub(
   });
 
   const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
-  const net = add(gross, neg(deductions));
+  // Refundable employment credits (a `credit` line) are money the employer
+  // pays the employee through payroll: they INCREASE net pay. Employer cost
+  // below deliberately excludes them — the employer reclaims the credit from
+  // the tax authority (F24 compensation for IT), so the P&L cost is nil and
+  // the GL projection debits the reclaimed liability instead (see payRunGlLegs).
+  const credits = sum(lines.filter((l) => l.kind === "credit").map((l) => l.amount));
+  const net = add(add(gross, neg(deductions)), credits);
   if (cmp(net, "0") < 0) throw new PayrollError(`net pay is negative (${net})`);
   const employerCost = sum(
     lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
@@ -3610,6 +3623,20 @@ async function payRunGlLegs(
           );
         }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
+        lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
+      } else if (line.kind === "credit") {
+        // A refundable credit is reclaimed from the tax authority by paying
+        // it less (F24 compensation for IT): debit the same liability the
+        // withholdings credited, so the projection balances and the frozen
+        // account below is the one the reclaim lands on. No burden expense —
+        // the P&L cost is nil (see the net math above).
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
+        if (!liability) {
+          throw new PayrollError(
+            `credit "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
+          );
+        }
+        accumulate(liability, amount, line.description ?? "Credit");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
       } else {
         const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);

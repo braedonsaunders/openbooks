@@ -10,6 +10,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { add, cmp } from "../../money.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
@@ -57,6 +58,16 @@ test("statutory slots name IRPEF, both addizionali, and both INPS shares", () =>
     assert.equal(component.assessedOn, "earnings", component.code);
     assert.equal(component.systemKey, "inps", component.code);
   }
+  // The TI/somma payouts ride the IRPEF slot as generic credits: the reclaim
+  // lands on the same F24 liability, so there is one account choice, not two.
+  const irpef = byKey.get("irpef")?.components ?? [];
+  assert.deepEqual(irpef.map((c) => c.code), ["IRPEF", "TI", "SOMMA"]);
+  for (const component of irpef.slice(1)) {
+    assert.equal(component.kind, "credit", component.code);
+    assert.equal(component.assessedOn, "earnings", component.code);
+    assert.equal(component.remittance, "tax_authority", component.code);
+  }
+  assert.deepEqual(irpef.slice(1).map((c) => c.systemKey), ["ti_payout", "somma_payout"]);
 });
 
 test("tenant-entered surtax slots: regionale per region, comunale per sub-region", () => {
@@ -142,8 +153,8 @@ function fakeCtx(overrides: {
   pensionable?: string;
   region?: string;
   answers?: Record<string, string | null>;
-}): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; amount: string; sequence: number }[] } {
-  const pushed: { systemKey: string; amount: string; sequence: number }[] = [];
+}): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
+  const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const answers = overrides.answers ?? {
     domicilio_comune: "H501",
     reddito_complessivo_presunto: null,
@@ -171,8 +182,10 @@ function fakeCtx(overrides: {
     emp: {},
     filingAccountId: null,
     deduction: () => "0",
-    pushStatutory: (systemKey, _kind, _desc, amount, sequence) => {
-      pushed.push({ systemKey, amount, sequence });
+    pushStatutory: (systemKey, kind, _desc, amount, sequence) => {
+      // Like the real createPushStatutory: zero amounts never become lines.
+      if (cmp(amount, "0") === 0) return;
+      pushed.push({ systemKey, kind, amount, sequence });
     },
     storedCertificates: [],
     certificateFor: (key) =>
@@ -235,26 +248,39 @@ test("missing declared rates refuse naming the scope point", async () => {
   );
 });
 
-test("payable TI/somma refuse by name: no credit channel, no factor workaround", async () => {
-  // Annual 8.400: somma 7,1% x ~7.628 = 541,59 — owed but unpayable
-  // without a credit line, so the pass refuses instead of emitting factors.
-  const { ctx } = fakeCtx({ income: "700.00", pensionable: "700.00" });
-  await assert.rejects(
-    computeItStatutoryWithRates(ctx, {
-      regionalRate: "1.23",
-      municipalRate: "0.8",
-      municipalExemption: null,
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ItPayrollRefusal);
-      assert.match((error as Error).message, /somma/);
-      assert.match((error as Error).message, /credit/);
-      return true;
-    },
-  );
+test("a 9.500 worker is paid +141,96/month in credits, and YTD matches cash", async () => {
+  // The whole argument for the generic `credit` kind, pinned end to end:
+  // annual 9.500,04 (791,67 x 12, no pensionable base) owes TI 1.200 +
+  // somma 5,3% x 9.500,04 = 503,50 a year = 100,00 + 41,96 a month. Before
+  // the credit channel this refused by name; as factors it would have
+  // underpaid every monthly net by 141,96 while YTD claimed 1.703,50 paid.
+  const { ctx, pushed } = fakeCtx({ income: "791.67", pensionable: "0.00" });
+  const factors = await computeItStatutoryWithRates(ctx, {
+    regionalRate: "1.23",
+    municipalRate: "0.8",
+    municipalExemption: null,
+  });
+  assert.equal(factors["TI"], "100.0000");
+  assert.equal(factors["SOMMA"], "41.9600");
+  const ti = pushed.find((p) => p.systemKey === "ti_payout")!;
+  const somma = pushed.find((p) => p.systemKey === "somma_payout")!;
+  assert.equal(ti.kind, "credit");
+  assert.equal(somma.kind, "credit");
+  // The stub lines ARE the cash, the factors ARE what year-to-date reads:
+  // equal amounts, and together the 141,96 the month is owed.
+  assert.equal(ti.amount, factors["TI"]);
+  assert.equal(somma.amount, factors["SOMMA"]);
+  assert.equal(add(ti.amount, somma.amount), "141.9600");
+  assert.deepEqual(pushed.map((p) => [p.systemKey, p.kind, p.sequence]), [
+    ["income_tax", "deduction", 110],
+    ["regional_surtax", "deduction", 115],
+    ["municipal_surtax", "deduction", 120],
+    ["ti_payout", "credit", 140],
+    ["somma_payout", "credit", 145],
+  ]);
 });
 
-test("wrapper pushes five lines and no payout factors", async () => {
+test("wrapper pushes five lines when no payout is owed, TI/SOMMA factors zero", async () => {
   const { ctx, pushed } = fakeCtx({});
   const factors = await computeItStatutoryWithRates(ctx, {
     regionalRate: "1.23",
@@ -264,11 +290,12 @@ test("wrapper pushes five lines and no payout factors", async () => {
   assert.equal(factors["I"], "2500.00");
   assert.equal(factors["PI"], "2500.00");
   // Annual 30.000: IRPEF netta 3.221,63/12, INPS matches the golden.
-  // TI and somma are 0 here, so the pass completes; payable amounts refuse.
+  // TI and somma are 0 here, so no credit lines are pushed (pushStatutory
+  // skips zeros) while the factors stay present at zero for YTD shape.
   assert.equal(factors["IRPEF"], "268.4700");
   assert.equal(factors["INPS_W"], "229.7500");
-  assert.ok(!("TI" in factors));
-  assert.ok(!("SOMMA" in factors));
+  assert.equal(factors["TI"], "0.0000");
+  assert.equal(factors["SOMMA"], "0.0000");
   assert.deepEqual(pushed.map((p) => [p.systemKey, p.sequence]), [
     ["income_tax", 110],
     ["regional_surtax", 115],

@@ -44,8 +44,8 @@ import { abs, add, cmp, isZero, neg, normalizeMoney, sum } from "./money.ts";
 /* Vocabulary                                                          */
 /* ------------------------------------------------------------------ */
 
-/** The three sides of a pay stub. Mirrors pay_stub_lines.kind exactly. */
-export type ParallelSlotKind = "earning" | "deduction" | "employer_contribution";
+/** The sides of a pay stub. Mirrors pay_stub_lines.kind exactly. */
+export type ParallelSlotKind = "earning" | "deduction" | "employer_contribution" | "credit";
 
 /** Findings also cover the stated totals, which belong to no single side. */
 export type ParallelFindingKind = ParallelSlotKind | "total";
@@ -267,6 +267,7 @@ export function componentSlot(
 const KIND_SEQUENCE: Record<ParallelFindingKind, number> = {
   earning: 100,
   deduction: 200,
+  credit: 250,
   employer_contribution: 300,
   total: 400,
 };
@@ -655,6 +656,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
 
   const earningDifference = kindDifference("earning");
   const deductionDifference = kindDifference("deduction");
+  const creditDifference = kindDifference("credit");
   const employerDifference = kindDifference("employer_contribution");
 
   const priorGross = sideTotal(prior, TOTAL_SLOT_GROSS);
@@ -679,14 +681,16 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
     ours: ourNet,
     difference: difference(priorNet, ourNet),
     // Net is downstream of the STATED gross, not of the itemized earnings:
-    // net == gross − deductions. Attributing net against earnings lets a
-    // one-sided earning (a register that states gross without itemizing it)
-    // smear the whole gross into "unexplained net" even when every deduction
-    // matches and the stated nets agree to the penny (F-t05-003) — the same
-    // smearing the component tests refuse for matched cells.
+    // net == gross − deductions + credits. Attributing net against earnings
+    // lets a one-sided earning (a register that states gross without
+    // itemizing it) smear the whole gross into "unexplained net" even when
+    // every deduction matches and the stated nets agree to the penny
+    // (F-t05-003) — the same smearing the component tests refuse for matched
+    // cells. Credits attribute the same way deductions do: a matched credit
+    // explains its share of net, so only an unmatched one is unattributed.
     unattributed: difference(
       difference(priorNet, ourNet),
-      difference(difference(priorGross, ourGross), deductionDifference),
+      add(difference(difference(priorGross, ourGross), deductionDifference), creditDifference),
     ),
   };
   const employerCostReconciliation: ParallelTotalsReconciliation = {
