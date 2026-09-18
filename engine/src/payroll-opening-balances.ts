@@ -3,7 +3,12 @@ import { canonicalDecimal } from "./exact-decimal.ts";
 import { db } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
-import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
+import {
+  employeeTaxYearFenceKey,
+  employerLevyFenceKey,
+  takeEmployeeTaxYearFences,
+  takeEmployerLevyFences,
+} from "./payroll-fences.ts";
 import type { PayrollSubsidiaryScope } from "./payroll-run.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./payroll/opening-ytd-registry.ts";
 
@@ -890,4 +895,219 @@ export async function componentYearToDate(
     )::text as ytd
   `));
   return normalizeMoney(String(r.rows[0]?.ytd ?? "0"));
+}
+
+/** One employer-scope carry-in row: the pre-adoption base for a levy. */
+export interface EmployerLevyOpeningWrite {
+  country: string;
+  levyKey: string;
+  /** Null for org-wide levies; the province/state for region levies. */
+  region: string | null;
+  baseYtd: string | number;
+}
+
+export interface EmployerLevyOpeningSaveResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  errors: { levyKey: string; region: string | null; message: string }[];
+}
+
+/**
+ * Create or replace employer-aggregate carry-ins for one tax year,
+ * all-or-nothing like the per-employee save.
+ *
+ * Each row is the employer's base earned before the adoption date in one
+ * levy's scope, copied from the prior provider's final report. A zero row
+ * is a DELETE ("no carry-in" and "carry-in of nothing" are the same fact).
+ * The levy key must be DECLARED by the pack for this year — a carry-in for
+ * a levy nobody computes would consume room nothing reads, which is the
+ * employer-scope version of the orphaned-amount defect the component save
+ * refuses.
+ *
+ * Serializes on the levy fence, and refuses a scope point once a run has
+ * committed base into it: editing history past committed stubs restates
+ * room already consumed, the same immutability the per-employee save
+ * enforces per employee.
+ */
+export async function saveEmployerLevyOpening(input: {
+  orgId: string;
+  actorId: string;
+  taxYear: number;
+  rows: EmployerLevyOpeningWrite[];
+}): Promise<EmployerLevyOpeningSaveResult> {
+  const year = assertTaxYear(input.taxYear);
+  const result: EmployerLevyOpeningSaveResult = { created: 0, updated: 0, deleted: 0, errors: [] };
+  if (input.rows.length === 0) return result;
+
+  // Pack declarations, resolved lazily: this module sits below the pack
+  // registry in the import graph, so a static import would join the cycle
+  // the opening-ytd registry exists to avoid.
+  const { PAYROLL_COUNTRY_PACKS } = await import("./payroll/packs.ts");
+  const declared = new Map<string, { scope: string }>();
+  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+    for (const levy of pack.employerAggregateLevies?.(year) ?? []) {
+      declared.set(`${country}\u001f${levy.key}`, { scope: levy.base.scope });
+    }
+  }
+
+  return db.transaction(async (tx) => {
+    await takeEmployerLevyFences(
+      tx,
+      input.rows.map((row) => employerLevyFenceKey(input.orgId, year, row.country, row.levyKey)),
+    );
+
+    const seen = new Set<string>();
+    const planned: { country: string; levyKey: string; region: string | null; base: string | null }[] = [];
+    for (const row of input.rows) {
+      const fail = (message: string) => result.errors.push({ levyKey: row.levyKey, region: row.region, message });
+      const point = `${row.country}\u001f${row.levyKey}\u001f${row.region ?? ""}`;
+      if (seen.has(point)) {
+        fail("appears more than once in this load");
+        continue;
+      }
+      seen.add(point);
+      const declaration = declared.get(`${row.country}\u001f${row.levyKey}`);
+      if (!declaration) {
+        fail(
+          `levy "${row.levyKey}" is not declared by the ${row.country} pack for ${year} — `
+          + "a carry-in for a levy nothing computes would shelter base nothing reads",
+        );
+        continue;
+      }
+      if (declaration.scope === "org" && row.region != null) {
+        fail(`levy "${row.levyKey}" is employer-wide — it carries no region`);
+        continue;
+      }
+      if (declaration.scope === "region" && (row.region == null || row.region === "")) {
+        fail(`levy "${row.levyKey}" is assessed per region — name the region this history belongs to`);
+        continue;
+      }
+      let base: string;
+      try {
+        base = normalizeMoney(row.baseYtd);
+      } catch {
+        fail("base is not an exact money amount");
+        continue;
+      }
+      if (cmp(base, "0") < 0) {
+        fail("base is history already earned — never less than zero");
+        continue;
+      }
+      // Committed stubs already consumed this scope point's room: the
+      // carry-in is immutable from that commit on, void the run to change it.
+      const locked = (await tx.execute<{ locked: boolean }>(sql`
+        select exists (
+          select 1 from pay_stubs s
+            join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+            join documents d on d.id = r.document_id and d.org_id = r.org_id
+           where s.org_id = ${input.orgId} and s.tax_year = ${year}
+             and (${row.region}::text is null or s.province = ${row.region})
+             and r.run_status = 'committed' and d.status <> 'voided'
+        ) as locked
+      `));
+      if (locked.rows[0]!.locked) {
+        fail("a committed run already consumed this scope point's room; void that run before changing it");
+        continue;
+      }
+      planned.push({
+        country: row.country, levyKey: row.levyKey,
+        region: row.region == null || row.region === "" ? null : row.region,
+        base: cmp(base, "0") === 0 ? null : base,
+      });
+    }
+
+    if (result.errors.length > 0) {
+      // Nothing partial: raise so the transaction unwinds, carrying the full
+      // error list back to the caller.
+      throw new EmployerLevyOpeningSaveError(result);
+    }
+
+    for (const row of planned) {
+      // The unique index cannot serialize two transactions that both observe
+      // a missing scope point, so an advisory lock keyed by the complete
+      // point closes the gap — the same lock the statutory-rate upsert takes.
+      const lockKey = [input.orgId, year, row.country, row.levyKey, row.region ?? ""].join("\u001f");
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+      const existing = (await tx.execute<{ id: string }>(sql`
+        select id from payroll_employer_levy_opening
+         where org_id = ${input.orgId} and tax_year = ${year}
+           and country = ${row.country} and levy_key = ${row.levyKey}
+           and region is not distinct from ${row.region}
+         for update
+      `));
+      const before = existing.rows[0];
+      if (row.base === null) {
+        if (before) {
+          await tx.execute(sql`
+            delete from payroll_employer_levy_opening
+             where org_id = ${input.orgId} and id = ${before.id}`);
+          result.deleted++;
+          await auditEmployerLevyOpening(tx, {
+            orgId: input.orgId, actorId: input.actorId, rowId: before.id,
+            action: "delete",
+            changes: { country: row.country, levyKey: row.levyKey, region: row.region, taxYear: year },
+          });
+        }
+        continue;
+      }
+      if (before) {
+        await tx.execute(sql`
+          update payroll_employer_levy_opening
+             set base_ytd = ${row.base}, updated_by = ${input.actorId}, updated_at = now()
+           where org_id = ${input.orgId} and id = ${before.id}`);
+        result.updated++;
+      } else {
+        const saved = (await tx.execute<{ id: string }>(sql`
+          insert into payroll_employer_levy_opening
+            (org_id, tax_year, country, levy_key, region, base_ytd, created_by, updated_by)
+          values (${input.orgId}, ${year}, ${row.country}, ${row.levyKey}, ${row.region},
+                  ${row.base}, ${input.actorId}, ${input.actorId})
+          returning id
+        `));
+        result.created++;
+        await auditEmployerLevyOpening(tx, {
+          orgId: input.orgId, actorId: input.actorId, rowId: saved.rows[0]!.id,
+          action: "insert",
+          changes: {
+            country: row.country, levyKey: row.levyKey, region: row.region,
+            taxYear: year, baseYtd: row.base,
+          },
+        });
+        continue;
+      }
+      await auditEmployerLevyOpening(tx, {
+        orgId: input.orgId, actorId: input.actorId, rowId: before.id,
+        action: "update",
+        changes: {
+          country: row.country, levyKey: row.levyKey, region: row.region,
+          taxYear: year, baseYtd: row.base,
+        },
+      });
+    }
+
+    return result;
+  });
+}
+
+/** Carries every rejected employer carry-in out of the aborted transaction. */
+export class EmployerLevyOpeningSaveError extends PayrollError {
+  constructor(readonly result: EmployerLevyOpeningSaveResult) {
+    super(result.errors[0]?.message ?? "employer levy openings were rejected");
+  }
+}
+
+async function auditEmployerLevyOpening(
+  runner: Pick<typeof db, "execute">,
+  args: {
+    orgId: string; actorId: string; rowId: string;
+    action: "insert" | "update" | "delete";
+    changes: Record<string, unknown>;
+  },
+): Promise<void> {
+  await runner.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${args.orgId}, 'payroll_employer_levy_opening', ${args.rowId}, ${args.action},
+            ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }

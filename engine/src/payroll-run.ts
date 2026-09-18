@@ -1,5 +1,10 @@
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
-import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
+import {
+  employeeTaxYearFenceKey,
+  employerLevyFenceKey,
+  takeEmployeeTaxYearFences,
+  takeEmployerLevyFences,
+} from "./payroll-fences.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
@@ -26,11 +31,13 @@ import {
   assertPayrollRegionSupported,
   resolveEmployeePayrollContext,
   resolvePayrollRunContext,
+  PAYROLL_COUNTRY_PACKS,
   type EmployeePayrollContext,
   type PayrollAssessedOn,
   type PayrollRunContext,
 } from "./payroll/packs.ts";
 import { createPushStatutory } from "./payroll/push-statutory.ts";
+import { assessStubAggregateLevies } from "./payroll/employer-aggregate-priors.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./payroll/statutory-context.ts";
 import {
   resolveStatutoryHolidayPay,
@@ -3366,6 +3373,19 @@ async function calculateStub(
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
 
+  // ---- Employer-aggregate levies: pack declares, generic computes --------
+  // The pack's `employerAggregateLevies` for this tax year (absent on both
+  // built-in packs today, so this whole block is inert until a pack declares
+  // one). Each levy's stub share is assessed here, in calculation order, so
+  // threshold room sequences across the run's own employees; the factors
+  // merge into the statutory factors below, which is what the year-to-date
+  // reads back. Annual-timing levies assess to zeros by construction.
+  const aggregateFactors = await assessStubAggregateLevies({
+    tx, orgId, documentId, employeePartyId, taxYear, country, region: province,
+    gross, taxableGross: earning((l) => l.taxable ?? true),
+    lines, pushStatutory,
+  });
+
   const clearIncomeAssessedLines = () => dropIncomeAssessedLines(lines);
 
   const bool = (value: string | null | undefined) =>
@@ -3386,6 +3406,19 @@ async function calculateStub(
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
     });
+    // Employer-aggregate factors merge here, not inside the pack pass: the
+    // pack owns its factor namespace and the levies own theirs, and a key in
+    // both would accumulate two levies into one year-to-date. Refused by
+    // name rather than merged and misattributed.
+    for (const [key, value] of Object.entries(aggregateFactors)) {
+      if (key in factors && factors[key] !== value) {
+        throw new PayrollError(
+          `employer-aggregate factor "${key}" collides with the ${country} pack's statutory factors — `
+          + "rename the levy's factorKey",
+        );
+      }
+      factors[key] = value;
+    }
     firstEarningsAssessed ??= earningsAssessedSnapshot(lines);
   };
 
@@ -3670,6 +3703,23 @@ export async function commitPayRun(input: {
         employeeTaxYearFenceKey(orgId, e.employee_party_id, run.tax_year),
       ),
     );
+    // Employer-aggregate room is shared across rosters, so the employee
+    // fence above cannot serialize it: two runs on disjoint rosters hold no
+    // common employee key. Every commit takes each declared per-run levy's
+    // employer key too — AFTER the employee keys, always in that order —
+    // so the freshness gate below sees competing commits in fence order and
+    // refuses the run whose room is gone. Declarations are read off every
+    // pack (the key carries its country, so packs never contend); packs
+    // that declare none add no keys and behave exactly as before.
+    const levyFenceKeys: string[] = [];
+    for (const [packCountry, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+      for (const levy of pack.employerAggregateLevies?.(Number(run.tax_year)) ?? []) {
+        if (levy.timing === "per_run") {
+          levyFenceKeys.push(employerLevyFenceKey(orgId, run.tax_year, packCountry, levy.key));
+        }
+      }
+    }
+    await takeEmployerLevyFences(tx, levyFenceKeys);
     // Historical component policy changes and deletes take the component
     // row's write lock. Hold the same rows through freshness and commit:
     // a later editor waits, then the database history guard sees the committed
