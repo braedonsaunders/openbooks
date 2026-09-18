@@ -338,6 +338,12 @@ export const taxReturnForms = pgTable("tax_return_forms", {
   /** Legally-required not-for-filing watermark on the facsimile (CRA/ATO/BMF). */
   watermark: text("watermark"),
   /**
+   * Pack-declared filing-notice catalog key (0172, F-w4-001): a
+   * tax-namespace message key the generic prepare panel renders for this
+   * form. Null when the pack declares no notice.
+   */
+  noticeKey: text("notice_key"),
+  /**
    * Optional official fillable PDF (tenant-uploaded, never bundled — Crown
    * copyright / personalized forms / XFA make bundling wrong). When set,
    * openbooks fills its AcroForm fields (tax_report_lines.pdf_field) and flattens.

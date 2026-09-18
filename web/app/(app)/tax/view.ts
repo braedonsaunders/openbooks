@@ -41,6 +41,7 @@ type FormRow = {
   submission_channel: string
   government_format: string
   submission_url: string | null
+  notice_key: string | null
   has_official: boolean
 }
 
@@ -111,7 +112,7 @@ export async function loadTax(
 
   const formsResult = (await db.execute<FormRow>(sql`
     select code, name, country, submission_channel, government_format, submission_url,
-           official_pdf_file_id is not null as has_official
+           notice_key, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${orgId} and is_active
      order by country nulls last, name`))

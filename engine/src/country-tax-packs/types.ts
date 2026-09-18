@@ -48,6 +48,14 @@ export interface TaxReturnPack {
   governmentFormat: "portal_entry" | "certified_file" | "api" | "paper";
   submissionUrl: string;
   watermark: string;
+  /**
+   * Optional filing notice the generic prepare panel renders for this form
+   * (F-w4-001: the panel used to branch on the literal `CA_GST34` code
+   * instead). A `tax`-namespace message-catalog key, e.g.
+   * "submission.gst34Notice" — never a country literal in UI code. Forms
+   * that declare nothing render no notice.
+   */
+  noticeKey?: string;
   boxes: readonly TaxReturnPackBox[];
 }
 

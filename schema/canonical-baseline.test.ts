@@ -356,6 +356,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0168_close_posting_module_recheck.sql",
     "0169_change_orders_income_account.sql",
     "0170_forecast_snapshot_org_target.sql",
+    "0171_expense_line_settlement_type.sql",
+    "0172_tax_return_form_notice_key.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

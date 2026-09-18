@@ -17,6 +17,8 @@ export type TaxFormOption = {
   submission_channel: string
   government_format: string
   submission_url: string | null
+  /** Pack-declared filing-notice catalog key; null renders no notice. */
+  notice_key: string | null
   has_official: boolean
 }
 

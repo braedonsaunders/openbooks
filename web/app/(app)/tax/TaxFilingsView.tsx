@@ -28,6 +28,8 @@ type Form = {
   submission_channel: string
   government_format: string
   submission_url: string | null
+  /** Pack-declared filing-notice catalog key; null renders no notice. */
+  notice_key: string | null
   has_official: boolean
 }
 type Box = { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }
@@ -241,8 +243,8 @@ export function TaxFilingsView({
                   </dl>
                 </div>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('submission.exportNotice')}</p>
-                {code === 'CA_GST34' ? (
-                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t('submission.gst34Notice')}</p>
+                {selectedForm.notice_key ? (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t(selectedForm.notice_key)}</p>
                 ) : null}
               </CardContent>
             ) : null}

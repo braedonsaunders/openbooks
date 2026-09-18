@@ -12,9 +12,9 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
-  const r = (await db.execute<{ code: string; name: string; country: string | null; submission_channel: string; government_format: string; submission_url: string | null; has_official: boolean }>(sql`
+  const r = (await db.execute<{ code: string; name: string; country: string | null; submission_channel: string; government_format: string; submission_url: string | null; notice_key: string | null; has_official: boolean }>(sql`
     select code, name, country, submission_channel, government_format, submission_url,
-           official_pdf_file_id is not null as has_official
+           notice_key, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${gate.user.orgId} and is_active
      order by name`))

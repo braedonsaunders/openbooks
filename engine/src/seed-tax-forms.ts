@@ -79,17 +79,18 @@ async function installTaxReturnPackWith(
   const formRes = (await tx.execute<{ id: string; inserted: boolean }>(sql`
     insert into tax_return_forms
       (org_id, code, name, country, jurisdiction_id, submission_channel, government_format,
-       submission_url, watermark, is_active, created_by, updated_by)
+       submission_url, watermark, notice_key, is_active, created_by, updated_by)
     values (${orgId}, ${pack.code}, ${pack.name}, ${pack.country}, ${jurisdictionId},
             ${pack.submissionChannel}, ${pack.governmentFormat}, ${pack.submissionUrl},
-            ${pack.watermark}, true, ${actorId}, ${actorId})
+            ${pack.watermark}, ${pack.noticeKey ?? null}, true, ${actorId}, ${actorId})
     on conflict (org_id, code) do update
       set name = excluded.name, country = excluded.country,
           jurisdiction_id = excluded.jurisdiction_id,
           submission_channel = excluded.submission_channel,
           government_format = excluded.government_format,
           submission_url = excluded.submission_url,
-          watermark = excluded.watermark, is_active = true,
+          watermark = excluded.watermark, notice_key = excluded.notice_key,
+          is_active = true,
           updated_at = now(), updated_by = ${actorId}
     where tax_return_forms.org_id = ${orgId}
     returning id, (xmax = 0) as inserted`));
