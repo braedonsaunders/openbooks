@@ -35,7 +35,8 @@
     "expectedPayments": "Upcoming payments",
     "topCustomers": "Top customers",
     "topVendors": "Top vendors",
-    "openCount": "{count, plural, one {# open} other {# open}}"
+    "openCount": "{count, plural, one {# open} other {# open}}",
+    "runway": "Cash runway"
   },
   "metricContext": {
     "today": "Posted today",
@@ -51,7 +52,11 @@
     "noData": "No data",
     "next30Days": "Next 30 days",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "week of {date}",
+    "noBurn": "No net burn",
+    "cashShortfall": "Cash shortfall",
+    "runwayWeeks": "{weeks, plural, one {# week of runway} other {# weeks of runway}}"
   },
   "categories": {
     "kpi": "Headlines",
@@ -84,7 +89,8 @@
     "expectedReceipts": "Predicted customer receipts in the next 30 days, in base currency.",
     "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency.",
     "topCustomers": "Largest open customer balances, top five.",
-    "topVendors": "Largest open vendor balances, top five."
+    "topVendors": "Largest open vendor balances, top five.",
+    "runway": "Projected cash and runway over the coming weeks, in base currency."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

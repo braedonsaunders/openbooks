@@ -35,7 +35,8 @@
     "expectedPayments": "Anstehende Zahlungen",
     "topCustomers": "Top-Kunden",
     "topVendors": "Top-Lieferanten",
-    "openCount": "{count, plural, one {# offen} other {# offene}}"
+    "openCount": "{count, plural, one {# offen} other {# offene}}",
+    "runway": "Liquiditätsreichweite"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -51,7 +52,11 @@
     "noData": "Keine Daten",
     "next30Days": "Nächste 30 Tage",
     "dso": "DSO {days}",
-    "dpo": "DPO {days}"
+    "dpo": "DPO {days}",
+    "weekOf": "Woche vom {date}",
+    "noBurn": "Kein Nettoabfluss",
+    "cashShortfall": "Liquiditätsengpass",
+    "runwayWeeks": "{weeks, plural, one {# Woche Liquiditätsreichweite} other {# Wochen Liquiditätsreichweite}}"
   },
   "categories": {
     "kpi": "Kennzahlen",
@@ -84,7 +89,8 @@
     "expectedReceipts": "Prognostizierte Kundeneingänge der nächsten 30 Tage, in Basiswährung.",
     "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung.",
     "topCustomers": "Die fünf größten offenen Kundensalden.",
-    "topVendors": "Die fünf größten offenen Lieferantensalden."
+    "topVendors": "Die fünf größten offenen Lieferantensalden.",
+    "runway": "Prognostizierter Bestand und Reichweite der kommenden Wochen, in Basiswährung."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

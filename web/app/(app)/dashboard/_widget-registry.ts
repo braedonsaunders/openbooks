@@ -226,6 +226,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
   },
+  'kpi-cash-runway': {
+    id: 'kpi-cash-runway',
+    category: 'kpi',
+    labelKey: 'widgets.runway',
+    descriptionKey: 'catalog.runway',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

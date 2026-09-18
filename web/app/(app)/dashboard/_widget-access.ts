@@ -27,6 +27,11 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-bills-due-30d': ['ap.read'],
   'list-top-customers': ['ar.read'],
   'list-top-vendors': ['ap.read'],
+  // The runway discloses cash trajectory and burn — the banking doorway,
+  // not the ledger one. A viewer holds gl.read (sees today's cash balance)
+  // but not banking.read (no forecast): the stricter grant wins, so the
+  // tile never shows a projection to a caller denied the cockpit.
+  'kpi-cash-runway': ['banking.read'],
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,

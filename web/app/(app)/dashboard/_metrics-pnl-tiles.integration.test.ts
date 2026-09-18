@@ -108,6 +108,12 @@ test("P&L tiles read one MTD profitAndLoss call and exclude out-of-window postin
       paymentStats: (async () => {
         throw new Error("paymentStats must not run here");
       }) as DashboardMoneyReaders["paymentStats"],
+      cashPosition: (async () => {
+        throw new Error("cashPosition must not run here");
+      }) as DashboardMoneyReaders["cashPosition"],
+      cashflowConfig: (async () => {
+        throw new Error("cashflowConfig must not run here");
+      }) as DashboardMoneyReaders["cashflowConfig"],
       profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
         calls += 1;
         return canonicalProfitAndLoss(...args);
@@ -149,6 +155,12 @@ test("a multi-functional MTD scope refuses into nulls, never zeros", { skip: !DB
       paymentStats: (async () => {
         throw new Error("paymentStats must not run here");
       }) as DashboardMoneyReaders["paymentStats"],
+      cashPosition: (async () => {
+        throw new Error("cashPosition must not run here");
+      }) as DashboardMoneyReaders["cashPosition"],
+      cashflowConfig: (async () => {
+        throw new Error("cashflowConfig must not run here");
+      }) as DashboardMoneyReaders["cashflowConfig"],
       profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
         calls.push("profitAndLoss");
         return canonicalProfitAndLoss(...args);
@@ -183,6 +195,12 @@ test("P&L readers never run without reports.read", { skip: !DB }, async () => {
       paymentStats: (async () => {
         throw new Error("paymentStats must not run here");
       }) as DashboardMoneyReaders["paymentStats"],
+      cashPosition: (async () => {
+        throw new Error("cashPosition must not run here");
+      }) as DashboardMoneyReaders["cashPosition"],
+      cashflowConfig: (async () => {
+        throw new Error("cashflowConfig must not run here");
+      }) as DashboardMoneyReaders["cashflowConfig"],
       profitAndLoss: (async () => {
         throw new Error("profitAndLoss must not run for a denied widget");
       }) as DashboardMoneyReaders["profitAndLoss"],

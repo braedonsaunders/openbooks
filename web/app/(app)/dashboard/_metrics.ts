@@ -11,11 +11,15 @@ import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { decimalRatio } from '@/lib/reports/decimals'
 import { groupByCustomer, type CustomerReceivable } from '@/lib/cash/ar-position'
 import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
+import { cashPosition } from '@/lib/cash/cash-position'
+import { analyticsConfig } from '@/lib/analytics/config'
+import { MissingRatesError } from '@/lib/consolidation'
 import {
   addDays,
   bankBalances,
   buildWeekGrid,
   compareMoney,
+  normalizeMoneyValue,
   parseISO,
   paymentStats,
   scheduleForecast,
@@ -41,9 +45,23 @@ export type DashboardMoneyReaders = {
   openItems: typeof openItems
   paymentStats: typeof paymentStats
   profitAndLoss: typeof profitAndLoss
+  cashPosition: typeof cashPosition
+  cashflowConfig: (orgId: string) => Promise<{ weeklyCap: string; restrictToSafe: boolean }>
 }
 
-const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems, paymentStats, profitAndLoss }
+const canonicalMoneyReaders: DashboardMoneyReaders = {
+  bankBalances,
+  openItems,
+  paymentStats,
+  profitAndLoss,
+  cashPosition,
+  // The org's AP capacity-scheduling knobs, exactly as the banking cash page
+  // and the analytics tools build them from the cashflow analytics config.
+  cashflowConfig: async (orgId: string) => {
+    const cfg = await analyticsConfig(orgId, 'cashflow')
+    return { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+  },
+}
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -97,6 +115,17 @@ export type DashboardMetrics = {
    */
   topCustomers: CustomerReceivable[] | null
   topVendors: VendorPayable[] | null
+  /**
+   * Cash runway off the canonical cashPosition reader — the same 8-week
+   * horizon the banking cash page opens on, the same AP settings, the same
+   * subsidiary doorway. Null when not queried, or when the FX-rate pipeline
+   * is blocked (the page shows its rates banner; the tile shows no-data).
+   */
+  runwayWeeks: string | null
+  runwayStatus: 'healthy' | 'caution' | 'critical' | null
+  projectedCash: string | null
+  lowestCash: string | null
+  lowestCashWeek: string | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -186,7 +215,8 @@ export async function loadDashboardMetrics(
   const wantPl = need('revenueMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
-  const [totals, banks, baseCurrency, arItems, apItems, arStats, apStats, pl, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
+  const [totals, banks, baseCurrency, arItems, apItems, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -239,6 +269,32 @@ export async function loadDashboardMetrics(
         }))
         .catch((e: unknown) => {
           if (e instanceof ReportCurrencyBasisError) return null
+          throw e
+        })
+      : Promise.resolve(null),
+    // Whole-company liquidity off cashPosition itself — not a re-derivation
+    // from its primitives, so the tile and the banking cash page cannot
+    // diverge on runway, lowest point, or projected end. Same 8-week horizon
+    // the page opens on, same AP capacity settings, same subsidiary doorway
+    // (unrestricted callers also match root-owned rows, exactly as the
+    // page's includeNullSubsidiary). A blocked FX-rate pipeline refuses
+    // inside with MissingRatesError — the page answers with its rates
+    // banner, the tile with no-data; anything else throws.
+    wantRunway
+      ? readers
+        .cashflowConfig(orgId)
+        .then((settings) =>
+          readers.cashPosition(orgId, 8, settings, today, subIds, authz.allowedSubsidiaryIds, subIds === undefined),
+        )
+        .then((p) => ({
+          weeks: p.runwayWeeks,
+          status: p.runwayStatus,
+          projected: p.projectedEnd,
+          lowest: p.lowestCash,
+          lowestWeek: p.lowestWeek,
+        }))
+        .catch((e: unknown) => {
+          if (e instanceof MissingRatesError) return null
           throw e
         })
       : Promise.resolve(null),
@@ -395,6 +451,11 @@ export async function loadDashboardMetrics(
     payablesDpo: apStats?.globalAvg ?? null,
     topCustomers,
     topVendors,
+    runwayWeeks: runway?.weeks ?? null,
+    runwayStatus: runway?.status ?? null,
+    projectedCash: runway?.projected ?? null,
+    lowestCash: runway?.lowest ?? null,
+    lowestCashWeek: runway?.lowestWeek ?? null,
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -440,6 +501,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
   'list-top-customers': ['topCustomers'],
   'list-top-vendors': ['topVendors'],
+  'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'asOfDate'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -472,6 +534,11 @@ const EMPTY_METRICS: DashboardMetrics = {
   payablesDpo: null,
   topCustomers: null,
   topVendors: null,
+  runwayWeeks: null,
+  runwayStatus: null,
+  projectedCash: null,
+  lowestCash: null,
+  lowestCashWeek: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],
