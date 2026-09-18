@@ -13,7 +13,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { POST } = await import('../app/api/admin/custom-fields/route');
 
@@ -22,11 +22,11 @@ const { installApp } = await import('./apps/store');
 const request = (body: unknown) => new Request('http://audit.local/api/admin/custom-fields', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 for (const mode of ['API requests', 'app installs', 'API and app installs', 'reversed app bundles']) {
   test(`custom-field creation serializes competing ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
       state.user = { id: actor, orgId: org.orgId, homeUserId: actor, homeOrgId: org.orgId, productionOrgId: org.orgId, envKind: 'production', name: 'Creation reviewer', email: 'creation@scratch.test', roles: [], isSuperAdmin: false };
-      await db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin'`));
       const field = { targetTable: 'parties', key: 'concurrent_review', label: 'Concurrent review', fieldType: 'text' };
       const outcomes = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
         const app = mode === 'app installs' || mode === 'reversed app bundles' || (mode === 'API and app installs' && index % 2 === 0);
@@ -47,10 +47,10 @@ for (const mode of ['API requests', 'app installs', 'API and app installs', 'rev
       const winners = outcomes.filter(outcome => outcome.status === 200);
       assert.equal(winners.length, 1, JSON.stringify(outcomes));
       assert.ok(outcomes.every(outcome => outcome.status === 200 || outcome.status === 409), JSON.stringify(outcomes));
-      const counts = (await db.execute<{ definitions: number; apps: number; versions: number }>(sql`select
+      const counts = (await withOrgContext(org.orgId, () => db.execute<{ definitions: number; apps: number; versions: number }>(sql`select
         (select count(*)::int from custom_field_defs where org_id=${org.orgId} and key=${field.key}) as definitions,
         (select count(*)::int from apps where org_id=${org.orgId}) as apps,
-        (select count(*)::int from app_versions where org_id=${org.orgId}) as versions`)).rows[0]!;
+        (select count(*)::int from app_versions where org_id=${org.orgId}) as versions`))).rows[0]!;
       assert.deepEqual(counts, { definitions: 1, apps: winners[0]!.app ? 1 : 0, versions: winners[0]!.app ? 1 : 0 }, 'losing installs roll back every app/version write');
     } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });
