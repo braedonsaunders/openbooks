@@ -44,7 +44,14 @@ export interface ScratchOrg {
 /** Build one pristine scratch tenant. The pool wrapper below calls this only
  * during fixed-size process setup; ordinary callers retain the historical
  * one-off behavior when pooling is not explicitly enabled. */
+// Fixture creation runs under the bypass, always. Tests connect as the
+// constrained runtime role now (CI shards no longer run as a superuser, which
+// PostgreSQL exempts from every RLS policy), so these seeds are genuinely
+// subject to org isolation and a bare insert fails with an RLS violation that
+// reads like a product regression. Wrapping here rather than at 150-odd call
+// sites means a suite cannot forget; reads stay scoped through withOrgContext.
 async function bootstrapScratchOrg(): Promise<ScratchOrg> {
+  return withBypassContext(async () => {
   const orgId = randomUUID();
   const date = "2026-07-15";
   const baselineIds: Record<string, string[]> = {};
@@ -197,6 +204,7 @@ async function bootstrapScratchOrg(): Promise<ScratchOrg> {
 
   mark("orgs", orgId);
   return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date, baselineIds };
+  });
 }
 
 export interface ScratchOrgLifecycleMetrics {
