@@ -14,7 +14,9 @@ import {
   AU_SCHEDULE1_SCALE3_STSL_2027,
   AU_SCHEDULE1_SCALE4_2027,
   AU_SCHEDULE1_SCALE5_2027,
+  AU_SCHEDULE1_SCALE5_STSL_2027,
   AU_SCHEDULE1_SCALE6_2027,
+  AU_SCHEDULE1_SCALE6_STSL_2027,
   AU_SCHEDULE8_STSL_NO_THRESHOLD_2027,
   AU_SCHEDULE8_STSL_THRESHOLD_2027,
 } from "./schedule1-2027.ts";
@@ -47,6 +49,18 @@ test("AU Schedule 8 combined tables split at the STSL floors", () => {
     AU_SCHEDULE1_SCALE3_STSL_2027[0],
     { lessThan: "1337", a: "0.3000", b: "0.3000" },
   );
+  assert.equal(AU_SCHEDULE1_SCALE5_STSL_2027.length, 10);
+  assert.equal(AU_SCHEDULE1_SCALE6_STSL_2027.length, 12);
+  assert.deepEqual(AU_SCHEDULE1_SCALE5_STSL_2027[5], {
+    lessThan: "2494",
+    a: "0.4500",
+    b: "382.2923",
+  });
+  assert.deepEqual(AU_SCHEDULE1_SCALE6_STSL_2027[7], {
+    lessThan: "2494",
+    a: "0.4600",
+    b: "382.2923",
+  });
   assert.deepEqual(AU_SCHEDULE8_STSL_THRESHOLD_2027[1], {
     lessThan: "2494",
     a: "0.15",

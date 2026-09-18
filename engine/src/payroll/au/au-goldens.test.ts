@@ -27,6 +27,7 @@ const RESIDENT = {
   residency: "australian_resident",
   workingHolidayMaker: false,
   claimsThreshold: true,
+  medicareExemption: "none",
   tfnQuoted: true,
   stslDebt: false,
   periodsPerYear: 12,
@@ -165,6 +166,29 @@ test("AU sweep: scale-3 weekly edges at, below and above", () => {
   }
 });
 
+// Weekly $2,000 with STSL and a FULL Medicare exemption, scale 5 + STSL.
+// x = 2,000.99 (< 2,494 row).
+// y = 0.45×2,000.99 − 382.2923 = 900.4455 − 382.2923 = 518.1532 → $518.
+test("AU golden: $2k weekly scale 5 with STSL withholds 518", () => {
+  const result = calculateAu2027({
+    ...RESIDENT, income: "2000", medicareExemption: "full", stslDebt: true,
+    pensionable: "2000", periodsPerYear: 52,
+  });
+  assert.equal(result.payg, "518.0000");
+  assert.equal(result.sg, "240.0000");
+});
+
+// Weekly $1,000 with a HALF Medicare exemption, scale 6. x = 1,000.99.
+// y = 0.3527×1,000.99 − 230.6135 = 353.0492 − 230.6135 = 122.4357 → $122.
+test("AU golden: $1k weekly scale 6 withholds 122", () => {
+  const result = calculateAu2027({
+    ...RESIDENT, income: "1000", medicareExemption: "half",
+    pensionable: "1000", periodsPerYear: 52,
+  });
+  assert.equal(result.payg, "122.0000");
+  assert.equal(result.sg, "120.0000");
+});
+
 // STSL floor edges, scale 2 + STSL (below $1,337 the row repeats the base):
 // 1,336 → 0.32×1,336.99−181.7319 = 246.1049 → 246;
 // 1,337 → 0.47×1,337.99−382.2935 = 246.5618 → 247.
@@ -202,6 +226,13 @@ test("AU engine refuses no-TFN, WHM and unsupported frequencies by name", () => 
   assert.throws(
     () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 52, workingHolidayMaker: true }),
     /working holiday makers is refused/,
+  );
+  assert.throws(
+    () => calculateAu2027({
+      ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 52,
+      residency: "foreign_resident", medicareExemption: "full",
+    }),
+    /foreign resident claiming a Medicare/,
   );
   assert.throws(
     () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 0 }),

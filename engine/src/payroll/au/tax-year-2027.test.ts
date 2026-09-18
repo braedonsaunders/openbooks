@@ -79,7 +79,8 @@ test("AU refusals name every untranscribed scale and cap", () => {
   const joined = AU_REFUSED_2027.join("\n");
   for (const name of [
     "scale 4",
-    "scales 5 and 6",
+    "foreign-resident-plus-Medicare-exemption",
+    "WLA machinery",
     "Schedule 15",
     "Schedules 2, 3, 4, 6, 7, 9, 10, 11, 12, 13 and 14",
     "surcharge",

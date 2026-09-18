@@ -211,7 +211,8 @@ export function auTablesForPayDate(payDate: string): { readonly taxYear: 2027 } 
  */
 export const AU_REFUSED_2027: readonly string[] = [
   "ATO PAYG withholding scale 4 (no TFN quoted: resident 47%, foreign resident 45% — flat-rate cents-ignored withholding the engine does not compute)",
-  "ATO PAYG withholding scales 5 and 6 (full/half Medicare levy exemption via the Medicare levy variation declaration, which the TFN declaration does not carry)",
+  "ATO Schedule 1 foreign-resident-plus-Medicare-exemption combination (scale 3 is foreign residents unqualified and scales 5-6 name no residency: no quotable scale covers both at once)",
+  "Medicare levy adjustment WLA machinery (family threshold, shading-out point and dependant counts from variation-declaration questions 9-12: the exemption claim alone selects scales 5-6 but no adjustment is applied)",
   "Medicare levy adjustment (WLA) and Withholding-declaration tax offsets (neither declaration is carried, so both adjustments are nil by the instrument's own conditions)",
   "ATO Schedule 15 working-holiday-maker withholding (the y = ax formula turns on registered-employer status and year-to-date payments the pack cannot see)",
   "ATO Schedules 2, 3, 4, 6, 7, 9, 10, 11, 12, 13 and 14 (horticultural/shearing, actors and entertainers, return to work, annuities, unused leave on termination, seniors and pensioners, voluntary agreements, employment termination payments, superannuation lump sums, superannuation income streams, additional withholding agreements)",

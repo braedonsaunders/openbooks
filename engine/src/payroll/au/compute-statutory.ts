@@ -9,7 +9,10 @@
  * and then add 99 cents" after the 33-cent rule, quarterly — "divide ...
  * by 13. Ignore any cents in the result and then add 99 cents"), the TFN
  * declaration selects scale 1 (no threshold claim), 2 (threshold claimed)
- * or 3 (foreign resident), the weekly withholding y = ax − b is rounded
+ * or 3 (foreign resident), and a Medicare levy variation declaration
+ * claiming a full or half exemption takes scale 5 or 6 instead — even
+ * where the threshold is also claimed (General example 2). The weekly
+ * withholding y = ax − b is rounded
  * ("rounded to the nearest dollar. Values ending in 50 cents are rounded up
  * to the next dollar. Do this rounding directly"), and the rounded weekly
  * figure is converted back ("fortnightly – ... Multiply this amount by two.
@@ -26,10 +29,11 @@
  * was lodged — neither declaration is carried, so both are nil by the
  * instrument's own conditions.
  *
- * Refused by name: no-TFN payees (scale 4), Medicare-exempt scales 5 and 6,
- * working holiday makers (Schedule 15), pay frequencies outside
- * weekly/fortnightly/monthly/quarterly, and every other schedule — see
- * AU_REFUSED_2027.
+ * Refused by name: no-TFN payees (scale 4), foreign residents claiming a
+ * Medicare exemption (no quotable scale covers the combination), working
+ * holiday makers (Schedule 15), pay frequencies outside
+ * weekly/fortnightly/monthly/quarterly, the family/spouse levy adjustment
+ * (WLA) machinery, and every other schedule — see AU_REFUSED_2027.
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts — the same
  * discipline as canada/decimal.ts. Coefficients stay decimal strings.
@@ -44,6 +48,10 @@ import {
   AU_SCHEDULE1_SCALE2_STSL_2027,
   AU_SCHEDULE1_SCALE3_2027,
   AU_SCHEDULE1_SCALE3_STSL_2027,
+  AU_SCHEDULE1_SCALE5_2027,
+  AU_SCHEDULE1_SCALE5_STSL_2027,
+  AU_SCHEDULE1_SCALE6_2027,
+  AU_SCHEDULE1_SCALE6_STSL_2027,
   type AuSchedule1Row,
 } from "./schedule1-2027.ts";
 import { AU_SUPER_2027 } from "./tax-year-2027.ts";
@@ -85,6 +93,8 @@ export interface Au2027Input {
   workingHolidayMaker: boolean;
   /** TFN declaration: threshold claimed from THIS payer (scale 2 vs 1). */
   claimsThreshold: boolean;
+  /** Medicare levy variation declaration: full takes scale 5, half scale 6. */
+  medicareExemption: "none" | "full" | "half";
   tfnQuoted: boolean;
   stslDebt: boolean;
   /** Period ordinary-time earnings (qualifying-earnings proxy), decimal. */
@@ -115,6 +125,22 @@ function scaleFor(input: Au2027Input): readonly AuSchedule1Row[] {
       + "Schedule 15 turns on registered-employer status and year-to-date "
       + "payments the pack cannot see (see AU_REFUSED_2027)",
     );
+  }
+  // The Medicare exemption outranks the threshold claim: the instrument's
+  // General example 2 claims the tax-free threshold AND a full Medicare
+  // exemption, and "Therefore, Scale 5 is applied".
+  if (input.medicareExemption !== "none") {
+    if (input.residency === "foreign_resident") {
+      throw new PayrollPackError(
+        "AU PAYG withholding for a foreign resident claiming a Medicare "
+        + "levy exemption is refused by name: no quotable scale covers the "
+        + "combination (see AU_REFUSED_2027)",
+      );
+    }
+    if (input.medicareExemption === "full") {
+      return input.stslDebt ? AU_SCHEDULE1_SCALE5_STSL_2027 : AU_SCHEDULE1_SCALE5_2027;
+    }
+    return input.stslDebt ? AU_SCHEDULE1_SCALE6_STSL_2027 : AU_SCHEDULE1_SCALE6_2027;
   }
   if (input.residency === "foreign_resident") {
     return input.stslDebt ? AU_SCHEDULE1_SCALE3_STSL_2027 : AU_SCHEDULE1_SCALE3_2027;
@@ -214,11 +240,19 @@ export async function computeAuStatutory(
       `AU TFN declaration residency answer "${residency}" is not a declared choice`,
     );
   }
+  const variation = certificateFor("au_medicare_levy_variation")?.answers ?? {};
+  const medicareExemption = variation["medicare_exemption"] ?? "none";
+  if (medicareExemption !== "none" && medicareExemption !== "full" && medicareExemption !== "half") {
+    throw new PayrollPackError(
+      `AU Medicare levy variation declaration exemption answer "${medicareExemption}" is not a declared choice`,
+    );
+  }
   const result = calculateAu2027({
     income,
     residency,
     workingHolidayMaker: bool(answers["working_holiday_maker"] ?? null),
     claimsThreshold: bool(answers["tax_free_threshold"] ?? null),
+    medicareExemption,
     tfnQuoted: (answers["tax_file_number"] ?? "") !== "",
     stslDebt: bool(answers["stsl_debt"] ?? null),
     pensionable,
