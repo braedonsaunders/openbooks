@@ -429,7 +429,7 @@ export async function createSubcontract(input: {
     if (!row.vendor_ok) throw new SubcontractError("Vendor is not active in this organization");
     if (!row.po_ok) throw new SubcontractError("Purchase order does not belong to this project and vendor");
     if (!row.currency) throw new SubcontractError("A transaction currency is required");
-    const result = (await tx.execute<any>(sql`
+    const result = (await tx.execute<Record<string, unknown>>(sql`
       insert into subcontracts (
         org_id, project_id, vendor_id, number, title, description, currency,
         original_commitment, default_retainage_percent, purchase_order_id,
@@ -441,7 +441,7 @@ export async function createSubcontract(input: {
         ${input.userId}, ${input.userId}
       ) returning *
     `));
-    const created = result.rows[0];
+    const created = result.rows[0]!;
     await audit(tx, input.orgId, "subcontracts", String(created.id), "insert", {
       after: created,
     }, input.userId);
@@ -630,7 +630,15 @@ export async function approveSubcontractChangeOrder(orgId: string, userId: strin
   requireSubcontractDate(approvedOn, "Approval date");
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
-    const result = (await tx.execute<any>(sql`
+    const result = (await tx.execute<{
+      status: string;
+      created_by: string | null;
+      target_sov_line_id: string | null;
+      subcontract_id: string;
+      number: string;
+      description: string | null;
+      amount: string;
+    }>(sql`
       select co.*, s.project_id from subcontract_change_orders co
       join subcontracts s on s.id = co.subcontract_id and s.org_id = co.org_id
       where co.org_id = ${orgId} and co.id = ${id} for update of co, s
@@ -803,7 +811,15 @@ async function computeApplicationTx(tx: SqlExecutor, orgId: string, payApplicati
   const priorExactRetainage = prior.map((row) =>
     cmp(row.gross, "0") > 0 && cmp(row.percent, "0") > 0 ? mulPercent(row.gross, row.percent) : "0.0000",
   );
-  const result = (await tx.execute<any>(sql`
+  const result = (await tx.execute<{
+    sov_line_id: string;
+    scheduled_value: string;
+    previous_earned: string;
+    previous_materials_stored: string;
+    work_completed_this_period: string;
+    materials_stored_current: string;
+    retainage_percent: string;
+  }>(sql`
     select l.sov_line_id, s.scheduled_value, l.previous_earned, l.previous_materials_stored,
            l.work_completed_this_period, l.materials_stored_current, l.retainage_percent
       from vendor_pay_application_lines l
@@ -873,7 +889,21 @@ export async function generateVendorPayApplicationBill(
 ): Promise<{ vendorBillDocumentId: string; documentNumber: string; netDue: string }> {
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
-    const result = (await tx.execute<any>(sql`
+    const result = (await tx.execute<{
+      subcontract_id: string;
+      project_id: string;
+      vendor_id: string;
+      currency: string;
+      subsidiary_id: string | null;
+      status: string;
+      application_number: number;
+      period_end: string;
+      vendor_invoice_number: string | null;
+      gross_this_period: string;
+      retainage_this_period: string;
+      net_due: string;
+      vendor_bill_document_id: string | null;
+    }>(sql`
       select vpa.*, s.project_id, s.vendor_id, s.currency, p.subsidiary_id
         from vendor_pay_applications vpa
         join subcontracts s on s.id = vpa.subcontract_id and s.org_id = vpa.org_id
@@ -971,7 +1001,13 @@ export async function releaseVendorRetainage(input: {
   requireSubcontractDate(input.periodEnd, "Period ending");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const contract = (await tx.execute<any>(sql`
+    const contract = (await tx.execute<{
+      project_id: string;
+      vendor_id: string;
+      currency: string;
+      status: string;
+      subsidiary_id: string | null;
+    }>(sql`
       select s.project_id, s.vendor_id, s.currency, s.status, p.subsidiary_id
         from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
        where s.org_id = ${input.orgId} and s.id = ${input.subcontractId} for update of s

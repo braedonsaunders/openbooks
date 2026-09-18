@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritorySubject } from "./crm-math.ts";
+import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritoryRule, type TerritorySubject } from "./crm-math.ts";
 
 /**
  * The stage gate lives in crm-math.ts because it is pure and this module is
@@ -152,7 +152,18 @@ export async function promoteCrmAccount(
 export async function routeCrmAccount(orgId: string, profileId: string, actorId: string): Promise<string | null> {
   if (!(await crmFeatureEnabled(db, orgId))) return null;
   return db.transaction(async (tx) => {
-    const account = (await tx.execute<any>(sql`
+    const account = (await tx.execute<{
+      id: string;
+      lifecycle_stage: CrmLifecycleStage;
+      lead_source_id: string | null;
+      industry: string | null;
+      annual_revenue: string | null;
+      employee_count: number | null;
+      owner_user_id: string | null;
+      territory_id: string | null;
+      country: string | null;
+      region: string | null;
+    }>(sql`
       select cp.id, cp.lifecycle_stage, cp.lead_source_id, cp.industry, cp.annual_revenue, cp.employee_count,
              cp.owner_user_id, cp.territory_id, a.country, a.region
         from crm_account_profiles cp
@@ -164,7 +175,12 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
        where cp.id = ${profileId} and cp.org_id = ${orgId} for update`));
     const row = account.rows[0];
     if (!row) return null;
-    const territories = (await tx.execute<any>(sql`
+    const territories = (await tx.execute<{
+      id: string;
+      rules: TerritoryRule[];
+      match_mode: "all" | "any";
+      default_owner_user_id: string | null;
+    }>(sql`
       select id, rules, match_mode, default_owner_user_id
         from crm_sales_territories where org_id = ${orgId} and is_active
        order by priority, created_at`));

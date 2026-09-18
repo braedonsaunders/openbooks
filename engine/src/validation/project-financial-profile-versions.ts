@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import {
   publishProjectFinancialProfileInTransaction,
@@ -11,7 +11,7 @@ const ROLLBACK = Symbol("expected validation rollback");
 async function expectDatabaseRejection(
   tx: SqlExecutor,
   name: string,
-  query: any,
+  query: SQL,
 ): Promise<void> {
   await tx.execute(sql.raw(`savepoint ${name}`));
   let rejected = false;

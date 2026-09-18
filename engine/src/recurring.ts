@@ -466,7 +466,22 @@ async function generateFromTemplate(
   const prior = await findOccurrenceDocument(orgId, context.scheduleId, context.occurrenceOn);
   if (prior) return prior;
 
-  const tplRes = (await db.execute<Record<string, any>>(sql`
+  const tplRes = (await db.execute<{
+    kind: string;
+    document_date: string | null;
+    due_date: string | null;
+    party_id: string | null;
+    subsidiary_id: string | null;
+    currency: string;
+    project_id: string | null;
+    department_id: string | null;
+    location_id: string | null;
+    class_id: string | null;
+    billing_method: string | null;
+    reference_number: string | null;
+    memo: string | null;
+    extra_dims: Record<string, unknown> | null;
+  }>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId} for share
   `));
   const tpl = tplRes.rows[0];

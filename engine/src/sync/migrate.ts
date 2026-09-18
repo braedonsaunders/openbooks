@@ -522,7 +522,9 @@ export async function loadEntities(
         const id = await upsert(stream.resource, ctx, rec, s);
         if (id) {
           idByRef.set(rec.sourceRef, id);
-          const map = (ctx.maps as any)[stream.resource] as Map<string, string> | undefined;
+          const map = stream.resource in ctx.maps
+            ? ctx.maps[stream.resource as keyof RefMaps]
+            : undefined;
           if (map) map.set(rec.sourceRef, id);
         }
       } catch (e) {

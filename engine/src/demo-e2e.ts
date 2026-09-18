@@ -27,7 +27,7 @@ async function main() {
 
   const ap = await acct("accounts payable");
   const expense = await acct("consumable");
-  const vendor = (await db.execute(sql`
+  const vendor = (await db.execute<{ id: string; display_name: string }>(sql`
     select p.id, p.display_name
       from parties p
      where p.org_id = ${orgId}
@@ -36,7 +36,7 @@ async function main() {
           where role.org_id = p.org_id and role.party_id = p.id and role.is_active
        )
      limit 1
-  `) as any).rows[0];
+  `)).rows[0];
 
   const deps: PostingDeps = { control: { ap: ap.id, ar: ap.id, bank: ap.id } };
 
@@ -71,7 +71,7 @@ async function main() {
     orgId,
     kind: "vendor_bill",
     documentNumber: demoNumber,
-    partyId: vendor.id,
+    partyId: vendor!.id,
     documentDate: "2026-07-13",
     dueDate: "2026-08-12",
     currency: "CAD",

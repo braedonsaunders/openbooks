@@ -326,7 +326,16 @@ test("adyen webhook: per-item HMAC verified", () => {
 /** Build an Adyen delivery whose every item carries its own valid HMAC. */
 function signedAdyenDelivery(
   keyBytes: Buffer,
-  items: Record<string, any>[],
+  items: Array<{
+    pspReference?: unknown;
+    originalReference?: unknown;
+    merchantAccountCode?: unknown;
+    merchantReference?: unknown;
+    amount?: { value?: unknown; currency?: unknown };
+    eventCode?: unknown;
+    success?: unknown;
+    additionalData?: Record<string, unknown>;
+  }>,
 ): { body: string } {
   for (const item of items) {
     const message = [

@@ -18,6 +18,36 @@ export const CLOSE_MODULES = [
 ] as const;
 export type CloseModule = (typeof CLOSE_MODULES)[number];
 
+/** One row of close_reopen_requests as read by the approve/re-close paths. */
+interface CloseReopenRequestRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  period_id: string;
+  book_id: string;
+  subsidiary_id: string | null;
+  requested_by: string;
+  modules: CloseModule[];
+  reason: string;
+}
+
+/** One close_blueprint_steps row materialized into run tasks at run start. */
+interface CloseBlueprintStepRow extends Record<string, unknown> {
+  id: string;
+  key: string;
+  title: string;
+  description: string | null;
+  workstream: string;
+  task_type: string;
+  completion_mode: string;
+  gate_type: string;
+  due_offset_business_days: number;
+  evidence_required: boolean;
+  sort_order: number;
+  default_owner_role_key: string | null;
+  default_reviewer_role_key: string | null;
+  applicability: Record<string, unknown> | null;
+}
+
 export function periodLockBlocksPosting(
   lock: { state: string; reopenExpiresAt: Date | string | null; reason: string | null } | undefined,
   allowImportedLock: boolean,
@@ -1185,7 +1215,7 @@ export async function startCloseRun(args: {
       returning id`));
       const runId = inserted.rows[0]?.id;
       if (!runId) throw new CloseError("close run was created concurrently; retry to resume its captured scope");
-      const steps = (await tx.execute<any>(sql`
+      const steps = (await tx.execute<CloseBlueprintStepRow>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
              default_owner_role_key, default_reviewer_role_key, applicability
@@ -2867,7 +2897,7 @@ export async function decidePeriodReopen(args: {
   hours?: number;
 }): Promise<void> {
   await db.transaction(async (tx) => {
-    const request = (await tx.execute<any>(sql`
+    const request = (await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
        for update`));
@@ -2895,7 +2925,7 @@ export async function decidePeriodReopen(args: {
       : defaultHours;
     const hours = Math.min(Math.max(requestedHours, 1), maxHours);
     const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
-    const modules = row.modules as CloseModule[];
+    const modules = row.modules;
     if (modules.some((module) => !CLOSE_MODULES.includes(module)))
       throw new CloseError("reopen request contains an invalid module");
     await tx.execute(sql`
@@ -3038,12 +3068,12 @@ export async function decidePeriodReopen(args: {
 
 async function recloseApprovedReopenRow(args: {
   tx: SqlExecutor;
-  row: any;
+  row: CloseReopenRequestRow;
   actorId?: string;
   reason: string;
   automatic: boolean;
 }): Promise<void> {
-  const modules = args.row.modules as CloseModule[];
+  const modules = args.row.modules;
   if (
     modules.length === 0 ||
     modules.some((module) => !CLOSE_MODULES.includes(module))
@@ -3201,7 +3231,7 @@ export async function recloseApprovedReopen(args: {
     throw new CloseError("a 10-500 character re-close reason is required");
   }
   await db.transaction(async (tx) => {
-    const request = (await tx.execute(sql`
+    const request = (await tx.execute<CloseReopenRequestRow>(sql`
       select *
         from close_reopen_requests
        where id = ${args.requestId}
@@ -3226,7 +3256,15 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
   // scheduler tick that calls this holds no request store, so without the
   // boundary RLS denies by default and no window is ever closed again.
   const expired = await withBypassContext(() =>
-    db.execute<any>(sql`
+    db.execute<{
+      id: string;
+      org_id: string;
+      period_id: string;
+      book_id: string;
+      subsidiary_id: string | null;
+      modules: CloseModule[];
+      reason: string;
+    }>(sql`
     select request.id, request.org_id, request.period_id, request.book_id,
            request.subsidiary_id, request.modules, request.reason
       from close_reopen_requests request
@@ -3236,7 +3274,7 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
   for (const row of expired.rows) {
     await withOrgContext(row.org_id, () =>
       db.transaction(async (tx) => {
-      const locked = (await tx.execute<any>(sql`
+      const locked = (await tx.execute<CloseReopenRequestRow>(sql`
         select *
           from close_reopen_requests
          where id = ${row.id}
@@ -3244,12 +3282,13 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
            and status = 'approved'
            and expires_at <= now()
          for update`));
-      if (!locked.rows[0]) return;
+      const lockedRow = locked.rows[0];
+      if (!lockedRow) return;
       await recloseApprovedReopenRow({
         tx,
-        row: locked.rows[0],
+        row: lockedRow,
         actorId,
-        reason: locked.rows[0].reason,
+        reason: lockedRow.reason,
         automatic: true,
       });
     }));
@@ -3480,7 +3519,23 @@ export async function runCloseAutomations(
   // Tenant-authored deadline/task automations are the Advanced Close layer.
   // Core close (start, attest, lock) still runs; existing rules are preserved.
   if (!(await advancedCloseEnabled(context.orgId))) return { completed: 0, failed: 0 };
-  const runResult = (await db.execute<any>(sql`
+  const runResult = (await db.execute<{
+    id: string;
+    period_id: string;
+    book_id: string;
+    status: string;
+    target_close_date: string | null;
+    readiness_score: string | number | null;
+    data_fingerprint: string;
+    started_by: string | null;
+    period_name: string;
+    book_name: string;
+    task_key: string | null;
+    workstream: string | null;
+    task_status: string | null;
+    exception_severity: string | null;
+    exception_code: string | null;
+  }>(sql`
     select r.*, p.name as period_name, b.name as book_name,
            t.key as task_key, t.workstream, t.status as task_status,
            x.severity as exception_severity, x.code as exception_code

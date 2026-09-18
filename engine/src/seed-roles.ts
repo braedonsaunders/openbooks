@@ -14,7 +14,7 @@ import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
  * custom roles are never modified.
  */
 
-const orgs = (await db.execute(sql`select id, name from orgs order by created_at`)) as any;
+const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`));
 if (orgs.rows.length === 0) {
   console.error("no orgs found — seed an org before seeding roles");
   process.exit(1);

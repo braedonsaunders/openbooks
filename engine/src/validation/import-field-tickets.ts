@@ -58,7 +58,9 @@ async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
     try { return await fn(); } catch (e) {
       last = e;
       const chain: string[] = [];
-      for (let c: any = e; c; c = c.cause) chain.push(String(c?.message ?? ""));
+      for (let c: unknown = e; c; c = (c as { cause?: unknown })?.cause) {
+        chain.push(String((c as { message?: unknown })?.message ?? ""));
+      }
       if (!/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(chain.join(" "))) throw e;
       await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
     }
@@ -120,9 +122,9 @@ const parseRows = (): Row[] =>
 
   // Preload the tickets already landed so a resumed run costs one query, not one per ticket.
   const existingTickets = new Map<string, string>(
-    (((await retry(() => db.execute(sql`
-      select document_number n, id from documents where org_id = ${ORG} and kind = 'field_ticket'`))) as any).rows as any[])
-      .map((x) => [String(x.n), String(x.id)]),
+    ((await retry(() => db.execute<{ n: string; id: string }>(sql`
+      select document_number n, id from documents where org_id = ${ORG} and kind = 'field_ticket'`)))).rows
+      .map((x): [string, string] => [String(x.n), String(x.id)]),
   );
   let created = 0, nativeCreated = 0, noProject = 0, existing = 0;
   for (const t of tickets) {
@@ -149,22 +151,22 @@ const parseRows = (): Row[] =>
         },
       };
       ticketDocId = await retry(() => withOrg(ORG, async () => {
-        const ins = (await db.execute(sql`
+        const ins = (await db.execute<{ id: string }>(sql`
           insert into documents (org_id, kind, document_number, party_id, project_id, document_date, currency,
                                  status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
           values (${ORG}, 'field_ticket', ${t.number}, ${parties.get(t.customerRef) ?? null}, ${projectId},
                   ${t.end}, ${baseCurrency}, ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
                   '0', '0', '0', ${t.po}, ${actor},
                   ${JSON.stringify(sourceMetadata)}::jsonb)
-          returning id`)) as any;
+          returning id`));
         await db.execute(sql`
           insert into field_tickets
             (document_id, org_id, period, period_start, period_end,
              foreman_party_id, created_by, updated_by)
-          values (${ins.rows[0].id}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
+          values (${ins.rows[0]!.id}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
                   ${parties.get(t.foremanRef) ?? null}, ${actor}, ${actor})
         `);
-        return String(ins.rows[0].id);
+        return String(ins.rows[0]!.id);
       }));
       existingTickets.set(t.number, ticketDocId!);
       created++;

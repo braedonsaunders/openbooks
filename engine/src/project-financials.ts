@@ -405,7 +405,10 @@ async function resolveProjectFinancialsInSnapshot(
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
     // cost by account (for the breakdown subtab) — same cost predicate.
-    db.execute<any>(sql`
+    db.execute<{
+      account_id: string; number: string | null; name: string; type: string; amount: string;
+      func: string | null; late: string;
+    }>(sql`
       select a.id as account_id, a.number, a.name, a.type, sub.base_currency as func,
              max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -417,7 +420,10 @@ async function resolveProjectFinancialsInSnapshot(
     // documents on the project (transactions tab). Row amounts arrive in
     // the document's transaction currency with its functional first leg and
     // translate per row below, so the tab states presentation like the rest.
-    db.execute<any>(sql`
+    db.execute<{
+      id: string; kind: string; documentNumber: string; documentDate: string; status: string;
+      partyName: string | null; func: string | null; late: string; fxRate: string; amount: string;
+    }>(sql`
       select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
              d.status, pt.display_name as "partyName", sub.base_currency as func,
              coalesce(d.document_date, d.posting_date)::text as late, d.fx_rate as "fxRate",

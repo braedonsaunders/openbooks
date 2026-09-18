@@ -362,7 +362,24 @@ async function resolveTaxComponents(
   documentId: string,
   orgId: string,
 ): Promise<Map<string, TaxPostingComponent[]>> {
-  const result = (await runner.execute<Record<string, any>>(sql`
+  const result = (await runner.execute<{
+    document_line_id: string;
+    tax_code_id: string;
+    sequence: number;
+    rate_percent: string;
+    taxable_amount: string;
+    tax_amount: string;
+    recoverable_amount: string;
+    nonrecoverable_amount: string;
+    calculation_type: "standard" | "withholding" | "reverse_charge";
+    price_includes_tax: boolean;
+    compound_on_previous: boolean;
+    rounding_scale: number;
+    collected_account_id: string | null;
+    paid_account_id: string | null;
+    withholding_account_id: string | null;
+    recoverable_percent: string | null;
+  }>(sql`
     select c.document_line_id, c.tax_code_id, c.sequence, c.rate_percent::text,
            c.taxable_amount::text, c.tax_amount::text,
            c.recoverable_amount::text, c.nonrecoverable_amount::text,

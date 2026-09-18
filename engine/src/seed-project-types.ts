@@ -56,17 +56,17 @@ export async function seedProjectTypes(
 }
 
 async function main() {
-  const org: any = await db.execute(
+  const org = await db.execute<{ id: string }>(
     sql`select id from orgs order by created_at`,
   );
   for (const row of org.rows) await seedProjectTypes(row.id);
-  const c: any = await db.execute(
+  const c = await db.execute<{ n: number }>(
     sql`select count(*)::int n from project_types`,
   );
-  const b: any = await db.execute(
+  const b = await db.execute<{ n: number }>(
     sql`select count(*)::int n from projects where project_type_id is not null`,
   );
-  console.log("project_types:", c.rows[0].n, "| projects typed:", b.rows[0].n);
+  console.log("project_types:", c.rows[0]!.n, "| projects typed:", b.rows[0]!.n);
   process.exit(0);
 }
 

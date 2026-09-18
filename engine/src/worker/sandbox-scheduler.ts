@@ -36,16 +36,22 @@ export async function tick(
     // its claim must cross an explicit trusted boundary — otherwise RLS denies
     // by default and the scanner silently sees no sandboxes at all.
     const due = (await withBypassContext(() =>
-      db.execute(sql`
+      db.execute<{
+        id: string;
+        orgId: string;
+        cadence: string;
+        keep: boolean | null;
+        ageSec: string;
+      }>(sql`
       select id, org_id as "orgId", refresh_schedule as "cadence", refresh_keep_customizations as "keep",
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
        limit 50`)));
 
-    for (const s of due.rows as any[]) {
+    for (const s of due.rows) {
       const window = CADENCE_MS[s.cadence];
-      if (!window || s.ageSec * 1000 < window) continue;
+      if (!window || Number(s.ageSec) * 1000 < window) continue;
       // Claim: flip ready→refreshing so only one scanner fires it.
       const claimed = (await withBypassContext(() =>
         db.execute(sql`

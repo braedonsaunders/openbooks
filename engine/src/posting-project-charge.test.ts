@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sum } from "./money.ts";
-import { PostingError, projectChargeKernelLines, type PostingDocumentLine } from "./posting.ts";
+import { PostingError, projectChargeKernelLines, type PostingDocument, type PostingDocumentLine } from "./posting.ts";
 
 const COST = "11111111-1111-4111-8111-111111111111";
 const RECOVERY = "22222222-2222-4222-8222-222222222222";
@@ -14,7 +14,7 @@ const doc = {
   locationId: null,
   classId: null,
   extraDims: {},
-} as any;
+} as unknown as PostingDocument;
 
 test("project charge balances, costs the job, and preserves equipment attribution", () => {
   const lines = projectChargeKernelLines(doc, [{
@@ -39,7 +39,7 @@ test("project charge balances, costs the job, and preserves equipment attributio
 });
 
 test("project charge refuses missing or same-account recovery", () => {
-  const base = { accountId: COST, amount: "1.0000", description: null, projectId: PROJECT } as any;
+  const base = { accountId: COST, amount: "1.0000", description: null, projectId: PROJECT } as unknown as PostingDocumentLine;
   assert.throws(() => projectChargeKernelLines(doc, [base]), PostingError);
   assert.throws(() => projectChargeKernelLines(doc, [{ ...base, recoveryAccountId: COST }]), /must be different/);
 });

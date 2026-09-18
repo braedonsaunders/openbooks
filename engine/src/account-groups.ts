@@ -224,20 +224,29 @@ function matchesRule(acct: { number: string | null; name: string; type: string }
 
 export async function listAccountGroups(dimension: string, orgId?: string): Promise<AccountGroup[]> {
   const orgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+    id: string;
+    dimension: string;
+    key: string;
+    name: string;
+    color: string | null;
+    sort_order: number;
+    match: AccountGroupMatch;
+    is_catch_all: boolean;
+  }>(sql`
     select id, dimension, key, name, color, sort_order, match, is_catch_all
     from account_groups
     where dimension = ${dimension} and is_active = true${orgFilter}
     order by sort_order, name
   `));
-  return (r.rows as any[]).map((x) => ({
+  return r.rows.map((x) => ({
     id: x.id,
     dimension: x.dimension,
     key: x.key,
     name: x.name,
     color: x.color,
     sortOrder: Number(x.sort_order),
-    match: (x.match ?? {}) as AccountGroupMatch,
+    match: x.match ?? {},
     isCatchAll: x.is_catch_all === true,
   }));
 }
@@ -254,18 +263,29 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
   const acctOrgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
   const [groups, pinRows, acctRows] = await Promise.all([
     listAccountGroups(dimension, orgId),
-    db.execute(sql`
+    db.execute<{
+      account_id: string;
+      group_id: string;
+      key: string;
+      name: string;
+      color: string | null;
+    }>(sql`
       select m.account_id, g.id as group_id, g.key, g.name, g.color
       from account_group_members m
       join account_groups g on g.id = m.group_id
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
       order by m.account_id, g.id
     `),
-    db.execute(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`),
+    db.execute<{
+      id: string;
+      number: string | null;
+      name: string;
+      type: string;
+    }>(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`),
   ]);
 
   const pins = new Map<string, GroupRef>();
-  for (const p of pinRows.rows as any[]) {
+  for (const p of pinRows.rows) {
     // Migration 0081 makes duplicate account/dimension pins impossible. Keep
     // a deterministic tie-break for legacy rows that predate that constraint
     // so historical reports never depend on the database's physical order.
@@ -277,8 +297,8 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
   const catchAll = groups.find((g) => g.isCatchAll) ?? null;
 
   const byAccount = new Map<string, GroupRef>();
-  for (const a of acctRows.rows as any[]) {
-    const acct = { number: a.number, name: a.name as string, type: a.type as string };
+  for (const a of acctRows.rows) {
+    const acct = { number: a.number, name: a.name, type: a.type };
     const pinned = pins.get(a.id);
     if (pinned) {
       byAccount.set(a.id, pinned);
