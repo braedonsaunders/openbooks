@@ -210,6 +210,22 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'list-top-customers': {
+    id: 'list-top-customers',
+    category: 'ar',
+    labelKey: 'widgets.topCustomers',
+    descriptionKey: 'catalog.topCustomers',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 4 },
+  },
+  'list-top-vendors': {
+    id: 'list-top-vendors',
+    category: 'ap',
+    labelKey: 'widgets.topVendors',
+    descriptionKey: 'catalog.topVendors',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

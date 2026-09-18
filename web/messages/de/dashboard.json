@@ -32,7 +32,10 @@
     "netIncome": "Nettoergebnis",
     "grossMargin": "Bruttomarge",
     "expectedReceipts": "Erwartete Eingänge",
-    "expectedPayments": "Anstehende Zahlungen"
+    "expectedPayments": "Anstehende Zahlungen",
+    "topCustomers": "Top-Kunden",
+    "topVendors": "Top-Lieferanten",
+    "openCount": "{count, plural, one {# offen} other {# offene}}"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -79,7 +82,9 @@
     "netIncome": "Umsatz minus Kosten und Aufwendungen seit Monatsbeginn.",
     "grossMargin": "Bruttoergebnis und Marge seit Monatsbeginn.",
     "expectedReceipts": "Prognostizierte Kundeneingänge der nächsten 30 Tage, in Basiswährung.",
-    "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung."
+    "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung.",
+    "topCustomers": "Die fünf größten offenen Kundensalden.",
+    "topVendors": "Die fünf größten offenen Lieferantensalden."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

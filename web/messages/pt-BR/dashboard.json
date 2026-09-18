@@ -32,7 +32,10 @@
     "netIncome": "Lucro líquido",
     "grossMargin": "Margem bruta",
     "expectedReceipts": "Recebimentos previstos",
-    "expectedPayments": "Pagamentos previstos"
+    "expectedPayments": "Pagamentos previstos",
+    "topCustomers": "Principais clientes",
+    "topVendors": "Principais fornecedores",
+    "openCount": "{count, plural, one {# em aberto} other {# em aberto}}"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -79,7 +82,9 @@
     "netIncome": "Receita menos custos e despesas do mês até a data.",
     "grossMargin": "Lucro bruto e margem do mês até a data.",
     "expectedReceipts": "Recebimentos de clientes previstos para os próximos 30 dias, na moeda base.",
-    "expectedPayments": "Pagamentos a fornecedores previstos para os próximos 30 dias, na moeda base."
+    "expectedPayments": "Pagamentos a fornecedores previstos para os próximos 30 dias, na moeda base.",
+    "topCustomers": "Os cinco maiores saldos de clientes em aberto.",
+    "topVendors": "Os cinco maiores saldos de fornecedores em aberto."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

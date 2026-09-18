@@ -970,6 +970,11 @@ test('money widget copy ships translated in every locale', () => {
     'dashboard.catalog.expectedReceipts',
     'dashboard.catalog.expectedPayments',
     'dashboard.metricContext.next30Days',
+    'dashboard.widgets.topCustomers',
+    'dashboard.widgets.topVendors',
+    'dashboard.widgets.openCount',
+    'dashboard.catalog.topCustomers',
+    'dashboard.catalog.topVendors',
   ] as const
   // Reviewed identicals: an acronym plus a bare number renders the same in
   // every locale by design (the MRR/Cron precedent) — pinned exact.

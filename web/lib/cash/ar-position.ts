@@ -68,7 +68,12 @@ export interface ArPosition {
   timeline: WeekRow[];
 }
 
-function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivable[] {
+/**
+ * Per-customer rollup shared by the AR cockpit and the dashboard
+ * top-customers list — one grouping so the two surfaces cannot disagree on
+ * who owes what. Sorted largest balance first.
+ */
+export function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivable[] {
   const map = new Map<string, CustomerReceivable>();
   for (const it of items) {
     const key = it.partyId ?? "__none__";

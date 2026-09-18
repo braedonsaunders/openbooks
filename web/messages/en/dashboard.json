@@ -32,7 +32,10 @@
     "netIncome": "Net income",
     "grossMargin": "Gross margin",
     "expectedReceipts": "Expected receipts",
-    "expectedPayments": "Upcoming payments"
+    "expectedPayments": "Upcoming payments",
+    "topCustomers": "Top customers",
+    "topVendors": "Top vendors",
+    "openCount": "{count, plural, one {# open} other {# open}}"
   },
   "metricContext": {
     "today": "Posted today",
@@ -79,7 +82,9 @@
     "netIncome": "Revenue minus cost and expenses, month to date.",
     "grossMargin": "Gross profit and margin, month to date.",
     "expectedReceipts": "Predicted customer receipts in the next 30 days, in base currency.",
-    "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency."
+    "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency.",
+    "topCustomers": "Largest open customer balances, top five.",
+    "topVendors": "Largest open vendor balances, top five."
   },
   "grid": {
     "customizing": "Customizing your dashboard",
