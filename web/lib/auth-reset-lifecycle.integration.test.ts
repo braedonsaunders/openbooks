@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, env, withBypassContext } from '@openbooks/engine/src/db.ts';
+import { db, withBypassContext } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/test-fixtures.ts';
 
 registerHooks({
@@ -16,8 +16,10 @@ registerHooks({
 for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollment'] as const) {
   test(`password reset invalidates ${scenario} from the previous credential`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await withBypassContext(() => createScratchOrg());
-    const priorSecret = env.SESSION_SECRET;
-    env.SESSION_SECRET = randomBytes(32).toString('hex');
+    // web/lib/auth.ts reads the session secret live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+const priorSecret = process.env.SESSION_SECRET;
+    process.env.SESSION_SECRET = randomBytes(32).toString('hex');
     try {
       const auth = await import('./auth');
       const { completePasswordReset } = await import('./auth-reset');
@@ -77,8 +79,8 @@ for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollme
       assert.equal((await auth.login(email, oldPassword, context)).kind, 'invalid');
       assert.deepEqual(await completePasswordReset(rawToken, newPassword), { ok: false, reason: 'invalid_token' });
     } finally {
-      if (priorSecret === undefined) delete env.SESSION_SECRET;
-      else env.SESSION_SECRET = priorSecret;
+      if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = priorSecret;
       await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   });

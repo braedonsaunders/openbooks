@@ -6,16 +6,17 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { beginOidcAuthorization, completeOidcAuthorization } = await import("./auth-oidc");
-const { env } = await import("@openbooks/engine/src/db.ts");
-env.SESSION_SECRET = "oidc-stream-boundary-test-secret";
-env.OPENBOOKS_OIDC_CLIENT_ID = "stream-test";
-env.OPENBOOKS_APP_URL = "https://books.example.test";
+// auth-oidc reads its config live from process.env (never the engine db.ts
+// module-evaluation snapshot), so seed the values here.
+process.env.SESSION_SECRET = "oidc-stream-boundary-test-secret";
+process.env.OPENBOOKS_OIDC_CLIENT_ID = "stream-test";
+process.env.OPENBOOKS_APP_URL = "https://books.example.test";
 
 for (const stage of ["discovery", "token", "jwks"] as const) {
   for (const length of ["missing", "understated", "oversized"] as const) {
     test(`OIDC bounds ${stage} while streaming with ${length} Content-Length`, async () => {
       const issuer = `https://${stage}-${length}.example.test`;
-      env.OPENBOOKS_OIDC_ISSUER = issuer;
+      process.env.OPENBOOKS_OIDC_ISSUER = issuer;
       let pulls = 0;
       let canceled = false;
       const body = new ReadableStream<Uint8Array>({
@@ -57,7 +58,7 @@ for (const stage of ["discovery", "token", "jwks"] as const) {
 for (const size of [1_000_000, 1_000_001]) {
   test(`OIDC discovery handles split UTF-8 at ${size} bytes`, async () => {
     const issuer = `https://utf8-${size}.example.test`;
-    env.OPENBOOKS_OIDC_ISSUER = issuer;
+    process.env.OPENBOOKS_OIDC_ISSUER = issuer;
     const metadata = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`, padding: "" };
     const paddingBytes = size - Buffer.byteLength(JSON.stringify(metadata));
     metadata.padding = "é".repeat(Math.floor(paddingBytes / 2)) + "x".repeat(paddingBytes % 2);

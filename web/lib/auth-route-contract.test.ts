@@ -28,7 +28,11 @@ test("authentication secrets are required at runtime without blocking secret-fre
   const oidc = readFileSync("web/lib/auth-oidc.ts", "utf8");
   for (const source of [auth, oidc]) {
     assert.doesNotMatch(source, /const SESSION_SECRET = requireSessionSecret/);
-    assert.match(source, /function sessionSecret\(\): string \{[\s\S]{0,100}return requireSessionSecret\(env\)/);
+    // The secret resolves at call time from the live environment, never from
+    // the engine db.ts module-evaluation snapshot (which misses values
+    // assigned after that import, e.g. by tests or late-boot configuration).
+    assert.doesNotMatch(source, /requireSessionSecret\(env\)/);
+    assert.match(source, /function sessionSecret\(\): string \{[\s\S]{0,300}return requireSessionSecret\(\)/);
   }
 });
 

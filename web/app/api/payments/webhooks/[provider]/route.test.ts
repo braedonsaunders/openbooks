@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env } from "../../../../../../engine/src/db.ts";
+import { db } from "../../../../../../engine/src/db.ts";
 import {
   ACCEPTANCE_ADAPTERS,
   PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
@@ -16,15 +16,17 @@ import {
 import { POST } from "./route.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const priorDataKey = env.OPENBOOKS_DATA_KEY;
+// engine/src/secrets.ts reads the data key live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
 
 before(() => {
-  env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
 });
 
 after(() => {
-  if (priorDataKey === undefined) delete env.OPENBOOKS_DATA_KEY;
-  else env.OPENBOOKS_DATA_KEY = priorDataKey;
+  if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+  else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
 });
 
 test("GoCardless webhook verification distinguishes invalid signatures and preserves every actionable event", () => {

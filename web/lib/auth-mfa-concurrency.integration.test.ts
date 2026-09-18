@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
 
 registerHooks({
@@ -16,8 +16,10 @@ registerHooks({
 for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] as const) {
   test(`${method} observes MFA enabled while its user lock is pending`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await withBypassContext(() => createScratchOrg());
-    const priorSecret = env.SESSION_SECRET;
-    env.SESSION_SECRET = randomBytes(32).toString("hex");
+    // web/lib/auth.ts reads the session secret live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+const priorSecret = process.env.SESSION_SECRET;
+    process.env.SESSION_SECRET = randomBytes(32).toString("hex");
     let release = () => {};
     let held: Promise<unknown> | undefined;
     let contender: Promise<import("./auth").LoginResult> | undefined;
@@ -86,8 +88,8 @@ for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] a
     } finally {
       release();
       await Promise.allSettled([held, contender]);
-      if (priorSecret === undefined) delete env.SESSION_SECRET;
-      else env.SESSION_SECRET = priorSecret;
+      if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = priorSecret;
       await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   });

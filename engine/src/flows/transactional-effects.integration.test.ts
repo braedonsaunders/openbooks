@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import type { AutomationPlan } from "@openbooks/forms-core";
-import { db, env, schema, withOrgTransaction } from "../db.ts";
+import { db, schema, withOrgTransaction } from "../db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -37,9 +37,10 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-// Gate one-click links sign HMAC tokens at render time; the engine's resolved
-// env snapshot is populated here so deferral itself is what's under test.
-env.FLOWS_EMAIL_SECRET ||= "transactional-flow-email-test-signing-secret";
+// Gate one-click links sign HMAC tokens at render time; the secret is seeded
+// here (the product reads it live from process.env) so deferral itself is
+// what's under test.
+process.env.FLOWS_EMAIL_SECRET ||= "transactional-flow-email-test-signing-secret";
 
 const adapter = createDocumentsFlowAdapter("vendor_bill");
 

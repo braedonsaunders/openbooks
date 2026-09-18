@@ -22,7 +22,9 @@ import { env } from "../db.ts";
 // deployment's SESSION_SECRET (always present, sealed per-tenant deploy), and
 // throw if neither exists rather than degrade to a guessable constant.
 function secret(): string {
-  const key = env.FLOWS_EMAIL_SECRET || env.SESSION_SECRET;
+  // Live reads: db.ts snapshots the environment at module evaluation, so a
+  // snapshot read misses a secret assigned after that import.
+  const key = process.env.FLOWS_EMAIL_SECRET || process.env.SESSION_SECRET;
   if (!key) {
     throw new Error(
       "FLOWS_EMAIL_SECRET or SESSION_SECRET must be set to sign one-click email approval links",

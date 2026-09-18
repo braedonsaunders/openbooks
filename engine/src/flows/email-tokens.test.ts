@@ -1,17 +1,18 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createEmailActionToken, verifyEmailActionToken } from "./email-tokens.ts";
-import { env } from "../db.ts";
 
-const priorEmailSecret = env.FLOWS_EMAIL_SECRET;
+// The product reads the secret live from process.env (never the engine db.ts
+// module-evaluation snapshot), so seed it there too.
+const priorEmailSecret = process.env.FLOWS_EMAIL_SECRET;
 
 before(() => {
-  env.FLOWS_EMAIL_SECRET = "openbooks-test-only-flow-secret";
+  process.env.FLOWS_EMAIL_SECRET = "openbooks-test-only-flow-secret";
 });
 
 after(() => {
-  if (priorEmailSecret === undefined) delete env.FLOWS_EMAIL_SECRET;
-  else env.FLOWS_EMAIL_SECRET = priorEmailSecret;
+  if (priorEmailSecret === undefined) delete process.env.FLOWS_EMAIL_SECRET;
+  else process.env.FLOWS_EMAIL_SECRET = priorEmailSecret;
 });
 
 /**

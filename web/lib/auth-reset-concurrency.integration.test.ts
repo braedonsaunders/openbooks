@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
 
 const deliveries: string[] = [];
@@ -48,8 +48,10 @@ test("concurrent password reset requests honor the hourly cap and leave one usab
   // under pooled RLS — without scope the second test's bare setup dies with
   // 42501. The reset calls under test scope their own queries internally.
   const org = await withBypassContext(() => createScratchOrg());
-  const priorSecret = env.SESSION_SECRET;
-  env.SESSION_SECRET = randomBytes(32).toString("hex");
+  // web/lib/auth.ts reads the session secret live from process.env (never the
+// engine db.ts module-evaluation snapshot), so seed it there too.
+const priorSecret = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
   deliveries.length = 0;
   try {
     const { userId, email } = await withBypassContext(async () => {
@@ -83,8 +85,8 @@ test("concurrent password reset requests honor the hourly cap and leave one usab
     assert.deepEqual(await completePasswordReset(token, "Another isolated password 9102"), { ok: false, reason: "invalid_token" });
   } finally {
     delete (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.reset-before-delivery-test")];
-    if (priorSecret === undefined) delete env.SESSION_SECRET;
-    else env.SESSION_SECRET = priorSecret;
+    if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = priorSecret;
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
