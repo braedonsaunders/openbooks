@@ -193,14 +193,14 @@ export const FR_CONTRATS_COURTS_ABATTEMENT_2026 = {
 
 /**
  * Named refusals: everything this file does not transcribe, with the
- * reason. The engine quotes these names back.
+ * reason. The engine quotes these names back. Cotisation-side refusals
+ * live in FR_COTISATION_REFUSALS_2026 (./cotisations-2026.ts).
  */
 export const FR_REFUSED_2026: readonly string[] = [
   "Grilles II (Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte): domicile-keyed grids the pack has no domicile channel for — refused by domicile name, never approximated by grille I",
   "Contrats-courts abattement (748 € then 766 €, transcribed above): needs contract start/end dates no pack channel carries",
   "Non-monthly grille scaling beyond the §180 monthly-equivalent rule: weekly/intermittent multi-bulletin and replacement-income period methods are documented, not implemented",
-  "CSG/CRDS computation, including the 98.25 % abattement base: urssaf.fr and boss.gouv.fr are unreachable from this vantage, so no rate is transcribed",
-  "All other cotisations (vieillesse plafonnée/déplafonnée, AGIRC-ARRCO T1/T2, CEG, maladie, allocations familiales, chômage, AT/MP, FNAL, CSA, versement mobilité): rates unquotable here; AT/MP and versement mobilité are tenant-entered by design",
+  "URSSAF cotisations now transcribed in ./cotisations-2026.ts except AGIRC-ARRCO T1/T2 (no obtainable page carries the rates), AT/MP and versement mobilité (tenant-declared by design), and the Alsace-Moselle 1,30 % salary supplement (no department channel)",
   "Complément de retenue à la source (option mechanics): taxpayer-side, declared and paid by the employee on impots.gouv.fr, never computed by the employer",
   "Grille-application tolerance month (BOI-IR-PAS-20-20-30-10 §120 admis late adoption): the engine applies the strict versement-date rule",
 ];

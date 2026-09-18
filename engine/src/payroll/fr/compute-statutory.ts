@@ -36,8 +36,12 @@
  *   et à Mayotte" (§90). Only grille I is transcribed; any other domicile
  *   is refused by name — never approximated by grille I.
  *
- * What this pass does NOT do (partial result, stated): every cotisation
- * (see FR_REFUSED_2026). The pack stays `installable: false`.
+ * What this pass does NOT do (partial result, stated): AGIRC-ARRCO (no
+ * obtainable rates), AT/MP and versement mobilité (tenant-declared, no
+ * context channel), the Alsace-Moselle salary supplement, the AGS interim
+ * variant, reduced-rate modulation, and the brut/net-imposable bridge
+ * (see FR_COTISATION_REFUSALS_2026 in ./cotisations-2026.ts). The pack
+ * stays `installable: false`.
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves away
  * from zero (roundDiv) — the same discipline as canada/decimal.ts. The
@@ -53,6 +57,7 @@ import {
   frPasDefaultRateUnits,
   frPasEditionForVersement,
 } from "./tables-2026.ts";
+import { calculateFrCotisations2026 } from "./cotisations.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -179,7 +184,7 @@ export function calculateFrPas2026(input: FrPas2026Input): FrPas2026Result {
 export async function computeFrStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, run, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor } = ctx;
+  const { taxYear, region, run, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, employerEmployeeCount } = ctx;
   if (taxYear !== 2026) {
     throw new PayrollPackError(
       `FR PAS withholding for tax year ${taxYear} has not been transcribed `
@@ -236,5 +241,42 @@ export async function computeFrStatutory(
     domicile: "metropole_hors_france",
   });
   pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
-  return { BASE: result.monthlyBase, TAUX_PAS: result.ratePct, PAS: result.pas };
+  // Cotisations: the stub supplies one earnings figure. It is used as the
+  // brut for the URSSAF lines while PAS above uses it as net imposable —
+  // the brut/net-imposable bridge (déductible CSG and friends) is refused
+  // by name (FR_COTISATION_REFUSALS_2026), not modelled. AT/MP and
+  // versement mobilité have no context channel for their tenant-declared
+  // rates, so those lines are not pushed; AGIRC-ARRCO has no rates at all.
+  const cots = calculateFrCotisations2026({
+    brut: base,
+    payDate,
+    periodsPerYear,
+    employerEmployeeCount: employerEmployeeCount ?? null,
+    atmpRatePct: null,
+    versementMobilitePct: null,
+  });
+  pushStatutory("vieillesse", "deduction", "Assurance vieillesse (salariale)", cots.vieillesseSal, 120);
+  pushStatutory("csg", "deduction", "CSG (salariale)", cots.csg, 130);
+  pushStatutory("crds", "deduction", "CRDS (salariale)", cots.crds, 135);
+  pushStatutory("maladie_er", "employer_contribution", "Assurance maladie (employeur)", cots.maladieEr, 210);
+  pushStatutory("vieillesse_er", "employer_contribution", "Assurance vieillesse (employeur)", cots.vieillesseEr, 211);
+  pushStatutory("allocfam_er", "employer_contribution", "Allocations familiales (employeur)", cots.allocFamEr, 215);
+  pushStatutory("chomage_er", "employer_contribution", "Assurance chômage (employeur)", cots.chomageEr, 225);
+  pushStatutory("ags_er", "employer_contribution", "Cotisation AGS (employeur)", cots.agsEr, 226);
+  pushStatutory("cdn_er", "employer_contribution", "FNAL, CSA et dialogue social (employeur)", cots.cdnEr, 230);
+  return {
+    BASE: result.monthlyBase,
+    TAUX_PAS: result.ratePct,
+    PAS: result.pas,
+    BRUT: base,
+    VIEIL_SAL: cots.vieillesseSal,
+    CSG: cots.csg,
+    CRDS: cots.crds,
+    MAL_ER: cots.maladieEr,
+    VIEIL_ER: cots.vieillesseEr,
+    FAM_ER: cots.allocFamEr,
+    CHOM_ER: cots.chomageEr,
+    AGS_ER: cots.agsEr,
+    CDN_ER: cots.cdnEr,
+  };
 }
