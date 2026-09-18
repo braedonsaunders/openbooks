@@ -59,7 +59,7 @@ const hooks = registerHooks({
 const { makePATCH } = await import("./handlers.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/test-fixtures.ts",
 );
@@ -75,19 +75,23 @@ interface Fixture {
 }
 
 async function seedDraftQuote(tag: string): Promise<Fixture> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const orderId = randomUUID();
-  await db.execute(sql`
-    insert into documents(
-      id, org_id, kind, document_number, document_date, party_id, subsidiary_id,
-      currency, status, subtotal, tax_total, total, memo
-    ) values (
-      ${orderId}, ${org.orgId}, 'quote', ${tag}, ${org.date}, ${org.customerId},
-      ${org.subsidiaryId}, 'CAD', 'draft', 0, 0, 0, 'Line-scale terms'
-    )
-  `);
-  return { orgId: org.orgId, actorId, orderId, revenueId: org.accounts.revenue };
+  // Fixture seeds under explicit bypass: the top-level ./handlers.ts import
+  // pulls in the web request-org resolver, which denies every unscoped query.
+  return withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const orderId = randomUUID();
+    await db.execute(sql`
+      insert into documents(
+        id, org_id, kind, document_number, document_date, party_id, subsidiary_id,
+        currency, status, subtotal, tax_total, total, memo
+      ) values (
+        ${orderId}, ${org.orgId}, 'quote', ${tag}, ${org.date}, ${org.customerId},
+        ${org.subsidiaryId}, 'CAD', 'draft', 0, 0, 0, 'Line-scale terms'
+      )
+    `);
+    return { orgId: org.orgId, actorId, orderId, revenueId: org.accounts.revenue };
+  });
 }
 
 async function patchLines(
@@ -98,17 +102,20 @@ async function patchLines(
     user: { orgId: fixture.orgId, id: fixture.actorId },
     allowedSubsidiaryIds: null,
   };
-  const revision = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-      from documents where id = ${fixture.orderId}`)).rows[0]!.revision;
-  return PATCH(
+  // Handler calls and verification reads run in the scratch org's scope,
+  // mirroring a production request.
+  const revision = await withOrgContext(fixture.orgId, async () =>
+    (await db.execute<{ revision: string }>(sql`
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
+        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+  return withOrgContext(fixture.orgId, () => PATCH(
     new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ expectedUpdatedAt: revision, lines }),
     }) as never,
     { params: Promise.resolve({ id: fixture.orderId }) } as never,
-  ) as unknown as Response;
+  )) as unknown as Response;
 }
 
 test(
@@ -121,9 +128,10 @@ test(
         { accountId: fixture.revenueId, quantity: "2", unitPrice: "200.00" },
       ]);
       assert.equal(first.status, 200);
-      const stored = (await db.execute<{ quantity: string; unit_price: string }>(sql`
-        select quantity::text, unit_price::text from document_lines
-         where document_id = ${fixture.orderId}`)).rows[0]!;
+      const stored = await withOrgContext(fixture.orgId, async () =>
+        (await db.execute<{ quantity: string; unit_price: string }>(sql`
+          select quantity::text, unit_price::text from document_lines
+           where document_id = ${fixture.orderId}`)).rows[0]!);
       // Premise: storage pads to the column scale.
       assert.equal(stored.unit_price, "200.00000000");
       // The drawer sends back exactly what it read; that must save.
