@@ -94,9 +94,12 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
       + "transcribed — SCT is refused by name (see GB_REGIONS)");
   }
 
-  if (rest === "BR") return { kind: "flat", rate: "0.20", welsh };
-  if (rest === "D0") return { kind: "flat", rate: "0.40", welsh };
-  if (rest === "D1") return { kind: "flat", rate: "0.45", welsh };
+  if (rest === "BR" || rest === "D0" || rest === "D1") {
+    if (nonCumulative) refuse(raw, "flat-rate codes price the whole period already — HMRC never issues them with a W1/M1/X marker");
+    if (rest === "BR") return { kind: "flat", rate: "0.20", welsh };
+    if (rest === "D0") return { kind: "flat", rate: "0.40", welsh };
+    return { kind: "flat", rate: "0.45", welsh };
+  }
   if (rest === "0T") {
     return { kind: "suffix", allowanceAnnual: "0", welsh, nonCumulative };
   }
