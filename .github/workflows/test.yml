@@ -105,16 +105,23 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/16
-      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
+      # Tests connect as the constrained runtime role, never as the service
+      # container's bootstrap superuser: superuser sessions bypass every RLS
+      # policy unconditionally, which made every isolation assertion through
+      # the app pool vacuous here. Bootstrap transfers ownership to this role
+      # (Load schema step, privileged URL below) so the test login owns what
+      # it must DDL while staying fully RLS-subject under FORCE.
+      OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "1"
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       # Pooling is permitted only for this explicitly provisioned disposable
       # database. The marker is set by the provisioning step below and checked
       # from pg_database by the fixture owner before any tenant is leased.
       OPENBOOKS_TEST_DB_ISOLATED: "1"
       OPENBOOKS_TEST_FIXTURE_POOL_SIZE: "4"
-      PGPASSWORD: openbooks
+      PGPASSWORD: openbooks-runtime-ci-password
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -135,7 +142,12 @@ jobs:
 
       - name: Load schema
         # The production bootstrap is the authoritative provisioner: tracked
-        # canonical baseline, row-level security, and base seeds.
+        # canonical baseline, row-level security, and base seeds. It runs as
+        # the container superuser (extensions, roles, and the ownership
+        # transfer to the runtime role need the privilege); every later step
+        # connects as the transferred constrained owner.
+        env:
+          OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
         run: npx tsx scripts/bootstrap.ts
 
       - name: Mark database as the owned ephemeral fixture
