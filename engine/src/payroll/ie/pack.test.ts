@@ -1,15 +1,16 @@
 /**
- * ie-payroll shard: the Ireland skeleton pack declares its slots, region,
- * RPN certificate and named 2026 refusals — and nothing else.
+ * ie-payroll-live shard: the Ireland pack transcribes 2026 (PAYE credits and
+ * bands, Class A PRSI, standard USC), computes through compute.ts, and keeps
+ * its named refusals for everything outside the transcribed scope.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { IE_PAYROLL_PACK } from "./pack.ts";
 
-describe("IE payroll skeleton pack", () => {
-  it("exists, is Irish, and is not installable", () => {
+describe("IE payroll pack", () => {
+  it("exists, is Irish, and is installable for 2026", () => {
     assert.equal(IE_PAYROLL_PACK.country, "IE");
-    assert.equal(IE_PAYROLL_PACK.installable, false);
+    assert.equal(IE_PAYROLL_PACK.installable, true);
     assert.equal(IE_PAYROLL_PACK.statutoryCurrency, "EUR");
     assert.equal(IE_PAYROLL_PACK.statutoryEngineLabel, "PAYE");
   });
@@ -39,12 +40,12 @@ describe("IE payroll skeleton pack", () => {
     assert.equal(IE_PAYROLL_PACK.remittanceVendorSettingsKey, "revenueRemittancePartyId");
   });
 
-  it("lists the national region and refuses it by name", () => {
+  it("supports the single national region end to end", () => {
     assert.ok(IE_PAYROLL_PACK.regions.known.includes("IE"));
-    assert.deepEqual([...IE_PAYROLL_PACK.regions.supported], []);
+    assert.deepEqual([...IE_PAYROLL_PACK.regions.supported], ["IE"]);
     assert.match(
       IE_PAYROLL_PACK.regions.unsupportedReason,
-      /not implemented by the IE payroll pack/,
+      /single national payroll region/,
     );
   });
 
@@ -64,24 +65,33 @@ describe("IE payroll skeleton pack", () => {
       "pay_basis",
       "usc_cutoff_total",
       "usc_exempt",
+      "prior_cumulative_pay",
+      "prior_cumulative_usc",
+      "prior_cumulative_tax",
     ]) {
       assert.ok(fields.has(key), `RPN declares ${key}`);
     }
   });
 
-  it("declares the withholding region as unimplemented", () => {
+  it("declares the withholding region as implemented", () => {
     const declared = IE_PAYROLL_PACK.withholding();
     assert.equal(declared.country, "IE");
     assert.equal(declared.regions.length, 1);
     const [region] = declared.regions;
     assert.ok(region, "IE withholding region declared");
     assert.equal(region.region, "IE");
-    assert.equal(region.implemented, false);
-    assert.match(region.unimplementedReason ?? "", /2026/);
+    assert.equal(region.implemented, true);
   });
 
-  it("refuses the untranscribed 2026 tax year by name", () => {
-    assert.deepEqual([...IE_PAYROLL_PACK.taxYears.editions], []);
+  it("declares two published 2026 editions (January + October PRSI step)", () => {
+    const editions = [...IE_PAYROLL_PACK.taxYears.editions];
+    assert.equal(editions.length, 2);
+    assert.ok(editions.every((edition) => edition.year === 2026));
+    assert.ok(editions.every((edition) => edition.status === "published"));
+    assert.deepEqual(
+      editions.map((edition) => edition.effectiveFrom),
+      ["2026-01-01", "2026-10-01"],
+    );
     assert.equal(IE_PAYROLL_PACK.taxYears.ratesModule, "engine/src/payroll/ie/rates.ts");
     assert.ok(IE_PAYROLL_PACK.taxYears.scaffold.steps.length > 0);
   });
@@ -104,10 +114,34 @@ describe("IE payroll skeleton pack", () => {
     assert.ok(jurisdiction.holidayPay !== null && jurisdiction.holidayPay.length === 1);
   });
 
-  it("refuses any statutory computation by name", async () => {
+  it("refuses a run with no pay date, and emergency basis with no RPN", async () => {
+    const stub = (overrides: Record<string, unknown>) =>
+      ({
+        tx: {
+          execute: async () => ({ rows: [{ tax: "0", usc: "0", taxbase: "0", gross: "0" }] }),
+        },
+        orgId: "org",
+        documentId: "doc",
+        employeePartyId: "emp",
+        taxYear: 2026,
+        region: "IE",
+        run: {},
+        emp: {},
+        periodsPerYear: 52,
+        income: "850.00",
+        nonPeriodic: "0",
+        pensionable: "850.00",
+        insurable: "850.00",
+        deduction: () => "0",
+        pushStatutory: () => undefined,
+        certificateFor: () => null,
+        assertRegionSupported: () => undefined,
+        ...overrides,
+      }) as never;
+    await assert.rejects(IE_PAYROLL_PACK.computeStatutory(stub({})), /no pay date/);
     await assert.rejects(
-      IE_PAYROLL_PACK.computeStatutory({} as never),
-      /no transcribed statutory tables/,
+      IE_PAYROLL_PACK.computeStatutory(stub({ run: { pay_date: "2026-03-15" } })),
+      /Emergency Tax/,
     );
   });
 });
