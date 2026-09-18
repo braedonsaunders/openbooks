@@ -563,7 +563,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/app/(app)/admin/setup/agents/[agentKey]/view-permission.integration.test.ts", { writes: 4, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/overview-loader.integration.test.ts", { writes: 5, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/view-permission.integration.test.ts", { writes: 2, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
-  ["web/app/(app)/approvals/_union-worklist.integration.test.ts", { writes: 8, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/_metrics-approval-union.integration.test.ts", { writes: 8, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/_metrics-arap-tiles.integration.test.ts", { writes: 11, via: "authz.ts -> auth.ts" }],
   ["web/app/(app)/dashboard/agent-findings-count.integration.test.ts", { writes: 4, via: "authz.ts -> auth.ts" }],
