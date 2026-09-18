@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('../../../engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('../../../engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '../../../engine/src/test-fixtures.ts'
 );
@@ -78,36 +78,38 @@ interface Seed {
 
 /** One published period sweep (fixed 100% to a department) over a real posted pool. */
 async function seed(): Promise<Seed> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
-  await enableAllocations(org.orgId);
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  await withBypassContext(() => enableAllocations(org.orgId));
   const ruleId = randomUUID();
   const versionId = randomUUID();
   const deptId = randomUUID();
-  await db.execute(sql`
-    insert into allocation_rules (id, org_id, key, name, mode, created_by, updated_by)
-    values (${ruleId}, ${org.orgId}, 'tool-sweep', 'Tool sweep', 'period', ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into allocation_rule_versions
-      (id, org_id, rule_id, version_no, status, effective_from, account_scope, created_by, updated_by)
-    values
-      (${versionId}, ${org.orgId}, ${ruleId}, 1, 'draft', '2020-01-01',
-       ${JSON.stringify({ kind: 'accounts', accountIds: [org.accounts.adjustment] })}::jsonb,
-       ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${deptId}, ${org.orgId}, 'Tool Dept', true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into allocation_rule_targets
-      (id, org_id, version_id, sequence, department_id, fixed_percent, is_remainder, label, custom)
-    values (${randomUUID()}, ${org.orgId}, ${versionId}, 1, ${deptId}, '100.0000', false, 'Tool Dept', '{}'::jsonb)`);
-  await db.execute(sql`
-    update allocation_rule_versions
-       set status = 'published', definition_hash = 'hash-tool', published_at = now()
-     where id = ${versionId} and org_id = ${org.orgId}`);
-  await db.execute(sql`
-    update allocation_rules set current_version_id = ${versionId}
-     where id = ${ruleId} and org_id = ${org.orgId}`);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into allocation_rules (id, org_id, key, name, mode, created_by, updated_by)
+      values (${ruleId}, ${org.orgId}, 'tool-sweep', 'Tool sweep', 'period', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into allocation_rule_versions
+        (id, org_id, rule_id, version_no, status, effective_from, account_scope, created_by, updated_by)
+      values
+        (${versionId}, ${org.orgId}, ${ruleId}, 1, 'draft', '2020-01-01',
+         ${JSON.stringify({ kind: 'accounts', accountIds: [org.accounts.adjustment] })}::jsonb,
+         ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into departments (id, org_id, name, is_active, custom)
+      values (${deptId}, ${org.orgId}, 'Tool Dept', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into allocation_rule_targets
+        (id, org_id, version_id, sequence, department_id, fixed_percent, is_remainder, label, custom)
+      values (${randomUUID()}, ${org.orgId}, ${versionId}, 1, ${deptId}, '100.0000', false, 'Tool Dept', '{}'::jsonb)`);
+    await db.execute(sql`
+      update allocation_rule_versions
+         set status = 'published', definition_hash = 'hash-tool', published_at = now()
+       where id = ${versionId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
+      update allocation_rules set current_version_id = ${versionId}
+       where id = ${ruleId} and org_id = ${org.orgId}`);
+  });
   const driver = await withOrgContext(org.orgId, () =>
     createDriver(org.orgId, actorId, {
       key: 'tool-manual',
@@ -135,8 +137,8 @@ async function seed(): Promise<Seed> {
       { accountId: org.accounts.bank, amount: '-100.0000' },
     ],
   }));
-  const journals = await db.execute<{ n: string }>(sql`
-    select count(*) as n from journal_entries where org_id = ${org.orgId}`);
+  const journals = await withOrgContext(org.orgId, () => db.execute<{ n: string }>(sql`
+    select count(*) as n from journal_entries where org_id = ${org.orgId}`));
   return {
     orgId: org.orgId, actorId, ruleId, versionId, deptId, driverId: driver.id,
     periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
@@ -145,13 +147,13 @@ async function seed(): Promise<Seed> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ n: string }>(sql`
-    select count(*) as n from journal_entries where org_id = ${orgId}`);
+  const rows = await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
+    select count(*) as n from journal_entries where org_id = ${orgId}`));
   return Number(rows.rows[0]?.n ?? 0);
 }
 
 test('feature-off hides every allocation tool', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   const userId = randomUUID();
   try {
     await withOrgContext(org.orgId, async () => {

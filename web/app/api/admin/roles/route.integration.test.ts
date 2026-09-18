@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgTransaction } from "@openbooks/engine/src/db.ts";
+import { db, pool, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
 import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
 import {
   createScratchOrg,
@@ -419,24 +419,33 @@ test("module permission declarations are tenant-scoped, explicitly grantable ins
   const f = await seed(["*"]);
   const other = await createScratchOrg();
   const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/test-extension-packages.ts");
+  // Installing the extension pulls web modules that replace the suite-wide
+  // test bypass with the request resolver (no Next request here), so every
+  // route call and verification read below carries the mocked identity's
+  // own org explicitly — exactly the scope production requests arrive with.
+  const scopedGet = () => withOrgContext(routeState.authz!.user.orgId, () => GET());
+  const scopedCall = (method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>) =>
+    withOrgContext(routeState.authz!.user.orgId, () => call(method, body));
+  const scopedRolePermissions = (roleId: string) =>
+    withOrgContext(f.orgId, () => rolePermissions(roleId));
   try {
     await installTestExtension({orgId:f.orgId,actorId:f.actorId,manifest:{key:'role-addon',name:'Role addon',version:'1.0.0',permissions:['admin.roles.manage'],contributions:[{kind:'permission',key:'role_addon.read',label:'Read role addon'}]}});
-    const available = await (await GET()).json();
+    const available = await (await scopedGet()).json();
     assert.ok(available.permissions.some((permission: { key: string }) => permission.key === "role_addon.read"));
-    const created = await call("POST", { name: "Addon reader", permissions: ["role_addon.read"] });
+    const created = await scopedCall("POST", { name: "Addon reader", permissions: ["role_addon.read"] });
     assert.equal(created.status, 200);
     const { id } = await created.json() as { id: string };
     routeState.authz!.permissions = new Set(["admin.roles.manage"]);
-    assert.equal((await call("POST", { name: "Beyond ceiling", permissions: ["role_addon.read"] })).status, 403);
+    assert.equal((await scopedCall("POST", { name: "Beyond ceiling", permissions: ["role_addon.read"] })).status, 403);
     routeState.authz!.user.orgId = other.orgId;
-    assert.deepEqual((await (await GET()).json()).permissions, []);
+    assert.deepEqual((await (await scopedGet()).json()).permissions, []);
     routeState.authz!.user.orgId = f.orgId;
     routeState.authz!.permissions = new Set(["*"]);
-    await disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" });
-    assert.deepEqual((await (await GET()).json()).permissions, []);
-    assert.deepEqual(await rolePermissions(id), ["role_addon.read"]);
-    assert.equal((await call("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);
-    assert.equal((await call("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status, 200);
-    assert.equal((await call("PATCH", { id, permissions: ["gl.read"] })).status, 200);
+    await withOrgContext(f.orgId, () => disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" }));
+    assert.deepEqual((await (await scopedGet()).json()).permissions, []);
+    assert.deepEqual(await scopedRolePermissions(id), ["role_addon.read"]);
+    assert.equal((await scopedCall("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);
+    assert.equal((await scopedCall("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status, 200);
+    assert.equal((await scopedCall("PATCH", { id, permissions: ["gl.read"] })).status, 200);
   } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
 });

@@ -26,7 +26,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { postDocument } = await import('@openbooks/engine/src/posting.ts');
 const { getAuthz } = await import('./authz');
@@ -51,37 +51,40 @@ for (const boundary of ['service','assistant','page','vitals','selected view'] a
   for (const surface of boundary === 'vitals' || boundary === 'selected view' ? ['cash'] as const : surfaces) {
     for (const mode of ['all','restricted','empty'] as const) {
       test(`Cash subsidiary access ${boundary}/${surface}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-        const org = await createScratchOrg();
+        const org = await withBypassContext(() => createScratchOrg());
         try {
-          const actor = await createScratchUser(org.orgId,'Cash reviewer','cash_reviewer');
-          const hidden = randomUUID(); const hiddenBank = randomUUID(); const hiddenParty = randomUUID();
-          const restriction = mode === 'all' ? { mode:'all' } : { mode:'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] };
-          await db.execute(sql`update app_roles set permissions='["reports.read","banking.read","ap.read","ar.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='cash_reviewer'`);
-          state.user = { id:actor,orgId:org.orgId,name:'Cash reviewer',email:'cash@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor };
-          state.subIds = mode === 'all' ? [org.subsidiaryId,hidden] : mode === 'empty' ? [] : [org.subsidiaryId];
-          await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
-          await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id) values (${hiddenBank},${org.orgId},'1099','HIDDEN-CASH-EVIDENCE','asset_bank',${hidden})`);
-          await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${hiddenParty},${org.orgId},'organization','HIDDEN-CASH-EVIDENCE',${hidden})`);
-          for (const [sub,bank,amount,party] of [[org.subsidiaryId,org.accounts.bank,'100',org.customerId],[hidden,hiddenBank,'999',hiddenParty]]) {
-            const entry = randomUUID();
-            await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values (${entry},${org.orgId},${org.bookId},${sub},${entry},${org.date},${org.periodId},'draft','manual')`);
-            await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
-              values (${org.orgId},${entry},1,${bank},${sub},${amount},'CAD',${amount},1),(${org.orgId},${entry},2,${org.accounts.revenue},${sub},${'-'+amount},'CAD',${'-'+amount},1)`);
-            await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
-            for (const kind of ['customer_invoice','vendor_bill']) {
-              const id = randomUUID();
-              await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate)
-                values (${id},${org.orgId},${kind},'draft',${id},${sub},${party},${org.date},'CAD',1)`);
-              await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
-                values (${org.orgId},${id},1,${kind === 'customer_invoice' ? org.accounts.revenue : org.accounts.adjustment},1,${amount},${amount},0,0)`);
-              await db.execute(sql`update documents set status='approved' where id=${id}`);
-              await postDocument(id,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}});
+          const { seededActor: actor, hidden: hiddenSub } = await withBypassContext(async () => {
+            const seededActor = await createScratchUser(org.orgId,'Cash reviewer','cash_reviewer');
+            const hidden = randomUUID(); const hiddenBank = randomUUID(); const hiddenParty = randomUUID();
+            const restriction = mode === 'all' ? { mode:'all' } : { mode:'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] };
+            await db.execute(sql`update app_roles set permissions='["reports.read","banking.read","ap.read","ar.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='cash_reviewer'`);
+            await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
+            await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id) values (${hiddenBank},${org.orgId},'1099','HIDDEN-CASH-EVIDENCE','asset_bank',${hidden})`);
+            await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${hiddenParty},${org.orgId},'organization','HIDDEN-CASH-EVIDENCE',${hidden})`);
+            for (const [sub,bank,amount,party] of [[org.subsidiaryId,org.accounts.bank,'100',org.customerId],[hidden,hiddenBank,'999',hiddenParty]]) {
+              const entry = randomUUID();
+              await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values (${entry},${org.orgId},${org.bookId},${sub},${entry},${org.date},${org.periodId},'draft','manual')`);
+              await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+                values (${org.orgId},${entry},1,${bank},${sub},${amount},'CAD',${amount},1),(${org.orgId},${entry},2,${org.accounts.revenue},${sub},${'-'+amount},'CAD',${'-'+amount},1)`);
+              await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+              for (const kind of ['customer_invoice','vendor_bill']) {
+                const id = randomUUID();
+                await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate)
+                  values (${id},${org.orgId},${kind},'draft',${id},${sub},${party},${org.date},'CAD',1)`);
+                await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
+                  values (${org.orgId},${id},1,${kind === 'customer_invoice' ? org.accounts.revenue : org.accounts.adjustment},1,${amount},${amount},0,0)`);
+                await db.execute(sql`update documents set status='approved' where id=${id}`);
+                await postDocument(id,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}});
+              }
             }
-          }
+            return { seededActor, hidden };
+          });
+          state.user = { id:actor,orgId:org.orgId,name:'Cash reviewer',email:'cash@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor };
+          state.subIds = mode === 'all' ? [org.subsidiaryId,hiddenSub] : mode === 'empty' ? [] : [org.subsidiaryId];
           await withOrgContext(org.orgId, async () => {
             const authz = await getAuthz(); assert.ok(authz);
             let data: unknown;
-            if (boundary === 'selected view') data = await cashPosition(org.orgId,4,settings,org.date,[hidden],authz.allowedSubsidiaryIds);
+            if (boundary === 'selected view') data = await cashPosition(org.orgId,4,settings,org.date,[hiddenSub],authz.allowedSubsidiaryIds);
             else if (boundary === 'service') {
               if (surface === 'cashflow') data = await cashflowData(org.orgId,4,org.date,authz.allowedSubsidiaryIds);
               if (surface === 'cash') data = await cashPosition(org.orgId,4,settings,org.date,undefined,authz.allowedSubsidiaryIds);
