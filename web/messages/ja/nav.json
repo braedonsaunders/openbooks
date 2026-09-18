@@ -73,7 +73,8 @@
     "compliance": "コンプライアンス",
     "compliance-vendors": "下請業者",
     "lien-waivers": "留置権放棄証書",
-    "information-returns": "支払調書"
+    "information-returns": "支払調書",
+    "crm-customer-360": "顧客360"
   },
   "groups": {
     "my-work": "マイワーク",

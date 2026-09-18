@@ -614,6 +614,22 @@
       "allocation_lineage": {
         "label": "Umlageherkunft",
         "description": "Jede umgelegte Zeile, rückverfolgt auf Regelversion, Quellperiode, Konto und Dimensionen, mit Treiberanteil und Betrag. Erfordert die Umlageberechtigung."
+      },
+      "crm_opportunities": {
+        "label": "Verkaufschancen",
+        "description": "Verkaufschancen mit Phasen, Abschlussdaten, Beträgen, Wahrscheinlichkeiten und Kundenzuordnung."
+      },
+      "crm_opportunity_lines": {
+        "label": "Verkaufschancen-Positionen",
+        "description": "Positionen der Verkaufschancen mit Mengen, Preisen, Beträgen, Kosten und Artikelreferenzen."
+      },
+      "crm_account_profiles": {
+        "label": "CRM-Konten & Leads",
+        "description": "Beziehungsprofile mit Lebenszyklusphasen, Qualifikation, Branche und Vertriebsgebiet."
+      },
+      "crm_activities": {
+        "label": "CRM-Aktivitäten",
+        "description": "Vertriebs- und Beziehungsaktivitäten wie Aufgaben, Anrufe, Termine, E-Mails und Notizen."
       }
     },
     "columns": {
@@ -771,38 +787,6 @@
         "default_cost": "Standardkosten",
         "description": "Beschreibung",
         "recovery_account": "Kostendeckungskonto"
-      },
-      "inventory_lot_movements": {
-        "lot_number": "Chargennummer",
-        "expires_on": "Verfallsdatum",
-        "item": "Artikel",
-        "item_code": "Artikelcode",
-        "item_name": "Artikelname",
-        "movement_kind": "Bewegungstyp",
-        "kind": "Bewegungstyp",
-        "moved_at": "Bewegungsdatum",
-        "quantity": "Menge",
-        "unit_cost": "Stückkosten",
-        "total_value": "Gesamtwert",
-        "location": "Standort",
-        "location_code": "Lagerort",
-        "status": "Buchungsstatus",
-        "document_number": "Belegnummer",
-        "party_name": "Geschäftspartner",
-        "document_date": "Belegdatum",
-        "memo": "Notiz",
-        "reversal_reason": "Stornogrund",
-        "movement_id": "Bewegung (ID)",
-        "lot_id": "Charge (ID)",
-        "item_id": "Artikel (ID)",
-        "document_id": "Transaktion (ID)",
-        "document_kind": "Belegart",
-        "stock_location_id": "Lagerort (ID)",
-        "document_line_id": "Transaktionszeile (ID)",
-        "journal_entry_id": "Buchung (ID)",
-        "transaction_entry_id": "Transaktionsbuchung (ID)",
-        "paired_movement_id": "Gekoppelte Bewegung (ID)",
-        "reverses_movement_id": "Stornierte Bewegung (ID)"
       },
       "inventory_lot_movements": {
         "lot_number": "Chargennummer",
@@ -1074,6 +1058,106 @@
         "amount": "Betrag",
         "residual": "Restbetrag",
         "created_at": "Erstellt am"
+      },
+      "crm_opportunities": {
+        "opportunity_number": "Verkaufschance #",
+        "title": "Titel",
+        "party_name": "Kunde",
+        "contact_name": "Hauptansprechpartner",
+        "owner_name": "Zuständiger",
+        "sales_team_name": "Vertriebsteam",
+        "lead_source_name": "Lead-Quelle",
+        "status_name": "Phase",
+        "status_key": "Phasenschlüssel",
+        "is_closed": "Geschlossen",
+        "is_won": "Gewonnen",
+        "forecast_category": "Prognosekategorie",
+        "probability": "Wahrscheinlichkeit (%)",
+        "currency": "Währung",
+        "projected_amount": "Voraussichtlicher Betrag",
+        "weighted_amount": "Gewichteter Betrag",
+        "range_low": "Spanne niedrig",
+        "range_high": "Spanne hoch",
+        "expected_close_date": "Voraussichtliches Abschlussdatum",
+        "next_step": "Nächster Schritt",
+        "win_loss_reason": "Grund für Gewinn/Verlust",
+        "description": "Beschreibung",
+        "subsidiary": "Tochtergesellschaft",
+        "department": "Abteilung",
+        "location": "Standort",
+        "class": "Klasse",
+        "created_at": "Erstellt am",
+        "id": "ID",
+        "party_id": "Partei (ID)"
+      },
+      "crm_opportunity_lines": {
+        "opportunity_number": "Verkaufschance #",
+        "opportunity_title": "Verkaufschancen-Titel",
+        "line_number": "Positionsnr.",
+        "item_name": "Artikel",
+        "item_code": "Artikelcode",
+        "description": "Beschreibung",
+        "quantity": "Menge",
+        "unit": "Einheit",
+        "unit_price": "Stückpreis",
+        "amount": "Betrag",
+        "unit_cost": "Stückkosten",
+        "cost_amount": "Kostenbetrag",
+        "gross_profit": "Bruttogewinn",
+        "probability": "Wahrscheinlichkeit (%)",
+        "expected_amount": "Erwarteter Betrag",
+        "party_name": "Kunde",
+        "owner_name": "Zuständiger",
+        "status_name": "Phase",
+        "expected_close_date": "Voraussichtliches Abschlussdatum",
+        "currency": "Währung",
+        "created_at": "Erstellt am",
+        "id": "ID",
+        "opportunity_id": "Verkaufschance (ID)"
+      },
+      "crm_account_profiles": {
+        "party_name": "Kunde",
+        "lifecycle_stage": "Lebenszyklusphase",
+        "status_name": "Phase",
+        "is_qualified": "Qualifiziert",
+        "is_closed": "Geschlossen",
+        "owner_name": "Zuständiger",
+        "territory_name": "Vertriebsgebiet",
+        "lead_source_name": "Lead-Quelle",
+        "industry": "Branche",
+        "category": "Kategorie",
+        "annual_revenue": "Jahresumsatz",
+        "employee_count": "Mitarbeiteranzahl",
+        "qualification_score": "Qualifikationswert",
+        "email": "E-Mail",
+        "phone": "Telefon",
+        "website": "Webseite",
+        "subsidiary": "Tochtergesellschaft",
+        "next_action_at": "Nächste Aktion am",
+        "last_activity_at": "Letzte Aktivität am",
+        "qualified_at": "Qualifiziert am",
+        "converted_at": "Umgewandelt am",
+        "acquired_on": "Akquiriert am",
+        "is_active": "Aktiv",
+        "created_at": "Erstellt am",
+        "id": "ID",
+        "party_id": "Partei (ID)"
+      },
+      "crm_activities": {
+        "kind": "Art",
+        "status": "Aktivitätsstatus",
+        "subject": "Betreff",
+        "priority": "Priorität",
+        "owner_name": "Zuständiger",
+        "assigned_name": "Zugewiesen an",
+        "starts_at": "Beginnt am",
+        "ends_at": "Endet am",
+        "due_at": "Fällig am",
+        "completed_at": "Abgeschlossen am",
+        "duration_minutes": "Dauer (Minuten)",
+        "is_private": "Privat",
+        "created_at": "Erstellt am",
+        "id": "ID"
       }
     },
     "enumValues": {
@@ -1265,6 +1349,22 @@
     "payroll-parallel-run-totals": {
       "name": "Parallellauf-Summen je Komponente",
       "description": "Dieselbe Abstimmung verdichtet: je Komponente, was der frühere Anbieter insgesamt gezahlt hat, was diese Abrechnung ermittelt, und die Differenz — sodass eine Periodenabweichung den verursachenden Komponenten zugeordnet wird."
+    },
+    "crm-pipeline-summary": {
+      "name": "Pipeline-Zusammenfassung nach Phase",
+      "description": "Offene Verkaufschancenbeträge, Anzahl und gewichtete Werte nach Phase und Währung."
+    },
+    "crm-forecast-by-owner": {
+      "name": "Pipeline-Prognose nach Zuständigem",
+      "description": "Prognostizierte und gewichtete Werte aufgeschlüsselt nach Vertriebsmitarbeiter und Prognosekategorie."
+    },
+    "crm-win-loss-analysis": {
+      "name": "Gewinn- und Verlustanalyse",
+      "description": "Ergebnisse geschlossener Verkaufschancen, Gründe und Gesamtsummen nach Status und Grund."
+    },
+    "crm-lead-conversion-funnel": {
+      "name": "Lead-Lebenszyklus & Quellenübersicht",
+      "description": "CRM-Beziehungsprofile kategorisiert nach Lebenszyklusphase, Status und Herkunftsquelle."
     }
   },
   "generalLedger": {

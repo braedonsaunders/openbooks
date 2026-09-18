@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "Lead", "prospect": "Interessent", "customer": "Kunde" },
+  "stages": {
+    "lead": "Lead",
+    "prospect": "Interessent",
+    "customer": "Kunde"
+  },
   "fields": {
     "accountName": "Kontoname",
     "lifecycleStage": "Lebenszyklusphase",
@@ -42,6 +46,10 @@
     "description": "Beschreibung",
     "quantity": "Menge",
     "unitPrice": "Stückpreis",
+    "unitCost": "Stückkosten",
+    "lineCost": "Zeilenkosten",
+    "grossProfit": "Bruttogewinn",
+    "grossMargin": "Bruttomarge",
     "winLossReason": "Gewinn-/Verlustgrund",
     "number": "Nummer",
     "projectedAmount": "Prognostizierter Betrag",
@@ -110,7 +118,10 @@
     "high": "Hoch",
     "urgent": "Dringend"
   },
-  "relatedTypes": { "account": "Konto", "opportunity": "Verkaufschance" },
+  "relatedTypes": {
+    "account": "Konto",
+    "opportunity": "Verkaufschance"
+  },
   "opportunities": {
     "title": "Verkaufschancen",
     "description": "Pipeline-Phasen, Umsatzspannen, Teams, Produkte und Vertriebsdokumente verwalten.",
@@ -121,6 +132,9 @@
     "emptyDescription": "Erstellen Sie eine Verkaufschance, um mit dem Aufbau der Pipeline zu beginnen.",
     "lines": "Produkte und Leistungen",
     "addLine": "Position hinzufügen",
+    "totalCost": "Gesamtkosten",
+    "costNotRecorded": "Nicht erfasst",
+    "partiallyCosted": "{costed} von {total} Positionen erfasst — Deal-Marge erscheint, sobald alle Positionen kalkuliert sind.",
     "selectItem": "Artikel auswählen",
     "createEstimate": "Angebot erstellen",
     "estimateCreated": "Angebot erstellt",
@@ -242,7 +256,11 @@
       "isClosed": "Abgeschlossener Status",
       "isWon": "Gewonnener Status",
       "isDefault": "Standard",
-      "isActive": "Aktiv"
+      "isActive": "Aktiv",
+      "requiresLines": "Positionen erforderlich",
+      "requiresPrimaryContact": "Hauptansprechpartner erforderlich",
+      "requiresPositiveAmount": "Positiver Betrag erforderlich",
+      "requiresWinLossReason": "Grund für Gewinn/Verlust erforderlich"
     },
     "states": {
       "active": "Aktiv",
@@ -250,8 +268,14 @@
       "yes": "Ja",
       "no": "Nein"
     },
-    "matchModes": { "all": "Alle Regeln erfüllen", "any": "Beliebige Regel erfüllen" },
-    "targetTypes": { "user": "Vertriebsmitarbeiter", "team": "Vertriebsteam" },
+    "matchModes": {
+      "all": "Alle Regeln erfüllen",
+      "any": "Beliebige Regel erfüllen"
+    },
+    "targetTypes": {
+      "user": "Vertriebsmitarbeiter",
+      "team": "Vertriebsteam"
+    },
     "validation": {
       "nameRequired": "Geben Sie einen Namen ein.",
       "invalidRules": "Weiterleitungsregeln müssen ein gültiges JSON-Array sein."
@@ -291,5 +315,7 @@
     "titleRequired": "Geben Sie einen Titel für die Verkaufschance ein.",
     "lossReasonRequired": "Für verlorene Verkaufschancen ist ein Verlustgrund erforderlich"
   },
-  "feedback": { "createFailed": "Der Entwurf konnte nicht erstellt werden." }
+  "feedback": {
+    "createFailed": "Der Entwurf konnte nicht erstellt werden."
+  }
 }

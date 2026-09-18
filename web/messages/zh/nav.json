@@ -73,7 +73,8 @@
     "compliance": "合规",
     "compliance-vendors": "分包商",
     "lien-waivers": "留置权弃权书",
-    "information-returns": "信息申报表"
+    "information-returns": "信息申报表",
+    "crm-customer-360": "客户360"
   },
   "groups": {
     "my-work": "我的工作",

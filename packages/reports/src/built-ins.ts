@@ -483,7 +483,100 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 5000,
     },
   },
-
+  {
+    slug: 'crm-pipeline-summary',
+    name: 'Pipeline summary by stage',
+    description: 'Open opportunity pipeline amounts, counts, and weighted values broken out by stage and currency.',
+    query: {
+      entity: 'crm_opportunities',
+      mode: 'summarize',
+      breakouts: [
+        { column: 'status_name' },
+        { column: 'forecast_category' },
+        { column: 'currency' },
+      ],
+      columns: [],
+      measures: [
+        { column: 'projected_amount', fn: 'sum', label: 'Projected amount' },
+        { column: 'weighted_amount', fn: 'sum', label: 'Weighted amount' },
+        { fn: 'count', label: 'Opportunities' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'is_closed', op: 'is_false' }],
+      },
+      sorts: [{ column: 'status_name', direction: 'asc' }],
+    },
+  },
+  {
+    slug: 'crm-forecast-by-owner',
+    name: 'Pipeline forecast by owner',
+    description: 'Projected and weighted opportunity pipeline values broken out by sales representative and forecast category.',
+    query: {
+      entity: 'crm_opportunities',
+      mode: 'summarize',
+      breakouts: [
+        { column: 'owner_name' },
+        { column: 'forecast_category' },
+        { column: 'currency' },
+      ],
+      columns: [],
+      measures: [
+        { column: 'projected_amount', fn: 'sum', label: 'Projected amount' },
+        { column: 'weighted_amount', fn: 'sum', label: 'Weighted amount' },
+        { fn: 'count', label: 'Opportunities' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'is_closed', op: 'is_false' }],
+      },
+      sorts: [{ column: 'owner_name', direction: 'asc' }],
+    },
+  },
+  {
+    slug: 'crm-win-loss-analysis',
+    name: 'Win/loss analysis',
+    description: 'Closed opportunity outcomes, win/loss reasons, and deal totals grouped by win status and reason.',
+    query: {
+      entity: 'crm_opportunities',
+      mode: 'summarize',
+      breakouts: [
+        { column: 'is_won' },
+        { column: 'win_loss_reason' },
+        { column: 'currency' },
+      ],
+      columns: [],
+      measures: [
+        { column: 'projected_amount', fn: 'sum', label: 'Closed amount' },
+        { fn: 'count', label: 'Deals' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'is_closed', op: 'is_true' }],
+      },
+      sorts: [{ column: 'is_won', direction: 'desc' }],
+    },
+  },
+  {
+    slug: 'crm-lead-conversion-funnel',
+    name: 'Lead lifecycle & source summary',
+    description: 'CRM relationship profiles categorized by lifecycle stage, status, and acquisition lead source.',
+    query: {
+      entity: 'crm_account_profiles',
+      mode: 'summarize',
+      breakouts: [
+        { column: 'lifecycle_stage' },
+        { column: 'status_name' },
+        { column: 'lead_source_name' },
+      ],
+      columns: [],
+      measures: [
+        { fn: 'count', label: 'Accounts' },
+      ],
+      filters: null,
+      sorts: [{ column: 'lifecycle_stage', direction: 'asc' }],
+    },
+  },
 ]
 
 /** O(1) catalog lookup shared by native routes, exports, and saved views. */

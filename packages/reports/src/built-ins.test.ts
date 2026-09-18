@@ -89,6 +89,40 @@ describe('built-in report definitions', () => {
     assert.equal(REPORT_ENTITY_MAP[lineage.query.entity]?.featureKey, 'allocations')
   })
 
+  it('defines 4 standard CRM built-in reports with CRM feature gate and permissions', () => {
+    const crmSlugs = [
+      'crm-pipeline-summary',
+      'crm-forecast-by-owner',
+      'crm-win-loss-analysis',
+      'crm-lead-conversion-funnel',
+    ] as const
+
+    for (const slug of crmSlugs) {
+      const def = BUILT_IN_REPORT_DEFINITION_MAP[slug]
+      assert.ok(def, `built-in report ${slug} must be defined`)
+      assert.doesNotThrow(() => validateCustomQuery(def.query), `${slug} query must be valid`)
+      const entity = REPORT_ENTITY_MAP[def.query.entity]
+      assert.ok(entity, `entity ${def.query.entity} must exist`)
+      assert.equal(entity.featureKey, 'crm')
+    }
+
+    const pipeline = BUILT_IN_REPORT_DEFINITION_MAP['crm-pipeline-summary']!
+    assert.equal(pipeline.query.mode, 'summarize')
+    assert.ok(pipeline.query.breakouts?.some((b) => b.column === 'currency'))
+
+    const forecast = BUILT_IN_REPORT_DEFINITION_MAP['crm-forecast-by-owner']!
+    assert.equal(forecast.query.mode, 'summarize')
+    assert.ok(forecast.query.breakouts?.some((b) => b.column === 'currency'))
+
+    const winLoss = BUILT_IN_REPORT_DEFINITION_MAP['crm-win-loss-analysis']!
+    assert.equal(winLoss.query.mode, 'summarize')
+    assert.ok(winLoss.query.breakouts?.some((b) => b.column === 'is_won'))
+
+    const funnel = BUILT_IN_REPORT_DEFINITION_MAP['crm-lead-conversion-funnel']!
+    assert.equal(funnel.query.entity, 'crm_account_profiles')
+    assert.equal(funnel.query.mode, 'summarize')
+  })
+
   it('defines lot recall as a valid, stably sorted inventory query without an implicit period', () => {
     const def = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']
     assert.ok(def)

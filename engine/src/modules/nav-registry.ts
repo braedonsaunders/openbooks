@@ -109,6 +109,15 @@ export const NAV_MODULES: NavModule[] = [
 
   // Customers — relationship lifecycle, pipeline, sales, and collection.
   {
+    key: 'crm-customer-360',
+    href: '/crm/customer-360',
+    label: 'Customer 360',
+    iconKey: 'users',
+    group: 'customers',
+    subgroup: 'relationships',
+    requiredPermission: 'crm.accounts.read',
+  },
+  {
     key: 'crm-leads',
     href: '/crm/leads',
     label: 'Leads',
@@ -861,6 +870,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
+    'crm-customer-360',
     'crm-leads',
     'crm-prospects',
     'crm-activities',

@@ -299,6 +299,8 @@ import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
 import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
 import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
+import { OpportunityKanbanBoard, OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
+import { Customer360Cockpit } from '../../app/(app)/crm/Customer360Cockpit'
 import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
 import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
 import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
@@ -1898,6 +1900,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       projectsEnabled={props.projectsEnabled === true}
     />
   ),
+  'customer-360-cockpit': (props) => (
+    <Customer360Cockpit data={props.data as ComponentProps<typeof Customer360Cockpit>['data']} />
+  ),
   'true-cost-view': (props) => (
     <TrueCostView data={props.data as ComponentProps<typeof TrueCostView>['data']} />
   ),
@@ -2872,6 +2877,29 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const drawer = props.drawer as ComponentProps<typeof OpportunityDrawer> | null
     if (!drawer) return null
     return <OpportunityDrawer {...drawer} />
+  },
+  'opportunity-view-switcher': (props) => {
+    const view = (props.view as 'board' | 'list') ?? 'list'
+    return <OpportunityViewSwitcher view={view} />
+  },
+  'opportunity-kanban-board': (props) => {
+    const statuses = (props.statuses as ComponentProps<typeof OpportunityKanbanBoard>['statuses']) ?? []
+    const opportunities = (props.opportunities as ComponentProps<typeof OpportunityKanbanBoard>['opportunities']) ?? []
+    const canManage = Boolean(props.canManage)
+    const drawerSlot = (props.drawer as unknown[])?.length
+      ? <Fragment>{(props.drawer as { widget?: string; props?: Record<string, unknown> }[]).map((d, i) => {
+          const r = d.widget ? WIDGET_REGISTRY[d.widget] : undefined
+          return r ? <Fragment key={i}>{r(d.props ?? {})}</Fragment> : null
+        })}</Fragment>
+      : undefined
+    return (
+      <OpportunityKanbanBoard
+        statuses={statuses}
+        opportunities={opportunities}
+        canManage={canManage}
+        drawerSlot={drawerSlot}
+      />
+    )
   },
 
   /* --- expense reports ------------------------------------------------------ */

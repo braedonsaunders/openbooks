@@ -1144,6 +1144,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/crm/customer-360': {
+    route: '/crm/customer-360',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/crm/customer-360/view')
+      return {
+        load: (input) => m.loadCustomer360View(input.searchParams ?? {}),
+        spec: (data) => m.customer360Spec(data as never),
+      }
+    },
+  },
   '/crm/forecasts': {
     route: '/crm/forecasts',
     segments: [],

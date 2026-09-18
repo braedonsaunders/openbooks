@@ -1,5 +1,9 @@
 {
-  "stages": { "lead": "Lead", "prospect": "Prospect", "customer": "Customer" },
+  "stages": {
+    "lead": "Lead",
+    "prospect": "Prospect",
+    "customer": "Customer"
+  },
   "fields": {
     "accountName": "Account name",
     "lifecycleStage": "Lifecycle stage",
@@ -42,6 +46,10 @@
     "description": "Description",
     "quantity": "Quantity",
     "unitPrice": "Unit price",
+    "unitCost": "Unit cost",
+    "lineCost": "Line cost",
+    "grossProfit": "Gross profit",
+    "grossMargin": "Gross margin",
     "winLossReason": "Win/loss reason",
     "number": "Number",
     "projectedAmount": "Projected amount",
@@ -110,7 +118,10 @@
     "high": "High",
     "urgent": "Urgent"
   },
-  "relatedTypes": { "account": "Account", "opportunity": "Opportunity" },
+  "relatedTypes": {
+    "account": "Account",
+    "opportunity": "Opportunity"
+  },
   "opportunities": {
     "title": "Opportunities",
     "description": "Manage pipeline stages, revenue ranges, teams, products, and sales documents.",
@@ -121,6 +132,9 @@
     "emptyDescription": "Create an opportunity to begin building the pipeline.",
     "lines": "Products and services",
     "addLine": "Add line",
+    "totalCost": "Total cost",
+    "costNotRecorded": "Not costed",
+    "partiallyCosted": "{costed} of {total} lines have a cost — the deal margin appears once every line is costed.",
     "selectItem": "Select an item",
     "createEstimate": "Create estimate",
     "estimateCreated": "Estimate created",
@@ -242,7 +256,11 @@
       "isClosed": "Closed status",
       "isWon": "Won status",
       "isDefault": "Default",
-      "isActive": "Active"
+      "isActive": "Active",
+      "requiresLines": "Require lines",
+      "requiresPrimaryContact": "Require primary contact",
+      "requiresPositiveAmount": "Require positive amount",
+      "requiresWinLossReason": "Require win/loss reason"
     },
     "states": {
       "active": "Active",
@@ -250,8 +268,14 @@
       "yes": "Yes",
       "no": "No"
     },
-    "matchModes": { "all": "Match all rules", "any": "Match any rule" },
-    "targetTypes": { "user": "Sales representative", "team": "Sales team" },
+    "matchModes": {
+      "all": "Match all rules",
+      "any": "Match any rule"
+    },
+    "targetTypes": {
+      "user": "Sales representative",
+      "team": "Sales team"
+    },
     "validation": {
       "nameRequired": "Enter a name.",
       "invalidRules": "Routing rules must be a valid JSON array."
@@ -291,5 +315,7 @@
     "titleRequired": "Enter an opportunity title.",
     "lossReasonRequired": "A loss reason is required to close as lost"
   },
-  "feedback": { "createFailed": "The draft could not be created." }
+  "feedback": {
+    "createFailed": "The draft could not be created."
+  }
 }

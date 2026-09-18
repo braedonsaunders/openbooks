@@ -214,8 +214,10 @@ const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contac
   isActive: contact.isActive === 'true',
 }))
 
+import { PartyCustomer360Section } from './PartyCustomer360Section'
+
 // Payroll profile editing lives here, on the native employee entity.
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | '360'
 
 /**
  * Records a visited drawer tab for keep-alive panels (F-t08-003): the
@@ -815,6 +817,7 @@ export function PartyDrawer({
   }
   const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
+    ...(role === 'customer' && !isPlaceholderName ? [{ key: '360' as const, label: 'Customer 360' }] : []),
     // Invoicing preferences + labor pricing live on their own subtabs (customers only),
     // out of the crowded overview.
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
@@ -1432,6 +1435,7 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
+        {tab === '360' && role === 'customer' && !isPlaceholderName ? <PartyCustomer360Section partyId={String(p.id)} /> : null}
         {tab === 'activities' && role === 'customer' && canReadActivities ? <ActivitySublist partyId={String(p.id)} /> : null}
 
         {tab === 'contacts' ? (

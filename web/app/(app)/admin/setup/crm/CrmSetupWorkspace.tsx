@@ -77,7 +77,9 @@ interface CrmSetupRecord extends Record<string, unknown> {
   manager_user_id?: string; default_owner_user_id?: string; match_mode?: string;
   rules?: unknown[]; members?: CrmTeamMember[]; sales_team_id?: string;
   owner_user_id?: string; period_start?: string; period_end?: string;
-  currency?: string; amount?: string | number
+  currency?: string; amount?: string | number;
+  requires_lines?: boolean; requires_primary_contact?: boolean;
+  requires_positive_amount?: boolean; requires_win_loss_reason?: boolean;
 }
 interface CrmForm extends Record<string, unknown> {
   name: string; description: string; lifecycleStage: string; sequence: string | number;
@@ -86,7 +88,9 @@ interface CrmForm extends Record<string, unknown> {
   priority: string | number; managerUserId: string; defaultOwnerUserId: string;
   matchMode: string; rulesText: string; memberIds: string[]; targetType: string;
   targetId: string; periodStart: string; periodEnd: string; currency: string;
-  amount: string | number
+  amount: string | number;
+  requiresLines: boolean; requiresPrimaryContact: boolean;
+  requiresPositiveAmount: boolean; requiresWinLossReason: boolean;
 }
 const EMPTY_CRM_FORM: CrmForm = {
   name: "", description: "", lifecycleStage: "lead", sequence: 10,
@@ -95,6 +99,8 @@ const EMPTY_CRM_FORM: CrmForm = {
   priority: 100, managerUserId: "", defaultOwnerUserId: "", matchMode: "all",
   rulesText: "[]", memberIds: [], targetType: "user", targetId: "",
   periodStart: "", periodEnd: "", currency: "", amount: "",
+  requiresLines: false, requiresPrimaryContact: false,
+  requiresPositiveAmount: false, requiresWinLossReason: false,
 }
 
 export function CrmSetupWorkspace({
@@ -440,6 +446,10 @@ function initialForm(
       isWon: row?.is_won ?? false,
       isDefault: row?.is_default ?? false,
       isActive: row?.is_active ?? true,
+      requiresLines: row?.requires_lines === true,
+      requiresPrimaryContact: row?.requires_primary_contact === true,
+      requiresPositiveAmount: row?.requires_positive_amount === true,
+      requiresWinLossReason: row?.requires_win_loss_reason === true,
     };
   if (tab === "sources")
     return {
@@ -600,7 +610,16 @@ function OpportunityStatusFields({ form, set, t }: FieldProps) {
       <ToggleGrid
         form={form}
         set={setStatus}
-        keys={["isClosed", "isWon", "isDefault", "isActive"]}
+        keys={[
+          "isClosed",
+          "isWon",
+          "isDefault",
+          "isActive",
+          "requiresLines",
+          "requiresPrimaryContact",
+          "requiresPositiveAmount",
+          "requiresWinLossReason",
+        ]}
         t={t}
       />
     </>

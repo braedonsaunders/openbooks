@@ -73,7 +73,8 @@
     "property-management": "Gestion immobilière",
     "subcontracts": "Sous-traitance",
     "admin-page-layouts": "Dispositions de page",
-    "admin-extensions": "Applications"
+    "admin-extensions": "Applications",
+    "crm-customer-360": "Client 360"
   },
   "modulesShort": {
     "ap": "Fournisseurs",

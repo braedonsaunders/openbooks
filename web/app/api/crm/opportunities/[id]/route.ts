@@ -4,7 +4,13 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { computeOpportunityTotals, validateContributionTotal } from '@openbooks/engine/src/crm-math.ts'
+import {
+  computeOpportunityTotals,
+  validateContributionTotal,
+  validateOpportunityStageTransition,
+  type OpportunityStagePolicy,
+  type OpportunityStageRefusal,
+} from '@openbooks/engine/src/crm-math.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
@@ -30,13 +36,61 @@ class OpportunityRevisionError extends Error {
   }
 }
 class OpportunityPermissionDenied extends Error {
-  constructor(readonly response: NextResponse) {
+  readonly response: NextResponse
+  constructor(response: NextResponse) {
     super('permission denied')
+    this.response = response
   }
 }
 
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/**
+ * Stage-entry policy is declared per status row (migration 0175) and resolved
+ * by the engine, never inferred here from a stage's name, key, or closed/won
+ * flags. This route used to hard-code "closed and not won requires a loss
+ * reason", which gave every organization one opinion and no way to hold a
+ * different one; that rule now lives on the Closed-lost status as data, and
+ * 0175 backfilled it so nothing about existing installations changed.
+ */
+function stagePolicyOf(status: Record<string, unknown>): OpportunityStagePolicy {
+  return {
+    requiresLines: status.requires_lines === true,
+    requiresPrimaryContact: status.requires_primary_contact === true,
+    requiresPositiveAmount: status.requires_positive_amount === true,
+    requiresWinLossReason: status.requires_win_loss_reason === true,
+  }
+}
+
+/** A stage that declares nothing needs no subject, and in particular needs no
+ *  stored line count — most saves are into ungated stages and must not pay for
+ *  a query that can only ever return "allowed". */
+function stageGates(policy: OpportunityStagePolicy): boolean {
+  return policy.requiresLines || policy.requiresPrimaryContact
+    || policy.requiresPositiveAmount || policy.requiresWinLossReason
+}
+
+/**
+ * Engine refusal codes are locale-free; this route answers in the plain text
+ * the rest of its errors use. `win_loss_reason_required` keeps the exact
+ * wording the hard-coded rule returned — the drawer highlights the loss-reason
+ * field by matching that message, so rewording it would silently break the
+ * highlight without failing anything.
+ */
+const STAGE_REFUSAL_MESSAGES: Record<OpportunityStageRefusal, string> = {
+  lines_required: 'this stage requires at least one line',
+  primary_contact_required: 'this stage requires a primary contact',
+  positive_amount_required: 'this stage requires a projected amount greater than zero',
+  win_loss_reason_required: 'a loss reason is required',
+}
+
+async function storedLineCount(executor: QueryExecutor, opportunityId: string, orgId: string): Promise<number> {
+  const result = await executor.execute<{ count: string | number }>(sql`
+    select count(*)::int as count from crm_opportunity_lines
+     where opportunity_id = ${opportunityId} and org_id = ${orgId}`)
+  return Number(result.rows[0]?.count ?? 0)
 }
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
@@ -152,7 +206,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
   if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
   let winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
-  if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) return NextResponse.json({ error: 'a loss reason is required' }, { status: 422 })
+  // Stage policy is checked after the lines are parsed below: the gates read
+  // the line count and the projected amount this save would produce, which do
+  // not exist yet here.
   // The date column is a plain calendar date; refuse anything else here so a
   // Postgres cast failure can never escape the transaction as a 500.
   const expectedCloseDate = body.expectedCloseDate === undefined ? undefined : textOrNull(body.expectedCloseDate)
@@ -172,10 +228,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (wholeDigits(quantity) > 15 || wholeDigits(unitPrice) > 15) {
           throw new Error('line quantities and prices must fit the ledger (at most 15 whole digits)')
         }
+        // Cost is optional and absence is meaningful: null stores "not
+        // costed", which reports no margin, as distinct from a zero cost,
+        // which reports a 100% one. An empty string is what a cleared input
+        // sends, so it reads as absence rather than as zero.
+        const rawUnitCost = line.unitCost
+        const unitCost = rawUnitCost == null || rawUnitCost === '' ? null : canonicalDecimal(rawUnitCost, 4)
+        if (rawUnitCost != null && rawUnitCost !== '' && unitCost === null) throw new Error('invalid lines')
+        if (unitCost !== null && wholeDigits(unitCost) > 15) {
+          throw new Error('line costs must fit the ledger (at most 15 whole digits)')
+        }
         return {
           quantity,
           unitPrice: normalizeMoney(unitPrice),
           probability: line.probability == null ? null : Number(line.probability),
+          unitCost: unitCost === null ? null : normalizeMoney(unitCost),
         }
       })
       calculated = computeOpportunityTotals(lineMathInputs, probability)
@@ -217,6 +284,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
     }
+  }
+  // Fast refusal on the unlocked snapshot, re-checked authoritatively inside
+  // the write transaction below (same contract as every other preflight here).
+  {
+    const policy = stagePolicyOf(nextStatus)
+    const refusal = stageGates(policy)
+      ? validateOpportunityStageTransition(
+          {
+            lineCount: lines ? lines.length : await storedLineCount(db, id, user.orgId),
+            hasPrimaryContact: !!contactId,
+            projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
+            winLossReason,
+          },
+          policy,
+        )
+      : null
+    if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal] }, { status: 422 })
   }
   const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined
   const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
@@ -350,9 +434,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!((await tx.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) {
       throw new OpportunityValidationError('invalid currency')
     }
-    if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) {
-      throw new OpportunityValidationError('a loss reason is required')
-    }
+    // Stage policy is enforced below, against the totals this write produces
+    // and the status row locked by this transaction.
 
     // Item and team-member references are mutable too.  Validate them after
     // locking and before the corresponding delete/insert pairs below.
@@ -396,6 +479,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (lineMathInputs) calculated = computeOpportunityTotals(lineMathInputs, probability)
 
+    // The authoritative stage gate. It runs against the status row locked by
+    // this transaction and the totals this write would leave behind, so a
+    // concurrently reconfigured stage cannot be satisfied by a stale snapshot,
+    // and it runs before the first line write so a refusal writes nothing.
+    //
+    // Every writer reaches the opportunity through this route, which is the
+    // point: the pipeline board, the drawer, data import, user scripts and the
+    // assistant all fail closed here rather than each carrying its own copy of
+    // the rules.
+    {
+      const policy = stagePolicyOf(nextStatus)
+      const refusal = stageGates(policy)
+        ? validateOpportunityStageTransition(
+            {
+              lineCount: lines ? lines.length : await storedLineCount(lockedDb, id, user.orgId),
+              hasPrimaryContact: !!contactId,
+              projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
+              winLossReason,
+            },
+            policy,
+          )
+        : null
+      if (refusal) throw new OpportunityValidationError(STAGE_REFUSAL_MESSAGES[refusal])
+    }
+
     if (lines && calculated) {
       await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
       for (let index = 0; index < lines.length; index++) {
@@ -407,11 +515,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         await tx.execute(sql`
           insert into crm_opportunity_lines
             (org_id, opportunity_id, line_number, item_id, description, quantity, unit, unit_price,
-             amount, probability, expected_amount, created_by, updated_by)
+             amount, probability, expected_amount, unit_cost, cost_amount, created_by, updated_by)
           values (${user.orgId}, ${id}, ${index + 1}, ${input.itemId ?? null}, ${textOrNull(input.description)},
                   ${math.quantity}, ${textOrNull(input.unit)}, ${math.unitPrice}, ${math.amount},
                   ${input.probability == null ? null : math.probability},
-                  ${math.expectedAmount}, ${user.id}, ${user.id})`)
+                  ${math.expectedAmount}, ${math.unitCost}, ${math.costAmount}, ${user.id}, ${user.id})`)
       }
     }
     if (teamRows.length) {
