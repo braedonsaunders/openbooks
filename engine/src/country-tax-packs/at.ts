@@ -47,6 +47,18 @@ const AT_U30_2026: TaxReturnPack = {
  * flat-rate farmer scheme, unmodelled); and the reverse-charge /
  * intra-EU-acquisition auxiliary lines (KZ 021/032/048/057/070–089 and
  * the section 6 correction KZ 090), which this pack does not serve.
+ *
+ * Sourcing refusals: the 20/10/13 schedules open at USP applicability
+ * (2026-08-01), not at the 2016 reform — the Steuerreform 2015/2016 did
+ * move 10% goods (and the 12% wine band) to 13%, corroborated by the
+ * Parliament Budgetdienst reform analysis, but no day-one date is
+ * verifiable in reachable primary text (RIS serves no BGBl here; the BMF
+ * formularservice hosts no 2016 vintage), so the tax-advisor reform sheet
+ * was dropped rather than kept as the date's only witness. The enclave
+ * KZ 037 claim still rests on the BMF's own U30 form via the statutory
+ * chamber's mirror (wko.at): the formularservice does not host that
+ * vintage and the U30a instructions do not document KZ 037 — a named
+ * mirror exception in the wave4 proof, re-verify if BMF publishes it.
  */
 export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
   code: "AT_INDIRECT_TAX",
@@ -79,14 +91,8 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "usp_ust_rates",
-      title: "USP (BMF-responsible) — Steuersätze und Steuerbefreiungen der Umsatzsteuer (20/10/13 bands, applicability)",
+      title: "USP (BMF-responsible) — Steuersätze und Steuerbefreiungen der Umsatzsteuer (20/10/13 bands; schedules open at this applicability, not origin)",
       url: "https://www.usp.gv.at/themen/steuern-finanzen/umsatzsteuer-ueberblick/steuersaetze-und-steuerbefreiungen-der-umsatzsteuer.html",
-      asOf: "2026-08-01",
-    },
-    {
-      id: "ust_reform_2016",
-      title: "Steuerberater info sheet — Änderungen in der Umsatzsteuer ab 2016 (13% from 1.1.2016; 20%/10% pre-existing; applicability, not origin)",
-      url: "https://www.7siegel.at/wp-content/uploads/2022/03/Aenderungen-UST-2016.pdf",
       asOf: "2026-08-01",
     },
     {
@@ -105,21 +111,21 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Austria USt standard rate",
         ratePercent: 20,
         role: "standard",
-        rates: [{ ratePercent: 20, effectiveFrom: "2016-01-01", sourceId: "ust_reform_2016" }],
+        rates: [{ ratePercent: 20, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
       },
       {
         code: "AT-VAT-RED10",
         name: "Austria USt reduced rate 10% (food, rent, books)",
         ratePercent: 10,
         role: "reduced",
-        rates: [{ ratePercent: 10, effectiveFrom: "2016-01-01", sourceId: "ust_reform_2016" }],
+        rates: [{ ratePercent: 10, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
       },
       {
         code: "AT-VAT-RED13",
         name: "Austria USt reduced rate 13% (2016 Steuerreform band)",
         ratePercent: 13,
         role: "reduced",
-        rates: [{ ratePercent: 13, effectiveFrom: "2016-01-01", sourceId: "ust_reform_2016" }],
+        rates: [{ ratePercent: 13, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
       },
       {
         code: "AT-VAT-ENCLAVE",

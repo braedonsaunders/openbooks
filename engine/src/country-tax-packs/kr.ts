@@ -42,8 +42,16 @@ const KR_VAT_RETURN_2026: TaxReturnPack = {
  * simplified-taxpayer regime are neither modelled nor declared.
  *
  * Rate history is left-truncated: the 10% rate has been flat for decades, but
- * the only NTS statement fetched is the 2022 applicability publication, so
- * both schedules open at 2022-01-01 as applicability, not origin.
+ * the cited MOEF booklet is the 2024 applicability publication, so both
+ * schedules open at 2024-01-01 as applicability, not origin.
+ *
+ * Sourcing refusal: the previous citation ("Taxation in Korea 2022" via a
+ * KOTRA archive URL, titled as an NTS publication) was doubly wrong — the
+ * file is KOTRA material 22-008, a KOTRA booklet, not an NTS publication,
+ * and the host is an archive mirror. It was replaced with the Ministry of
+ * Economy and Finance's own KOREAN TAXATION 2024, which states the 10%
+ * rate, the zero-rating scope and the output-minus-input calculation
+ * directly. No NTS-hosted page stating the 10% rate was found.
  */
 export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
   code: "KR_INDIRECT_TAX",
@@ -69,10 +77,10 @@ export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-08-01",
     },
     {
-      id: "nts_taxation_korea_2022",
-      title: "NTS — Taxation in Korea 2022: 10% flat VAT rate, 0% on exports, zero-rate vs exemption, output-minus-input calculation (applicability, not origin)",
-      url: "https://dl.kotra.or.kr/pyxis-api/2/digital-files/82975f5a-3656-4b95-a929-a1226cf456ff",
-      asOf: "2026-08-01",
+      id: "moef_korean_taxation_2024",
+      title: "MOEF — KOREAN TAXATION 2024: VAT rate 10%, zero-rating for exports etc. with refundable input tax, output-minus-input calculation (applicability, not origin)",
+      url: "https://mofe.go.kr/com/cmm/fms/FileDown.do?atchFileId=ATCH_000000000028183&fileSn=1",
+      asOf: "2026-09-18",
     },
   ],
   jurisdictions: [],
@@ -84,14 +92,14 @@ export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Korea VAT standard rate",
         ratePercent: 10,
         role: "standard",
-        rates: [{ ratePercent: 10, effectiveFrom: "2022-01-01", sourceId: "nts_taxation_korea_2022" }],
+        rates: [{ ratePercent: 10, effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" }],
       },
       {
         code: "KR-VAT-ZERO",
         name: "Korea VAT zero rate — exports and qualifying overseas services",
         ratePercent: 0,
         role: "zero",
-        rates: [{ ratePercent: 0, effectiveFrom: "2022-01-01", sourceId: "nts_taxation_korea_2022" }],
+        rates: [{ ratePercent: 0, effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" }],
       },
     ],
   },

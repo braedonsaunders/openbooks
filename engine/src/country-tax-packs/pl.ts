@@ -46,6 +46,12 @@ const PL_JPK_V7M_2026: TaxReturnPack = {
  * (zero-rated basic foodstuffs, cut energy rates) — a temporary rate is only
  * transcribed with both the opening and closing ordinances sourced, which was
  * not done here.
+ *
+ * Sourcing refusal: the 5% band's 2011 origin rested solely on the OECD
+ * Consumption Tax Trends summary, so the schedule now opens at the MF List
+ * of VAT rates publication (13.12.2021) instead — the MF Sejm reply on the
+ * 23%/8% mechanism does not mention the 5% band. Shorter MF-sourced
+ * history beats a longer OECD-sourced one.
  */
 export const POLAND_TAX_PACK: CountryTaxPackDefinition = {
   code: "PL_INDIRECT_TAX",
@@ -83,9 +89,9 @@ export const POLAND_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
-      id: "oecd_ctt_2024_poland",
-      title: "OECD Consumption Tax Trends 2024 — Poland applicability: 23% standard (22% in 2010, changed 2011), 5%/8% reduced bands",
-      url: "https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/consumption-tax-trends/consumption-tax-trends-poland.pdf",
+      id: "mf_vat_rates_list_2021",
+      title: "Ministerstwo Finansów — List of VAT rates (13.12.2021): standard 23%, reduced 8%/5%/0%; 5% for Annex 10 goods (applicability, not origin)",
+      url: "https://podatki-arch.mf.gov.pl/en/value-added-tax/general-vat-rules-and-rates/list-of-vat-rates/",
       asOf: "2026-09-18",
     },
   ],
@@ -112,7 +118,7 @@ export const POLAND_TAX_PACK: CountryTaxPackDefinition = {
         name: "Poland reduced VAT 5%",
         ratePercent: 5,
         role: "reduced",
-        rates: [{ ratePercent: 5, effectiveFrom: "2011-01-01", sourceId: "oecd_ctt_2024_poland" }],
+        rates: [{ ratePercent: 5, effectiveFrom: "2021-12-13", sourceId: "mf_vat_rates_list_2021" }],
       },
       {
         code: "PL-VAT-ZERO",
