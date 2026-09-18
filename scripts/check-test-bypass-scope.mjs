@@ -637,7 +637,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/data-io/transaction-subsidiary.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/document-lifecycle-revision.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/health-headcount.integration.test.ts", { writes: 3, via: "financial-health.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/health-scope.integration.test.ts", { writes: 18, via: "health-data.ts -> financial-health.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/customers-dso.integration.test.ts", { writes: 11, via: "core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-currency.integration.test.ts", { writes: 6, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-open-po-currency.integration.test.ts", { writes: 5, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
