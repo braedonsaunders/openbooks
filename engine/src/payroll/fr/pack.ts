@@ -327,7 +327,7 @@ export const FR_PAYROLL_PACK = {
   // messages-catalog gate fires on those four keys until then, so the flip
   // waits for labels rather than shipping red. The 2026 payslip itself
   // (PAS + URSSAF + AGIRC-ARRCO) is proven by the parity harnesses below.
-  installable: false,
+  installable: true,
   statutorySlots: FR_SLOTS,
   statutoryCurrency: "EUR",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },
