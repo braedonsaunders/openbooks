@@ -31,9 +31,7 @@ export interface ApiDocsData {
   schema: ApiRecordTypeSchema[]
 }
 
-export async function loadApiDocs(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<ApiDocsData> {
+export async function loadApiDocs(): Promise<ApiDocsData> {
   // Native gates, verbatim: permission first, then feature flag.
   const authz = await requirePermission('api.keys.manage')
   await requireFeatureEnabled(authz.user.orgId, 'apiAccess')

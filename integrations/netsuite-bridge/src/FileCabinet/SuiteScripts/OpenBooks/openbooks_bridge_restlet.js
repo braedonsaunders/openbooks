@@ -52,7 +52,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const features = {};
       featureIds.forEach((id) => {
         try { features[id.toLowerCase()] = runtime.isFeatureInEffect({ feature: id }); }
-        catch (_) { features[id.toLowerCase()] = null; }
+        catch { features[id.toLowerCase()] = null; }
       });
       const now = query.runSuiteQL({ query: "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS') AS now FROM DUAL" })
         .asMappedResults()[0].now;
@@ -100,7 +100,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const fields = {};
       loaded.getFields().forEach((fieldId) => {
         try { fields[fieldId] = normalize(loaded.getValue({ fieldId })); }
-        catch (_) { fields[fieldId] = null; }
+        catch { fields[fieldId] = null; }
       });
       const sublists = {};
       loaded.getSublists().forEach((sublistId) => {
@@ -111,7 +111,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
           const values = {};
           fieldIds.forEach((fieldId) => {
             try { values[fieldId] = normalize(loaded.getSublistValue({ sublistId, fieldId, line })); }
-            catch (_) { values[fieldId] = null; }
+            catch { values[fieldId] = null; }
           });
           lines.push(values);
         }

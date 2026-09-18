@@ -20,6 +20,6 @@ export default async function ExpensesHome({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadExpenses(sp)
+  const data = await loadExpenses()
   return <ModuleView spec={expensesSpec(data)} data={data} searchParams={sp} trusted />
 }

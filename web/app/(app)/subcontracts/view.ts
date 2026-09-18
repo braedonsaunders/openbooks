@@ -53,9 +53,7 @@ export interface SubcontractsData {
   }
 }
 
-export async function loadSubcontracts(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<SubcontractsData> {
+export async function loadSubcontracts(): Promise<SubcontractsData> {
   const authz = await requirePermission('ap.read')
   await requireSubcontractsFeature(authz.user.orgId)
   const orgId = authz.user.orgId

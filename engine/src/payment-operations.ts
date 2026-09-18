@@ -672,7 +672,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
   // so bank files never inherit the server's UTC day by accident.
   const scoped: FormatContext = { ...ctx, businessDate: await businessToday(orgId) };
   if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
-    return loadRunFile(String(scoped.run.id), orgId, now);
+    return loadRunFile(String(scoped.run.id), orgId);
   }
   if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "sepa_debit") return { ...sepaDebit(scoped), runNumber: String(scoped.run.run_number) };

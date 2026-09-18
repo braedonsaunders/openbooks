@@ -39,9 +39,7 @@ export interface ExpensesData {
   data: ExpensesDashboardData
 }
 
-export async function loadExpenses(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<ExpensesData> {
+export async function loadExpenses(): Promise<ExpensesData> {
   const authz = await requirePermission('expenses.read')
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
   const t = await getTranslations('expenses')

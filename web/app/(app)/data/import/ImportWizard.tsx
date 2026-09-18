@@ -41,8 +41,7 @@ interface SampleCompanyProfile {
 }
 
 type Step = 'source' | 'mapping' | 'preview' | 'result'
-const FORMATS = ['csv', 'xlsx', 'json'] as const
-type Format = (typeof FORMATS)[number]
+type Format = 'csv' | 'xlsx' | 'json'
 
 export function ImportWizard() {
   const t = useTranslations('data')

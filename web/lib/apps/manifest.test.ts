@@ -58,7 +58,8 @@ test('parseManifest rejects duplicate endpoint names', () => {
 })
 
 test('parseManifest requires a frontend entry', () => {
-  const { frontend, ...noFrontend } = good
+  const noFrontend: Record<string, unknown> = { ...good }
+  delete noFrontend.frontend
   const r = parseManifest(noFrontend)
   assert.equal(r.ok, false)
 })

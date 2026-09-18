@@ -13,8 +13,7 @@ export const dynamic = 'force-dynamic'
  */
 // The view union stays here rather than moving into ./view.ts: the loader
 // imports it, and a page that names its own tab set is the honest owner of it.
-const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
-export type LaborCostingView = (typeof VIEWS)[number]
+export type LaborCostingView = 'rates' | 'components' | 'posting' | 'reconciliation'
 
 
 export default async function LaborCostingSetup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

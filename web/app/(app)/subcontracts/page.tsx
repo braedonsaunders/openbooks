@@ -9,6 +9,6 @@ export default async function SubcontractsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams
-  const data = await loadSubcontracts(sp)
+  const data = await loadSubcontracts()
   return <ModuleView spec={subcontractsSpec(data)} data={data} searchParams={sp} trusted />
 }

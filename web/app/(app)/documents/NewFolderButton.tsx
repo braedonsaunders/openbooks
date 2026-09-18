@@ -5,7 +5,7 @@ import { FolderPlus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 
-export function NewFolderButton({ parentId }: { parentId?: string }) {
+export function NewFolderButton() {
   const t = useTranslations('documents')
   const router = useRouter()
   const search = useSearchParams()

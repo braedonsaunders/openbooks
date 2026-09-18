@@ -25,7 +25,7 @@ export default async function AccountingHomePage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  const data = await loadAccounting(sp)
+  const data = await loadAccounting()
   return <ModuleView spec={accountingSpec(data)} data={data} searchParams={sp} trusted />
 }
 

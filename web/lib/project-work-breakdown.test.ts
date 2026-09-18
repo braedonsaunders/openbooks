@@ -173,8 +173,6 @@ const scopeMockSources = new Map<string, string>([
   ],
 ])
 
-let workBreakdown!: typeof import('./project-work-breakdown.ts')
-let workBreakdownRoute!: typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
 const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
 const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
 let resolveModules!: () => void
@@ -215,7 +213,7 @@ const scopeHooks = registerHooks({
 })
 
 const scopeModuleSpecifier = './project-work-breakdown.ts?subsidiary-scope-regression' as string
-workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
+const workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
 scopeHooks.deregister()
 
 const routeHooks = registerHooks({
@@ -280,7 +278,7 @@ const routeHooks = registerHooks({
 })
 
 const routeModuleSpecifier = '../app/api/projects/[id]/tasks/[taskId]/route.ts?subsidiary-scope-regression' as string
-workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
+const workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
 routeHooks.deregister()
 resolveModules()
 

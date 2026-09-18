@@ -165,7 +165,7 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   const tentativePerPeriod = divIntCents(tentativeAnnual, P); // 2h
   const creditPerPeriod = divIntCents(opt(input.dependentCredits), P); // 3b
   const extra = opt(input.extraPerPeriod); // 4a
-  let periodicFit = input.fitExempt ? ZERO : max0(tentativePerPeriod - creditPerPeriod); // 3c
+  const periodicFit = input.fitExempt ? ZERO : max0(tentativePerPeriod - creditPerPeriod); // 3c
   trace("TW", tentativeAnnual);
   trace("TWP", tentativePerPeriod);
 

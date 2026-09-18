@@ -32,9 +32,7 @@ export interface NavigationAdminData {
   apps: NavAppOption[]
 }
 
-export async function loadNavigationAdmin(
-  _sp: Record<string, string | string[] | undefined>,
-): Promise<NavigationAdminData | null> {
+export async function loadNavigationAdmin(): Promise<NavigationAdminData | null> {
   // Navigation editing is an admin surface. The catalogue and admin hub name
   // admin.nav.manage ("Customize navigation") as its key; holders of the
   // historical admin.customization.manage keep their access so existing

@@ -241,7 +241,7 @@ test(
 
       const stub = await stubOf(fx, run.documentId, employee);
       assert.ok(stub, "the Californian was paid");
-      assert.equal(stub!.gross, "2000.0000");
+      assert.equal(stub!.gross, PERIOD_WAGES);
 
       // The engine, called directly with the same facts. No DE 4 on file, so
       // the certificate resolves to the pack's declared defaults — which is a
@@ -250,7 +250,7 @@ test(
         payDate: PAY_DATE,
         periodEnd: PERIOD_END,
         periodsPerYear: 26,
-        wages: "2000.0000",
+        wages: PERIOD_WAGES,
         certificate: resolveCertificate({
           certificate: payrollCertificate("US", "us_ca_de4"), asOf: PAY_DATE,
         }),
@@ -307,7 +307,7 @@ test(
       assert.ok(claimedStub);
       const expectedPa = PA_WITHHOLDING.compute({
         payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: "2000.0000",
+        wages: PERIOD_WAGES,
         certificate: resolveCertificate({
           certificate: payrollCertificate("US", "us_ca_de4"), asOf: PAY_DATE,
         }),
@@ -375,11 +375,11 @@ test(
       });
       const expectedState = NY_WITHHOLDING.compute({
         payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: "2000.0000", certificate: it2104({ nyc_resident: "true" }), basis: "resident",
+        wages: PERIOD_WAGES, certificate: it2104({ nyc_resident: "true" }), basis: "resident",
       });
       const expectedCity = NYC_WITHHOLDING.compute({
         payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: "2000.0000", certificate: it2104({ nyc_resident: "true" }), basis: "resident",
+        wages: PERIOD_WAGES, certificate: it2104({ nyc_resident: "true" }), basis: "resident",
       });
       assert.notEqual(expectedCity.tax, "0.0000");
 

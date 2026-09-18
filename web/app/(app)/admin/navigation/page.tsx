@@ -9,7 +9,7 @@ export default async function NavigationAdmin({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadNavigationAdmin(sp)
+  const data = await loadNavigationAdmin()
   if (!data) return null
   return <ModuleView spec={navigationAdminSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -88,7 +88,7 @@ test("the nav loader redirects an unauthenticated visitor to login", { skip: !pr
   await freshOrgWithUser().then(async ({ orgId }) => {
     try {
       loaderState.user = null;
-      await assert.rejects(() => loadNavigationAdmin({}), /NEXT_REDIRECT:\/login/);
+      await assert.rejects(() => loadNavigationAdmin(), /NEXT_REDIRECT:\/login/);
     } finally {
       await dropScratchOrgReporting(orgId);
     }
@@ -99,7 +99,7 @@ test("the nav loader refuses a signed-in user with neither admin key", { skip: !
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["reports.read"]);
-    await assert.rejects(() => loadNavigationAdmin({}), /NEXT_REDIRECT:\/$/);
+    await assert.rejects(() => loadNavigationAdmin(), /NEXT_REDIRECT:\/$/);
   } finally {
     await dropScratchOrgReporting(orgId);
   }
@@ -109,7 +109,7 @@ test("the nav loader serves a holder of admin.nav.manage", { skip: !process.env.
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["admin.nav.manage"]);
-    const data = await loadNavigationAdmin({});
+    const data = await loadNavigationAdmin();
     assert.ok(data);
     assert.ok(data.initial);
     assert.ok(Array.isArray(data.apps));
@@ -122,7 +122,7 @@ test("the nav loader keeps serving a holder of admin.customization.manage", { sk
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["admin.customization.manage"]);
-    const data = await loadNavigationAdmin({});
+    const data = await loadNavigationAdmin();
     assert.ok(data);
   } finally {
     await dropScratchOrgReporting(orgId);

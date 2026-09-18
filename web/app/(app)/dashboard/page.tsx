@@ -15,7 +15,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadDashboard(sp)
+  const data = await loadDashboard()
   if (!data) return null
   return <ModuleView spec={dashboardSpec(data)} data={data} searchParams={sp} trusted />
 }

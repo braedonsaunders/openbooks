@@ -454,7 +454,8 @@ function resolveRegisteredSubtabs(
   registered: FormTabMeta,
 ): FormTabPlacement {
   if (!registered.subtabs?.length) {
-    const { subtabs: _subtabs, ...withoutSubtabs } = placement
+    const withoutSubtabs = { ...placement }
+    delete withoutSubtabs.subtabs
     return withoutSubtabs
   }
 

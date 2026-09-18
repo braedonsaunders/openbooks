@@ -28,7 +28,7 @@ export async function loadPaymentProviders(): Promise<PaymentProvidersData> {
   return {}
 }
 
-export function paymentProvidersSpec(_data: PaymentProvidersData): PageSpec {
+export function paymentProvidersSpec(): PageSpec {
   return page({
     route: '/admin/setup/payment-providers',
     // The setup workspace renders its own shell around every setup page, so a

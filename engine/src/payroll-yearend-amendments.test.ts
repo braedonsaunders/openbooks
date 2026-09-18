@@ -397,7 +397,9 @@ test("a snapshot round-trips back into the slip a cancellation must file", () =>
       { code: "44", label: "Union dues", value: "600.00" },
     ],
   };
-  const { sin: _sin, stubCount: _stubCount, ...expected } = GOLDEN_SLIP;
+  const expected: Record<string, unknown> = { ...GOLDEN_SLIP };
+  delete expected.sin;
+  delete expected.stubCount;
   const { stubCount, ...rebuilt } = t4SlipFromReported(reported, rowId);
   assert.deepEqual(rebuilt, expected);
   // The stub count is provenance, not a T4 box, and the transmittal never

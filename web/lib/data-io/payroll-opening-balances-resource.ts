@@ -214,7 +214,8 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
       }
       const rows = result.rows.map((row) => {
         const rowId = String(row.__rowId ?? '')
-        const { __rowId: _drop, ...rest } = row
+        const rest = { ...row }
+        delete rest.__rowId
         const out: Record<string, CellValue> = { ...rest }
         for (const component of components) out[componentColumnKey(component)] = null
         for (const [key, value] of Object.entries(byRow.get(rowId) ?? {})) out[key] = value

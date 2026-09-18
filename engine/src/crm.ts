@@ -106,7 +106,7 @@ export async function promoteCrmAccount(
   `));
 
   let profileId = existing.rows[0]?.id;
-  let fromStage = existing.rows[0]?.lifecycle_stage;
+  const fromStage = existing.rows[0]?.lifecycle_stage;
   if (!profileId) {
     const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses

@@ -384,7 +384,9 @@ const listReportSchedules: AssistantToolDef = {
     const schedules = [];
     for (const row of rows.rows) {
       if (!(await definitionPermitted(authz, row.entity, row.statement_kind))) continue;
-      const { entity: _e, statement_kind: _s, ...schedule } = row;
+      const schedule: Record<string, unknown> = { ...row };
+      delete schedule.entity;
+      delete schedule.statement_kind;
       schedules.push(schedule);
     }
     return { ok: true, data: { schedules, href: "/reports" } };

@@ -310,7 +310,7 @@ export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfile
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
   `));
   const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
-  let profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
+  const profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
     ? raw!.profiles.map((p) => ({ ...DEFAULT_PROFILE, ...p, categorySettings: p.categorySettings ?? {}, customCategories: p.customCategories ?? [], baseOverrides: p.baseOverrides ?? {} }))
     : [DEFAULT_PROFILE];
   const activeProfileId = raw?.activeProfileId && profiles.some((p) => p.id === raw!.activeProfileId) ? raw!.activeProfileId : profiles[0]!.id;

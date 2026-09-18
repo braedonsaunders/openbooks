@@ -62,7 +62,6 @@ export function unsealSecret(sealed: SealedSecret): string | null {
  */
 export async function resolvePublicHost(
   host: string,
-  _opts?: { timeoutMs?: number },
 ): Promise<{ address: string; hostname: string; family?: number; ipLiteral: boolean }> {
   const { isIP } = await import('node:net')
   const h = host.trim()

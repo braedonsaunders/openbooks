@@ -525,7 +525,7 @@ async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input:
   } else {
     let resolved
     try {
-      resolved = await resolvePublicHost(t.host, { timeoutMs: TRANSPORT_TIMEOUT_MS })
+      resolved = await resolvePublicHost(t.host)
       if (resolved.ipLiteral) throw new Error('External SMTP host must be a DNS name so its TLS identity can be verified.')
     } catch (error) {
       throw providerOperationError('SMTP', error, redactions)

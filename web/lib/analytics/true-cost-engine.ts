@@ -452,7 +452,6 @@ export function evaluateFormula(expr: string): number | null {
     const n = Number(s);
     return isNaN(n) ? null : n;
   };
-  let factor: () => number | null;
   const parenOrNum = (): number | null => {
     if (peek() === "(") {
       pos++;
@@ -461,17 +460,16 @@ export function evaluateFormula(expr: string): number | null {
       pos++;
       return v;
     }
-    if (peek() === "-") { pos++; const v = factor(); return v === null ? null : -v; }
-    if (peek() === "+") { pos++; return factor(); }
+    if (peek() === "-") { pos++; const v = parenOrNum(); return v === null ? null : -v; }
+    if (peek() === "+") { pos++; return parenOrNum(); }
     return parseNumber();
   };
-  factor = parenOrNum;
   const term = (): number | null => {
-    let v = factor();
+    let v = parenOrNum();
     if (v === null) return null;
     while (peek() === "*" || peek() === "/") {
       const op = clean[pos++];
-      const r = factor();
+      const r = parenOrNum();
       if (r === null) return null;
       v = op === "*" ? v * r : r === 0 ? NaN : v / r;
     }

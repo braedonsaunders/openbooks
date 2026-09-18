@@ -370,7 +370,7 @@ test("every UUID segment accepts the full a-f hex range", () => {
 });
 
 test("exactly 200 lines validate; 201 do not", () => {
-  const lines = Array.from({ length: 100 }, (_, i) => [
+  const lines = Array.from({ length: 100 }, () => [
     { accountId: A, amount: "1.00" },
     { accountId: B, amount: "-1.00" },
   ]).flat();

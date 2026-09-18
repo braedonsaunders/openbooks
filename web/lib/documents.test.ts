@@ -22,12 +22,10 @@ registerHooks({
 
 const {
   applyDocumentEdit,
-  assertDocumentEditRevision,
   buildReversalLinkEvidence,
   createPostedCorrectionDraft,
   DocumentEditError,
   loadDocumentEditCurrent,
-  requireDocumentEditRevision,
   runDocumentVersionedTransaction,
   runPostedCorrectionDraftFlows,
   validateCorrectionReason,
@@ -529,7 +527,14 @@ test(
           }],
         ] as const) {
           const stored = await loadStoredDocument(org.orgId, id)
-          const { updatedAt: _omittedRevision, memo: _memo, ...currentWithoutRevision } = stored
+          const currentWithoutRevision: Omit<StoredDocument, 'updatedAt' | 'memo'> = {
+            kind: stored.kind,
+            status: stored.status,
+            total: stored.total,
+            taxTotal: stored.taxTotal,
+            partyId: stored.partyId,
+            documentDate: stored.documentDate,
+          }
           await assert.rejects(
             withOrgContext(org.orgId, () => applyDocumentEdit(
               id,

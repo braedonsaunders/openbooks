@@ -30,7 +30,7 @@ export async function loadSync(): Promise<SyncData> {
   return {}
 }
 
-export function syncSpec(_data: SyncData): PageSpec {
+export function syncSpec(): PageSpec {
   return page({
     route: '/sync',
     // Bare + `page-container`: the native page renders <PageContainer>, not

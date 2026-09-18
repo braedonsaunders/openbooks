@@ -99,7 +99,7 @@ function deleteRequest(entity: string, id: string): Request {
   });
 }
 
-const call = (entity: string, body: unknown) => ({ params: Promise.resolve({ entity }) });
+const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
 interface TaxFixture {
   orgId: string;
@@ -113,7 +113,7 @@ async function seedTaxFixture(): Promise<TaxFixture> {
   authenticate({ orgId: org.orgId, actorId });
   const res = await POST(
     postRequest("tax-codes", { code: "OB-VAT", name: "VAT", isActive: true }),
-    call("tax-codes", {}),
+    call("tax-codes"),
   );
   assert.equal(res.status, 200);
   const { id } = (await res.json()) as { id: string };
@@ -168,7 +168,7 @@ async function seedDerivedRuleFixture(): Promise<DerivedRuleFixture> {
       sequence: 50,
       isActive: true,
     }),
-    call("pay-derived-rules", {}),
+    call("pay-derived-rules"),
   );
   assert.equal(created.status, 200);
   const { id: ruleId } = (await created.json()) as { id: string };
@@ -207,13 +207,13 @@ test("generic setup PATCH and DELETE reject malformed row ids", { skip: !DB }, a
 
     const patched = await PATCH(
       patchRequest("tax-codes", { id: "not-a-uuid", code: "MALFORMED", name: "Should not persist" }),
-      call("tax-codes", {}),
+      call("tax-codes"),
     );
     assert.equal(patched.status, 404);
 
     const deleted = await DELETE(
       deleteRequest("tax-codes", "not-a-uuid"),
-      call("tax-codes", {}),
+      call("tax-codes"),
     );
     assert.equal(deleted.status, 404);
   } finally {
@@ -247,7 +247,7 @@ test("derived-rule edits close the old window and create a successor", { skip: !
         sequence: 50,
         isActive: true,
       }),
-      call("pay-derived-rules", {}),
+      call("pay-derived-rules"),
     );
     assert.equal(edited.status, 200);
     const { id: successorId } = (await edited.json()) as { id: string };
@@ -285,7 +285,7 @@ test("derived-rule edits close the old window and create a successor", { skip: !
         sequence: 50,
         isActive: true,
       }),
-      call("pay-derived-rules", {}),
+      call("pay-derived-rules"),
     );
     assert.equal(appended.status, 200);
     const { id: appendedId } = (await appended.json()) as { id: string };
@@ -306,7 +306,7 @@ test("setup deletes write their audit event in the same transaction", { skip: !D
   try {
     const deleted = await DELETE(
       deleteRequest("pay-derived-rules", f.ruleId),
-      call("pay-derived-rules", {}),
+      call("pay-derived-rules"),
     );
     assert.equal(deleted.status, 200);
     const rows = await db.execute(sql`
@@ -336,7 +336,7 @@ test("API rejects negative and out-of-domain tax rates before any write", { skip
           effectiveFrom: "2026-01-01",
           ...override,
         }),
-        call("tax-rates", {}),
+        call("tax-rates"),
       );
       assert.equal(res.status, 400, `${label}: expected a client error`);
       const body = (await res.json()) as { error: string };
@@ -353,7 +353,7 @@ test("API rejects negative and out-of-domain tax rates before any write", { skip
     ] as const) {
       const res = await POST(
         postRequest("tax-rates", { taxCodeId: f.vatCodeId, effectiveFrom: "2026-01-01", ...override }),
-        call("tax-rates", {}),
+        call("tax-rates"),
       );
       assert.equal(res.status, 400, `${label}: expected a client error`);
     }
@@ -368,7 +368,7 @@ test("API rejects negative and out-of-domain tax rates before any write", { skip
         ratePercent: "8.875",
         effectiveFrom: "2026-01-01",
       }),
-      call("tax-rates", {}),
+      call("tax-rates"),
     );
     assert.equal(created.status, 200);
     const { id } = (await created.json()) as { id: string };
@@ -385,7 +385,7 @@ test("API rejects negative and out-of-domain tax rates before any write", { skip
           effectiveFrom: "2026-01-01",
           ...override,
         }),
-        call("tax-rates", {}),
+        call("tax-rates"),
       );
       assert.equal(rejected.status, 400, `${label}: edit must be refused`);
       const body = (await rejected.json()) as { error: string };
@@ -404,7 +404,7 @@ test("API rejects negative and out-of-domain tax rates before any write", { skip
         effectiveFrom: "2026-01-01",
         effectiveTo: "2026-06-30",
       }),
-      call("tax-rates", {}),
+      call("tax-rates"),
     );
     assert.equal(edited.status, 200);
     const rows = await taxRateRows(f.orgId);
@@ -428,7 +428,7 @@ test("valid exact-decimal effective-dated rates persist and calculate", { skip: 
         effectiveFrom: "2026-01-01",
         effectiveTo: "2026-06-30",
       }),
-      call("tax-rates", {}),
+      call("tax-rates"),
     );
     assert.equal(zero.status, 200);
     const standard = await POST(
@@ -437,7 +437,7 @@ test("valid exact-decimal effective-dated rates persist and calculate", { skip: 
         ratePercent: "8.875",
         effectiveFrom: "2026-07-01",
       }),
-      call("tax-rates", {}),
+      call("tax-rates"),
     );
     assert.equal(standard.status, 200);
     assert.deepEqual(await taxRateRows(f.orgId), [
@@ -527,8 +527,8 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
     authenticate({ orgId: org.orgId, actorId });
     const code = `RACE-${randomUUID().slice(0, 8)}`;
     const [first, second] = await Promise.all([
-      POST(postRequest("tax-codes", { code, name: "Racer A" }), call("tax-codes", {})),
-      POST(postRequest("tax-codes", { code, name: "Racer B" }), call("tax-codes", {})),
+      POST(postRequest("tax-codes", { code, name: "Racer A" }), call("tax-codes")),
+      POST(postRequest("tax-codes", { code, name: "Racer B" }), call("tax-codes")),
     ]);
     const statuses = [first.status, second.status].sort();
     assert.deepEqual(statuses, [200, 409], "exactly one create wins with a deterministic conflict");
@@ -549,12 +549,12 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
     // the SQLSTATE read through Drizzle's error wrapper.
     const firstClass = await POST(
       postRequest("classes", { code: "RACE-CLS-A", name: "Class A" }),
-      call("classes", {}),
+      call("classes"),
     );
     assert.equal(firstClass.status, 200);
     const secondClass = await POST(
       postRequest("classes", { code: "RACE-CLS-B", name: "Class B" }),
-      call("classes", {}),
+      call("classes"),
     );
     assert.equal(secondClass.status, 200);
     const takeover = await PATCH(
@@ -563,7 +563,7 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
         code: "RACE-CLS-A",
         name: "Class B",
       }),
-      call("classes", {}),
+      call("classes"),
     );
     assert.equal(takeover.status, 409);
     assert.deepEqual(await takeover.json(), { error: "This record already exists.", code: "duplicate" });
@@ -650,9 +650,9 @@ test("duplicate FX rates answer a typed conflict with a human message, not a bar
       rateType: "spot",
       rate: "1.3604000000",
     };
-    const first = await POST(postRequest("fx-rates", rate), call("fx-rates", {}));
+    const first = await POST(postRequest("fx-rates", rate), call("fx-rates"));
     assert.equal(first.status, 200);
-    const second = await POST(postRequest("fx-rates", rate), call("fx-rates", {}));
+    const second = await POST(postRequest("fx-rates", rate), call("fx-rates"));
     assert.equal(second.status, 409);
     const body = (await second.json()) as { error?: unknown; code?: unknown };
     assert.equal(body.code, "duplicate");
@@ -696,7 +696,7 @@ test("intercompany pairs missing elimination flags answer a typed message, never
         dueFromAccountId: dueFromId,
         dueToAccountId: dueToId,
       }),
-      call("intercompany-pairs", {}),
+      call("intercompany-pairs"),
     );
     assert.equal(res.status, 400);
     const body = (await res.json()) as { error?: unknown; code?: unknown };
@@ -738,7 +738,7 @@ test("payment cards name an active employee and a liability account (0171)", { s
         liabilityAccountId: cardLiability,
         isActive: true,
       }),
-      call("payment-cards", {}),
+      call("payment-cards"),
     );
     assert.equal(created.status, 200);
 
@@ -749,7 +749,7 @@ test("payment cards name an active employee and a liability account (0171)", { s
         liabilityAccountId: cardLiability,
         isActive: true,
       }),
-      call("payment-cards", {}),
+      call("payment-cards"),
     );
     assert.equal(notEmployee.status, 400);
     assert.match(((await notEmployee.json()) as { error: string }).error, /active employee/);
@@ -761,7 +761,7 @@ test("payment cards name an active employee and a liability account (0171)", { s
         liabilityAccountId: expenseAccount,
         isActive: true,
       }),
-      call("payment-cards", {}),
+      call("payment-cards"),
     );
     assert.equal(notLiability.status, 400);
     assert.match(((await notLiability.json()) as { error: string }).error, /must be a liability account/);

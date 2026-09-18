@@ -420,7 +420,9 @@ export async function createScheduleTask(
       returning id`))
     const id = created.rows[0]?.id
     if (!id) throw new ScheduleError('could not create task', 500)
-    const { name: _name, order: _order, ...rest } = input
+    const rest: ScheduleTaskPatchInput = { ...input }
+    delete rest.name
+    delete rest.order
     await applyTaskPatch(orgId, projectId, id, rest, userId, tx)
     return id
   }))

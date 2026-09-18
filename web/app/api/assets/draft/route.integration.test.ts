@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { NextRequest } from "next/server";
 
 // Live-Postgres regression for fnd_mtcb42ht_vieu7b: draft creation used to
 // read max(FA-####)+1 and insert in separate autocommit statements. The two
@@ -124,9 +123,7 @@ async function seed(): Promise<Fixture> {
 }
 
 function post(fixture: Fixture): Promise<Response> {
-  return withOrgContext(fixture.orgId, () =>
-    POST(new NextRequest("http://openbooks.test/api/assets/draft", { method: "POST" })),
-  );
+  return withOrgContext(fixture.orgId, () => POST());
 }
 
 test(

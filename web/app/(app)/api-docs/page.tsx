@@ -15,6 +15,6 @@ export default async function ApiDocsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadApiDocs(sp)
+  const data = await loadApiDocs()
   return <ModuleView spec={apiDocsSpec(data)} data={data} searchParams={sp} trusted />
 }
