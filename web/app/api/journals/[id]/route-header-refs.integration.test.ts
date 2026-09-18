@@ -66,7 +66,7 @@ const patchRouteUrl = "./route.ts?journal-header-refs-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { documentRevisionCounterSql } = await import("../../../../lib/documents.ts");
 
@@ -83,17 +83,17 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
   };
 }
 
-async function revisionToken(documentId: string): Promise<string> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
+async function revisionToken(orgId: string, documentId: string): Promise<string> {
+  const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `));
+  `)));
   return row.rows[0]!.updatedAt;
 }
 
 async function makeDraftJournal(org: { orgId: string; subsidiaryId: string; date: string }, adminId: string, n: string) {
   const documentId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, subsidiary_id, document_date,
        currency, fx_rate, status, subtotal, tax_total, total, custom,
@@ -103,7 +103,7 @@ async function makeDraftJournal(org: { orgId: string; subsidiaryId: string; date
       ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
       '{}'::jsonb, ${adminId}, ${adminId}
     )
-  `);
+  `));
   return documentId;
 }
 
@@ -111,25 +111,25 @@ test(
   "journals PATCH refuses an impossible header document date with a domain error",
   { skip: !DB },
   async () => {
-    const orgA = await createScratchOrg();
+    const orgA = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(orgA.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
         user: { orgId: orgA.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const documentId = await makeDraftJournal(orgA, adminId, "JE-BAD-DATE-1");
-      const token = await revisionToken(documentId);
+      const token = await revisionToken(orgA.orgId, documentId);
       const attempt = patchRequest(documentId, { expectedUpdatedAt: token, documentDate: "2026-02-30" });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(orgA.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.ok(
         refused.status === 400 || refused.status === 422,
         `expected a domain 4xx, got ${refused.status}`,
       );
-      const date = (await db.execute<{ d: string }>(sql`
+      const date = (await withOrgContext(orgA.orgId, () => db.execute<{ d: string }>(sql`
         select document_date::text as d from documents where id = ${documentId}
-      `)).rows[0]!.d;
+      `))).rows[0]!.d;
       assert.equal(date, orgA.date, "refused date writes nothing");
     } finally {
       routeState.authz = null;
@@ -142,30 +142,30 @@ test(
   "journals PATCH refuses a foreign-org line party with a domain error",
   { skip: !DB },
   async () => {
-    const orgA = await createScratchOrg();
-    const orgB = await createScratchOrg();
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(orgA.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
         user: { orgId: orgA.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const documentId = await makeDraftJournal(orgA, adminId, "JE-ALIEN-PARTY-1");
-      const token = await revisionToken(documentId);
+      const token = await revisionToken(orgA.orgId, documentId);
       // orgB's real customer: well-formed, active, but another tenant's.
       const attempt = patchRequest(documentId, {
         expectedUpdatedAt: token,
         lines: [{ accountId: orgA.accounts.cogs, amount: "100", partyId: orgB.customerId }],
       });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(orgA.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.ok(
         refused.status === 404 || refused.status === 422,
         `expected a domain 4xx, got ${refused.status}`,
       );
-      const lines = (await db.execute<{ n: number }>(sql`
+      const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `)).rows[0]!.n;
+      `))).rows[0]!.n;
       assert.equal(lines, 0, "refused foreign-party lines store nothing");
     } finally {
       routeState.authz = null;
@@ -179,26 +179,26 @@ test(
   "journals PATCH refuses a foreign-org header party with a domain error",
   { skip: !DB },
   async () => {
-    const orgA = await createScratchOrg();
-    const orgB = await createScratchOrg();
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(orgA.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
         user: { orgId: orgA.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const documentId = await makeDraftJournal(orgA, adminId, "JE-ALIEN-HDR-1");
-      const token = await revisionToken(documentId);
+      const token = await revisionToken(orgA.orgId, documentId);
       const attempt = patchRequest(documentId, { expectedUpdatedAt: token, partyId: orgB.customerId });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(orgA.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.ok(
         refused.status === 404 || refused.status === 422,
         `expected a domain 4xx, got ${refused.status}`,
       );
-      const party = (await db.execute<{ p: string | null }>(sql`
+      const party = (await withOrgContext(orgA.orgId, () => db.execute<{ p: string | null }>(sql`
         select party_id as p from documents where id = ${documentId}
-      `)).rows[0]!.p;
+      `))).rows[0]!.p;
       assert.equal(party, null, "refused header party writes nothing");
     } finally {
       routeState.authz = null;
@@ -212,65 +212,65 @@ test(
   "journals PATCH refuses foreign reference custom values on header and lines",
   { skip: !DB },
   async () => {
-    const orgA = await createScratchOrg();
-    const orgB = await createScratchOrg();
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(orgA.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
         user: { orgId: orgA.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
       const documentId = await makeDraftJournal(orgA, adminId, "JE-ALIEN-CF-1");
-      await db.execute(sql`
+      await withBypassContext(() => db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${orgA.orgId}, 'documents', 'journal', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${adminId}, ${adminId}),
           (${randomUUID()}, ${orgA.orgId}, 'document_lines', 'journal', 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${adminId}, ${adminId})
-      `);
+      `));
       const headerAttempt = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(documentId),
+        expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         custom: { ref_party: orgB.customerId },
       });
-      const refusedHeader = await PATCH(headerAttempt.req, headerAttempt.ctx);
+      const refusedHeader = await withOrgContext(orgA.orgId, () => PATCH(headerAttempt.req, headerAttempt.ctx));
       assert.equal(
         refusedHeader.status,
         404,
         `expected tenant-opaque 404, got ${refusedHeader.status}: ${JSON.stringify(await refusedHeader.clone().json().catch(() => null))}`,
       );
-      const storedCustom = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+      const storedCustom = (await withOrgContext(orgA.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from documents where id = ${documentId}
-      `)).rows[0]!.custom;
+      `))).rows[0]!.custom;
       assert.equal(
         (storedCustom as Record<string, unknown> | undefined)?.ref_party,
         undefined,
         "refused header references store nothing",
       );
       const savedHeader = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(documentId),
+        expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         custom: { ref_party: orgA.customerId },
       });
-      assert.equal((await PATCH(savedHeader.req, savedHeader.ctx)).status, 200, "own-org header reference must stay green");
+      assert.equal((await withOrgContext(orgA.orgId, () => PATCH(savedHeader.req, savedHeader.ctx))).status, 200, "own-org header reference must stay green");
       const lineAttempt = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(documentId),
+        expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgB.customerId } }],
       });
-      const refusedLine = await PATCH(lineAttempt.req, lineAttempt.ctx);
+      const refusedLine = await withOrgContext(orgA.orgId, () => PATCH(lineAttempt.req, lineAttempt.ctx));
       assert.equal(
         refusedLine.status,
         404,
         `expected tenant-opaque 404, got ${refusedLine.status}: ${JSON.stringify(await refusedLine.clone().json().catch(() => null))}`,
       );
-      const lines = (await db.execute<{ n: number }>(sql`
+      const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `)).rows[0]!.n;
+      `))).rows[0]!.n;
       assert.equal(lines, 0, "refused line references store nothing");
       const savedLine = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(documentId),
+        expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgA.customerId } }],
       });
-      assert.equal((await PATCH(savedLine.req, savedLine.ctx)).status, 200, "own-org line reference must stay green");
+      assert.equal((await withOrgContext(orgA.orgId, () => PATCH(savedLine.req, savedLine.ctx))).status, 200, "own-org line reference must stay green");
     } finally {
       routeState.authz = null;
       await dropScratchOrg(orgA.orgId);
