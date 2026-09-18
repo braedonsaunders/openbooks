@@ -60,7 +60,14 @@ test('journal drawer keeps immutable lifecycle states out of edit mode', () => {
   assert.match(actions, /doc\.status === 'approved' \|\| doc\.status === 'posted'/)
   assert.match(actions, /onClick=\{voidJournal\}/)
   assert.match(voidWorkflow, /promptDialog\(/)
-  assert.match(voidWorkflow, /fetch\(\s*`\/api\/documents\/\$\{doc\.id\}\/void`/)
+  // Fleet-8 m1: voidJournal runs on the shared action path — the
+  // never-throwing read lives in fetchAction now, not a bare fetch.
+  // Contract unchanged: the void call carries the reason AND the exact
+  // document revision, and the route fences on the token, so a bare
+  // { reason } body is a dead button. Render-proved in
+  // journal-drawer-refusal.test.tsx (stale-revision reload + pin).
+  assert.match(voidWorkflow, /await execute\(/)
+  assert.match(voidWorkflow, /fetchAction\(\s*`\/api\/documents\/\$\{doc\.id\}\/void`/)
   // The void call carries the reason AND the exact document revision: the
   // void route fences on the token, so a bare { reason } body is a dead button.
   assert.match(voidWorkflow, /body: JSON\.stringify\(\{ reason, expectedUpdatedAt: voidRevision \}\)/)
