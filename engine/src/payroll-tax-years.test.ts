@@ -270,15 +270,40 @@ test(
         // The CA T4 already refused an unknown year through its box caps. The
         // W-2 and the 941 did not: they would have filed a year the engine
         // cannot withhold for, with no refusal anywhere on the page.
-        assert.match(
-          section.populationRefusal ?? "",
-          new RegExp(`${unloaded} statutory tables are not loaded`),
-          `${section.country} ${section.key}`,
-        );
-        assert.deepEqual(section.data.rows, []);
+        //
+        // "Unloaded" is PER PACK, which this test originally assumed away by
+        // deriving one year from the US pack and asserting the year refusal for
+        // every section. Both CA and US run on the calendar year, so the
+        // assumption held while they were the only packs; AU's fiscal year
+        // 2026-27 makes `max(US) + 1` a year AU genuinely has loaded, and AU
+        // then reports its OWN refusal (STP finalisation is declared but not
+        // populated). That is the pack being right, not the page being wrong.
+        //
+        // So the invariant is asked of each pack on its own terms. What must
+        // hold everywhere is the part that actually protects the filing: no
+        // section returns rows for a year its own pack cannot withhold for.
+        const yearProblem = payrollTaxYearProblem(section.country, unloaded);
+        if (yearProblem) {
+          assert.match(
+            section.populationRefusal ?? "",
+            new RegExp(`${unloaded} statutory tables are not loaded`),
+            `${section.country} ${section.key}`,
+          );
+          assert.deepEqual(section.data.rows, [], `${section.country} ${section.key}`);
+        } else {
+          // The pack has the year. It may populate or name its own refusal —
+          // but it may never do both, which would show rows under a refusal.
+          if (section.populationRefusal != null) {
+            assert.deepEqual(section.data.rows, [], `${section.country} ${section.key}`);
+          }
+        }
       }
-      // A loaded year still populates normally (empty tenant, but no refusal).
+      // A year loaded for CA and US populates for them with no refusal (empty
+      // tenant). Other packs may legitimately carry a named refusal for 2026 —
+      // DE declares the Lohnsteuerbescheinigung but has not implemented ELSTER
+      // population — so this asks the two packs the fixture installed.
       for (const section of await orgYearEndFilings(org.orgId, 2026)) {
+        if (section.country !== "CA" && section.country !== "US") continue;
         assert.equal(section.populationRefusal, null, `${section.country} ${section.key}`);
       }
     } finally {

@@ -12,6 +12,7 @@ import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import { computeDeStatutory } from "./compute-statutory.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
@@ -263,9 +264,13 @@ function dePackFilings() {
         description:
           "The employer's annual electronic wage-tax certificate per employee, "
           + "transmitted via ELSTER (EStG §41b).",
+        // A DECLARED refusal, so it must carry a refusal class: the generic
+        // enumeration turns a PayrollError into this filing's own
+        // populationRefusal and rethrows anything else. As a bare Error this
+        // escaped that conversion and took down the whole year-end page.
         population: (): Promise<PayrollFilingData> =>
           Promise.reject(
-            new Error(
+            new PayrollPackError(
               "ELSTER transmission of the Lohnsteuerbescheinigung is not "
               + "implemented by the DE payroll pack — the 2026 monthly engine "
               + "computes, but year-end population is a separate filing feature.",

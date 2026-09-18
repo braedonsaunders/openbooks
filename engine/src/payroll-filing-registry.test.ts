@@ -73,6 +73,20 @@ const ZZ_AMENDMENT = {
   refusal: "the ZZ pack does not correct this filing",
 } as const;
 
+/**
+ * The countries the registry declares with no synthetic pack registered —
+ * i.e. the built-ins, in registry order. Read once, before any test registers
+ * anything, so a test that forgets to unregister cannot inflate it.
+ */
+const BUILT_IN_FILING_COUNTRIES: readonly string[] = declaredPayrollFilings().map((pack) => pack.country);
+
+function builtInFilingCountries(): readonly string[] {
+  return BUILT_IN_FILING_COUNTRIES;
+}
+
+/** A country no payroll pack declares, for the no-pack-at-all refusals. */
+const UNDECLARED_COUNTRY = "XX";
+
 function withZZ(fn: () => void | Promise<void>) {
   return async () => {
     registerPayrollFilings(ZZ_FILINGS);
@@ -86,7 +100,15 @@ function withZZ(fn: () => void | Promise<void>) {
 
 test("a registered third pack's filing appears in the declared enumeration", withZZ(() => {
   const countries = declaredPayrollFilings().map((pack) => pack.country);
-  assert.deepEqual(countries, ["CA", "US", "ZZ"], "built-ins first, then registrations");
+  // The contract is the ORDER — every built-in first, the runtime
+  // registration last — not the identity of the built-ins. This pinned
+  // ["CA", "US", "ZZ"] and went red the day the registry opened past two
+  // countries, which is a stale pin, not a regression: derive the built-ins.
+  assert.deepEqual(
+    countries,
+    [...builtInFilingCountries(), "ZZ"],
+    "built-ins first, then registrations",
+  );
   const filing = yearEndFiling("ZZ", "p60");
   assert.equal(filing.label, "P60 end-of-year certificate");
   assert.ok(filing.download, "the pack's declared file builder rides along");
@@ -179,10 +201,22 @@ test("an undeclared program type is refused, naming what the pack declares", wit
   assert.ok(problem, "undeclared program type must be refused");
   assert.match(problem!, /does not file under program type "zz_nope"/);
   assert.match(problem!, /zz_paye/, "the refusal names the declared types");
+
+  // A country with NO pack at all gets the other refusal. This used GB, which
+  // had no pack when the test was written and now has one — so the assertion
+  // was pinning the two-country world, not the behaviour.
   assert.match(
-    filingAccountProblem({ country: "GB", programType: "paye", stateCode: null })!,
-    /no payroll pack declares filing program types for GB/,
+    filingAccountProblem({ country: UNDECLARED_COUNTRY, programType: "paye", stateCode: null })!,
+    new RegExp(`no payroll pack declares filing program types for ${UNDECLARED_COUNTRY}`),
   );
+
+  // And a real built-in beyond CA/US refuses the same way ZZ does, naming what
+  // it declares — the behaviour this test is titled for, now that a pack whose
+  // program types are neither Canadian nor American exists to check it on.
+  const gb = filingAccountProblem({ country: "GB", programType: "paye", stateCode: null });
+  assert.ok(gb, "GB has a pack, and 'paye' is not one of its declared program types");
+  assert.match(gb, /does not file under program type "paye"/);
+  assert.match(gb, /gb_paye/, "the refusal names the declared type it should have been");
 }));
 
 test("a region-scoped program type requires its region, and only then", withZZ(() => {
