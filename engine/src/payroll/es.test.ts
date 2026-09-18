@@ -1,5 +1,6 @@
 /**
- * ES payroll skeleton tests: the pack declares, the engine refuses.
+ * ES payroll pack tests: declarations, regions, certificates, editions,
+ * and the computeStatutory refusal guards.
  *
  * No DB, no registry side effects: the ES modules below are pure
  * declarations, and the one registry touched (tax years) is registered and
@@ -20,9 +21,12 @@ import {
   unregisterPayrollTaxYears,
 } from "./packs.ts";
 
-test("ES pack exists as an uninstallable 2026 pack in euro on a calendar year", () => {
+test("ES pack exists as an installable 2026 pack in euro on a calendar year", () => {
   assert.equal(ES_PAYROLL_PACK.country, "ES");
-  assert.equal(ES_PAYROLL_PACK.installable, false);
+  // installable since the adapter golden proves a full monthly payslip
+  // computes AND pushes all ten lines through the declaration-enforcing
+  // push path (adapter-goldens.test.ts), with ES slot labels landed.
+  assert.equal(ES_PAYROLL_PACK.installable, true);
   assert.equal(ES_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.equal(ES_PAYROLL_PACK.taxYear.basis, "calendar");
   assert.equal(ES_PAYROLL_PACK.statutoryEngineLabel, "AEAT");
@@ -32,17 +36,40 @@ test("ES pack exists as an uninstallable 2026 pack in euro on a calendar year", 
   assert.equal(ES_PAYROLL_PACK.jurisdictions[0]?.holidayPay, null);
 });
 
-test("ES slots name IRPF withholding and Seguridad Social, employee plus employer", () => {
+test("ES slots name IRPF withholding and Seguridad Social, every pushed key declared", () => {
   const keys = ES_PAYROLL_PACK.statutorySlots.map((slot) => slot.key);
   assert.deepEqual(keys, ["irpf", "seguridad_social"]);
   const systems = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.systemKey),
   );
-  assert.deepEqual(systems, ["irpf", "ss_cc", "ss_cc"]);
+  // Exactly the ten keys compute-statutory.ts pushes — one slot for all SS
+  // lines, so no new slot labels were needed. The engine pushes ss_cc_er,
+  // never employer-side ss_cc, hence the distinct employer keys.
+  assert.deepEqual(systems, [
+    "irpf",
+    "ss_cc", "ss_des", "ss_for", "ss_mei",
+    "ss_cc_er", "ss_des_er", "ss_fogasa_er", "ss_for_er", "ss_mei_er",
+  ]);
   const kinds = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.kind),
   );
-  assert.deepEqual(kinds, ["deduction", "deduction", "employer_contribution"]);
+  assert.deepEqual(kinds, [
+    "deduction",
+    "deduction", "deduction", "deduction", "deduction",
+    "employer_contribution", "employer_contribution", "employer_contribution",
+    "employer_contribution", "employer_contribution",
+  ]);
+  // IRPF moves with pre-tax deductions; every SS cuota is rate × base.
+  const assessed = new Map(
+    ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
+      slot.components.map((component) =>
+        [`${component.systemKey}|${component.kind}`, component.assessedOn] as const),
+    ),
+  );
+  assert.equal(assessed.get("irpf|deduction"), "taxable_income");
+  for (const key of [...assessed.keys()].filter((k) => k !== "irpf|deduction")) {
+    assert.equal(assessed.get(key), "earnings", key);
+  }
 });
 
 test("ES regions list all 19 communities and support the 17 AEAT ones", () => {
