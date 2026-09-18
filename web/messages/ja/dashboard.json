@@ -32,7 +32,10 @@
     "netIncome": "純利益",
     "grossMargin": "粗利率",
     "expectedReceipts": "入金予定",
-    "expectedPayments": "支払予定"
+    "expectedPayments": "支払予定",
+    "topCustomers": "主要顧客",
+    "topVendors": "主要仕入先",
+    "openCount": "{count, plural, one {# 件の未処理} other {# 件の未処理}}"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -79,7 +82,9 @@
     "netIncome": "月初来の収益から原価・費用を差し引いた利益。",
     "grossMargin": "月初来の売上総利益と利益率。",
     "expectedReceipts": "今後30日間の入金見込み（基軸通貨）。",
-    "expectedPayments": "今後30日間の支払見込み（基軸通貨）。"
+    "expectedPayments": "今後30日間の支払見込み（基軸通貨）。",
+    "topCustomers": "未収残高の大きい顧客上位5件。",
+    "topVendors": "未払残高の大きい仕入先上位5件。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

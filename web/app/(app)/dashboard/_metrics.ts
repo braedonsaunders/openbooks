@@ -9,6 +9,8 @@ import { openItems } from '@/lib/cash/open-items'
 import { profitAndLoss } from '@/lib/reports/statements'
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { decimalRatio } from '@/lib/reports/decimals'
+import { groupByCustomer, type CustomerReceivable } from '@/lib/cash/ar-position'
+import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
 import {
   addDays,
   bankBalances,
@@ -87,6 +89,14 @@ export type DashboardMetrics = {
    */
   receivablesDso: number | null
   payablesDpo: number | null
+  /**
+   * Top-5 balances by party off the same open items the stock tiles read,
+   * through the same groupByCustomer/groupByVendor rollups the AR/AP
+   * cockpits list — largest first. Null when not queried; an empty array
+   * renders the honest empty card, never a zero row.
+   */
+  topCustomers: CustomerReceivable[] | null
+  topVendors: VendorPayable[] | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -171,8 +181,8 @@ export async function loadDashboardMetrics(
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
   const wantCash = need('cashBalance')
   const wantMoney = need('baseCurrency')
-  const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso')
-  const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo')
+  const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso', 'topCustomers')
+  const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo', 'topVendors')
   const wantPl = need('revenueMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
@@ -305,6 +315,12 @@ export async function loadDashboardMetrics(
   }
   const expectedReceipts = need('expectedReceipts30d') ? forecast30d(arItems, arStats) : null
   const expectedPayments = need('expectedPayments30d') ? forecast30d(apItems, apStats) : null
+  // Party rollups over the identical item arrays — groupBy sorts largest
+  // first, the tile takes five. Same functions as the cockpits, so a
+  // customer never owes one figure on the dashboard and another on /ar.
+  const asOfDay = parseISO(today)
+  const topCustomers = need('topCustomers') ? groupByCustomer(arItems, asOfDay).slice(0, 5) : null
+  const topVendors = need('topVendors') ? groupByVendor(apItems, asOfDay).slice(0, 5) : null
   const unionRequestedAt = (item: ApprovalWorklistItem): string => {
     const raw =
       item.kind === 'flow_gate' ? item.createdAt : (item.submittedAt ?? item.createdAt)
@@ -377,6 +393,8 @@ export async function loadDashboardMetrics(
     expectedPayments30d: expectedPayments,
     receivablesDso: arStats?.globalAvg ?? null,
     payablesDpo: apStats?.globalAvg ?? null,
+    topCustomers,
+    topVendors,
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -420,6 +438,8 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-gross-margin-mtd': ['baseCurrency', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
   'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'asOfDate'],
   'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
+  'list-top-customers': ['topCustomers'],
+  'list-top-vendors': ['topVendors'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -450,6 +470,8 @@ const EMPTY_METRICS: DashboardMetrics = {
   expectedPayments30d: null,
   receivablesDso: null,
   payablesDpo: null,
+  topCustomers: null,
+  topVendors: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],

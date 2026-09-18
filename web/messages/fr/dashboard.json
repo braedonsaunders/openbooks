@@ -32,7 +32,10 @@
     "netIncome": "Résultat net",
     "grossMargin": "Marge brute",
     "expectedReceipts": "Encaissements prévus",
-    "expectedPayments": "Paiements prévus"
+    "expectedPayments": "Paiements prévus",
+    "topCustomers": "Principaux clients",
+    "topVendors": "Principaux fournisseurs",
+    "openCount": "{count, plural, one {# ouvert} other {# ouverts}}"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -79,7 +82,9 @@
     "netIncome": "Chiffre d'affaires moins coûts et charges depuis le début du mois.",
     "grossMargin": "Bénéfice brut et marge depuis le début du mois.",
     "expectedReceipts": "Encaissements clients prévus sur les 30 prochains jours, en devise de référence.",
-    "expectedPayments": "Paiements fournisseurs prévus sur les 30 prochains jours, en devise de référence."
+    "expectedPayments": "Paiements fournisseurs prévus sur les 30 prochains jours, en devise de référence.",
+    "topCustomers": "Les cinq plus gros soldes clients ouverts.",
+    "topVendors": "Les cinq plus gros soldes fournisseurs ouverts."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",

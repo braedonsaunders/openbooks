@@ -32,7 +32,10 @@
     "netIncome": "Resultado neto",
     "grossMargin": "Margen bruto",
     "expectedReceipts": "Cobros previstos",
-    "expectedPayments": "Pagos previstos"
+    "expectedPayments": "Pagos previstos",
+    "topCustomers": "Principales clientes",
+    "topVendors": "Principales proveedores",
+    "openCount": "{count, plural, one {# abierto} other {# abiertos}}"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -79,7 +82,9 @@
     "netIncome": "Ingresos menos costes y gastos del mes hasta la fecha.",
     "grossMargin": "Beneficio bruto y margen del mes hasta la fecha.",
     "expectedReceipts": "Cobros de clientes previstos para los próximos 30 días, en moneda base.",
-    "expectedPayments": "Pagos a proveedores previstos para los próximos 30 días, en moneda base."
+    "expectedPayments": "Pagos a proveedores previstos para los próximos 30 días, en moneda base.",
+    "topCustomers": "Los cinco mayores saldos de clientes pendientes.",
+    "topVendors": "Los cinco mayores saldos de proveedores pendientes."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

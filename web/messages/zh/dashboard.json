@@ -32,7 +32,10 @@
     "netIncome": "净利润",
     "grossMargin": "毛利率",
     "expectedReceipts": "预计收款",
-    "expectedPayments": "预计付款"
+    "expectedPayments": "预计付款",
+    "topCustomers": "主要客户",
+    "topVendors": "主要供应商",
+    "openCount": "{count, plural, one {# 笔未结} other {# 笔未结}}"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -79,7 +82,9 @@
     "netIncome": "本月至今收入减去成本和费用。",
     "grossMargin": "本月至今毛利及毛利率。",
     "expectedReceipts": "未来30天预计客户回款（本位币）。",
-    "expectedPayments": "未来30天预计供应商付款（本位币）。"
+    "expectedPayments": "未来30天预计供应商付款（本位币）。",
+    "topCustomers": "排名前五的客户未结余额。",
+    "topVendors": "排名前五的供应商未结余额。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

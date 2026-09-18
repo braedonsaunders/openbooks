@@ -19,7 +19,9 @@ import {
   Receipt,
   Scale,
   Sparkles,
+  Store,
   TrendingUp,
+  Users,
   Wallet,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
@@ -118,6 +120,10 @@ export function WidgetCard({
         ? <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value="—" href="/reports/pnl" tone="slate" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value={money(data.grossProfitMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="slate" hint={withAsOf(hint)} />
     }
+    case 'list-top-customers':
+      return <PartyBalanceList title={t('widgets.topCustomers')} icon={<Users size={14} />} href="/ar" parties={data.topCustomers ?? []} />
+    case 'list-top-vendors':
+      return <PartyBalanceList title={t('widgets.topVendors')} icon={<Store size={14} />} href="/ap" parties={data.topVendors ?? []} />
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
@@ -361,6 +367,60 @@ function PendingApprovalsList({
                 </div>
               ) : null}
             </Link>
+          </li>
+        ))}
+      </ul>
+    </CardShell>
+  )
+}
+
+/**
+ * Top balances by party — the same rollup rows the AR/AP cockpits list.
+ * An empty book renders the empty card, never a zero row.
+ */
+function PartyBalanceList({
+  title,
+  icon,
+  href,
+  parties,
+}: {
+  title: string
+  icon: React.ReactNode
+  href: string
+  parties: Array<{ partyId: string | null; partyName: string; amount: string; count: number; overdue: string }>
+}) {
+  const { money } = useMoney()
+  const t = useTranslations('dashboard')
+  if (parties.length === 0) {
+    return (
+      <CardShell title={title} icon={icon}>
+        <EmptyRow />
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell title={title} icon={icon} href={href}>
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {parties.map((p) => (
+          <li key={p.partyId ?? p.partyName}>
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                    {p.partyName}
+                  </span>
+                  <Badge variant="outline">{t('widgets.openCount', { count: p.count })}</Badge>
+                </div>
+                {Number(p.overdue) > 0 ? (
+                  <div className="truncate text-xs text-rose-600 dark:text-rose-400">
+                    {money(p.overdue)} · {t('metricContext.pastDue')}
+                  </div>
+                ) : null}
+              </div>
+              <div className="shrink-0 text-right text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                {money(p.amount)}
+              </div>
+            </div>
           </li>
         ))}
       </ul>

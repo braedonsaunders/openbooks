@@ -86,7 +86,12 @@ export interface ApPosition {
   timeline: WeekRow[];
 }
 
-function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
+/**
+ * Per-vendor rollup shared by the AP cockpit and the dashboard top-vendors
+ * list — one grouping so the two surfaces cannot disagree on who is owed
+ * what. Sorted largest balance first.
+ */
+export function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
   const map = new Map<string, VendorPayable>();
   for (const it of items) {
     const key = it.partyId ?? "__none__";
