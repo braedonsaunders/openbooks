@@ -5,7 +5,7 @@ import type { PayrollAssessedOn } from "./packs.ts";
 /** One line in the stub set `calculateStub` builds before the statutory pass. */
 export interface StubLine {
   componentId: string | null;
-  kind: "earning" | "deduction" | "employer_contribution";
+  kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string;
   hours?: string;
   rate?: string;
@@ -35,9 +35,23 @@ export interface StatutoryAllocation {
   departmentId?: string | null;
 }
 
+/**
+ * Push one statutory line. `kind` answers what the money IS:
+ *
+ * - `deduction` — withheld from pay; DECREASES net.
+ * - `employer_contribution` — accrued at the employer's cost; leaves net
+ *   alone and raises employer cost.
+ * - `credit` — a refundable employment credit the employer PAYS the employee
+ *   through payroll and reclaims from the tax authority (Italy’s trattamento
+ *   integrativo and c. 4 somma, recovered via F24 compensation). A credit is
+ *   earnings-assessed, computed from gross, pushed ONCE and never re-derived
+ *   by the protection fixpoint (exactly like an earnings line); it INCREASES
+ *   net pay, and its `remittance: "tax_authority"` is the reclaim — the
+ *   remittance summary nets it against the same destination’s withholdings.
+ */
 export type PushStatutoryFn = (
   systemKey: string,
-  kind: "deduction" | "employer_contribution",
+  kind: "deduction" | "employer_contribution" | "credit",
   description: string,
   amount: string,
   sequence: number,

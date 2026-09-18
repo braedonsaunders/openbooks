@@ -14,9 +14,9 @@ import { guardSubsidiaryScope } from '../../../../../lib/authz'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const KINDS = new Set(['earning', 'deduction', 'employer_contribution', 'total'])
+const KINDS = new Set(['earning', 'deduction', 'employer_contribution', 'credit', 'total'])
 
-type ToleranceKind = 'earning' | 'deduction' | 'employer_contribution' | 'total'
+type ToleranceKind = 'earning' | 'deduction' | 'employer_contribution' | 'credit' | 'total'
 
 // Tolerances are one org-wide comparison policy, not subsidiary-owned rows.
 // Keep that exception explicit at every verb so a future subsidiary-scoped

@@ -319,11 +319,11 @@ async function loadUnmappedComponents(orgId: string): Promise<UnmappedComponentR
     select id as component_id, code, name, kind::text as kind,
            array_remove(array[
              case when kind = 'earning' and expense_account_id is null then 'expenseAccountId' end,
-             case when kind in ('deduction', 'employer_contribution') and liability_account_id is null then 'liabilityAccountId' end,
-             case when kind in ('deduction', 'employer_contribution') and remittance_party_id is null then 'remittancePartyId' end
+             case when kind in ('deduction', 'employer_contribution', 'credit') and liability_account_id is null then 'liabilityAccountId' end,
+             case when kind in ('deduction', 'employer_contribution', 'credit') and remittance_party_id is null then 'remittancePartyId' end
            ], null) as missing
       from pay_components
-     where org_id = ${orgId} and is_active and kind in ('earning', 'deduction', 'employer_contribution')
+     where org_id = ${orgId} and is_active and kind in ('earning', 'deduction', 'employer_contribution', 'credit')
   `));
   return rows.rows
     .filter((row) => row.missing.length > 0)

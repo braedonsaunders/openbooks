@@ -118,6 +118,7 @@ const TOTAL_SLOT_LABELS: Record<string, string> = {
 const KIND_LABELS: Record<ParallelSlotKind, string> = {
   earning: "earning",
   deduction: "deduction",
+  credit: "credit",
   employer_contribution: "employer contribution",
 };
 
@@ -140,7 +141,7 @@ export async function comparableSlots(
     select c.id, c.code, c.name, c.kind, c.system_key, c.sequence
       from pay_components c
      where c.org_id = ${orgId}
-     order by case c.kind when 'earning' then 1 when 'deduction' then 2 else 3 end,
+     order by case c.kind when 'earning' then 1 when 'deduction' then 2 when 'credit' then 3 else 4 end,
               c.sequence, c.code
      for share of c
   `));
