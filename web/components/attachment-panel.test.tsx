@@ -206,11 +206,21 @@ type RequestRecord = {
 interface AttachmentPanelTestState {
   harness: ReactHookHarness
   errors: string[]
+  translate: (key: unknown) => string
+}
+
+function identityTranslator(key: unknown): string {
+  // Mirrors next-intl: the key must be a string. A function passed as the key
+  // (the useState-updater trap) throws `key.split is not a function` instead
+  // of silently becoming state.
+  if (typeof key !== 'string') throw new TypeError('key.split is not a function')
+  return key
 }
 
 const testState: AttachmentPanelTestState = {
   harness: createReactHookHarness(),
   errors: [],
+  translate: identityTranslator,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for('openbooks.attachment-panel-test-state')
@@ -275,8 +285,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:next-intl',
     `
-      const translate = (key) => key
-      export function useTranslations() { return translate }
+      const state = globalThis[Symbol.for('openbooks.attachment-panel-test-state')]
+      export function useTranslations() { return state.translate }
     `,
   ],
   [
@@ -503,6 +513,34 @@ test('a late A error cannot replace B files or B loading/error state', async (t)
   tree = renderPanel('record-b')
   assert.equal(loadingVisible(tree), false)
   assert.deepEqual(testState.errors, ['loadFailed'])
+})
+
+// Updater-trap regression: the reset latch tracks the next-intl translator
+// alongside the target. A locale/messages refresh hands useTranslations a
+// new identity; the latch must store it. Passing it bare to the setter
+// invokes it as a state updater with the old translator as the key and
+// next-intl throws `key.split is not a function`, dropping the page into
+// the error boundary.
+test('a translator identity change stores the translator without invoking it', async (t) => {
+  testState.harness.reset()
+  testState.errors.length = 0
+  testState.translate = identityTranslator
+  const transport = installDeferredFetch()
+  t.after(() => transport.restore())
+  t.after(() => {
+    testState.translate = identityTranslator
+  })
+
+  renderPanel('record-a')
+
+  const refreshed = (key: unknown): string => {
+    if (typeof key !== 'string') throw new TypeError('key.split is not a function')
+    return `v2:${key}`
+  }
+  testState.translate = refreshed
+  const tree = renderPanel('record-a')
+  assert.match(renderedText(tree), /v2:feedback\.loading/, 'the refreshed translator renders without throwing')
+  assert.deepEqual(testState.errors, [])
 })
 
 // F-t06-010: detaching from a posted record always 409s (evidence is

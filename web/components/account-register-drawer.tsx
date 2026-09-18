@@ -71,7 +71,10 @@ export function AccountRegisterDrawer() {
   const [prevTc, setPrevTc] = useState(() => tc)
   if (prevResetKey !== resetKey || prevTc !== tc) {
     setPrevResetKey(resetKey)
-    setPrevTc(tc)
+    // Wrap the translator: a bare function argument is invoked as a state
+    // updater with the previous translator as the key, and next-intl throws
+    // `key.split is not a function`.
+    setPrevTc(() => tc)
     setData(null)
     setLoadedKey(null)
   }
