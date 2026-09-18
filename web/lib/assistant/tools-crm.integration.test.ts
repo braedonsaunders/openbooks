@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -57,45 +57,47 @@ async function seedCrm(orgId: string, rootSubsidiary: string, customerId: string
   const openOpp = randomUUID();
   const hiddenOpp = randomUUID();
   const activity = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
-    values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden CRM entity','CAD','CA',true,false)
-  `);
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
-    values (${hiddenParty}, ${orgId}, 'customer', 'Hidden Customer', true, '{}'::jsonb, ${hiddenSubsidiary})
-  `);
-  await db.execute(sql`
-    insert into crm_opportunity_statuses(id,org_id,key,name,sequence,probability,is_closed,is_won,is_active)
-    values (${openStatus},${orgId},'negotiation','Negotiation',10,60,false,false,true),
-           (${wonStatus},${orgId},'closed-won','Closed won',90,100,true,true,true)
-  `);
-  await db.execute(sql`
-    insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,forecast_category,
-           probability,currency,projected_amount,weighted_amount,expected_close_date,is_active)
-    values (${openOpp},${orgId},'OPP-1001','Harbourview Tower Fit-Out',${customerId},${openStatus},'most_likely',
-           60,'CAD','10000','6000','2026-11-30',true),
-           (${hiddenOpp},${orgId},'OPP-1002','Hidden Subsidiary Deal',${hiddenParty},${openStatus},'upside',
-           20,'CAD','50000','10000','2026-12-15',true)
-  `);
-  // The hidden opportunity sits in the hidden legal entity so a restricted
-  // caller must not see it even though its customer is hidden too.
-  await db.execute(sql`
-    update crm_opportunities set subsidiary_id = ${hiddenSubsidiary} where id = ${hiddenOpp}
-  `);
-  await db.execute(sql`
-    insert into crm_account_profiles(id,org_id,party_id,lifecycle_stage,qualification_score,is_active)
-    values (${randomUUID()},${orgId},${customerId},'prospect',72,true)
-  `);
-  await db.execute(sql`
-    insert into crm_activities(id,org_id,kind,status,subject,priority)
-    values (${activity},${orgId},'call','planned',' harbourview discovery call ', 'high')
-  `);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
+      values (${hiddenSubsidiary},${orgId},${rootSubsidiary},'Hidden CRM entity','CAD','CA',true,false)
+    `);
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
+      values (${hiddenParty}, ${orgId}, 'customer', 'Hidden Customer', true, '{}'::jsonb, ${hiddenSubsidiary})
+    `);
+    await db.execute(sql`
+      insert into crm_opportunity_statuses(id,org_id,key,name,sequence,probability,is_closed,is_won,is_active)
+      values (${openStatus},${orgId},'negotiation','Negotiation',10,60,false,false,true),
+             (${wonStatus},${orgId},'closed-won','Closed won',90,100,true,true,true)
+    `);
+    await db.execute(sql`
+      insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,forecast_category,
+             probability,currency,projected_amount,weighted_amount,expected_close_date,is_active)
+      values (${openOpp},${orgId},'OPP-1001','Harbourview Tower Fit-Out',${customerId},${openStatus},'most_likely',
+             60,'CAD','10000','6000','2026-11-30',true),
+             (${hiddenOpp},${orgId},'OPP-1002','Hidden Subsidiary Deal',${hiddenParty},${openStatus},'upside',
+             20,'CAD','50000','10000','2026-12-15',true)
+    `);
+    // The hidden opportunity sits in the hidden legal entity so a restricted
+    // caller must not see it even though its customer is hidden too.
+    await db.execute(sql`
+      update crm_opportunities set subsidiary_id = ${hiddenSubsidiary} where id = ${hiddenOpp}
+    `);
+    await db.execute(sql`
+      insert into crm_account_profiles(id,org_id,party_id,lifecycle_stage,qualification_score,is_active)
+      values (${randomUUID()},${orgId},${customerId},'prospect',72,true)
+    `);
+    await db.execute(sql`
+      insert into crm_activities(id,org_id,kind,status,subject,priority)
+      values (${activity},${orgId},'call','planned',' harbourview discovery call ', 'high')
+    `);
+  });
   return { openStatus, wonStatus, hiddenSubsidiary, hiddenParty, openOpp, hiddenOpp, activity };
 }
 
 test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const seed = await seedCrm(org.orgId, org.subsidiaryId, org.customerId);
     const restricted = {
@@ -180,8 +182,8 @@ test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { sk
 });
 
 test('CRM assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   try {
     const seedA = await seedCrm(orgA.orgId, orgA.subsidiaryId, orgA.customerId);
     const authzA = {
@@ -197,10 +199,10 @@ test('CRM assistant reads isolate orgs and honor the feature flag', { skip: !pro
       );
       assert.deepEqual(cross, { ok: false, error: 'opportunity_not_found' });
     });
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":false}'::jsonb)
       where id=${orgA.orgId}
-    `);
+    `));
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(authzA, 'search_opportunities', {});
       assert.deepEqual(off, { ok: false, error: 'crm_feature_disabled' });

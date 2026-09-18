@@ -608,7 +608,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/assistant/tools-banking-scope.integration.test.ts", { writes: 6, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-budgets-scope.integration.test.ts", { writes: 12, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-close-scope.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-crm.integration.test.ts", { writes: 11, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-equipment.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-expenses.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-files-scope.integration.test.ts", { writes: 7, via: "registry.ts -> tools.ts -> data.ts -> org-scope.ts -> auth.ts" }],
