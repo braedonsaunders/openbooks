@@ -34,12 +34,25 @@ export function LivePreview<T>({
   const [error, setError] = useState(false)
   const runId = useRef(0)
 
+  // Reset while reloading, during render (same committed values, no extra
+  // render). Compared element-wise with Object.is — the same semantics the
+  // fetch below uses for its dependency array. Like that effect, an `enabled`
+  // toggle alone resets nothing.
+  const [prevDeps, setPrevDeps] = useState(deps)
+  const depsChanged = prevDeps.length !== deps.length ||
+    prevDeps.some((dep, index) => !Object.is(dep, deps[index]))
+  if (depsChanged) {
+    setPrevDeps(deps)
+    if (enabled) {
+      setLoading(true)
+      setError(false)
+    }
+  }
+
   useEffect(() => {
     if (!enabled) return
     const controller = new AbortController()
     const id = ++runId.current
-    setLoading(true)
-    setError(false)
     const timer = setTimeout(() => {
       load(controller.signal)
         .then((result) => {

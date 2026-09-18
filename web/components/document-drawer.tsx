@@ -90,6 +90,13 @@ interface BuiltinSegmentOpt {
   showOnHeader: boolean
   showOnLines: boolean
 }
+
+// Stable identities for the omitted-`segments`/`builtinSegments` defaults. A
+// `= []` default would hand the `payload_` memo below a fresh array on every
+// render, and the render-time dirty tracker keys on that memo's identity —
+// an ever-churning identity re-renders forever.
+const EMPTY_SEGMENTS: SegmentOpt[] = []
+const EMPTY_BUILTIN_SEGMENTS: BuiltinSegmentOpt[] = []
 interface LineRow extends Record<string, unknown> {
   accountId: string
   itemId: string
@@ -853,8 +860,8 @@ export function DocumentDrawer({
   projects,
   locations,
   classes,
-  segments = [],
-  builtinSegments = [],
+  segments = EMPTY_SEGMENTS,
+  builtinSegments = EMPTY_BUILTIN_SEGMENTS,
   items,
   stockLocations,
   subsidiaries,
@@ -956,7 +963,6 @@ export function DocumentDrawer({
     revision: persistedPropRevision,
     payload,
   })
-  const rehydratingPersistedPayload = useRef(false)
   const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // A refused submit/post that only fires a transient toast reads as
@@ -1483,28 +1489,22 @@ export function DocumentDrawer({
     // unchanged revision is an invalid server contract and is not adopted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id, persistedPropRevision, dirty])
-  const first = useRef(true)
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (rehydratingPersistedPayload.current) {
-      return
-    }
-    if (editable) setDirty(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload_])
-
-  useEffect(() => {
-    // resetForm always advances this epoch, even when the incoming values are
-    // identical and payload_ therefore does not change. Bound the suppression
-    // to that render so the next real user edit can never be ignored.
-    rehydratingPersistedPayload.current = false
-  }, [rehydrationEpoch])
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render). resetForm always
+  // advances the rehydration epoch — even when the incoming values are
+  // identical and payload_ therefore does not change — so the epoch change
+  // itself bounds the suppression to that render and the next real user edit
+  // can never be ignored.
+  const [prevPayload, setPrevPayload] = useState(payload_)
+  const [prevRehydrationEpoch, setPrevRehydrationEpoch] = useState(rehydrationEpoch)
+  if (prevPayload !== payload_ || prevRehydrationEpoch !== rehydrationEpoch) {
+    const rehydrating = prevRehydrationEpoch !== rehydrationEpoch
+    setPrevPayload(payload_)
+    setPrevRehydrationEpoch(rehydrationEpoch)
+    if (!rehydrating && editable) setDirty(true)
+  }
 
   function resetForm(source: DocPayload) {
-    rehydratingPersistedPayload.current = true
     setRehydrationEpoch((epoch) => epoch + 1)
     const sourceDoc = asDocumentDoc(source.doc)
     setPartyId(sourceDoc.party_id ?? '')

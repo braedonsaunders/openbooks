@@ -286,20 +286,30 @@ export function PaymentDrawer({
   const { busy, refusal, execute, clearRefusal } = useAppAction()
 
   // -- open items follow the selected party --------------------------------
-  const firstParty = useRef(true)
+  // Reset the allocations (and enter the loading state) when the party
+  // selection changes, during render (same committed values, no extra
+  // render). Keyed on the fetch inputs below.
+  const [prevPartyKeys, setPrevPartyKeys] = useState(() => ({ partyId, side, isDraft }))
+  if (prevPartyKeys.partyId !== partyId || prevPartyKeys.side !== side || prevPartyKeys.isDraft !== isDraft) {
+    setPrevPartyKeys({ partyId, side, isDraft })
+    if (isDraft) {
+      setAllocs({})
+      if (!partyId) setOpenItems([])
+      else setLoadingItems(true)
+    }
+  }
+  // Mount-skip mirror: the mount pass keeps the passed initialOpenItems; only
+  // post-mount party changes fetch. (Ref write in an effect — no setState, so
+  // no cascade and no extra dep subscription.)
+  const partyFetchArmed = useRef(false)
   useEffect(() => {
     if (!isDraft) return
-    if (firstParty.current) {
-      firstParty.current = false
+    if (!partyFetchArmed.current) {
+      partyFetchArmed.current = true
       return
     }
-    setAllocs({})
-    if (!partyId) {
-      setOpenItems([])
-      return
-    }
+    if (!partyId) return
     let cancelled = false
-    setLoadingItems(true)
     fetch(`/api/payments/open-items?partyId=${partyId}&side=${side}`)
       .then(async (res) => {
         const data = await res.json()
@@ -315,12 +325,24 @@ export function PaymentDrawer({
     }
   }, [partyId, side, isDraft, t])
 
+  // Clear stale settlement rates while their inputs change, during render
+  // (same committed values, no extra render). Keyed on the fetch inputs
+  // below.
+  const [prevSettlementKeys, setPrevSettlementKeys] = useState(() => ({
+    currency: doc.currency, documentDate, openItems, side,
+  }))
+  if (
+    prevSettlementKeys.currency !== doc.currency || prevSettlementKeys.documentDate !== documentDate ||
+    prevSettlementKeys.openItems !== openItems || prevSettlementKeys.side !== side
+  ) {
+    setPrevSettlementKeys({ currency: doc.currency, documentDate, openItems, side })
+    const staleTargets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
+    if (!staleTargets.length || !documentDate) setSettlementRates([])
+  }
+
   useEffect(() => {
     const targets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
-    if (!targets.length || !documentDate) {
-      setSettlementRates([])
-      return
-    }
+    if (!targets.length || !documentDate) return
     let cancelled = false
     const query = new URLSearchParams({
       side,
@@ -392,22 +414,18 @@ export function PaymentDrawer({
     }),
     [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, doc.updated_at],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render). `editable` is read
+  // but deliberately NOT subscribed: the gate fires only when `payload`
+  // changes identity, so merely entering edit mode with untouched fields never
+  // marks the form dirty (same guarantee as the ref-mirrored gate this
+  // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
-  // dirty on merely entering edit mode.
-  const editableRef = useRef(editable)
-  useEffect(() => {
-    editableRef.current = editable
-  }, [editable])
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (editableRef.current) setDirty(true)
-  }, [payload])
+  const [prevPayload, setPrevPayload] = useState(payload)
+  if (prevPayload !== payload) {
+    setPrevPayload(payload)
+    if (editable) setDirty(true)
+  }
 
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {

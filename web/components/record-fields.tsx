@@ -59,10 +59,25 @@ function useEntityOptions(source: 'gl_accounts' | 'parties', partyKind?: PartyPi
   const previewOptions = useContext(RecordPreviewOptions)
   const [options, setOptions] = useState<SelectOption[] | null>(null)
   const [failed, setFailed] = useState(false)
+  // Clear a previous failure while reloading, during render (same committed
+  // value, no extra render). Fires on the same input changes the fetch below
+  // re-runs on — and, like it, does nothing while preview options apply.
+  // Keyed on preview presence rather than the options identity (providers
+  // pass a fresh array each render); the reset only cares whether preview
+  // applies, and the failure flag is forced false while it does.
+  const [prevOptionsInputs, setPrevOptionsInputs] = useState(() => ({
+    source, partyKind, hasPreview: previewOptions !== null,
+  }))
+  if (
+    prevOptionsInputs.source !== source || prevOptionsInputs.partyKind !== partyKind ||
+    prevOptionsInputs.hasPreview !== (previewOptions !== null)
+  ) {
+    setPrevOptionsInputs({ source, partyKind, hasPreview: previewOptions !== null })
+    if (!previewOptions) setFailed(false)
+  }
   useEffect(() => {
     if (previewOptions) return
     let alive = true
-    setFailed(false)
     fetchOptions(source, partyKind).then(
       (opts) => alive && setOptions(opts),
       () => alive && setFailed(true),

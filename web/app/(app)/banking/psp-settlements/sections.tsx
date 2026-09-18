@@ -192,11 +192,17 @@ export function PspSettlementsWorkspace({
   const [loading, setLoading] = useState(initialRows === null)
   const [loadFailed, setLoadFailed] = useState(false)
 
+  // Adopt provided rows by leaving the loading state, during render (same
+  // committed value, no extra render). Transition-based so a manual reload
+  // (which sets loading itself) is untouched.
+  const [prevInitialRows, setPrevInitialRows] = useState(initialRows)
+  if (prevInitialRows !== initialRows) {
+    setPrevInitialRows(initialRows)
+    if (initialRows !== null) setLoading(false)
+  }
+
   useEffect(() => {
-    if (initialRows !== null) {
-      setLoading(false)
-      return
-    }
+    if (initialRows !== null) return
     const controller = new AbortController()
     void fetchSettlements(controller.signal).then((loaded) => {
       if (controller.signal.aborted) return

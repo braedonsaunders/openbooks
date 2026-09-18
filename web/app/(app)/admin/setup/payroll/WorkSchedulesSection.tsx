@@ -112,19 +112,23 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
   const [draft, setDraft] = useState<Schedule | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/work-schedules')
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'failed')
-      setSchedules(json.schedules ?? [])
-      setOptions(json.options ?? { employees: [], trades: [], departments: [], subsidiaries: [] })
-    } catch (error) {
-      toast.error((error as Error).message)
-    } finally {
-      setLoading(false)
-    }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (the mount initializer above, and the mutation reloads)
+  // instead of a mount effect.
+  const load = useCallback(() => {
+    return fetch('/api/work-schedules')
+      .then((res) => res.json().then((json) => {
+        if (!res.ok) throw new Error(json.error ?? 'failed')
+        setSchedules(json.schedules ?? [])
+        setOptions(json.options ?? { employees: [], trades: [], departments: [], subsidiaries: [] })
+      }))
+      .catch((error: unknown) => {
+        toast.error((error as Error).message)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -209,6 +213,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
       if (!res.ok) throw new Error(json.error ?? 'failed')
       toast.success(tc('feedback.saved'))
       setDraft(null)
+      setLoading(true)
       await load()
     } catch (error) {
       toast.error((error as Error).message)
@@ -228,6 +233,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'failed')
       setDraft(null)
+      setLoading(true)
       await load()
     } catch (error) {
       toast.error((error as Error).message)

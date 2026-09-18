@@ -36,13 +36,16 @@ export function SecurityPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const reload = useCallback(async () => {
-    const [mfa, sessionResult] = await Promise.all([
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const reload = useCallback(() => {
+    return Promise.all([
       jsonRequest("/api/auth/mfa"),
       jsonRequest("/api/auth/sessions"),
-    ]);
-    setStatus(mfa);
-    setSessions(sessionResult.sessions);
+    ]).then(([mfa, sessionResult]) => {
+      setStatus(mfa);
+      setSessions(sessionResult.sessions);
+    });
   }, []);
 
   useEffect(() => { void reload().catch((error) => setMessage(error.message)); }, [reload]);

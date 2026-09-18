@@ -393,7 +393,21 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       : 'details',
   )
 
-  useEffect(() => {
+  // Reset the resolved rate (or enter the loading state) when the rate inputs
+  // change, during render (same committed values, no extra render). Keyed on
+  // the fetch inputs below.
+  const [prevRateKeys, setPrevRateKeys] = useState(() => ({
+    editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, windowEnd: visibleWindow.end,
+  }))
+  if (
+    prevRateKeys.editable !== editable || prevRateKeys.lineEquipment !== lineEquipment ||
+    prevRateKeys.lineItem !== lineItem || prevRateKeys.lineQty !== lineQty ||
+    prevRateKeys.lineRateUnit !== lineRateUnit || prevRateKeys.projectId !== projectId ||
+    prevRateKeys.windowEnd !== visibleWindow.end
+  ) {
+    setPrevRateKeys({
+      editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, windowEnd: visibleWindow.end,
+    })
     if (!editable || !projectId || !lineItem) {
       setLineRate('')
       setLineAmount('')
@@ -402,19 +416,22 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRateUnit('')
       setLineRateUnits([])
       setLineRateLoading(false)
-      return
-    }
-    if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) {
+    } else if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) {
       setLineRate('')
       setLineAmount('')
       setLineRateSource('')
       setLineComponents([])
       setLineRateLoading(false)
-      return
+    } else {
+      setLineRateLoading(true)
     }
+  }
+
+  useEffect(() => {
+    if (!editable || !projectId || !lineItem) return
+    if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) return
     const controller = new AbortController()
     let active = true
-    setLineRateLoading(true)
     const query = new URLSearchParams({ projectId, itemId: lineItem, quantity: lineQty, onDate: visibleWindow.end })
     if (lineEquipment) query.set('equipmentUnitId', lineEquipment)
     if (lineRateUnit) query.set('rateUnitCode', lineRateUnit)

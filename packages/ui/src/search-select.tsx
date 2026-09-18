@@ -16,6 +16,8 @@ import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from './utils'
 import { anchoredMenuPosition } from './anchored-menu-position'
+import { useHydrated } from './use-hydrated'
+import { useMediaQuery } from './use-media-query'
 
 export type SelectOption = {
   value: string
@@ -88,8 +90,11 @@ export function SearchSelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
-  const [isDesktop, setIsDesktop] = useState(true)
-  const [mounted, setMounted] = useState(false)
+  // Desktop layout ships on the server and corrects after hydration, exactly
+  // like the previous effect-driven `matchMedia` copy — as an external-store
+  // subscription instead of a render cascade.
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const mounted = useHydrated()
   const wrapRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -99,15 +104,6 @@ export function SearchSelect({
   // it floats above any `overflow` container (e.g. the line-grid table) instead
   // of being clipped or expanding the row.
   const [pos, setPos] = useState<ReturnType<typeof anchoredMenuPosition> | null>(null)
-
-  useEffect(() => {
-    setMounted(true)
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const update = () => setIsDesktop(mq.matches)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
 
   const noneLabel = tCommon('labels.none')
   const allOptions = useMemo(

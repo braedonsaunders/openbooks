@@ -426,28 +426,36 @@ export function RunWizard(props: {
     finish: posted,
   }
 
-  const loadGlPreview = useCallback(async () => {
-    setGl((g) => ({ ...g, state: 'loading' }))
-    try {
-      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'preview-gl' }),
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The idle→loading
+  // transition lives with the triggers (below, and the step retry) instead of
+  // a mount effect.
+  const loadGlPreview = useCallback(() => {
+    return fetch(`/api/payroll/runs/${run.document_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'preview-gl' }),
+    })
+      .then((res) => res.json().then((j) => {
+        if (!res.ok) {
+          setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: j.error ?? 'failed' })
+          return
+        }
+        setGl({ state: 'ready', legs: j.legs ?? [], debitTotal: j.debitTotal ?? '0', error: '' })
+      }))
+      .catch((e: unknown) => {
+        setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: (e as Error).message })
       })
-      const j = await res.json()
-      if (!res.ok) {
-        setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: j.error ?? 'failed' })
-        return
-      }
-      setGl({ state: 'ready', legs: j.legs ?? [], debitTotal: j.debitTotal ?? '0', error: '' })
-    } catch (e) {
-      setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: (e as Error).message })
-    }
   }, [run.document_id])
 
-  // The GL step self-loads whenever it becomes visible with calculated stubs.
+  // The GL step self-loads whenever it becomes visible with calculated stubs,
+  // entering the loading state during render (same committed values, no extra
+  // render) so the fetch below triggers off it.
+  if (step === 'gl' && calculated && gl.state === 'idle') {
+    setGl({ ...gl, state: 'loading' })
+  }
   useEffect(() => {
-    if (step === 'gl' && calculated && gl.state === 'idle') void loadGlPreview()
+    if (step === 'gl' && calculated && gl.state === 'loading') void loadGlPreview()
   }, [step, calculated, gl.state, loadGlPreview])
 
   async function act(action: 'calculate' | 'commit') {
@@ -780,7 +788,10 @@ export function RunWizard(props: {
           stale={props.staleness.stale}
           funding={props.funding}
           busy={busy}
-          onRetry={loadGlPreview}
+          onRetry={() => {
+            setGl((g) => ({ ...g, state: 'loading' }))
+            void loadGlPreview()
+          }}
           onCommit={() => act('commit')}
           fmt={fmt}
         />

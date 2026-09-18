@@ -32,12 +32,17 @@ export function ScheduleReportButton({
   const [schedules, setSchedules] = useState<ScheduleRow[] | null>(null)
   const [canSchedule, setCanSchedule] = useState(false)
 
-  const refetch = useCallback(async () => {
-    const res = await fetch(`/api/reports/schedules?definitionId=${definitionId}`, { cache: 'no-store' })
-    if (!res.ok) return
-    const data = await res.json()
-    setSchedules(data.schedules ?? [])
-    setCanSchedule(Boolean(data.canSchedule))
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const refetch = useCallback(() => {
+    return fetch(`/api/reports/schedules?definitionId=${definitionId}`, { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) return
+        return res.json().then((data) => {
+          setSchedules(data.schedules ?? [])
+          setCanSchedule(Boolean(data.canSchedule))
+        })
+      })
   }, [definitionId])
 
   useEffect(() => {

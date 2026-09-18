@@ -91,13 +91,25 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
 
-  useEffect(() => {
-    if (!target) return
+  // Reset the drill state when its inputs change, during render (same
+  // committed values, no extra render — and no one-commit flash of the
+  // previous target's rows while the new fetch is in flight).
+  const [prevTarget, setPrevTarget] = useState(target)
+  const [prevFrom, setPrevFrom] = useState(from)
+  const [prevTo, setPrevTo] = useState(to)
+  if (prevTarget !== target || prevFrom !== from || prevTo !== to) {
+    setPrevTarget(target)
+    setPrevFrom(from)
+    setPrevTo(to)
     setData(null)
     setError(null)
     setView('txns')
     setQuery('')
     setPage(1)
+  }
+
+  useEffect(() => {
+    if (!target) return
     const ctrl = new AbortController()
     fetch(`/api/analytics/drill?${target.kind}=${target.id}&from=${from}&to=${to}`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))

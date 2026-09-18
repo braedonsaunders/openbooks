@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Drawer, Button, Input } from "@openbooks/ui";
 import { Field } from "./workspace-ui";
 import type { SaveAction } from "./types";
@@ -13,7 +13,11 @@ export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: 
     rentableArea: "",
     bedrooms: "",
   });
-  useEffect(() => {
+  // Reseed the form when the drawer opens for another property, during render
+  // (same committed values, no extra render).
+  const [prevPropertyId, setPrevPropertyId] = useState(propertyId);
+  if (prevPropertyId !== propertyId) {
+    setPrevPropertyId(propertyId);
     if (propertyId)
       setForm({
         code: "",
@@ -22,7 +26,7 @@ export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: 
         rentableArea: "",
         bedrooms: "",
       });
-  }, [propertyId]);
+  }
   const submit = () =>
     onSave({
       propertyId,

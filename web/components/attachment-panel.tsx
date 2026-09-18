@@ -96,43 +96,58 @@ export function AttachmentPanel({
     [searchParams],
   )
 
-  const load = useCallback(async (signal: AbortSignal, generation: number) => {
-    setLoading(true)
-    try {
-      const res = await fetch(
-        `/api/file-cabinet/attachments?targetTable=${encodeURIComponent(targetTable)}&targetId=${targetId}`,
-        { signal },
-      )
-      if (!res.ok) throw new Error('load failed')
-      const data = (await res.json()) as { attachments: AttachedFile[] }
-      if (signal.aborted || generation !== loadGeneration.current) return
-      setItems(data.attachments)
-      setSelectedId((current) => {
-        if (current && data.attachments.some((item) => item.id === current)) return current
-        return data.attachments.find(previewable)?.id ?? data.attachments[0]?.id ?? null
-      })
-    } catch {
-      if (signal.aborted || generation !== loadGeneration.current) return
-      toast.error(t('loadFailed'))
-    } finally {
-      if (generation === loadGeneration.current) setLoading(false)
-    }
-  }, [targetTable, targetId, t])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    const generation = ++loadGeneration.current
+  // Reset the list when the target (or locale) changes, during render (same
+  // committed values, no extra render). Mirrors the fetch inputs exactly.
+  const [prevTargetTable, setPrevTargetTable] = useState(targetTable)
+  const [prevTargetId, setPrevTargetId] = useState(targetId)
+  const [prevT, setPrevT] = useState(() => t)
+  if (prevTargetTable !== targetTable || prevTargetId !== targetId || prevT !== t) {
+    setPrevTargetTable(targetTable)
+    setPrevTargetId(targetId)
+    setPrevT(t)
     setItems([])
     setSelectedId(null)
     setPreviewExpanded(false)
-    void load(controller.signal, generation)
+    setLoading(true)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const { signal } = controller
+    const generation = ++loadGeneration.current
+    // Every state update sits in a fetch continuation, never synchronously in
+    // the effect body. Rejection paths mirror the previous try/catch/finally:
+    // stale or aborted responses stay silent, live failures toast and stop
+    // the spinner.
+    fetch(
+      `/api/file-cabinet/attachments?targetTable=${encodeURIComponent(targetTable)}&targetId=${targetId}`,
+      { signal },
+    ).then(
+      (res) => {
+        if (!res.ok) throw new Error('load failed')
+        return (res.json() as Promise<{ attachments: AttachedFile[] }>).then((data) => {
+          if (signal.aborted || generation !== loadGeneration.current) return
+          setItems(data.attachments)
+          setSelectedId((current) => {
+            if (current && data.attachments.some((item) => item.id === current)) return current
+            return data.attachments.find(previewable)?.id ?? data.attachments[0]?.id ?? null
+          })
+          setLoading(false)
+        })
+      },
+      () => {
+        if (signal.aborted || generation !== loadGeneration.current) return
+        toast.error(t('loadFailed'))
+        setLoading(false)
+      },
+    )
     return () => {
       controller.abort()
       // Invalidate the request before the next effect starts, including fetch
       // implementations that resolve despite an abort signal.
       if (loadGeneration.current === generation) loadGeneration.current += 1
     }
-  }, [load])
+  }, [targetTable, targetId, t])
 
   const counts = useMemo(() => ({
     pdf: items.filter((item) => groupOf(item) === 'pdf').length,

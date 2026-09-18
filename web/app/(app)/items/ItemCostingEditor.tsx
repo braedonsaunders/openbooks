@@ -93,9 +93,9 @@ export function ItemCostingEditor({
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
-  useEffect(() => {
-    if (!canManage) setEditing(false)
-  }, [canManage])
+  // A read-only viewer must never hold the form in edit mode. Adjusted during
+  // render (same committed value, no extra render).
+  if (!canManage && editing) setEditing(false)
   const [busy, setBusy] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -158,20 +158,31 @@ export function ItemCostingEditor({
     setProvisionalUnitCost(p?.provisional_unit_cost ?? '')
   }
 
-  async function load(signal?: AbortSignal) {
-    const res = await fetch(`/api/items/${itemId}/costing`, { signal })
-    if (!res.ok) throw new Error(common('feedback.loadFailed'))
-    const next = (await res.json()) as { profile: Profile | null }
-    if (signal?.aborted) return
-    setProfile(next.profile)
-    hydrate(next.profile)
-    setLoaded(true)
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  function load(signal?: AbortSignal) {
+    return fetch(`/api/items/${itemId}/costing`, { signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(common('feedback.loadFailed'))
+        return (res.json() as Promise<{ profile: Profile | null }>).then((next) => {
+          if (signal?.aborted) return
+          setProfile(next.profile)
+          hydrate(next.profile)
+          setLoaded(true)
+        })
+      })
   }
-  useEffect(() => {
-    const controller = new AbortController()
+  // Clear the costing view while reloading for another item, during render
+  // (same committed values, no extra render).
+  const [prevItemId, setPrevItemId] = useState(itemId)
+  if (prevItemId !== itemId) {
+    setPrevItemId(itemId)
     setLoaded(false)
     setEditing(false)
     setProfile(null)
+  }
+  useEffect(() => {
+    const controller = new AbortController()
     void load(controller.signal).catch(() => {
       if (!controller.signal.aborted) toast.error(common('feedback.loadFailed'))
     })

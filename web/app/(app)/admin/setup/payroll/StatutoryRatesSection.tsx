@@ -128,17 +128,20 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
-  const load = useCallback(async (forYear: number | null) => {
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback((forYear: number | null) => {
     const query = forYear ? `?year=${forYear}` : ''
-    const res = await fetch(`/api/payroll/settings/rates${query}`)
-    const payload = (await res.json()) as Payload & { error?: string }
-    if (!res.ok) {
-      setFailure(payload.error ?? 'failed')
-      return
-    }
-    setFailure(null)
-    setData(payload)
-    setYear(payload.year)
+    return fetch(`/api/payroll/settings/rates${query}`)
+      .then((res) => res.json().then((payload: Payload & { error?: string }) => {
+        if (!res.ok) {
+          setFailure(payload.error ?? 'failed')
+          return
+        }
+        setFailure(null)
+        setData(payload)
+        setYear(payload.year)
+      }))
   }, [])
 
   useEffect(() => {

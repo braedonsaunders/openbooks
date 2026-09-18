@@ -52,40 +52,59 @@ export function SharePanel({
 
   const base = `/api/file-cabinet/${resourceType === 'folder' ? 'folders' : 'files'}/${resourceId}/grants`
 
-  async function load() {
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (below, and the mutation reloads) instead of a mount
+  // effect.
+  function load() {
+    return Promise.all([fetch(base), fetch('/api/file-cabinet/principals')])
+      .then(([g, p]) => {
+        if (!g.ok || !p.ok) throw new Error('SHARING_LOAD_FAILED')
+        return Promise.all([g.json(), p.json()]).then(([grantsPayload, principalsPayload]) => {
+          if (
+            !grantsPayload ||
+            !Array.isArray(grantsPayload.grants) ||
+            !principalsPayload ||
+            !Array.isArray(principalsPayload.users) ||
+            !Array.isArray(principalsPayload.roles)
+          ) {
+            throw new Error('SHARING_LOAD_FAILED')
+          }
+          setGrants(grantsPayload.grants as Grant[])
+          setUsers(principalsPayload.users as Principal[])
+          setRoles(principalsPayload.roles as Principal[])
+        })
+      })
+      .catch(() => {
+        // An unavailable grants endpoint must never look like an empty grants list.
+        setGrants(null)
+        setLoadError(true)
+      })
+  }
+
+  // Reset the lists while reloading for another resource, during render (same
+  // committed values, no extra render). Keyed on resourceId alone, mirroring
+  // the fetch below.
+  const [prevResourceId, setPrevResourceId] = useState(resourceId)
+  if (prevResourceId !== resourceId) {
+    setPrevResourceId(resourceId)
     setLoadError(false)
     setGrants(null)
     setUsers([])
     setRoles([])
-    try {
-      const [g, p] = await Promise.all([fetch(base), fetch('/api/file-cabinet/principals')])
-      if (!g.ok || !p.ok) throw new Error('SHARING_LOAD_FAILED')
-
-      const [grantsPayload, principalsPayload] = await Promise.all([g.json(), p.json()])
-      if (
-        !grantsPayload ||
-        !Array.isArray(grantsPayload.grants) ||
-        !principalsPayload ||
-        !Array.isArray(principalsPayload.users) ||
-        !Array.isArray(principalsPayload.roles)
-      ) {
-        throw new Error('SHARING_LOAD_FAILED')
-      }
-
-      setGrants(grantsPayload.grants as Grant[])
-      setUsers(principalsPayload.users as Principal[])
-      setRoles(principalsPayload.roles as Principal[])
-    } catch {
-      // An unavailable grants endpoint must never look like an empty grants list.
-      setGrants(null)
-      setLoadError(true)
-    }
   }
 
   useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resourceId])
+
+  function resetGrantsForReload() {
+    setLoadError(false)
+    setGrants(null)
+    setUsers([])
+    setRoles([])
+  }
 
   const granted = new Set((grants ?? []).map((g) => `${g.principalType}:${g.principalId}`))
 
@@ -101,6 +120,7 @@ export function SharePanel({
         fallbackMessage: tt('shareFailed'),
         successMessage: tt('shareUpdated'),
         onOk: () => {
+          resetGrantsForReload()
           void load()
         },
       },
@@ -122,6 +142,7 @@ export function SharePanel({
       fallbackMessage: tt('shareFailed'),
       successMessage: tt('shareRemoved'),
       onOk: () => {
+        resetGrantsForReload()
         void load()
       },
     })

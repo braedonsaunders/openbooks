@@ -60,21 +60,33 @@ export function EmployeeEntitlementBalances({ partyId }: { partyId: string }) {
   } | null>(null)
   const [loadError, setLoadError] = useState(false)
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setLoadError(false)
-    try {
-      const response = await fetch(`/api/payroll/entitlements?employee=${encodeURIComponent(partyId)}`, { signal })
-      if (!response.ok) throw new Error('load failed')
-      setData(await response.json())
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      setLoadError(true)
-      setData(null)
-    }
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (below, and the retry button) instead of a mount effect.
+  const load = useCallback((signal?: AbortSignal) => {
+    fetch(`/api/payroll/entitlements?employee=${encodeURIComponent(partyId)}`, { signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('load failed')
+        return response.json()
+      })
+      .then((payload) => setData(payload))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setLoadError(true)
+        setData(null)
+      })
   }, [partyId])
 
-  useEffect(() => {
+  // Reset when the employee changes, during render (same committed values, no
+  // extra render — and no one-commit flash of a stale error banner).
+  const [prevPartyId, setPrevPartyId] = useState(partyId)
+  if (prevPartyId !== partyId) {
+    setPrevPartyId(partyId)
     setData(null)
+    setLoadError(false)
+  }
+
+  useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
@@ -92,7 +104,7 @@ export function EmployeeEntitlementBalances({ partyId }: { partyId: string }) {
     return (
       <section className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center dark:border-rose-900 dark:bg-rose-950/30">
         <p className="text-sm text-rose-700 dark:text-rose-300">{tc('feedback.loadFailed')}</p>
-        <Button size="sm" variant="outline" className="mt-3" onClick={() => void load()}>
+        <Button size="sm" variant="outline" className="mt-3" onClick={() => { setLoadError(false); void load() }}>
           {tc('actions.retry')}
         </Button>
       </section>

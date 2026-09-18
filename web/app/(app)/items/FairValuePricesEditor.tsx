@@ -35,15 +35,20 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   const [prices, setPrices] = useState<Price[]>([])
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
-  useEffect(() => {
-    if (!canManage) setForm(null)
-  }, [canManage])
+  // A read-only viewer must never hold the form open. Adjusted during render
+  // (same committed value, no extra render).
+  if (!canManage && form !== null) setForm(null)
 
-  async function load() {
-    const res = await fetch(`/api/items/${itemId}/fair-values`)
-    if (!res.ok) return
-    const data = (await res.json()) as { prices: Price[] }
-    setPrices(data.prices)
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  function load() {
+    return fetch(`/api/items/${itemId}/fair-values`)
+      .then((res) => {
+        if (!res.ok) return
+        return (res.json() as Promise<{ prices: Price[] }>).then((data) => {
+          setPrices(data.prices)
+        })
+      })
   }
   useEffect(() => {
     void load()

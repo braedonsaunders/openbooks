@@ -36,9 +36,15 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
   const [asOf, setAsOf] = useState(useBusinessToday());
   const [result, setResult] = useState<ReconciliationResult | null>(null);
   const [loading, setLoading] = useState(true);
+  // Re-enter the loading state while refetching for another date, during
+  // render (same committed value, no extra render).
+  const [prevAsOf, setPrevAsOf] = useState(asOf);
+  if (prevAsOf !== asOf) {
+    setPrevAsOf(asOf);
+    setLoading(true);
+  }
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetch(`/api/property-management/deposit-reconciliation?asOf=${asOf}`, {
       cache: "no-store",
     })

@@ -90,15 +90,23 @@ export function GlobalPartyDrawerHost({
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
 
-  useEffect(() => {
-    if (!partyId) {
-      setData(null)
-      setLoadedId(null)
-      return
-    }
-    const controller = new AbortController()
+  // Clear the drawer while (re)loading, during render (same committed values,
+  // no extra render). The snapshot mirrors the fetch inputs below exactly, so
+  // the reset fires on the same renders the effect re-runs on.
+  const [prevPartyRequest, setPrevPartyRequest] = useState(() => ({ closeHref, partyForm, partyId, role, router, t }))
+  if (
+    prevPartyRequest.closeHref !== closeHref || prevPartyRequest.partyForm !== partyForm ||
+    prevPartyRequest.partyId !== partyId || prevPartyRequest.role !== role ||
+    prevPartyRequest.router !== router || prevPartyRequest.t !== t
+  ) {
+    setPrevPartyRequest({ closeHref, partyForm, partyId, role, router, t })
     setData(null)
     setLoadedId(null)
+  }
+
+  useEffect(() => {
+    if (!partyId) return
+    const controller = new AbortController()
     const params = new URLSearchParams()
     if (role) params.set('role', role)
     if (partyForm) params.set('form', partyForm)
@@ -128,16 +136,29 @@ export function GlobalPartyDrawerHost({
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
 
-  useEffect(() => {
-    if (!partyId || !transactionId || !transactionKind) {
-      setTransactionData(null)
-      setLoadedTransaction(null)
-      return
-    }
-    const selection = `${transactionKind}:${transactionId}`
-    const controller = new AbortController()
+  // Same render-time reset for the nested transaction drawer. Keyed on the
+  // query string (not the search-params object, whose identity is not stable
+  // across renders) plus the other fetch inputs.
+  const [prevTxnRequest, setPrevTxnRequest] = useState(() => ({
+    partyId, router, queryString, t, transactionCloseHref, transactionId, transactionKind,
+  }))
+  if (
+    prevTxnRequest.partyId !== partyId || prevTxnRequest.router !== router ||
+    prevTxnRequest.queryString !== queryString || prevTxnRequest.t !== t ||
+    prevTxnRequest.transactionCloseHref !== transactionCloseHref ||
+    prevTxnRequest.transactionId !== transactionId || prevTxnRequest.transactionKind !== transactionKind
+  ) {
+    setPrevTxnRequest({
+      partyId, router, queryString, t, transactionCloseHref, transactionId, transactionKind,
+    })
     setTransactionData(null)
     setLoadedTransaction(null)
+  }
+
+  useEffect(() => {
+    if (!partyId || !transactionId || !transactionKind) return
+    const selection = `${transactionKind}:${transactionId}`
+    const controller = new AbortController()
     const params = new URLSearchParams({ transaction: transactionId, kind: transactionKind })
     const form = searchParams.get('form')
     if (form) params.set('form', form)

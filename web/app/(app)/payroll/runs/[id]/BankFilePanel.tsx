@@ -118,12 +118,17 @@ export function BankFilePanel({
   const [profileId, setProfileId] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/payroll/runs/${documentId}/bank-file`)
-    if (!res.ok) return
-    const data = (await res.json()) as PanelState
-    setState(data)
-    setProfileId((current) => current || (data.profiles.find((p) => p.configured)?.id ?? ''))
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback(() => {
+    return fetch(`/api/payroll/runs/${documentId}/bank-file`)
+      .then((res) => {
+        if (!res.ok) return
+        return (res.json() as Promise<PanelState>).then((data) => {
+          setState(data)
+          setProfileId((current) => current || (data.profiles.find((p) => p.configured)?.id ?? ''))
+        })
+      })
   }, [documentId])
 
   useEffect(() => {

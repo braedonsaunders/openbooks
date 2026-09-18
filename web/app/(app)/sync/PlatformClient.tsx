@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -196,15 +196,21 @@ export function PlatformClient() {
     null,
   );
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/platform/connections");
-    if (!res.ok) {
-      toast.error(t("toast.loadFailed", { status: res.status }));
-      setLoading(false);
-      return;
-    }
-    setData(await res.json());
-    setLoading(false);
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const load = useCallback(() => {
+    return fetch("/api/platform/connections")
+      .then((res) => {
+        if (!res.ok) {
+          toast.error(t("toast.loadFailed", { status: res.status }));
+          setLoading(false);
+          return;
+        }
+        return res.json().then((payload) => {
+          setData(payload);
+          setLoading(false);
+        });
+      });
   }, [t]);
 
   useEffect(() => {
@@ -984,6 +990,16 @@ export function PlatformClient() {
  * Steps are looked up by manifest source key (`sync.sources.<source>.steps`);
  * the manifest's English text is the fallback for sources without messages.
  */
+function subscribeOrigin(): () => void {
+  return () => {};
+}
+function readOrigin(): string {
+  return window.location.origin;
+}
+function serverOrigin(): string {
+  return "";
+}
+
 function OauthSetupBox({
   source,
   setup,
@@ -992,8 +1008,10 @@ function OauthSetupBox({
   setup: NonNullable<SourceTypeDef["oauthSetup"]>;
 }) {
   const t = useTranslations("sync");
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  // The page origin is external browser state: subscribe to it instead of
+  // copying it into state from an effect. The server snapshot keeps the
+  // server and first client render on the empty string, as before.
+  const origin = useSyncExternalStore(subscribeOrigin, readOrigin, serverOrigin);
   const redirectUri = `${origin}/api/platform/connections/oauth/${source}/callback`;
 
   // Object.values, not a plain cast: the English-fallback deep merge turns
@@ -1088,10 +1106,15 @@ function ConnectionDrawer({
   >("review_required");
   const [saving, setSaving] = useState(false);
 
-  // Prefill from the edited connection (or clear for a fresh add) on open.
-  useEffect(() => {
-    if (!open) return;
-    if (editing) {
+  // Prefill from the edited connection (or clear for a fresh add) on open,
+  // during render (same committed values, no extra render). A closing drawer
+  // resets nothing, like before.
+  const [prevDrawerKeys, setPrevDrawerKeys] = useState(() => ({ open, editing }));
+  if (prevDrawerKeys.open !== open || prevDrawerKeys.editing !== editing) {
+    setPrevDrawerKeys({ open, editing });
+    if (!open) {
+      // retain the form while closed
+    } else if (editing) {
       setSource(editing.source);
       setDisplayName(editing.displayName);
       setConfig(
@@ -1111,8 +1134,7 @@ function ConnectionDrawer({
       setSecrets({});
       setPostedChangePolicy("review_required");
     }
-  }, [open, editing]);
-
+  }
   const def = sourceTypes.find((s) => s.source === source);
   // Blurbs are keyed by manifest source; the manifest's English text is the
   // fallback for a source that has no message entry yet.

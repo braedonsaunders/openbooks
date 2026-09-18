@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, Trash2 } from 'lucide-react'
@@ -83,17 +83,16 @@ export function RecordDrawer({
   const editable = mode === 'edit' && canEditStatus
 
   // -- explicit save (no autosave) -------------------------------------------
-  const first = useRef(true)
+  // Mark dirty during render (same committed value, no extra render). The
+  // pinned refusal still clears post-commit, exactly when it used to.
+  const [prevValues, setPrevValues] = useState(values)
+  if (prevValues !== values) {
+    setPrevValues(values)
+    if (editable) setSaveState('dirty')
+  }
   useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (editable) {
-      setSaveState('dirty')
-      // A fresh edit supersedes the pinned refusal, like the next action does.
-      clearRefusal()
-    }
+    // A fresh edit supersedes the pinned refusal, like the next action does.
+    if (editable) clearRefusal()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values])
 

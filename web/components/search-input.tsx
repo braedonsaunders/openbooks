@@ -30,11 +30,12 @@ export function SearchInput({
   const urlValue = search.get(paramKey) ?? ''
   const [edit, setEdit] = useState(() => createSearchInputEditState(urlValue))
   const [navigationPending, startTransition] = useTransition()
+  // Reconcile the edit buffer with the URL during render (same committed
+  // value, no extra render). `reconcileSearchInputUrl` returns the previous
+  // state by reference when nothing changed, so this settles after one pass.
+  const reconciledEdit = reconcileSearchInputUrl(edit, urlValue, navigationPending)
+  if (reconciledEdit !== edit) setEdit(reconciledEdit)
   const value = edit.value
-
-  useEffect(() => {
-    setEdit((current) => reconcileSearchInputUrl(current, urlValue, navigationPending))
-  }, [navigationPending, urlValue])
 
   useEffect(() => {
     const handle = setTimeout(() => {

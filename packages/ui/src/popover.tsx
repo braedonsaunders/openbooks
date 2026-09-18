@@ -4,6 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from './utils'
+import { useHydrated } from './use-hydrated'
 
 /**
  * Portal-based popover that escapes any overflow-hidden ancestor.
@@ -38,9 +39,7 @@ export function Popover({
     width: number
     height: number
   } | null>(null)
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   React.useEffect(() => {
     if (!open) return

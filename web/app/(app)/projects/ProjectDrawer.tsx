@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { BookOpen, ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
@@ -265,21 +265,18 @@ export function ProjectDrawer({
     }),
     [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
+  // during render (same committed value, no extra render). `editable` is read
+  // but deliberately NOT subscribed: the gate fires only when `savePayload`
+  // changes identity, so merely entering edit mode with untouched fields never
+  // marks the form dirty (same guarantee as the ref-mirrored gate this
+  // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
-  // Ref-mirrored: subscribing the tracker to `editable` would mark the form
-  // dirty on merely entering edit mode.
-  const editableRef = useRef(editable)
-  useEffect(() => {
-    editableRef.current = editable
-  }, [editable])
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (editableRef.current) setDirty(true)
-  }, [savePayload])
+  const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
+  if (prevSavePayload !== savePayload) {
+    setPrevSavePayload(savePayload)
+    if (editable) setDirty(true)
+  }
 
   function resetForm() {
     setName(isPlaceholderName ? '' : (pr.name ?? ''))
@@ -549,12 +546,11 @@ export function ProjectDrawer({
       )
   }, [effectiveLayout, schedulingEnabled, t])
 
-  // A hidden or gated-off tab must never stay selected.
-  useEffect(() => {
-    if (tabs.length > 0 && !tabs.some((item) => item.key === tab)) {
-      setTab(tabs[0]!.key)
-    }
-  }, [tab, tabs])
+  // A hidden or gated-off tab must never stay selected, during render (same
+  // committed value, no extra render).
+  if (tabs.length > 0 && !tabs.some((item) => item.key === tab)) {
+    setTab(tabs[0]!.key)
+  }
 
   const activeTab = tabs.find((item) => item.key === tab) ?? null
   const managementTabs = useMemo(
@@ -562,15 +558,14 @@ export function ProjectDrawer({
     [tabs],
   )
 
-  useEffect(() => {
-    if (
-      tab === 'project_management' &&
-      managementTabs.length > 0 &&
-      !managementTabs.some((item) => item.key === managementTab)
-    ) {
-      setManagementTab(managementTabs[0]!.key)
-    }
-  }, [managementTab, managementTabs, tab])
+  // Same fallback for the management sub-tab, during render.
+  if (
+    tab === 'project_management' &&
+    managementTabs.length > 0 &&
+    !managementTabs.some((item) => item.key === managementTab)
+  ) {
+    setManagementTab(managementTabs[0]!.key)
+  }
 
   return (
     <>

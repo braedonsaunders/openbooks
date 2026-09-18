@@ -4,6 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from './utils'
+import { useHydrated } from './use-hydrated'
 
 /**
  * Universal context menu — a floating list of actions opened at a point.
@@ -80,28 +81,41 @@ export function ContextMenu({
   className?: string
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
-  const [mounted, setMounted] = React.useState(false)
-  const [coords, setCoords] = React.useState<{ x: number; y: number } | null>(null)
+  const mounted = useHydrated()
+  // Measured panel size, delivered by the observer callback below. The menu
+  // position is derived from it during render (see `coords`) instead of being
+  // copied into state from an effect.
+  const [panelSize, setPanelSize] = React.useState<{ width: number; height: number } | null>(null)
 
-  React.useEffect(() => setMounted(true), [])
-
-  // Clamp inside the viewport once the panel has a measurable size. Runs before
-  // paint (useLayoutEffect) so the menu never flashes at an off-screen point.
+  // Observe the panel once it exists so the menu can clamp inside the
+  // viewport. The measurement arrives via the observer callback (an external
+  // subscription), and disconnects after the first reading — the position only
+  // depends on `open`/`position`, matching the previous update points.
   React.useLayoutEffect(() => {
-    if (!open || !position) {
-      setCoords(null)
-      return
-    }
+    if (!open || !position) return
     const panel = panelRef.current
-    const pw = panel?.offsetWidth ?? 176
-    const ph = panel?.offsetHeight ?? 0
+    if (!panel || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      setPanelSize({ width: panel.offsetWidth, height: panel.offsetHeight })
+      observer.disconnect()
+    })
+    observer.observe(panel)
+    return () => observer.disconnect()
+  }, [open, position])
+
+  const coords = React.useMemo(() => {
+    if (!open || !position) return null
+    const pw = panelSize?.width ?? 176
+    const ph = panelSize?.height ?? 0
     const pad = 8
     let x = position.x
     let y = position.y
-    if (x + pw + pad > window.innerWidth) x = window.innerWidth - pw - pad
-    if (y + ph + pad > window.innerHeight) y = window.innerHeight - ph - pad
-    setCoords({ x: Math.max(pad, x), y: Math.max(pad, y) })
-  }, [open, position])
+    if (typeof window !== 'undefined') {
+      if (x + pw + pad > window.innerWidth) x = window.innerWidth - pw - pad
+      if (y + ph + pad > window.innerHeight) y = window.innerHeight - ph - pad
+    }
+    return { x: Math.max(pad, x), y: Math.max(pad, y) }
+  }, [open, position, panelSize])
 
   React.useEffect(() => {
     if (!open) return

@@ -89,14 +89,14 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
     }
   }, [navGroups, moreLabel])
 
-  useEffect(() => {
-    if (
-      openIdx !== null &&
-      ((openIdx === MORE_MENU_INDEX && visibleCount === navGroups.length) || openIdx >= visibleCount)
-    ) {
-      setOpenIdx(null)
-    }
-  }, [navGroups.length, openIdx, visibleCount])
+  // Close the overflow menu when its entry scrolls out of the overflow range,
+  // during render (same committed value, no extra render).
+  if (
+    openIdx !== null &&
+    ((openIdx === MORE_MENU_INDEX && visibleCount === navGroups.length) || openIdx >= visibleCount)
+  ) {
+    setOpenIdx(null)
+  }
 
   useEffect(
     () => () => {

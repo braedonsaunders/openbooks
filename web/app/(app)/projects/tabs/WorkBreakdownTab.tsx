@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Pencil, Plus, RefreshCw } from 'lucide-react'
@@ -92,9 +92,14 @@ export function WorkBreakdownTab({
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  // Adopt a new task list during render (same committed values, no extra
+  // render). Keyed on the prop identity, like before — local edits never
+  // trigger it.
+  const [prevInitialTasks, setPrevInitialTasks] = useState(initialTasks)
+  if (prevInitialTasks !== initialTasks) {
+    setPrevInitialTasks(initialTasks)
     setTasks(sortTasks(initialTasks.map(normalizeInitialTask)))
-  }, [initialTasks])
+  }
 
   const statusOptions = useMemo(
     () => [

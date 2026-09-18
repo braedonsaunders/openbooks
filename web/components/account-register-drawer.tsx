@@ -63,20 +63,27 @@ export function AccountRegisterDrawer() {
   const closeHref = useMemo(() => accountRegisterCloseHref(pathname, query), [pathname, query])
   const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}:${registerSearch ?? ''}:${book ?? ''}`
 
+  // Clear the register while (re)loading, during render (same committed
+  // values, no extra render). Keyed on the request inputs plus the close href
+  // and translator — the same values that re-run the fetch below.
+  const resetKey = JSON.stringify([requestKey, closeHref])
+  const [prevResetKey, setPrevResetKey] = useState(resetKey)
+  const [prevTc, setPrevTc] = useState(() => tc)
+  if (prevResetKey !== resetKey || prevTc !== tc) {
+    setPrevResetKey(resetKey)
+    setPrevTc(tc)
+    setData(null)
+    setLoadedKey(null)
+  }
+
   useEffect(() => {
-    if (!accountId) {
-      setData(null)
-      setLoadedKey(null)
-      return
-    }
+    if (!accountId) return
     const controller = new AbortController()
     const requestParams = new URLSearchParams({ page: String(page) })
     if (book) requestParams.set('book', book)
     if (from) requestParams.set('from', from)
     if (to) requestParams.set('to', to)
     if (registerSearch) requestParams.set('q', registerSearch)
-    setData(null)
-    setLoadedKey(null)
     fetch(`/api/accounts/${accountId}/register?${requestParams}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(tc('feedback.loadFailed'))

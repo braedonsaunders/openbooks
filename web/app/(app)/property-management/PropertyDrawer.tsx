@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import type { Option } from "./workspace-ui";
@@ -33,9 +33,14 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
   const tCommon = useTranslations("common");
   const tWorkspace = useTranslations("entities.propertyManagement.workspace");
   const tTypes = useTranslations("entities.propertyManagement.propertyTypes");
-  useEffect(() => {
+  // Reseed the form when the drawer opens, during render (same committed
+  // values, no extra render). Keyed on the memoized `initial` (stable
+  // identity — the sibling slice's restructuring) plus `open`.
+  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }));
+  if (prevFormKeys.open !== open || prevFormKeys.initial !== initial) {
+    setPrevFormKeys({ open, initial });
     if (open) setForm(initial);
-  }, [open, initial]);
+  }
   const submit = () => {
     const { currency, ...fields } = form;
     onSave({

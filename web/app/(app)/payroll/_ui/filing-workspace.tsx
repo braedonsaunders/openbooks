@@ -553,9 +553,20 @@ export function SlipDrawer({
     + (format === 'pdf' ? '&format=pdf' : '')
 
   const [state, setState] = useState<SlipState>({ status: 'loading' })
+  // Reset the slip while reloading, during render (same committed values, no
+  // extra render). Keyed on the fetch inputs below.
+  const [prevSlipInputs, setPrevSlipInputs] = useState(() => ({
+    country: section.country, key: section.key, year, rowId,
+  }))
+  if (
+    prevSlipInputs.country !== section.country || prevSlipInputs.key !== section.key ||
+    prevSlipInputs.year !== year || prevSlipInputs.rowId !== rowId
+  ) {
+    setPrevSlipInputs({ country: section.country, key: section.key, year, rowId })
+    setState({ status: 'loading' })
+  }
   useEffect(() => {
     let alive = true
-    setState({ status: 'loading' })
     void fetch(slipHref('json'))
       .then(async (res) => {
         const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; currency?: string; error?: string }

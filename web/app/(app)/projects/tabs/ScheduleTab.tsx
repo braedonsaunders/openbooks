@@ -33,16 +33,21 @@ export function ScheduleTab({
   const [data, setData] = useState<ScheduleData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    const res = await fetch(`/api/project-schedule?projectId=${projectId}`, { cache: 'no-store' })
-    if (!res.ok) {
-      setError(tCommon('feedback.loadFailed'))
-      setData(emptySchedule)
-      return
-    }
-    const body = (await res.json()) as { schedule: ScheduleData }
-    setError(null)
-    setData(body.schedule)
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body.
+  const refresh = useCallback(() => {
+    return fetch(`/api/project-schedule?projectId=${projectId}`, { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) {
+          setError(tCommon('feedback.loadFailed'))
+          setData(emptySchedule)
+          return
+        }
+        return (res.json() as Promise<{ schedule: ScheduleData }>).then((body) => {
+          setError(null)
+          setData(body.schedule)
+        })
+      })
   }, [projectId, tCommon])
 
   useEffect(() => {

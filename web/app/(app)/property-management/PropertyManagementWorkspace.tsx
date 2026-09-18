@@ -111,22 +111,26 @@ export function PropertyManagementWorkspace({
   const [reopenCamPoolId, setReopenCamPoolId] = useState<string | null>(null);
   const [propertyInitialTab, setPropertyInitialTab] = useState("overview");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/property-management", {
-        cache: "no-store",
+  // Fetch chain: every state update sits in a promise continuation (the fetch
+  // response), never synchronously in the effect body. The loading reset lives
+  // with the triggers (the mount initializer above, and the mutation reload)
+  // instead of a mount effect.
+  const load = useCallback(() => {
+    return fetch("/api/property-management", {
+      cache: "no-store",
+    })
+      .then((response) => response.json().then((body) => {
+        if (!response.ok) throw new Error(body.error);
+        setData(body);
+      }))
+      .catch((error: unknown) => {
+        toast.error(
+          error instanceof Error ? error.message : t("toasts.couldNotLoad"),
+        );
+      })
+      .finally(() => {
+        setLoading(false);
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      setData(body);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("toasts.couldNotLoad"),
-      );
-    } finally {
-      setLoading(false);
-    }
   }, [t]);
   useEffect(() => {
     void load();
@@ -141,6 +145,7 @@ export function PropertyManagementWorkspace({
     try {
       const result = await api(payload);
       toast.success(success);
+      setLoading(true);
       await load();
       return result;
     } catch (error) {
