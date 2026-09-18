@@ -114,8 +114,10 @@ test("AU filings declare STP with an annual finalisation", async () => {
     ["ato_stp"],
   );
   assert.equal(filings.yearEnd.length, 1);
-  assert.equal(filings.yearEnd[0]?.cadence, "annual");
-  await assert.rejects(() => filings.yearEnd[0]?.population("org", 2026), PayrollPackError);
+  for (const filing of filings.yearEnd) {
+    assert.equal(filing.cadence, "annual");
+    await assert.rejects(filing.population("org", 2026), PayrollPackError);
+  }
   const packFilings = AU_PAYROLL_PACK.filings();
   assert.equal(packFilings.country, "AU");
   assert.deepEqual(
