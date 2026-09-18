@@ -39,6 +39,16 @@ const SA_VAT_RETURN: TaxReturnPack = {
  * 1 January 2018 and raised to 15% on 1 July 2020. A pack that only knows 15%
  * silently misprices every 2018–2020 document.
  *
+ * SOURCING CAVEAT on the 1 July 2020 boundary. The cited ZATCA guidelines
+ * attest the 2018 introduction, the 5% era and the current 15% applicability,
+ * but no ZATCA page reachable today states the changeover date itself — the
+ * contemporaneous announcement URL 404s and gazt.gov.sa (the authority's
+ * former name) is dead. The date is from the Ministry of Finance decision and
+ * is not in dispute, but it is NOT attested by the source id on that rate row.
+ * Re-source it if a ZATCA or Umm al-Qura page surfaces. Keeping the 5% band
+ * with this caveat beats dropping it: truncating to 15% would misprice every
+ * 2018–2020 document, which is the defect this pack exists to avoid.
+ *
  * Zero-rated supplies (exports, qualifying domestic supplies) carry SA-VAT-ZERO.
  * Exempt supplies (financial services, residential leases) are NOT a 0% code and
  * have no code here. There is no reduced rate.

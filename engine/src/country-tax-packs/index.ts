@@ -19,6 +19,7 @@ import { NORWAY_TAX_PACK } from "./no.ts";
 import { NEW_ZEALAND_TAX_PACK } from "./nz.ts";
 import { POLAND_TAX_PACK } from "./pl.ts";
 import { PORTUGAL_TAX_PACK } from "./pt.ts";
+import { SAUDI_ARABIA_TAX_PACK } from "./sa.ts";
 import { SWEDEN_TAX_PACK } from "./se.ts";
 import { SINGAPORE_TAX_PACK } from "./sg.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
@@ -54,6 +55,7 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   PORTUGAL_TAX_PACK,
   DENMARK_TAX_PACK,
   NORWAY_TAX_PACK,
+  SAUDI_ARABIA_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 

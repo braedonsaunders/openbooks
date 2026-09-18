@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
+import { packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import { SAUDI_ARABIA_TAX_PACK } from "./sa.ts";
 import type { EffectiveTaxRate } from "./types.ts";
 
@@ -85,7 +85,7 @@ describe("Saudi Arabia VAT pack", () => {
   });
 
   it("keys tax codes by its own return pack and leaves jurisdictions empty", () => {
-    assert.deepEqual(Object.keys(pack.returnPackTaxCodes), [RETURN_CODE]);
+    assert.deepEqual(packReturnCodesWithTaxCodes(pack), [RETURN_CODE]);
     assert.equal(pack.jurisdictions.length, 0);
     assert.equal(primaryPackTaxCode(pack, RETURN_CODE)?.code, "SA-VAT-STD");
   });
