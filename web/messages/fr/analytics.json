@@ -462,6 +462,7 @@
       "newCustomers": "Nouveaux clients",
       "overdueOrders": "Commandes en retard",
       "periodRevenue": "CA de la période",
+      "totalInvoiced": "Total facturé",
       "profitLeaks": "Fuites de marge",
       "projectedClv": "CLV projetée",
       "recencyRisk": "Risque d’ancienneté",
@@ -558,6 +559,15 @@
       "review": "Réexaminer",
       "win-back": "Reconquérir"
     },
+    "recon": {
+      "title": "Rapprochement du chiffre d'affaires",
+      "tax": "Taxes sur les montants facturés",
+      "credits": "Avoirs",
+      "deferred": "Reporté sur périodes futures",
+      "recognized": "Reconnu sur facturations antérieures",
+      "voids": "Ajustements d'annulation",
+      "other": "Autres écritures comptables"
+    },
     "risk": {
       "critical": "Critique",
       "high": "Élevé",
@@ -634,7 +644,7 @@
       "recencyBold": "Ancienneté :",
       "recencyTail": " mesurée jusqu’à aujourd’hui (ou jusqu’à la fin de période en historique), jamais jusqu’à une fin d’exercice future.",
       "revenueBold": "Base de chiffre d’affaires :",
-      "revenueTail": " totaux des factures clients comptabilisées."
+      "revenueTail": " produits constatés — écritures nettes de produits, même univers comptable que le compte de résultat. Facturé correspond à la facturation brute ; le détail client réconcilie les deux."
     },
     "sub": {
       "activeLast6mo": "actifs dans les 6 derniers mois",
@@ -652,6 +662,7 @@
       "newInPeriod": "{count} nouveaux sur la période",
       "pastUsualCycle": "au-delà de leur cycle habituel",
       "revenue": "chiffre d’affaires",
+      "invoiced": "facturation brute de la période",
       "rfmChampions": "segment champions RFM",
       "score40to59": "score 40–59",
       "score80Plus": "score ≥ 80",
@@ -692,6 +703,7 @@
       "r": "R",
       "recency": "Ancienneté",
       "revenue": "Chiffre d’affaires",
+      "invoiced": "Facturé",
       "recommendation": "Recommandation",
       "retention": "Rétention",
       "retentionProb": "Prob. fidélisation",

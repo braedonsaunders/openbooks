@@ -462,6 +462,7 @@
       "newCustomers": "Neukunden",
       "overdueOrders": "Überfällige Aufträge",
       "periodRevenue": "Umsatz Zeitraum",
+      "totalInvoiced": "Fakturiert gesamt",
       "profitLeaks": "Margenlecks",
       "projectedClv": "Prognostizierter CLV",
       "recencyRisk": "Aktualitätsrisiko",
@@ -558,6 +559,15 @@
       "review": "Prüfen",
       "win-back": "Zurückgewinnen"
     },
+    "recon": {
+      "title": "Umsatzabstimmung",
+      "tax": "Umsatzsteuer in fakturierten Beträgen",
+      "credits": "Gutschriften",
+      "deferred": "Abgrenzung künftiger Perioden",
+      "recognized": "Aus früheren Rechnungen realisiert",
+      "voids": "Stornoanpassungen",
+      "other": "Sonstige Hauptbuchungen"
+   },
     "risk": {
       "critical": "Kritisch",
       "high": "Hoch",
@@ -634,7 +644,7 @@
       "recencyBold": "Aktualität:",
       "recencyTail": " gemessen bis heute (bzw. bis Periodenende bei Historie), nie bis zu einem künftigen Geschäftsjahresende.",
       "revenueBold": "Umsatzbasis:",
-      "revenueTail": " gebuchte Kundenrechnungs-Beträge."
+      "revenueTail": " realisierte Umsätze — Netto-Einkommensbuchungen, dieselbe Hauptbuch-Grundgesamtheit wie die GuV. Fakturiert sind Bruttorechnungen; der Kundendrill stimmt beide ab."
     },
     "sub": {
       "activeLast6mo": "aktiv in den letzten 6 Monaten",
@@ -652,6 +662,7 @@
       "newInPeriod": "{count} neu im Zeitraum",
       "pastUsualCycle": "hinter üblichem Zyklus zurück",
       "revenue": "Umsatz",
+      "invoiced": "Bruttorechnungen im Zeitraum",
       "rfmChampions": "RFM-Top-Segment",
       "score40to59": "Wert 40–59",
       "score80Plus": "Wert ≥ 80",
@@ -695,6 +706,7 @@
       "retention": "Bindung",
       "retentionProb": "Bind.-Wahrsch.",
       "revenue": "Umsatz",
+      "invoiced": "Fakturiert",
       "revShare": "Umsatzanteil",
       "risk": "Risiko",
       "riskFactors": "Risikofaktoren",

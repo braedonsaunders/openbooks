@@ -353,6 +353,7 @@
       "critical": "Critical",
       "totalProjectedClv": "Total Projected CLV",
       "periodRevenue": "Period Revenue",
+      "totalInvoiced": "Total Invoiced",
       "grossProfit": "Gross Profit",
       "profitLeaks": "Profit Leaks",
       "recencyRisk": "Recency Risk",
@@ -387,6 +388,7 @@
       "last3moVsLy": "last 3mo vs same period LY",
       "trend": "trend: {trend}",
       "revenue": "revenue",
+      "invoiced": "gross billings in period",
       "firstOrderInPeriod": "first order in period",
       "activeLast6mo": "active in last 6 months",
       "customersCount": "{count} customers",
@@ -455,6 +457,7 @@
       "customer": "Customer",
       "health": "Health",
       "revenue": "Revenue",
+      "invoiced": "Invoiced",
       "projectedClv": "Projected CLV",
       "segment": "Segment",
       "churn": "Churn",
@@ -530,6 +533,15 @@
       "silver": "Silver",
       "bronze": "Bronze"
     },
+    "recon": {
+      "title": "Revenue reconciliation",
+      "tax": "Sales tax in invoiced totals",
+      "credits": "Credit memos",
+      "deferred": "Deferred to future periods",
+      "recognized": "Recognized from prior billings",
+      "voids": "Void adjustments",
+      "other": "Other ledger postings"
+   },
     "risk": {
       "low": "Low",
       "medium": "Medium",
@@ -663,7 +675,7 @@
     },
     "sources": {
       "revenueBold": "Revenue basis:",
-      "revenueTail": " posted customer-invoice document totals.",
+      "revenueTail": " recognized revenue — net income-account postings, the same ledger universe the P&L reads. Invoiced is gross billings; the customer drill reconciles the two.",
       "recencyBold": "Recency:",
       "recencyTail": " measured to today (or the period end when historical), never a future fiscal-year end.",
       "frictionBold": "Friction:",

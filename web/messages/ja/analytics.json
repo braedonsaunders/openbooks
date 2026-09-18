@@ -462,6 +462,7 @@
       "newCustomers": "新規得意先",
       "overdueOrders": "延滞発注",
       "periodRevenue": "期間売上",
+      "totalInvoiced": "請求済み合計",
       "profitLeaks": "利益流出",
       "projectedClv": "予測CLV",
       "recencyRisk": "レセンシーリスク",
@@ -558,6 +559,15 @@
       "review": "見直し",
       "win-back": "呼び戻し"
     },
+    "recon": {
+      "title": "売上の照合",
+      "tax": "請求合計に含まれる売上税",
+      "credits": "クレジットメモ",
+      "deferred": "将来期間への繰延",
+      "recognized": "過去の請求からの認識分",
+      "voids": "無効化調整",
+      "other": "その他の元帳記帳"
+    },
     "risk": {
       "critical": "重大",
       "high": "高",
@@ -634,7 +644,7 @@
       "recencyBold": "レセンシー：",
       "recencyTail": " 当日（履歴表示時は期間末）基準。将来の会計年度末は使わない。",
       "revenueBold": "売上基準：",
-      "revenueTail": " 記帳済み得意先請求書の書類合計。"
+      "revenueTail": " 認識済み売上——損益勘定の純記帳であり、損益計算書と同じ元帳範囲。請求済みは総請求額であり、得意先ドリルで両者を照合する。"
     },
     "sub": {
       "activeLast6mo": "過去6か月アクティブ",
@@ -652,6 +662,7 @@
       "newInPeriod": "期間内新規{count}社",
       "pastUsualCycle": "通常サイクル超過",
       "revenue": "売上",
+      "invoiced": "期間内の総請求額",
       "rfmChampions": "RFMチャンピオン層",
       "score40to59": "スコア40–59",
       "score80Plus": "スコア80以上",
@@ -696,6 +707,7 @@
       "retentionProb": "維持確率",
       "revShare": "売上シェア",
       "revenue": "売上",
+      "invoiced": "請求済み",
       "risk": "リスク",
       "riskFactors": "リスク要因",
       "score": "スコア",

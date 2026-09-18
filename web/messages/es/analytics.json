@@ -462,6 +462,7 @@
       "newCustomers": "Clientes nuevos",
       "overdueOrders": "Pedidos vencidos",
       "periodRevenue": "Ingresos del período",
+      "totalInvoiced": "Total facturado",
       "profitLeaks": "Fugas de margen",
       "projectedClv": "CLV proyectado",
       "recencyRisk": "Riesgo de antigüedad",
@@ -558,6 +559,15 @@
       "review": "Revisar",
       "win-back": "Recuperar"
     },
+    "recon": {
+      "title": "Conciliación de ingresos",
+      "tax": "Impuestos en los totales facturados",
+      "credits": "Notas de crédito",
+      "deferred": "Diferido a períodos futuros",
+      "recognized": "Reconocido de facturación anterior",
+      "voids": "Ajustes por anulaciones",
+      "other": "Otros asientos contables"
+    },
     "risk": {
       "critical": "Crítico",
       "high": "Alto",
@@ -634,7 +644,7 @@
       "recencyBold": "Antigüedad:",
       "recencyTail": " medida hasta hoy (o hasta el fin del período en histórico), nunca hasta un fin de ejercicio futuro.",
       "revenueBold": "Base de ingresos:",
-      "revenueTail": " totales de documentos de facturas de clientes contabilizadas."
+      "revenueTail": " ingresos reconocidos — asientos netos de ingresos, el mismo universo contable que la cuenta de resultados. Facturado es facturación bruta; el detalle del cliente concilia ambos."
     },
     "sub": {
       "activeLast6mo": "activos en los últimos 6 meses",
@@ -652,6 +662,7 @@
       "newInPeriod": "{count} nuevos en el período",
       "pastUsualCycle": "más allá de su ciclo habitual",
       "revenue": "ingresos",
+      "invoiced": "facturación bruta del período",
       "rfmChampions": "segmento campeones RFM",
       "score40to59": "puntuación 40–59",
       "score80Plus": "puntuación ≥ 80",
@@ -695,6 +706,7 @@
       "retention": "Retención",
       "retentionProb": "Prob. retención",
       "revenue": "Ingresos",
+      "invoiced": "Facturado",
       "revShare": "Parte ingr.",
       "risk": "Riesgo",
       "riskFactors": "Factores de riesgo",
