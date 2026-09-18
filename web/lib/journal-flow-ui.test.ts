@@ -26,8 +26,8 @@ test('journal approval UX is Flow-driven and does not reserve a drawer tab', () 
 test('journal drawer keeps immutable lifecycle states out of edit mode', () => {
   const drawer = source('app/(app)/journal/JournalDrawer.tsx')
   const lifecycle = drawer.slice(
-    drawer.indexOf('const doc = journal.doc'),
-    drawer.indexOf('const [partyId', drawer.indexOf('const doc = journal.doc')),
+    drawer.indexOf('const doc = asJournalDoc(journal.doc)'),
+    drawer.indexOf('const [partyId', drawer.indexOf('const doc = asJournalDoc(journal.doc)')),
   )
   const editControl = drawer.slice(drawer.indexOf('primaryAction={'), drawer.indexOf('actions={'))
   const actions = drawer.slice(drawer.indexOf('actions={'), drawer.indexOf('footer='))
