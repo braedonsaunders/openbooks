@@ -189,7 +189,10 @@ if (DB) {
       )
       assert.equal(beforeDelete.rows[0]!.n, '0')
 
-      await deleteApp(fx.org.orgId, fx.actorId, fx.key)
+      // Same ambient-scope class as the refusal call above: deleteApp resolves
+      // its row through the ambient scope, so the real uninstall needs the
+      // org scope too — unscoped it silently no-ops and leaves no evidence.
+      await withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key))
       const evidence = await withBypass(() =>
         db.execute<{
           actorId: string
