@@ -51,16 +51,28 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   regions: {
     label: "regione",
     known: IT_REGION_CODES,
-    // Stays [] by choice, not by gap: the addizionale regionale is a
-    // tenant-declared rate, not a withholding table per region, so no region
-    // has "its own tables" to support — the engine computes every domicile
-    // identically from the declared rate (withholding.implemented is true
-    // for all 20). Listing regions here would claim per-region tables exist.
-    supported: [],
+    // All 20, because `supported` asks whether the ENGINE computes the
+    // region's income tax end to end — not whether the region publishes its
+    // own withholding tables. It does: IRPEF nationally, plus the addizionale
+    // regionale/comunale from the tenant-declared rate, identically for every
+    // domicile (withholding.implemented is true for all 20, and these two
+    // fields are the same fact — see installable-region-coverage.test.ts).
+    //
+    // Reading it as "publishes its own tables" left this [] while the pack was
+    // installable, and Link 4 of resolveEmployeePayrollContext calls
+    // assertPayrollRegionSupported UNCONDITIONALLY — so every Italian employee
+    // threw before a single line was computed. Declining the opt-in
+    // ctx.assertRegionSupported callback (which this engine does, for its own
+    // reasons) does not exempt a pack from that gate.
+    //
+    // An unconfigured addizionale rate is still refused, in compute-statutory
+    // by scope point. That is the right layer: a missing rate is one region's
+    // missing datum, while an unsupported region refuses the whole payroll.
+    supported: IT_REGION_CODES,
     unsupportedReason:
-      "no IT regione publishes its own withholding tables: the addizionale regionale/comunale for "
-      + "{region} computes from the tenant-declared rate (see engine/src/payroll/it/rates.ts), so the "
-      + "region is not listed as supported — the engine still withholds for it once the rate is entered.",
+      "income tax withholding for regione {region} is not implemented: the IT pack computes IRPEF "
+      + "plus the addizionale regionale/comunale for every ISTAT regione, so reaching this message "
+      + "means {region} is not a known ISTAT code.",
   },
   jurisdictions: IT_JURISDICTIONS,
   // Withholdings are paid through Modello F24 to the Agenzia delle Entrate —

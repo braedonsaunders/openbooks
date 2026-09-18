@@ -10,22 +10,13 @@ import { computeFrStatutory } from "./compute-statutory.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 
 /**
- * France payroll pack (skeleton).
+ * France payroll pack — `installable: true` for calendar 2026.
  *
- * Registers nothing: `PayrollCountry` is still `"CA" | "US"` (packs.ts:190),
- * so this object cannot be added to `PAYROLL_COUNTRY_PACKS` yet — see
- * `packs/proposals/payroll-country-union.md`, cited in the shard ledger.
- * It is written against the pack contract (`Omit<PayrollCountryPack,
- * "country">`, asserted below) so it registers unchanged once Orchestrate
- * opens the union. `installable: false` until a tax year is transcribed.
- *
- * Declared from primary sources; calendar 2026 PAS grille I (métropole) is
- * transcribed in ./tables-2026.ts and the 2026 URSSAF cotisation rates in
- * ./cotisations-2026.ts, both computed in ./compute-statutory.ts. The pack
- * stays `installable: false` only for the packAccounts.FR.slots.*
- * labels (labels shard; messages-catalog gate fires until they land).
- * APEC and tenant-declared rates without an engine channel stay refused
- * by name:
+ * Calendar 2026 PAS grille I (métropole) is transcribed in ./tables-2026.ts
+ * and the 2026 URSSAF cotisation rates in ./cotisations-2026.ts, both computed
+ * in ./compute-statutory.ts. Declared from primary sources. APEC and
+ * tenant-declared rates without an engine channel stay refused by name
+ * (FR_REFUSED_2026, FR_COTISATION_REFUSALS_2026):
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
  * - Social contributions: collected by URSSAF (C. séc. soc. art. L213-1);
@@ -35,14 +26,22 @@ import { FR_TAX_YEARS } from "./rates.ts";
  */
 
 // ---------------------------------------------------------------------------
-// Regions: France levies no regional income tax — PAS is national — but
-// `supported` stays empty until PAS withholds income tax end to end.
+// Regions: France levies no regional income tax — PAS is national — so the one
+// known region is the country itself, and it is supported now that the grille
+// computes end to end (finding F-fr-001 emptied this list at the skeleton
+// stage, correctly for that state; the grille then landed).
+//
+// DOM domiciles are NOT a region distinction here. Grilles II and III are
+// keyed by the employee's domicile, which arrives on the `fr_pas_option`
+// certificate, so compute-statutory.ts refuses them by domicile name. Do not
+// model them as regions: an unsupported region refuses the whole payroll,
+// while the certificate answer is per employee.
 // ---------------------------------------------------------------------------
 
 const FR_REGIONS: Omit<PayrollCountryPack, "country">["regions"] = {
   label: "country",
   known: ["FR"],
-  supported: [],
+  supported: ["FR"],
   unsupportedReason:
     "income tax withholding for {region} is not implemented: PAS does not compute end to end. "
     + "Transcribe the year's grille into engine/src/payroll/fr/ first.",

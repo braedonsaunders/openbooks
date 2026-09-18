@@ -23,11 +23,14 @@
  * 10-rate recovery of indebiti are year-end/timing mechanics the per-period
  * engine does not model — refused by name (IT_REFUSED_2025).
  *
- * Deliberately NOT called: `assertRegionSupported`. No region publishes its
- * own tables, so `regions.supported` is correctly [] (finding F-fr-001)
- * while the pass runs for any known ISTAT region once its surtax rates are
- * declared. An unconfigured rate is a refusal naming the scope point — a
- * pack that computes the surtax from a guessed rate is wrong money.
+ * Deliberately NOT called: the `ctx.assertRegionSupported` callback. This pass
+ * runs for any known ISTAT region, and an unconfigured surtax rate is a
+ * refusal naming the scope point — a pack that computes the surtax from a
+ * guessed rate is wrong money.
+ *
+ * Declining the callback is NOT a reason to empty `regions.supported`: Link 4
+ * of resolveEmployeePayrollContext gates every employee on that list whatever
+ * the pack does here. All 20 regions are listed (see ./pack.ts).
  *
  * The trattamento integrativo and c. 4 somma payouts are pushed as generic
  * `credit` lines (ti_payout/somma_payout, pack-local components on the IRPEF
