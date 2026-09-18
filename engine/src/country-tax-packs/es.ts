@@ -60,15 +60,37 @@ export const SPAIN_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://sede.agenciatributaria.gob.es/Sede/todas-gestiones/impuestos-tasas/iva/modelo-303-iva-autoliquidacion_/instrucciones-2026.html",
       asOf: "2026-08-01",
     },
+    {
+      id: "aeat_reduced_rates_applicability",
+      title: "AEAT — IVA reducido (10%) and superreducido (4%) applicability, left-truncated: the current rates page states no origin date",
+      url: "https://sede.agenciatributaria.gob.es/Sede/iva/regimenes-tributacion-iva/regimen-general.html",
+      asOf: "2026-03-26",
+    },
   ],
   jurisdictions: [],
   returnPacks: [ES_MODELO_303_2026],
   returnPackTaxCodes: {
-    ES_MODELO303: {
-      code: "ES-VAT-STD",
-      name: "Spain IVA-territory standard VAT",
-      ratePercent: 21,
-      rates: [{ ratePercent: 21, effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" }],
-    },
+    ES_MODELO303: [
+      {
+        code: "ES-VAT-STD",
+        name: "Spain IVA-territory standard VAT",
+        ratePercent: 21,
+        rates: [{ ratePercent: 21, effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" }],
+      },
+      {
+        code: "ES-VAT-RED",
+        name: "Spain IVA-territory reducido VAT",
+        ratePercent: 10,
+        role: "reduced",
+        rates: [{ ratePercent: 10, effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
+      },
+      {
+        code: "ES-VAT-SUPERRED",
+        name: "Spain IVA-territory superreducido VAT",
+        ratePercent: 4,
+        role: "reduced",
+        rates: [{ ratePercent: 4, effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
+      },
+    ],
   },
 };
