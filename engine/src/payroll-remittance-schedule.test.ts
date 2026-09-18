@@ -189,7 +189,7 @@ const ACCOUNT: PayrollFilingAccount = {
 
 const ROW: RemittanceRow = {
   component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",
-  system_key: "qpip", remittance_party_id: null, liability_account_id: "liab-1",
+  system_key: "qpip", country: "CA", remittance_party_id: null, liability_account_id: "liab-1",
   filing_account_id: ACCOUNT.id, filingUnknown: false, province: "QC", amount: "100.00",
 };
 

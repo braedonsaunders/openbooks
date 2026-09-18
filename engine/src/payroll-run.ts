@@ -3541,8 +3541,8 @@ async function payRunGlLegs(
     // this projection no longer knows any jurisdiction's mapping itself, and
     // a third pack's slot with no legacy key simply resolves to the
     // component account or a named refusal.
-    const statutoryLiability = (systemKey: string | null): string | null =>
-      systemKey ? legacyStatutoryLiabilityAccount(systemKey, rawPayrollSettings) : null;
+    const statutoryLiability = (systemKey: string | null, country: string | null): string | null =>
+      systemKey ? legacyStatutoryLiabilityAccount(systemKey, rawPayrollSettings, country) : null;
     const wagesToClearing = settings.wagesTo === "labor_clearing" && costing.mode === "post";
     if (settings.wagesTo === "labor_clearing" && !laborClearing) {
       throw new PayrollError("payroll setup incomplete: labor clearing account is not configured");
@@ -3550,7 +3550,7 @@ async function payRunGlLegs(
 
     const stubLines = (await tx.execute<Record<string, string | null>>(sql`
       select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
-             c.system_key, c.expense_account_id, c.liability_account_id, s.net_pay
+             c.system_key, c.country, c.expense_account_id, c.liability_account_id, s.net_pay
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
@@ -3603,7 +3603,7 @@ async function payRunGlLegs(
           });
         }
       } else if (line.kind === "deduction") {
-        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
         if (!liability) {
           throw new PayrollError(
             `deduction "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
@@ -3612,7 +3612,7 @@ async function payRunGlLegs(
         accumulate(liability, neg(amount), line.description ?? "Deduction");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
       } else {
-        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
         if (!liability) {
           throw new PayrollError(
             `employer contribution "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,

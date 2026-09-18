@@ -1928,13 +1928,17 @@ export interface PayrollRemittanceSchedule {
 // ---------------------------------------------------------------------------
 
 /**
- * Every pack's remittance and legacy-account declarations folded into three
- * lookups by system key. Cross-pack, because the remittance summary and the GL
- * projection both see stub lines from every installed pack at once; a system
- * key two packs declare DIFFERENTLY is a refusal, never a coin toss.
+ * ONE pack's remittance and legacy-account declarations folded into lookups
+ * by system key, for that pack's own country. Never across packs: two
+ * sovereign tax authorities routinely give the same withholding the same
+ * system key (GB and IE both call theirs `paye`), and those are two correct
+ * descriptions of two jurisdictions — not a disagreement to detect. Within
+ * the pack, a system key two slots declare DIFFERENTLY is a refusal naming
+ * the country, never a coin toss. Callers resolve country-first, from the
+ * component row's own country.
  */
 export interface StatutoryRemittanceDeclaration {
-  /** System keys declared `internal_accrual` — never remitted, by anyone. */
+  /** System keys this pack declares `internal_accrual` — never remitted. */
   internalAccrualSystemKeys: readonly string[];
   /** systemKey → the pack's remittance-vendor settings key (null = none). */
   vendorSettingsKeyBySystemKey: ReadonlyMap<string, string | null>;
@@ -1948,59 +1952,54 @@ export interface StatutoryRemittanceDeclaration {
   legacyLiabilitySettingsKeyBySystemKey: ReadonlyMap<string, string>;
 }
 
-export function statutoryRemittanceDeclaration(): StatutoryRemittanceDeclaration {
+export function statutoryRemittanceDeclaration(country: string): StatutoryRemittanceDeclaration {
+  const pack = payrollPack(country);
   const internal = new Set<string>();
   const remitted = new Set<string>();
   const vendorKey = new Map<string, string | null>();
   const regionalVendorKey = new Map<string, Readonly<Record<string, string>>>();
   const legacyKey = new Map<string, string>();
-  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
-    for (const slot of pack.statutorySlots) {
-      for (const component of slot.components) {
-        (component.remittance === "internal_accrual" ? internal : remitted)
-          .add(component.systemKey);
-        if (component.remittance === "tax_authority") {
-          const declared = pack.remittanceVendorSettingsKey;
-          const existing = vendorKey.get(component.systemKey);
-          if (existing !== undefined && existing !== declared) {
-            throw new PayrollPackError(
-              `two payroll packs declare different remittance vendors for ${component.systemKey}`,
-            );
-          }
-          vendorKey.set(component.systemKey, declared);
-        }
-        if (component.regionalRemittanceVendorSettingsKeys) {
-          const declared = component.regionalRemittanceVendorSettingsKeys;
-          const existing = regionalVendorKey.get(component.systemKey);
-          if (existing) {
-            for (const [region, key] of Object.entries(declared)) {
-              if (region in existing && existing[region] !== key) {
-                throw new PayrollPackError(
-                  `two payroll pack components declare different ${region} remittance vendors for ${component.systemKey}`,
-                );
-              }
+  for (const slot of pack.statutorySlots) {
+    for (const component of slot.components) {
+      (component.remittance === "internal_accrual" ? internal : remitted)
+        .add(component.systemKey);
+      if (component.remittance === "tax_authority") {
+        // The vendor is the pack's single remittanceVendorSettingsKey, so one
+        // pack cannot map one system key to two vendors — the type is the
+        // guard, and there is no cross-pack comparison left to make.
+        vendorKey.set(component.systemKey, pack.remittanceVendorSettingsKey);
+      }
+      if (component.regionalRemittanceVendorSettingsKeys) {
+        const declared = component.regionalRemittanceVendorSettingsKeys;
+        const existing = regionalVendorKey.get(component.systemKey);
+        if (existing) {
+          for (const [region, key] of Object.entries(declared)) {
+            if (region in existing && existing[region] !== key) {
+              throw new PayrollPackError(
+                `the ${country} payroll pack declares different ${region} remittance vendors for ${component.systemKey}`,
+              );
             }
-            regionalVendorKey.set(component.systemKey, { ...existing, ...declared });
-          } else {
-            regionalVendorKey.set(component.systemKey, declared);
           }
+          regionalVendorKey.set(component.systemKey, { ...existing, ...declared });
+        } else {
+          regionalVendorKey.set(component.systemKey, declared);
         }
-        if (slot.legacySettingsKey) {
-          const existing = legacyKey.get(component.systemKey);
-          if (existing !== undefined && existing !== slot.legacySettingsKey) {
-            throw new PayrollPackError(
-              `two payroll pack slots declare different legacy accounts for ${component.systemKey}`,
-            );
-          }
-          legacyKey.set(component.systemKey, slot.legacySettingsKey);
+      }
+      if (slot.legacySettingsKey) {
+        const existing = legacyKey.get(component.systemKey);
+        if (existing !== undefined && existing !== slot.legacySettingsKey) {
+          throw new PayrollPackError(
+            `the ${country} payroll pack declares different legacy accounts for ${component.systemKey}`,
+          );
         }
+        legacyKey.set(component.systemKey, slot.legacySettingsKey);
       }
     }
   }
   for (const systemKey of internal) {
     if (remitted.has(systemKey)) {
       throw new PayrollPackError(
-        `payroll packs declare ${systemKey} both internal_accrual and remittable`,
+        `the ${country} payroll pack declares ${systemKey} both internal_accrual and remittable`,
       );
     }
   }
@@ -2230,8 +2229,14 @@ export function packRemittanceVendorSettingsKeys(country: string): string[] {
 export function legacyStatutoryLiabilityAccount(
   systemKey: string,
   payrollSettingsBlob: Record<string, unknown>,
+  country: string | null,
 ): string | null {
-  const key = statutoryRemittanceDeclaration().legacyLiabilitySettingsKeyBySystemKey.get(systemKey);
+  // Country-first: the slot's declaration for the COMPONENT's pack country. A
+  // row naming no country (shared baseline, user components) or a country
+  // with no pack carries no pack declaration — the same null as a system key
+  // no pack declares, resolved by the caller's undeclared paths.
+  if (!country || !PAYROLL_COUNTRY_PACKS[country]) return null;
+  const key = statutoryRemittanceDeclaration(country).legacyLiabilitySettingsKeyBySystemKey.get(systemKey);
   if (!key) return null;
   const value = payrollSettingsBlob[key];
   return typeof value === "string" && value ? value : null;
