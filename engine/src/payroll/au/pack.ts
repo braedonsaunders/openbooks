@@ -1,0 +1,106 @@
+/**
+ * The AU payroll country pack (skeleton).
+ *
+ * Declares what Australia withholds and accrues — PAYG withholding (which
+ * collects income tax, the Medicare levy and STSL repayments through the one
+ * withholding), the Superannuation Guarantee employer contribution, and
+ * workers' compensation — plus the TFN declaration, the STP filing, and
+ * named refusals for everything not yet transcribed.
+ *
+ * `installable: false` until a tax year is transcribed. The `country` field
+ * cannot yet join the `PayrollCountry` union (`'CA' | 'US'` at
+ * ../packs.ts), so the pack is typed to match that interface in every other
+ * respect and registers once Orchestrate opens the union — see
+ * packs/proposals/payroll-country-union.md (gb-payroll owns the propose).
+ */
+import type {
+  PayrollCountryPack,
+  PayrollRegionCoverage,
+} from "../packs.ts";
+import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_WITHHOLDING } from "./jurisdictions.ts";
+import { computeAuStatutory } from "./compute-statutory.ts";
+import { auPackFilings } from "./filings.ts";
+import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
+
+const AU_REGIONS: PayrollRegionCoverage = {
+  label: "state",
+  known: AU_KNOWN_REGIONS,
+  // PAYG withholding is federal and uniform, but the engine computes no
+  // state's income tax until Schedule 1 is transcribed — so every region is
+  // refused by name rather than silently withheld at zero.
+  supported: [],
+  unsupportedReason:
+    "PAYG withholding for {region} is not implemented by the AU payroll pack: "
+    + "no published PAYG withholding edition is transcribed (see AU_TAX_YEARS)",
+};
+
+export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {
+  country: "AU",
+  installable: false,
+  statutoryCurrency: "AUD",
+  // The ATO financial year opens 1 July and is named for the year it closes
+  // (2025–26 opens 1 July 2025). Data on the pack, not a code branch.
+  taxYear: { basis: "fiscal", startMonth: 7, startDay: 1, namedBy: "closing_year" },
+  regions: AU_REGIONS,
+  // No employment calendar is declared yet: the Fair Work Act national public
+  // holidays and the state calendars are not transcribed, and an empty list
+  // refuses loudly where `null` would falsely claim no holiday-pay mandate.
+  jurisdictions: [],
+  // PAYG withholding is remitted to the ATO through the org-configured ATO
+  // remittance vendor. (The ATO's own due-date timetable by withholding size
+  // is not transcribed, so no schedule is declared.)
+  remittanceVendorSettingsKey: "atoRemittancePartyId",
+  // ATO arrears and lump-sum payments are taxed outside ordinary period
+  // annualisation (lump sum payment in arrears treatment, Schedule 5 back
+  // payments). Provisional: confirm against the transcribed schedules.
+  retroactivePayTreatment: "non_periodic",
+  contributoryBases: {
+    // Super Guarantee is assessed on ordinary time earnings (12% from
+    // 1 July 2025 — ATO).
+    pensionable: "ordinary time earnings (OTE) — the Super Guarantee base",
+    // No EI equivalent exists; the second accumulator carries wages
+    // assessable for state workers' compensation insurance.
+    insurable: "workers' compensation assessable wages (state schemes)",
+  },
+  // Union dues give PAYG withholding no per-period treatment (deductible on
+  // the annual return only), so the engine stamps nothing.
+  employeeUnionDuesTaxTreatment: null,
+  filings: auPackFilings,
+  statutoryRates: AU_PACK_RATES,
+  taxYears: AU_TAX_YEARS,
+  certificates: () => AU_CERTIFICATES,
+  withholding: () => AU_WITHHOLDING,
+  statutorySlots: [
+    {
+      key: "payg",
+      components: [
+        // PAYG withholding collects income tax, the Medicare levy and STSL
+        // repayments through the one withholding, driven by the TFN
+        // declaration answers. Salary-sacrificed amounts move it, so it is
+        // re-derived by the protection fixpoint like every income tax.
+        { code: "PAYG", name: "PAYG withholding", systemKey: "payg_withholding", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+      ],
+    },
+    {
+      key: "super",
+      components: [
+        // Super Guarantee: the employer contribution on ordinary time
+        // earnings (12% from 1 July 2025). Paid to the employee's super
+        // fund, never to the ATO — hence `external`, with the fund as the
+        // per-component destination.
+        { code: "SG", name: "Superannuation guarantee", systemKey: "super_guarantee", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
+      key: "wcb",
+      components: [
+        // Workers' compensation premium: assessable wages × the employer's
+        // state-insurer rate (a tenant-entered regional slot — see
+        // AU_PACK_RATES), remitted to the state insurer.
+        { code: "WCB", name: "Workers' compensation", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+  ],
+  computeStatutory: computeAuStatutory,
+  statutoryEngineLabel: "PAYG withholding",
+};
