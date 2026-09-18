@@ -111,13 +111,18 @@ async function legacyCash(orgId: string): Promise<string> {
   return r.rows[0]!.cash_balance;
 }
 
+// Fixture writes run under the bypass. Importing a web reader replaces the
+// test bypass with a resolver that returns undefined outside a request, so a
+// bare seed here fails RLS with an error that reads like a product defect.
 async function ensurePeriod(orgId: string, year: number, month: number, start: string, end: string): Promise<string> {
   const id = randomUUID();
-  const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`)).rows[0]!.fiscal_calendar_id;
-  await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${id}, ${orgId}, ${year}, ${month}, ${`${year}-0${month}`}, ${start}, ${end}, false, ${cal})`);
-  return id;
+  return withBypass(async () => {
+    const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`)).rows[0]!.fiscal_calendar_id;
+    await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${id}, ${orgId}, ${year}, ${month}, ${`${year}-0${month}`}, ${start}, ${end}, false, ${cal})`);
+    return id;
+  });
 }
 
 async function postBank(
@@ -128,6 +133,7 @@ async function postBank(
   },
 ): Promise<void> {
   const entry = randomUUID();
+  await withBypass(async () => {
   await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
     values (${entry}, ${org.orgId}, ${opts.book ?? org.bookId}, ${opts.sub ?? org.subsidiaryId},
       ${`CASH-${opts.label}-${entry.slice(0, 8)}`}, ${opts.date ?? org.date}, ${opts.period ?? org.periodId}, 'draft', 'manual')`);
@@ -139,6 +145,7 @@ async function postBank(
       (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.adjustment}, ${opts.sub ?? org.subsidiaryId},
         ${"-" + amount}, ${currency}, ${"-" + amount}, 1)`);
   await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+  });
 }
 
 test("dashboard cash tile agrees with the legacy reader on a simple org", { skip: !DB }, async () => {
