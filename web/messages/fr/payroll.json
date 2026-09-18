@@ -796,6 +796,14 @@
           "patronales": "Cotisations patronales \u00e0 payer (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
         }
       },
+      "ES": {
+        "title": "Espagne \u2014 comptes l\u00e9gaux",
+        "description": "Comptes de passif pour les montants que le pack espagnol retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "slots": {
+          "irpf": "IRPF \u00e0 payer (imp\u00f4t sur le revenu pr\u00e9lev\u00e9 au taux annuel)",
+          "seguridad_social": "Seguridad Social \u00e0 payer (cotisations employ\u00e9 et employeur : contingencias comunes, ch\u00f4mage, FOGASA, formation, MEI)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

@@ -796,6 +796,14 @@
           "patronales": "Contribui\u00e7\u00f5es patronais a recolher (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
         }
       },
+      "ES": {
+        "title": "Espanha \u2014 contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Espanha ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "slots": {
+          "irpf": "IRPF a recolher (imposto de renda retido \u00e0 al\u00edquota anual)",
+          "seguridad_social": "Seguridad Social a recolher (contribui\u00e7\u00f5es de funcion\u00e1rio e empregador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

@@ -796,6 +796,14 @@
           "patronales": "Verbindlichkeiten aus Arbeitgeberbeitr\u00e4gen (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
         }
       },
+      "ES": {
+        "title": "Spanien \u2014 gesetzliche Konten",
+        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das ES-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "irpf": "Verbindlichkeiten aus IRPF (Einkommensteuer zum Jahrestarif)",
+          "seguridad_social": "Verbindlichkeiten aus Seguridad Social (Arbeitnehmer- und Arbeitgeberbeitr\u00e4ge: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {
