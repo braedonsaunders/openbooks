@@ -179,6 +179,22 @@ test("voided payroll retains component classification and reference evidence",
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
 
+/**
+ * Race scaffolding runs on raw pg clients that skip the pool's RLS-GUC
+ * wrapper. Pre-r1 these connected as superuser (RLS-exempt), so their
+ * locking reads saw every row; under the constrained runtime role the same
+ * reads see zero rows, the lock barrier never forms, and the test times out
+ * instead of racing. Explicit session bypass restores the pre-r1 visibility
+ * on these throwaway connections (closed at test end); the fencing
+ * assertions themselves run through the product path unchanged.
+ */
+async function scopeRaceClient(client: pg.Client, orgId: string): Promise<void> {
+  await client.query(
+    "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'on', false)",
+    [orgId],
+  );
+}
+
 async function waitForBlock(client: pg.Client, blockerPid: number) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
@@ -203,6 +219,8 @@ for (const operation of ["edit", "delete"] as const) {
       try {
         const {input, entryId} = await calculatedRun(fx);
         await holder.connect(); await editor.connect();
+        await scopeRaceClient(holder, fx.orgId);
+        await scopeRaceClient(editor, fx.orgId);
         await holder.query("begin");
         await holder.query("select id from time_entries where org_id=$1 and id=$2 for update", [fx.orgId, entryId]);
         const holderPid = (await holder.query<{pid: number}>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -246,7 +264,9 @@ test("commit waits for an earlier component editor and then refuses its stale ca
     let committing: Promise<unknown> | undefined;
     try {
       const {input} = await calculatedRun(fx);
-      await editor.connect(); await editor.query("begin");
+      await editor.connect();
+      await scopeRaceClient(editor, fx.orgId);
+      await editor.query("begin");
       await editor.query("update pay_components set taxable=false where org_id=$1 and system_key='base_pay'", [fx.orgId]);
       const pid = (await editor.query<{pid: number}>("select pg_backend_pid() as pid")).rows[0]!.pid;
       committing = commitPayRun(input); void committing.catch(() => {});
