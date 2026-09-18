@@ -58,6 +58,11 @@ async function runBootstrap(databaseUrl: string): Promise<void> {
         OPENBOOKS_DB_URL: databaseUrl,
         OPENBOOKS_RUNTIME_DB_URL: "",
         OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION: "",
+        // This suite bootstraps a throwaway database of its own, so the CI
+        // harness flags that shape the SHARED test database must not leak in.
+        // Ownership transfer refuses without OPENBOOKS_RUNTIME_DB_URL, which
+        // is deliberately blank here, so inheriting it fails the bootstrap.
+        OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
         ORG_CURRENCY: "USD",
         ORG_COUNTRY: "US",
         OPENBOOKS_DATA_KEY:
