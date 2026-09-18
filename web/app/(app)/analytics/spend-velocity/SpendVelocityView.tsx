@@ -158,7 +158,6 @@ type ScatterPoint = { data: [number, number, number, string] }
 function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
   const accounts = data.accountVelocity
   const byVelocity = [...accounts].sort((a, b) => b.velocity - a.velocity).slice(0, 6)

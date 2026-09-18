@@ -509,7 +509,6 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
 function AnalysisTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
   const [sub, setSub] = useState<'rsf' | 'zscore' | 'calendar'>('rsf')
 
