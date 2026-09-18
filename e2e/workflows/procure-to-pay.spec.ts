@@ -26,9 +26,11 @@ import { authedContext, dismissSetupWizard } from "../auth";
  * inherits the order's NULL, so without explicit scoping this suite's bills
  * vanish from the report. All money moves in the current UTC month (see the
  * DAY anchor below), so month-filtered reports isolate this suite's postings
- * exactly. The goods-receipt path auto-assigns a stock location only when
- * the org has exactly one ACTIVE stock location; this suite is its sole
- * creator, and local re-runs against a warm DB must re-bootstrap first.
+ * exactly. The goods-receipt path refuses a stocked line with no warehouse
+ * whenever the warehouse choice is ambiguous, so the suite names its own
+ * warehouse explicitly on the PO line. Reconciliation sign-off is
+ * date-monotonic on the suite's settlement account, so local re-runs
+ * against a warm DB must re-bootstrap first.
  *
  * Flow (core test): vendor with approved bank account (second-user approval)
  * → purchase order → goods receipt → vendor bill (3-way match: bills only
@@ -258,7 +260,7 @@ function parseNacha(text: string, expectedCents: bigint, expectedCount: number) 
 test.describe("procure-to-pay workflows", () => {
   test.describe.configure({ mode: "serial", timeout: 300_000 });
 
-  const shared: { profileId: string; terms210: string; rootSub: string } = { profileId: "", terms210: "", rootSub: "" };
+  const shared: { profileId: string; terms210: string; rootSub: string; stockLocationId: string } = { profileId: "", terms210: "", rootSub: "", stockLocationId: "" };
   const acct: Record<string, string> = {};
   let itemId = "";
 
@@ -347,9 +349,11 @@ test.describe("procure-to-pay workflows", () => {
         }
       }
 
-      // 4. Stock location chain. Product rule: the goods-receipt path
-      //    auto-assigns a location only with exactly one ACTIVE stock
-      //    location — this suite is its sole creator (fresh CI tenant).
+      // 4. Stock location chain. Product rule: receiving a stocked PO line
+      //    with no warehouse is refused whenever the choice is ambiguous
+      //    (zero or 2+ active warehouses — ORDER_LINE_WAREHOUSE_REQUIRED),
+      //    so the suite names its warehouse explicitly on every stocked PO
+      //    line instead of relying on the single-warehouse silent fallback.
       const loc = await api(page, "POST", "/api/admin/setup/locations", { name: `P2P Warehouse ${TAG}` });
       const locationId = str(req(loc, "POST setup/locations").id, "location id");
       const sloc = await api(page, "POST", "/api/admin/setup/stock-locations", {
@@ -358,9 +362,7 @@ test.describe("procure-to-pay workflows", () => {
         kind: "warehouse",
         isActive: true,
       });
-      // The id is deliberately unconsumed: the location's existence (this
-      // suite is its sole creator) is what the goods-receipt path needs.
-      str(req(sloc, "POST setup/stock-locations").id, "stock location id");
+      shared.stockLocationId = str(req(sloc, "POST setup/stock-locations").id, "stock location id");
 
       // 5. Stock item with a FIFO costing profile (asset/cogs/RNB).
       const draft = await api(page, "POST", "/api/items/draft", {});
@@ -650,6 +652,9 @@ test.describe("procure-to-pay workflows", () => {
           quantity: qty,
           unit: "ea",
           unitPrice,
+          // Explicit warehouse: the receipt refuses a warehouseless stocked
+          // line whenever the org's warehouse choice is ambiguous.
+          stockLocationId: shared.stockLocationId,
         }],
         expectedUpdatedAt: revOf(req(poGet, "GET PO")),
       });
@@ -946,7 +951,12 @@ test.describe("procure-to-pay workflows", () => {
         partyId: employeeId,
         documentDate: DAY,
         memo: `P2P site visit ${TAG}`,
-        lines: [{ accountId: acct["6000"], description: "Mileage and meals", amount: "150.0000" }],
+        // out_of_pocket: the employee fronted the money and the pay run
+        // reimburses them. company_paid would require a corporate card and
+        // pay the issuer (owed nothing to the employee); personal is a
+        // receivable from the employee. Only out_of_pocket belongs in a
+        // reimbursement run — the drawer defaults new lines the same way.
+        lines: [{ accountId: acct["6000"], description: "Mileage and meals", amount: "150.0000", settlementType: "out_of_pocket" }],
         expectedUpdatedAt: revOf(req(expGet, "GET expense draft")),
       }), "PATCH expense lines");
       req(await api(page, "POST", "/api/expenses/actions", { action: "submit", documentId: expenseId }), "POST expense submit");
