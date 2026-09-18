@@ -622,11 +622,11 @@
     "fields": {
       "wageExpenseAccountId": "Lohnaufwand",
       "burdenExpenseAccountId": "Arbeitgeberlast-Aufwand",
-      "netPayAccountId": "Nettolohn verbindlich",
-      "cppPayableAccountId": "CPP verbindlich",
-      "eiPayableAccountId": "EI verbindlich",
-      "taxPayableAccountId": "Einkommensteuer verbindlich",
-      "vacationPayableAccountId": "Urlaub verbindlich",
+      "netPayAccountId": "Verbindlichkeiten aus Nettolohn",
+      "cppPayableAccountId": "Verbindlichkeiten aus CPP",
+      "eiPayableAccountId": "Verbindlichkeiten aus EI",
+      "taxPayableAccountId": "Verbindlichkeiten aus Einkommensteuer",
+      "vacationPayableAccountId": "Verbindlichkeiten aus Urlaub",
       "wagesTo": "Löhne buchen auf",
       "craRemittancePartyId": "CRA-Abführungsempfänger",
       "rqRemittancePartyId": "Revenu-Québec-Abführungsempfänger",
@@ -703,27 +703,27 @@
         "title": "Kanada — gesetzliche CRA-Konten",
         "description": "Verbindlichkeitskonten für die Beträge, die das CRA-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
-          "income_tax": "Einkommensteuer verbindlich",
-          "qc_income_tax": "Québec-Einkommensteuer verbindlich (Revenu Québec)",
-          "cpp": "CPP verbindlich (inkl. CPP2)",
-          "ei": "EI verbindlich",
-          "qpip": "QPIP verbindlich (Quebec)",
-          "vacation": "Urlaub verbindlich",
-          "wcb": "Unfallversicherung verbindlich (WCB/WSIB)",
-          "eht": "Arbeitgeber-Gesundheitssteuer verbindlich",
-          "hsf": "Health Services Fund verbindlich (Quebec)"
+          "income_tax": "Verbindlichkeiten aus Einkommensteuer",
+          "qc_income_tax": "Verbindlichkeiten aus Québec-Einkommensteuer (Revenu Québec)",
+          "cpp": "Verbindlichkeiten aus CPP (inkl. CPP2)",
+          "ei": "Verbindlichkeiten aus EI",
+          "qpip": "Verbindlichkeiten aus QPIP (Quebec)",
+          "vacation": "Verbindlichkeiten aus Urlaub",
+          "wcb": "Verbindlichkeiten aus Unfallversicherung (WCB/WSIB)",
+          "eht": "Verbindlichkeiten aus Arbeitgeber-Gesundheitssteuer",
+          "hsf": "Verbindlichkeiten aus Health Services Fund (Quebec)"
         }
       },
       "US": {
         "title": "Vereinigte Staaten — gesetzliche Bundeskonten",
         "description": "Verbindlichkeitskonten für die Beträge, die das US-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
-          "fit": "Bundeseinkommensteuer verbindlich",
-          "fica": "FICA verbindlich (Social Security + Medicare)",
-          "futa": "FUTA verbindlich",
-          "suta": "Staatliche Arbeitslosenversicherung verbindlich",
-          "state_income_tax": "Staatliche Einkommensteuer verbindlich",
-          "local_income_tax": "Kommunale Einkommensteuer verbindlich"
+          "fit": "Verbindlichkeiten aus Bundeseinkommensteuer",
+          "fica": "Verbindlichkeiten aus FICA (Social Security + Medicare)",
+          "futa": "Verbindlichkeiten aus FUTA",
+          "suta": "Verbindlichkeiten aus staatlicher Arbeitslosenversicherung",
+          "state_income_tax": "Verbindlichkeiten aus staatlicher Einkommensteuer",
+          "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer"
         }
       },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
