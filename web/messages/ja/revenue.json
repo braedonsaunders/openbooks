@@ -49,5 +49,18 @@
     "postedStatus": "記帳済み",
     "plannedStatus": "計画",
     "fairValueOutOfRange": "公正価値レンジ外（{low} – {high}）"
+  },
+  "cancel": {
+    "button": "認識をキャンセル",
+    "drawerHint": "この契約を早期終了しますか？請求書の無効化ではなく認識をキャンセルしてください。",
+    "reasonTitle": "収益認識のキャンセル",
+    "reasonLabel": "キャンセルの理由",
+    "reasonPlaceholder": "残りの義務をキャンセルする理由を記入してください",
+    "confirmTitle": "この契約の認識をキャンセルしますか？",
+    "confirmBody": "計上済みの認識仕訳は反対仕訳で取り消され、残りの計画は破棄され、請求書 {invoice} は無効化されます。この操作は元に戻せません。",
+    "confirm": "認識をキャンセル",
+    "failed": "キャンセルに失敗しました",
+    "done": "認識をキャンセルしました",
+    "submitted": "キャンセルを承認用に送信しました"
   }
 }

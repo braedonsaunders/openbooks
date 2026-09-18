@@ -49,5 +49,18 @@
     "postedStatus": "Comptabilisé",
     "plannedStatus": "Prévu",
     "fairValueOutOfRange": "Hors fourchette de juste valeur ({low} – {high})"
+  },
+  "cancel": {
+    "button": "Annuler la reconnaissance",
+    "drawerHint": "Ce contrat se termine en avance ? Annulez sa reconnaissance plutôt que d'annuler la facture.",
+    "reasonTitle": "Annuler la reconnaissance du revenu",
+    "reasonLabel": "Motif de l'annulation",
+    "reasonPlaceholder": "Décrivez pourquoi l'obligation restante est annulée",
+    "confirmTitle": "Annuler la reconnaissance de ce contrat ?",
+    "confirmBody": "Les écritures de reconnaissance comptabilisées seront contre-passées, le plan restant sera retiré et la facture {invoice} sera annulée. Cette action est irréversible.",
+    "confirm": "Annuler la reconnaissance",
+    "failed": "Échec de l'annulation",
+    "done": "Reconnaissance annulée",
+    "submitted": "Annulation soumise pour approbation"
   }
 }

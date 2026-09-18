@@ -4,6 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import { useTranslations } from 'next-intl'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { add, neg, sum } from '@openbooks/engine/src/money.ts'
+import { CancelRecognitionButton } from './CancelRecognitionButton'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import type { ContractPayload } from './_lib'
 
@@ -59,6 +60,20 @@ export function ContractDrawer({ payload, canRun, closeHref = '/revenue' }: { pa
           <Stat label={t('labels.recognized')} value={money(totals.recognized)} />
           <Stat label={t('labels.deferred')} value={money(totals.deferred)} />
         </section>
+
+        {/* -- cancellation: the dedicated workflow the invoice-void refusal
+            points at. Only an active invoice-sourced contract names a live
+            invoice to cancel; project contracts and finished contracts offer
+            nothing here. */}
+        {canRun && c.status === 'active' && c.sourceInvoiceId ? (
+          <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cancel.drawerHint')}</p>
+            <CancelRecognitionButton
+              documentId={c.sourceInvoiceId}
+              invoiceNumber={c.sourceInvoiceNumber ?? c.contract_number}
+            />
+          </section>
+        ) : null}
 
         {/* -- obligations + schedules -------------------------------- */}
         {payload.obligations.map((o) => (

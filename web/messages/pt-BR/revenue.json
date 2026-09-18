@@ -49,5 +49,18 @@
     "postedStatus": "Lançado",
     "plannedStatus": "Planejado",
     "fairValueOutOfRange": "Fora da faixa de valor justo ({low} – {high})"
+  },
+  "cancel": {
+    "button": "Cancelar o reconhecimento",
+    "drawerHint": "Encerrando este contrato antecipadamente? Cancele o reconhecimento em vez de anular a fatura.",
+    "reasonTitle": "Cancelar o reconhecimento de receita",
+    "reasonLabel": "Motivo do cancelamento",
+    "reasonPlaceholder": "Descreva por que a obrigação restante está sendo cancelada",
+    "confirmTitle": "Cancelar o reconhecimento deste contrato?",
+    "confirmBody": "Os lançamentos de reconhecimento contabilizados serão revertidos, o plano restante será retirado e a fatura {invoice} será anulada. Esta ação não pode ser desfeita.",
+    "confirm": "Cancelar o reconhecimento",
+    "failed": "Falha ao cancelar",
+    "done": "Reconhecimento cancelado",
+    "submitted": "Cancelamento enviado para aprovação"
   }
 }

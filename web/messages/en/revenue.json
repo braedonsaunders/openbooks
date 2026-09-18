@@ -49,5 +49,18 @@
     "postedStatus": "Posted",
     "plannedStatus": "Planned",
     "fairValueOutOfRange": "Outside fair value range ({low} – {high})"
+  },
+  "cancel": {
+    "button": "Cancel recognition",
+    "drawerHint": "Ending this contract early? Cancel its recognition instead of voiding the invoice.",
+    "reasonTitle": "Cancel revenue recognition",
+    "reasonLabel": "Reason for cancellation",
+    "reasonPlaceholder": "Describe why the remaining obligation is being cancelled",
+    "confirmTitle": "Cancel this contract's recognition?",
+    "confirmBody": "Posted recognition entries will be reversed, the remaining plan retired, and invoice {invoice} voided. This cannot be undone.",
+    "confirm": "Cancel recognition",
+    "failed": "Cancellation failed",
+    "done": "Recognition cancelled",
+    "submitted": "Cancellation submitted for approval"
   }
 }

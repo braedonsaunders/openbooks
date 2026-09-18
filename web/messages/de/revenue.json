@@ -49,5 +49,18 @@
     "postedStatus": "Gebucht",
     "plannedStatus": "Geplant",
     "fairValueOutOfRange": "Außerhalb der Fair-Value-Bandbreite ({low} – {high})"
+  },
+  "cancel": {
+    "button": "Abgrenzung stornieren",
+    "drawerHint": "Wird dieser Vertrag vorzeitig beendet? Stornieren Sie die Abgrenzung, statt die Rechnung zu stornieren.",
+    "reasonTitle": "Erlösabgrenzung stornieren",
+    "reasonLabel": "Grund für die Stornierung",
+    "reasonPlaceholder": "Beschreiben, warum die restliche Verpflichtung storniert wird",
+    "confirmTitle": "Abgrenzung dieses Vertrags stornieren?",
+    "confirmBody": "Gebuchte Abgrenzungen werden storniert, der restliche Plan wird stillgelegt und Rechnung {invoice} wird storniert. Dies kann nicht rückgängig gemacht werden.",
+    "confirm": "Abgrenzung stornieren",
+    "failed": "Stornierung fehlgeschlagen",
+    "done": "Abgrenzung storniert",
+    "submitted": "Stornierung zur Genehmigung eingereicht"
   }
 }
