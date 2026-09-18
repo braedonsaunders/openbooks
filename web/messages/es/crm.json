@@ -149,6 +149,12 @@
       "closedLost": "Perdida"
     }
   },
+  "customer360": {
+    "title": "Cliente 360",
+    "description": "Pipeline comercial unificado, antigüedad de cuentas por cobrar, límite de crédito, DSO y telemetría de interacciones.",
+    "emptyTitle": "No se encontraron clientes",
+    "emptyDescription": "Agrega un cliente para ver su telemetría de Cliente 360."
+  },
   "forecastCategories": {
     "omitted": "Omitida",
     "worst_case": "Peor caso",

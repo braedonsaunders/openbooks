@@ -149,6 +149,12 @@
       "closedLost": "已输单"
     }
   },
+  "customer360": {
+    "title": "客户360",
+    "description": "统一的商机管道、应收账款账龄、信用额度、DSO和互动记录。",
+    "emptyTitle": "未找到客户",
+    "emptyDescription": "添加客户以查看其客户360数据。"
+  },
   "forecastCategories": {
     "omitted": "已排除",
     "worst_case": "最坏情况",

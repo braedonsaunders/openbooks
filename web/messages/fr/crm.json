@@ -149,6 +149,12 @@
       "closedLost": "Perdue"
     }
   },
+  "customer360": {
+    "title": "Client 360",
+    "description": "Pipeline commercial unifié, ancienneté des créances, limite de crédit, DSO et télémétrie des interactions.",
+    "emptyTitle": "Aucun client trouvé",
+    "emptyDescription": "Ajoutez un client pour voir sa télémétrie Client 360."
+  },
   "forecastCategories": {
     "omitted": "Exclue",
     "worst_case": "Scénario pessimiste",

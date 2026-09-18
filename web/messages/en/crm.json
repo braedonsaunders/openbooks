@@ -149,6 +149,12 @@
       "closedLost": "Closed lost"
     }
   },
+  "customer360": {
+    "title": "Customer 360",
+    "description": "Unified commercial pipeline, receivables aging, credit limit, DSO, and interaction telemetry.",
+    "emptyTitle": "No customers found",
+    "emptyDescription": "Add a customer to view their Customer 360 telemetry."
+  },
   "forecastCategories": {
     "omitted": "Omitted",
     "worst_case": "Worst case",

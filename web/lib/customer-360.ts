@@ -6,7 +6,7 @@ import { businessToday, parseIsoDate } from '@openbooks/engine/src/business-date
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
-import { crmOpportunityScope, crmSharedScope } from './crm-scope'
+import { crmActivityScope, crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
 export interface CustomerAgingBreakdown {
@@ -102,7 +102,6 @@ export async function loadCustomer360(
     is_on_hold: boolean | null
     hold_reason: string | null
     cr_credit_limit: string | null
-    party_credit_limit: string | null
   }>(sql`
     select p.id, p.display_name, p.email, p.phone, p.website,
            coalesce(cr.currency, 'USD') as currency,
@@ -110,8 +109,7 @@ export async function loadCustomer360(
            pt.name as terms_name,
            coalesce(cr.is_on_hold, false) as is_on_hold,
            cr.hold_reason,
-           cr.credit_limit::text as cr_credit_limit,
-           p.credit_limit::text as party_credit_limit
+           cr.credit_limit::text as cr_credit_limit
       from parties p
       left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
       left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
@@ -122,8 +120,9 @@ export async function loadCustomer360(
   const partyRow = partyResult.rows[0]
   if (!partyRow) return null
 
-  // Authoritative credit limit from customer_roles, fallback to parties
-  const creditLimitRaw = partyRow.cr_credit_limit ?? partyRow.party_credit_limit
+  // The credit limit lives on the customer role alongside terms and hold
+  // state. parties carries no credit columns, so there is no fallback.
+  const creditLimitRaw = partyRow.cr_credit_limit
   const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined
   const creditLimitNum = hasCreditLimit ? parseFloat(creditLimitRaw!) || 0 : null
 
@@ -254,11 +253,13 @@ export async function loadCustomer360(
                 where d.org_id = ${orgId} and d.party_id = ${partyId}
                   and d.kind = 'customer_invoice' and d.status = 'posted'
                   and d.project_id is not null
+                  ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
              ), 0)::text as total_billed
         from projects prj
        where prj.org_id = ${orgId}
-         and prj.customer_party_id = ${partyId}
+         and prj.customer_id = ${partyId}
          and prj.is_active
+         ${subsidiaryVisibleFilter(sql`prj.subsidiary_id`, allowedSubsidiaryIds ?? null)}
     `)
     const prjRow = projectsResult.rows[0]
     if (prjRow) {
@@ -295,6 +296,7 @@ export async function loadCustomer360(
          and l.subject_kind = 'account'
          and l.subject_id = ${partyId}
          and not a.is_private
+         ${crmActivityScope(allowedSubsidiaryIds)}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc
        limit 25
     `),
