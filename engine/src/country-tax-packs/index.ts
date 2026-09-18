@@ -6,6 +6,7 @@ import { CANADA_TAX_PACK } from "./ca.ts";
 import { ARGENTINA_TAX_PACK } from "./ar.ts";
 import { CHILE_TAX_PACK } from "./cl.ts";
 import { COLOMBIA_TAX_PACK } from "./co.ts";
+import { CZECHIA_TAX_PACK } from "./cz.ts";
 import { DENMARK_TAX_PACK } from "./dk.ts";
 import { SWITZERLAND_TAX_PACK } from "./ch.ts";
 import { GERMANY_TAX_PACK } from "./de.ts";
@@ -17,6 +18,7 @@ import { GREECE_TAX_PACK } from "./gr.ts";
 import { IRELAND_TAX_PACK } from "./ie.ts";
 import { HUNGARY_TAX_PACK } from "./hu.ts";
 import { INDIA_TAX_PACK } from "./in.ts";
+import { ICELAND_TAX_PACK } from "./is.ts";
 import { ITALY_TAX_PACK } from "./it.ts";
 import { JAPAN_TAX_PACK } from "./jp.ts";
 import { KOREA_TAX_PACK } from "./kr.ts";
@@ -74,6 +76,8 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   MEXICO_TAX_PACK,
   GREECE_TAX_PACK,
   COLOMBIA_TAX_PACK,
+  ICELAND_TAX_PACK,
+  CZECHIA_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 
