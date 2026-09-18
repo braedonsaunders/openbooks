@@ -796,6 +796,14 @@
           "patronales": "Cotisations patronales\u5e94\u4ed8\uff08\u96c7\u4e3bURSSAF\uff1amaladie\u3001vieillesse\u3001ch\u00f4mage\u3001AT/MP\u3001versement mobilit\u00e9\uff09"
         }
       },
+      "ES": {
+        "title": "\u897f\u73ed\u7259 \u2014 \u6cd5\u5b9a\u79d1\u76ee",
+        "description": "\u897f\u73ed\u7259\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "slots": {
+          "irpf": "IRPF\u5e94\u4ed8\uff08\u6309\u5e74\u7387\u6e90\u6cc9\u6263\u7f34\u6240\u5f97\u7a0e\uff09",
+          "seguridad_social": "Seguridad Social\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3b\u7f34\u6b3e\uff1acontingencias comunes\u3001desempleo\u3001FOGASA\u3001formaci\u00f3n\u3001MEI\uff09"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {

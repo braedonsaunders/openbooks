@@ -796,6 +796,14 @@
           "patronales": "Cotizaciones patronales por pagar (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
         }
       },
+      "ES": {
+        "title": "Espa\u00f1a \u2014 cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete ES retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "irpf": "IRPF por pagar (retenci\u00f3n del impuesto sobre la renta al tipo anual)",
+          "seguridad_social": "Seguridad Social por pagar (cotizaciones de empleado y empleador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

@@ -796,6 +796,14 @@
           "patronales": "Employer social contributions payable (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
         }
       },
+      "ES": {
+        "title": "Spain \u2014 statutory accounts",
+        "description": "Liability accounts for the amounts the Spain pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "irpf": "IRPF payable (income tax withholding at the annual tipo rate)",
+          "seguridad_social": "Seguridad Social payable (employee + employer contributions: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
