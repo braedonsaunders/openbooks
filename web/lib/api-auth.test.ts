@@ -5,7 +5,7 @@ import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, env } from "@openbooks/engine/src/db.ts";
+import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
 
@@ -197,20 +197,25 @@ function bearer(plaintext: string): Request {
 
 async function seedOwner(orgId: string, permissions: string[]): Promise<string> {
   const userId = randomUUID();
-  const roleId = (await db.execute(sql`
-    insert into app_roles (org_id, key, name, is_built_in, permissions)
-    values (${orgId}, ${`api-owner-${userId.slice(0, 8)}`}, 'API Owner', false,
-            ${JSON.stringify(permissions)}::jsonb)
-    returning id`)).rows[0]!.id as string;
-  // Users activate only once they hold a role (enforce_user_active_role_assignment).
-  await db.execute(sql`
-    insert into users (id, org_id, email, name, password_hash, is_active)
-    values (${userId}, ${orgId}, ${`api-owner-${userId.slice(0, 8)}@scratch.test`}, 'API Owner', 'x', false)`);
-  await db.execute(sql`
-    insert into role_assignments (org_id, user_id, role_id)
-    values (${orgId}, ${userId}, ${roleId})`);
-  await db.execute(sql`update users set is_active = true where id = ${userId}`);
-  return userId;
+  // File-local seed helper: stage fixture rows under the test bypass (the
+  // shared createScratchUser precedent wraps call sites; a single body wrap
+  // here covers every caller).
+  return withBypassContext(async () => {
+    const roleId = (await db.execute(sql`
+      insert into app_roles (org_id, key, name, is_built_in, permissions)
+      values (${orgId}, ${`api-owner-${userId.slice(0, 8)}`}, 'API Owner', false,
+              ${JSON.stringify(permissions)}::jsonb)
+      returning id`)).rows[0]!.id as string;
+    // Users activate only once they hold a role (enforce_user_active_role_assignment).
+    await db.execute(sql`
+      insert into users (id, org_id, email, name, password_hash, is_active)
+      values (${userId}, ${orgId}, ${`api-owner-${userId.slice(0, 8)}@scratch.test`}, 'API Owner', 'x', false)`);
+    await db.execute(sql`
+      insert into role_assignments (org_id, user_id, role_id)
+      values (${orgId}, ${userId}, ${roleId})`);
+    await db.execute(sql`update users set is_active = true where id = ${userId}`);
+    return userId;
+  });
 }
 
 async function insertKey(
@@ -220,12 +225,12 @@ async function insertKey(
   scopes: string,
 ): Promise<{ id: string; plaintext: string }> {
   const gen = generateApiKey();
-  const id = (await db.execute(sql`
+  const id = (await withBypassContext(() => db.execute(sql`
     insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview,
                           scopes, is_active, created_by, updated_by)
     values (${orgId}, ${userId}, ${name}, ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
             ${scopes}::jsonb, true, ${userId}, ${userId})
-    returning id`)).rows[0]!.id as string;
+    returning id`))).rows[0]!.id as string;
   return { id, plaintext: gen.plaintext };
 }
 
@@ -233,14 +238,16 @@ test(
   "an explicitly narrow key grants exactly its selection against a powerful owner",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
       actorState.orgId = org.orgId;
       const ownerId = await seedOwner(org.orgId, ["*"]);
       actorState.userId = ownerId;
       const key = await insertKey(org.orgId, ownerId, "narrow", '["gl.read"]');
 
-      const auth = await resolveApiKeyAuth(bearer(key.plaintext));
+      // Key resolution reads key/user/role rows through RLS like production's
+      // request scope, so resolve under the org context.
+      const auth = await withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
       assert.ok(auth, "an explicit narrow scope must authenticate");
       assert.deepEqual([...auth.permissions].sort(), ["gl.read"]);
       assert.equal(canApi(auth, "gl.read"), true);
@@ -249,13 +256,13 @@ test(
 
       // Through the guarded v1 transport: the narrow permission passes, a
       // sibling the owner holds is still refused — the key never inherits.
-      await db.execute(sql`
+      await withBypassContext(() => db.execute(sql`
         update orgs
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,apiAccess}', 'true'::jsonb)
-         where id = ${org.orgId}`);
-      const allowed = await guardApiKey("gl.read", bearer(key.plaintext));
+         where id = ${org.orgId}`));
+      const allowed = await withOrgContext(org.orgId, () => guardApiKey("gl.read", bearer(key.plaintext)));
       assert.ok(!(allowed instanceof NextResponse), "gl.read must pass the guarded transport");
-      const denied = await guardApiKey("ap.pay", bearer(key.plaintext));
+      const denied = await withOrgContext(org.orgId, () => guardApiKey("ap.pay", bearer(key.plaintext)));
       assert.ok(denied instanceof NextResponse, "ap.pay must be refused by the guarded transport");
       assert.equal((denied as NextResponse).status, 403);
     } finally { await dropScratchOrg(org.orgId); }
@@ -266,7 +273,7 @@ test(
   "a minted key stores exactly its explicit selection and fails closed on residual junk",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
       const orgId = org.orgId;
       actorState.orgId = orgId;
@@ -277,25 +284,25 @@ test(
       assert.equal(minted.status, 201);
       const { id, plaintext } = (await minted.json()) as { id: string; plaintext: string };
 
-      const row = (await db.execute(sql`
-        select scopes from api_keys where id = ${id} and org_id = ${orgId}`)).rows[0] as {
+      const row = (await withOrgContext(orgId, () => db.execute(sql`
+        select scopes from api_keys where id = ${id} and org_id = ${orgId}`))).rows[0] as {
         scopes: string[];
       };
       // The route stores the normalized catalogue-ordered selection.
       assert.deepEqual(row.scopes, ["gl.read", "ap.pay"]);
 
-      const auth = await resolveApiKeyAuth(bearer(plaintext));
+      const auth = await withOrgContext(orgId, () => resolveApiKeyAuth(bearer(plaintext)));
       assert.ok(auth);
       assert.deepEqual([...auth.permissions].sort(), ["ap.pay", "gl.read"]);
 
       // A direct write can still plant a non-empty array of non-catalogue junk;
       // the resolver must grant it nothing (no wildcard, no partial credit).
-      await db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`);
-      assert.equal(await resolveApiKeyAuth(bearer(plaintext)), null);
+      await withBypassContext(() => db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`));
+      assert.equal(await withOrgContext(orgId, () => resolveApiKeyAuth(bearer(plaintext))), null);
 
       // And storage itself refuses to clear the key to an empty scope set.
       await assert.rejects(
-        db.execute(sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`),
+        withBypassContext(() => db.execute(sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`)),
         (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
       );
     } finally { await dropScratchOrg(org.orgId); }

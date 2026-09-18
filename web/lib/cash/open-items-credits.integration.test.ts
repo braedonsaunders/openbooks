@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { openItems } = await import('./open-items')
@@ -46,7 +46,10 @@ test('open items net unapplied vendor credits against AP bills', { skip: !env.OP
       await postBill(scratch, actor, 'vendor_bill', 1000)
       await postBill(scratch, actor, 'vendor_credit', 300)
     })
-    const items = await openItems(scratch.orgId, 'ap', '2026-07-31')
+    // The reader resolves the org's base currency through RLS like production's
+    // request scope, so read under the org context (bare reads see no org row
+    // and fail closed with 'has no base currency').
+    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ap', '2026-07-31'))
     assert.equal(items.length, 2)
     const net = items.reduce((sum, item) => sum + Number(item.remaining), 0)
     assert.equal(net.toFixed(4), '700.0000')
@@ -65,7 +68,7 @@ test('open items net unapplied customer credits against AR invoices', { skip: !e
       await postBill(scratch, actor, 'customer_invoice', 500)
       await postBill(scratch, actor, 'customer_credit', 200)
     })
-    const items = await openItems(scratch.orgId, 'ar', '2026-07-31')
+    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
     assert.equal(items.length, 2)
     const net = items.reduce((sum, item) => sum + Number(item.remaining), 0)
     assert.equal(net.toFixed(4), '300.0000')
