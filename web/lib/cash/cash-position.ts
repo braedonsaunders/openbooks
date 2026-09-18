@@ -229,7 +229,7 @@ export async function cashPosition(
     paymentStats("ap", asOfIso, subIds),
     bankBalances(asOfIso, subIds),
     loadCategories(orgId),
-    db.execute(sql`
+    db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
       select id, number, name, type from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, visible, { orgWideNull: true })}
@@ -239,7 +239,7 @@ export async function cashPosition(
     // payable document to its party and then DISTINCTing back down to a few
     // thousand names materialized the whole document set to answer a
     // yes/no question per party.
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name
       from parties p
       where p.org_id = ${orgId}
@@ -317,7 +317,7 @@ export async function cashPosition(
     arCoverage: compareMoney(apOutstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arOutstanding), apOutstanding) : null,
     categories,
     apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
-    vendorOptions: (vendorRows.rows as any[]).map((v) => ({ id: v.id, name: v.name })),
-    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
+    vendorOptions: vendorRows.rows.map((v) => ({ id: v.id, name: v.name })),
+    accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
   };
 }

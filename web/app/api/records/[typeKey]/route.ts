@@ -51,12 +51,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
        order by r.created_at desc
        limit ${perPage} offset ${(page - 1) * perPage}
     `)),
-    db.execute(sql`select count(*) as n from custom_records r where ${where}`) as any,
+    db.execute<{ n: string }>(sql`select count(*) as n from custom_records r where ${where}`),
   ])
 
   return NextResponse.json({
     records: rows.rows,
-    total: Number(count.rows[0].n),
+    total: Number(count.rows[0]?.n ?? 0),
     page,
     perPage,
   })

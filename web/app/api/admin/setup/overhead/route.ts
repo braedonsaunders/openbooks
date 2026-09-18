@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   const body = parsedBody.data
 
   if (body.action === 'publish') {
-    const effectiveFrom: string = body.effectiveFrom
+    const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : ''
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '') || !isCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
@@ -228,7 +228,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
     }
     const accountId = body.accountId ?? null
-    if (accountId !== null && !isUuid(accountId)) return NextResponse.json({ error: 'invalid accountId' }, { status: 422 })
+    if (accountId !== null && (typeof accountId !== 'string' || !isUuid(accountId))) return NextResponse.json({ error: 'invalid accountId' }, { status: 422 })
     if (mode === 'net_zero_pair' && !accountId) return NextResponse.json({ error: 'net_zero_pair requires an overhead applied account' }, { status: 422 })
     // Existing lock order: feature-gate fence first, then the authoritative
     // feature recheck, then row locks (org settings, then the referenced

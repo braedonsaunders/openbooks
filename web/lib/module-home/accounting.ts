@@ -138,7 +138,7 @@ export async function accountingHome(
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
-    db.execute<any>(sql`
+    db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
       select r.id, r.status, p.name as period_name,
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done

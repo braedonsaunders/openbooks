@@ -36,7 +36,8 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
-  if (!body?.projectId || !isUuid(String(body.projectId))) {
+  const projectId = String(body?.projectId ?? "");
+  if (!body?.projectId || !isUuid(projectId)) {
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
   }
   let drawAmount: string | null = null;
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
       gate.user.id,
       {
         ...body,
-        projectId: body.projectId,
+        projectId,
         drawAmount,
       },
       gate.allowedSubsidiaryIds,

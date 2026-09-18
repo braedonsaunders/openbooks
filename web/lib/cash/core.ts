@@ -9,6 +9,34 @@ import { resolveOrgId } from '../org-scope'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 
+interface CashWeeklyHistoryRow extends Record<string, unknown> {
+  wk: string
+  number: string | null
+  name: string
+  net: string
+  gross: string
+}
+
+interface CashDailyRow extends Record<string, unknown> {
+  day: string
+  spend: string
+  paid: string
+}
+
+interface CashPaymentEventRow extends Record<string, unknown> {
+  day: string
+  paid: string
+}
+
+interface CashRegisterLineRow extends Record<string, unknown> {
+  day: string
+  kind: string
+  doc_number: string | null
+  party: string
+  memo: string
+  amount: string
+}
+
 export { openItems } from './open-items'
 
 /**
@@ -555,7 +583,7 @@ export async function categoryWeekly(
     const historyStart = addDays(tStart, -historyWeeks * 7);
     // Grouped by Sunday-start week AND account: weeks before the horizon feed
     // the average, weeks inside it act as actuals ().
-    const r = (await db.execute(sql`
+    const r = (await db.execute<CashWeeklyHistoryRow>(sql`
       select (e.posting_date - extract(dow from e.posting_date)::int)::text as wk,
              a.number, a.name,
              sum(l.amount) as net, sum(abs(l.amount)) as gross
@@ -569,7 +597,7 @@ export async function categoryWeekly(
     `));
     const weeklyHistory: Record<string, Money> = {};
     const accountTotals = new Map<string, Money>();
-    for (const x of r.rows as any[]) {
+    for (const x of r.rows) {
       const net = normalizeMoneyValue(String(x.net));
       const gross = normalizeMoneyValue(String(x.gross));
       const activity = useNet ? net : gross;
@@ -647,7 +675,7 @@ export async function categoryWeekly(
     const historyStart = addDays(asOf, -lookbackDays);
     const ids = sql.join(accountIds.map((a) => sql`${a}`), sql`, `);
     // Charges push the card liability (amount < 0), payments release it (> 0).
-    const r = (await db.execute(sql`
+    const r = (await db.execute<CashDailyRow>(sql`
       select e.posting_date::text as day,
              sum(case when l.amount < 0 then -l.amount else 0 end) as spend,
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
@@ -668,7 +696,7 @@ export async function categoryWeekly(
     const totalCurrentBalance = absMoney(normalizeMoneyValue(String(balR.rows[0]?.bal ?? ZERO_MONEY)));
 
     interface DayTotals { date: Date; spend: Money; paid: Money }
-    const days: DayTotals[] = (r.rows as any[]).map((x) => ({ date: parseISO(x.day), spend: normalizeMoneyValue(String(x.spend)), paid: normalizeMoneyValue(String(x.paid)) }));
+    const days: DayTotals[] = r.rows.map((x) => ({ date: parseISO(x.day), spend: normalizeMoneyValue(String(x.spend)), paid: normalizeMoneyValue(String(x.paid)) }));
     const grandTotalSpend = sumMoney(days.map((d) => d.spend));
 
     // Monthly payment rollups with the largest payment's day of month.
@@ -858,7 +886,7 @@ export async function categoryWeekly(
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await db.execute(sql`
+    const r = (await db.execute<CashPaymentEventRow>(sql`
       -- Same functional-currency translation as the payment history above.
       select coalesce(d.document_date, d.posting_date)::text as day, sum(round(abs(d.total * d.fx_rate), 4)) as paid
       from documents d
@@ -867,7 +895,7 @@ export async function categoryWeekly(
         and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
       group by 1
     `));
-    const events = (r.rows as any[])
+    const events = r.rows
       .map((x) => ({ date: parseISO(x.day), amount: normalizeMoneyValue(String(x.paid)) }))
       .sort((a, b) => b.date.getTime() - a.date.getTime());
     if (events.length >= 2) {
@@ -937,7 +965,7 @@ export async function categoryWeekly(
     const memoFilter = keywords.length
       ? sql` and (${sql.join(keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`), sql` or `)})`
       : sql``;
-    const r = (await db.execute(sql`
+    const r = (await db.execute<CashRegisterLineRow>(sql`
       select e.posting_date::text as day, coalesce(d.kind, 'journal') as kind,
              d.document_number as doc_number, coalesce(p.display_name, '') as party,
              coalesce(d.memo, e.memo, '') as memo, -l.amount as amount
@@ -953,7 +981,7 @@ export async function categoryWeekly(
     const weeklyHistory: Record<string, Money> = {};
     const currentWeekKey = toISO(weekStart(asOf));
     const startKey = toISO(tStart);
-    for (const x of r.rows as any[]) {
+    for (const x of r.rows) {
       const amount = normalizeMoneyValue(String(x.amount));
       if (compareMoney(amount, ZERO_MONEY) <= 0) continue;
       const wk = toISO(weekStart(parseISO(x.day)));

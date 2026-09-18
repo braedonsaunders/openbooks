@@ -19,17 +19,17 @@ export async function POST() {
         from equipment_units where org_id = ${gate.user.orgId} and unit_number ~ '^EQ-\\d+$'
     `)))
     const unitNumber = `EQ-${String(Number(seq.rows[0]?.n ?? 1)).padStart(4, '0')}`
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into equipment_units (org_id, subsidiary_id, unit_number, name, status, created_by, updated_by)
       values (${gate.user.orgId}, ${root.rows[0].id}, ${unitNumber}, 'New equipment unit', 'draft', ${gate.user.id}, ${gate.user.id}) returning id
-    `)) as any
+    `))
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${gate.user.orgId}, 'equipment_units', ${inserted.rows[0].id}, 'insert',
+      values (${gate.user.orgId}, 'equipment_units', ${inserted.rows[0]!.id}, 'insert',
               ${JSON.stringify({ unitNumber, status: 'draft' })}::jsonb, ${gate.user.id})
     `)
     return inserted
   })
   if (!created) return NextResponse.json({ error: 'no_available_subsidiary' }, { status: 409 })
-  return NextResponse.json({ id: created.rows[0].id })
+  return NextResponse.json({ id: created.rows[0]!.id })
 }

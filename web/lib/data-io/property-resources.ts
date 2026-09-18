@@ -41,6 +41,53 @@ export const PROPERTY_DESCRIPTORS: ResourceDescriptor[] = [
 ]
 export const PROPERTY_DESCRIPTOR_BY_KEY = new Map(PROPERTY_DESCRIPTORS.map((d) => [d.key, d]))
 
+/** One managed_properties row as the property import needs it. */
+interface ManagedPropertyImportRow extends Record<string, unknown> {
+  id: string
+  property_type: string
+  status: string
+  currency: string | null
+  custom: Record<string, unknown> | null
+  location_id: string | null
+  fixed_asset_id: string | null
+  rent_income_account_id: string | null
+  cam_income_account_id: string | null
+  deposit_liability_account_id: string | null
+  default_bank_account_id: string | null
+  address: Record<string, unknown> | null
+}
+
+/** One property_units row as the unit import needs it. */
+interface PropertyUnitImportRow extends Record<string, unknown> {
+  id: string
+  status: string
+}
+
+/** One property_leases row as the lease import needs it. */
+interface PropertyLeaseImportRow extends Record<string, unknown> {
+  id: string
+  billing_day: number | null
+  payment_terms_days: number | null
+  security_deposit_required: string | null
+  cam_method: string | null
+  cam_share_percent: string | null
+  late_fee_type: string | null
+  late_fee_value: string | null
+  grace_days: number | null
+  auto_invoice: boolean | null
+  auto_post: boolean | null
+}
+
+/** One lease_charges row (plus joined lookups) as the charge import needs it. */
+interface LeaseChargeImportRow extends Record<string, unknown> {
+  amount: string
+  frequency: string
+  effective_to: string | null
+  account_number: string | null
+  item_code: string | null
+  tax_code: string | null
+}
+
 export async function propertyManagementEnabled(orgId: string): Promise<boolean> {
   return orgFeatureEnabled(orgId, 'propertyManagement')
 }
@@ -115,7 +162,7 @@ function propertyResource(orgId: string): DataResource {
           const code = String(src.code ?? '').trim()
           const name = String(src.name ?? '').trim()
           if (!code || !name || !src.subsidiary) throw new Error('code, name, and subsidiary are required')
-          const existing = (await db.execute(sql`select * from managed_properties where org_id=${ctx.orgId} and code=${code} limit 1`)) as { rows: any[] }
+          const existing = (await db.execute(sql`select * from managed_properties where org_id=${ctx.orgId} and code=${code} limit 1`)) as { rows: ManagedPropertyImportRow[] }
           if (existing.rows[0] && mode === 'insert') throw new Error(`already exists (code=${code})`)
           const subsidiaryId = await naturalId(ctx.orgId, 'subsidiaries', 'name', src.subsidiary)
           if (!subsidiaryId) throw new Error(`subsidiary "${String(src.subsidiary)}" not found`)
@@ -194,7 +241,7 @@ function unitResource(orgId: string): DataResource {
         const propertyId = await naturalId(ctx.orgId, 'managed_properties', 'code', src.propertyCode)
         const code = String(src.code ?? '').trim()
         if (!propertyId || !code) throw new Error('valid propertyCode and code are required')
-        const found = (await db.execute(sql`select * from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${code} limit 1`)) as { rows: any[] }
+        const found = (await db.execute(sql`select * from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${code} limit 1`)) as { rows: PropertyUnitImportRow[] }
         if (found.rows[0] && mode === 'insert') throw new Error(`already exists (${String(src.propertyCode)} + ${code})`)
         if (!ctx.dryRun) {
           const values = { orgId: ctx.orgId, actorId: ctx.actorId, code, name: src.name ? String(src.name) : null, unitType: src.unitType ? String(src.unitType) : null, rentableArea: src.rentableArea ? String(src.rentableArea) : null, bedrooms: src.bedrooms === '' || src.bedrooms == null ? null : Number(src.bedrooms) }
@@ -254,7 +301,7 @@ function leaseResource(orgId: string): DataResource {
         if (!leaseNumber || !propertyId || !tenantId || !src.startsOn || !src.baseRent) throw new Error('leaseNumber, valid propertyCode, tenant, startsOn, and baseRent are required')
         const unitId = src.unitCode ? ((await db.execute(sql`select id from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${String(src.unitCode)} limit 1`)) as { rows: { id: string }[] }).rows[0]?.id ?? null : null
         if (src.unitCode && !unitId) throw new Error(`unit "${String(src.unitCode)}" not found on property`)
-        const found = (await db.execute(sql`select l.*,(select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as base_rent from property_leases l where l.org_id=${ctx.orgId} and l.lease_number=${leaseNumber} limit 1`)) as { rows: any[] }
+        const found = (await db.execute(sql`select l.*,(select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as base_rent from property_leases l where l.org_id=${ctx.orgId} and l.lease_number=${leaseNumber} limit 1`)) as { rows: PropertyLeaseImportRow[] }
         if (found.rows[0] && mode === 'insert') throw new Error(`already exists (leaseNumber=${leaseNumber})`)
         const current = found.rows[0]
         const values = { orgId: ctx.orgId, actorId: ctx.actorId, propertyId, unitId, tenantId, leaseNumber, startsOn: String(src.startsOn), endsOn: src.endsOn ? String(src.endsOn) : null, baseRent: String(src.baseRent), billingDay: Number(src.billingDay ?? current?.billing_day ?? 1), paymentTermsDays: Number(src.paymentTermsDays ?? current?.payment_terms_days ?? 0), securityDepositRequired: String(src.securityDepositRequired ?? current?.security_deposit_required ?? '0'), camMethod: String(src.camMethod ?? current?.cam_method ?? 'none') as 'none' | 'fixed' | 'pro_rata', camSharePercent: src.camSharePercent == null || src.camSharePercent === '' ? current?.cam_share_percent ?? null : String(src.camSharePercent), lateFeeType: String(src.lateFeeType ?? current?.late_fee_type ?? 'none') as 'none' | 'fixed' | 'percent', lateFeeValue: String(src.lateFeeValue ?? current?.late_fee_value ?? '0'), graceDays: Number(src.graceDays ?? current?.grace_days ?? 0), autoInvoice: src.autoInvoice == null || src.autoInvoice === '' ? current?.auto_invoice ?? true : coerceBoolean(src.autoInvoice), autoPost: src.autoPost == null || src.autoPost === '' ? current?.auto_post ?? false : coerceBoolean(src.autoPost) }
@@ -318,7 +365,7 @@ function leaseChargeResource(orgId: string): DataResource {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || (src.effectiveTo && String(src.effectiveTo) < effectiveFrom)) throw new Error('effective dates must form a valid YYYY-MM-DD range')
         const lease = (await db.execute(sql`select id,status from property_leases where org_id=${ctx.orgId} and lease_number=${leaseNumber} limit 1`)) as { rows: { id: string; status: string }[] }
         if (!lease.rows[0]) throw new Error(`lease "${leaseNumber}" not found`)
-        const existing = (await db.execute(sql`select c.*,a.number as account_number,i.code as item_code,t.code as tax_code from lease_charges c left join accounts a on a.id=c.income_account_id and a.org_id=c.org_id left join items i on i.id=c.item_id and i.org_id=c.org_id left join tax_codes t on t.id=c.tax_code_id and t.org_id=c.org_id where c.org_id=${ctx.orgId} and c.lease_id=${lease.rows[0].id} and c.charge_type=${chargeType} and c.effective_from=${effectiveFrom} and c.description=${description} limit 1`)) as { rows: any[] }
+        const existing = (await db.execute(sql`select c.*,a.number as account_number,i.code as item_code,t.code as tax_code from lease_charges c left join accounts a on a.id=c.income_account_id and a.org_id=c.org_id left join items i on i.id=c.item_id and i.org_id=c.org_id left join tax_codes t on t.id=c.tax_code_id and t.org_id=c.org_id where c.org_id=${ctx.orgId} and c.lease_id=${lease.rows[0].id} and c.charge_type=${chargeType} and c.effective_from=${effectiveFrom} and c.description=${description} limit 1`)) as { rows: LeaseChargeImportRow[] }
         if (existing.rows[0]) {
           if (mode === 'insert') throw new Error('charge already exists')
           const itemOmitted = src.item === undefined || src.item === null || src.item === ''

@@ -83,7 +83,16 @@ export async function POST(req: Request) {
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
+  const body = parsedBody.data as {
+    action?: string; provider?: string; displayName?: string; isEnabled?: boolean;
+    defaultBankAccountId?: string; defaultFeeAccountId?: string; defaultDisputeAccountId?: string;
+    defaultFxAccountId?: string; defaultClearingAccountId?: string; apiKey?: string;
+    subsidiaryId?: string; settlementDate?: string; transactions?: unknown;
+    externalRef?: string; payoutId?: string; payload?: unknown;
+    bankAccountId?: string; feeAccountId?: string; disputeAccountId?: string;
+    fxAccountId?: string; clearingAccountId?: string;
+    batchId?: string; reversalDate?: string; reason?: string;
+  };
   const requiredPermission =
     body.action === "saveConfig"
       ? "admin.setup.manage"
@@ -123,16 +132,27 @@ export async function POST(req: Request) {
         const provider = body.provider as PspProvider;
         const fallbackDate = String(body.settlementDate ?? (await businessToday(orgId)));
         let parsed;
+        // Provider payloads forward the raw JSON to the validating parser,
+        // which throws PspSettlementError (mapped to 422 below) on shape
+        // violations — the same value as before, only statically described.
+        const providerPayload =
+          typeof body.payload === "object" && body.payload !== null ? body.payload : body;
         if (provider === "stripe") {
           parsed = parseStripeBalanceTransactions(
-            body.transactions ?? [],
+            Array.isArray(body.transactions) ? body.transactions : [],
             String(body.externalRef ?? body.payoutId ?? ""),
             fallbackDate,
           );
         } else if (provider === "recurly") {
-          parsed = parseRecurlySettlement(body.payload ?? body, fallbackDate);
+          parsed = parseRecurlySettlement(
+            providerPayload as Parameters<typeof parseRecurlySettlement>[0],
+            fallbackDate,
+          );
         } else if (provider === "chargebee") {
-          parsed = parseChargebeeSettlement(body.payload ?? body, fallbackDate);
+          parsed = parseChargebeeSettlement(
+            providerPayload as Parameters<typeof parseChargebeeSettlement>[0],
+            fallbackDate,
+          );
         } else {
           return NextResponse.json(
             { error: "unknown provider" },

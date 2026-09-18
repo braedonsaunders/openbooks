@@ -34,6 +34,26 @@ export interface ScheduleCardRun {
   employeeCount: number
 }
 
+interface PayrollScheduleHomeRow extends Record<string, unknown> {
+  id: string
+  name: string
+  frequency: string
+  periods_per_year: number
+  anchor_period_end: string
+  pay_date_offset_days: number
+  is_default: boolean
+  active_employees: string
+  document_id: string | null
+  document_number: string | null
+  run_status: string | null
+  document_status: string | null
+  period_start: string | null
+  period_end: string | null
+  pay_date: string | null
+  net_total: string | null
+  employee_count: string | null
+}
+
 export interface PayrollScheduleCard {
   id: string
   name: string
@@ -111,7 +131,7 @@ export async function payrollHome(
 
   const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings, blobRes] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
-    db.execute(sql`
+    db.execute<PayrollScheduleHomeRow>(sql`
       select s.id, s.name, s.frequency, s.periods_per_year,
              s.anchor_period_end::text as anchor_period_end, s.pay_date_offset_days, s.is_default,
              coalesce(pc.n, 0) as active_employees,
@@ -219,7 +239,7 @@ export async function payrollHome(
       select settings->'payroll' as p from orgs where id = ${orgId}`),
   ]))
 
-  const schedules: PayrollScheduleCard[] = schedulesRes.rows.map((s: any) => {
+  const schedules: PayrollScheduleCard[] = schedulesRes.rows.map((s) => {
     const latest = s.document_id
       ? {
           documentId: String(s.document_id),

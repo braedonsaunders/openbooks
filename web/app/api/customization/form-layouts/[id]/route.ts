@@ -14,11 +14,11 @@ const nameBodySchema = z.looseObject({
 });
 
 async function loadOwn(orgId: string, id: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; recordType: string; name: string; description: string | null; isDefault: boolean; isActive: boolean; allowedRoles: unknown; layout: unknown }>(sql`
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
       from form_layouts where org_id = ${orgId} and id = ${id}
-  `)) as any;
+  `));
   return r.rows[0] ?? null;
 }
 

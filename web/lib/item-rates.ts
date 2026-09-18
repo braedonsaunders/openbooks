@@ -204,7 +204,7 @@ export async function resolveItemRate(input: {
     const sourceCurrency=version.rows[0]!.currency
     const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
     if(!fxRate)continue
-    const lines = (await db.execute<any>(sql`
+    const lines = (await db.execute<{ id: string; unit_code: string; unit_name: string; base_quantity: string; cost_rate: string | null; bill_rate: string | null }>(sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}

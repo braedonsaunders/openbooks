@@ -6,8 +6,24 @@ import { add, sum } from '@openbooks/engine/src/money.ts'
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
+  type TaxCalculationType,
   type TaxComponentConfig,
 } from '@openbooks/engine/src/tax.ts'
+
+/** One tax_codes row (or left-joined group member) as the profile loader reads it. */
+interface TaxCodeProfileRow extends Record<string, unknown> {
+  id: string | null
+  code: string | null
+  effective_rate: string | null
+  recoverable_percent: string | null
+  calculation_type: TaxCalculationType | null
+  price_includes_tax: boolean | null
+  compound_on_previous: boolean | null
+  rounding_scale: number | null
+  collected_account_id: string | null
+  paid_account_id: string | null
+  withholding_account_id: string | null
+}
 import {
   quoteExternalTax,
   readTaxRateProviderConfig,
@@ -27,7 +43,7 @@ export interface TaxProfiles {
 export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<TaxProfiles> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const date = asOfDate ?? await businessToday(resolvedOrgId)
-  const codeRows = (await db.execute<Record<string, unknown>>(sql`
+  const codeRows = (await db.execute<TaxCodeProfileRow>(sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
@@ -41,7 +57,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active
   `))
-  const config = (row: Record<string, any>, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
+  const config = (row: TaxCodeProfileRow, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
     taxCodeId: String(row.id),
     code: String(row.code),
     sequence,
@@ -50,7 +66,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
     // instead of silently posting 0% tax with full calculation evidence.
     ratePercent: requireEffectiveRateRow(String(row.code), date, row.effective_rate),
     recoverablePercent: String(row.recoverable_percent),
-    calculationType: row.calculation_type,
+    calculationType: row.calculation_type ?? undefined,
     priceIncludesTax: inclusive ?? Boolean(row.price_includes_tax),
     compoundOnPrevious: Boolean(row.compound_on_previous),
     roundingScale: Number(row.rounding_scale),
@@ -65,7 +81,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
     .filter((row) => row.effective_rate != null)
     .map((row) => [String(row.id), [config(row, 1)]]))
 
-  const groupRows = (await db.execute<Record<string, unknown>>(sql`
+  const groupRows = (await db.execute<TaxCodeProfileRow>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
            tgm.sequence, tc.id, tc.code, tc.is_active as code_active, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,

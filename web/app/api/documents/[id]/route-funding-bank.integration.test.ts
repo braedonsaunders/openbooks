@@ -47,7 +47,7 @@ async function revision(orgId: string, id: string): Promise<string> {
   return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
 }
 
-async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: any }> {
+async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   const response = await withOrgContext(orgId, () => PATCH(
     new Request(`http://documents.test/api/documents/${id}`, {
       method: 'PATCH',

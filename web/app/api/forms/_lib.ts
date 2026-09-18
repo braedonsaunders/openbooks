@@ -23,11 +23,11 @@ export async function getTemplateByKey(
   orgId: string,
   key: string,
 ): Promise<TemplateRow | undefined> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<TemplateRow>(sql`
     select id, key, name, category, description, status, kind, allowed_roles
       from form_templates
      where org_id = ${orgId} and key = ${key}
-  `)) as any
+  `))
   return r.rows[0]
 }
 

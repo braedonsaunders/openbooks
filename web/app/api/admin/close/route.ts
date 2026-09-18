@@ -315,7 +315,7 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
     const blueprintId = insertedBlueprint.id as string;
     const ids = new Map<string, string>();
     for (const step of steps) {
-      const result = (await tx.execute(sql`
+      const result = (await tx.execute<{ id: string }>(sql`
         insert into close_blueprint_steps
           (org_id, blueprint_id, key, title, description, workstream, task_type, completion_mode,
            gate_type, due_offset_business_days, evidence_required, default_owner_role_key,
@@ -323,8 +323,8 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
         values (${orgId}, ${blueprintId}, ${step.key}, ${step.title}, ${step.description}, ${step.workstream},
                 ${step.taskType}, ${step.completionMode}, ${step.gateType}, ${step.dueOffsetBusinessDays},
                 ${step.evidenceRequired}, ${step.defaultOwnerRoleKey}, ${step.defaultReviewerRoleKey},
-                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`)) as any;
-      ids.set(step.key, result.rows[0].id as string);
+                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`));
+      ids.set(step.key, result.rows[0]!.id);
     }
     for (const step of steps)
       for (const dependency of step.dependsOn) {

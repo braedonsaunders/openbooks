@@ -64,14 +64,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data)
-  if (body.kind !== undefined && !KINDS.includes(body.kind)) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })
-  if (body.status !== undefined && !STATUSES.includes(body.status)) return NextResponse.json({ error: 'invalid activity status' }, { status: 422 })
-  if (body.priority !== undefined && !PRIORITIES.includes(body.priority)) return NextResponse.json({ error: 'invalid priority' }, { status: 422 })
+  if (body.kind !== undefined && (typeof body.kind !== 'string' || !KINDS.includes(body.kind))) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })
+  if (body.status !== undefined && (typeof body.status !== 'string' || !STATUSES.includes(body.status))) return NextResponse.json({ error: 'invalid activity status' }, { status: 422 })
+  if (body.priority !== undefined && (typeof body.priority !== 'string' || !PRIORITIES.includes(body.priority))) return NextResponse.json({ error: 'invalid priority' }, { status: 422 })
   if (body.subject !== undefined && !textOrNull(body.subject)) return NextResponse.json({ error: 'subject is required' }, { status: 422 })
   if (body.isPrivate !== undefined && typeof body.isPrivate !== 'boolean') return NextResponse.json({ error: 'isPrivate must be a boolean' }, { status: 422 })
   for (const key of ['ownerUserId', 'assignedUserId'] as const) {
     const value = body[key]
-    if (value !== undefined && value !== null && (!isUuid(value) || !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0])) {
+    if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value) || !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0])) {
       return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     }
   }

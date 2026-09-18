@@ -32,9 +32,25 @@ export type SegmentDefinitionOption = {
  * tables; custom values are loaded from segment_values. This is the one shape
  * used by editors, account rules, and report controls.
  */
+interface SegmentRegistryRow extends Record<string, unknown> {
+  id: string
+  key: string
+  name: string
+  plural_name: string
+  source_kind: 'builtin' | 'custom'
+  storage_column: string | null
+  is_hierarchical: boolean
+  show_on_header: boolean
+  show_on_lines: boolean
+  show_in_reports: boolean
+  allow_account_requirement: boolean
+  sort_order: number
+  values: SegmentValueOption[]
+}
+
 export async function segmentRegistry(orgId?: string): Promise<SegmentDefinitionOption[]> {
   const orgFilter = orgId ? sql`and sd.org_id = ${orgId}` : sql``
-  const result = (await db.execute(sql`
+  const result = (await db.execute<SegmentRegistryRow>(sql`
     select sd.id, sd.key, sd.name, sd.plural_name, sd.source_kind,
            sd.storage_column, sd.is_hierarchical, sd.show_on_header,
            sd.show_on_lines, sd.show_in_reports,
@@ -54,7 +70,7 @@ export async function segmentRegistry(orgId?: string): Promise<SegmentDefinition
      group by sd.id
      order by sd.sort_order, sd.name
   `))
-  return result.rows.map((row: any) => ({
+  return result.rows.map((row) => ({
     id: row.id,
     key: row.key,
     name: row.name,

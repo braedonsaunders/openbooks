@@ -51,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<Record<string, any>>(sql`
+      const locked = (await tx.execute<{ id: string; name: string; description: string | null; book_id: string; fiscal_year: number; kind: string; status: string; revision: number; submitted_by: string | null }>(sql`
         select id, name, description, book_id, fiscal_year, kind, status, revision, submitted_by
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
       `))

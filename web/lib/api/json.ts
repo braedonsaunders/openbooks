@@ -33,7 +33,7 @@ const INVALID_BODY = "invalid request body";
  * lifecycle validation in their existing domain code. It still closes the
  * malformed/null/array body gap and keeps all JSON decoding on this boundary.
  */
-export const jsonObject = z.looseObject({}) as z.ZodType<Record<string, any>>;
+export const jsonObject = z.looseObject({}) as z.ZodType<Record<string, unknown>>;
 
 export async function parseJsonBody<S extends z.ZodType>(
   req: Request,

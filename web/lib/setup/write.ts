@@ -509,9 +509,9 @@ export async function validateEntityIntegrity(
 
   if (entity.key === 'subsidiaries') {
     const existing = rowId
-      ? ((await executor.execute(sql`
+      ? ((await executor.execute<{ id: string; parent_id: string | null; is_active: boolean; is_elimination: boolean }>(sql`
           select id, parent_id, is_active, is_elimination from subsidiaries
-           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`))).rows[0] ?? null
       : null
     if (rowId && !existing) return 'not found'
     const parentId = body.parentId === undefined ? existing?.parent_id : body.parentId || null
@@ -535,7 +535,7 @@ export async function validateEntityIntegrity(
         if (cycle.rows.length) return 'A subsidiary cannot be parented beneath itself'
       }
     }
-    if (rowId && body.isElimination !== undefined && body.isElimination !== existing.is_elimination) {
+    if (rowId && body.isElimination !== undefined && body.isElimination !== existing?.is_elimination) {
       const used = ((await executor.execute(sql`
         select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)))
       if (used.rows.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
@@ -556,11 +556,11 @@ export async function validateEntityIntegrity(
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
        and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)))
     if (subsidiaries.rows.length !== 2) return 'Choose two active, non-elimination subsidiaries'
-    const accounts = ((await executor.execute(sql`
+    const accounts = ((await executor.execute<{ id: string; type: string; eliminate: boolean }>(sql`
       select id, type, eliminate from accounts where org_id = ${orgId} and is_active and not is_summary
        and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)))
     const byId = new Map<string, { id: string; type: string; eliminate: boolean }>(
-      accounts.rows.map((a: any) => [a.id as string, a]),
+      accounts.rows.map((a): [string, { id: string; type: string; eliminate: boolean }] => [a.id, a]),
     )
     const dueFrom = byId.get(dueFromId)
     const dueTo = byId.get(dueToId)

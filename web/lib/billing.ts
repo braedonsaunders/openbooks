@@ -56,6 +56,95 @@ interface GenerateResult {
   kind: string
 }
 
+/** One locked billing_requests row — jsonb option bags arrive parsed. */
+interface BillingRequestRow extends Record<string, unknown> {
+  id: string
+  status: string
+  basis: string
+  billing_method_snapshot: string | null
+  project_id: string
+  invoice_description: string | null
+  invoice_type: string | null
+  start_date: string | null
+  cutoff_date: string | null
+  draw_amount: string | null
+  customer_po: string | null
+  selected_time_entry_ids: unknown
+  custom: Record<string, unknown> | null
+}
+
+/** The project header the invoice is cut against. */
+interface BillingProjectRow extends Record<string, unknown> {
+  id: string
+  customer_id: string | null
+  customer_po_number: string | null
+  subsidiary_id: string | null
+  custom: Record<string, unknown> | null
+  project_invoicing: unknown
+  customer_invoicing: unknown
+  billing_currency: string | null
+}
+
+interface BillingScheduleRow extends Record<string, unknown> {
+  id: string
+  name: string | null
+  amount_billed: string | null
+}
+
+interface BillingTimeRow extends Record<string, unknown> {
+  id: string
+  hours: string | null
+  cost_rate: string | null
+  bill_rate: string | null
+  item_id: string | null
+  time_type_id: string | null
+  employee_party_id: string | null
+  memo: string | null
+  department_id: string | null
+  worked_on: string | null
+  income_account_id: string | null
+  default_rate: string | null
+  tax_code_id: string | null
+  item_name: string | null
+  item_kind: string | null
+  item_category: string | null
+  time_type_name: string | null
+}
+
+/** One jsonb rate-component object behind a materials line. */
+interface BillRateComponent {
+  unitCode: string | null
+  unitName: string | null
+  quantity: string
+  rate: string
+  amount: string
+}
+
+interface BillingCostRow extends Record<string, unknown> {
+  id: string
+  amount: string | null
+  markup_percent: string | null
+  description: string | null
+  item_id: string | null
+  quantity: string | null
+  unit: string | null
+  bill_rate: string | null
+  bill_amount: string | null
+  equipment_unit_id: string | null
+  rate_version_id: string | null
+  kind: string | null
+  department_id: string | null
+  document_date: string | null
+  subsidiary_id: string | null
+  rate_presentation: string | null
+  income_account_id: string | null
+  tax_code_id: string | null
+  item_name: string | null
+  item_kind: string | null
+  item_category: string | null
+  bill_components: BillRateComponent[] | null
+}
+
 /** Negate a decimal safely — prefixing '-' breaks when the value is already negative. */
 function negate(v: string): string {
   return fromUnits(-toUnits(String(v ?? '0')))
@@ -103,7 +192,7 @@ export async function generateInvoiceFromBillingRequest(
     const featureState = projectGate.rows[0]?.features ?? {}
     if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
-    const reqRes = (await tx.execute<any>(sql`
+    const reqRes = (await tx.execute<BillingRequestRow>(sql`
       select br.* from billing_requests br
         join projects p on p.id = br.project_id and p.org_id = br.org_id
        where br.id = ${requestId} and br.org_id = ${orgId}
@@ -130,7 +219,7 @@ export async function generateInvoiceFromBillingRequest(
       throw new BillingError('The Field Ticket billing request has no selected tickets')
     }
 
-    const projRes = (await tx.execute<any>(sql`
+    const projRes = (await tx.execute<BillingProjectRow>(sql`
       select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
              p.invoicing_profile as project_invoicing, c.invoicing_profile as customer_invoicing,
              coalesce(s.base_currency,o.base_currency) as billing_currency
@@ -249,7 +338,7 @@ export async function generateInvoiceFromBillingRequest(
       })
     } else if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
       // Bill the selected (or all open) milestone schedule rows.
-      const scheds = (await tx.execute<any>(sql`
+      const scheds = (await tx.execute<BillingScheduleRow>(sql`
         select id, name, amount_billed from billing_schedules
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
          order by sort_order
@@ -311,7 +400,7 @@ export async function generateInvoiceFromBillingRequest(
         ? sql` and te.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
         : sql``
 
-      const timeRows = (await tx.execute<any>(sql`
+      const timeRows = (await tx.execute<BillingTimeRow>(sql`
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
                te.employee_party_id, te.memo, te.department_id, te.worked_on,
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
@@ -393,7 +482,7 @@ export async function generateInvoiceFromBillingRequest(
           ? sql``
           : costDateFilter
 
-      const costRows = (await tx.execute<any>(sql`
+      const costRows = (await tx.execute<BillingCostRow>(sql`
         select dl.id,
                -- Native order lines are stored in document direction: ordinary
                -- commitments are positive and discount lines remain negative.
@@ -431,7 +520,7 @@ export async function generateInvoiceFromBillingRequest(
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `))
 
-      if (allowedSubsidiaryIds !== null && costRows.rows.some(row => !allowedSubsidiaryIds.has(row.subsidiary_id))) {
+      if (allowedSubsidiaryIds !== null && costRows.rows.some(row => !allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
         throw new BillingError('Selected costs include subsidiaries outside your access')
       }
       for (const cl of costRows.rows) {
@@ -449,7 +538,7 @@ export async function generateInvoiceFromBillingRequest(
           ? cl.bill_components
           : []
         if (components.length) {
-          components.forEach((component: any, index: number) => built.push({
+          components.forEach((component, index: number) => built.push({
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
@@ -778,7 +867,7 @@ export async function generateInvoiceFromBillingRequest(
 
     // -- create the customer_invoice draft --------------------------------
     const documentNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', project.subsidiary_id ?? undefined)
-    const [created] = (await tx.execute(sql`
+    const created = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency,
                              status, project_id, subsidiary_id, billing_method, is_final_invoice,
                              reference_number, memo, subtotal, tax_total, total, created_by)
@@ -788,7 +877,7 @@ export async function generateInvoiceFromBillingRequest(
               ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
               ${req.invoice_description}, '0', '0', '0', ${userId})
       returning id
-    `)).rows as unknown as [any]
+    `)).rows[0]!
     const invoiceId = created.id
 
     // The invoice carries the PRESENTED lines; provenance is stamped from the
@@ -798,7 +887,7 @@ export async function generateInvoiceFromBillingRequest(
     let lineNo = 1
     for (const [index, l] of presentedLines.entries()) {
       const tax = totals.lines[index]!
-      const [line] = (await tx.execute(sql`
+      const line = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_input_amount, tax_amount, tax_overridden,
               employee_id, time_entry_id, time_type_id,
@@ -809,7 +898,7 @@ export async function generateInvoiceFromBillingRequest(
               ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
               ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id}, ${userId})
         returning id
-      `)).rows as unknown as [any]
+      `)).rows[0]!
       await persistLineTaxComponents(tx, { orgId, documentLineId: String(line.id), components: tax.taxComponents, actorId: userId })
       if (tax.providerQuote) {
         await persistTaxQuote(orgId, tax.providerQuote.providerConfigId,

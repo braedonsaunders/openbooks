@@ -291,7 +291,7 @@ export async function PUT(req: Request) {
   for (const key of ACCOUNT_KEYS) {
     if (!(key in body)) continue
     const v = body[key] ?? null
-    if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+    if (v !== null && (typeof v !== 'string' || !isUuid(v))) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
   }
   const validated = await validatePayrollAccounts(orgId, body)
   if (validated instanceof NextResponse) return validated
@@ -322,7 +322,7 @@ export async function PUT(req: Request) {
   for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
     if (!(vendorKey in body)) continue
     const party = body[vendorKey] ?? null
-    if (party !== null && !isUuid(party)) {
+    if (party !== null && (typeof party !== 'string' || !isUuid(party))) {
       return NextResponse.json({ error: `invalid ${vendorKey}` }, { status: 422 })
     }
   }
@@ -381,10 +381,11 @@ export async function PUT(req: Request) {
   // to staff); it is validated here so a bad expression is refused at save
   // time rather than at stub-email time. No password is ever stored.
   if ('stubPassword' in body) {
-    const policy = body.stubPassword
-    if (typeof policy !== 'object' || policy === null || Array.isArray(policy)) {
+    const rawPolicy = body.stubPassword
+    if (typeof rawPolicy !== 'object' || rawPolicy === null || Array.isArray(rawPolicy)) {
       return NextResponse.json({ error: 'invalid stubPassword' }, { status: 422 })
     }
+    const policy = rawPolicy as Record<string, unknown>
     const expression = typeof policy.expression === 'string' ? policy.expression.trim() : ''
     const enabled = policy.enabled === true
     if (enabled) {

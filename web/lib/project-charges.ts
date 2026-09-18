@@ -173,13 +173,13 @@ export async function createProjectCharge(
     const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
     const docDate = input.documentDate ?? await businessToday(orgId)
 
-    const [doc] = (await tx.execute(sql`
+    const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, project_id,
                              subsidiary_id, reference_number, subtotal, tax_total, total, created_by)
       values (${orgId}, 'project_charge', ${documentNumber}, ${docDate}, ${currency}, 'draft', ${input.projectId},
               ${subsidiaryId}, ${input.referenceNumber ?? null}, '0', '0', '0', ${userId})
       returning id
-    `)).rows as unknown as [any]
+    `)).rows[0]!
     const docId = doc.id
 
     const amounts: string[] = []

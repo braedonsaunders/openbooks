@@ -732,12 +732,20 @@ function recordsAdapter(
  * the caller's effective-permission predicate — records access requires BOTH
  * the App's granted `records.read` AND the user's own records.read (app ∩ user).
  */
+/** Caller-supplied bridge JSON views as an object for field reads. */
+function isBridgePayloadObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/** Absent sub-object: the same `{}` every options/body/filters default used. */
+const EMPTY_PAYLOAD_OBJECT: Record<string, unknown> = {}
+
 export async function runBridgeMethod(opts: {
   orgId: string
   user: SessionUser
   key: string
   method: string
-  payload: any
+  payload: unknown
   expectedVersionId?: string
   userCan: (perm: string) => boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
@@ -759,9 +767,14 @@ export async function runBridgeMethod(opts: {
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
   })
 
+  // Field reads go through the object view (a non-object payload reads as
+  // absent, exactly like the previous `?.` chain); the idempotency hash below
+  // keeps the original value.
+  const payload = isBridgePayloadObject(opts.payload) ? opts.payload : {}
+
   if (opts.method.startsWith('platform.')) {
-    const typeKey = String(opts.payload?.typeKey ?? '')
-    const id = String(opts.payload?.id ?? '')
+    const typeKey = String(payload.typeKey ?? '')
+    const id = String(payload.id ?? '')
     const units = platformBridgeUnits(opts.method)
     const started = Date.now()
     // The dispatch itself decides the terminal outcome; infrastructure faults
@@ -771,22 +784,34 @@ export async function runBridgeMethod(opts: {
         let result: unknown
         switch (opts.method) {
           case 'platform.query':
-            result = await platform.query!(opts.payload?.plan)
+            result = await platform.query!(payload.plan)
             break
           case 'platform.schema':
             result = await platform.schema()
             break
           case 'platform.list':
-            result = await platform.list(typeKey, opts.payload?.options ?? {})
+            result = await platform.list(
+              typeKey,
+              isBridgePayloadObject(payload.options) ? payload.options : EMPTY_PAYLOAD_OBJECT,
+            )
             break
           case 'platform.get':
             result = await platform.get(typeKey, id)
             break
           case 'platform.create':
-            result = await platform.create(typeKey, opts.payload?.body ?? {})
+          case 'platform.update': {
+            // writeRecord rejects a non-object body with this 400; raise it
+            // here with the same envelope instead of laundering the type.
+            const body = payload.body ?? EMPTY_PAYLOAD_OBJECT
+            if (!isBridgePayloadObject(body) || Array.isArray(body)) {
+              throw new AppPlatformError('record body must be an object', 400)
+            }
+            result =
+              opts.method === 'platform.create'
+                ? await platform.create(typeKey, body)
+                : await platform.update(typeKey, id, body)
             break
-          case 'platform.update':
-            result = await platform.update(typeKey, id, opts.payload?.body ?? {})
+          }
             break
           case 'platform.delete':
             result = await platform.delete(typeKey, id)
@@ -824,7 +849,7 @@ export async function runBridgeMethod(opts: {
           method: opts.method,
           typeKey,
           id,
-          payload: opts.payload?.body ?? opts.payload?.options ?? opts.payload?.plan ?? null,
+          payload: payload.body ?? payload.options ?? payload.plan ?? null,
           ...(opts.method === 'platform.query' ? { readInvocation: crypto.randomUUID() } : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
@@ -846,19 +871,22 @@ export async function runBridgeMethod(opts: {
     const rec = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
     const result =
       opts.method === 'records.list'
-        ? await rec.list(String(opts.payload?.typeKey ?? ''), opts.payload?.filters ?? {})
-        : await rec.get(String(opts.payload?.typeKey ?? ''), String(opts.payload?.id ?? ''))
+        ? await rec.list(
+            String(payload.typeKey ?? ''),
+            isBridgePayloadObject(payload.filters) ? payload.filters : EMPTY_PAYLOAD_OBJECT,
+          )
+        : await rec.get(String(payload.typeKey ?? ''), String(payload.id ?? ''))
     return { ok: true, result }
   }
 
   if (opts.method === 'callBackend') {
-    const endpointName = String(opts.payload?.endpoint ?? '')
+    const endpointName = String(payload.endpoint ?? '')
     return invokeAppEndpointHandler({
       orgId: opts.orgId,
       user: opts.user,
       key: opts.key,
       endpoint: endpointName,
-      body: opts.payload?.payload ?? null,
+      body: payload.payload ?? null,
       userCan: opts.userCan,
       allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
       operation: `apps.call_backend.${endpointName}`,

@@ -177,7 +177,18 @@ export async function saveBudgetCells(input: {
       if (result.rows.length !== dimensionExpected[index]!.length) throw new BudgetMutationError('invalid_dimension')
     })
 
-    const beforeRows = (await tx.execute<Record<string, any>>(sql`
+    interface BudgetLineBeforeRow extends Record<string, unknown> {
+      account_id: string
+      period_id: string
+      subsidiary_id: string | null
+      department_id: string | null
+      project_id: string | null
+      location_id: string | null
+      class_id: string | null
+      amount: string
+      note: string | null
+    }
+    const beforeRows = (await tx.execute<BudgetLineBeforeRow>(sql`
       select account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id, amount::text, note
         from budget_lines
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}

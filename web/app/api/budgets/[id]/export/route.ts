@@ -24,7 +24,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
   `))
   if (!scenario.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const lines = (await db.execute<Record<string, any>>(sql`
+  interface BudgetExportRow extends Record<string, unknown> {
+    number: string | null
+    account_name: string
+    period: string
+    subsidiary: string | null
+    department: string | null
+    project: string | null
+    location: string | null
+    class: string | null
+    amount: string
+    note: string | null
+  }
+  const lines = (await db.execute<BudgetExportRow>(sql`
     select a.number, a.name as account_name, p.name as period,
            s.name as subsidiary,
            d.code as department, pr.code as project, loc.code as location, c.code as class,

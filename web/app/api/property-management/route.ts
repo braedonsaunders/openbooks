@@ -46,6 +46,24 @@ import { guardPropertyManagementFeature } from "../../../lib/property-management
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Custom-value bag for validation. Absent stays absent (so "omitted" and
+ * "explicit null" keep their distinct meanings); a non-object carries no
+ * values, matching how the validator reads the bag.
+ */
+function customBag(
+  value: unknown,
+): Record<string, unknown> | null | undefined {
+  if (value == null) return value;
+  if (typeof value === "object") return value as Record<string, unknown>;
+  return {};
+}
+
+/** Optional date scalar: absent stays absent, anything else stringified. */
+function dateOrUndefined(value: unknown): string | undefined {
+  return value == null ? undefined : String(value);
+}
+
 export async function GET() {
   const authz = await guardPermission("ar.read");
   if (authz instanceof NextResponse) return authz;
@@ -186,14 +204,14 @@ async function guardSubsidiaryAccess(
     subsidiaryId =
       typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
   } else if (["updateUnit", "deleteUnit"].includes(action)) {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
   } else if (action === "reverseDeposit") {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
   } else if (
     [
@@ -206,9 +224,9 @@ async function guardSubsidiaryAccess(
       "assessLateFees",
     ].includes(action) && body.propertyId
   ) {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
     if (
       action === "updateProperty" &&
@@ -234,9 +252,9 @@ async function guardSubsidiaryAccess(
       "recordDeposit",
     ].includes(action)
   ) {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
     if (action === "updateLease" && body.propertyId !== undefined) {
       // A draft lease may move to another property: the target must be
@@ -254,16 +272,16 @@ async function guardSubsidiaryAccess(
         );
     }
   } else if (action === "applyEscalation") {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
   } else if (
     ["updateCamPool", "cancelCamPool", "reopenCamPool", "finalizeCam", "billCam"].includes(action)
   ) {
-    const result = (await db.execute(
+    const result = (await db.execute<{ subsidiaryId: string | null }>(
       sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`,
-    )) as any;
+    ));
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
   }
   if (!subsidiaryId)
@@ -394,7 +412,7 @@ export async function POST(request: Request) {
         // createManagedProperty stores body.custom verbatim, so shape AND
         // ownership are fenced here before anything persists.
         const createDefs = await loadFieldDefs("managed_properties");
-        const createValidation = validateCustomValues(createDefs, body.custom);
+        const createValidation = validateCustomValues(createDefs, customBag(body.custom));
         if (!createValidation.ok) {
           return NextResponse.json(
             {
@@ -419,7 +437,7 @@ export async function POST(request: Request) {
         const updateDefs = await loadFieldDefs("managed_properties");
         const validation = validateCustomValues(
           updateDefs,
-          body.custom,
+          customBag(body.custom),
         );
         if (!validation.ok) {
           return NextResponse.json(
@@ -549,25 +567,25 @@ export async function POST(request: Request) {
           common.orgId,
           common.actorId,
           String(body.leaseId),
-          body.throughOn,
+          dateOrUndefined(body.throughOn),
         );
         break;
       case "billRent":
         result = await billDueLeaseCharges(
           common.orgId,
           common.actorId,
-          body.asOf,
-          body.leaseId,
-          body.propertyId,
+          dateOrUndefined(body.asOf),
+          body.leaseId == null ? undefined : String(body.leaseId),
+          body.propertyId == null ? undefined : String(body.propertyId),
         );
         break;
       case "assessLateFees":
         result = await assessLeaseLateFees(
           common.orgId,
           common.actorId,
-          body.asOf,
-          body.leaseId,
-          body.propertyId,
+          dateOrUndefined(body.asOf),
+          body.leaseId == null ? undefined : String(body.leaseId),
+          body.propertyId == null ? undefined : String(body.propertyId),
         );
         break;
       case "recordDeposit":
@@ -620,7 +638,7 @@ export async function POST(request: Request) {
           common.orgId,
           common.actorId,
           String(body.poolId),
-          body.invoiceDate,
+          dateOrUndefined(body.invoiceDate),
         );
         break;
       default:

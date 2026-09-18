@@ -10,9 +10,88 @@ import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
  * effective GL accounts (native asset override → category), running totals
  * (accumulated depreciation, NBV) and the full period-by-period schedule.
  */
+export interface AssetRow extends Record<string, unknown> {
+  id: string
+  category_id: string
+  subsidiary_id: string
+  asset_number: string
+  name: string
+  description: string | null
+  status: string
+  acquired_on: string | null
+  in_service_on: string | null
+  acquisition_cost: string
+  salvage_value: string
+  serial_number: string | null
+  depreciation_method: string | null
+  depreciation_method_id: string | null
+  useful_life_months: number | null
+  depreciation_rate_percent: string | null
+  depreciation_convention: string | null
+  depreciation_units_total: string | null
+  opening_accumulated_depreciation: string | null
+  opening_accumulated_as_of: string | null
+  custom: { taxDepreciation?: Record<string, Record<string, unknown>> } & Record<string, unknown>
+  updated_at: string
+  asset_account_id: string | null
+  accumulated_depreciation_account_id: string | null
+  depreciation_expense_account_id: string | null
+}
+
+export interface AssetCategoryRow extends Record<string, unknown> {
+  id: string
+  name: string
+  asset_account_id: string
+  accumulated_depreciation_account_id: string
+  depreciation_expense_account_id: string
+  default_method: string
+  default_depreciation_method_id: string | null
+  default_life_months: number | null
+  default_convention: string
+  tax_attributes: Record<string, string | number>
+}
+
+interface AssetAccountRow extends Record<string, unknown> {
+  id: string
+  number: string | null
+  name: string
+}
+
+interface AssetBookRow extends Record<string, unknown> {
+  id: string
+  code: string
+  name: string
+  is_primary: boolean
+  posts_gl: boolean
+  method: string | null
+  depreciation_method_id: string | null
+  method_name: string | null
+}
+
+interface AssetScheduleLineRow extends Record<string, unknown> {
+  id: string
+  sequence: number
+  book_id: string
+  book_code: string
+  book_name: string
+  period_name: string
+  period_ends_on: string
+  planned_amount: string
+  posted_amount: string | null
+  accumulated: string
+  journal_entry_id: string | null
+  source: 'formula' | 'manual' | 'production_usage' | 'imported'
+  input_id: string | null
+  input_kind: 'manual' | 'production_usage' | null
+  production_units: string | null
+  input_memo: string | null
+  evidence_file_id: string | null
+  evidence_file_name: string | null
+}
+
 export interface AssetPayload {
-  asset: Record<string, any>
-  category: Record<string, any> | null
+  asset: AssetRow
+  category: AssetCategoryRow | null
   accounts: {
     assetAccountId: string | null
     accumulatedDepreciationAccountId: string | null
@@ -66,7 +145,7 @@ export interface AssetPayload {
   }[]
 }
 
-function acctName(r: Record<string, any> | undefined): string | null {
+function acctName(r: Record<string, unknown> | undefined): string | null {
   if (!r) return null
   return `${r.number ?? ''} ${r.name ?? ''}`.trim() || null
 }
@@ -119,7 +198,7 @@ export async function loadAssetWithRunner(
   orgId: string,
   options: AssetReadOptions = {},
 ): Promise<AssetPayload | null> {
-  const assetRes = (await tx.execute<Record<string, any>>(sql`
+  const assetRes = (await tx.execute<AssetRow>(sql`
     select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from fixed_assets where id = ${id} and org_id = ${orgId} for share
   `))
@@ -127,7 +206,7 @@ export async function loadAssetWithRunner(
   if (!asset) return null
 
   const catRes = asset.category_id
-    ? ((await tx.execute<Record<string, any>>(sql`
+    ? ((await tx.execute<AssetCategoryRow>(sql`
         select * from asset_categories where id = ${asset.category_id} and org_id = ${orgId}
       `)))
     : { rows: [] }
@@ -155,7 +234,7 @@ export async function loadAssetWithRunner(
     eff.depreciationExpenseAccountId,
   ].filter(Boolean)
   const acctRes = ids.length
-    ? ((await tx.execute<Record<string, any>>(sql`
+    ? ((await tx.execute<AssetAccountRow>(sql`
         select id, number, name from accounts
          where org_id = ${orgId} and id = any(${sql`array[${sql.join(
            ids.map((i) => sql`${i}::uuid`),
@@ -169,7 +248,7 @@ export async function loadAssetWithRunner(
   const perPage = Number.isInteger(options.perPage) && options.perPage! > 0 ? Math.min(options.perPage!, 100) : 25
   const query = (options.query ?? '').trim()
   const bookId = options.bookId ?? null
-  const bookRows = await tx.execute<Record<string, any>>(sql`
+  const bookRows = await tx.execute<AssetBookRow>(sql`
       select b.id, b.code, b.name, b.is_primary, b.posts_gl,
              s.method, s.depreciation_method_id, m.name as method_name
         from accounting_books b
@@ -210,7 +289,7 @@ export async function loadAssetWithRunner(
      where event.org_id = ${orgId} and event.asset_id = ${id}
        and entry.status in ('posted', 'reversed')
   `)).rows
-  const linesRes = (await tx.execute<Record<string, any>>(sql`
+  const linesRes = (await tx.execute<AssetScheduleLineRow>(sql`
     with schedule_rows as (
       select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source,
              s.book_id, b.code as book_code, b.name as book_name,

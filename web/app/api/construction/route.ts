@@ -227,7 +227,16 @@ async function actionProjectScope(orgId: string, action: string, body: Record<st
 export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
+  // Project/pay-app ids below are pre-validated by actionProjectScope (garbage
+  // 404s there), so the `as string` pins at the call sites only restate that.
+  const body = parsedBody.data as {
+    action?: string; projectId?: string; payApplicationId?: string;
+    periodEnd?: string; id?: string; description?: string;
+    scheduledValue?: unknown; number?: unknown; notes?: unknown;
+    amount?: unknown; retainagePercent?: unknown; lines?: unknown;
+    itemNo?: unknown; sortOrder?: unknown; targetSovLineId?: unknown;
+    incomeAccountId?: unknown; approvedOn?: unknown;
+  };
   const action = body.action as string;
   const permission = action === "approveChangeOrder" || action === "approvePayApp" || action === "voidPayApp"
     ? "ar.approve"
@@ -255,7 +264,7 @@ export async function POST(req: Request) {
   try {
     switch (action) {
       case "addSov": {
-        if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const description = String(body.description ?? "").trim();
         const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
         if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
@@ -369,7 +378,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "addChangeOrder": {
-        if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const number = String(body.number ?? "").trim();
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
@@ -423,7 +432,7 @@ export async function POST(req: Request) {
           ? await businessToday(orgId)
           : requireIsoDate(body.approvedOn, "Approval date");
         await db.transaction(async (tx) => {
-          const co = (await tx.execute<any>(sql`
+          const co = (await tx.execute<{ project_id: string; number: string; description: string | null; amount: string; target_sov_line_id: string | null; income_account_id: string | null; created_by: string | null }>(sql`
             select project_id, number, description, amount, target_sov_line_id, income_account_id, created_by from change_orders
              where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
           `));
@@ -552,10 +561,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "createPayApp": {
-        if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const retainageRaw = canonicalDecimal(body.retainagePercent ?? "10", 4);
         if (retainageRaw === null) throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
-        const r = await createPayApplication(orgId, userId, body.projectId, body.periodEnd, normalizeMoney(retainageRaw));
+        const r = await createPayApplication(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(retainageRaw));
         return NextResponse.json(r, { status: 201 });
       }
       case "submitPayApp": {
@@ -578,26 +587,26 @@ export async function POST(req: Request) {
             });
           }
         }
-        const result = await submitPayApplication(orgId, userId, body.payApplicationId, lines);
+        const result = await submitPayApplication(orgId, userId, body.payApplicationId as string, lines);
         return NextResponse.json(result);
       }
       case "approvePayApp": {
-        await approvePayApplication(orgId, userId, body.payApplicationId);
+        await approvePayApplication(orgId, userId, body.payApplicationId as string);
         return NextResponse.json({ ok: true });
       }
       case "voidPayApp": {
-        await voidPayApplication(orgId, userId, body.payApplicationId);
+        await voidPayApplication(orgId, userId, body.payApplicationId as string);
         return NextResponse.json({ ok: true });
       }
       case "billPayApp": {
-        const r = await generatePayApplicationInvoice(orgId, userId, body.payApplicationId);
+        const r = await generatePayApplicationInvoice(orgId, userId, body.payApplicationId as string);
         return NextResponse.json(r);
       }
       case "releaseRetainage": {
-        if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
-        const r = await releaseRetainage(orgId, userId, body.projectId, body.periodEnd, normalizeMoney(amountRaw));
+        const r = await releaseRetainage(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(amountRaw));
         return NextResponse.json(r);
       }
       default:

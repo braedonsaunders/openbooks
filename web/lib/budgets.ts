@@ -63,6 +63,45 @@ export type BudgetLineValue = {
   note: string | null
 }
 
+interface BudgetScenarioRow extends Record<string, unknown> {
+  id: string
+  name: string
+  description: string | null
+  fiscal_year: number
+  kind: BudgetKind
+  status: BudgetStatus
+  revision: number
+  book_id: string
+  book_name: string
+  book_code: string
+  submitted_at: Date | null
+  approved_at: Date | null
+  updated_at: Date
+}
+
+interface BudgetPeriodRow extends Record<string, unknown> {
+  id: string
+  name: string
+  period_number: number
+  starts_on: string
+  ends_on: string
+}
+
+interface BudgetWorkspaceAccountRow extends Record<string, unknown> {
+  id: string
+  number: string | null
+  name: string
+  type: string
+}
+
+interface BudgetWorkspaceLineRow extends Record<string, unknown> {
+  id: string
+  account_id: string
+  period_id: string
+  amount: string
+  note: string | null
+}
+
 export type DimensionOption = { id: string; code: string | null; name: string }
 
 export type BudgetWorkspace = {
@@ -93,7 +132,7 @@ function dimensionWhere(alias: string, dims: BudgetDimensions) {
 }
 
 export async function loadBudgetScenario(id: string, orgId: string): Promise<BudgetScenario | null> {
-  const result = (await db.execute<Record<string, any>>(sql`
+  const result = (await db.execute<BudgetScenarioRow>(sql`
     select bs.id, bs.name, bs.description, bs.fiscal_year, bs.kind, bs.status,
            bs.revision, bs.book_id, b.name as book_name, b.code as book_code,
            bs.submitted_at, bs.approved_at, bs.updated_at
@@ -135,21 +174,21 @@ export async function loadBudgetWorkspace(
     ${search ? sql`and (a.name ilike ${`%${search}%`} or coalesce(a.number, '') ilike ${`%${search}%`})` : sql``}`
 
   const [periodRows, accountRows, accountCount, dimensions, total] = await Promise.all([
-    db.execute(sql`
+    db.execute<BudgetPeriodRow>(sql`
       select distinct on (p.period_number)
              p.id, p.name, p.period_number, p.starts_on, p.ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${scenario.fiscalYear} and not p.is_adjustment
        order by p.period_number, fc.is_default desc, p.starts_on
-    `) as unknown as Promise<{ rows: Record<string, any>[]; }>,
-    db.execute(sql`
+    `),
+    db.execute<BudgetWorkspaceAccountRow>(sql`
       select a.id, a.number, a.name, a.type
         from accounts a
        where ${accountWhere}
        order by a.number nulls last, a.name
        limit ${opts.perPage} offset ${(opts.page - 1) * opts.perPage}
-    `) as unknown as Promise<{ rows: Record<string, any>[]; }>,
+    `),
     db.execute(sql`select count(*) as n from accounts a where ${accountWhere}`) as Promise<{
       rows: { n: string }[]
     }>,
@@ -165,7 +204,7 @@ export async function loadBudgetWorkspace(
 
   const accountIds = accountRows.rows.map((row) => String(row.id))
   const lineRows = accountIds.length
-    ? ((await db.execute<Record<string, any>>(sql`
+    ? ((await db.execute<BudgetWorkspaceLineRow>(sql`
         select bl.id, bl.account_id, bl.period_id, bl.amount::text, bl.note
           from budget_lines bl
          where bl.org_id = ${orgId} and bl.scenario_id = ${id}

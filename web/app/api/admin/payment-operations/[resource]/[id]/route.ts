@@ -28,7 +28,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data)
+  const body = parsedBody.data as {
+    status?: string; action?: string; country?: string | null;
+    name?: string; formatterScript?: string; currency?: string;
+    fileExtension?: string; contentType?: string; isActive?: boolean;
+    cron?: string; timezone?: string; paymentBankProfileId?: string;
+    selectionCriteria?: Record<string, unknown>;
+    signedOn?: string; validFrom?: string; expiresOn?: string;
+    bankAccountId?: string; paymentFormatId?: string; subsidiaryId?: string;
+    settings?: Record<string, unknown>;
+  }
   // POST constrains mandate status and schedule action to fixed value domains
   // while the text columns carry no CHECK constraint. PATCH must refuse what
   // POST would never store: a mistyped status never equals the 'active' the

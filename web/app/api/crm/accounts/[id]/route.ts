@@ -43,7 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as Record<string, unknown>
-  const current = (await db.execute<any>(sql`
+  const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null }>(sql`
     select cp.*, p.display_name, p.is_active as party_active
       from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
      where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`))

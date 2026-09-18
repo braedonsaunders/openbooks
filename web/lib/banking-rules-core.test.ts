@@ -6,7 +6,9 @@ import {
   resolveSplitAmounts,
   ruleAppliesToAccount,
   type BankLine,
+  type RuleCondition,
   type RuleConditionGroup,
+  type RuleOp,
   type RuleSplitLine,
 } from './banking-rules-core.ts'
 
@@ -73,7 +75,7 @@ test('nested groups: (A and B) or C', () => {
 })
 
 test('amount uses absolute value; between and comparisons', () => {
-  const g = (op: string, value: any): RuleConditionGroup => ({ combinator: 'and', rules: [{ field: 'amount', op: op as any, value }] })
+  const g = (op: RuleOp, value: RuleCondition['value']): RuleConditionGroup => ({ combinator: 'and', rules: [{ field: 'amount', op, value }] })
   assert.equal(evaluateGroup(line({ amount: '-250' }), g('between', [100, 300]), FIXED_NOW), true)
   assert.equal(evaluateGroup(line({ amount: '-250' }), g('gt', 300), FIXED_NOW), false)
   assert.equal(evaluateGroup(line({ amount: '-250' }), g('lte', 250), FIXED_NOW), true)

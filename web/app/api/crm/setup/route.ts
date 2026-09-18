@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
       const name = String(body.name ?? "").trim();
       if (
         !name ||
+        typeof body.lifecycleStage !== "string" ||
         !["lead", "prospect", "customer"].includes(body.lifecycleStage)
       )
         return NextResponse.json(
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
             sql`update crm_account_statuses set name=${name},description=${body.description ?? null},lifecycle_stage=${body.lifecycleStage},sequence=${sequence},is_qualified=${body.isQualified === true},is_closed=${body.isClosed === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_account_statuses (org_id,key,name,description,lifecycle_stage,sequence,is_qualified,is_closed,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${body.lifecycleStage},${sequence},${body.isQualified === true},${body.isClosed === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_account_statuses (org_id,key,name,description,lifecycle_stage,sequence,is_qualified,is_closed,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${body.lifecycleStage},${sequence},${body.isQualified === true},${body.isClosed === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-opportunity-status") {
       const name = String(body.name ?? "").trim();
@@ -139,6 +140,7 @@ export async function POST(req: NextRequest) {
           { status: 422 },
         );
       if (
+        typeof body.defaultForecastCategory !== "string" ||
         !["omitted", "worst_case", "most_likely", "upside"].includes(
           body.defaultForecastCategory,
         )
@@ -157,7 +159,7 @@ export async function POST(req: NextRequest) {
             sql`update crm_opportunity_statuses set name=${name},description=${body.description ?? null},sequence=${sequence},probability=${probability},default_forecast_category=${body.defaultForecastCategory},is_closed=${body.isClosed === true},is_won=${body.isWon === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},requires_lines=${body.requiresLines === true},requires_primary_contact=${body.requiresPrimaryContact === true},requires_positive_amount=${body.requiresPositiveAmount === true},requires_win_loss_reason=${body.requiresWinLossReason === true},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_opportunity_statuses (org_id,key,name,description,sequence,probability,default_forecast_category,is_closed,is_won,is_default,is_active,requires_lines,requires_primary_contact,requires_positive_amount,requires_win_loss_reason,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${sequence},${probability},${body.defaultForecastCategory},${body.isClosed === true},${body.isWon === true},${body.isDefault === true},${body.isActive !== false},${body.requiresLines === true},${body.requiresPrimaryContact === true},${body.requiresPositiveAmount === true},${body.requiresWinLossReason === true},${user.id},${user.id}) returning *`,
+            sql`insert into crm_opportunity_statuses (org_id,key,name,description,sequence,probability,default_forecast_category,is_closed,is_won,is_default,is_active,requires_lines,requires_primary_contact,requires_positive_amount,requires_win_loss_reason,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${sequence},${probability},${body.defaultForecastCategory},${body.isClosed === true},${body.isWon === true},${body.isDefault === true},${body.isActive !== false},${body.requiresLines === true},${body.requiresPrimaryContact === true},${body.requiresPositiveAmount === true},${body.requiresWinLossReason === true},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-lead-source") {
       const name = String(body.name ?? "").trim();
@@ -168,23 +170,30 @@ export async function POST(req: NextRequest) {
             sql`update crm_lead_sources set name=${name},description=${body.description ?? null},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_lead_sources (org_id,key,name,description,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_lead_sources (org_id,key,name,description,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-territory") {
       const name = String(body.name ?? "").trim();
+      const matchMode =
+        typeof body.matchMode === "string"
+          ? body.matchMode
+          : body.matchMode == null
+            ? "all"
+            : "";
       if (
         !name ||
         !Array.isArray(body.rules) ||
-        !["all", "any"].includes(body.matchMode ?? "all")
+        !["all", "any"].includes(matchMode)
       )
         return NextResponse.json(
           { error: "valid territory name and rules are required" },
           { status: 422 },
         );
       for (const id of [body.managerUserId, body.defaultOwnerUserId].filter(
-        Boolean,
+        (candidate) => Boolean(candidate),
       ))
         if (
+          typeof id !== "string" ||
           !isUuid(id) ||
           !(
             ((await db.execute(
@@ -198,10 +207,10 @@ export async function POST(req: NextRequest) {
           );
       row = recordId
         ? await db.execute(
-            sql`update crm_sales_territories set name=${name},description=${body.description ?? null},priority=${Number(body.priority) || 100},manager_user_id=${body.managerUserId || null},default_owner_user_id=${body.defaultOwnerUserId || null},match_mode=${body.matchMode ?? "all"},rules=${JSON.stringify(body.rules)}::jsonb,is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+            sql`update crm_sales_territories set name=${name},description=${body.description ?? null},priority=${Number(body.priority) || 100},manager_user_id=${body.managerUserId || null},default_owner_user_id=${body.defaultOwnerUserId || null},match_mode=${matchMode},rules=${JSON.stringify(body.rules)}::jsonb,is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_sales_territories (org_id,key,name,description,priority,manager_user_id,default_owner_user_id,match_mode,rules,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${Number(body.priority) || 100},${body.managerUserId || null},${body.defaultOwnerUserId || null},${body.matchMode ?? "all"},${JSON.stringify(body.rules)}::jsonb,${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_sales_territories (org_id,key,name,description,priority,manager_user_id,default_owner_user_id,match_mode,rules,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${Number(body.priority) || 100},${body.managerUserId || null},${body.defaultOwnerUserId || null},${matchMode},${JSON.stringify(body.rules)}::jsonb,${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-team") {
       const name = String(body.name ?? "").trim();
@@ -244,7 +253,7 @@ export async function POST(req: NextRequest) {
             sql`update crm_sales_teams set name=${name},manager_user_id=${body.managerUserId || null},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_sales_teams (org_id,key,name,manager_user_id,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.managerUserId || null},${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_sales_teams (org_id,key,name,manager_user_id,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.managerUserId || null},${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
       const teamRow = team.rows[0];
       if (!teamRow) row = team;
@@ -319,9 +328,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "invalid currency" }, { status: 422 });
       let createCurrency = currency;
       if (createCurrency === undefined && !recordId) {
-        const org = (await db.execute(
+        const org = (await db.execute<{ base_currency: string }>(
           sql`select base_currency from orgs where id=${user.orgId}`,
-        )) as any;
+        ));
         createCurrency = org.rows[0]?.base_currency;
         if (!createCurrency)
         return NextResponse.json({ error: "invalid currency" }, { status: 422 });
@@ -364,8 +373,9 @@ export async function POST(req: NextRequest) {
     const first = result.rows ? result.rows[0] : row;
     if (!first)
       return NextResponse.json({ error: "record not found" }, { status: 404 });
+    const firstId = typeof first === 'object' && first !== null && 'id' in first ? first.id : null;
     await db.execute(
-      sql`insert into audit_log (org_id,table_name,row_id,action,changes,actor_id) values (${user.orgId},'crm_setup',${(first as any).id ?? null},${recordId ? "update" : "insert"},${JSON.stringify({ action, body })}::jsonb,${user.id})`,
+      sql`insert into audit_log (org_id,table_name,row_id,action,changes,actor_id) values (${user.orgId},'crm_setup',${firstId ?? null},${recordId ? "update" : "insert"},${JSON.stringify({ action, body })}::jsonb,${user.id})`,
     );
     return NextResponse.json(first);
   });

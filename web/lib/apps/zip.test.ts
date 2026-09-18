@@ -60,7 +60,9 @@ test('parses a root-level bundle: text utf8, binaries base64, junk skipped', () 
     '.DS_Store': strToU8('junk'),
   })
   const b = parseZipBundle(zip)
-  assert.deepEqual((b.manifest as any).key, 'demo')
+  const manifestKey =
+    typeof b.manifest === 'object' && b.manifest !== null && 'key' in b.manifest ? b.manifest.key : undefined
+  assert.deepEqual(manifestKey, 'demo')
   const paths = b.files.map((f) => f.path).sort()
   assert.deepEqual(paths, ['frontend/index.html', 'logo.png'])
   const html = b.files.find((f) => f.path === 'frontend/index.html')!

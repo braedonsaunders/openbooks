@@ -322,8 +322,8 @@ export async function PUT(req: Request) {
   for (const key of CONTROL_ACCOUNT_KEYS) {
     if (!(key in body)) continue
     const v = body[key]
-    if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
-    accounts[key] = v
+    if (v !== null && (typeof v !== 'string' || !isUuid(v))) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+    accounts[key] = typeof v === 'string' ? v : null
   }
   // A referenced account must be a real, ACTIVE posting account in this org:
   // downstream labor/payroll postings reject inactive accounts, so accepting
@@ -394,10 +394,10 @@ export async function POST(req: Request) {
     const tradeId = body.tradeId ?? null
     const departmentId = body.departmentId ?? null
     const subsidiaryId = body.subsidiaryId ?? null
-    if (employeePartyId !== null && !isUuid(employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-    if (tradeId !== null && !isUuid(tradeId)) return NextResponse.json({ error: 'invalid trade' }, { status: 422 })
-    if (departmentId !== null && !isUuid(departmentId)) return NextResponse.json({ error: 'invalid department' }, { status: 422 })
-    if (subsidiaryId !== null && !isUuid(subsidiaryId)) return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+    if (employeePartyId !== null && (typeof employeePartyId !== 'string' || !isUuid(employeePartyId))) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    if (tradeId !== null && (typeof tradeId !== 'string' || !isUuid(tradeId))) return NextResponse.json({ error: 'invalid trade' }, { status: 422 })
+    if (departmentId !== null && (typeof departmentId !== 'string' || !isUuid(departmentId))) return NextResponse.json({ error: 'invalid department' }, { status: 422 })
+    if (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
     if ([employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId].filter(Boolean).length > 1) {
       return NextResponse.json({ error: 'choose exactly one wage scope' }, { status: 422 })
     }
@@ -565,7 +565,7 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'end-rate') {
-    if (!isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    if (typeof body.id !== 'string' || !isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const to = body.effectiveTo
     if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isCalendarDate(to))) {
       return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
@@ -625,7 +625,7 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'delete-rate') {
-    if (!isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    if (typeof body.id !== 'string' || !isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const reason = bodyReason(body.reason, 'wage rate deleted')
     try {
       const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
@@ -675,12 +675,12 @@ export async function POST(req: Request) {
   // Payroll true-up: read the clearing wash for a period / post its residue.
   // An impossible date that passes the shape check reaches the engine, whose
   // SQL date comparisons throw past the route's 422 mapping as a 500.
-  const DATE_OK = (v: unknown) => typeof v === 'string' && DATE_RE.test(v) && isCalendarDate(v)
+  const DATE_OK = (v: unknown): v is string => typeof v === 'string' && DATE_RE.test(v) && isCalendarDate(v)
   if (body.action === 'reconcile') {
     if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
     }
-    if (!isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
+    if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
     const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
     if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
     if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -698,7 +698,7 @@ export async function POST(req: Request) {
     if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
     }
-    if (!isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
+    if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
     // Posting payroll variance writes GL journals — setup authority alone is
     // not posting authority (same boundary as every journal action).
     if (!can(gate, 'gl.post')) {

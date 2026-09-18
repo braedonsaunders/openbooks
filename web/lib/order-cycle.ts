@@ -37,6 +37,51 @@ import { isUuid } from './list-params'
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
 
+interface OrderSourceRow extends Record<string, unknown> {
+  id: string
+  kind: string
+  status: string
+  party_id: string | null
+  currency: string
+  fx_rate: string
+  document_date: string
+  due_date: string | null
+  subsidiary_id: string | null
+  department_id: string | null
+  project_id: string | null
+  location_id: string | null
+  class_id: string | null
+  extra_dims: unknown
+  memo: string | null
+  billing_method: string | null
+}
+
+interface OrderConvertLineRow extends Record<string, unknown> {
+  id: string
+  line_number: number
+  item_id: string | null
+  account_id: string | null
+  description: string | null
+  quantity: string
+  unit: string | null
+  unit_price: string
+  amount: string
+  tax_code_id: string | null
+  tax_group_id: string | null
+  tax_amount: string
+  department_id: string | null
+  project_id: string | null
+  location_id: string | null
+  class_id: string | null
+  extra_dims: unknown
+  stock_location_id: string | null
+  is_billable: boolean
+  quantity_billed: string
+  quantity_fulfilled: string
+  item_kind: string | null
+  item_income_account_id: string | null
+}
+
 /**
  * Order-cycle documents (quote / sales_order / purchase_order) are NON-posting
  * commitment documents: they live in `documents` with lines, but never hit the
@@ -1060,21 +1105,21 @@ export async function convertOrder(
       if (error instanceof InventoryError) throw new ConversionError(error.message, 422)
       throw error
     }
-    const src = (await tx.execute<any>(sql`
+    const src = (await tx.execute<OrderSourceRow>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
              subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
         from documents where id = ${sourceId} and org_id = ${orgId} for update
     `))
     const doc = src.rows[0]
     if (!doc) throw new ConversionError('Order not found')
-    if (!ORDER_KINDS.includes(doc.kind)) throw new ConversionError('Not an order document')
+    if (!ORDER_KINDS.includes(doc.kind as OrderKind)) throw new ConversionError('Not an order document')
     if (doc.status === 'draft') throw new ConversionError('Issue the order before converting it')
     if (doc.status === 'voided') throw new ConversionError('This order is voided')
 
     const target = (CONVERSION_TARGETS[doc.kind as OrderKind] || []).find((t) => t.kind === targetKind)
     if (!target) throw new ConversionError(`Cannot convert a ${doc.kind} into ${targetKind}`)
 
-    const lines = (await tx.execute(sql`
+    const lines = (await tx.execute<OrderConvertLineRow>(sql`
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description, dl.quantity, dl.unit,
              dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
@@ -1109,7 +1154,7 @@ export async function convertOrder(
           taxAmount: String(line.tax_amount),
         }),
       }))
-      .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
+      .filter((row): row is { line: OrderConvertLineRow; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
     // One shared physical-quantity ceiling for both billing legs. A purchase
     // order bills received-and-unbilled stock; a sales order bills shipped-and-
@@ -1173,7 +1218,7 @@ export async function convertOrder(
 
     const convertedAmounts: string[] = []
     const convertedTaxes: string[] = []
-    const [created] = (await tx.execute(sql`
+    const created = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
                              currency, fx_rate, status, subsidiary_id, department_id, project_id, location_id,
                              class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, created_by)
@@ -1183,7 +1228,7 @@ export async function convertOrder(
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
               '0', '0', '0', ${userId})
       returning id
-    `)).rows as unknown as [any]
+    `)).rows[0]!
     const newId = created.id
 
     // Migration 0034 makes approved document lines immutable. Advancing

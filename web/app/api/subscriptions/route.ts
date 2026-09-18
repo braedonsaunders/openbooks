@@ -260,7 +260,7 @@ export async function POST(req: Request) {
         if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
-        if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+        if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
         const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
         const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
@@ -292,7 +292,7 @@ export async function POST(req: Request) {
         if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
-        if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+        if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
         const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
         const isActive = optionalBoolean(body.isActive, "active") ?? true;
@@ -427,7 +427,7 @@ export async function POST(req: Request) {
             priceOverride = null;
           }
         }
-        const result = await changeSubscription(body.id, {
+        const result = await changeSubscription(String(body.id), {
           quantity,
           priceOverride,
         }, undefined, { actorId: userId });
@@ -505,7 +505,7 @@ export async function POST(req: Request) {
         if (scopeDenied) return scopeDenied;
         // The authenticated caller authors the bill-now invoice — the
         // subscription's own id is never an actor.
-        const gen = await billSubscriptionNow(body.id, undefined, { actorId: userId });
+        const gen = await billSubscriptionNow(String(body.id), undefined, { actorId: userId });
         return NextResponse.json(gen);
       }
       default:
