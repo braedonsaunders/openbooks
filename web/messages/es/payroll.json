@@ -726,6 +726,15 @@
           "local_income_tax": "Impuesto local sobre la renta por pagar"
         }
       },
+      "NL": {
+        "title": "Países Bajos — cuentas legales Belastingdienst",
+        "description": "Cuentas de pasivo para los montos que el paquete NL retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "loonheffing": "Loonheffing por pagar (impuesto salarial + seguro nacional)",
+          "werknemersverzekeringen": "Werknemersverzekeringen por pagar (WW, Aof + Whk del empleador)",
+          "zvw": "Zvw por pagar (contribución sanitaria del empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

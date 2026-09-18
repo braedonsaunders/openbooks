@@ -726,6 +726,15 @@
           "local_income_tax": "地方所得税应付"
         }
       },
+      "NL": {
+        "title": "荷兰 — Belastingdienst法定科目",
+        "description": "荷兰包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "loonheffing": "Loonheffing应付（工资税＋国民保险）",
+          "werknemersverzekeringen": "Werknemersverzekeringen应付（雇主WW、Aof＋Whk）",
+          "zvw": "Zvw应付（雇主医疗保险缴款）"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {
