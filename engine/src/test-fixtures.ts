@@ -1240,13 +1240,6 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
   for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
     const failed = await db.transaction(async (tx) => {
       await setTeardownGucs(tx);
-      // Reassembling the committed baseline snapshot is a trusted historical
-      // assembly, which is exactly what the 0102 primary-book history guard's
-      // migration exemption exists for: repairing a test-reassigned primary
-      // while journals exist would otherwise be rejected as an uncontrolled
-      // book conversion. Test writes run after commit with the GUC off, so
-      // the guard still constrains everything the tests themselves do.
-      await tx.execute(sql`select set_config('openbooks.migration', 'on', true)`);
       // Baseline documents and their source entries reference each other, so
       // reinserting the template in any fixed table order deadlocks without
       // replica mode. Both links are DEFERRABLE: defer exactly those two, the
