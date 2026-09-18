@@ -47,12 +47,13 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   };
 }
 
-test("FR pack computes the full 2026 payslip; installable waits for slot labels", () => {
+test("FR pack computes the full 2026 payslip and is installable", () => {
   assert.equal(FR_PAYROLL_PACK.country, "FR");
-  // PAS + URSSAF + AGIRC-ARRCO prove out in the parity harnesses, but the
-  // messages-catalog gate fires on packAccounts.FR.slots.* until the labels
-  // shard lands them — so installable stays false rather than shipping red.
-  assert.equal(FR_PAYROLL_PACK.installable, false);
+  // PAS + URSSAF + AGIRC-ARRCO prove out in the parity harnesses. This waited on
+  // packAccounts.FR.slots.* — those landed in all seven locales, so the flip is
+  // live. The catalog gate is what keeps this honest: if a future slot arrives
+  // without labels, messages-catalog goes red before this does.
+  assert.equal(FR_PAYROLL_PACK.installable, true);
   assert.equal(FR_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.deepEqual(FR_PAYROLL_PACK.taxYear, {
     basis: "calendar",
