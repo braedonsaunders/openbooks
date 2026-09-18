@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
 import { db, schema, withOrg, withBypassContext, withOrgContext } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
@@ -723,6 +723,55 @@ async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[])
   }
 }
 
+/**
+ * A server-side window over the gate leg of the approvals union. `prefix` is
+ * the number of leading leg rows to fetch (offset+limit at the union level):
+ * legs are disjoint and share the merge order, so the union slices its page
+ * from per-leg prefixes without ever fetching the whole leg. `kind` filters
+ * on the same expression the row mapper reports
+ * (coalesce(document kind, subject kind)).
+ */
+export interface WorklistGatePage {
+  prefix: number;
+  kind?: string;
+}
+
+/**
+ * SQL pre-filter reproducing gateSubsidiaryScopeAllows for the rows the
+ * documents join already carries an entity for. Non-document subjects
+ * (d.id is null) pass through to resolveWorklistSubsidiaries + the JS filter
+ * below, exactly as before — the predicate drops in SQL only what the JS
+ * filter would drop, so full and paged reads return the same rows.
+ */
+function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
+  if (allowedSubsidiaryIds == null) return sql``;
+  const ids = JSON.stringify([...allowedSubsidiaryIds]);
+  return sql`and (
+    d.id is null
+    or d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+  )`;
+}
+
+function worklistGateKindSql(kind: string | undefined): SQL {
+  if (kind == null) return sql``;
+  return sql`and coalesce(d.kind, g.subject_kind) = ${kind}`;
+}
+
+function worklistDirectWhere(
+  orgId: string,
+  userId: string,
+  roleList: string[],
+  allowedSubsidiaryIds: GateSubsidiaryScope,
+  kind: string | undefined,
+): SQL {
+  return sql`g.org_id = ${orgId} and g.status = 'pending'
+    and (g.assignee_user_id = ${userId}
+         or (g.assignee_role is not null and g.assignee_role in
+              (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
+    ${worklistGateScopeSql(allowedSubsidiaryIds)}
+    ${worklistGateKindSql(kind)}`;
+}
+
 export async function worklistGates(
   orgId: string,
   userId: string,
@@ -734,15 +783,22 @@ export async function worklistGates(
    * other entities are never listed. Null/undefined means unrestricted.
    */
   allowedSubsidiaryIds?: GateSubsidiaryScope,
+  /**
+   * Paged read: fetch only the leading `prefix` rows of this leg in leg
+   * order. Omitted for the full read (dashboard tile, counts).
+   */
+  page?: WorklistGatePage,
 ): Promise<WorklistGate[]> {
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
+  const kind = page?.kind;
+  // The id tiebreaker pins page boundaries: without a unique order key
+  // Postgres may return tied rows in any order and rows duplicate or drop
+  // across pages (same rule as the document list order clause).
   const r = (await db.execute<Record<string, unknown>>(sql`
     ${WORKLIST_SELECT}
-     where g.org_id = ${orgId} and g.status = 'pending'
-       and (g.assignee_user_id = ${userId}
-            or (g.assignee_role is not null and g.assignee_role in
-                 (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
-     order by g.created_at
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind)}
+     order by g.created_at, g.id
+     ${page ? sql`limit ${page.prefix}` : sql``}
   `));
   const out = r.rows.map((row) => mapWorklistRow(row, null));
 
@@ -750,7 +806,10 @@ export async function worklistGates(
   // to the caller. Only user-assigned rows qualify (the principal's
   // assignment is the grant — role gates the principal merely could claim do
   // not travel), and rows already in the caller's own list win over the
-  // delegated view of the same row.
+  // delegated view of the same row. This arm stays unpaged by design: it
+  // covers a handful of out-of-office principals, and windowing it would
+  // break the dedup below (a delegated duplicate past the window would
+  // resurface as a second row). The direct arm above carries the page.
   const principals = await activeDelegationPrincipals(orgId, userId);
   if (principals.length > 0) {
     const seen = new Set(out.map((g) => g.id));
@@ -760,7 +819,9 @@ export async function worklistGates(
        where g.org_id = ${orgId} and g.status = 'pending'
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
-       order by g.created_at
+         ${worklistGateScopeSql(allowedSubsidiaryIds)}
+         ${worklistGateKindSql(kind)}
+       order by g.created_at, g.id
     `));
     for (const row of d.rows) {
       const id = String(row.id);
@@ -778,6 +839,54 @@ export async function worklistGates(
     return out.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId));
   }
   return out;
+}
+
+/**
+ * Per-kind totals for the gate leg under the exact predicates worklistGates
+ * applies (direct + delegated-minus-direct, scope, kind). The approvals page
+ * derives its total and kind chips from these aggregates instead of counting
+ * fetched rows, so the counts stay exact while the rows stay windowed.
+ */
+export async function worklistGateKindCounts(
+  orgId: string,
+  userId: string,
+  roles?: Iterable<string>,
+  allowedSubsidiaryIds?: GateSubsidiaryScope,
+  kind?: string,
+): Promise<Map<string, number>> {
+  const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
+  const counts = new Map<string, number>();
+  const accumulate = (rows: Array<{ kind: string; n: string }>) => {
+    for (const row of rows) counts.set(row.kind, (counts.get(row.kind) ?? 0) + Number(row.n));
+  };
+  const baseJoins = sql`
+      from flow_gates g
+      left join documents d on d.id = g.subject_id and d.org_id = g.org_id`;
+  accumulate((await db.execute<{ kind: string; n: string }>(sql`
+    select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
+      ${baseJoins}
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind)}
+     group by coalesce(d.kind, g.subject_kind)
+  `)).rows);
+  const principals = await activeDelegationPrincipals(orgId, userId);
+  if (principals.length > 0) {
+    // Same dedup as the row merge, expressed as a predicate: a delegated row
+    // satisfying the direct condition would already be counted above.
+    accumulate((await db.execute<{ kind: string; n: string }>(sql`
+      select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
+        ${baseJoins}
+       where g.org_id = ${orgId} and g.status = 'pending'
+         and g.assignee_user_id in
+              (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
+         and not (g.assignee_user_id = ${userId}
+              or (g.assignee_role is not null and g.assignee_role in
+                   (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
+         ${worklistGateScopeSql(allowedSubsidiaryIds)}
+         ${worklistGateKindSql(kind)}
+       group by coalesce(d.kind, g.subject_kind)
+    `)).rows);
+  }
+  return counts;
 }
 
 // --- Delegation ----------------------------------------------------------------
