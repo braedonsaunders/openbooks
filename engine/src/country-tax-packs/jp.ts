@@ -71,20 +71,38 @@ export const JAPAN_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://www.nta.go.jp/english/taxes/consumption_tax/pdf/2025/general_07.pdf",
       asOf: "2026-08-01",
     },
+    {
+      id: "nta_consumption_tax_reduced",
+      title: "National Tax Agency — reduced consumption-tax rate (8%) from 1 October 2019",
+      url: "https://www.nta.go.jp/english/taxes/consumption_tax/01.htm",
+      asOf: "2026-09-18",
+    },
   ],
   jurisdictions: [],
   returnPacks: [JP_CONSUMPTION_2025],
   returnPackTaxCodes: {
-    JP_CONSUMPTION: {
-      code: "JP-CT-STD",
-      name: "Japan combined standard consumption and local consumption tax",
-      ratePercent: 10,
-      rates: [
-        { ratePercent: 3, effectiveFrom: "1989-04-01", effectiveTo: "1997-03-31", sourceId: "nta_consumption_tax_history" },
-        { ratePercent: 5, effectiveFrom: "1997-04-01", effectiveTo: "2014-03-31", sourceId: "nta_consumption_tax_history" },
-        { ratePercent: 8, effectiveFrom: "2014-04-01", effectiveTo: "2019-09-30", sourceId: "nta_consumption_tax_history" },
-        { ratePercent: 10, effectiveFrom: "2019-10-01", sourceId: "nta_consumption_tax_current" },
-      ],
-    },
+    JP_CONSUMPTION: [
+      {
+        code: "JP-CT-STD",
+        name: "Japan combined standard consumption and local consumption tax",
+        ratePercent: 10,
+        role: "standard",
+        rates: [
+          { ratePercent: 3, effectiveFrom: "1989-04-01", effectiveTo: "1997-03-31", sourceId: "nta_consumption_tax_history" },
+          { ratePercent: 5, effectiveFrom: "1997-04-01", effectiveTo: "2014-03-31", sourceId: "nta_consumption_tax_history" },
+          { ratePercent: 8, effectiveFrom: "2014-04-01", effectiveTo: "2019-09-30", sourceId: "nta_consumption_tax_history" },
+          { ratePercent: 10, effectiveFrom: "2019-10-01", sourceId: "nta_consumption_tax_current" },
+        ],
+      },
+      {
+        code: "JP-CT-RED",
+        name: "Japan combined reduced consumption and local consumption tax",
+        ratePercent: 8,
+        role: "reduced",
+        rates: [
+          { ratePercent: 8, effectiveFrom: "2019-10-01", sourceId: "nta_consumption_tax_reduced" },
+        ],
+      },
+    ],
   },
 };
