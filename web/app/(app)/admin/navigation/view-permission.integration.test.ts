@@ -71,10 +71,11 @@ hooks.deregister();
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
+const { withBypassContext } = await import("@openbooks/engine/src/db.ts");
 
 async function freshOrgWithUser(): Promise<{ orgId: string; userId: string }> {
-  const org = await createScratchOrg();
-  const userId = await createScratchUser(org.orgId, "Nav Loader", "nav_loader_role");
+  const org = await withBypassContext(() => createScratchOrg());
+  const userId = await withBypassContext(() => createScratchUser(org.orgId, "Nav Loader", "nav_loader_role"));
   return { orgId: org.orgId, userId };
 }
 

@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
@@ -145,10 +145,10 @@ async function seedFx(orgId: string, subsidiaryId: string, actorId: string, acco
 }
 
 test('fx reads and revaluation run through the engine tables', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
-    const { periodId, childId } = await seedFx(org.orgId, org.subsidiaryId, actors.adminId, org.accounts);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+    const { periodId, childId } = await withBypassContext(() => seedFx(org.orgId, org.subsidiaryId, actors.adminId, org.accounts));
     const reader = {
       user: userFor(org.orgId, actors.adminId),
       permissions: new Set(['assistant.use', 'gl.read', 'close.read']),
@@ -238,11 +238,11 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
 });
 
 test('fx tools refuse without permission, with the module off, or across orgs', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
-    const { periodId } = await seedFx(org.orgId, org.subsidiaryId, actors.adminId, org.accounts);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+    const { periodId } = await withBypassContext(() => seedFx(org.orgId, org.subsidiaryId, actors.adminId, org.accounts));
     const reader = {
       user: userFor(org.orgId, actors.adminId),
       permissions: new Set(['assistant.use', 'gl.read', 'close.read']),
@@ -272,11 +272,11 @@ test('fx tools refuse without permission, with the module off, or across orgs', 
         /forbidden/,
       );
     });
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"multiCurrency":false}'::jsonb, true)
        where id = ${org.orgId}
-    `);
+    `));
     await withOrgContext(org.orgId, async () => {
       assert.deepEqual(await executeAssistantTool(reader, 'list_fx_rates', { fromCurrency: 'USD', toCurrency: 'CAD' }), {
         ok: false, error: 'multi_currency_feature_disabled',
@@ -289,7 +289,7 @@ test('fx tools refuse without permission, with the module off, or across orgs', 
       );
     });
     // Another org's period reads as missing; its rates never leak.
-    const otherActors = await seedFlowActors(other.orgId);
+    const otherActors = await withBypassContext(() => seedFlowActors(other.orgId));
     const otherReader = {
       user: userFor(other.orgId, otherActors.adminId),
       permissions: new Set(['assistant.use', 'gl.read', 'close.read']),

@@ -17,7 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { customersHome } = await import('./customers.ts');
 const { paymentStats } = await import('../cash/core.ts');
@@ -55,7 +55,7 @@ async function pay(org: { orgId: string; subsidiaryId: string; bookId: string; p
 }
 
 test('customers-home DSO reads the documented 45-day default with no settlements', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const home = await withOrgContext(org.orgId, () => customersHome(org.orgId));
     assert.equal(home.dso, 45, 'empty history must read the single DSO default, not null');
@@ -65,15 +65,15 @@ test('customers-home DSO reads the documented 45-day default with no settlements
 });
 
 test('customers-home DSO excludes party-less settlements like the engine rollup', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, 'Home DSO', 'admin');
-    const customer = await party(org.orgId, 'Real Customer');
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Home DSO', 'admin'));
+    const customer = await withBypassContext(() => party(org.orgId, 'Real Customer'));
     // One ordinary 10-day settlement pins the engine DSO at 10.
-    await pay(org, actor, customer, await invoice(org, customer, '500', '2026-07-01'), '500', '2026-07-11');
+    await withBypassContext(async () => pay(org, actor, customer, await invoice(org, customer, '500', '2026-07-01'), '500', '2026-07-11'));
     // A party-less 71-day settlement: kernel-legal (null matches null) but
     // outside the engine definition, which keys statistics per party.
-    await pay(org, actor, null, await invoice(org, null, '1000', '2026-07-01'), '1000', '2026-09-10');
+    await withBypassContext(async () => pay(org, actor, null, await invoice(org, null, '1000', '2026-07-01'), '1000', '2026-09-10'));
     const { home, engine } = await withOrgContext(org.orgId, async () => ({
       home: await customersHome(org.orgId),
       engine: (await paymentStats('ar', '2026-09-16')).globalAvg,

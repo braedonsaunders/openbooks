@@ -87,9 +87,9 @@ function post(body: unknown): Promise<Response> {
 }
 
 test("set-application refuses a nonexistent posting account", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: randomUUID() });
     assert.equal(response.status, 422);
@@ -101,9 +101,9 @@ test("set-application refuses a nonexistent posting account", { skip: !DB }, asy
 });
 
 test("set-application refuses an inactive account", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     await withBypassContext(() => db.execute(sql`
       update accounts set is_active = false where id = ${org.accounts.adjustment}`));
@@ -117,9 +117,9 @@ test("set-application refuses an inactive account", { skip: !DB }, async () => {
 });
 
 test("set-application stores a real account with audit evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: org.accounts.adjustment });
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
@@ -143,9 +143,9 @@ test("set-application stores a real account with audit evidence", { skip: !DB },
 });
 
 test("set-lifecycle refuses a supplied mode outside the enum without writing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-lifecycle", mode: "hourly", cadence: "monthly" });
     assert.equal(response.status, 422);
@@ -158,9 +158,9 @@ test("set-lifecycle refuses a supplied mode outside the enum without writing", {
 });
 
 test("set-lifecycle refuses a supplied cadence outside the enum without writing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-lifecycle", mode: "scheduled", cadence: "weekly" });
     assert.equal(response.status, 422);
@@ -173,9 +173,9 @@ test("set-lifecycle refuses a supplied cadence outside the enum without writing"
 });
 
 test("set-application refuses a supplied mode outside the enum without writing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-application", mode: "amortize" });
     assert.equal(response.status, 422);
@@ -188,9 +188,9 @@ test("set-application refuses a supplied mode outside the enum without writing",
 });
 
 test("omitted mode/cadence keep the documented defaults", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const lifecycle = await post({ action: "set-lifecycle" });
     assert.equal(lifecycle.status, 200, JSON.stringify(await lifecycle.clone().json()));
@@ -205,12 +205,12 @@ test("omitted mode/cadence keep the documented defaults", { skip: !DB }, async (
 });
 
 test("set-lifecycle audit failure rolls the policy back", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   const suffix = randomUUID().replaceAll("-", "");
   const functionName = `overhead_audit_failure_${suffix}`;
   const triggerName = `overhead_audit_failure_trigger_${suffix}`;
   try {
-    const actorId = await createScratchUser(org.orgId, "Setup Admin", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     await withBypassContext(() => db.execute(sql.raw(`
       create function public."${functionName}"() returns trigger
