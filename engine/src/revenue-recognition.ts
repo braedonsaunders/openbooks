@@ -30,6 +30,14 @@ import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "./clo
  * double-posts. The upstream invoice must have parked the money in deferred
  * revenue (posting.ts credits the item's deferred account for rev-rec lines),
  * so recognition simply drains deferred → earned over the term.
+ *
+ * A manual credit memo against the source invoice relieves deferred revenue
+ * WITHOUT touching the plan — so the run caps every posting at what remains
+ * genuinely unearned (allocated − recognized − credited-to-deferred). After a
+ * full-remainder credit the run posts nothing; after a partial credit it posts
+ * only the remainder (the final line may post partial). Credits that debit an
+ * income account instead — a concession while service continues — never count:
+ * they reduce earned directly and must not retire the plan.
  */
 
 export type RecognitionMethod =
@@ -1361,6 +1369,85 @@ export interface RunRecognitionResult {
   problems: string[];
 }
 
+/**
+ * What remains genuinely unearned for one obligation on one book (F-w5-001).
+ *
+ *   remaining = allocated − recognized(net of reversals) − credited-to-deferred
+ *
+ * `credited-to-deferred` counts only posted, non-voided customer-credit lines
+ * that debit the obligation's own deferred account, on a credit with a live
+ * application to the source invoice. That conjunction is the whole rule:
+ *
+ * - deferred-account scoping is what separates unearned relief (retires the
+ *   plan) from an income-account concession (reduces earned, plan untouched);
+ * - the application is the only structural edge a credit memo has to an
+ *   invoice, so an unapplied credit cannot be attributed to any obligation;
+ * - voided credits are excluded by document status, and their reversal
+ *   entries never match because only the document's own posted entry counts.
+ *
+ * Obligations with no source invoice (project percent-complete) correlate to
+ * nothing and always report zero credits. Scoped per book so multi-book plans
+ * behave exactly as before when no credits exist.
+ */
+async function recognitionUnearnedRemaining(
+  tx: SqlExecutor,
+  input: { orgId: string; obligationId: string; bookId: string; deferredAccountId: string },
+): Promise<{ remaining: string; credited: string }> {
+  const r = (await tx.execute<{ allocated: string; recognized: string; credited: string }>(sql`
+    select o.allocated_price as allocated,
+      coalesce((
+        select sum(case when l.journal_entry_id is not null then coalesce(l.recognized_amount, 0) else 0 end)
+             - sum(case when l.reversal_journal_entry_id is not null then coalesce(l.recognized_amount, 0) else 0 end)
+          from recognition_schedule_lines l
+          join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+         where s.org_id = ${input.orgId}
+           and s.obligation_id = ${input.obligationId}
+           and s.book_id = ${input.bookId}
+      ), 0)::text as recognized,
+      coalesce((
+        select sum(cl.amount)
+          from documents credit
+          join journal_lines cl
+            on cl.entry_id = credit.posted_entry_id
+           and cl.org_id = credit.org_id
+          join journal_entries ce
+            on ce.id = cl.entry_id
+           and ce.org_id = cl.org_id
+           and ce.book_id = ${input.bookId}
+           and ce.status = 'posted'
+         where credit.org_id = ${input.orgId}
+           and credit.kind = 'customer_credit'
+           and credit.status = 'posted'
+           and cl.account_id = ${input.deferredAccountId}
+           and cl.amount > 0
+           and exists (
+             select 1
+               from journal_lines fl
+               join applications app
+                 on app.from_line_id = fl.id
+                and app.org_id = fl.org_id
+                and app.unapplied_at is null
+               join journal_lines tl
+                 on tl.id = app.to_line_id
+                and tl.org_id = app.org_id
+              where fl.entry_id = credit.posted_entry_id
+                and fl.org_id = credit.org_id
+                and tl.entry_id = inv.posted_entry_id
+                and tl.org_id = inv.org_id
+           )
+      ), 0)::text as credited
+      from performance_obligations o
+      left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+      left join documents inv on inv.id = dl.document_id and inv.org_id = dl.org_id
+     where o.id = ${input.obligationId} and o.org_id = ${input.orgId}`));
+  const row = r.rows[0];
+  if (!row) throw new RevenueRecognitionError("recognition obligation disappeared during posting");
+  return {
+    remaining: add(add(row.allocated, neg(row.recognized)), neg(row.credited)),
+    credited: row.credited,
+  };
+}
+
 function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readonly string[]) {
   if (allowedSubsidiaryIds === undefined) return sql`true`;
   return sql`exists (
@@ -1466,7 +1553,10 @@ async function recognitionPostingRows(
  * `asOfDate`. Each line becomes one balanced journal entry (DR deferred / CR
  * recognized) posted through the kernel, origin = 'revenue_recognition'. A
  * closed GL period is skipped (not an error). Idempotent: a line with a
- * journal_entry_id is never reconsidered.
+ * journal_entry_id is never reconsidered. Every posting is capped at what
+ * remains genuinely unearned for its obligation (F-w5-001): a fully-credited
+ * obligation holds its plan lines (skipped with an explanatory problem), a
+ * partially-credited one posts only the remainder.
  */
 export async function runRevenueRecognition(
   orgId: string,
@@ -1523,6 +1613,17 @@ export async function runRevenueRecognition(
         if (!deferredAccountId || !recognizedAccountId) {
           return { status: "not_configured" as const, row };
         }
+        // F-w5-001: a manual credit memo relieves deferred without touching
+        // the plan. Never post more than what remains genuinely unearned; a
+        // fully-credited obligation holds its plan lines, a partially-credited
+        // one posts only the remainder (the final line may post partial).
+        const cap = await recognitionUnearnedRemaining(tx, {
+          orgId, obligationId: row.obligation_id, bookId: row.book_id, deferredAccountId,
+        });
+        if (cmp(cap.remaining, "0") <= 0) {
+          return { status: "credit_capped" as const, credited: cap.credited, row };
+        }
+        const posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
         if (!row.subsidiary_id || !row.base_currency) {
           throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
         }
@@ -1532,8 +1633,8 @@ export async function runRevenueRecognition(
         await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
         const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
         const lines = [
-          { accountId: deferredAccountId, amount: planned },
-          { accountId: recognizedAccountId, amount: neg(planned) },
+          { accountId: deferredAccountId, amount: posting },
+          { accountId: recognizedAccountId, amount: neg(posting) },
         ];
         await validateSubsidiaryRestrictions(tx, {
           orgId, ctx: subsidiaryContext, docSubsidiaryId: subsidiaryId,
@@ -1582,13 +1683,20 @@ export async function runRevenueRecognition(
 
         await tx.execute(sql`
           update recognition_schedule_lines
-             set recognized_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
+             set recognized_amount = ${posting}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id} and org_id = ${orgId}`);
 
-        return { status: "posted" as const, entryId: eid, planned, row };
+        return { status: "posted" as const, entryId: eid, planned: posting, row };
       }));
       if (posted.status === "already_posted" || posted.status === "zero") {
         result.skipped++;
+        continue;
+      }
+      if (posted.status === "credit_capped") {
+        result.skipped++;
+        result.problems.push(
+          `${posted.row.contract_number} ${posted.row.obligation_desc}: fully credited — ${posted.credited} relieved to deferred, nothing remains unearned; plan line held`,
+        );
         continue;
       }
       if (posted.status === "not_configured") {
