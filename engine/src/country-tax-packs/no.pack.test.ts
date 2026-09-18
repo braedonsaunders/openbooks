@@ -73,17 +73,11 @@ test("Norway histories run back to 2012, one row per rate change", () => {
     codes.find((entry) => entry.code === code)!.rates!;
   assert.deepEqual(
     rows("NO-VAT-STD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [
-      [25, "2012-01-01", "2025-12-31"],
-      [25, "2026-01-01", null],
-    ],
+    [[25, "2012-01-01", null]],
   );
   assert.deepEqual(
     rows("NO-VAT-FOOD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [
-      [15, "2012-01-01", "2025-12-31"],
-      [15, "2026-01-01", null],
-    ],
+    [[15, "2012-01-01", null]],
   );
   assert.deepEqual(
     rows("NO-VAT-PASSENGER").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
@@ -92,16 +86,12 @@ test("Norway histories run back to 2012, one row per rate change", () => {
       [10, "2016-01-01", "2017-12-31"],
       [12, "2018-01-01", "2020-03-31"],
       [6, "2020-04-01", "2021-09-30"],
-      [12, "2021-10-01", "2025-12-31"],
-      [12, "2026-01-01", null],
+      [12, "2021-10-01", null],
     ],
   );
   assert.deepEqual(
     rows("NO-VAT-FISH-1111").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [
-      [11.11, "2025-01-01", "2025-12-31"],
-      [11.11, "2026-01-01", null],
-    ],
+    [[11.11, "2025-01-01", null]],
   );
   for (const code of codes) {
     const last = code.rates![code.rates!.length - 1]!;

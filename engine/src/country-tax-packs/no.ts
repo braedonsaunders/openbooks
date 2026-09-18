@@ -45,11 +45,15 @@ const NO_MVA_MELDING_2026: TaxReturnPack = {
  * the earliest table attesting the value from the row's start date: 25%
  * general and 15% food every year 2012–2025; low 8% every year 2012–2015,
  * 10% in 2016 and 2017, 12% in 2018, 2019 and 2020 (headline) through 2025.
- * The 2016 year page additionally narrates the 14 December 2015 Storting
- * decision raising the low rate from 8% to 10% for 2016, which pins the
- * 2015/2016 boundary; the other year-turn boundaries rest on the pairwise
- * year tables (Norway's annual rates change at year turns; mid-year changes
- * are narrated separately, as the 2016 and 2020 cases show).
+ * Unchanged tails are single open rows — the 2026 re-enactment earns no row
+ * of its own, since the 2012–2025 tables earn none either. The current-year
+ * Storting decision stays in the sources below as the live instrument even
+ * where no row cites it; rows cite earliest attestations. The 2016 year
+ * page additionally narrates the 14 December 2015 Storting decision raising
+ * the low rate from 8% to 10% for 2016, which pins the 2015/2016 boundary;
+ * the other year-turn boundaries rest on the pairwise year tables (Norway's
+ * annual rates change at year turns; mid-year changes are narrated
+ * separately, as the 2016 and 2020 cases show).
  *
  * The temporary 12%-to-6% low-rate cut of 2020–2021 IS transcribed: both
  * endpoints (from 1 April 2020 to 30 September 2021) are stated on
@@ -153,20 +157,14 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
         name: "Norway standard VAT 25% (høy sats)",
         ratePercent: 25,
         role: "standard",
-        rates: [
-          { ratePercent: 25, effectiveFrom: "2012-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
-          { ratePercent: 25, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
-        ],
+        rates: [{ ratePercent: 25, effectiveFrom: "2012-01-01", sourceId: "skatteetaten_satshistorikk_2012" }],
       },
       {
         code: "NO-VAT-FOOD",
         name: "Norway food VAT 15% (middels sats næringsmidler)",
         ratePercent: 15,
         role: "reduced",
-        rates: [
-          { ratePercent: 15, effectiveFrom: "2012-01-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2012" },
-          { ratePercent: 15, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
-        ],
+        rates: [{ ratePercent: 15, effectiveFrom: "2012-01-01", sourceId: "skatteetaten_satshistorikk_2012" }],
       },
       {
         code: "NO-VAT-PASSENGER",
@@ -178,18 +176,14 @@ export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 10, effectiveFrom: "2016-01-01", effectiveTo: "2017-12-31", sourceId: "skatteetaten_satshistorikk_2016" },
           { ratePercent: 12, effectiveFrom: "2018-01-01", effectiveTo: "2020-03-31", sourceId: "skatteetaten_satshistorikk_2018" },
           { ratePercent: 6, effectiveFrom: "2020-04-01", effectiveTo: "2021-09-30", sourceId: "skatteetaten_satshistorikk_2020" },
-          { ratePercent: 12, effectiveFrom: "2021-10-01", effectiveTo: "2025-12-31", sourceId: "skatteetaten_satshistorikk_2021" },
-          { ratePercent: 12, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
+          { ratePercent: 12, effectiveFrom: "2021-10-01", sourceId: "skatteetaten_satshistorikk_2021" },
         ],
       },
       {
         code: "NO-VAT-FISH-1111",
         name: "Norway wild marine resources VAT 11.11%",
         ratePercent: 11.11,
-        rates: [
-          { ratePercent: 11.11, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "storting_mva_2025" },
-          { ratePercent: 11.11, effectiveFrom: "2026-01-01", sourceId: "storting_mva_2026" },
-        ],
+        rates: [{ ratePercent: 11.11, effectiveFrom: "2025-01-01", sourceId: "storting_mva_2025" }],
       },
     ],
   },
