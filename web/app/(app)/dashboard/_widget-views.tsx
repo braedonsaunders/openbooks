@@ -16,6 +16,7 @@ import {
   Hourglass,
   Landmark,
   Layers,
+  ListChecks,
   NotebookPen,
   Percent,
   Receipt,
@@ -156,6 +157,17 @@ export function WidgetCard({
       return <PartyBalanceList title={t('widgets.topCustomers')} icon={<Users size={14} />} href="/ar" parties={data.topCustomers ?? []} />
     case 'list-top-vendors':
       return <PartyBalanceList title={t('widgets.topVendors')} icon={<Store size={14} />} href="/ap" parties={data.topVendors ?? []} />
+    case 'kpi-items-to-reconcile':
+      return (
+        <MetricTile
+          icon={<ListChecks size={15} />}
+          label={t('widgets.itemsToReconcile')}
+          value={String(data.unreconciledItems)}
+          href="/banking/match"
+          tone={data.unreconciledItems > 0 ? 'amber' : 'emerald'}
+          hint={data.unreconciledItems > 0 ? t('metricContext.toReconcile') : t('metricContext.allMatched')}
+        />
+      )
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
