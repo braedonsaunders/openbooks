@@ -5044,7 +5044,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "common": 264,
   "crm": 255,
   "customization": 187,
-  "dashboard": 147,
+  "dashboard": 157,
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
