@@ -786,6 +786,16 @@
           "unfall": "Berufsgenossenschaft payable (employer accident insurance)"
         }
       },
+      "FR": {
+        "title": "France \u2014 statutory accounts",
+        "description": "Liability accounts for the amounts the France pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "pas": "PAS payable (income tax withheld at source)",
+          "salariales": "Employee social contributions payable (assurance vieillesse, CSG + CRDS)",
+          "retraite_comp": "Supplementary pension payable (employee + employer AGIRC-ARRCO, CEG + CET)",
+          "patronales": "Employer social contributions payable (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {

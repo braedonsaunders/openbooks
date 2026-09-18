@@ -786,6 +786,16 @@
           "unfall": "Berufsgenossenschaft \u00e0 payer (assurance accidents employeur)"
         }
       },
+      "FR": {
+        "title": "France \u2014 comptes l\u00e9gaux",
+        "description": "Comptes de passif pour les montants que le pack fran\u00e7ais retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "slots": {
+          "pas": "PAS \u00e0 payer (imp\u00f4t sur le revenu pr\u00e9lev\u00e9 \u00e0 la source)",
+          "salariales": "Cotisations salariales \u00e0 payer (assurance vieillesse, CSG + CRDS)",
+          "retraite_comp": "Retraite compl\u00e9mentaire \u00e0 payer (AGIRC-ARRCO, CEG + CET, parts employ\u00e9 et employeur)",
+          "patronales": "Cotisations patronales \u00e0 payer (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {
