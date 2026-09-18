@@ -12,6 +12,13 @@
  * L. 199/2025 rewrote the second IRPEF bracket and the AdE page is
  * internally inconsistent).
  *
+ * Known integration gap (refused by name, not approximated): workers owed a
+ * trattamento integrativo or c. 4 somma payout refuse in the statutory pass
+ * because pushStatutory has no earnings-credit line kind — the amounts would
+ * otherwise travel as factors while no stub line pays them. Clears when the
+ * generic layer accepts credit lines (FLEET-PROPOSE to Orchestrate, owned
+ * outside this pack); the pure engine already computes both payouts.
+ *
  * Registration shape: `country` is the string "IT", which does not yet
  * typecheck against `PayrollCountry` (packs.ts:190, still 'CA' | 'US'). The
  * pack is therefore typed as the full `PayrollCountryPack` minus the closed
