@@ -341,7 +341,7 @@ Settings → Features**.
 - Sales-tax nexus monitoring
 - Tax filings, return boxes, mappings, adjustments, review states, exports, and
   filing evidence
-- A 42-pack return-workpaper library covering examples for Canada, the United
+- A 49-pack return-workpaper library covering examples for Canada, the United
   States, the United Kingdom, Australia, New Zealand, several EU countries,
   India, Singapore, South Africa, the UAE, and Japan
 - Official-PDF field mapping where a compatible AcroForm is supplied
