@@ -1206,22 +1206,116 @@ async function snapshotScratchOrg(org: ScratchOrg, tables: readonly string[]): P
 }
 
 /**
- * Sentinel: abort a reset delete-pass transaction so the pass retries whole.
- * Thrown inside the pass when committing would violate a deferred link (see
- * below); caught by the pass loop, which continues. Never escapes the loop.
+ * Record the database cause (message + code + constraint), not the driver's
+ * query wrapper. The wrapper's `String()` is a multi-line query dump whose
+ * first line is always the uninformative "Failed query:" prefix, which is how
+ * reset failures used to report every table as an identical unknown.
  */
-const RESET_PASS_RETRY = "scratch-fixture-reset-pass-retry";
+function describeResetFailure(error: unknown): string {
+  const cause = (error as { cause?: unknown } | null | undefined)?.cause;
+  if (typeof cause === "object" && cause !== null) {
+    const pg = cause as { message?: unknown; code?: unknown; constraint?: unknown; detail?: unknown };
+    if (typeof pg.message === "string") {
+      const code = typeof pg.code === "string" ? pg.code : "?";
+      const constraint = typeof pg.constraint === "string" ? pg.constraint : "?";
+      const detail = typeof pg.detail === "string" && pg.detail.length > 0 ? ` ${pg.detail}` : "";
+      return `${pg.message} [${code}:${constraint}]${detail}`;
+    }
+  }
+  return String(error);
+}
+
+/**
+ * Restore every mutable baseline column from the committed template and
+ * reinsert deleted baseline rows; bounded passes handle FK ordering. Runs
+ * both before the delete passes (to repair test-mutated baseline references
+ * that would otherwise block deletes) and after (to repair cascade damage
+ * from the deletes themselves).
+ */
+async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
+  const schema = org.snapshotSchema;
+  if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
+  let restoreRemaining = tables.filter((table) => (columns.get(table) ?? []).includes("id"));
+  const restoreErrors = new Map<string, string>();
+  for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
+    const failed = await db.transaction(async (tx) => {
+      await setTeardownGucs(tx);
+      // Reassembling the committed baseline snapshot is a trusted historical
+      // assembly, which is exactly what the 0102 primary-book history guard's
+      // migration exemption exists for: repairing a test-reassigned primary
+      // while journals exist would otherwise be rejected as an uncontrolled
+      // book conversion. Test writes run after commit with the GUC off, so
+      // the guard still constrains everything the tests themselves do.
+      await tx.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+      // Baseline documents and their source entries reference each other, so
+      // reinserting the template in any fixed table order deadlocks without
+      // replica mode. Both links are DEFERRABLE: defer exactly those two, the
+      // same pair the full teardown defers, and constraint checks move to
+      // commit when both sides are present again.
+      await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
+      const failures: { table: string; error: string }[] = [];
+      for (const [index, table] of restoreRemaining.entries()) {
+        const tableColumns = columns.get(table) ?? [];
+        const mutable = tableColumns.filter((column) => column !== "id");
+        const target = `public.${quoteIdentifier(table)}`;
+        const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+        const assignments = mutable.map((column) => `${quoteIdentifier(column)} = baseline.${quoteIdentifier(column)}`).join(", ");
+        const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
+        const ownerPredicate = table === "orgs" ? `target.id = '${org.orgId}'` : `target.org_id = '${org.orgId}'`;
+        const savepoint = `scratch_fixture_restore_${pass}_${index}`;
+        await tx.execute(sql.raw(`savepoint ${savepoint}`));
+        try {
+          if (mutable.length > 0) {
+            await tx.execute(sql.raw(
+              `update ${target} as target set ${assignments} from ${snapshot} as baseline where target.id = baseline.id and ${ownerPredicate}`,
+            ));
+          }
+          await tx.execute(sql.raw(
+            `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.id = baseline.id)`,
+          ));
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+        } catch (error) {
+          await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
+          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+          failures.push({ table, error: describeResetFailure(error) });
+        }
+      }
+      return failures;
+    });
+    for (const table of restoreRemaining) restoreErrors.delete(table);
+    for (const failure of failed) restoreErrors.set(failure.table, failure.error);
+    const failedNames = failed.map((failure) => failure.table);
+    if (failedNames.length === 0) {
+      restoreRemaining = [];
+      break;
+    }
+    if (failedNames.length === restoreRemaining.length) break;
+    restoreRemaining = failedNames;
+  }
+  if (restoreRemaining.length > 0) {
+    const detail = restoreRemaining.map((table) => `${table}: ${restoreErrors.get(table) ?? "unknown restore failure"}`).join("; ");
+    throw new Error(`scratch fixture baseline restore failed — ${detail}`);
+  }
+}
 
 /**
  * Reset a leased tenant without dropping its bootstrap spine. Test-created
- * rows are removed in one committed, retrying server-side pass while the
- * known bootstrap ids remain. Any row that cannot be removed is an error: the
- * slot is tainted and will never be handed to another test. Full teardown and
- * the schema-wide 371-table proof happen only when the fixed pool closes.
+ * rows are removed in committed delete passes while the known bootstrap ids
+ * remain. Any row that cannot be removed is an error: the slot is tainted and
+ * will never be handed to another test. Full teardown and the schema-wide
+ * 371-table proof happen only when the fixed pool closes.
  */
 async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
   const schema = org.snapshotSchema;
   if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
+  // Repair test-mutated baseline references BEFORE deleting: a test that
+  // repointed a baseline row (a baseline account aimed at a non-baseline
+  // subsidiary) would otherwise hold its own test rows hostage, because the
+  // post-delete restore that repairs the pointer runs too late. Restoring
+  // first is safe for the deletes below — it touches only baseline rows (by
+  // id) and reinserts deleted baseline rows, never test rows — and the
+  // post-delete restore still runs after to repair cascade damage.
+  await restoreScratchOrgBaseline(org, tables, columns);
   let remaining = [...tables].filter((table) => table !== "orgs");
   const errors = new Map<string, string>();
   const coreSet = new Set<string>(CORE_A);
@@ -1231,17 +1325,17 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
     // teardown's phase order (generic passes, then TxA/TxB): a tail child
     // (capture runs, allocations) referencing a core parent must go first,
     // and inside the core the curated children-first order keeps
-    // lines-before-entries-before-documents. Alphabetical order deletes
-    // documents while entries still reference them and fails the whole pass
-    // at COMMIT on the deferred document/entry link instead of converging.
+    // lines-before-entries-before-documents. Within the pass the per-table
+    // loop sweeps until it stops making progress (see below): tail order is
+    // alphabetical, so a child attempted before its parent (payment
+    // instructions before their run items) fails its sweep and succeeds on
+    // the next one once the blocker is gone.
     const remainingSet = new Set(remaining);
     const ordered = [
       ...remaining.filter((t) => !coreSet.has(t)),
       ...CORE_A.filter((t) => remainingSet.has(t)),
     ];
-    let failed: { table: string; error: string }[];
-    try {
-      failed = await db.transaction(async (tx) => {
+    const failed: { table: string; error: string }[] = await db.transaction(async (tx) => {
         await setTeardownGucs(tx);
         // This is a dedicated disposable database owned by the CI job. The reset
         // must run as the test login, which is deliberately NOT a superuser (so
@@ -1258,7 +1352,6 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
         // path can enable pooling without the database marker checked above.
         await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
         await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
-        const failures: { table: string; error: string }[] = [];
 
         // These guards are intentionally unconditional. Disable only the named
         // test-evidence triggers for this transaction, exactly as full teardown
@@ -1330,63 +1423,81 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           where user_id in (select id from users where org_id = ${org.orgId})`);
         await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
         await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
-        for (const [index, table] of ordered.entries()) {
-          const savepoint = `scratch_fixture_reset_${pass}_${index}`;
-          await tx.execute(sql.raw(`savepoint ${savepoint}`));
-          try {
-            const target = `public.${quoteIdentifier(table)}`;
-            const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
-            const tableColumns = columns.get(table) ?? [];
-            if (tableColumns.includes("id")) {
-              await tx.execute(sql`
-                delete from ${sql.raw(target)} as target
-                 where target.org_id = ${org.orgId}
-                   and not exists (select 1 from ${sql.raw(snapshot)} as baseline where baseline.id = target.id)`);
-            } else {
-              // A handful of join/projection tables are keyed by composite
-              // columns and have no synthetic id. Compare every nullable column
-              // with IS NOT DISTINCT FROM, then restore missing template rows;
-              // the savepoint/pass machinery keeps FK ordering recoverable.
-              const match = rowMatch(tableColumns, "target", "baseline");
-              const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
-              await tx.execute(sql.raw(
-                `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
-              ));
-              await tx.execute(sql.raw(
-                `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
-              ));
+        // Sweep the ordered deletes until a full sweep converges or stops
+        // making progress. Every schema FK is deferrable (initially
+        // immediate), so a statement error only ever means "blocked by a row
+        // this same transaction has not deleted yet" — re-attempting the
+        // failed set in the same transaction converges every chain and every
+        // order artifact (instructions before items, parents before children)
+        // in this one commit. Without the re-attempt, a blocked documents
+        // row survives while journal_entries delete, and the deferred
+        // posted_entry link then fails the whole pass at COMMIT — rolling the
+        // converged deletes back with it, identically, on every pass.
+        let sweepTodo = ordered;
+        let failures: { table: string; error: string }[] = [];
+        for (let sweep = 0; sweepTodo.length > 0; sweep += 1) {
+          failures = [];
+          for (const [index, table] of sweepTodo.entries()) {
+            const savepoint = `scratch_fixture_reset_${pass}_${sweep}_${index}`;
+            await tx.execute(sql.raw(`savepoint ${savepoint}`));
+            try {
+              const target = `public.${quoteIdentifier(table)}`;
+              const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
+              const tableColumns = columns.get(table) ?? [];
+              if (tableColumns.includes("id")) {
+                await tx.execute(sql`
+                  delete from ${sql.raw(target)} as target
+                   where target.org_id = ${org.orgId}
+                     and not exists (select 1 from ${sql.raw(snapshot)} as baseline where baseline.id = target.id)`);
+              } else {
+                // A handful of join/projection tables are keyed by composite
+                // columns and have no synthetic id. Compare every nullable column
+                // with IS NOT DISTINCT FROM, then restore missing template rows;
+                // the savepoint/sweep machinery keeps FK ordering recoverable.
+                const match = rowMatch(tableColumns, "target", "baseline");
+                const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
+                await tx.execute(sql.raw(
+                  `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
+                ));
+                await tx.execute(sql.raw(
+                  `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
+                ));
+              }
+              await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+            } catch (error) {
+              // PostgreSQL aborts a transaction after any statement error. A
+              // savepoint creates a real subtransaction so one FK-blocked table
+              // can wait for a later sweep without poisoning the reset
+              // transaction.
+              await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
+              await tx.execute(sql.raw(`release savepoint ${savepoint}`));
+              failures.push({ table, error: describeResetFailure(error) });
             }
-            await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-          } catch (error) {
-            // PostgreSQL aborts a transaction after any statement error. A
-            // savepoint creates a real subtransaction so one FK-blocked table
-            // can be deferred to the next deterministic pass without poisoning
-            // the committed reset transaction.
-            await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
-            await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-            failures.push({ table, error: String(error) });
           }
+          if (failures.length === 0) break;
+          // The todo set only ever shrinks: an identical-length failure set
+          // means the sweep converged nothing and further sweeps would replay
+          // the identical statements against the identical rows.
+          if (failures.length === sweepTodo.length) break;
+          sweepTodo = failures.map((failure) => failure.table);
         }
         for (const { table, trigger } of GUARDED_EVIDENCE) {
           if (!tables.includes(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
         }
-        const doomNames = failures.map((f) => f.table);
-        if (doomNames.includes("documents") && !doomNames.includes("journal_entries")) {
-          // Entries were deleted while documents survive: the deferred
-          // posted_entry link would fail this pass at COMMIT and roll the
-          // entries delete back with it. Retry the whole pass instead — the
-          // rollback restores the entries too, and a later pass clears the
-          // documents' remaining referencer first. Transactional DDL (the
-          // trigger disables above) rolls back as well, so nothing leaks.
-          throw new Error(RESET_PASS_RETRY);
+        const doomNames = new Set(failures.map((f) => f.table));
+        if (doomNames.has("documents") && !doomNames.has("journal_entries")) {
+          // Entries are gone while documents survive: committing now would
+          // violate the deferred posted_entry link and roll every converged
+          // delete in this pass back with it. Replaying the pass cannot help
+          // — the sweeps above already ran the identical statements to
+          // stability — so fail fast with the stabilized per-table causes
+          // instead of committing partial work.
+          const detail = failures.map((f) => `${f.table}: ${f.error}`).join("; ");
+          throw new Error(`scratch fixture ${org.orgId} reset cannot clear documents while journal entries are gone — ${detail}`);
         }
         return failures;
       });
-    } catch (err) {
-      if ((err as Error).message !== RESET_PASS_RETRY) throw err;
-      continue;
-    }
     for (const table of remaining) errors.delete(table);
     for (const failure of failed) errors.set(failure.table, failure.error);
     const failedNames = failed.map((failure) => failure.table);
@@ -1406,60 +1517,10 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   // newly-created rows is insufficient: tests routinely update seeded books,
   // periods, accounts, items, and org settings before committing. Missing
   // baseline rows are reinserted as well; bounded passes handle FK ordering.
-  let restoreRemaining = tables.filter((table) => (columns.get(table) ?? []).includes("id"));
-  const restoreErrors = new Map<string, string>();
-  for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
-    const failed = await db.transaction(async (tx) => {
-      await setTeardownGucs(tx);
-      // Baseline documents and their source entries reference each other, so
-      // reinserting the template in any fixed table order deadlocks without
-      // replica mode. Both links are DEFERRABLE: defer exactly those two, the
-      // same pair the full teardown defers, and constraint checks move to
-      // commit when both sides are present again.
-      await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
-      const failures: { table: string; error: string }[] = [];
-      for (const [index, table] of restoreRemaining.entries()) {
-        const tableColumns = columns.get(table) ?? [];
-        const mutable = tableColumns.filter((column) => column !== "id");
-        const target = `public.${quoteIdentifier(table)}`;
-        const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
-        const assignments = mutable.map((column) => `${quoteIdentifier(column)} = baseline.${quoteIdentifier(column)}`).join(", ");
-        const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
-        const ownerPredicate = table === "orgs" ? `target.id = '${org.orgId}'` : `target.org_id = '${org.orgId}'`;
-        const savepoint = `scratch_fixture_restore_${pass}_${index}`;
-        await tx.execute(sql.raw(`savepoint ${savepoint}`));
-        try {
-          if (mutable.length > 0) {
-            await tx.execute(sql.raw(
-              `update ${target} as target set ${assignments} from ${snapshot} as baseline where target.id = baseline.id and ${ownerPredicate}`,
-            ));
-          }
-          await tx.execute(sql.raw(
-            `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.id = baseline.id)`,
-          ));
-          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-        } catch (error) {
-          await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
-          await tx.execute(sql.raw(`release savepoint ${savepoint}`));
-          failures.push({ table, error: String(error) });
-        }
-      }
-      return failures;
-    });
-    for (const table of restoreRemaining) restoreErrors.delete(table);
-    for (const failure of failed) restoreErrors.set(failure.table, failure.error);
-    const failedNames = failed.map((failure) => failure.table);
-    if (failedNames.length === 0) {
-      restoreRemaining = [];
-      break;
-    }
-    if (failedNames.length === restoreRemaining.length) break;
-    restoreRemaining = failedNames;
-  }
-  if (restoreRemaining.length > 0) {
-    const detail = restoreRemaining.map((table) => `${table}: ${restoreErrors.get(table) ?? "unknown restore failure"}`).join("; ");
-    throw new Error(`scratch fixture baseline restore failed — ${detail}`);
-  }
+  // The same restore also runs BEFORE the delete passes (see above) to repair
+  // test-mutated baseline references; this second run repairs cascade damage
+  // from the deletes themselves.
+  await restoreScratchOrgBaseline(org, tables, columns);
   await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
     await tx.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId} and name like 'Scratch %'`);
