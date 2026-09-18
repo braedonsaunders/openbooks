@@ -66,3 +66,24 @@ test("Argentina rate schedules are contiguous and every sourceId resolves", () =
 test("Argentina IVA is national with no subnational jurisdictions", () => {
   assert.equal(ARGENTINA_TAX_PACK.jurisdictions.length, 0);
 });
+
+test("Argentina standard band runs back to 1992 with the one-year grant, restoration and 2002 window kept", () => {
+  const codes = packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002");
+  assert.deepEqual(
+    codes.find((entry) => entry.code === "AR-VAT-STD")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [18, "1992-03-01", "1995-03-31"],
+      [21, "1995-04-01", "1996-03-31"],
+      [21, "1996-04-01", "2002-11-17"],
+      [19, "2002-11-18", "2003-01-17"],
+      [21, "2003-01-18", null],
+    ],
+  );
+  assert.deepEqual(
+    codes.find((entry) => entry.code === "AR-VAT-RED105")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [9.5, "2002-11-18", "2003-01-17"],
+      [10.5, "2003-01-18", null],
+    ],
+  );
+});
