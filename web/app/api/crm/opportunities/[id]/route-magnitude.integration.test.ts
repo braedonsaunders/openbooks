@@ -32,32 +32,35 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   state.orgId = org.orgId
-  state.actorId = (await seedFlowActors(org.orgId)).adminId
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(settings, '{features}',
-      coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const statusId = (await db.execute<{ id: string }>(sql`
-    insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
-    values (${org.orgId}, 'open', 'Open', 10, false, false, true)
-    returning id`)).rows[0]!.id
-  const itemId = (await db.execute<{ id: string }>(sql`
+  state.actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
+  const statusId = await withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
+       where id = ${org.orgId}`)
+    const statusId = (await db.execute<{ id: string }>(sql`
+      insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
+      values (${org.orgId}, 'open', 'Open', 10, false, false, true)
+      returning id`)).rows[0]!.id
+    return statusId
+  })
+  const itemId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into items (org_id, kind, name, is_active)
     values (${org.orgId}, 'service', 'Opp Item', true)
-    returning id`)).rows[0]!.id
-  const oppId = (await db.execute<{ id: string }>(sql`
+    returning id`))).rows[0]!.id
+  const oppId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency)
     values (${org.orgId}, 'OPP-001', 'Magnitude Opp', ${statusId}, 'CAD')
-    returning id`)).rows[0]!.id
+    returning id`))).rows[0]!.id
   return { org, statusId, itemId, oppId }
 }
 
@@ -72,15 +75,18 @@ async function patch(id: string, body: Record<string, unknown>): Promise<{ statu
   try {
     // Saves speak the revision contract: attach the live token so the
     // magnitude assertions exercise validation, not the 409 guard.
-    const expectedUpdatedAt = await revision(id)
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://crm.test/api/crm/opportunities/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...body, expectedUpdatedAt }),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
+    // The token read rides the same org scope as the PATCH itself.
+    const response = await withOrgContext(state.orgId, async () => {
+      const expectedUpdatedAt = await revision(id)
+      return PATCH(
+        new Request(`http://crm.test/api/crm/opportunities/${id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...body, expectedUpdatedAt }),
+        }),
+        { params: Promise.resolve({ id }) },
+      )
+    })
     return { status: response.status, json: await response.json().catch(() => null) }
   } catch (error) {
     return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
@@ -88,8 +94,8 @@ async function patch(id: string, body: Record<string, unknown>): Promise<{ statu
 }
 
 async function lineCount(oppId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from crm_opportunity_lines where opportunity_id = ${oppId}`)).rows
+  const rows = (await withOrgContext(state.orgId, () => db.execute<{ n: number }>(sql`
+    select count(*)::int as n from crm_opportunity_lines where opportunity_id = ${oppId}`))).rows
   return rows[0]!.n
 }
 
@@ -140,9 +146,9 @@ test('PATCH still saves a column-maximum line with identical read-back', { skip:
       lines: [{ itemId, quantity: '1', unitPrice: '999999999999999.9999' }],
     }))
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await db.execute<{ unit_price: string; amount: string }>(sql`
+    const rows = (await withOrgContext(state.orgId, () => db.execute<{ unit_price: string; amount: string }>(sql`
       select unit_price::text as unit_price, amount::text as amount
-        from crm_opportunity_lines where opportunity_id = ${oppId}`)).rows
+        from crm_opportunity_lines where opportunity_id = ${oppId}`))).rows
     assert.equal(rows[0]!.unit_price, '999999999999999.9999')
     assert.equal(rows[0]!.amount, '999999999999999.9999')
   } finally {

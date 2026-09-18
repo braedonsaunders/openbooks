@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { dropScratchOrgReporting } from "@openbooks/engine/src/test-fixtures.ts";
 import { seedAdoption } from "@openbooks/engine/src/payroll-filing-test-fixtures.ts";
 
@@ -86,29 +86,34 @@ test(
   "the import route carries the caller's subsidiary fence onto every write",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const fx = await seedAdoption();
+    const fx = await withBypassContext(() => seedAdoption());
     try {
       const hidden = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,name,base_currency,country,parent_id,is_elimination,is_active,custom)
-        values(${hidden},${fx.orgId},'Other employer','CAD','CA',${fx.subsidiaryId},false,true,'{}'::jsonb)`);
-      await db.execute(
-        sql`update parties set subsidiary_id=${fx.subsidiaryId} where id=${fx.employeeId} and org_id=${fx.orgId}`,
-      );
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into subsidiaries(id,org_id,name,base_currency,country,parent_id,is_elimination,is_active,custom)
+          values(${hidden},${fx.orgId},'Other employer','CAD','CA',${fx.subsidiaryId},false,true,'{}'::jsonb)`);
+        await db.execute(
+          sql`update parties set subsidiary_id=${fx.subsidiaryId} where id=${fx.employeeId} and org_id=${fx.orgId}`,
+        );
+      });
       const gate = (allowed: Set<string> | null) => ({
         user: { orgId: fx.orgId, id: fx.actorId },
         permissions: new Set(["data.import", "payroll.manage", "admin.setup.manage", "parties.manage"]),
         allowedSubsidiaryIds: allowed,
       });
       const carryInCount = async () =>
-        Number((await db.execute<{ n: string }>(sql`
+        Number((await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from payroll_opening_balances
-           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`)).rows[0]!.n);
+           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`))).rows[0]!.n);
+      // The mocked session gate carries no connection scope; route calls run
+      // under the org, as the middleware provides in production.
+      const send = (body: Record<string, unknown>) => withOrgContext(fx.orgId, () => post(body));
 
       // A resource that cannot enforce the fence is refused for a restricted
       // caller in every mode, before any row is looked at.
       routeState.authz = gate(new Set([hidden]));
       for (const mode of ["preview", "commit"] as const) {
-        const refused = await post({
+        const refused = await send({
           mode,
           resource: "accounts",
           rows: [{ number: "9999", name: "Smuggled" }],
@@ -124,7 +129,7 @@ test(
       // employee fails in preview (no "would be created" disclosure) and in
       // commit (nothing written).
       for (const mode of ["preview", "commit"] as const) {
-        const response = await post(carryIn(mode, fx.employeeName));
+        const response = await send(carryIn(mode, fx.employeeName));
         assert.equal(response.status, 200);
         const body = await response.json();
         assert.equal(body.outcome.created, 0);
@@ -136,17 +141,17 @@ test(
 
       // The same rows from a caller whose scope covers the employee are written.
       routeState.authz = gate(new Set([fx.subsidiaryId]));
-      const preview = await post(carryIn("preview", fx.employeeName));
+      const preview = await send(carryIn("preview", fx.employeeName));
       assert.equal((await preview.json()).outcome.created, 1);
       assert.equal(await carryInCount(), 0);
-      const commit = await post(carryIn("commit", fx.employeeName));
+      const commit = await send(carryIn("commit", fx.employeeName));
       assert.equal(commit.status, 200);
       assert.equal((await commit.json()).outcome.created, 1);
       assert.equal(await carryInCount(), 1);
 
       // An unrestricted caller keeps every resource.
       routeState.authz = gate(null);
-      const accounts = await post({
+      const accounts = await send({
         mode: "preview",
         resource: "accounts",
         rows: [{ number: "9999", name: "Allowed" }],

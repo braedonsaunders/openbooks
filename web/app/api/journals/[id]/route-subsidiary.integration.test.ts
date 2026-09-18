@@ -70,7 +70,7 @@ const patchRouteUrl = "./route.ts?journal-subsidiary-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { documentRevisionCounterSql } = await import("../../../../lib/documents.ts");
 
@@ -99,9 +99,9 @@ test(
   "journals PATCH refuses to clear the header subsidiary",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       // A subsidiary-restricted caller: the null-clear must be refused, not
       // waved past the scope guard (which only checks non-null ids).
       routeState.authz = {
@@ -110,41 +110,45 @@ test(
         allowedSubsidiaryIds: [org.subsidiaryId],
       };
       const documentId = randomUUID();
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, subsidiary_id, document_date,
-           currency, fx_rate, status, subtotal, tax_total, total, custom,
-           created_by, updated_by)
-        values (
-          ${documentId}, ${org.orgId}, 'journal', 'JE-SUB-CLEAR-1',
-          ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
-          '{}'::jsonb, ${adminId}, ${adminId}
-        )
-      `);
-      await db.execute(sql`
-        insert into document_lines
-          (org_id, document_id, line_number, account_id, quantity, unit_price,
-           amount, subsidiary_id, custom, created_by, updated_by)
-        values (
-          ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 100,
-          100, ${org.subsidiaryId}, '{}'::jsonb, ${adminId}, ${adminId}
-        )
-      `);
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, document_number, subsidiary_id, document_date,
+             currency, fx_rate, status, subtotal, tax_total, total, custom,
+             created_by, updated_by)
+          values (
+            ${documentId}, ${org.orgId}, 'journal', 'JE-SUB-CLEAR-1',
+            ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
+            '{}'::jsonb, ${adminId}, ${adminId}
+          )
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, quantity, unit_price,
+             amount, subsidiary_id, custom, created_by, updated_by)
+          values (
+            ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 100,
+            100, ${org.subsidiaryId}, '{}'::jsonb, ${adminId}, ${adminId}
+          )
+        `);
+      });
 
-      const token = await revisionToken(documentId);
+      // The mocked session gate carries no connection scope; the revision
+      // read, the handler, and the verification read run under the org.
+      const token = await withOrgContext(org.orgId, () => revisionToken(documentId));
       const attempt = patchRequest(documentId, { subsidiaryId: null, expectedUpdatedAt: token });
-      const refused = await PATCH(attempt.req, attempt.ctx);
+      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.equal(refused.status, 422);
       assert.match((await refused.json() as { error: string }).error, /subsidiary/i);
-      const stored = (await db.execute<{ subsidiary_id: string | null }>(sql`
+      const stored = (await withOrgContext(org.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from documents where id = ${documentId}
-      `));
+      `)));
       assert.equal(stored.rows[0]!.subsidiary_id, org.subsidiaryId);
 
       // Positive control: an ordinary header edit with the same revision
       // still saves, so the refusal is the null — not the harness.
       const memo = patchRequest(documentId, { memo: "still editable", expectedUpdatedAt: token });
-      const saved = await PATCH(memo.req, memo.ctx);
+      const saved = await withOrgContext(org.orgId, () => PATCH(memo.req, memo.ctx));
       assert.equal(saved.status, 200);
     } finally {
       routeState.authz = null;
