@@ -40,16 +40,14 @@ test("AU statutory slots name PAYG withholding, super and workers comp", () => {
   assert.equal(sg?.remittance, "external");
 });
 
-test("AU regions list every state and territory and refuse each by name", () => {
+test("AU regions list every state and territory as supported federal PAYG", () => {
   assert.deepEqual([...AU_KNOWN_REGIONS], [
     "NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT",
   ]);
   assert.deepEqual(AU_PAYROLL_PACK.regions.known, AU_KNOWN_REGIONS);
-  assert.deepEqual(AU_PAYROLL_PACK.regions.supported, []);
-  assert.match(
-    AU_PAYROLL_PACK.regions.unsupportedReason.replace("{region}", "NSW"),
-    /PAYG withholding for NSW is not implemented/,
-  );
+  // PAYG is federal and uniform: no state has its own tables, so every
+  // known region is supported.
+  assert.deepEqual([...AU_PAYROLL_PACK.regions.supported], [...AU_KNOWN_REGIONS]);
 });
 
 test("AU certificates declare the TFN declaration, not a W-4 clone", () => {
@@ -67,16 +65,17 @@ test("AU certificates declare the TFN declaration, not a W-4 clone", () => {
   assert.equal(AU_PAYROLL_PACK.certificates(), AU_CERTIFICATES);
 });
 
-test("AU withholding refuses every region and levies no state income tax", () => {
+test("AU withholding implements federal PAYG in every region", () => {
   assert.equal(AU_WITHHOLDING.country, "AU");
   assert.deepEqual(
     AU_WITHHOLDING.regions.map((region) => region.region),
     AU_KNOWN_REGIONS,
   );
   for (const region of AU_WITHHOLDING.regions) {
-    assert.equal(region.implemented, false);
-    assert.match(region.unimplementedReason ?? "", /Schedule 1/);
+    assert.equal(region.implemented, true);
+    assert.equal(region.unimplementedReason, undefined);
     assert.equal(region.residentWithholding, "none");
+    assert.match(region.citation, /F2026L00716/);
   }
   assert.equal(AU_PAYROLL_PACK.withholding(), AU_WITHHOLDING);
 });

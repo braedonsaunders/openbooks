@@ -25,13 +25,13 @@ import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
 const AU_REGIONS: PayrollRegionCoverage = {
   label: "state",
   known: AU_KNOWN_REGIONS,
-  // PAYG withholding is federal and uniform, but the engine computes no
-  // state's income tax until Schedule 1 is transcribed — so every region is
-  // refused by name rather than silently withheld at zero.
-  supported: [],
+  // PAYG withholding is federal and uniform: the transcribed Schedule 1
+  // scales apply identically in every state and territory, so every known
+  // region is supported. No state publishes its own tables
+  // (regionsWithOwnTables is [] in AU_TAX_YEARS).
+  supported: [...AU_KNOWN_REGIONS],
   unsupportedReason:
-    "PAYG withholding for {region} is not implemented by the AU payroll pack: "
-    + "no published PAYG withholding edition is transcribed (see AU_TAX_YEARS)",
+    "PAYG withholding for {region} is not implemented by the AU payroll pack",
 };
 
 export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {

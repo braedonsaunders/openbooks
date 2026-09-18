@@ -1,15 +1,23 @@
 /**
- * AU 2026–27 parity proofs: agency goldens, hand-worked cases, sweep.
+ * AU 2026–27 parity proofs for the instrument's per-period method.
  *
- * Provenance: no ATO worked example is quotable from this vantage
- * (ato.gov.au 403s), so per the live-shard bar these goldens are built FROM
- * THE TABLES with the arithmetic shown in comments — each expected figure is
- * derived by hand from the Schedule 7 / MLA / HESA figures quoted in
- * ./tax-year-2027.ts, and the engine must reproduce it to the cent. The
- * independence is real: the comments below do the multiplication the engine
- * is not allowed to get wrong.
+ * Mechanism 2 (hand-worked, arithmetic shown in comments — each expected
+ * figure is derived by hand from the Schedule 1 / Schedule 8 coefficients
+ * quoted in ./schedule1-2027.ts, and the engine must reproduce it to the
+ * dollar). Mechanism 1 (the instrument's own sample data and worked
+ * examples) lives in au-instrument.test.ts. Mechanism 3 is the FY throw
+ * below and auTablesForPayDate; mechanism 4 is the sweeps plus the
+ * monotonicity loop.
+ *
+ * Where the instrument disagrees with the retired annualising engine, the
+ * instrument wins: the $5,000/month no-threshold case was $1,037.50 by
+ * annualisation and is $1,291.00 by Schedule 1; the $12,500/month STSL case
+ * was $4,337.21 and is $4,342.00. The working-holiday-maker case is gone —
+ * Schedule 15 needs registration and YTD state the pack cannot see, so the
+ * engine refuses WHM by name and a weekly scale-2 case takes its place.
  *
  * Amounts are decimal strings at fixed scale ("810.0000"), never floats.
+ * PAYG withholds whole dollars; the .0000 is the slot's fixed scale.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -24,171 +32,188 @@ const RESIDENT = {
   periodsPerYear: 12,
 } as const;
 
-// $60,000 resident, threshold claimed, monthly.
-// Tax: (45,000−18,200)×15% = 4,020.00; (60,000−45,000)×30% = 4,500.00 → 8,520.00.
-// Medicare: 60,000 > 35,013 → 2% = 1,200.00. HELP: none.
-// PAYG: 9,720.00 / 12 = 810.00. SG: 5,000 × 12% = 600.00.
-test("AU golden: $60k resident monthly withholds 810.00 + 600.00 SG", () => {
+// Monthly $5,000, threshold claimed, scale 2.
+// Weekly equiv: 5,000×3/13 = 1,153.84 → 1,153 → x = 1,153.99.
+// y = 0.3227×1,153.99 − 185.1935 = 372.3926 − 185.1935 = 187.1991 → $187.
+// Monthly: 187×13/3 = 810.33 → $810. SG: 5,000×12% = 600.00.
+test("AU golden: $5k monthly scale 2 withholds 810 + 600 SG", () => {
   const result = calculateAu2027({
-    ...RESIDENT, annualIncome: "60000", pensionable: "5000",
+    ...RESIDENT, income: "5000", pensionable: "5000",
   });
   assert.equal(result.payg, "810.0000");
   assert.equal(result.sg, "600.0000");
 });
 
-// $32,000 resident with STSL, fortnightly. Medicare shades, so HELP is nil.
-// Tax: (32,000−18,200)×15% = 2,070.00.
-// Medicare: min(2%×32,000 = 640.00, 10%×(32,000−28,011) = 398.90) = 398.90.
-// Reduced levy → s154-1(2) zeroes HELP. PAYG: 2,468.90 / 26 = 94.9576… → 94.96.
-// SG: 1,230.77 × 12% = 147.6924 → 147.69.
-test("AU golden: $32k STSL fortnightly shades Medicare and nils HELP", () => {
+// Fortnightly $1,230.77 with STSL, scale 2 + STSL table.
+// Weekly equiv: 1,230.77/2 = 615.38 → 615 → x = 615.99 (< 673 row).
+// y = 0.25×615.99 − 108.2135 = 153.9975 − 108.2135 = 45.7840 → $46.
+// Fortnightly: 46×2 = $92. SG: 1,230.77×12% = 147.6924 → 147.69.
+test("AU golden: $1,230.77 fortnightly STSL withholds 92", () => {
   const result = calculateAu2027({
-    ...RESIDENT, annualIncome: "32000", stslDebt: true,
+    ...RESIDENT, income: "1230.77", stslDebt: true,
     pensionable: "1230.77", periodsPerYear: 26,
   });
-  assert.equal(result.payg, "94.9600");
+  assert.equal(result.payg, "92.0000");
   assert.equal(result.sg, "147.6900");
 });
 
-// $100,000 foreign resident, monthly. No threshold, no Medicare, no HELP.
-// Tax: 100,000 × 30% = 30,000.00 → PAYG 2,500.00.
-// SG: 8,333.33 × 12% = 999.9996 → half-up to 1,000.00.
-test("AU golden: $100k foreign resident withholds 2,500.00 flat", () => {
+// Monthly $8,333.33, foreign resident, scale 3 (no Medicare in scale 3).
+// Weekly equiv: 8,333.33×3/13 = 1,923.07 → 1,923 → x = 1,923.99.
+// y = 0.30×1,923.99 − 0.30 = 577.1970 − 0.30 = 576.8970 → $577.
+// Monthly: 577×13/3 = 2,500.33 → $2,500.
+// SG: 8,333.33×12% = 999.9996 → half-up to 1,000.00.
+test("AU golden: $8,333.33 foreign monthly withholds 2,500 flat", () => {
   const result = calculateAu2027({
     ...RESIDENT,
     residency: "foreign_resident",
-    annualIncome: "100000",
+    income: "8333.33",
     pensionable: "8333.33",
   });
   assert.equal(result.payg, "2500.0000");
   assert.equal(result.sg, "1000.0000");
 });
 
-// $60,000 resident WITHOUT a threshold claim (scale-1 effect, engine-stated).
-// Tax: 45,000×15% = 6,750.00; 15,000×30% = 4,500.00 → 11,250.00.
-// Medicare 1,200.00 → PAYG 12,450.00 / 12 = 1,037.50.
-test("AU golden: $60k without threshold claim withholds from the first dollar", () => {
+// Monthly $5,000 WITHOUT a threshold claim, scale 1. The instrument wins:
+// weekly equiv 1,153 → x = 1,153.99 (< 2,246 row).
+// y = 0.32×1,153.99 − 71.6508 = 369.2768 − 71.6508 = 297.6260 → $298.
+// Monthly: 298×13/3 = 1,291.33 → $1,291.
+test("AU golden: $5k monthly scale 1 withholds 1,291", () => {
   const result = calculateAu2027({
-    ...RESIDENT, annualIncome: "60000", claimsThreshold: false, pensionable: "5000",
+    ...RESIDENT, income: "5000", claimsThreshold: false, pensionable: "5000",
   });
-  assert.equal(result.payg, "1037.5000");
+  assert.equal(result.payg, "1291.0000");
   assert.equal(result.sg, "600.0000");
 });
 
-// $50,000 working holiday maker, monthly. Part III bands, no Medicare.
-// Tax: 45,000×15% = 6,750.00; 5,000×30% = 1,500.00 → 8,250.00 → PAYG 687.50.
-test("AU golden: $50k WHM uses Part III bands with no Medicare", () => {
+// Weekly $1,000, threshold claimed, scale 2. x = 1,000.99 (< 1,282 row).
+// y = 0.3227×1,000.99 − 185.1935 = 323.0195 − 185.1935 = 137.8260 → $138.
+// SG: 1,000×12% = 120.00.
+test("AU golden: $1k weekly scale 2 withholds 138", () => {
   const result = calculateAu2027({
-    ...RESIDENT, annualIncome: "50000", workingHolidayMaker: true, pensionable: "4166.67",
+    ...RESIDENT, income: "1000", pensionable: "1000", periodsPerYear: 52,
   });
-  assert.equal(result.payg, "687.5000");
-  assert.equal(result.sg, "500.0000");
+  assert.equal(result.payg, "138.0000");
+  assert.equal(result.sg, "120.0000");
 });
 
-// $150,000 resident with STSL, monthly. Both HELP bands + 10% cap slack.
-// Tax: 4,020.00 + 90,000×30% (27,000.00) + 15,000×37% (5,550.00) = 36,570.00.
-// Medicare: 3,000.00 (full → HELP applies).
-// HELP: (129,717−69,528)×15% = 9,028.35; (150,000−129,717)×17% = 3,448.11 →
-// 12,476.46 ≤ 10%×150,000 cap. PAYG: 52,046.46/12 = 4,337.205 → 4,337.21.
-test("AU golden: $150k STSL hits both HELP bands under the 10% cap", () => {
+// Monthly $12,500 with STSL, scale 2 + STSL table. The instrument wins:
+// weekly equiv: 12,500×3/13 = 2,884.61 → 2,884 → x = 2,884.99 (< 3,577 row).
+// y = 0.56×2,884.99 − 613.9154 = 1,615.5944 − 613.9154 = 1,001.6790 → $1,002.
+// Monthly: 1,002×13/3 = 4,342.00 → $4,342. SG 1,500.00.
+test("AU golden: $12.5k monthly STSL withholds 4,342", () => {
   const result = calculateAu2027({
-    ...RESIDENT, annualIncome: "150000", stslDebt: true, pensionable: "12500",
+    ...RESIDENT, income: "12500", stslDebt: true, pensionable: "12500",
   });
-  assert.equal(result.payg, "4337.2100");
+  assert.equal(result.payg, "4342.0000");
   assert.equal(result.sg, "1500.0000");
 });
 
-// Band-boundary sweep, periodsPerYear 1 so PAYG equals the annual figure.
-// Resident low edges (Medicare nil below $28,011; full 2% above $35,013):
-// 18,200 → 0; 18,201 → 0.15;
-// 45,000 → 4,020.00 tax + 900.00 Medicare = 4,920.00;
-// 45,001 → 4,020.30 + 900.02 = 4,920.32.
-test("AU sweep: resident low band edges at, below and above", () => {
+// Scale-1 weekly edges (x = w + 0.99):
+// 187 → 0.15×187.99−0.15 = 28.0485 → 28; 188 → next row, 28.3670 → 28;
+// 370 → 66.2960 → 66; 371 → 0.179×371.99−0.1066 = 66.4796 → 66.
+test("AU sweep: scale-1 weekly edges at, below and above", () => {
   const cases: Array<[string, string]> = [
-    ["18200", "0.0000"],
-    ["18201", "0.1500"],
-    ["45000", "4920.0000"],
-    ["45001", "4920.3200"],
+    ["187", "28.0000"],
+    ["188", "28.0000"],
+    ["370", "66.0000"],
+    ["371", "66.0000"],
   ];
   for (const [income, expected] of cases) {
     const result = calculateAu2027({
-      ...RESIDENT, annualIncome: income, pensionable: "0", periodsPerYear: 1,
+      ...RESIDENT, income, claimsThreshold: false, pensionable: "0", periodsPerYear: 52,
     });
-    assert.equal(result.payg, expected, `income ${income}`);
+    assert.equal(result.payg, expected, `weekly ${income}`);
   }
 });
 
-// Foreign-resident high edges (no Medicare/HELP for foreign residents):
-// 135,000 → 135,000×30% = 40,500.00; 135,001 → +0.37;
-// 190,000 → 40,500.00 + 55,000×37% = 60,850.00; 190,001 → +0.45.
-test("AU sweep: foreign-resident high band edges at, below and above", () => {
+// Scale-2 weekly edges across the $538 Medicare-shade row change:
+// 537 → 0.15×537.99−54.3462 = 26.3523 → 26;
+// 538 → 0.25×538.99−108.2135 = 26.5340 → 27;
+// 672 → 60.0340 → 60; 673 → 0.17×673.99−54.3473 = 60.2310 → 60.
+test("AU sweep: scale-2 weekly edges at, below and above", () => {
   const cases: Array<[string, string]> = [
-    ["135000", "40500.0000"],
-    ["135001", "40500.3700"],
-    ["190000", "60850.0000"],
-    ["190001", "60850.4500"],
+    ["537", "26.0000"],
+    ["538", "27.0000"],
+    ["672", "60.0000"],
+    ["673", "60.0000"],
+  ];
+  for (const [income, expected] of cases) {
+    const result = calculateAu2027({
+      ...RESIDENT, income, pensionable: "0", periodsPerYear: 52,
+    });
+    assert.equal(result.payg, expected, `weekly ${income}`);
+  }
+});
+
+// Scale-3 weekly edges (no Medicare anywhere in scale 3):
+// 2,595 → 0.30×2,595.99−0.30 = 778.4970 → 778;
+// 2,596 → 0.37×2,596.99−181.7308 = 779.1555 → 779.
+test("AU sweep: scale-3 weekly edges at, below and above", () => {
+  const cases: Array<[string, string]> = [
+    ["2595", "778.0000"],
+    ["2596", "779.0000"],
   ];
   for (const [income, expected] of cases) {
     const result = calculateAu2027({
       ...RESIDENT,
       residency: "foreign_resident",
-      annualIncome: income,
+      income,
       pensionable: "0",
-      periodsPerYear: 1,
+      periodsPerYear: 52,
     });
-    assert.equal(result.payg, expected, `income ${income}`);
+    assert.equal(result.payg, expected, `weekly ${income}`);
   }
 });
 
-// Medicare edges (resident, no STSL, periods 1): threshold, shade, full.
-test("AU sweep: Medicare threshold and phase-in edges", () => {
+// STSL floor edges, scale 2 + STSL (below $1,337 the row repeats the base):
+// 1,336 → 0.32×1,336.99−181.7319 = 246.1049 → 246;
+// 1,337 → 0.47×1,337.99−382.2935 = 246.5618 → 247.
+test("AU sweep: STSL floor edges switch tables without a cliff", () => {
   const cases: Array<[string, string]> = [
-    // 28,011: no levy. Tax (28,011−18,200)×15% = 1,471.65.
-    ["28011", "1471.6500"],
-    // 28,012: min(560.24, 0.10) = 0.10 levy. Tax 1,471.80.
-    ["28012", "1471.9000"],
-    // 35,013: min(700.26, 700.20) = 700.20 levy. Tax 2,521.95.
-    ["35013", "3222.1500"],
-    // 35,014: full 700.28 levy. Tax 2,522.10.
-    ["35014", "3222.3800"],
+    ["1336", "246.0000"],
+    ["1337", "247.0000"],
   ];
   for (const [income, expected] of cases) {
     const result = calculateAu2027({
-      ...RESIDENT, annualIncome: income, pensionable: "0", periodsPerYear: 1,
+      ...RESIDENT, income, stslDebt: true, pensionable: "0", periodsPerYear: 52,
     });
-    assert.equal(result.payg, expected, `income ${income}`);
+    assert.equal(result.payg, expected, `weekly ${income}`);
   }
 });
 
-// HELP edges (resident + STSL, periods 1): minimum income and second band.
-// 69,528: tax 11,378.40 + Medicare 1,390.56, HELP nil → 12,768.96.
-// 69,529: tax 11,378.70 + Medicare 1,390.58 + 0.15 HELP → 12,769.43.
-// 129,717: tax 29,435.10 + Medicare 2,594.34 + 9,028.35 HELP → 41,057.79.
-// 129,718: tax 29,435.40 + Medicare 2,594.36 + 9,028.52 HELP → 41,058.28.
-test("AU sweep: HELP minimum-income and second-band edges", () => {
-  const cases: Array<[string, string]> = [
-    ["69528", "12768.9600"],
-    ["69529", "12769.4300"],
-    ["129717", "41057.7900"],
-    ["129718", "41058.2800"],
-  ];
-  for (const [income, expected] of cases) {
+// Withholding never falls as weekly pay rises (scale 2, $0–$3,700).
+test("AU sweep: scale-2 withholding is monotonic in weekly pay", () => {
+  let previous = -1;
+  for (let weekly = 0; weekly <= 3700; weekly++) {
     const result = calculateAu2027({
-      ...RESIDENT, annualIncome: income, stslDebt: true, pensionable: "0", periodsPerYear: 1,
+      ...RESIDENT, income: String(weekly), pensionable: "0", periodsPerYear: 52,
     });
-    assert.equal(result.payg, expected, `income ${income}`);
+    const current = Number(result.payg);
+    assert.ok(current >= previous, `weekly ${weekly}: ${current} < ${previous}`);
+    previous = current;
   }
 });
 
-test("AU engine refuses no-TFN and bad periods by name", () => {
+test("AU engine refuses no-TFN, WHM and unsupported frequencies by name", () => {
   assert.throws(
-    () => calculateAu2027({ ...RESIDENT, annualIncome: "60000", pensionable: "0", tfnQuoted: false }),
+    () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 52, tfnQuoted: false }),
     /no quoted TFN/,
   );
   assert.throws(
-    () => calculateAu2027({ ...RESIDENT, annualIncome: "60000", pensionable: "0", periodsPerYear: 0 }),
+    () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 52, workingHolidayMaker: true }),
+    /working holiday makers is refused/,
+  );
+  assert.throws(
+    () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 0 }),
     /periodsPerYear/,
   );
+  for (const periodsPerYear of [1, 24]) {
+    assert.throws(
+      () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear }),
+      /refused by name/,
+      `${periodsPerYear} pays per year`,
+    );
+  }
 });
 
 function stubCtx(overrides: Record<string, unknown> = {}): Parameters<typeof computeAuStatutory>[0] {
