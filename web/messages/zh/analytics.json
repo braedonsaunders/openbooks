@@ -462,6 +462,7 @@
       "newCustomers": "新客户",
       "overdueOrders": "逾期订单",
       "periodRevenue": "本期营收",
+      "totalInvoiced": "已开票总额",
       "profitLeaks": "利润流失",
       "projectedClv": "预测CLV",
       "recencyRisk": "近期风险",
@@ -558,6 +559,15 @@
       "review": "复核",
       "win-back": "挽回"
     },
+    "recon": {
+      "title": "营收对账",
+      "tax": "开票总额中的销售税",
+      "credits": "贷项通知单",
+      "deferred": "递延至以后期间",
+      "recognized": "以前开票在本期确认",
+      "voids": "作废调整",
+      "other": "其他账簿分录"
+    },
     "risk": {
       "critical": "严重",
       "high": "高",
@@ -634,7 +644,7 @@
       "recencyBold": "近期性：",
       "recencyTail": " 以当日（查看历史时以期末）为准，从不用未来的财年末。",
       "revenueBold": "营收口径：",
-      "revenueTail": " 已过账客户发票的单据合计。"
+      "revenueTail": " 已确认营收——净收入科目记账，与损益表口径一致。已开票为开票总额；客户钻取会调节两者。"
     },
     "sub": {
       "activeLast6mo": "近6个月活跃",
@@ -652,6 +662,7 @@
       "newInPeriod": "期内新增{count}个",
       "pastUsualCycle": "超出常规周期",
       "revenue": "营收",
+      "invoiced": "本期开票总额",
       "rfmChampions": "RFM冠军客群",
       "score40to59": "评分40–59",
       "score80Plus": "评分≥80",
@@ -696,6 +707,7 @@
       "retentionProb": "留存概率",
       "revShare": "营收占比",
       "revenue": "营收",
+      "invoiced": "已开票",
       "risk": "风险",
       "riskFactors": "风险因素",
       "score": "评分",

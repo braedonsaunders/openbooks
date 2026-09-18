@@ -462,6 +462,7 @@
       "newCustomers": "Novos clientes",
       "overdueOrders": "Pedidos em atraso",
       "periodRevenue": "Receita do período",
+      "totalInvoiced": "Total faturado",
       "profitLeaks": "Vazamentos de lucro",
       "projectedClv": "CLV projetado",
       "recencyRisk": "Risco de recentidade",
@@ -558,6 +559,15 @@
       "review": "Revisar",
       "win-back": "Reconquistar"
     },
+    "recon": {
+      "title": "Conciliação de receita",
+      "tax": "Impostos nos totais faturados",
+      "credits": "Notas de crédito",
+      "deferred": "Diferido para períodos futuros",
+      "recognized": "Reconhecido de faturamentos anteriores",
+      "voids": "Ajustes de anulação",
+      "other": "Outros lançamentos contábeis"
+    },
     "risk": {
       "critical": "Crítico",
       "high": "Alto",
@@ -634,7 +644,7 @@
       "recencyBold": "Recentidade:",
       "recencyTail": " medida até hoje (ou até o fim do período no histórico), nunca até um fim de exercício futuro.",
       "revenueBold": "Base de receita:",
-      "revenueTail": " totais de documentos de faturas de clientes lançados."
+      "revenueTail": " receita reconhecida — lançamentos líquidos de receita, o mesmo universo contábil da DRE. Faturado é o faturamento bruto; o detalhe do cliente concilia os dois."
     },
     "sub": {
       "activeLast6mo": "ativo nos últimos 6 meses",
@@ -652,6 +662,7 @@
       "newInPeriod": "{count} novos no período",
       "pastUsualCycle": "além do ciclo habitual",
       "revenue": "receita",
+      "invoiced": "faturamento bruto no período",
       "rfmChampions": "segmento de campeões RFM",
       "score40to59": "escore 40–59",
       "score80Plus": "escore ≥ 80",
@@ -696,6 +707,7 @@
       "retentionProb": "Prob. retenção",
       "revShare": "Part. receita",
       "revenue": "Receita",
+      "invoiced": "Faturado",
       "risk": "Risco",
       "riskFactors": "Fatores de risco",
       "score": "Pontuação",
