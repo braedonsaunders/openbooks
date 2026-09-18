@@ -59,7 +59,7 @@ export function CardTile({
   return (
     <div
       className={
-        'flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950 ' +
+        'flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ' +
         (className ?? '')
       }
     >
