@@ -34,20 +34,36 @@ const TR_KDV1_2026: TaxReturnPack = {
  * transaction-type codes, not stable public numeric box codes, so there are
  * no Casilla-style numbers to transcribe.
  *
- * SOURCING: four citations are non-authority, kept as named id-specific
- * exceptions (wave5 proof). `sirkuler_2008_03_baseline` (2008 professional
- * circular quoting BKK 2007/13033: 18/8/1 from 2008) carries every
- * 2008-01-01 row — the underlying RG 30.12.2007/26742 and mevzuat.gov.tr
- * are unreachable from this sandbox. `sovos_tr_kdv_july2023` and
- * `trustus_tr_kdv_table` corroborate the 7346 increase (18 to 20, 8 to 10,
- * 1 unchanged, effective 10.07.2023) and were the path that verified the
- * Resmî Gazete PDF URL; the RG PDF itself is not fetchable from this
- * sandbox (TLS timeout on https, http redirects back to https), which is a
- * sandbox limitation, not corroboration. `kdv1_v41_duyuru_mirror`
- * (alomaliye mirror of the GİB KDV1 v41 duyuru) corroborates the table and
- * field names — the ebeyan beyan-doc center is a JS application with no
- * curl-reachable duyuru PDF. No rate value changes; truncating to
- * GİB-portal-attested-only would leave no rate history at all.
+ * SOURCING: zero vendor citations. The baseline rows rest on the gazette
+ * instrument itself — Bakanlar Kurulu Kararı 2007/13033, Resmî Gazete
+ * 30.12.2007 sayı 26742, decided 24/12/2007 under KDV Kanunu md. 28 ve 36,
+ * read at the gazette's own URL
+ * https://www.resmigazete.gov.tr/eskiler/2007/12/20071230-4.htm by a host
+ * whose network reaches resmigazete.gov.tr (this sandbox's TLS cannot; a
+ * sandbox limitation, recorded per the pack-fleet fetch rules). Operative
+ * Madde 1 — the legacy page encoding strips Turkish diacritics, the
+ * figures are unambiguous:
+ *
+ * > Mal teslimleri ile hizmet ifalarına uygulanacak katma değer vergisi
+ * > oranları; a) Ekli listelerde yer alanlar hariç olmak üzere, vergiye
+ * > tabi işlemler için, % 18 b) Ekli (I) sayılı listede yer alan teslim ve
+ * > hizmetler için, % 1 c) Ekli (II) sayılı listede yer alan teslim ve
+ * > hizmetler için, % 8 olarak tespit edilmiştir.
+ *
+ * Commencement is Madde 4, not the publication date: financial-leasing
+ * rules apply from publication for later contracts, List II rows A/13-b,
+ * A/14, A/18-b and B/24, B/25 join 1/1/2008, and the remaining provisions
+ * — including the Madde 1 rate sentence — take effect the day after
+ * publication, 31.12.2007. Baseline rows therefore open 2007-12-31; the
+ * 1/1/2008 list-membership refinements are below this pack's band
+ * granularity and are named here, not modelled.
+ *
+ * Deleted vendor entries, cited by zero rate rows: `sovos_tr_kdv_july2023`,
+ * `trustus_tr_kdv_table`, `kdv1_v41_duyuru_mirror`, and the
+ * `sirkuler_2008_03_baseline` professional circular the gazette instrument
+ * supersedes. Box/table names were transcribed from the GİB KDV1 v41
+ * duyuru text; boxes carry no source pointers, so no citation entry
+ * remains for them.
  */
 export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
   code: "TR_INDIRECT_TAX",
@@ -73,21 +89,9 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
-      id: "sovos_tr_kdv_july2023",
-      title: "Sovos regulatory update — 18% to 20% and 8% to 10% effective 10 July 2023 per Presidential Decree 7346, with link to the Resmî Gazete PDF",
-      url: "https://sovos.com/regulatory-updates/vat/turkiye-increases-vat-rates-effective-july-10-2023/",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "trustus_tr_kdv_table",
-      title: "TrustUs Türkiye KDV guide — 1% basic-goods band unaffected by the July 2023 increase, 8% to 10%, 18% to 20%",
-      url: "https://trustusconsultancy.com/en/value-added-tax-turkey-kdv/",
-      asOf: "2026-09-18",
-    },
-    {
-      id: "sirkuler_2008_03_baseline",
-      title: "Applicability of the 2007/13033 schedule (%18 / %1 / %8) from 2008 — RG 30.12.2007 sayı 26742, 2008 yılında geçerli (left-truncated: no origin claimed before 2008)",
-      url: "https://www.bilgidenetim.com.tr/srk/2008-03.pdf",
+      id: "rg_2007_13033_baseline",
+      title: "Resmî Gazete 30.12.2007 sayı 26742 — BKK 2007/13033: genel oran %18, (I) sayılı liste %1, (II) sayılı liste %8; Madde 4 ile diğer hükümler 31.12.2007'de yürürlükte",
+      url: "https://www.resmigazete.gov.tr/eskiler/2007/12/20071230-4.htm",
       asOf: "2026-09-18",
     },
     {
@@ -102,12 +106,6 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://ebeyan.gib.gov.tr/beyan-doc/",
       asOf: "2026-09-18",
     },
-    {
-      id: "kdv1_v41_duyuru_mirror",
-      title: "Mirror of the GİB KDV1 41. versiyon duyuru — real table and field names (Özel Matrah Tablosu, Bildirim/İşlem Türü, Toplam Matrah, Teslim ve Hizmetlerin Karşılığını Teşkil Eden Bedel)",
-      url: "https://www.alomaliye.com/wp-content/uploads/2025/10/kdv-41-duyuru.pdf",
-      asOf: "2026-09-18",
-    },
   ],
   jurisdictions: [],
   returnPacks: [TR_KDV1_2026],
@@ -119,7 +117,7 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 20,
         role: "standard",
         rates: [
-          { ratePercent: 18, effectiveFrom: "2008-01-01", effectiveTo: "2023-07-09", sourceId: "sirkuler_2008_03_baseline" },
+          { ratePercent: 18, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
           { ratePercent: 20, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
         ],
       },
@@ -129,7 +127,7 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 10,
         role: "reduced",
         rates: [
-          { ratePercent: 8, effectiveFrom: "2008-01-01", effectiveTo: "2023-07-09", sourceId: "sirkuler_2008_03_baseline" },
+          { ratePercent: 8, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
           { ratePercent: 10, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
         ],
       },
@@ -138,7 +136,7 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         name: "Türkiye reduced KDV 1% (liste I, basic foodstuffs)",
         ratePercent: 1,
         role: "reduced",
-        rates: [{ ratePercent: 1, effectiveFrom: "2008-01-01", sourceId: "sirkuler_2008_03_baseline" }],
+        rates: [{ ratePercent: 1, effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" }],
       },
     ],
   },

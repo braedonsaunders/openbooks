@@ -64,20 +64,20 @@ test("Türkiye carries all three KDV bands with the July 2023 increase transcrib
   ]);
   const std = set.find((entry) => entry.code === "TR-VAT-STD")!;
   assert.deepEqual(std.rates, [
-    { ratePercent: 18, effectiveFrom: "2008-01-01", effectiveTo: "2023-07-09", sourceId: "sirkuler_2008_03_baseline" },
+    { ratePercent: 18, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
     { ratePercent: 20, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
   ]);
   assertContiguous(std.rates ?? []);
   const red10 = set.find((entry) => entry.code === "TR-VAT-RED10")!;
   assert.deepEqual(red10.rates, [
-    { ratePercent: 8, effectiveFrom: "2008-01-01", effectiveTo: "2023-07-09", sourceId: "sirkuler_2008_03_baseline" },
+    { ratePercent: 8, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
     { ratePercent: 10, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
   ]);
   assertContiguous(red10.rates ?? []);
   // The 2023 decision left the 1% liste-I band untouched: one open band.
   const red1 = set.find((entry) => entry.code === "TR-VAT-RED1")!;
   assert.deepEqual(red1.rates, [
-    { ratePercent: 1, effectiveFrom: "2008-01-01", sourceId: "sirkuler_2008_03_baseline" },
+    { ratePercent: 1, effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" },
   ]);
   assertContiguous(red1.rates ?? []);
   assert.equal(primaryPackTaxCode(TURKIYE_TAX_PACK, "TR_KDV1")?.code, "TR-VAT-STD");
@@ -90,7 +90,18 @@ test("every Türkiye rate source pointer resolves to a declared source", () => {
       assert.ok(ids.has(rate.sourceId), `unresolved pointer ${rate.sourceId}`);
     }
   }
-  for (const id of ["rg_7346_kdv_2023", "trustus_tr_kdv_table", "gib_dvd_portal", "gib_ebeyan_doc"]) {
+  for (const id of ["rg_7346_kdv_2023", "rg_2007_13033_baseline", "gib_dvd_portal", "gib_ebeyan_doc"]) {
     assert.ok(ids.has(id), `missing source ${id}`);
+  }
+  for (const id of ["sovos_tr_kdv_july2023", "trustus_tr_kdv_table", "kdv1_v41_duyuru_mirror", "sirkuler_2008_03_baseline"]) {
+    assert.ok(!ids.has(id), `orphaned vendor source still declared: ${id}`);
+  }
+});
+
+test("Türkiye sources live only on gazette and tax-authority hosts", () => {
+  for (const source of TURKIYE_TAX_PACK.sources) {
+    const host = new URL(source.url).hostname;
+    const official = host === "www.resmigazete.gov.tr" || host.endsWith(".gib.gov.tr") || host === "gib.gov.tr";
+    assert.ok(official, `non-authority host for ${source.id}: ${host}`);
   }
 });
