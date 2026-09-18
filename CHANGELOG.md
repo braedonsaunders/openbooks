@@ -6,6 +6,53 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.16] - 2026-09-18
+
+Nine forward migrations (0171-0179). The swarm release script migrates
+before it swaps, so no manual step is required; operators running Compose
+get the same ordering from the bootstrap one-shot.
+
+### Payroll
+
+- Ten installable countries: CA, US, GB, DE, FR, IE, AU, IT, NL, ES, each
+  with agency-published goldens, hand-worked cases independent of the
+  engine, and band-boundary sweeps. DE reproduces both official BMF
+  Pruftabellen; AU reproduces the legislative instrument's own tables.
+- A generic `credit` pay-component kind threaded through net math, GL,
+  the deduction-protection pool, remittance netting and parallel-run
+  attribution, with no country branches (0179).
+- Employer-aggregate levies with their own opening balances (0174, 0177).
+
+### Tax
+
+- 41 country packs. Every source URL is now required to sit on an
+  authority host or a named, reasoned exception.
+
+### Product
+
+- Notifications inbox replaces the header bell, as a first-class page.
+- CRM phase 1 and 2: pipeline kanban, cost margins, and a customer-360
+  cockpit (0178).
+- Dashboard gains money and operational widgets, each permission-gated so
+  a tile a caller cannot see never runs its query.
+- Approvals worklist pages server-side with honest select-all.
+- Expense lines carry an explicit settlement: out-of-pocket reimburses the
+  employee, company-paid settles with the card issuer, personal is a
+  receivable (0171).
+
+### Correctness
+
+- Posting effects claim exactly one due row per drain call; the previous
+  `UPDATE..FROM` re-evaluated `SKIP LOCKED LIMIT 1` per outer row and could
+  mark every due effect running while reporting one.
+- Signing and encryption secrets are read live rather than from a snapshot
+  taken at module evaluation, which could be taken before the value was set.
+- Tenant isolation is enforced across the integration suite under FORCE
+  row-level security as the constrained runtime role, not the bootstrap
+  superuser.
+- Lint warnings and explicit `any` are both zero, and both ceilings are
+  pinned at zero rather than tracking the real count upward.
+
 ## [0.1.0-alpha.15] - 2026-09-17
 
 Fleet-7 defect wave on top of alpha.14. No new migration.

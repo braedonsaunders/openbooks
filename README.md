@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.15` image digest in
+2. resolves and records the official `0.1.0-alpha.16` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -735,10 +735,12 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.15` is the current community preview. It keeps the
-version-tag release path and continues fleet-7: typed refusals, payroll
-funding/wage-rate fixes, and feature-gate explanations. See the
-changelog for the areas touched.
+`v0.1.0-alpha.16` is the current community preview. It keeps the
+version-tag release path. This release widens payroll to ten installable
+countries, adds a notifications inbox and a CRM customer-360 cockpit,
+enforces tenant isolation across the integration suite, and takes lint
+warnings and explicit `any` to zero. See the changelog for the areas
+touched.
 
 Good uses today:
 
