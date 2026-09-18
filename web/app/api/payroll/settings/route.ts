@@ -11,6 +11,7 @@ import {
 import {
   declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,
+  installablePayrollCountries,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
   remittanceFrequencyBand,
   remittanceScheduleForFrequencyKey,
@@ -91,14 +92,10 @@ export interface PayrollSettingsWarning {
 
 /**
  * Payroll jurisdiction packs the org can install — the pack REGISTRY's own
- * `installable` declaration, never a second list. A pack that exists but is
- * not yet installable (in development, superseded) is known for validation
- * but refused for install.
+ * `installable` declaration via installablePayrollCountries, never a second
+ * list. (Kept as a local name so the call sites below read unchanged.)
  */
-const installableCountries = (): string[] =>
-  Object.values(PAYROLL_COUNTRY_PACKS)
-    .filter((pack) => pack.installable)
-    .map((pack) => pack.country)
+const installableCountries = installablePayrollCountries
 
 async function validatePayrollAccounts(
   orgId: string,

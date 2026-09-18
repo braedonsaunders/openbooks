@@ -52,6 +52,7 @@ import {
   type TeamSize,
   type WorkspaceProfile,
 } from '@/lib/workspace-profile'
+import { initialPayrollPack, packDescription, packTitle, type WizardT } from './payroll-pack-display'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -60,8 +61,12 @@ const BASE_STEPS: StepKey[] = ['welcome', 'company', 'industry', 'profile', 'rhy
 
 type ToggleKey = 'inventory' | 'timeTracking' | 'multiSubsidiary' | 'multiCurrency' | 'projects' | 'subscriptionBilling' | 'orders' | 'crm' | 'bankFeeds' | 'onlinePayments' | 'fixedAssets' | 'payroll'
 
-/** Payroll jurisdiction packs offered by the wizard (US is announced, not shipped). */
-type PayrollPack = 'CA' | null
+/**
+ * The payroll country pack the org will install — an open string over the
+ * packs the server declares via the `payrollPacks` prop, never a closed
+ * union. Null means the operator has not chosen (or chose none).
+ */
+type PayrollPack = string | null
 
 // ─── Icon map ─────────────────────────────────────────────────────────────
 
@@ -98,6 +103,9 @@ export function SetupWizard(props: {
   canSwitchIndustry: boolean
   isRerun: boolean
   suppressOnWizardRoute?: boolean
+  /** Installable payroll country packs, in registry order — declared by the
+   *  server from the pack registry, never a list in this file. */
+  payrollPacks?: string[]
   onClose?: () => void
 }) {
   const t = useTranslations('admin.setup.wizard')
@@ -128,7 +136,8 @@ export function SetupWizard(props: {
   const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>(props.initial.features)
   const [featureChoices, setFeatureChoices] = useState<Record<string, boolean>>(props.initial.allFeatures)
   const [includeSampleCompany, setIncludeSampleCompany] = useState(false)
-  const [payrollPack, setPayrollPack] = useState<PayrollPack>('CA')
+  const installablePacks = props.payrollPacks ?? []
+  const [payrollPack, setPayrollPack] = useState<PayrollPack>(initialPayrollPack(installablePacks))
   const countries = useMemo(() => countryOptions(locale), [locale])
   const currencies = useMemo(() => currencyOptions(locale), [locale])
 
@@ -229,11 +238,13 @@ export function SetupWizard(props: {
       }
       // Payroll module chosen with a country pack: install it now (statutory
       // component seed + pack marker), mirroring the sample-company follow-up.
-      if (toggles.payroll && payrollPack === 'CA') {
+      // The pack is whatever the operator chose — the settings API refuses
+      // anything outside the registry's installable set.
+      if (toggles.payroll && payrollPack) {
         const pack = await fetch('/api/payroll/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'install-pack', country: 'CA' }),
+          body: JSON.stringify({ action: 'install-pack', country: payrollPack }),
         })
         if (!pack.ok) {
           const detail = await pack.json().catch(() => ({}))
@@ -460,7 +471,7 @@ export function SetupWizard(props: {
         />
       )}
       {step === 'payroll' && (
-        <PayrollStep t={t} pack={payrollPack} setPack={setPayrollPack} />
+        <PayrollStep t={t} packs={installablePacks} pack={payrollPack} setPack={setPayrollPack} />
       )}
       {step === 'launch' && (
         <LaunchStep
@@ -1000,12 +1011,13 @@ function RhythmStep(props: {
 }
 
 function PayrollStep(props: {
-  t: ReturnType<typeof useTranslations<'admin.setup.wizard'>>
+  t: WizardT
+  /** Installable packs, in registry order — the cards render whatever is declared. */
+  packs: string[]
   pack: PayrollPack
   setPack: (value: PayrollPack) => void
 }) {
-  const { t, pack, setPack } = props
-  const canadaSelected = pack === 'CA'
+  const { t, packs, pack, setPack } = props
   return (
     <div className="space-y-6">
       <div>
@@ -1015,39 +1027,36 @@ function PayrollStep(props: {
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('payroll.packQuestion')}</legend>
         <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            aria-pressed={canadaSelected}
-            onClick={() => setPack(canadaSelected ? null : 'CA')}
-            className={cn(
-              'relative flex items-start gap-3 rounded-xl border p-4 text-left transition-colors',
-              canadaSelected
-                ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40'
-                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
-            )}
-          >
-            <span className={cn('rounded-lg p-2', canadaSelected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
-              <Landmark size={18} />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('payroll.packs.canada.title')}</span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('payroll.packs.canada.description')}</span>
-            </span>
-            {canadaSelected && (
-              <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-teal-500">
-                <Check className="text-white" size={12} strokeWidth={3} />
-              </span>
-            )}
-          </button>
-          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 opacity-60 dark:border-slate-800 dark:bg-slate-800/50">
-            <span className="rounded-lg bg-slate-100 p-2 text-slate-400 dark:bg-slate-800">
-              <Landmark size={18} />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('payroll.packs.us.title')}</span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('payroll.packs.us.description')}</span>
-            </span>
-          </div>
+          {packs.map((code) => {
+            const selected = pack === code
+            return (
+              <button
+                key={code}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setPack(selected ? null : code)}
+                className={cn(
+                  'relative flex items-start gap-3 rounded-xl border p-4 text-left transition-colors',
+                  selected
+                    ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
+                )}
+              >
+                <span className={cn('rounded-lg p-2', selected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
+                  <Landmark size={18} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{packTitle(t, code)}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{packDescription(t, code)}</span>
+                </span>
+                {selected && (
+                  <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-teal-500">
+                    <Check className="text-white" size={12} strokeWidth={3} />
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </fieldset>
       <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/40">
@@ -1253,7 +1262,7 @@ function ReviewStep(props: {
         {payrollOn && (
           <ReviewRow
             label={t('review.payrollPack')}
-            value={payrollPack === 'CA' ? t('review.payrollPackCanada') : t('review.payrollPackNone')}
+            value={payrollPack ? packTitle(t, payrollPack) : t('review.payrollPackNone')}
           />
         )}
         {industry && (

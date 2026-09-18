@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { installablePayrollCountries } from '@openbooks/engine/src/payroll/packs.ts'
 import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'
 import { SetupWizard } from '@/app/(app)/admin/setup/wizard/SetupWizard'
@@ -72,6 +73,7 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
       canSwitchIndustry={switchable}
       isRerun={false}
       suppressOnWizardRoute
+      payrollPacks={installablePayrollCountries()}
     />
   )
 }
