@@ -735,6 +735,14 @@
           "zvw": "Zvw à payer (cotisation maladie employeur)"
         }
       },
+      "GB": {
+        "title": "Royaume-Uni — comptes légaux HMRC",
+        "description": "Comptes de passif pour les montants que le pack britannique retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "paye": "PAYE à payer (impôt sur le revenu)",
+          "nic": "National Insurance à payer (classe 1 employé et employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

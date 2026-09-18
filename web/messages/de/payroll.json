@@ -735,6 +735,14 @@
           "zvw": "Verbindlichkeiten aus Zvw (Arbeitgeber-Krankenversicherung)"
         }
       },
+      "GB": {
+        "title": "Vereinigtes Königreich — gesetzliche HMRC-Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das GB-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "paye": "Verbindlichkeiten aus PAYE (Einkommensteuer)",
+          "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

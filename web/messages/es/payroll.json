@@ -735,6 +735,14 @@
           "zvw": "Zvw por pagar (contribución sanitaria del empleador)"
         }
       },
+      "GB": {
+        "title": "Reino Unido — cuentas legales HMRC",
+        "description": "Cuentas de pasivo para los montos que el paquete GB retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "paye": "PAYE por pagar (impuesto sobre la renta)",
+          "nic": "National Insurance por pagar (clase 1 de empleado y empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

@@ -735,6 +735,14 @@
           "zvw": "Zvw payable (employer health-insurance contribution)"
         }
       },
+      "GB": {
+        "title": "United Kingdom — HMRC statutory accounts",
+        "description": "Liability accounts for the amounts the United Kingdom pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "paye": "PAYE payable (income tax)",
+          "nic": "National Insurance payable (employee + employer Class 1)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
