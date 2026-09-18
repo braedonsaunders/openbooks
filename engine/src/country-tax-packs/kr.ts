@@ -51,7 +51,10 @@ const KR_VAT_RETURN_2026: TaxReturnPack = {
  * and the host is an archive mirror. It was replaced with the Ministry of
  * Economy and Finance's own KOREAN TAXATION 2024, which states the 10%
  * rate, the zero-rating scope and the output-minus-input calculation
- * directly. No NTS-hosted page stating the 10% rate was found.
+ * directly. No NTS-hosted page stating the 10% rate was found (rechecked
+ * 2026-09-18: the English NTS guidance page nttSn=78081 covers filing
+ * penalties, not rates; older MOEF booklets use opaque FileDown URLs no
+ * index names).
  */
 export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
   code: "KR_INDIRECT_TAX",
