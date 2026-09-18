@@ -593,7 +593,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/app/api/journals/[id]/route-line-account-scope.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/journals/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/journals/[id]/route-subsidiary.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/payroll/profiles/route.integration.test.ts", { writes: 5, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/app/api/pdf-templates/[id]/route-patch-flags.integration.test.ts", { writes: 3, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/api/timesheets/reject-audit.integration.test.ts", { writes: 6, via: "route.ts -> _lib.ts -> authz.ts -> auth.ts" }],
   ["web/app/api/timesheets/reopen-audit.integration.test.ts", { writes: 6, via: "route.ts -> _lib.ts -> authz.ts -> auth.ts" }],
