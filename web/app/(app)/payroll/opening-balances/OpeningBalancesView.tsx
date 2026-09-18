@@ -92,10 +92,20 @@ export function OpeningBalancesView({
   // Only show a column some employee's country pack actually reads. A US-only
   // payroll has no CPP2, and a column of permanently blank boxes is noise that
   // makes the columns that matter harder to find.
+  //
+  // Unknown country (an orphan row whose profile is gone) assumes NOTHING:
+  // every pack's columns stay offered rather than defaulting the row to
+  // Canada — the exact silent-Canada fallthrough the engine refuses
+  // (engine/src/payroll/packs.ts). An empty grid offers no pack columns:
+  // there is nobody to carry anything in for.
   const packs = useMemo(() => {
-    const present = new Set(initial.rows.map((r) => r.country ?? 'CA'))
-    return present.size === 0 ? new Set(['CA']) : present
-  }, [initial.rows])
+    const present = new Set<string>()
+    for (const row of initial.rows) {
+      if (row.country) present.add(row.country)
+      else for (const field of fields) for (const pack of field.packs) present.add(pack)
+    }
+    return present
+  }, [initial.rows, fields])
   const visibleFields = useMemo(
     () => fields.filter((f) => f.packs.some((pack) => packs.has(pack))),
     [fields, packs],
@@ -361,7 +371,11 @@ export function OpeningBalancesView({
                   </div>
                 </td>
                 {visibleFields.map((field) => {
-                  const applies = field.packs.includes(row.country ?? 'CA')
+                  // Unknown country applies to every pack's columns (see the
+                  // packs set above): the row's pack is gone with its profile,
+                  // and refusing its amounts a column would hide carried-in
+                  // money the engine still reads.
+                  const applies = row.country == null || field.packs.includes(row.country)
                   return (
                     <td key={field.key} className="px-2 py-1.5 text-right">
                       {applies ? (

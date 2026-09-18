@@ -11,7 +11,7 @@ import type { PayrollOpeningYtdField } from "./packs.ts";
  * fields next to its own statutory code.
  */
 export const PACK_OPENING_BALANCE_FIELDS: readonly (
-  PayrollOpeningYtdField & { packs: readonly ("CA" | "US")[] }
+  PayrollOpeningYtdField & { packs: readonly string[] }
 )[] = [
   ...CA_OPENING_YTD_FIELDS.map((field) => ({ ...field, packs: ["CA"] as const })),
   ...US_OPENING_YTD_FIELDS.map((field) => ({ ...field, packs: ["US"] as const })),
