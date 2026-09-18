@@ -123,6 +123,7 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     "info.portaldasfinancas.gov.pt",
     "at.madeira.gov.pt",
     "skat.dk",
+    "www.retsinformation.dk",
     "www.skatteetaten.no",
     "lovdata.no",
     "zatca.gov.sa",
