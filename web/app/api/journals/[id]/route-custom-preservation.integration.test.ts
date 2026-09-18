@@ -64,7 +64,7 @@ const patchRouteUrl = "./route.ts?journal-custom-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { documentRevisionCounterSql } = await import("../../../../lib/documents.ts");
 
@@ -81,12 +81,14 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
   };
 }
 
-async function revisionToken(documentId: string): Promise<string> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
-      from documents where id = ${documentId}
-  `));
-  return row.rows[0]!.updatedAt;
+async function revisionToken(orgId: string, documentId: string): Promise<string> {
+  return await withOrgContext(orgId, async () => {
+    const row = (await db.execute<{ updatedAt: string }>(sql`
+      select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
+        from documents where id = ${documentId} and org_id = ${orgId}
+    `));
+    return row.rows[0]!.updatedAt;
+  });
 }
 
 test(
@@ -95,41 +97,48 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      // seedFlowActors seeds app_roles outside any bypass of its own; scope
+      // the call (and every seed write below) explicitly now that importing
+      // the route module has replaced the ambient test bypass process-wide.
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
-      await db.execute(sql`
-        insert into custom_field_defs
-          (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
-        values
-          (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${adminId}, ${adminId}),
-          (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${adminId}, ${adminId})
-      `);
       const documentId = randomUUID();
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, subsidiary_id, document_date,
-           currency, fx_rate, status, subtotal, tax_total, total, custom,
-           created_by, updated_by)
-        values (
-          ${documentId}, ${org.orgId}, 'journal', 'JE-CUSTOM-1',
-          ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
-          '{"required_code":"R-1"}'::jsonb, ${adminId}, ${adminId}
-        )
-      `);
-      const token = await revisionToken(documentId);
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into custom_field_defs
+            (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+          values
+            (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${adminId}, ${adminId}),
+            (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${adminId}, ${adminId})
+        `);
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, document_number, subsidiary_id, document_date,
+             currency, fx_rate, status, subtotal, tax_total, total, custom,
+             created_by, updated_by)
+          values (
+            ${documentId}, ${org.orgId}, 'journal', 'JE-CUSTOM-1',
+            ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
+            '{"required_code":"R-1"}'::jsonb, ${adminId}, ${adminId}
+          )
+        `);
+      });
+      const token = await revisionToken(org.orgId, documentId);
       const attempt = patchRequest(documentId, {
         expectedUpdatedAt: token,
         custom: { optional_note: "updated" },
       });
-      const saved = await PATCH(attempt.req, attempt.ctx);
+      // The handler reads through the ambient scope, which the route import
+      // above left RLS-enforced: establish the caller's tenant explicitly.
+      const saved = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
       assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+      const stored = await withOrgContext(org.orgId, async () => (await db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from documents where id = ${documentId} and org_id = ${org.orgId}
-      `)).rows[0]?.custom;
+      `)).rows[0]?.custom);
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
     } finally {
       routeState.authz = null;

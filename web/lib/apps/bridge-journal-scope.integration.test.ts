@@ -107,7 +107,10 @@ function callBridge(
   body: Record<string, unknown>,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): ReturnType<typeof runBridgeMethod> {
-  return runBridgeMethod({
+  // getAppByKey predicates on org_id explicitly but still reads through RLS,
+  // which the store import above leaves enforced with no ambient tenant: run
+  // the call under test inside the caller's tenant.
+  return withOrgContext(fx.org.orgId, () => runBridgeMethod({
     orgId: fx.org.orgId,
     user: fx.user,
     key: appKey,
@@ -115,7 +118,7 @@ function callBridge(
     payload: { endpoint: 'journal', payload: body },
     userCan: () => true,
     allowedSubsidiaryIds,
-  })
+  }))
 }
 
 async function journalSubsidiaries(orgId: string): Promise<string[]> {

@@ -30,7 +30,7 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { POST } = await import('./route.ts')
@@ -45,10 +45,10 @@ async function fixture(): Promise<Fixture> {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()
-  const departmentId = (await db.execute<{ id: string }>(sql`
+  const departmentId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into departments (org_id, name, is_active)
     values (${org.orgId}, 'Publish Dept', true)
-    returning id`)).rows[0]!.id
+    returning id`)).rows[0]!.id)
   return { org, departmentId }
 }
 
@@ -69,8 +69,8 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function publishedRates(orgId: string) {
-  return (await db.execute<{ department_id: string | null }>(sql`
-    select department_id from overhead_rates where org_id = ${orgId}`)).rows
+  return await withOrgContext(orgId, async () => (await db.execute<{ department_id: string | null }>(sql`
+    select department_id from overhead_rates where org_id = ${orgId}`)).rows)
 }
 
 test('publish rejects an impossible effectiveFrom instead of throwing', { skip: !DB }, async () => {

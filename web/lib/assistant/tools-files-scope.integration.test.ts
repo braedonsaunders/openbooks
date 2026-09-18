@@ -22,30 +22,35 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { getAuthz } = await import('../authz')
 const { executeAssistantTool } = await import('./registry')
 
 test('assistant file tools hide record-folder files outside the caller fence', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'File scope prober', 'file_scope_prober')
+  // createScratchUser seeds app_roles outside any bypass of its own; scope
+  // the call (and every seed write below) explicitly now that importing the
+  // assistant modules has replaced the ambient test bypass process-wide.
+  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'File scope prober', 'file_scope_prober'))
   const hidden = randomUUID()
-  await db.execute(sql`update app_roles
-    set permissions=${JSON.stringify(['documents.read', 'assistant.use'])}::jsonb,
-        subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
-    where org_id=${org.orgId} and key='file_scope_prober'`)
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-    values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden File Branch','CAD','CA')`)
   const hiddenDoc = randomUUID()
-  await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
-    values (${hiddenDoc}, ${org.orgId}, 'customer_invoice', 'draft', 'HIDDEN-FILE-1', ${hidden}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
   const folderId = randomUUID()
   const fileId = randomUUID()
-  await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
-    values (${folderId}, ${org.orgId}, null, 'documents / hidden', true, 'documents', ${hiddenDoc})`)
-  await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
-    values (${fileId}, ${org.orgId}, ${folderId}, 'hidden-file-evidence.txt', 'text/plain', 8)`)
+  await withBypassContext(async () => {
+    await db.execute(sql`update app_roles
+      set permissions=${JSON.stringify(['documents.read', 'assistant.use'])}::jsonb,
+          subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id=${org.orgId} and key='file_scope_prober'`)
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden File Branch','CAD','CA')`)
+    await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+      values (${hiddenDoc}, ${org.orgId}, 'customer_invoice', 'draft', 'HIDDEN-FILE-1', ${hidden}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
+    await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
+      values (${folderId}, ${org.orgId}, null, 'documents / hidden', true, 'documents', ${hiddenDoc})`)
+    await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'hidden-file-evidence.txt', 'text/plain', 8)`)
+  })
   state.user = {
     id: actor,
     orgId: org.orgId,
