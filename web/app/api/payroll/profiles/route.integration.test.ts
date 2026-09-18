@@ -22,10 +22,18 @@ registerHooks({
   },
 })
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/src/payroll/packs.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { GET, POST } = await import('./route')
 const DB = !!process.env.OPENBOOKS_DB_URL
+
+/**
+ * The countries the profile editor may offer, snapshotted once before any
+ * test runs so a pack registered mid-file could never inflate it. (Nothing
+ * in this file registers packs; the snapshot makes the derivation explicit.)
+ */
+const EXPECTED_COUNTRIES: readonly string[] = Object.keys(PAYROLL_COUNTRY_PACKS)
 
 async function fixture() {
   // Scratch seeding runs under an explicit bypass boundary: importing the
@@ -107,7 +115,24 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
         exemptionFlags: { column: string }[]
       }>
     }
-    assert.deepEqual(body.countries, ['CA', 'US'])
+    // The contract is that the editor renders whatever the installed packs
+    // declare — the registry's keys, in registry order — not a CA/US union.
+    // This pinned ['CA', 'US'] and went red the day the registry opened past
+    // two countries: a stale pin, not a regression. Derive it; the GET is the
+    // runtime registration assertion, so every registered pack must also
+    // declare its profile shape below.
+    assert.deepEqual(body.countries, EXPECTED_COUNTRIES)
+    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES)
+    for (const [country, profile] of Object.entries(body.packProfiles)) {
+      assert.equal(typeof profile.subdivisionLabel, 'string', `${country} declares a subdivision label`)
+      assert.ok(profile.subdivisionLabel.length > 0, `${country} subdivision label is non-empty`)
+      assert.ok(Array.isArray(profile.subdivisions), `${country} declares subdivisions`)
+      for (const code of profile.supportedSubdivisions) {
+        assert.ok(profile.subdivisions.includes(code), `${country} supports only a known subdivision: ${code}`)
+      }
+      assert.ok(Array.isArray(profile.certificates), `${country} declares certificates`)
+      assert.ok(Array.isArray(profile.exemptionFlags), `${country} declares exemption flags`)
+    }
     const ca = body.packProfiles['CA']!
     assert.equal(ca.subdivisionLabel, 'province')
     assert.ok(ca.subdivisions.includes('ON') && ca.subdivisions.includes('ZZ'))
