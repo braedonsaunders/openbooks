@@ -28,20 +28,16 @@ import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 /**
  * Pack country → the source file its declaration and prose live in.
  *
- * CA and US point at `packs.ts` rather than a `pack.ts` of their own, and that
- * is not an oversight: they ARE the oldest and most complete packs (T4127 with
- * Quebec and the CRA remittance rules; Pub 15-T with fifty states), but they
- * were written when there was no second country, so the registry file and the
- * pack definition were the same file — CA is an object literal at packs.ts:1093
- * and US at packs.ts:1245. Every country added afterwards got its own module
- * and one import line, because editing the shared registry is what the fleet
- * doctrine avoids. The asymmetry is worth removing (extract both into
- * canada/pack.ts and us/pack.ts), but until then they are checked where their
- * prose actually is, not skipped.
+ * Every pack is now a `<country>/pack.ts` with one import line in the registry,
+ * CA and US included. Those two were object literals inside `packs.ts` until
+ * the registry was made uniform — written before a second country existed, so
+ * the registry file and the pack declaration were the same file, which left the
+ * oldest and most complete packs as the only two a pack-level structural test
+ * could not read. Canada's directory is `canada`, not `ca`.
  */
 const PACK_FILES: Record<string, string> = {
-  CA: "packs.ts",
-  US: "packs.ts",
+  CA: "canada/pack.ts",
+  US: "us/pack.ts",
   GB: "gb/pack.ts",
   DE: "de/pack.ts",
   FR: "fr/pack.ts",
