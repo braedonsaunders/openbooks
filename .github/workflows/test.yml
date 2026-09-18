@@ -79,7 +79,13 @@ jobs:
 
   database:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 was enough until the payroll and tax packs landed: ten installable
+    # countries and 41 tax packs added real work to every shard, and 11 and 16
+    # were cancelled mid fixture-pool reset at 15m06s and 15m18s while still
+    # making progress. Raised rather than re-sharded because shard membership
+    # is derived from the file list, so changing the count moves every file
+    # and invalidates the per-shard receipts this campaign was verified on.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

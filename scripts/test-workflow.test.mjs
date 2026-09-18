@@ -44,7 +44,10 @@ test('units, database shards and simulation run independently without omitted te
   assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]/)
   assert.match(integration, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/16/)
   assert.match(integration, /fail-fast: false/)
-  assert.match(integration, /timeout-minutes: 15/)
+  // Pinned so the budget is a decision rather than a drift. Raised 15 -> 25
+  // when the payroll and tax packs landed: shards 11 and 16 were cancelled
+  // mid fixture-pool reset at ~15m while still making progress.
+  assert.match(integration, /timeout-minutes: 25/)
   assert.doesNotMatch(integration, /--test-concurrency|continue-on-error/)
   assert.match(integration, /name: coverage-\$\{\{ matrix.shard \}\}/)
   assert.match(integration, /COLLECT_COVERAGE:.*github.event_name == 'workflow_dispatch'/)
