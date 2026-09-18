@@ -65,16 +65,17 @@ test("Thailand VAT is national with no subnational VAT jurisdictions", () => {
   assert.equal(THAILAND_TAX_PACK.jurisdictions.length, 0);
 });
 
-test("Thailand standard band covers the pinned date and expires on the decree end date", () => {
+test("Thailand renewed 7% band covers a date inside its window and names the missing successor after it", () => {
   const codes = packTaxCodesForReturn(THAILAND_TAX_PACK, "TH_PP30");
   const standard = codes.find((code) => code.code === "TH-VAT-STD")!;
   const zero = codes.find((code) => code.code === "TH-VAT-ZERO")!;
   assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2026-09-18");
-  assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2026-09-30");
+  assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2026-10-01");
+  assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2027-09-30");
   assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-ZERO", zero, "2026-09-18");
-  assert.equal(standard.rates!.at(-1)!.effectiveTo, "2026-09-30");
+  assert.equal(standard.rates!.at(-1)!.effectiveTo, "2027-09-30");
   assert.throws(
-    () => assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2026-10-01"),
-    /TH-VAT-STD has no rate covering 2026-10-01.*successor rate/,
+    () => assertPackCodeRateSchedule("TH_INDIRECT_TAX/TH_PP30/TH-VAT-STD", standard, "2027-10-01"),
+    /TH-VAT-STD has no rate covering 2027-10-01.*successor rate/,
   );
 });

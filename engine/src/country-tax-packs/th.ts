@@ -9,7 +9,7 @@ const TH_PP30_2026: TaxReturnPack = {
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://efiling.rd.go.th/rd-cms/",
-  watermark: "Working copy — VAT is 7% by annually-renewed decree through 30 Sep 2026; confirm the successor decree, then file through Revenue Department e-Filing",
+  watermark: "Working copy — VAT is 7% by annually-renewed decree through 30 Sep 2027; confirm the successor decree, then file through Revenue Department e-Filing",
   boxes: [
     { lineCode: "1", label: "Item 1 — sales amount this month (7%, 0% and section-81-exempt sales)", sign: 1, sequence: 10 },
     { lineCode: "2", label: "Item 2 — less sales subject to 0% tax rate", sign: 1, sequence: 20 },
@@ -37,22 +37,34 @@ const TH_PP30_2026: TaxReturnPack = {
  * + 0.7% local tax) continuously since 1997, renewed roughly every year or
  * two with an explicit expiry date. The 10% is the rate that would apply if a
  * decree lapsed; it is never declared here as a current rate. The standard
- * schedule below is the contiguous tail this sandbox could source: three
- * closed 7% bands from 1 Oct 2023 to 30 Sep 2026, each dated from the Revenue
+ * schedule below is the contiguous tail this sandbox could source: four
+ * closed 7% bands from 1 Oct 2023 to 30 Sep 2027, each dated from the Revenue
  * Department press release that announced its Cabinet-approved draft decree.
  * Earlier decree windows are not transcribed — the history left-truncates at
  * 2023-10-01 rather than guessing an origin date.
  *
+ * The fourth band rests on Revenue Department press release 18/2569 (27 Jul
+ * 2026), whose operative sentence reads:
+ *
+ *   "ขยายระยะเวลาการลดอัตราภาษีมูลค่าเพิ่มเหลือร้อยละ ๗ (รวมภาษีท้องถิ่น)
+ *    ออกไปอีก ๑ ปี ตั้งแต่วันที่ ๑ ตุลาคม ๒๕๖๙ ถึงวันที่ ๓๐ กันยายน ๒๕๗๐"
+ *
+ * i.e. the 7% VAT reduction (inclusive of local tax) is extended one more
+ * year, from 1 Oct 2026 (B.E. 2569) to 30 Sep 2027 (B.E. 2570). The rate is
+ * unchanged at 7%. A follow-up release, 19/2569 (2 Aug 2026), confirms
+ * collection stays at 7% under the 27 Jul 2569 Cabinet approval.
+ *
  * Sourcing refusals, named so the next person can finish them instead of
  * re-discovering them: the gazetted decree texts live on
- * ratchakitcha.soc.go.th, which answered 403 from this sandbox (origin
- * refused — blocked, not absent; retry from another vantage). Band dates are
- * therefore titled as applicability per the cited release, not as the legal
- * instrument's origin. Non-authority secondary coverage reports a further
- * one-year extension past 30 Sep 2026, but no authority page fetched from
- * here attests it, so the schedule ends 2026-09-30: after that date the
- * covers-today guard fails until the successor is transcribed, and that
- * failure is the intended signal, not a defect.
+ * ratchakitcha.soc.go.th, which answered 403 (Cloudflare "Just a moment..."
+ * challenge — origin refused, not absent; retry from another vantage) from
+ * this sandbox on both / and /search. Band dates are therefore titled as
+ * applicability per the cited release, not as the legal instrument's origin.
+ * Non-authority secondary coverage names the gazetted instrument as Royal
+ * Decree No. 807 B.E. 2569, published 23 Aug 2026, but no authority page
+ * fetched from here attests that number, so it is not declared. After
+ * 2027-09-30 the covers-today guard fails until the next successor is
+ * transcribed, and that failure is the intended signal, not a defect.
  *
  * Filing: P.P.30 is a monthly return (items 1–16 on the official
  * instructions). Items 13–16 (surcharge and penalty on late or additional
@@ -110,6 +122,12 @@ export const THAILAND_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
+      id: "rd_news_18_2569",
+      title: "Revenue Department press release 18/2569 — 7% VAT applicability 1 Oct 2026–30 Sep 2027 (Cabinet-approved draft decree; Gazette text not fetched from here)",
+      url: "https://www.rd.go.th/fileadmin/user_upload/news/2569thai/news18_2569.pdf",
+      asOf: "2026-09-18",
+    },
+    {
       id: "rd_news_4_2019_en",
       title: "Revenue Department News 4/2019 — statutory 10% under the Revenue Code reduced to 7% (6.3% VAT + 0.7% local tax) by royal decree",
       url: "https://www.rd.go.th/fileadmin/user_upload/news/englishnews04_2562.pdf",
@@ -141,6 +159,7 @@ export const THAILAND_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 7, effectiveFrom: "2023-10-01", effectiveTo: "2024-09-30", sourceId: "rd_news_32_2566" },
           { ratePercent: 7, effectiveFrom: "2024-10-01", effectiveTo: "2025-09-30", sourceId: "rd_news_29_2567" },
           { ratePercent: 7, effectiveFrom: "2025-10-01", effectiveTo: "2026-09-30", sourceId: "rd_news_34_2568" },
+          { ratePercent: 7, effectiveFrom: "2026-10-01", effectiveTo: "2027-09-30", sourceId: "rd_news_18_2569" },
         ],
       },
       {
