@@ -743,6 +743,15 @@
           "nic": "National Insurance à payer (classe 1 employé et employeur)"
         }
       },
+      "IE": {
+        "title": "Irlande — comptes légaux Revenue",
+        "description": "Comptes de passif pour les montants que le pack irlandais retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "paye": "PAYE à payer (impôt sur le revenu après crédits)",
+          "prsi": "PRSI à payer (classe A employé et employeur)",
+          "usc": "USC à payer (charge distincte de l’impôt sur le revenu)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

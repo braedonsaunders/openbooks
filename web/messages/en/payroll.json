@@ -743,6 +743,15 @@
           "nic": "National Insurance payable (employee + employer Class 1)"
         }
       },
+      "IE": {
+        "title": "Ireland — Revenue statutory accounts",
+        "description": "Liability accounts for the amounts the Ireland pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "paye": "PAYE payable (income tax after credits)",
+          "prsi": "PRSI payable (employee + employer Class A)",
+          "usc": "USC payable (separate charge, not income tax)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
