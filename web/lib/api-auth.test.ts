@@ -108,6 +108,10 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     "allocations.manage",
     "allocations.run",
     "allocations.approve",
+    // In-app issue reporting, added with the feedback inbox. Its own key
+    // because filing a report sends generalized text OUT of the installation
+    // to the operator, which no other permission implies.
+    "feedback.use",
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
