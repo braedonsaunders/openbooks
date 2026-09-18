@@ -710,7 +710,8 @@
           "qpip": "QPIP payable (Quebec)",
           "vacation": "Vacation payable",
           "wcb": "Workers' compensation payable (WCB/WSIB)",
-          "eht": "Employer Health Tax payable"
+          "eht": "Employer Health Tax payable",
+          "hsf": "Health Services Fund payable (Quebec)"
         }
       },
       "US": {
