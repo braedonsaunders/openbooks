@@ -50,8 +50,13 @@ const PH_BIR_2550Q_2026: TaxReturnPack = {
  * this vantage (origin refused, not absent — retry from another network), and
  * the pre-migration RR 16-2005 / RMC 68-2005 full texts are no longer served
  * (their old /images/ paths return the site shell). The next person with
- * Official Gazette access can prepend the 10%-to-12% history.
- */
+ * Official Gazette access can prepend the 10%-to-12% history. Leads checked
+ * 2026-09-18 and left out: the Senate hosts the RA 9337 enrolled text at
+ * web.senate.gov.ph/republic_acts/ra%209337.pdf but it answers 403 from
+ * sandboxed vantages (retry unproxied — the act states the standby 12%
+ * mechanism, though the 1/2/2006 effectivity itself needs RR 16-2005);
+ * the Abakada decision (G.R. 168056) confirms the standby structure but is
+ * not the publishing authority, so it cannot carry the band.
 export const PHILIPPINES_TAX_PACK: CountryTaxPackDefinition = {
   code: "PH_INDIRECT_TAX",
   version: "2026.08.01",
