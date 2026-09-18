@@ -20,6 +20,9 @@ test("every default tax code has an explicit effective-dated rate schedule", () 
     // Covers-today invariant (F-tax-sunset-001) against the real today; the
     // shape checks below are date-arithmetic, not today-dependent.
     assertPackCodeRateSchedule(packCode, definition);
+    // assertPackCodeRateSchedule already refuses a definition with no rates,
+    // so the shape loop below is reached only with a populated schedule.
+    assert.ok(definition.rates, `${packCode} has no rate schedule`);
     for (const [index, rate] of definition.rates.entries()) {
       assert.match(rate.effectiveFrom, /^\d{4}-\d{2}-\d{2}$/);
       assert.equal(new Date(`${rate.effectiveFrom}T00:00:00Z`).toISOString().slice(0, 10), rate.effectiveFrom);
