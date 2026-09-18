@@ -184,8 +184,10 @@ export type DashboardMetrics = {
   draftDocuments: Array<{
     id: string
     kind: string
-    documentNumber: string
-    documentDate: string
+    /** Null until the document is numbered, which drafts may not be yet. */
+    documentNumber: string | null
+    /** Null while the author has not dated the draft. */
+    documentDate: string | null
     total: string
     status: string
   }>
@@ -235,6 +237,35 @@ export async function loadCloseReadiness(authz: Authz): Promise<DashboardMetrics
     stage: run.currentStage,
     targetCloseDate: run.targetCloseDate,
   }))
+}
+
+/** Ledger totals tile. Counts and sums arrive from the driver as strings. */
+interface TotalsRow extends Record<string, unknown> {
+  journal_lines: string | number
+  accounts: string | number
+  entries_today: string | number
+  ledger_sum: string
+}
+
+/** Recent posted entries, with the per-entry line rollup joined on. */
+interface RecentEntryRow extends Record<string, unknown> {
+  id: string
+  entry_number: string | null
+  posting_date: string
+  memo: string | null
+  status: string
+  line_count: string | number
+  total_debits: string
+}
+
+/** The caller's own draft documents. */
+interface DraftDocumentRow extends Record<string, unknown> {
+  id: string
+  kind: string
+  document_number: string | null
+  document_date: string | null
+  total: string
+  status: string
 }
 
 export async function loadDashboardMetrics(
@@ -289,7 +320,7 @@ export async function loadDashboardMetrics(
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
     wantTotals
-      ? db.execute(sql`
+      ? db.execute<TotalsRow>(sql`
       select
         (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
@@ -377,7 +408,7 @@ export async function loadDashboardMetrics(
     // Top-N first, then aggregate the five entries' lines — grouping before
     // the limit aggregated every entry in the tenant.
     need('recentEntries')
-      ? db.execute(sql`
+      ? db.execute<RecentEntryRow>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status,
              lt.line_count, lt.total_debits
         from (
@@ -396,7 +427,7 @@ export async function loadDashboardMetrics(
     `)
       : Promise.resolve({ rows: [] }),
     need('draftDocuments')
-      ? db.execute(sql`
+      ? db.execute<DraftDocumentRow>(sql`
       select id, kind, document_number, document_date, total, status
         from documents
        where org_id = ${orgId} and status = 'draft' and created_by = ${userId}
@@ -421,7 +452,7 @@ export async function loadDashboardMetrics(
       : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
   ])
 
-  const t = (totals as any).rows[0]
+  const t = totals.rows[0]!
   // Hub KPI arithmetic, exactly as arPosition/apPosition derive it from the
   // same items: outstanding minus the Current bucket (null/future due),
   // floored at zero.
@@ -536,7 +567,7 @@ export async function loadDashboardMetrics(
     pendingExpenses: expenses?.pendingExpenses ?? 0,
     closeRuns: closeRuns ?? [],
     asOfDate: today,
-    recentEntries: (((recentEntries)).rows).map((r: any) => ({
+    recentEntries: recentEntries.rows.map((r) => ({
       id: r.id,
       entryNumber: r.entry_number,
       postingDate: r.posting_date,
@@ -549,7 +580,7 @@ export async function loadDashboardMetrics(
     // top-5 oldest first, gates + gateless documents + pay runs.
     pendingApprovalList: unionTop5.map((r) => ({ ...r })),
     myApprovalList: unionTop5.map((r) => ({ ...r })),
-    draftDocuments: (((draftDocuments)).rows).map((r: any) => ({
+    draftDocuments: draftDocuments.rows.map((r) => ({
       id: r.id,
       kind: r.kind,
       documentNumber: r.document_number,
