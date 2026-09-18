@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DENMARK_TAX_PACK } from "./dk.ts";
-import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
+import { packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import type { EffectiveTaxRate } from "./types.ts";
 
 const pack = DENMARK_TAX_PACK;
@@ -44,8 +44,8 @@ test("Denmark moms return declares the real portal fields plus the OpenBooks wor
 
 test("every Denmark rate sourceId resolves to a sources entry", () => {
   const sourceIds = new Set(pack.sources.map((source) => source.id));
-  for (const [returnCode, entry] of Object.entries(pack.returnPackTaxCodes)) {
-    const definitions = Array.isArray(entry) ? entry : [entry];
+  for (const returnCode of packReturnCodesWithTaxCodes(pack)) {
+    const definitions = packTaxCodesForReturn(pack, returnCode);
     assert.ok(definitions.length > 0, `${returnCode} declares no tax codes`);
     for (const definition of definitions) {
       for (const rate of definition.rates ?? []) {
@@ -56,9 +56,8 @@ test("every Denmark rate sourceId resolves to a sources entry", () => {
 });
 
 test("Denmark rate history is contiguous", () => {
-  for (const entry of Object.values(pack.returnPackTaxCodes)) {
-    const definitions = Array.isArray(entry) ? entry : [entry];
-    for (const definition of definitions) {
+  for (const returnCode of packReturnCodesWithTaxCodes(pack)) {
+    for (const definition of packTaxCodesForReturn(pack, returnCode)) {
       assertContiguous(definition.rates ?? []);
     }
   }
