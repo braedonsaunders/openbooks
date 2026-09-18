@@ -235,6 +235,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'kpi-items-to-reconcile': {
+    id: 'kpi-items-to-reconcile',
+    category: 'kpi',
+    labelKey: 'widgets.itemsToReconcile',
+    descriptionKey: 'catalog.itemsToReconcile',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

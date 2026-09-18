@@ -6,6 +6,7 @@ import { isAppWidgetId } from '@/lib/apps/surfaces'
 
 const GL = ['gl.read']
 const AP = ['ap.read', 'ap.approve']
+const BANKING = ['banking.read']
 const INSIGHTS = ['insights.read', 'reports.read']
 
 const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
@@ -32,6 +33,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // but not banking.read (no forecast): the stricter grant wins, so the
   // tile never shows a projection to a caller denied the cockpit.
   'kpi-cash-runway': ['banking.read'],
+  'kpi-items-to-reconcile': BANKING,
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,

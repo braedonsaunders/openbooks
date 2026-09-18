@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
+import { bankingHome } from '@/lib/module-home/banking'
 import { openItems } from '@/lib/cash/open-items'
 import { profitAndLoss } from '@/lib/reports/statements'
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
@@ -126,6 +127,9 @@ export type DashboardMetrics = {
   projectedCash: string | null
   lowestCash: string | null
   lowestCashWeek: string | null
+  /** Unmatched bank statement lines awaiting reconciliation. A count, never
+   * money — there is no currency to mix, by construction. */
+  unreconciledItems: number
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -167,6 +171,20 @@ export type DashboardMetrics = {
     total: string
     status: string
   }>
+}
+
+/**
+ * Bank-reconciliation queue for the dashboard tile. Returns null for a
+ * caller without `banking.read` BEFORE any query runs — denial must skip
+ * the reader, not merely hide its result. Reads `bankingHome`, the same
+ * reader as the /banking cockpit and its Match-button count, so the tile
+ * and the cockpit tie by construction.
+ */
+export async function loadReconSummary(authz: Authz): Promise<{ unreconciledItems: number } | null> {
+  if (!can(authz, 'banking.read')) return null
+  const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
+  const home = await bankingHome(authz.user.orgId, subIds)
+  return { unreconciledItems: home.unmatchedLines }
 }
 
 export async function loadDashboardMetrics(
@@ -216,7 +234,7 @@ export async function loadDashboardMetrics(
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
-  const [totals, banks, baseCurrency, arItems, apItems, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const [totals, banks, baseCurrency, arItems, apItems, recon, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -244,6 +262,10 @@ export async function loadDashboardMetrics(
     // contract), never a silently undercounted tile.
     wantAr ? readers.openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
     wantAp ? readers.openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
+    // Gated inside on banking.read (null with no query for denied callers),
+    // and on the visible widget set — a layout without the tile never runs
+    // the reader at all.
+    need('unreconciledItems') ? loadReconSummary(authz) : Promise.resolve(null),
     // Settlement-behaviour averages behind the forecast and the DSO/DPO
     // hints — the same paymentStats reader the cockpits feed into
     // scheduleForecast, so the tile prediction and the cockpit worklist
@@ -456,6 +478,7 @@ export async function loadDashboardMetrics(
     projectedCash: runway?.projected ?? null,
     lowestCash: runway?.lowest ?? null,
     lowestCashWeek: runway?.lowestWeek ?? null,
+    unreconciledItems: recon?.unreconciledItems ?? 0,
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -502,6 +525,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'list-top-customers': ['topCustomers'],
   'list-top-vendors': ['topVendors'],
   'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'asOfDate'],
+  'kpi-items-to-reconcile': ['unreconciledItems'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -539,6 +563,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   projectedCash: null,
   lowestCash: null,
   lowestCashWeek: null,
+  unreconciledItems: 0,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],
