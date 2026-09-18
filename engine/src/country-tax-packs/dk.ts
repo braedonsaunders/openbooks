@@ -36,25 +36,18 @@ const DK_MOMS_2026: TaxReturnPack = {
  *
  * Denmark has no reduced VAT rate — one of very few EU states without one —
  * so the return carries only the 25% standard code. That single code runs
- * back to 1992-01-01 as one open row, citing Danmarks Statistik's
- * "Skatter og afgifter" rate table (1999 edition, fetched in full) as a
- * named per-source-id exception: DST is the Danish state's own national
- * statistical institute publishing an official statistical series — a
- * government body attesting a government fact, naming the instrument
- * directly, not anyone's reading of the law.
- * - Operative text, verbatim: "01.01.1992- 25,00" under "Lov nr. 891 af
- *   21. dec. 1991" (from 01.01.1992: 25.00 percent, per Act no. 891 of
- *   21 December 1991). skat.dk's current 25% page corroborates the tail.
- * - What it does NOT attest: the act's own text. The act exists — its ELI
- *   at retsinformation.dk/eli/lta/1991/891 resolves (HTTP 200) — but the
- *   body served to plain clients is the site's React SPA shell with zero
- *   document text, so the operative clause is unread. Whoever next has a
- *   JS-capable vantage knows exactly which document to open.
- * - The 22% predecessor is identified but not transcribed: the same table
- *   shows 22,00 under Lov nr. 219 af 4. juni 1980, but no start date for
- *   the 22% era is attested, so no 22% row is added.
- * skat.dk itself was searched: its rates archive carries no VAT subject
- * and no history article states the 1992 changeover.
+ * back to 1992-01-01 as one open row, sourced to the act itself: LOV nr 891
+ * af 21/12/1991 (Tillægsmoms på 3 pct.), read in full at retsinformation.dk.
+ * - Operative text, verbatim: § 2 nr. 3 — »I § 14 ændres »22 pct.« til:
+ *   »22 + 3 pct.«« — with § 5 Stk. 1 (»Loven træder i kraft den 1. januar
+ *   1992«) and Stk. 3 (§ 2 applies to supplies »fra og med den 1. januar
+ *   1992«). Note the drafting quirk: Denmark wrote the change as base 22
+ *   PLUS a 3-point supplement (the tillægsmoms of the act's title), so § 14
+ *   reads "22 + 3 pct.", not "25 pct." — the effective standard rate is 25%.
+ *   skat.dk's current 25% page corroborates the tail.
+ * - The 22% predecessor is identified but not transcribed: § 14 held 22%
+ *   before this change, but no start date for the 22% era is attested, so
+ *   no 22% row is added.
  * Zero-rated newspaper supplies are NOT declared as a code: no agency source
  * for the zero band was fetched. Exempt supplies (health, education,
  * passenger transport and the like) are not a 0% code.
@@ -87,9 +80,9 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-09-18",
     },
     {
-      id: "dst_skatter_avgifter_1999",
-      title: "Danmarks Statistik — Skatter og afgifter 1999, VAT rate table: '01.01.1992- 25,00' under 'Lov nr. 891 af 21. dec. 1991' (state statistical series, named per-source-id exception: not the act's own text)",
-      url: "https://ws.dst.dk/Site/Dst/Udgivelser/GetPubFile.aspx?id=4322&sid=skat1999",
+      id: "lov_891_1991_tillaegsmoms",
+      title: "LOV nr 891 af 21/12/1991 (Tillægsmoms på 3 pct.), retsinformation.dk ELI: § 2 nr. 3 amends § 14 »22 pct.« to »22 + 3 pct.« (effective rate 25%); § 5 Stk. 1 in force 1 January 1992, Stk. 3 applies § 2 to supplies from 1 January 1992",
+      url: "https://www.retsinformation.dk/eli/lta/1991/891",
       asOf: "2026-09-18",
     },
     {
@@ -120,7 +113,7 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
         name: "Denmark standard moms",
         role: "standard",
         ratePercent: 25,
-        rates: [{ ratePercent: 25, effectiveFrom: "1992-01-01", sourceId: "dst_skatter_avgifter_1999" }],
+        rates: [{ ratePercent: 25, effectiveFrom: "1992-01-01", sourceId: "lov_891_1991_tillaegsmoms" }],
       },
     ],
   },
