@@ -5,6 +5,7 @@ import {
   decideDocumentApproval,
   DocumentApprovalError,
   worklistApprovals,
+  worklistApprovalsPage,
   type WorklistBudget,
   type WorklistDocument,
   type WorklistPayRun,
@@ -107,6 +108,77 @@ export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWo
     }
   }
   return out;
+}
+
+export interface ApprovalWorklistWindow {
+  limit: number;
+  offset: number;
+  kind?: string;
+}
+
+/**
+ * One server-side page over the unified worklist: same doorway, same legs,
+ * same per-item shape as approvalWorklistForAuthz, but each leg fetches only
+ * its leading offset+limit rows in SQL and the total/kind counts come from
+ * GROUP BY aggregates. The dashboard tile keeps the full reader; the center
+ * reads here so a real approval backlog cannot slow the page.
+ */
+export async function approvalWorklistPageForAuthz(
+  authz: Authz,
+  window: ApprovalWorklistWindow,
+): Promise<{ items: ApprovalWorklistItem[]; total: number; kindCounts: Map<string, number> }> {
+  const orgId = authz.user.orgId;
+  const flowsOn = await isFeatureEnabled(orgId, "flows");
+  const mayFlows = flowsOn && can(authz, "flows.approve");
+  const payDirections = payApproveDirectionsForAuthz(authz);
+  const budgetsOn = await isFeatureEnabled(orgId, "budgets");
+  const mayBudgets = budgetsOn && can(authz, "budgets.approve");
+  if (!mayFlows && payDirections.length === 0 && !mayBudgets) {
+    if (!flowsOn) return { items: [], total: 0, kindCounts: new Map() };
+    throw forbidden("flows.approve");
+  }
+  const page = await worklistApprovalsPage(
+    orgId,
+    authz.user.id,
+    {
+      roles: authz.user.roles.map((role) => role.key),
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      includeFlows: mayFlows,
+      includeBudgets: mayBudgets,
+      includePayRuns: payDirections.length > 0,
+      payDirections,
+      payScope: paymentRunScopeSql(authz, "r"),
+    },
+    { limit: window.limit, offset: window.offset, kind: window.kind },
+  );
+  // Same application-layer boundary as the full reader, applied to the
+  // window: the leg query already scopes + directs in SQL, so this re-check
+  // is a no-op on consistent data and a fail-closed net on anything else.
+  const payCandidates = page.items.filter((item) => item.kind === "pay_run");
+  let payAllowed = new Set<string>();
+  if (payCandidates.length > 0) {
+    const scoped = (await db.execute<{ id: string; direction: string }>(sql`
+      select r.id, r.direction from payment_runs r
+       where r.org_id = ${orgId}
+         and r.id in (select jsonb_array_elements_text(${JSON.stringify(payCandidates.map((item) => item.id))}::jsonb)::uuid)
+         and ${paymentRunScopeSql(authz, "r")}`)).rows;
+    payAllowed = new Set(
+      scoped.filter((row) => payDirections.includes(row.direction as PayDirection)).map((row) => row.id),
+    );
+  }
+  const out: ApprovalWorklistItem[] = [];
+  for (const item of page.items) {
+    if (item.kind === "flow_gate") {
+      if (mayFlows) out.push({ ...item.gate, kind: "flow_gate" });
+    } else if (item.kind === "document") {
+      if (mayFlows) out.push({ ...item.document, kind: "document" });
+    } else if (item.kind === "budget") {
+      if (mayBudgets) out.push({ ...item.budget, kind: "budget" });
+    } else if (item.kind === "pay_run") {
+      if (payAllowed.has(item.id)) out.push({ ...item.payRun, kind: "pay_run" });
+    }
+  }
+  return { items: out, total: page.total, kindCounts: page.kindCounts };
 }
 
 export interface DecideApprovalInput {

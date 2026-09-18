@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { APPROVALS_BULK_BATCH_MAX } from '../../../../../lib/approvals-limits'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadGateHeader, requireFlowsSession } from '../../_lib'
 
@@ -19,8 +20,12 @@ export const runtime = 'nodejs'
  * per-item database and engine operations bounded for every request.
  */
 
-/** Maximum number of gates that may be decided in one request. */
-export const MAX_BULK_ITEMS = 50
+/**
+ * Maximum number of gates that may be decided in one request. Aliased to the
+ * shared approvals ceiling so the worklist page size and the request cap
+ * cannot drift apart (a page selection always fits one request).
+ */
+export const MAX_BULK_ITEMS = APPROVALS_BULK_BATCH_MAX
 
 type BulkItem = { gateId?: string }
 
