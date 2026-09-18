@@ -49,9 +49,10 @@
     "days": "{days} T"
   },
   "bulk": {
-    "selected": "{count} ausgewählt",
-    "selectAll": "Alle auswählen",
     "selectRow": "{document} auswählen",
+    "selectedOnPage": "{count} auf dieser Seite ausgewählt",
+    "selectAllOnPage": "Alle auf dieser Seite auswählen",
+    "tooMany": "Zu viele für eine Anfrage ausgewählt (max. {count})",
     "approveSelected": "Ausgewählte genehmigen",
     "rejectSelected": "Ausgewählte ablehnen",
     "rejectTitle": "{count} Genehmigungen ablehnen?",

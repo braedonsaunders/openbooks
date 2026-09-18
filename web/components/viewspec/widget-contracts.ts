@@ -58,6 +58,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'app-runtime-chrome': { props: ['appKey', 'appName', 'appsHref', 'appsLabel', 'context'] },
   'approval-engine-cell': { props: ['name'] },
   'approval-tabs': { props: ['tabs'] },
+  'approvals-pagination': { props: ['page', 'params', 'perPage', 'total'] },
   'approvals-table': { props: ['actionsEnabled', 'bulk', 'rows', 'showAssignee', 'users'] },
   'apps-empty-icon': { props: [] },
   'apps-launcher-button': { props: ['className', 'href', 'icon', 'label', 'size', 'variant'] },

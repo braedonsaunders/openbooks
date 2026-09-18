@@ -49,9 +49,10 @@
     "days": "{days}天"
   },
   "bulk": {
-    "selected": "已选择 {count} 项",
-    "selectAll": "全选",
     "selectRow": "选择 {document}",
+    "selectedOnPage": "本页已选择 {count} 项",
+    "selectAllOnPage": "全选本页",
+    "tooMany": "单次请求最多选择 {count} 项",
     "approveSelected": "批准所选",
     "rejectSelected": "驳回所选",
     "rejectTitle": "驳回 {count} 项审批？",

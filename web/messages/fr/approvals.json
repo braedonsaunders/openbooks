@@ -49,9 +49,10 @@
     "days": "{days}j"
   },
   "bulk": {
-    "selected": "{count} sélectionné(s)",
-    "selectAll": "Tout sélectionner",
     "selectRow": "Sélectionner {document}",
+    "selectedOnPage": "{count} sélectionné(s) sur cette page",
+    "selectAllOnPage": "Tout sélectionner sur cette page",
+    "tooMany": "Trop d'éléments sélectionnés pour une requête (max {count})",
     "approveSelected": "Approuver la sélection",
     "rejectSelected": "Rejeter la sélection",
     "rejectTitle": "Rejeter {count} approbations ?",

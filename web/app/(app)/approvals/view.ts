@@ -6,7 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
 import {
-  approvalWorklistForAuthz,
+  approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
 import {
@@ -28,7 +28,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz, can } from '../../../lib/authz'
-import { mergeHref, pickString } from '../../../lib/list-params'
+import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
+import { clamp, mergeHref, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
 import { pgTextArrayLiteral } from '../../../lib/pg-array'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -120,6 +121,16 @@ export interface ApprovalsData {
   showAssignee: boolean
   actionsEnabled: boolean
   tabKey: string
+  /** Filtered total across all union legs (drives pagination). */
+  total: number
+  /** Unfiltered total (drives the mine count bubble and the empty state). */
+  unfilteredTotal: number
+  page: number
+  perPage: number
+  /** Plain-string search params for pagination links. */
+  paginationParams: Record<string, string>
+  /** Submitted tab: flow runs + own budgets combined total. */
+  submittedTotal: number
 }
 
 export async function loadApprovals(
@@ -138,7 +149,23 @@ export async function loadApprovals(
   const rawTab = pickString(sp.tab)
   const tab: Tab =
     rawTab === 'submitted' ? 'submitted' : rawTab === 'all' && canSeeAll ? 'all' : 'mine'
-  const kindFilter = pickString(sp.kind)
+  const kindFilter = pickString(sp.kind) || undefined
+
+  // Server-side window shared by every tab on this page. perPage never
+  // exceeds the bulk batch ceiling, so a page-scoped selection always fits
+  // a single bulk request (pinned by approvals-paging.test.ts).
+  const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
+  const perPage = Math.min(
+    clamp(Number(pickString(sp.perPage) ?? '25'), 5, 100),
+    APPROVALS_BULK_BATCH_MAX,
+  )
+  const offset = (page - 1) * perPage
+  const prefix = offset + perPage
+  const paginationParams: Record<string, string> = {}
+  for (const [key, value] of Object.entries(sp)) {
+    const single = pickString(value)
+    if (single != null) paginationParams[key] = single
+  }
 
   const kindLabel = (kind: string) =>
     KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
@@ -151,7 +178,19 @@ export async function loadApprovals(
   // no rows rather than a forbidden error.
   const mayApprove =
     can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve') || can(authz, 'budgets.approve')
-  const unified: ApprovalWorklistItem[] = mayApprove ? await approvalWorklistForAuthz(authz) : []
+  // One server-side page over the union: each leg fetches its leading
+  // offset+limit rows in SQL and the total/chips come from aggregates, so no
+  // request ever scans a whole leg. Same reader family as the dashboard tile
+  // (approvalWorklistForAuthz), same doorway, same per-item shape.
+  const unionPage = mayApprove
+    ? await approvalWorklistPageForAuthz(authz, { limit: perPage, offset, kind: kindFilter })
+    : { items: [] as ApprovalWorklistItem[], total: 0, kindCounts: new Map<string, number>() }
+  const unified: ApprovalWorklistItem[] = unionPage.items
+  const unionTotal = unionPage.total
+  // Chips ignore the kind filter, so their counts sum to the unfiltered
+  // total (drives the mine bubble and the empty state).
+  let unfilteredTotal = 0
+  for (const count of unionPage.kindCounts.values()) unfilteredTotal += count
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
   const flowIds = [
@@ -269,10 +308,14 @@ export async function loadApprovals(
     return gateToRow(item, assignee)
   }
 
+  // The engine returns the window in merge order; re-sorting the bounded
+  // window is a safety net, not a second paging implementation.
+  const byRequestedAt = (a: ApprovalRow, b: ApprovalRow) =>
+    a.requestedAt.localeCompare(b.requestedAt) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   const mineRows: ApprovalRow[] = unified
     .map((item) => unionToRow(item, null))
-    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
-  const mineCount = mineRows.length
+    .sort(byRequestedAt)
+  const mineCount = unfilteredTotal
 
   // ---- All approvals (same union reader as mine + tile) --------------------
   // The tab stays canSeeAll-gated, but its rows are the caller's actionable
@@ -288,11 +331,16 @@ export async function loadApprovals(
     }
     allRows = unified
       .map((item) => unionToRow(item, assigneeOf(item)))
-      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+      .sort(byRequestedAt)
   }
 
   // ---- Submitted by me ------------------------------------------------------
+  // Same window as the union tabs: the flow leg pages in SQL (window total
+  // via over()), the caller's own budgets ride along capped (their scope is
+  // one user, same precedent as the delegate picker), and the loader merges
+  // and slices the bounded inputs.
   let submittedRows: SubmittedListRow[] = []
+  let submittedTotal = 0
   if (tab === 'submitted') {
     const flowRes = await db.execute<Record<string, unknown>>(sql`
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
@@ -300,7 +348,8 @@ export async function loadApprovals(
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
              d.total, d.subsidiary_id as "subsidiaryId", coalesce(d.status, cr.status) as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
-             string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
+             string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith",
+             count(*) over () as "fullCount"
         from flow_runs r
         join flows f on f.id = r.flow_id and f.org_id = r.org_id
         join flow_gates g on g.run_id = r.id and g.org_id = r.org_id and g.status = 'pending'
@@ -311,11 +360,14 @@ export async function loadApprovals(
         left join users u on u.id = g.assignee_user_id
        where r.org_id = ${orgId} and r.status = 'waiting'
          and coalesce(d.created_by, cr.started_by) = ${user.id}
+         ${kindFilter ? sql`and coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) = ${kindFilter}` : sql``}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
-       order by min(g.created_at)
+       order by min(g.created_at), r.id
+       limit ${prefix}
     `)
+    submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0)
 
     submittedRows = flowRes.rows
       .map((r): SubmittedListRow => {
@@ -339,8 +391,9 @@ export async function loadApprovals(
 
     // Budgets submitted through the direct maker/checker path create no flow
     // run, so the query above never sees them. List the caller's own pending
-    // scenarios with the approvers who can decide them (F-t13-005).
-    if (can(authz, 'budgets.read')) {
+    // scenarios with the approvers who can decide them (F-t13-005). The flow
+    // leg filters by kind in SQL; this small capped leg filters here.
+    if (can(authz, 'budgets.read') && (!kindFilter || kindFilter === 'budget_scenario')) {
       const budgetRes = await db.execute<Record<string, unknown>>(sql`
         select bs.id as "budgetId", bs.name as "documentNumber",
                coalesce(sum(bl.amount), 0)::text as total,
@@ -355,7 +408,8 @@ export async function loadApprovals(
           left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
          where bs.org_id = ${orgId} and bs.status = 'pending_approval' and bs.submitted_by = ${user.id}
          group by bs.id
-         order by bs.submitted_at
+         order by bs.submitted_at, bs.id
+         limit 500
       `)
       for (const r of budgetRes.rows) {
         const waitingSince = iso(r.waitingSince)
@@ -375,7 +429,14 @@ export async function loadApprovals(
         })
       }
     }
-    submittedRows.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))
+    // The budgets leg is one user's own submissions (capped above); the flow
+    // leg carries the prefix. Merged and sliced like the union tabs.
+    const budgetPushed = submittedRows.length - flowRes.rows.length
+    submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0) + budgetPushed
+    submittedRows.sort(
+      (a, b) => a.waitingSince.localeCompare(b.waitingSince) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+    )
+    submittedRows = submittedRows.slice(offset, offset + perPage)
   }
 
   // Delegate targets (row delegation + out-of-office picker).
@@ -386,14 +447,16 @@ export async function loadApprovals(
   `)
   const delegateUsers = usersRes.rows
 
-  // ---- Kind chips + filter (mine/all tabs) ----------------------------------
+  // ---- Kind chips (mine/all tabs) -------------------------------------------
+  // Counts come from the union aggregates (unfiltered by kind, sorted by code
+  // so chip order is stable across locales); the rows arrive kind-filtered
+  // from SQL, so there is deliberately no second filter here.
   const rowsForTab = tab === 'all' ? allRows : mineRows
-  const chipCounts = new Map<string, number>()
-  for (const r of rowsForTab) chipCounts.set(r.kind, (chipCounts.get(r.kind) ?? 0) + 1)
-  const visibleRows = kindFilter ? rowsForTab.filter((r) => r.kind === kindFilter) : rowsForTab
-  const visibleSubmitted = kindFilter
-    ? submittedRows.filter((r) => r.kind === kindFilter)
-    : submittedRows
+  const chipCounts = new Map<string, number>(
+    [...unionPage.kindCounts.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  )
+  const visibleRows = rowsForTab
+  const visibleSubmitted = submittedRows
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'mine', label: t('tabs.mine'), count: mineCount },
@@ -413,10 +476,10 @@ export async function loadApprovals(
       count: typeof count === 'number' ? count : null,
     })),
     onSubmitted: tab === 'submitted',
-    submittedEmpty: tab === 'submitted' && visibleSubmitted.length === 0,
-    submittedPresent: tab === 'submitted' && visibleSubmitted.length > 0,
-    gatesEmpty: tab !== 'submitted' && rowsForTab.length === 0,
-    gatesPresent: tab !== 'submitted' && rowsForTab.length > 0,
+    submittedEmpty: tab === 'submitted' && submittedTotal === 0,
+    submittedPresent: tab === 'submitted' && submittedTotal > 0,
+    gatesEmpty: tab !== 'submitted' && unfilteredTotal === 0,
+    gatesPresent: tab !== 'submitted' && unfilteredTotal > 0,
     emptySubmittedTitle: t('emptySubmitted.title'),
     emptySubmittedDescription: t('emptySubmitted.description'),
     emptyTitle: tab === 'all' ? t('emptyAll.title') : t('empty.title'),
@@ -427,9 +490,15 @@ export async function loadApprovals(
       label: kindLabel(kind),
       count,
       active: kindFilter === kind,
-      href: mergeHref('/approvals', sp, { kind: kindFilter === kind ? undefined : kind }),
+      // A new filter restarts at page one: the old page may not exist.
+      href: mergeHref('/approvals', sp, {
+        kind: kindFilter === kind ? undefined : kind,
+        page: undefined,
+      }),
     })),
-    clearHref: kindFilter ? mergeHref('/approvals', sp, { kind: undefined }) : null,
+    clearHref: kindFilter
+      ? mergeHref('/approvals', sp, { kind: undefined, page: undefined })
+      : null,
     clearLabel: tc('labels.all'),
     columnDocument: t('table.document'),
     columnKind: t('table.kind'),
@@ -445,6 +514,12 @@ export async function loadApprovals(
     showAssignee: tab === 'all',
     actionsEnabled: tab === 'mine' || canManageFlows,
     tabKey: tab,
+    total: unionTotal,
+    unfilteredTotal,
+    page,
+    perPage,
+    paginationParams,
+    submittedTotal,
   }
 }
 
@@ -510,6 +585,15 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
             when: f('submittedPresent'),
           },
           {
+            ...widgetBlock('approvals-pagination', {
+              params: data.paginationParams,
+              total: data.submittedTotal,
+              page: data.page,
+              perPage: data.perPage,
+            }),
+            when: f('submittedPresent'),
+          },
+          {
             ...widgetBlock('empty-state', {
               icon: 'check-circle',
               title: data.emptyTitle,
@@ -533,6 +617,12 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
                 bulk: data.bulk,
                 showAssignee: data.showAssignee,
                 actionsEnabled: data.actionsEnabled,
+              }),
+              widgetBlock('approvals-pagination', {
+                params: data.paginationParams,
+                total: data.total,
+                page: data.page,
+                perPage: data.perPage,
               }),
             ]),
             when: f('gatesPresent'),

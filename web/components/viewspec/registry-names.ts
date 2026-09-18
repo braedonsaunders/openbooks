@@ -62,6 +62,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'approval-engine-cell',
   'approval-tabs',
   'approvals-table',
+  'approvals-pagination',
   'apps-empty-icon',
   'apps-launcher-button',
   'apps-library-button',
