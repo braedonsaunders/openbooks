@@ -11,7 +11,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { purchasingHome } = await import('./purchasing')
@@ -25,6 +25,9 @@ async function seedPostedDocument(
   const controlLineId = randomUUID()
   const otherLineId = randomUUID()
   const functionalTotal = input.currency === 'USD' && input.fxRate === '1.35' ? '135' : input.total
+  // Fixture writes run under the test bypass; the presentation read below
+  // runs under withOrgContext, proving enforcement visibility.
+  await withBypassContext(async () => {
   await db.execute(sql`
     insert into documents(
       id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
@@ -65,10 +68,11 @@ async function seedPostedDocument(
        set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}
      where id = ${documentId} and org_id = ${org.orgId}
   `)
+  })
 }
 
 test('purchasing scalar metrics convert transaction-currency documents before org formatting', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   try {
     await pinClock('2026-07-15', async () => {
       await seedPostedDocument(org, {

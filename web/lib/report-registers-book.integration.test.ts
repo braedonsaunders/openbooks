@@ -44,20 +44,24 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db, withBypass } from "./engine/src/db.ts";
+      import { db, withBypass, withBypassContext, withOrgContext } from "./engine/src/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
       import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
 
       installTrustedTestDatabaseBypass();
-      const scratch = await createScratchOrg();
+      // Seeds run under the explicit bypass: importing the registers reader
+      // below replaces the process-wide test bypass, so unscoped seeds and
+      // reads would silently see zero rows after that import.
+      const scratch = await withBypassContext(() => createScratchOrg());
+      const taxBookId = randomUUID();
       try {
-        const taxBookId = randomUUID();
-        await db.execute(sql\`
+        await withBypassContext(() => db.execute(sql\`
           insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`));
 
         const postAR = async (bookId, tag) => {
           const entryId = randomUUID();
+          await withBypassContext(async () => {
           await db.execute(sql\`
             insert into journal_entries
               (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -78,6 +82,7 @@ test(
           await db.execute(sql\`
             update journal_entries set status = 'posted', posted_at = now()
              where id = \${entryId}\`);
+          });
         };
         await postAR(scratch.bookId, 'PRI');
         await postAR(taxBookId, 'TAX');
@@ -85,6 +90,9 @@ test(
         const { partyRegister, accountRegister, partnerStatement } =
           await import("./web/lib/reports/registers.ts");
 
+        // Reads run under the org scope, proving the primary-book default
+        // holds under enforcement rather than under the seed bypass.
+        await withOrgContext(scratch.orgId, async () => {
         // Default scope is the primary book only — never the merged pair.
         const reg = await partyRegister('ar', { from: scratch.date, to: scratch.date, orgId: scratch.orgId });
         assert.equal(reg.parties.length, 1);
@@ -111,6 +119,7 @@ test(
           { from: scratch.date, to: scratch.date }, null, taxBookId);
         assert.equal(taxAcct.balance, '500.0000');
         console.log('registers stay primary-scoped with a parallel book present');
+        });
       } finally {
         await withBypass(() => dropScratchOrg(scratch.orgId));
       }
