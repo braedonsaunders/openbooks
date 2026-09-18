@@ -105,3 +105,17 @@ test("the temporary 8% band covers the pinned date and carries its published exp
 test("Vietnam GTGT is national — no subnational jurisdictions declared", () => {
   assert.equal(VIETNAM_TAX_PACK.jurisdictions.length, 0);
 });
+
+test("Vietnam 10/5/0 bands run back to 2009 as single open rows, 8% window untouched", () => {
+  const codes = codesFor("VN_GTGT_01");
+  for (const [code, rate] of [["VN-VAT-STD", 10], ["VN-VAT-RED5", 5], ["VN-VAT-ZERO", 0]] as const) {
+    assert.deepEqual(
+      codes.find((entry) => entry.code === code)!.rates,
+      [{ ratePercent: rate, effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
+    );
+  }
+  const reduced8 = codes.find((entry) => entry.code === "VN-VAT-RED8")!;
+  assert.deepEqual(reduced8.rates, [
+    { ratePercent: 8, effectiveFrom: "2025-07-01", effectiveTo: "2026-12-31", sourceId: "congbao_nd174_window" },
+  ]);
+});

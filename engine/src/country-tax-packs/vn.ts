@@ -33,11 +33,21 @@ const VN_GTGT_01: TaxReturnPack = {
  * provinces but levy no subnational tax.
  *
  * The standard rate is 10% (Luật Thuế GTGT 48/2024/QH15, Điều 9 khoản 3,
- * in force 2025-07-01). The long-standing 5% band (khoản 2: clean water,
- * fertiliser, agricultural services, unprocessed farm produce) and the 0%
- * export band (khoản 1) are separate codes, each left-truncated to the
- * 2025-07-01 applicability the current law attests; earlier history,
- * including the pre-2025 8% windows, is not transcribed.
+ * in force 2025-07-01). The 10%, 5% and 0% bands run back to 2009-01-01 as
+ * single open rows: Luật 13/2008/QH12, Điều 8 sets the same three values
+ * (10% residual, 5% on clean water/fertiliser/farm goods, 0% on exports)
+ * with effect from 01/01/2009, replacing the 1997 VAT law. These are
+ * continuing-authority rows — the 2024 law is a recast with identical
+ * values, and the intervening amendments (31/2013 on Điều 8 lists,
+ * 71/2014, 106/2016) adjusted scopes and lists, not values — so equal
+ * values collapse. The pre-2009 1997-law era is a named refusal (its rates
+ * are unsourced from here). The 13/2008 text is read from the NA law as
+ * republished on the Government trade portal (vietnamtradeportal.gov.vn):
+ * the authority's own instrument mirrored on a .gov.vn host, with the
+ * succession and amendment chain cross-checked primarily against the Law
+ * 48/2024 repeal clause on Công báo (13/2008 as amended, repealed when Law
+ * 48 takes effect). Earlier 8% windows are not transcribed here by order:
+ * VN-VAT-RED8 below is untouched.
  *
  * The temporary 8% cut is its own code, VN-VAT-RED8: Nghị định
  * 174/2025/NĐ-CP (implementing Nghị quyết 204/2025/QH15) applies 8% from
@@ -107,8 +117,14 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "congbao_law48_rates",
-      title: "Công báo 1527+1528 — Luật Thuế GTGT 48/2024/QH15, Điều 9: 0%/5%/10% bands, in force 2025-07-01",
+      title: "Công báo 1527+1528 — Luật Thuế GTGT 48/2024/QH15, Điều 9: 0%/5%/10% bands, in force 2025-07-01; repeals Luật 13/2008/QH12 (as amended by 31/2013, 71/2014, 106/2016) on entry into force",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2024/11/43576/53720-1-20241527-152848-2024-qh15.pdf",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "tradeportal_law13_2008_rates",
+      title: "Luật 13/2008/QH12 (3/6/2008), Điều 8: 0%/5%/10% bands in force from 01/01/2009 — NA law as republished on the Government trade portal (vietnamtradeportal.gov.vn); succession and amendment chain cross-checked primarily against the Law 48/2024 repeal clause on Công báo",
+      url: "https://www.vietnamtradeportal.gov.vn/kcfinder/upload/files/13.2008.QH12.pdf",
       asOf: "2026-09-18",
     },
     {
@@ -157,7 +173,7 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
         name: "Vietnam standard GTGT 10%",
         ratePercent: 10,
         role: "standard",
-        rates: [{ ratePercent: 10, effectiveFrom: "2025-07-01", sourceId: "congbao_law48_rates" }],
+        rates: [{ ratePercent: 10, effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
       },
       {
         code: "VN-VAT-RED8",
@@ -171,14 +187,14 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
         name: "Vietnam reduced GTGT 5% — water, fertiliser, agricultural services and produce",
         ratePercent: 5,
         role: "reduced",
-        rates: [{ ratePercent: 5, effectiveFrom: "2025-07-01", sourceId: "congbao_law48_rates" }],
+        rates: [{ ratePercent: 5, effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
       },
       {
         code: "VN-VAT-ZERO",
         name: "Vietnam zero-rated GTGT 0% — exports",
         ratePercent: 0,
         role: "zero",
-        rates: [{ ratePercent: 0, effectiveFrom: "2025-07-01", sourceId: "congbao_law48_rates" }],
+        rates: [{ ratePercent: 0, effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
       },
     ],
   },
