@@ -20,7 +20,7 @@ import {
   unregisterPayrollTaxYears,
 } from "./packs.ts";
 
-test("ES pack exists as an uninstallable skeleton in euro on a calendar year", () => {
+test("ES pack exists as an uninstallable 2026 pack in euro on a calendar year", () => {
   assert.equal(ES_PAYROLL_PACK.country, "ES");
   assert.equal(ES_PAYROLL_PACK.installable, false);
   assert.equal(ES_PAYROLL_PACK.statutoryCurrency, "EUR");
@@ -45,13 +45,20 @@ test("ES slots name IRPF withholding and Seguridad Social, employee plus employe
   assert.deepEqual(kinds, ["deduction", "deduction", "employer_contribution"]);
 });
 
-test("ES regions list all 19 communities and support none yet", () => {
+test("ES regions list all 19 communities and support the 17 AEAT ones", () => {
   const { regions } = ES_PAYROLL_PACK;
   assert.equal(regions.known.length, 19);
   for (const code of ["AN", "CT", "MD", "NC", "PV", "CE", "ML"]) {
     assert.ok(regions.known.includes(code), code);
   }
-  assert.deepEqual([...regions.supported], []);
+  assert.deepEqual([...regions.supported].sort(), [
+    "AN", "AR", "AS", "CB", "CE", "CL", "CM", "CN", "CT", "EX", "GA",
+    "IB", "MC", "MD", "ML", "RI", "VC",
+  ]);
+  const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
+  for (const code of [...regions.supported]) {
+    assert.equal(withholding.get(code)?.implemented, true, code);
+  }
 });
 
 test("ES foral territories are refused by name, never covered by AEAT", () => {
@@ -134,14 +141,46 @@ test("ES statutory rates carry no tenant slots: every rate is a published consta
   assert.deepEqual([...ES_PACK_RATES.slots], []);
 });
 
-test("ES computeStatutory refuses instead of inventing money", async () => {
+test("ES computeStatutory refuses foral regions, off-year runs and off-monthly payroll", async () => {
+  const pushed: Array<{ key: string; amount: string }> = [];
+  const base = {
+    taxYear: 2026,
+    region: "MD",
+    run: { pay_date: "2026-03-15" },
+    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990" },
+    income: "2000.00",
+    nonPeriodic: "",
+    pensionable: "2000.00",
+    insurable: "2000.00",
+    periodsPerYear: 12,
+    pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
+      pushed.push({ key, amount });
+    },
+    certificateFor: () => null,
+    assertRegionSupported: (region: string) => {
+      if (!ES_PAYROLL_PACK.regions.supported.includes(region)) {
+        throw new PayrollPackError(`unsupported region ${region}`);
+      }
+    },
+  } as unknown as Parameters<typeof computeEsStatutory>[0];
+  const good = await computeEsStatutory(base);
+  assert.match(good["ES_TIPO_IRPF"] ?? "", /^\d+\.\d\d$/);
+  assert.ok(pushed.some((line) => line.key === "irpf"));
+
   await assert.rejects(
-    () => computeEsStatutory(),
+    () => computeEsStatutory({ ...base, region: "PV" }),
     (error: unknown) => {
       assert.ok(error instanceof PayrollPackError);
-      assert.match((error as Error).message, /2026/);
-      assert.match((error as Error).message, /Bizkaia/);
+      assert.match((error as Error).message, /foral/);
       return true;
     },
+  );
+  await assert.rejects(
+    () => computeEsStatutory({ ...base, taxYear: 2025 }),
+    /has not been transcribed/,
+  );
+  await assert.rejects(
+    () => computeEsStatutory({ ...base, periodsPerYear: 52 }),
+    /intrinsically monthly/,
   );
 });

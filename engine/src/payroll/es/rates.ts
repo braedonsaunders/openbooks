@@ -188,12 +188,12 @@ export interface EsIrpfEscalaTramo {
 
 /** TABLA 2 — ESCALA DE RETENCIÓN (identical in both 2026 editions). */
 export const ES_IRPF_ESCALA_2026: readonly EsIrpfEscalaTramo[] = [
-  { hasta: "12450", cuota: "0", restoHasta: "12450", porcentaje: "0.19" },
-  { hasta: "20200", cuota: "2365.50", restoHasta: "7750", porcentaje: "0.24" },
-  { hasta: "35200", cuota: "4225.50", restoHasta: "15000", porcentaje: "0.30" },
-  { hasta: "60000", cuota: "8725.50", restoHasta: "24800", porcentaje: "0.37" },
-  { hasta: "300000", cuota: "17901.50", restoHasta: "240000", porcentaje: "0.45" },
-  { hasta: null, cuota: "125901.50", restoHasta: null, porcentaje: "0.47" },
+  { hasta: "0", cuota: "0", restoHasta: "12450", porcentaje: "0.19" },
+  { hasta: "12450", cuota: "2365.50", restoHasta: "7750", porcentaje: "0.24" },
+  { hasta: "20200", cuota: "4225.50", restoHasta: "15000", porcentaje: "0.30" },
+  { hasta: "35200", cuota: "8725.50", restoHasta: "24800", porcentaje: "0.37" },
+  { hasta: "60000", cuota: "17901.50", restoHasta: "240000", porcentaje: "0.45" },
+  { hasta: "300000", cuota: "125901.50", restoHasta: null, porcentaje: "0.47" },
 ];
 
 /** TABLA 1 — exclusion limits by situación and descendiente count band. */
