@@ -27,7 +27,10 @@
     "overdueReceivables": "Überfällige Forderungen",
     "openPayables": "Offene Verbindlichkeiten",
     "overduePayables": "Überfällige Verbindlichkeiten",
-    "agentFindings": "Agentenfeststellungen"
+    "agentFindings": "Agentenfeststellungen",
+    "revenue": "Umsatz",
+    "netIncome": "Nettoergebnis",
+    "grossMargin": "Bruttomarge"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -38,7 +41,9 @@
     "asOf": "Stand {date}",
     "agentProposals": "{count} mit Vorschlägen",
     "agentLastRun": "letzter Lauf {date}",
-    "agentClear": "Alles in Ordnung"
+    "agentClear": "Alles in Ordnung",
+    "monthToDate": "Seit Monatsbeginn",
+    "noData": "Keine Daten"
   },
   "categories": {
     "kpi": "Kennzahlen",
@@ -64,7 +69,10 @@
     "overdueReceivables": "Ausgangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
     "openPayables": "Unbezahlte Eingangsrechnungen in Basiswährung.",
     "overduePayables": "Eingangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
-    "agentFindings": "Feststellungen der Hintergrundagenten öffnen — zur Workbench springen."
+    "agentFindings": "Feststellungen der Hintergrundagenten öffnen — zur Workbench springen.",
+    "revenue": "Seit Monatsbeginn erfasster Umsatz, in Basiswährung.",
+    "netIncome": "Umsatz minus Kosten und Aufwendungen seit Monatsbeginn.",
+    "grossMargin": "Bruttoergebnis und Marge seit Monatsbeginn."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",

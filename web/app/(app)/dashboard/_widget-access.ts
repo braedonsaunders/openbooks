@@ -18,6 +18,11 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-overdue-receivables': ['ar.read'],
   'kpi-open-payables': ['ap.read'],
   'kpi-overdue-payables': ['ap.read'],
+  // P&L tiles read the P&L report reader over the caller's subsidiary scope —
+  // the same doorway as /reports/pnl, so the same grant guards both.
+  'kpi-revenue-mtd': ['reports.read'],
+  'kpi-net-income-mtd': ['reports.read'],
+  'kpi-gross-margin-mtd': ['reports.read'],
   'kpi-pending-approvals': AP,
   'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,

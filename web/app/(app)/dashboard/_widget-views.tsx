@@ -13,9 +13,12 @@ import {
   Landmark,
   Layers,
   NotebookPen,
+  Percent,
   Receipt,
   Scale,
   Sparkles,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import type { DashboardMetrics } from './_metrics'
@@ -83,6 +86,25 @@ export function WidgetCard({
       return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={withAsOf(t('metricContext.outstanding'))} />
     case 'kpi-overdue-payables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
+    case 'kpi-revenue-mtd':
+      return data.revenueMtd === null
+        ? <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value="—" href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
+        : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.monthToDate'))} />
+    case 'kpi-net-income-mtd':
+      return data.netIncomeMtd === null
+        ? <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value="—" href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
+        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value={money(data.netIncomeMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.monthToDate'))} />
+    case 'kpi-gross-margin-mtd': {
+      // No MTD revenue means the ratio is undefined, not zero — the tile
+      // shows the gross profit it can state and drops the margin it cannot.
+      const margin = data.grossMarginMtd === null
+        ? null
+        : new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(Number(data.grossMarginMtd))
+      const hint = margin === null ? t('metricContext.monthToDate') : `${margin} · ${t('metricContext.monthToDate')}`
+      return data.grossProfitMtd === null
+        ? <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value="—" href="/reports/pnl" tone="slate" hint={withAsOf(t('metricContext.noData'))} />
+        : <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value={money(data.grossProfitMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="slate" hint={withAsOf(hint)} />
+    }
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':

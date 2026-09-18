@@ -66,6 +66,10 @@ function denialSpies(calls: string[]): DashboardMoneyReaders {
       calls.push(`openItems:${args[1]}`);
       throw new Error("openItems must not run for a denied widget");
     }) as DashboardMoneyReaders["openItems"],
+    profitAndLoss: (async () => {
+      calls.push("profitAndLoss");
+      throw new Error("profitAndLoss must not run for a denied widget");
+    }) as DashboardMoneyReaders["profitAndLoss"],
   };
 }
 
@@ -119,6 +123,10 @@ test("the visible set — not the permission check — selects the queries", { s
         calls.push(`openItems:${args[1]}`);
         return args[1] === "ar" ? items : [];
       }) as DashboardMoneyReaders["openItems"],
+      profitAndLoss: (async () => {
+        calls.push("profitAndLoss");
+        return null;
+      }) as unknown as DashboardMoneyReaders["profitAndLoss"],
     };
     const allowedId = await withBypass(() => createScratchUser(org.orgId, "AR Reader", "staff"));
     const allowed = authzFor(org.orgId, allowedId as unknown as string, ["dashboard.read", "ar.read"]);
@@ -149,6 +157,7 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
       openItems: (async (...args: Parameters<DashboardMoneyReaders["openItems"]>) => {
         calls.push(`openItems:${args[1]}`); return [];
       }) as DashboardMoneyReaders["openItems"],
+      profitAndLoss: (async () => { calls.push("profitAndLoss"); return null; }) as unknown as DashboardMoneyReaders["profitAndLoss"],
     };
     const fullId = await withBypass(() => createScratchUser(org.orgId, "Full Reader", "admin"));
     const full = authzFor(org.orgId, fullId as unknown as string, ["dashboard.read", "gl.read", "ar.read", "ap.read"]);
@@ -156,6 +165,7 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
     assert.ok(calls.includes("bankBalances"), "default still queries cash balances");
     assert.ok(calls.includes("openItems:ar"), "default still queries AR items");
     assert.ok(calls.includes("openItems:ap"), "default still queries AP items");
+    assert.ok(calls.includes("profitAndLoss"), "default still queries the P&L reader");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

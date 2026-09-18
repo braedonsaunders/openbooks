@@ -165,6 +165,33 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'kpi-revenue-mtd': {
+    id: 'kpi-revenue-mtd',
+    category: 'kpi',
+    labelKey: 'widgets.revenue',
+    descriptionKey: 'catalog.revenue',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-net-income-mtd': {
+    id: 'kpi-net-income-mtd',
+    category: 'kpi',
+    labelKey: 'widgets.netIncome',
+    descriptionKey: 'catalog.netIncome',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-gross-margin-mtd': {
+    id: 'kpi-gross-margin-mtd',
+    category: 'kpi',
+    labelKey: 'widgets.grossMargin',
+    descriptionKey: 'catalog.grossMargin',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

@@ -27,7 +27,10 @@
     "overdueReceivables": "Contas a receber vencidas",
     "openPayables": "Contas a pagar em aberto",
     "overduePayables": "Contas a pagar vencidas",
-    "agentFindings": "Achados dos agentes"
+    "agentFindings": "Achados dos agentes",
+    "revenue": "Receita",
+    "netIncome": "Lucro líquido",
+    "grossMargin": "Margem bruta"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -38,7 +41,9 @@
     "asOf": "Em {date}",
     "agentProposals": "{count} com propostas",
     "agentLastRun": "última execução {date}",
-    "agentClear": "Tudo certo"
+    "agentClear": "Tudo certo",
+    "monthToDate": "Mês até a data",
+    "noData": "Sem dados"
   },
   "categories": {
     "kpi": "Destaques",
@@ -64,7 +69,10 @@
     "overdueReceivables": "Faturas de clientes vencidas na moeda base.",
     "openPayables": "Contas a pagar de fornecedores não pagas na moeda base.",
     "overduePayables": "Contas a pagar de fornecedores vencidas na moeda base.",
-    "agentFindings": "Abra os achados dos agentes em segundo plano — vá para a bancada."
+    "agentFindings": "Abra os achados dos agentes em segundo plano — vá para a bancada.",
+    "revenue": "Receita lançada no mês até a data, na moeda base.",
+    "netIncome": "Receita menos custos e despesas do mês até a data.",
+    "grossMargin": "Lucro bruto e margem do mês até a data."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

@@ -27,7 +27,10 @@
     "overdueReceivables": "延滞している売掛金",
     "openPayables": "未払の買掛金",
     "overduePayables": "延滞している買掛金",
-    "agentFindings": "エージェントの指摘"
+    "agentFindings": "エージェントの指摘",
+    "revenue": "収益",
+    "netIncome": "純利益",
+    "grossMargin": "粗利率"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -38,7 +41,9 @@
     "asOf": "{date} 時点",
     "agentProposals": "提案あり {count} 件",
     "agentLastRun": "前回実行 {date}",
-    "agentClear": "問題なし"
+    "agentClear": "問題なし",
+    "monthToDate": "月初来",
+    "noData": "データなし"
   },
   "categories": {
     "kpi": "ヘッドライン",
@@ -64,7 +69,10 @@
     "overdueReceivables": "基準通貨での支払期日を過ぎた得意先請求書です。",
     "openPayables": "基準通貨での未払の仕入請求書です。",
     "overduePayables": "基準通貨での支払期日を過ぎた仕入請求書です。",
-    "agentFindings": "バックグラウンドエージェントの指摘を開く — ワークベンチへ移動します。"
+    "agentFindings": "バックグラウンドエージェントの指摘を開く — ワークベンチへ移動します。",
+    "revenue": "月初来の計上収益（基軸通貨）。",
+    "netIncome": "月初来の収益から原価・費用を差し引いた利益。",
+    "grossMargin": "月初来の売上総利益と利益率。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

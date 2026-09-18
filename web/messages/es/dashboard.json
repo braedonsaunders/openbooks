@@ -27,7 +27,10 @@
     "overdueReceivables": "Cuentas por cobrar vencidas",
     "openPayables": "Cuentas por pagar abiertas",
     "overduePayables": "Cuentas por pagar vencidas",
-    "agentFindings": "Hallazgos de agentes"
+    "agentFindings": "Hallazgos de agentes",
+    "revenue": "Ingresos",
+    "netIncome": "Resultado neto",
+    "grossMargin": "Margen bruto"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -38,7 +41,9 @@
     "agentProposals": "{count} con propuestas",
     "agentLastRun": "última ejecución {date}",
     "agentClear": "Sin pendientes",
-    "asOf": "Al {date}"
+    "asOf": "Al {date}",
+    "monthToDate": "Mes hasta la fecha",
+    "noData": "Sin datos"
   },
   "categories": {
     "kpi": "Indicadores clave",
@@ -64,7 +69,10 @@
     "overdueReceivables": "Facturas de clientes vencidas en moneda base.",
     "openPayables": "Facturas de proveedores sin pagar en moneda base.",
     "overduePayables": "Facturas de proveedores vencidas en moneda base.",
-    "agentFindings": "Hallazgos abiertos de agentes en segundo plano: ir al panel."
+    "agentFindings": "Hallazgos abiertos de agentes en segundo plano: ir al panel.",
+    "revenue": "Ingresos registrados en el mes hasta la fecha, en moneda base.",
+    "netIncome": "Ingresos menos costes y gastos del mes hasta la fecha.",
+    "grossMargin": "Beneficio bruto y margen del mes hasta la fecha."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

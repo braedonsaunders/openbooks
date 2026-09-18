@@ -1,11 +1,14 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { openItems } from '@/lib/cash/open-items'
+import { profitAndLoss } from '@/lib/reports/statements'
+import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
+import { decimalRatio } from '@/lib/reports/decimals'
 import {
   bankBalances,
   compareMoney,
@@ -28,9 +31,10 @@ import { WIDGETS } from './_widget-registry'
 export type DashboardMoneyReaders = {
   bankBalances: typeof bankBalances
   openItems: typeof openItems
+  profitAndLoss: typeof profitAndLoss
 }
 
-const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems }
+const canonicalMoneyReaders: DashboardMoneyReaders = { bankBalances, openItems, profitAndLoss }
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -50,6 +54,17 @@ export type DashboardMetrics = {
   overdueReceivables: string
   openPayables: string
   overduePayables: string
+  /**
+   * Month-to-date P&L off the canonical profitAndLoss reader (one call feeds
+   * all three tiles). Null when the subsidiary scope spans functional
+   * currencies — the reader refuses rather than mixing, and a tile must
+   * render that as no-data ("—"), never as a zero that reads as a fact.
+   */
+  revenueMtd: string | null
+  netIncomeMtd: string | null
+  grossProfitMtd: string | null
+  /** Gross-margin ratio on the 0–1 scale; null when MTD revenue is zero. */
+  grossMarginMtd: string | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -133,10 +148,11 @@ export async function loadDashboardMetrics(
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
   const wantCash = need('cashBalance')
-  const wantMoney = wantCash || need('openReceivables', 'overdueReceivables', 'openPayables', 'overduePayables')
+  const wantMoney = need('baseCurrency')
   const wantAr = need('openReceivables', 'overdueReceivables')
   const wantAp = need('openPayables', 'overduePayables')
-  const [totals, banks, baseCurrency, arItems, apItems, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const wantPl = need('revenueMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
+  const [totals, banks, baseCurrency, arItems, apItems, pl, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -164,6 +180,28 @@ export async function loadDashboardMetrics(
     // contract), never a silently undercounted tile.
     wantAr ? readers.openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
     wantAp ? readers.openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
+    // One MTD profitAndLoss call feeds the revenue, net-income and margin
+    // tiles — three round trips for one period would triple the dashboard's
+    // heaviest reader. A multi-functional scope refuses inside (the report
+    // contract, pinned by report-currency-basis); catch that declared
+    // outcome into nulls so the tiles render no-data, and let anything else
+    // throw — an unexpected P&L failure must not masquerade as an empty
+    // month. Subsidiary doorway matches the hubs: the caller's scope, so a
+    // restricted caller tiles what /reports/pnl shows them.
+    wantPl
+      ? readers
+        .profitAndLoss(startOfMonth(today), today, { subsidiaryIds: subIds }, orgId)
+        .then((r) => ({
+          revenue: r.revenue,
+          netIncome: r.netIncome,
+          grossProfit: r.grossProfit,
+          margin: decimalRatio(r.grossProfit, r.revenue),
+        }))
+        .catch((e: unknown) => {
+          if (e instanceof ReportCurrencyBasisError) return null
+          throw e
+        })
+      : Promise.resolve(null),
     // Top-N first, then aggregate the five entries' lines — grouping before
     // the limit aggregated every entry in the tenant.
     need('recentEntries')
@@ -287,6 +325,10 @@ export async function loadDashboardMetrics(
     overdueReceivables: arTile.overdue,
     openPayables: apTile.open,
     overduePayables: apTile.overdue,
+    revenueMtd: pl?.revenue ?? null,
+    netIncomeMtd: pl?.netIncome ?? null,
+    grossProfitMtd: pl?.grossProfit ?? null,
+    grossMarginMtd: pl?.margin ?? null,
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -325,6 +367,9 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'asOfDate'],
   'kpi-open-payables': ['baseCurrency', 'openPayables', 'asOfDate'],
   'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
+  'kpi-revenue-mtd': ['baseCurrency', 'revenueMtd', 'asOfDate'],
+  'kpi-net-income-mtd': ['baseCurrency', 'netIncomeMtd', 'asOfDate'],
+  'kpi-gross-margin-mtd': ['baseCurrency', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -347,6 +392,10 @@ const EMPTY_METRICS: DashboardMetrics = {
   overdueReceivables: '0',
   openPayables: '0',
   overduePayables: '0',
+  revenueMtd: null,
+  netIncomeMtd: null,
+  grossProfitMtd: null,
+  grossMarginMtd: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],

@@ -27,7 +27,10 @@
     "overdueReceivables": "Créances en retard",
     "openPayables": "Dettes ouvertes",
     "overduePayables": "Dettes en retard",
-    "agentFindings": "Constats des agents"
+    "agentFindings": "Constats des agents",
+    "revenue": "Chiffre d'affaires",
+    "netIncome": "Résultat net",
+    "grossMargin": "Marge brute"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -38,7 +41,9 @@
     "agentProposals": "{count} avec propositions",
     "agentLastRun": "dernière exécution {date}",
     "agentClear": "Rien en attente",
-    "asOf": "Au {date}"
+    "asOf": "Au {date}",
+    "monthToDate": "Mois en cours",
+    "noData": "Aucune donnée"
   },
   "categories": {
     "kpi": "Indicateurs clés",
@@ -64,7 +69,10 @@
     "overdueReceivables": "Factures clients échues en devise de base.",
     "openPayables": "Factures fournisseurs impayées en devise de base.",
     "overduePayables": "Factures fournisseurs échues en devise de base.",
-    "agentFindings": "Constats ouverts des agents en arrière-plan — ouvrir le poste de travail."
+    "agentFindings": "Constats ouverts des agents en arrière-plan — ouvrir le poste de travail.",
+    "revenue": "Chiffre d'affaires comptabilisé depuis le début du mois, en devise de référence.",
+    "netIncome": "Chiffre d'affaires moins coûts et charges depuis le début du mois.",
+    "grossMargin": "Bénéfice brut et marge depuis le début du mois."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
