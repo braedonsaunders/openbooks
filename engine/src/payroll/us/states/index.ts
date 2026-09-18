@@ -52,6 +52,7 @@ import { MT_WITHHOLDING } from "./mt.ts";
 import { NC_WITHHOLDING } from "./nc.ts";
 import { ND_WITHHOLDING } from "./nd.ts";
 import { NE_WITHHOLDING } from "./ne.ts";
+import { NM_WITHHOLDING } from "./nm.ts";
 import { NJ_WITHHOLDING } from "./nj.ts";
 import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
@@ -129,6 +130,7 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   OK_WITHHOLDING,
   MS_WITHHOLDING,
   NE_WITHHOLDING,
+  NM_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -153,7 +155,6 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
-  NM: "New Mexico FYI-104, Wage Withholding Tax",
 };
 
 /** The engines the pack carries, for the setup surface and readiness. */
@@ -257,6 +258,7 @@ export { MT_WITHHOLDING, MT_RATES_2026 } from "./mt.ts";
 export { MS_WITHHOLDING, MS_RATES_2026 } from "./ms.ts";
 export { ND_WITHHOLDING, ND_RATES_2026 } from "./nd.ts";
 export { NE_WITHHOLDING, NE_RATES_2026 } from "./ne.ts";
+export { NM_WITHHOLDING, NM_RATES_2026, nmScheduleFor, nmSupplementalFlat } from "./nm.ts";
 export { OK_WITHHOLDING, OK_RATES_2026 } from "./ok.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,

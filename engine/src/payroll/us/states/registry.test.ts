@@ -36,7 +36,7 @@ test("the pack now withholds state income tax somewhere", () => {
   // everywhere it is printed.
   assert.deepEqual(
     implementedUsStates(),
-    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NJ", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "UT", "VT", "VA", "WV", "WI"],
+    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "UT", "VT", "VA", "WV", "WI"],
   );
   for (const state of implementedUsStates()) {
     assert.equal(
@@ -48,7 +48,7 @@ test("the pack now withholds state income tax somewhere", () => {
 
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
-  assert.equal(supported.length, 49); // 40 implemented + 9 no-tax
+  assert.equal(supported.length, 50); // 41 implemented + 9 no-tax
   for (const state of ["CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "HI", "NC",
     "AL", "AR", "AZ", "ID", "IN", "KS", "KY", "LA", "VA", "VT", "WV", "IA", "MN", "MS", "MO", "MT", "NE", "ND", "OK", "WI", "UT", "OR", "RI", "SC",
     "TX", "FL", "WA"]) {
@@ -80,7 +80,7 @@ test("an untranscribed state is refused BY NAME, with the publication and the fi
       assert.match(message, /District of Columbia FR-230/);
       assert.match(message, /engine\/src\/payroll\/us\/states\/dc\.ts/);
       assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
-      assert.match(message, /Implemented today: AL, AZ, AR, CA, CO, CT, DE, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NJ, NY, NC, ND, OH, OK, OR, PA, RI, SC, UT, VT, VA, WV, WI/);
+      assert.match(message, /Implemented today: AL, AZ, AR, CA, CO, CT, DE, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, UT, VT, VA, WV, WI/);
       return true;
     },
   );
