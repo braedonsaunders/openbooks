@@ -229,6 +229,11 @@ test(
     const clientB = new pg.Client({ connectionString: databaseUrl });
     await clientA.connect();
     await clientB.connect();
+    // Raw clients skip the pool's RLS-GUC wrapper: without an explicit scope
+    // the org lookup matches zero rows under enforcement. These clients pin
+    // partial-index behavior, not RLS, so they take the test bypass.
+    await clientA.query("select set_config('app.bypass_rls','on',false)");
+    await clientB.query("select set_config('app.bypass_rls','on',false)");
     const ids: string[] = [];
     try {
       const org = (
@@ -310,6 +315,8 @@ test(
   async () => {
     const client = new pg.Client({ connectionString: databaseUrl });
     await client.connect();
+    // Same bypass rationale as the partial-index test above.
+    await client.query("select set_config('app.bypass_rls','on',false)");
     const idPrefix = randomUUID().slice(0, 24);
     const ids = Array.from(
       { length: 5 },

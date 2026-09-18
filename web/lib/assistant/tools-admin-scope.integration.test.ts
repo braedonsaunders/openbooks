@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -35,7 +35,10 @@ function userFor(orgId: string, userId: string): SessionUser {
 
 const ADMIN_PERMS = ['assistant.use', 'admin.users.manage', 'admin.roles.manage', 'api.keys.manage', 'admin.audit.read'];
 
+// File-local seed helper: always fixture writes, so it carries its own
+// bypass rather than depending on the ambient test-process scope.
 async function seedAdmin(orgId: string, adminId: string) {
+  return withBypassContext(async () => {
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true}'::jsonb, true)
@@ -66,12 +69,13 @@ async function seedAdmin(orgId: string, adminId: string) {
            (${orgId}, 'flow_email', ${randomUUID()}, 'probe-2', 'failed', 'worker exploded', 3, '{}'::jsonb)
   `);
   return { rowId };
+  });
 }
 
 test('admin reads mirror the admin pages without leaking secrets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const { rowId } = await seedAdmin(org.orgId, actors.adminId);
     const authz = {
       user: userFor(org.orgId, actors.adminId),
@@ -137,10 +141,10 @@ test('admin reads mirror the admin pages without leaking secrets', { skip: !proc
 });
 
 test('admin reads enforce their gates, scope, and org boundary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     await seedAdmin(org.orgId, actors.adminId);
     const full = {
       user: userFor(org.orgId, actors.adminId),
@@ -179,7 +183,7 @@ test('admin reads enforce their gates, scope, and org boundary', { skip: !proces
       }
     });
     // Another org sees none of the first org's admin surface.
-    const otherActors = await seedFlowActors(other.orgId);
+    const otherActors = await withBypassContext(() => seedFlowActors(other.orgId));
     const otherAuthz = {
       user: userFor(other.orgId, otherActors.adminId),
       permissions: new Set(ADMIN_PERMS),
