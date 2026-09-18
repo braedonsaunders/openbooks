@@ -37,6 +37,38 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
       storage: "certificate_rows",
       fields: [
         {
+          key: "titolare_pensione",
+          label: "Titolare di pensione o assegno equiparato",
+          kind: "flag",
+          default: "false",
+          help: "The worker's income is art. 49 c. 2 lett. a) TUIR pension income: the 2025 engine "
+            + "refuses it by name (pensionati use the TABELLA 7 detrazioni, not transcribed).",
+        },
+        {
+          key: "tempo_determinato",
+          label: "Rapporto di lavoro a tempo determinato",
+          kind: "flag",
+          default: "false",
+          help: "A fixed-term contract raises the art. 13 c. 1 floor from 690 to 1.380 euro.",
+        },
+        {
+          key: "anzianita_post_1995",
+          label: "Iscritto dopo il 31 dicembre 1995 (o opzione contributivo)",
+          kind: "flag",
+          default: "false",
+          help: "Workers first insured after 31 December 1995 (or on the contributivo option) fall "
+            + "under the L. 335/1995 massimale of 120.607 euro for 2025. Not part of the detrazioni "
+            + "form; recorded here as the pack's only employee-filed input channel.",
+        },
+        {
+          key: "domicilio_comune",
+          label: "Comune di domicilio fiscale (codice catastale)",
+          kind: "code",
+          subRegion: { side: "residence" },
+          help: "The fiscal domicile comune that selects the addizionale comunale (codice catastale, "
+            + "e.g. H501 for Roma). Domicile, never the workplace, attributes both surtaxes.",
+        },
+        {
           key: "coniuge_a_carico",
           label: "Coniuge fiscalmente a carico",
           kind: "flag",
