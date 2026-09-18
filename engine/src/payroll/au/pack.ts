@@ -1,5 +1,5 @@
 /**
- * The AU payroll country pack (skeleton).
+ * The AU payroll country pack — registered and installable.
  *
  * Declares what Australia withholds and accrues — PAYG withholding (which
  * collects income tax, the Medicare levy and STSL repayments through the one
@@ -13,11 +13,8 @@
  * scales 1–2, foreign residents on scale 3, Medicare-exempt residents on
  * scales 5–6. Refused by name: scale 4 (no TFN), foreign-plus-exemption,
  * Schedule 15 (working holiday makers), every other schedule, and
- * non-standard pay frequencies — see AU_REFUSED_2027. The `country` field
- * cannot yet join the `PayrollCountry`
- * union (`'CA' | 'US'` at ../packs.ts), so the pack is typed to match that
- * interface in every other respect and registers once Orchestrate opens the
- * union — see packs/proposals/payroll-country-union.md.
+ * non-standard pay frequencies — see AU_REFUSED_2027. `PayrollCountry` is the
+ * registry's own keys, so `country: "AU"` typechecks directly.
  */
 import type {
   PayrollCountryPack,

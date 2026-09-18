@@ -27,10 +27,9 @@ import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
  * 9% elsewhere, where the ELStAM Konfession is set) and the four SV branches
  * with their Beitragsbemessungsgrenzen, monthly payroll only.
  *
- * Typed as `Omit<PayrollCountryPack, "country"> & { country: "DE" }` because
- * `PayrollCountry` is still `"CA" | "US"` (packs.ts:190) — see
- * packs/proposals/payroll-country-union.md, owned by gb-payroll. The object
- * registers unchanged once Orchestrate opens the union.
+ * REGISTERED: `PayrollCountry` is now `keyof typeof PAYROLL_COUNTRY_PACKS`, so
+ * this pack is in the registry and installable. (It was written before the
+ * union opened, against a locally widened type; that scaffolding is gone.)
  */
 
 const DE_YEAR_REFUSAL =

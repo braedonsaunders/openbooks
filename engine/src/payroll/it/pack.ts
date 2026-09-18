@@ -19,13 +19,9 @@
  * F24 liability the withholdings credit — one destination, one account
  * choice, and the remittance summary nets them against it.
  *
- * Registration shape: `country` is the string "IT", which does not yet
- * typecheck against `PayrollCountry` (packs.ts:190, still 'CA' | 'US'). The
- * pack is therefore typed as the full `PayrollCountryPack` minus the closed
- * union member, so it registers unchanged the moment Orchestrate opens the
- * type (packs/proposals/payroll-country-union.md, owned by gb-payroll —
- * this shard sends no second propose for it). Nothing outside
- * engine/src/payroll/it/ is touched.
+ * REGISTERED: `PayrollCountry` is the registry's own keys, so `country: "IT"`
+ * typechecks directly. (Written while the union was closed, typed as the full
+ * `PayrollCountryPack` minus that member to prove conformance.)
  */
 import type { PayrollCountryPack } from "../packs.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";

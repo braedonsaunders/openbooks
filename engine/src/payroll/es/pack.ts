@@ -11,13 +11,11 @@
  * September editions) and the TGSS Orden de cotización live in ./rates.ts and
  * computeStatutory prices a monthly AEAT-territory payslip through them.
  *
- * REGISTRATION is blocked on the generic layer: `PayrollCountry` is still
- * `"CA" | "US"` (packs.ts:190), so this object is typed WITHOUT the union —
- * `Omit<PayrollCountryPack, "country"> & { country: "ES" }` — which proves it
- * is structurally registerable the moment Orchestrate opens the type (see
- * packs/proposals/payroll-country-union.md, owned by gb-payroll — no second
- * propose sent). Nothing here is registered: no `packs.ts` edit, no registry
- * side effect, no settings key wired.
+ * REGISTERED: `PayrollCountry` is now `keyof typeof PAYROLL_COUNTRY_PACKS`, so
+ * this pack is in the registry, wired to a settings key, and installable.
+ * (Written while the union was closed, against a locally widened type that
+ * only proved structural conformance; the claim that nothing here is
+ * registered no longer holds.)
  */
 import type {
   PayrollCountryPack,
