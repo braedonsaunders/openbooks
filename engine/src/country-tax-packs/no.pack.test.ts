@@ -67,25 +67,41 @@ test("Norway MVA is national with no subnational VAT jurisdictions", () => {
   assert.equal(NORWAY_TAX_PACK.jurisdictions.length, 0);
 });
 
-test("Norway histories run back to 2012 on the main bands with the sourced 6% window", () => {
+test("Norway histories run back to 2012, one row per rate change", () => {
   const codes = packTaxCodesForReturn(NORWAY_TAX_PACK, "NO_MVA_MELDING");
-  const earliest = (code: string): string => codes.find((entry) => entry.code === code)!.rates![0]!.effectiveFrom;
-  assert.equal(earliest("NO-VAT-STD"), "2012-01-01");
-  assert.equal(earliest("NO-VAT-FOOD"), "2012-01-01");
-  assert.equal(earliest("NO-VAT-PASSENGER"), "2012-01-01");
-  assert.equal(earliest("NO-VAT-FISH-1111"), "2025-01-01");
-  const passenger = codes.find((entry) => entry.code === "NO-VAT-PASSENGER")!.rates!;
+  const rows = (code: string): readonly EffectiveTaxRate[] =>
+    codes.find((entry) => entry.code === code)!.rates!;
   assert.deepEqual(
-    passenger.filter((rate) => rate.ratePercent === 6),
-    [{ ratePercent: 6, effectiveFrom: "2020-04-01", effectiveTo: "2021-09-30", sourceId: "skatteetaten_satshistorikk_2020" }],
+    rows("NO-VAT-STD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [25, "2012-01-01", "2025-12-31"],
+      [25, "2026-01-01", null],
+    ],
   );
   assert.deepEqual(
-    passenger.filter((rate) => rate.ratePercent === 8).map((rate) => rate.effectiveFrom),
-    ["2012-01-01", "2013-01-01", "2014-01-01", "2015-01-01"],
+    rows("NO-VAT-FOOD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [15, "2012-01-01", "2025-12-31"],
+      [15, "2026-01-01", null],
+    ],
   );
   assert.deepEqual(
-    passenger.filter((rate) => rate.ratePercent === 10).map((rate) => rate.effectiveFrom),
-    ["2016-01-01", "2017-01-01"],
+    rows("NO-VAT-PASSENGER").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [8, "2012-01-01", "2015-12-31"],
+      [10, "2016-01-01", "2017-12-31"],
+      [12, "2018-01-01", "2020-03-31"],
+      [6, "2020-04-01", "2021-09-30"],
+      [12, "2021-10-01", "2025-12-31"],
+      [12, "2026-01-01", null],
+    ],
+  );
+  assert.deepEqual(
+    rows("NO-VAT-FISH-1111").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [11.11, "2025-01-01", "2025-12-31"],
+      [11.11, "2026-01-01", null],
+    ],
   );
   for (const code of codes) {
     const last = code.rates![code.rates!.length - 1]!;
