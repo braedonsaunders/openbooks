@@ -4,9 +4,7 @@ import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries } fr
 import { COUNTRY_TAX_PACKS, packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import type { CountryTaxPackDefinition, EffectiveTaxRate } from "./types.ts";
 
-// CZ is deliberately absent: its pack is held unregistered pending re-sourcing
-// away from another ERP vendor's documentation. See the BRIEF's held-packs table.
-const maintainedCountries = ["PT", "DK", "NO", "SA", "TR"] as const;
+const maintainedCountries = ["PT", "DK", "NO", "SA", "TR", "CZ"] as const;
 
 function pack(country: (typeof maintainedCountries)[number]): CountryTaxPackDefinition {
   const value = COUNTRY_TAX_PACKS.find((entry) => entry.country === country);
