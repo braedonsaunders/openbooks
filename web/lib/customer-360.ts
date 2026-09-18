@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { businessToday, parseISO } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, parseIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
@@ -135,7 +135,7 @@ export async function loadCustomer360(
   ])
 
   const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId)
-  const asOfDate = parseISO(asOf)
+  const asOfDate = parseIsoDate(asOf)
 
   let current = 0
   let days1To30 = 0
@@ -192,8 +192,8 @@ export async function loadCustomer360(
   }
 
   // 4. Payment metrics & DSO
-  const partyStat = stats.parties.get(partyId)
-  const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avgDays) : null
+  const partyStat = stats.map.get(partyId)
+  const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null
   const dso = partyAvgDaysToPay ?? Math.round(stats.globalAvg)
 
   // 5. Commercial Pipeline
@@ -390,7 +390,7 @@ export async function loadCustomer360(
       dso,
       partyAvgDaysToPay,
       orgAvgDaysToPay: Math.round(stats.globalAvg),
-      settlementsCount: partyStat?.count ?? 0,
+      settlementsCount: partyStat?.n ?? 0,
     },
     pipeline: {
       totalOpportunities: oppRow?.total_count ?? 0,

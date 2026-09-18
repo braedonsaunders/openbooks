@@ -229,7 +229,7 @@ export interface OpenItem {
   remaining: Money;
 }
 
-export type PaymentStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number };
+export type PaymentStats = { map: Map<string, { avg: number; sd: number; n: number }>; globalAvg: number };
 
 /**
  * The same weeks with their per-transaction arrays withheld. Totals and counts
@@ -358,13 +358,15 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
      group by party_id
     having sum(n) > 0
   `);
-  const map = new Map<string, { avg: number; sd: number }>();
+  const map = new Map<string, { avg: number; sd: number; n: number }>();
   let sum = 0;
   let count = 0;
   for (const x of r.rows) {
     const avg = Number(x.avg_days);
     const n = Number(x.n);
-    map.set(x.id, { avg, sd: Number(x.sd_days) });
+    // n travels with the average so a reader can tell a mean over 40 settlements
+    // from a mean over one; the sufficient statistics already carry it.
+    map.set(x.id, { avg, sd: Number(x.sd_days), n });
     sum += avg * n;
     count += n;
   }
