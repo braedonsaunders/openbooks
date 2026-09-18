@@ -557,7 +557,7 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // fails the build); a file fixed must leave this list in the same commit
 // (a stale entry fails the build). Shrink this list only by fixing files —
 // never add an entry without a slot-probe verification behind it.
-// 114 files, 894 unscoped writes.
+// 109 files, 831 unscoped writes.
 export const BASELINE_EXPOSED = new Map([
   ["web/app/(app)/admin/navigation/view-permission.integration.test.ts", { writes: 2, via: "view.ts -> store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/app/(app)/admin/setup/agents/[agentKey]/view-permission.integration.test.ts", { writes: 4, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
@@ -610,7 +610,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/assistant/tools-banking-scope.integration.test.ts", { writes: 6, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-budgets-scope.integration.test.ts", { writes: 12, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-close-scope.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-crm.integration.test.ts", { writes: 11, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-equipment.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-expenses.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
   ["web/lib/assistant/tools-files-scope.integration.test.ts", { writes: 7, via: "registry.ts -> tools.ts -> data.ts -> org-scope.ts -> auth.ts" }],
@@ -633,14 +632,12 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/crm-forecast-snapshots.integration.test.ts", { writes: 5, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-party-lifecycle.integration.test.ts", { writes: 9, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/crm-write-validation.integration.test.ts", { writes: 1, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/custom-field-creation.integration.test.ts", { writes: 3, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/import-scope.integration.test.ts", { writes: 3, via: "route.ts -> resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/resource-roundtrip-matrix.integration.test.ts", { writes: 3, via: "resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/transaction-roundtrip.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/data-io/transaction-subsidiary.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/document-lifecycle-revision.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/health-headcount.integration.test.ts", { writes: 3, via: "financial-health.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/health-scope.integration.test.ts", { writes: 18, via: "health-data.ts -> financial-health.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/customers-dso.integration.test.ts", { writes: 11, via: "core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-currency.integration.test.ts", { writes: 6, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/module-home/purchasing-open-po-currency.integration.test.ts", { writes: 5, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
@@ -651,7 +648,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/order-revision-integrity.integration.test.ts", { writes: 7, via: "handlers.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/payroll-941-source-scope.integration.test.ts", { writes: 10, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-bank-file-scope.integration.test.ts", { writes: 5, via: "route.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/payroll-filing-history-scope.integration.test.ts", { writes: 11, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-filing-history.integration.test.ts", { writes: 9, via: "route.ts -> subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-filing-row-scope.integration.test.ts", { writes: 4, via: "subsidiary-scope.ts -> authz.ts -> auth.ts" }],
   ["web/lib/payroll-payment-route-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
@@ -663,7 +659,6 @@ export const BASELINE_EXPOSED = new Map([
   ["web/lib/payroll-stub-outputs-scope.integration.test.ts", { writes: 11, via: "route.ts -> authz.ts -> auth.ts" }],
   ["web/lib/pdf-templates/payroll-scope.integration.test.ts", { writes: 20, via: "authz.ts -> auth.ts" }],
   ["web/lib/pdf-templates/values.integration.test.ts", { writes: 4, via: "values.ts -> locale.ts -> auth.ts" }],
-  ["web/lib/pdf-templates/ytd-tax-jurisdiction.integration.test.ts", { writes: 20, via: "values.ts -> field-tickets.ts -> authz.ts -> auth.ts" }],
   ["web/lib/primary-book-history.integration.test.ts", { writes: 21, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/project-billing-accounting.integration.test.ts", { writes: 46, via: "bills.ts -> org-scope.ts -> auth.ts" }],
   ["web/lib/recurring-controls.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
