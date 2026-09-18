@@ -6,6 +6,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { ActionError, fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -204,10 +207,10 @@ export function JournalDrawer({
     journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()],
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
-  // A refused post pins here (F-t06-006/F-t06-011): toasts expire, but the
-  // drawer must keep showing why the entry did not post.
-  const [postError, setPostError] = useState<string | null>(null)
+  // Saves, posts, deletes and voids run on the shared action path: a
+  // refusal (F-t06-006/F-t06-011) pins until the next action AND toasts,
+  // and busy always releases through the package's finally.
+  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
   // A posted-with-warnings post pins here (F-t08-007): the entry IS posted,
   // but its party-less control legs sit outside every subledger, so the
   // drawer keeps saying so until the next action (same rule as refusals).
@@ -403,88 +406,101 @@ export function JournalDrawer({
   }, [doc.id])
 
   async function save() {
-    setBusy(true)
     setSaveState('saving')
     if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
     const revision = documentRevisionRef.current
     if (revision == null) {
       setSaveState('error')
-      toast.error(t('postFailed'))
-      setBusy(false)
+      refuse(null, t('postFailed'))
       return
     }
-    const outcome = await saveJournalDraft({
-      documentId: String(doc.id),
-      revision,
-      payload,
-      fallbackMessage: t('postFailed'),
-    })
-    if (outcome.status === 'saved') {
-      const savedJournal = outcome.saved
-      draftBaseline.current = {
-        documentId: String(savedJournal.doc.id),
-        revision: outcome.revision,
-        payload: savedJournal,
-      }
-      seenPersistedRevisions.current.add(outcome.revision)
-      resetForm(savedJournal)
-      setDocumentRevision(outcome.revision)
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      router.refresh()
-    } else {
-      setSaveState('error')
-      toast.error(outcome.message)
-      if (outcome.status === 'conflict') await refreshFromServer(false).catch(() => {})
-    }
-    setBusy(false)
+    const ok = await execute(
+      async () => {
+        const outcome = await saveJournalDraft({
+          documentId: String(doc.id),
+          revision,
+          payload,
+          fallbackMessage: t('postFailed'),
+        })
+        // saveJournalDraft reports messages, not wire statuses: the saved
+        // branch is exact (the journals PATCH answers 200), the refusal
+        // branches carry the routing in their kind instead.
+        if (outcome.status === 'saved') return { ok: true, status: 200, data: outcome } as const
+        if (outcome.status === 'conflict') {
+          await refreshFromServer(false).catch(() => {})
+          return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
+        }
+        // saveJournalDraft reports messages, not statuses: every non-conflict
+        // failure classifies as a domain refusal. The message always renders
+        // either way; only log-worthy routing differs.
+        return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
+      },
+      {
+        fallbackMessage: t('postFailed'),
+        onOk: (outcome) => {
+          const savedJournal = outcome.saved
+          draftBaseline.current = {
+            documentId: String(savedJournal.doc.id),
+            revision: outcome.revision,
+            payload: savedJournal,
+          }
+          seenPersistedRevisions.current.add(outcome.revision)
+          resetForm(savedJournal)
+          setDocumentRevision(outcome.revision)
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+        },
+        onRefused: () => {
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
   }
 
   function cancel() {
     resetForm(draftBaseline.current.payload)
     setDirty(false)
     setSaveState('saved')
+    clearRefusal()
     setMode('view')
   }
 
   async function post() {
-    setBusy(true)
-    setPostError(null)
     setPostWarning(null)
-    const res = await fetch('/api/journals/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'post', documentId: doc.id }),
-    })
-    const data = (await res.json().catch(() => ({}))) as {
-      error?: unknown
-      pendingApproval?: boolean
-      warnings?: { code: string; accounts: { number: string | null; name: string }[] }[]
-    }
-    if (!res.ok) {
-      const message = typeof data.error === 'string' && data.error ? data.error : t('postFailed')
-      setPostError(message)
-      toast.error(message)
-      setBusy(false)
-      return
-    }
-    // Posting commits a new documents.revision_seq (migration 0167 bumps it
-    // on EVERY update): re-pin the canonical token now, or the next fenced
-    // write in this session (void) 409s on the pre-post revision (F-t06-008).
-    await refreshFromServer(false).catch(() => {})
-    if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
-    else toast.success(t('postedToast'))
-    const partyless = (data.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
-    if (partyless && partyless.accounts.length > 0) {
-      setPostWarning(
-        t('partylessControlWarning', {
-          accounts: partyless.accounts.map((a) => `${a.number ?? ''} ${a.name}`.trim()).join(', '),
+    const ok = await execute(
+      () =>
+        fetchAction('/api/journals/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'post', documentId: doc.id }),
         }),
-      )
-    }
-    setBusy(false)
-    router.refresh()
+      {
+        fallbackMessage: t('postFailed'),
+        onOk: async (data) => {
+          const posted = data as {
+            pendingApproval?: boolean
+            warnings?: { code: string; accounts: { number: string | null; name: string }[] }[]
+          }
+          // Posting commits a new documents.revision_seq (migration 0167 bumps it
+          // on EVERY update): re-pin the canonical token now, or the next fenced
+          // write in this session (void) 409s on the pre-post revision (F-t06-008).
+          await refreshFromServer(false).catch(() => {})
+          if (posted.pendingApproval) toast.success(tc('actions.submitForApproval'))
+          else toast.success(t('postedToast'))
+          const partyless = (posted.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
+          if (partyless && partyless.accounts.length > 0) {
+            setPostWarning(
+              t('partylessControlWarning', {
+                accounts: partyless.accounts.map((a) => `${a.number ?? ''} ${a.name}`.trim()).join(', '),
+              }),
+            )
+          }
+        },
+      },
+    )
+    if (ok) router.refresh()
   }
 
   async function remove() {
@@ -497,16 +513,14 @@ export function JournalDrawer({
       }))
     )
       return
-    setBusy(true)
-    const res = await fetch(`/api/journals/${doc.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success(t('deleted'))
-      router.push('/journal')
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('deleteFailed'))
-      setBusy(false)
-    }
+    await execute(() => fetchAction(`/api/journals/${doc.id}`, { method: 'DELETE' }), {
+      fallbackMessage: t('deleteFailed'),
+      successMessage: t('deleted'),
+      onOk: () => {
+        router.push('/journal')
+        router.refresh()
+      },
+    })
   }
 
   async function voidJournal() {
@@ -517,37 +531,42 @@ export function JournalDrawer({
       confirmLabel: tc('actions.void'),
     })
     if (!reason) return
-    setBusy(true)
-    // The void API fences on the exact revision like every other document
-    // write: without it every void answers 409 and the button is dead. The
-    // token is the editor's canonical revision (never the lossy RSC Date).
-    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
-    const voidRevision = documentRevisionRef.current
-    if (voidRevision == null) {
-      toast.error(t('postFailed'))
-      setBusy(false)
-      return
-    }
-    const res = await fetch(`/api/documents/${doc.id}/void`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason, expectedUpdatedAt: voidRevision }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      // A stale revision means the re-pin raced a concurrent write: reload
-      // the canonical revision and say so (F-t06-021), instead of toasting
-      // raw kernel text. Every other refusal already names its remedy.
-      if (data.code === 'stale-revision') {
-        await refreshFromServer(false).catch(() => {})
-        toast.error(t('voidStaleRevision'))
-      } else {
-        toast.error(data.error ?? t('postFailed'))
-      }
-    }
-    else if (data.status === 'pending_approval') toast.success(tc('actions.submitForApproval'))
-    else toast.success(tc('status.voided'))
-    setBusy(false)
+    await execute(
+      async () => {
+        // The void API fences on the exact revision like every other document
+        // write: without it every void answers 409 and the button is dead. The
+        // token is the editor's canonical revision (never the lossy RSC Date).
+        if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+        const voidRevision = documentRevisionRef.current
+        if (voidRevision == null) return { ok: false, error: new ActionError({ kind: 'refused' }) }
+        const result = await fetchAction(`/api/documents/${doc.id}/void`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason, expectedUpdatedAt: voidRevision }),
+        })
+        if (!result.ok && result.error.code === 'stale-revision') {
+          // A stale revision means the re-pin raced a concurrent write:
+          // reload the canonical revision and say so in translated copy
+          // (F-t06-021) — the server sentence leaks the revision-token
+          // mechanism, and the recovery (reload) already happened here, so
+          // the message must describe what happened, not quote the refusal.
+          await refreshFromServer(false).catch(() => {})
+          return {
+            ok: false,
+            error: new ActionError({ kind: 'conflict', code: 'stale-revision', serverMessage: t('voidStaleRevision') }),
+          }
+        }
+        return result
+      },
+      {
+        fallbackMessage: t('postFailed'),
+        onOk: (data) => {
+          const status = (data as { status?: unknown } | null)?.status
+          if (status === 'pending_approval') toast.success(tc('actions.submitForApproval'))
+          else toast.success(tc('status.voided'))
+        },
+      },
+    )
     router.refresh()
   }
 
@@ -755,11 +774,7 @@ export function JournalDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {postError ? (
-          <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {postError}
-          </p>
-        ) : null}
+        <ActionAlert error={refusal} fallbackMessage={t('postFailed')} />
         {postWarning ? (
           <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             {postWarning}

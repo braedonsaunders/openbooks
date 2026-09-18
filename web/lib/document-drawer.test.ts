@@ -191,7 +191,13 @@ test('a stale save surfaces the server conflict instead of manufacturing a new t
     save,
     /savedRevision = revisionFromSuccessfulDocumentSave\(data\)[\s\S]*?setDocumentRevision\(savedRevision\)/,
   )
-  assert.match(save, /readDocumentSaveFailure\([\s\S]*?toast\.error\(failure\.message\)/)
+  // Fleet-8 m1: save() runs on the shared action path — the never-throwing
+  // read, the pin and the toast live in the package now. Same contract: the
+  // server conflict surfaces verbatim and the save state goes 'error',
+  // render-proved in document-drawer-save-refusal.test.tsx.
+  assert.match(save, /await execute\([\s\S]*?fetchAction\(request\.path/)
+  assert.match(save, /onRefused: \(\) => \{[\s\S]*?setSaveState\('error'\)/)
+  assert.doesNotMatch(save, /readDocumentSaveFailure/)
   assert.doesNotMatch(save, /Date\.now|new Date\(/)
   assert.match(
     DRAWER_SOURCE,

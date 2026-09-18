@@ -20,16 +20,24 @@ test('journal voids carry the revision token required by the void API', () => {
 // F-t06-006/F-t06-011: posting outside any period (or into a locked one)
 // 422s, but the drawer showed nothing durable — a transient toast at best.
 // A refused post pins a persistent in-drawer alert with the server reason.
+// Fleet-8 m1: the pin moved onto the shared action path (useAppAction +
+// ActionAlert) — same contract, render-proved in
+// journal-drawer-refusal.test.tsx.
 test('a refused post pins a persistent alert with the server reason', () => {
   assert.match(
     source,
-    /setPostError/,
+    /const \{ busy, refusal, execute, clearRefusal, refuse \} = useAppAction\(\)/,
     'post() must pin the refusal into drawer state: toasts alone expire and the findings show the failure reads as silent',
   )
   assert.match(
     source,
-    /role="alert"/,
+    /<ActionAlert error=\{refusal\}/,
     'the pinned refusal must render as an alert the tester can still read after the toast expires',
+  )
+  assert.doesNotMatch(
+    source,
+    /setPostError/,
+    'the hand-rolled post-error state must stay retired',
   )
 })
 
@@ -46,7 +54,7 @@ test('posted journals lock attachment removal while keeping uploads', () => {
 test('a stale-revision void reloads and says so instead of toasting kernel text', () => {
   assert.match(
     source,
-    /data\.code === 'stale-revision'/,
+    /\.code === 'stale-revision'/,
     'the void failure path must branch on the typed refusal code (F-t06-021): a stale token reloads the canonical revision with a localized message',
   )
   assert.match(
