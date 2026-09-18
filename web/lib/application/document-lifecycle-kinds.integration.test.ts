@@ -21,7 +21,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
@@ -73,10 +73,10 @@ async function openCurrentMonth(orgId: string, periodId: string): Promise<void> 
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString().slice(0, 10);
   if (monthStart === "2026-07-01") return;
   const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     select ${orgId}, ${today.getUTCFullYear()}, ${today.getUTCMonth() + 1}, ${monthStart.slice(0, 7)}, ${monthStart}, ${monthEnd}, false, fiscal_calendar_id
-      from accounting_periods where id = ${periodId} and org_id = ${orgId}`);
+      from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
 }
 
 async function seedDoc(
@@ -88,30 +88,30 @@ async function seedDoc(
   extra: { partyId?: string | null; paymentCardId?: string | null } = {},
 ): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id, payment_card_id,
        document_date, currency, subtotal, tax_total, total, created_by)
     values (${id}, ${org.orgId}, ${kind}, 'draft', ${number}, ${org.subsidiaryId},
       ${extra.partyId ?? null}, ${extra.paymentCardId ?? null},
       '2026-07-15', 'CAD', '100.0000', '0.0000', '100.0000', ${actorId})
-  `);
+  `));
   let n = 0;
   for (const line of lines) {
     n += 1;
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount, created_by)
       values (${org.orgId}, ${id}, ${n}, ${line.accountId}, '1', ${line.amount}, ${line.amount}, '0.0000', '0.0000', ${actorId})
-    `);
+    `));
   }
   return id;
 }
 
 test("journals post and void through their governed path, never the generic lifecycle", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     await openCurrentMonth(org.orgId, org.periodId);
     const ctx = ctxFor(org.orgId, actors.adminId, ["gl.post"]);
     const run = (name: string, input: Record<string, unknown>) =>
@@ -174,26 +174,26 @@ test("journals post and void through their governed path, never the generic life
 });
 
 test("credits, deposits, transfers, and card charges traverse submit, post, void, and correct", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     await openCurrentMonth(org.orgId, org.periodId);
     // Second bank account for transfers; card + liability for card charges.
     const bankB = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${bankB}, ${org.orgId}, '1020', 'Petty Cash', 'asset_bank', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    `);
+    `));
     const cardLiability = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${cardLiability}, ${org.orgId}, '2010', 'Card Payable', 'liability_credit', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    `);
+    `));
     const cardId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into payment_cards (id, org_id, holder_party_id, liability_account_id, label, last_four)
       values (${cardId}, ${org.orgId}, ${org.vendorId}, ${cardLiability}, 'Probe card', '4242')
-    `);
+    `));
 
     const bodies: Record<string, { lines: { accountId: string; amount: string }[]; extra?: { partyId?: string | null; paymentCardId?: string | null } }> = {
       vendor_credit: { lines: [{ accountId: org.accounts.cogs, amount: "100.0000" }], extra: { partyId: org.vendorId } },

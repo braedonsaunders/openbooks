@@ -22,7 +22,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('./authz');
 const { utilizationData } = await import('./analytics/utilization-data');
@@ -37,15 +37,15 @@ import type { UtilizationData } from './analytics/utilization-data';
 for (const boundary of ['service','page','assistant'] as const) {
   for (const mode of ['all','restricted','empty'] as const) {
     test(`Utilization subsidiary access ${boundary}: ${mode}`, {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
-      const org=await createScratchOrg();
+      const org=await withBypassContext(()=>createScratchOrg());
       try {
-        const actor=await createScratchUser(org.orgId,'Time reviewer','time_reviewer');
+        const actor=await withBypassContext(()=>createScratchUser(org.orgId,'Time reviewer','time_reviewer'));
         const restriction=mode === 'all' ? {mode:'all'} : {mode:'list',subsidiaryIds:mode === 'empty' ? [] : [org.subsidiaryId]};
-        await db.execute(sql`update app_roles set permissions='["reports.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='time_reviewer'`);
+        await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["reports.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='time_reviewer'`));
         state.user={id:actor,orgId:org.orgId,name:'Time reviewer',email:'time@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
         const hidden=randomUUID(),visibleProject=randomUUID(),hiddenProject=randomUUID();
-        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Private entity','CAD','CA')`);
-        for(const [project,sub] of [[visibleProject,org.subsidiaryId],[hiddenProject,hidden]])await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${sub},${project},'Time project',${org.customerId},'active',true)`);
+        await withBypassContext(()=>db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Private entity','CAD','CA')`));
+        for(const [project,sub] of [[visibleProject,org.subsidiaryId],[hiddenProject,hidden]])await withBypassContext(()=>db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${sub},${project},'Time project',${org.customerId},'active',true)`));
         const cases=[
           [org.subsidiaryId,visibleProject,'1','Visible project worker'],
           [hidden,hiddenProject,'9','PRIVATE-UTIL-EVIDENCE'],
@@ -56,8 +56,8 @@ for (const boundary of ['service','page','assistant'] as const) {
         ] as const;
         for(const [sub,project,hours,name] of cases){
           const employee=randomUUID();
-          await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'person',${name},${sub})`);
-          for(const date of ['2026-06-15',org.date])await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,cost_rate,status) values (${org.orgId},${employee},${date},${hours},${project},${org.items.service},${project !== null},10,'approved')`);
+          await withBypassContext(()=>db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'person',${name},${sub})`));
+          for(const date of ['2026-06-15',org.date])await withBypassContext(()=>db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,cost_rate,status) values (${org.orgId},${employee},${date},${hours},${project},${org.items.service},${project !== null},10,'approved')`));
         }
         await withOrgContext(org.orgId,async()=>{
           const authz=await getAuthz();assert.ok(authz);
@@ -86,9 +86,9 @@ for (const boundary of ['service','page','assistant'] as const) {
 }
 for(const feature of ['projects','timeTracking']){
   test(`Utilization service enforces ${feature} feature`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+    const org=await withBypassContext(()=>createScratchOrg());
     try{
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({[feature]:false})}::jsonb) where id=${org.orgId}`);
+      await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({[feature]:false})}::jsonb) where id=${org.orgId}`));
       await withOrgContext(org.orgId,async()=>{await assert.rejects(utilizationData(org.orgId,period,null),/time.tracking.*disabled/i);});
     }finally{await dropScratchOrg(org.orgId);}
   });

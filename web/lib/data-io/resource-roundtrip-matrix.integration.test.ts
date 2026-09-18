@@ -27,7 +27,7 @@ const { listResources, getResource } = (await import('./resources.ts')) as typeo
 const { guessMapping } = (await import('./parse.ts')) as typeof import('./parse.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
   '@openbooks/engine/src/test-fixtures.ts'
 )
@@ -35,14 +35,14 @@ const { createScratchOrg, dropScratchOrgReporting } = await import(
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 async function matrixOrg(): Promise<string> {
-  const o = await createScratchOrg()
-  await db.execute(sql`
+  const o = await withBypassContext(() => createScratchOrg())
+  await withBypassContext(() => db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('features', jsonb_build_object(
       'payroll', true, 'propertyManagement', true, 'expenses', true,
       'multiCurrency', true, 'inventory', true, 'equipment', true,
       'fixedAssets', true, 'projects', true, 'projectBilling', true,
       'revenueRecognition', true, 'timeTracking', true, 'multiSubsidiary', true
-    )) where id = ${o.orgId}`)
+    )) where id = ${o.orgId}`))
   return o.orgId
 }
 
@@ -93,9 +93,9 @@ async function writeAll(
   mode: 'insert' | 'upsert',
   dryRun: boolean,
 ): Promise<{ created: number; updated: number; failed: number; errors: { message: string }[]; warnings?: unknown }> {
-  const resource = await getResource(orgId, key)
+  const resource = await withOrgContext(orgId, () => getResource(orgId, key))
   assert.ok(resource, `${key} resolves`)
-  return resource!.write(rows, mode, { orgId, actorId, dryRun })
+  return withOrgContext(orgId, () => resource!.write(rows, mode, { orgId, actorId, dryRun }))
 }
 
 test(
@@ -166,12 +166,12 @@ test(
         { created: 1, failed: 0, errors: [] },
       )
       const assetNo = (
-        await db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '1%' order by number limit 1`)
+        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '1%' order by number limit 1`))
       ).rows[0]?.number
       const cogsNo = (
-        await db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '5%' order by number limit 1`)
+        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '5%' order by number limit 1`))
       ).rows[0]?.number
       assert.ok(assetNo, 'bootstrap CoA carries a 1xxx account')
       assert.ok(cogsNo, 'bootstrap CoA carries a 5xxx account')
@@ -239,8 +239,8 @@ test(
         { created: 1, failed: 0, errors: [] },
       )
       const revenueNo = (
-        await db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '4%' order by number limit 1`)
+        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '4%' order by number limit 1`))
       ).rows[0]?.number
       assert.ok(revenueNo)
       const invDate = '2026-07-15'
@@ -264,7 +264,7 @@ test(
       const orgB = await matrixOrg()
       try {
         const { listResources: listRes } = await import('./resources.ts')
-        const order = (await listRes(orgA)).map((d) => d.key)
+        const order = (await withOrgContext(orgA, () => listRes(orgA))).map((d) => d.key)
         // Migration runbook order: master data first (setup rows such as
         // inventory profiles and BOMs point at items), then setup in registry
         // order, then transactions. listResources groups setup before master,
@@ -288,11 +288,11 @@ test(
         // The second import must create nothing and leave B byte-identical:
         // that is the idempotency contract, independent of row order.
         for (const key of keys) {
-          const ra = await getResource(orgA, key)
-          const rb = await getResource(orgB, key)
+          const ra = await withOrgContext(orgA, () => getResource(orgA, key))
+          const rb = await withOrgContext(orgB, () => getResource(orgB, key))
           assert.ok(ra && rb, `${key} resolves in both orgs`)
-          const a = await ra!.read()
-          const b0 = await rb!.read()
+          const a = await withOrgContext(orgA, () => ra!.read())
+          const b0 = await withOrgContext(orgB, () => rb!.read())
           if (a.rows.length === 0) {
             // Vacuous is still asserted: an empty export must import nothing
             // into an empty resource (both orgs seed the same fixture).
@@ -311,7 +311,7 @@ test(
             first.created + first.failed, rows.length,
             `${key}: every row is created or refused (${first.created}+${first.failed}!=${rows.length})`,
           )
-          const b = await rb!.read()
+          const b = await withOrgContext(orgB, () => rb!.read())
           const norm = (rs: Record<string, unknown>[]) => rs.map(normalizeRow)
             .sort((x, y) => String(JSON.stringify(x)).localeCompare(String(JSON.stringify(y))))
           const normA = norm(rows)
@@ -325,7 +325,7 @@ test(
           console.log(`MATRIX DYNAMIC ${key}: second=${JSON.stringify({ created: second.created, updated: second.updated, failed: second.failed, errors: second.errors.map((e) => e.message).slice(0, 2) })}`)
           assert.equal(second.created, 0, `${key}: re-import must create nothing`)
           assert.equal(second.updated, 0, `${key}: re-import must update nothing`)
-          const b2 = await rb!.read()
+          const b2 = await withOrgContext(orgB, () => rb!.read())
           assert.deepEqual(
             norm(b2.rows as Record<string, unknown>[]), normB,
             `${key}: re-import must leave the org unchanged`,
@@ -349,10 +349,10 @@ test(
     // under both, or an export emits columns its own importer hides.
     const rich = await matrixOrg()
     try {
-      const poor = await createScratchOrg()
+      const poor = await withBypassContext(() => createScratchOrg())
       try {
-        const badRich = await auditOrg(rich, 'rich')
-        const badPoor = await auditOrg(poor.orgId, 'poor')
+        const badRich = await withOrgContext(rich, () => auditOrg(rich, 'rich'))
+        const badPoor = await withOrgContext(poor.orgId, () => auditOrg(poor.orgId, 'poor'))
         assert.deepEqual([...badRich, ...badPoor], [])
       } finally {
         await dropScratchOrgReporting(poor.orgId)

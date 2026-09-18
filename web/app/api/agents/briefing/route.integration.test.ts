@@ -23,7 +23,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { businessToday } = await import('@openbooks/engine/src/business-date.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { createConversation, appendMessage } = await import('../../../../lib/ai-conversations');
@@ -31,8 +31,8 @@ const { getAuthz } = await import('../../../../lib/authz');
 const { GET, POST } = await import('./route');
 
 async function asUser(orgId: string, name: string, roleKey: string, perms: string[]) {
-  const actor = await createScratchUser(orgId, name, roleKey);
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`);
+  const actor = await withBypassContext(() => createScratchUser(orgId, name, roleKey));
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`));
   state.user = { id: actor, orgId, name, email: `${roleKey}@scratch.test`, roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
 }
 
@@ -45,7 +45,7 @@ const post = (action: unknown) =>
   });
 
 test('briefing cache is per-day-per-user; generation needs AI', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await asUser(org.orgId, 'Reader', 'b06_brief_reader', READER);
     await withOrgContext(org.orgId, async () => {
