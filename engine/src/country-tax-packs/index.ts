@@ -27,6 +27,7 @@ import { MEXICO_TAX_PACK } from "./mx.ts";
 import { NETHERLANDS_TAX_PACK } from "./nl.ts";
 import { NORWAY_TAX_PACK } from "./no.ts";
 import { NEW_ZEALAND_TAX_PACK } from "./nz.ts";
+import { PHILIPPINES_TAX_PACK } from "./ph.ts";
 import { POLAND_TAX_PACK } from "./pl.ts";
 import { PORTUGAL_TAX_PACK } from "./pt.ts";
 import { ROMANIA_TAX_PACK } from "./ro.ts";
@@ -82,6 +83,7 @@ export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
   CZECHIA_TAX_PACK,
   THAILAND_TAX_PACK,
   KENYA_TAX_PACK,
+  PHILIPPINES_TAX_PACK,
 ];
 export const JURISDICTION_SELECTION_PREFIX = "JURISDICTION:";
 
