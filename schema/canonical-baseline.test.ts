@@ -361,6 +361,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0174_payroll_employer_levy_opening.sql",
     "0175_payroll_country_pack_open.sql",
     "0176_pay_component_system_key_shape.sql",
+    "0177_payroll_employer_levy_opening_rls.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
