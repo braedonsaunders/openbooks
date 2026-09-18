@@ -83,3 +83,13 @@ test("Sweden rate schedules are contiguous and every sourceId resolves", () => {
 test("Sweden moms is national with no subnational VAT jurisdictions", () => {
   assert.equal(SWEDEN_TAX_PACK.jurisdictions.length, 0);
 });
+
+test("Sweden standard and reduced bands run back to 2019 as single open rows", () => {
+  const codes = packTaxCodesForReturn(SWEDEN_TAX_PACK, "SE_MOMSDEKLARATION");
+  for (const code of ["SE-VAT-STD", "SE-VAT-RED12", "SE-VAT-RED6"]) {
+    assert.deepEqual(
+      codes.find((entry) => entry.code === code)!.rates,
+      [{ ratePercent: code === "SE-VAT-STD" ? 25 : code === "SE-VAT-RED12" ? 12 : 6, effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
+    );
+  }
+});
