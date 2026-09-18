@@ -133,6 +133,11 @@ function amount(value: string | undefined, fallback: string, what: string): bigi
  * (ALGORITMO example: base 24.000 → "Hasta 20.200,00: 4.225,50" plus
  * "3.800,00 * 0,30 = 1.140,00").
  */
+/** Test hook: TABLA 2 applied to a base, returned as canonical units. */
+export function escalaIrpf2026(base: string): string {
+  return D(escala(U(base)));
+}
+
 function escala(base: bigint): bigint {
   let cuota = 0n;
   let edge = 0n;
@@ -342,11 +347,14 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
 
   // H. Tipo: Ceuta/Melilla(/La Palma) reduction, vivienda offset, truncate, floors.
   const ceumeli = zona !== "ninguna" && input.rendimientosZona === true;
-  // "MINOPAGO = 2,00% * RETRIB" then "MINOPAGO = TRUNCAR (MINOPAGO)".
+  // "MINOPAGO = 2,00% * RETRIB" then "MINOPAGO = TRUNCAR (MINOPAGO)":
+  // floor to the cent (2% of a 2dp amount can carry a sub-cent tail).
   const minopago = input.presVivienda === true
-    ? (retrib * U(ES_PRESVIV_FACTOR)) / 10000n
+    ? ((retrib * U(ES_PRESVIV_FACTOR)) / 10000n / 100n) * 100n
     : 0n;
   // "DIFERENCIA POSITIVA = (CUOTA * 0,40) - MINOPAGO" with CEUMELI, else "CUOTA - MINOPAGO".
+  // The 1e4-unit scale floors sub-0,0001 € remainders of the 0,40 product;
+  // every other step of the chain is exact at this scale.
   const rebajada = (cuota * U(ES_CEUMELI_FACTOR)) / 10000n;
   let diferencia = (ceumeli ? rebajada : cuota) - minopago;
   if (diferencia < 0n) diferencia = 0n;
