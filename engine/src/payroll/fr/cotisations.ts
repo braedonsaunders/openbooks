@@ -24,12 +24,18 @@
  *   Method (engine-stated, not agency-quoted): every line rounds half-up
  *   to the centime, caps resolve to exact centimes at monthly periodicity.
  *
- * What this pass does NOT do (named refusals, stated): AGIRC-ARRCO (no
- * obtainable rates), AT/MP and versement mobilité (tenant-declared — the
- * pure function accepts declared rates and prices them, but no pack
- * channel carries them to the adapter), the Alsace-Moselle 1,30 %
- * salary supplement (no department channel), the AGS 0,03 % interim
- * variant (no employer-type channel).
+ * Retraite complémentaire AGIRC-ARRCO (./retraite-2026.ts): T1 at the
+ * 7,87 % appelé rate and T2 at 21,59 %, each split 60/40 in the engine
+ * from the quoted totals; CEG 2,15 % (T1) and 2,70 % (T2) split the same
+ * way; CET 0,35 % on the T1+T2 assiettes strictly above the plafond.
+ *
+ * What this pass does NOT do (named refusals, stated): APEC 0,06 %
+ * (cadres only — no cadre-status channel), a conventionally modified
+ * 60/40 split (no tenant-override channel), AT/MP and versement mobilité
+ * (tenant-declared — the pure function accepts declared rates and prices
+ * them, but no pack channel carries them to the adapter), the
+ * Alsace-Moselle 1,30 % salary supplement (no department channel), the
+ * AGS 0,03 % interim variant (no employer-type channel).
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves
  * away from zero (roundDiv) — the same discipline as ./compute-statutory.ts
@@ -51,6 +57,12 @@ import {
   FR_VIEILLESSE_SAL_2026,
   frCotisationYearForPayDate,
 } from "./cotisations-2026.ts";
+import {
+  FR_ARRCO_TAUX_2026,
+  FR_CEG_2026,
+  FR_CET_2026,
+  frRetraiteYearForPayDate,
+} from "./retraite-2026.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -160,12 +172,53 @@ export interface FrCotisations2026Result {
   atmpEr: string;
   /** 0.0000 unless a tenant rate was declared. */
   versementMobiliteEr: string;
+  // Retraite complémentaire AGIRC-ARRCO (all 4dp).
+  /** T1 assiette (capped at the PASS) and T2 assiette (0 above 8×PASS). */
+  t1Base: string;
+  t2Base: string;
+  arrcoSalT1: string;
+  arrcoErT1: string;
+  arrcoSalT2: string;
+  arrcoErT2: string;
+  arrcoSal: string;
+  arrcoEr: string;
+  cegSalT1: string;
+  cegErT1: string;
+  cegSalT2: string;
+  cegErT2: string;
+  cegSal: string;
+  cegEr: string;
+  /** Whether the salaire exceeds the plafond (strict), triggering CET. */
+  cetApplies: boolean;
+  /** The T1+T2 assiette the CET is prélevée on (0 when not applied). */
+  cetBase: string;
+  cetSal: string;
+  cetEr: string;
+}
+
+/**
+ * Regulated 60/40 split of a quoted appelé total, done in the engine:
+ * salarié 40 %, employeur 60 % (FR_ARRCO_SPLIT_QUOTE_2026). Exact at the
+ * 1e6 rate scale for every 2026 total, so no rounding enters the split —
+ * rounding happens once, per line, at the centime. The salarié share
+ * rounds half-up and the employeur share is priced from its own exact
+ * rate (parts can differ from a rounded total by one centime, stated).
+ */
+function split6040(totalRate6: bigint): { sal: bigint; er: bigint } {
+  const sal = (totalRate6 * 40n) / 100n;
+  if (totalRate6 * 40n !== sal * 100n) {
+    throw new PayrollPackError(
+      "FR 60/40 split is not exact at the rate scale: engine defect, not a table gap",
+    );
+  }
+  return { sal, er: totalRate6 - sal };
 }
 
 export function calculateFrCotisations2026(
   input: FrCotisations2026Input,
 ): FrCotisations2026Result {
   frCotisationYearForPayDate(input.payDate);
+  frRetraiteYearForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
     throw new PayrollPackError(
       `FR cotisations need a positive integer periodsPerYear, got ${input.periodsPerYear}`,
@@ -239,6 +292,36 @@ export function calculateFrCotisations2026(
 
   const add = (...units: bigint[]): bigint => units.reduce((a, b) => a + b, 0n);
 
+  // Retraite complémentaire: T1 up to the PASS, T2 from the PASS to 8×PASS.
+  const t1Base = plafPer;
+  const huitPass = passAnnual * 8n;
+  const annualised = brut * BigInt(periods);
+  const t2Annualised = annualised < passAnnual
+    ? 0n
+    : annualised - passAnnual > huitPass - passAnnual ? huitPass - passAnnual : annualised - passAnnual;
+  const t2Base = roundDiv(t2Annualised, BigInt(periods));
+
+  const arrcoT1 = split6040(rate6(FR_ARRCO_TAUX_2026.t1.rate));
+  const arrcoT2 = split6040(rate6(FR_ARRCO_TAUX_2026.t2.rate));
+  const cegT1 = split6040(rate6(FR_CEG_2026.t1.rate));
+  const cegT2 = split6040(rate6(FR_CEG_2026.t2.rate));
+  const cetSplit = split6040(rate6(FR_CET_2026.rate));
+
+  const arrcoSalT1 = lineOf(t1Base, arrcoT1.sal);
+  const arrcoErT1 = lineOf(t1Base, arrcoT1.er);
+  const arrcoSalT2 = lineOf(t2Base, arrcoT2.sal);
+  const arrcoErT2 = lineOf(t2Base, arrcoT2.er);
+  const cegSalT1 = lineOf(t1Base, cegT1.sal);
+  const cegErT1 = lineOf(t1Base, cegT1.er);
+  const cegSalT2 = lineOf(t2Base, cegT2.sal);
+  const cegErT2 = lineOf(t2Base, cegT2.er);
+
+  // CET strictly above the plafond, prélevée on the T1+T2 assiettes.
+  const cetApplies = annualised > passAnnual;
+  const cetBase = cetApplies ? t1Base + t2Base : 0n;
+  const cetSal = cetApplies ? lineOf(cetBase, cetSplit.sal) : 0n;
+  const cetEr = cetApplies ? lineOf(cetBase, cetSplit.er) : 0n;
+
   return {
     vieillesseSalPlafonnee: D(vieilSalPlaf),
     vieillesseSalDeplafonnee: D(vieilSalDeplaf),
@@ -261,5 +344,23 @@ export function calculateFrCotisations2026(
     cdnEr: D(add(fnalEr, csaEr, dialogueEr, vmEr)),
     atmpEr: D(atmpEr),
     versementMobiliteEr: D(vmEr),
+    t1Base: D(t1Base),
+    t2Base: D(t2Base),
+    arrcoSalT1: D(arrcoSalT1),
+    arrcoErT1: D(arrcoErT1),
+    arrcoSalT2: D(arrcoSalT2),
+    arrcoErT2: D(arrcoErT2),
+    arrcoSal: D(add(arrcoSalT1, arrcoSalT2)),
+    arrcoEr: D(add(arrcoErT1, arrcoErT2)),
+    cegSalT1: D(cegSalT1),
+    cegErT1: D(cegErT1),
+    cegSalT2: D(cegSalT2),
+    cegErT2: D(cegErT2),
+    cegSal: D(add(cegSalT1, cegSalT2)),
+    cegEr: D(add(cegErT1, cegErT2)),
+    cetApplies,
+    cetBase: D(cetBase),
+    cetSal: D(cetSal),
+    cetEr: D(cetEr),
   };
 }

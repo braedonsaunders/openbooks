@@ -36,12 +36,12 @@
  *   et à Mayotte" (§90). Only grille I is transcribed; any other domicile
  *   is refused by name — never approximated by grille I.
  *
- * What this pass does NOT do (partial result, stated): AGIRC-ARRCO (no
- * obtainable rates), AT/MP and versement mobilité (tenant-declared, no
- * context channel), the Alsace-Moselle salary supplement, the AGS interim
- * variant, reduced-rate modulation, and the brut/net-imposable bridge
- * (see FR_COTISATION_REFUSALS_2026 in ./cotisations-2026.ts). The pack
- * stays `installable: false`.
+ * What this pass does NOT do (stated): APEC (cadres only, no channel),
+ * a conventionally modified 60/40 split, AT/MP and versement mobilité
+ * (tenant-declared, no context channel), the Alsace-Moselle salary
+ * supplement, the AGS interim variant, reduced-rate modulation, and the
+ * brut/net-imposable bridge (see FR_COTISATION_REFUSALS_2026 in
+ * ./cotisations-2026.ts).
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves away
  * from zero (roundDiv) — the same discipline as canada/decimal.ts. The
@@ -264,6 +264,12 @@ export async function computeFrStatutory(
   pushStatutory("chomage_er", "employer_contribution", "Assurance chômage (employeur)", cots.chomageEr, 225);
   pushStatutory("ags_er", "employer_contribution", "Cotisation AGS (employeur)", cots.agsEr, 226);
   pushStatutory("cdn_er", "employer_contribution", "FNAL, CSA et dialogue social (employeur)", cots.cdnEr, 230);
+  pushStatutory("arrco", "deduction", "Retraite complémentaire (salariale)", cots.arrcoSal, 140);
+  pushStatutory("arrco", "employer_contribution", "Retraite complémentaire (employeur)", cots.arrcoEr, 240);
+  pushStatutory("ceg", "deduction", "Contribution d'équilibre général (salariale)", cots.cegSal, 141);
+  pushStatutory("ceg", "employer_contribution", "Contribution d'équilibre général (employeur)", cots.cegEr, 241);
+  pushStatutory("cet", "deduction", "Contribution d'équilibre technique (salariale)", cots.cetSal, 142);
+  pushStatutory("cet", "employer_contribution", "Contribution d'équilibre technique (employeur)", cots.cetEr, 242);
   return {
     BASE: result.monthlyBase,
     TAUX_PAS: result.ratePct,
@@ -278,5 +284,11 @@ export async function computeFrStatutory(
     CHOM_ER: cots.chomageEr,
     AGS_ER: cots.agsEr,
     CDN_ER: cots.cdnEr,
+    ARRCO_SAL: cots.arrcoSal,
+    ARRCO_ER: cots.arrcoEr,
+    CEG_SAL: cots.cegSal,
+    CEG_ER: cots.cegEr,
+    CET_SAL: cots.cetSal,
+    CET_ER: cots.cetEr,
   };
 }
