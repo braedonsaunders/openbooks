@@ -91,6 +91,17 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'ap.approve',
   },
   {
+    // Deliberately ungated: the inbox shows only the signed-in user's own
+    // notifications, and every query self-scopes to (org_id, user_id). If a
+    // permission is ever added here, this comment must go with it —
+    // Notifications.scope.test.ts pins both the scoping and this shape.
+    key: 'notifications',
+    href: '/notifications',
+    label: 'Notifications',
+    iconKey: 'bell',
+    group: 'my-work',
+  },
+  {
     key: 'documents',
     href: '/documents',
     label: 'File Cabinet',
