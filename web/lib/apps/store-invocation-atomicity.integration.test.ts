@@ -99,15 +99,20 @@ function callBridge(
   appKey: string,
   payload: unknown,
 ): ReturnType<typeof runBridgeMethod> {
-  return runBridgeMethod({
-    orgId: fx.org.orgId,
-    user: fx.user,
-    key: appKey,
-    method: 'callBackend',
-    payload,
-    userCan: () => true,
-    allowedSubsidiaryIds: null,
-  })
+  // The bridge resolves the app and its audience from the ambient tenant
+  // scope, exactly as a production request would carry it; without the
+  // scope the lookup runs deny-closed and the app reads as not found.
+  return withOrgContext(fx.org.orgId, () =>
+    runBridgeMethod({
+      orgId: fx.org.orgId,
+      user: fx.user,
+      key: appKey,
+      method: 'callBackend',
+      payload,
+      userCan: () => true,
+      allowedSubsidiaryIds: null,
+    }),
+  )
 }
 
 /** One sandboxed backend doing journal + platform + KV writes. */
@@ -222,18 +227,20 @@ test(
       })
       const appKey = await installProofApp(fx, financialHandler({ post: false }))
       const restrictedUser = { ...fx.user, roles: [{ key: 'ordinary-role', name: 'Ordinary role' }] }
-      const listed = await runBridgeMethod({
-        orgId: fx.org.orgId,
-        user: restrictedUser,
-        key: appKey,
-        method: 'records.list',
-        payload: { typeKey },
-        userCan: (permission) => permission === 'records.read',
-        allowedSubsidiaryIds: null,
-      })
+      const listed = await withOrgContext(fx.org.orgId, () =>
+        runBridgeMethod({
+          orgId: fx.org.orgId,
+          user: restrictedUser,
+          key: appKey,
+          method: 'records.list',
+          payload: { typeKey },
+          userCan: (permission) => permission === 'records.read',
+          allowedSubsidiaryIds: null,
+        }),
+      )
       assert.equal(listed.ok, true)
       assert.deepEqual(listed.result, [])
-      const fetched = await runBridgeMethod({
+      const fetched = await withOrgContext(fx.org.orgId, () => runBridgeMethod({
         orgId: fx.org.orgId,
         user: restrictedUser,
         key: appKey,
@@ -241,7 +248,7 @@ test(
         payload: { typeKey, id: recordId },
         userCan: (permission) => permission === 'records.read',
         allowedSubsidiaryIds: null,
-      })
+      }))
       assert.equal(fetched.ok, true)
       assert.equal(fetched.result, null)
     } finally {

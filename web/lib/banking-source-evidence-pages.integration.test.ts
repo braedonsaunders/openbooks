@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import * as React from 'react'
+import type { ScratchOrg } from '../../engine/src/test-fixtures.ts'
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
@@ -36,7 +37,7 @@ registerHooks({
   },
 })
 
-const { db, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof import('../../engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof import('../../engine/src/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/test-fixtures.ts')
 // The pages' LOADERS, not their rendered trees: the evidence badge and the
@@ -61,33 +62,36 @@ const CONNECTOR_SOURCE = 'test-source'
 const CONNECTOR_NAME = 'Test Source'
 
 async function seedSourceEvidenceOrg() {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'Bank operator', 'admin')
-  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
-  state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Bank operator', email: 'bank@scratch.test',
-    roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-  await db.execute(sql`update accounts set currency_restriction='USD',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
-  await db.execute(sql`insert into connections(org_id,source,display_name,mirror_enabled)
-    values(${org.orgId},${CONNECTOR_SOURCE},${CONNECTOR_NAME},true)`)
-  // One cleared line (mirrored source stamp) and one open line, both posted
-  // in the primary book on or before the sign-off cutoff.
-  const clearedEntry = randomUUID(), openEntry = randomUUID()
-  for (const [entry, number] of [[clearedEntry, 'cleared-1'], [openEntry, 'open-1']] as const) {
-    await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-      values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${number},${org.date},${org.periodId},'draft','manual')`)
-  }
-  await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,source_cleared_date,source_cleared_connector)
-    values(${randomUUID()},${org.orgId},${clearedEntry},1,${org.accounts.bank},${org.subsidiaryId},100,'USD',100,1,${org.date},${CONNECTOR_SOURCE}),
-      (${randomUUID()},${org.orgId},${clearedEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'USD',-100,1,null,null),
-      (${randomUUID()},${org.orgId},${openEntry},1,${org.accounts.bank},${org.subsidiaryId},50,'USD',50,1,null,null),
-      (${randomUUID()},${org.orgId},${openEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-50,'USD',-50,1,null,null)`)
-  await db.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id in (${clearedEntry},${openEntry})`)
-  const sourceRecon = randomUUID(), statementRecon = randomUUID(), orphanRecon = randomUUID()
-  await db.execute(sql`insert into reconciliations(id,org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector,signed_off_by,signed_off_at)
-    values(${sourceRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source',${CONNECTOR_SOURCE},${actor},now()),
-      (${statementRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'statement',null,${actor},now()),
-      (${orphanRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source','lone-source',${actor},now())`)
-  return { org, actor, sourceRecon, statementRecon, orphanRecon }
+  const org: ScratchOrg = await withBypassContext(() => createScratchOrg() as Promise<ScratchOrg>)
+  const seeded = await withBypassContext(async () => {
+    const actor = await createScratchUser(org.orgId, 'Bank operator', 'admin')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+    await db.execute(sql`update accounts set currency_restriction='USD',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
+    await db.execute(sql`insert into connections(org_id,source,display_name,mirror_enabled)
+      values(${org.orgId},${CONNECTOR_SOURCE},${CONNECTOR_NAME},true)`)
+    // One cleared line (mirrored source stamp) and one open line, both posted
+    // in the primary book on or before the sign-off cutoff.
+    const clearedEntry = randomUUID(), openEntry = randomUUID()
+    for (const [entry, number] of [[clearedEntry, 'cleared-1'], [openEntry, 'open-1']] as const) {
+      await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+        values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${number},${org.date},${org.periodId},'draft','manual')`)
+    }
+    await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,source_cleared_date,source_cleared_connector)
+      values(${randomUUID()},${org.orgId},${clearedEntry},1,${org.accounts.bank},${org.subsidiaryId},100,'USD',100,1,${org.date},${CONNECTOR_SOURCE}),
+        (${randomUUID()},${org.orgId},${clearedEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'USD',-100,1,null,null),
+        (${randomUUID()},${org.orgId},${openEntry},1,${org.accounts.bank},${org.subsidiaryId},50,'USD',50,1,null,null),
+        (${randomUUID()},${org.orgId},${openEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-50,'USD',-50,1,null,null)`)
+    await db.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id in (${clearedEntry},${openEntry})`)
+    const sourceRecon = randomUUID(), statementRecon = randomUUID(), orphanRecon = randomUUID()
+    await db.execute(sql`insert into reconciliations(id,org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector,signed_off_by,signed_off_at)
+      values(${sourceRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source',${CONNECTOR_SOURCE},${actor},now()),
+        (${statementRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'statement',null,${actor},now()),
+        (${orphanRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source','lone-source',${actor},now())`)
+    return { actor, sourceRecon, statementRecon, orphanRecon }
+  })
+  state.user = { id: seeded.actor, orgId: org.orgId, isSuperAdmin: false, name: 'Bank operator', email: 'bank@scratch.test',
+    roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seeded.actor }
+  return { org, ...seeded }
 }
 
 test('source-evidenced sign-off renders reconciled-from-connector with counts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

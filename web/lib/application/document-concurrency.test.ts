@@ -171,15 +171,15 @@ type IdempotencyHarness = Awaited<ReturnType<typeof buildIdempotencyHarness>>;
 async function buildIdempotencyHarness() {
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
-  const { db, pool } = await import("@openbooks/engine/src/db.ts");
+  const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
   const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
     "@openbooks/engine/src/test-fixtures.ts"
   );
   const { requestDocumentVoid } = await import("@openbooks/engine/src/document-void.ts");
   const { executeIdempotent } = await import("./idempotency.ts");
 
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Idempotent Void Controller", "admin");
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Idempotent Void Controller", "admin"));
   const context: ApplicationContext = {
     authz: {
       user: { id: actorId, orgId: org.orgId } as ApplicationContext["authz"]["user"],
@@ -193,7 +193,7 @@ async function buildIdempotencyHarness() {
 
   async function seedApprovedQuote(documentNumber: string): Promise<string> {
     const documentId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, party_id, subsidiary_id,
          document_date, currency, status, created_by)
@@ -202,31 +202,33 @@ async function buildIdempotencyHarness() {
         ${org.customerId}, ${org.subsidiaryId}, ${org.date}, 'CAD',
         'approved', ${actorId}
       )
-    `);
+    `));
     return documentId;
   }
 
   async function seedSlowBeforeVoidScript(sleepSeconds: number): Promise<void> {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb, true)
-       where id = ${org.orgId}
-    `);
-    await db.execute(sql`
-      insert into user_scripts
-        (id, org_id, name, trigger_point, document_kind, source,
-         timeout_ms, sort_order, is_active, created_by)
-      values (
-        ${randomUUID()}, ${org.orgId}, 'Idempotency pool probe', 'before_void',
-        'quote',
-        ${`function main() { ob.query("select pg_sleep(${sleepSeconds})::text as waited"); }`},
-        10_000, 1, true, ${actorId}
-      )
-    `);
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb, true)
+         where id = ${org.orgId}
+      `);
+      await db.execute(sql`
+        insert into user_scripts
+          (id, org_id, name, trigger_point, document_kind, source,
+           timeout_ms, sort_order, is_active, created_by)
+        values (
+          ${randomUUID()}, ${org.orgId}, 'Idempotency pool probe', 'before_void',
+          'quote',
+          ${`function main() { ob.query("select pg_sleep(${sleepSeconds})::text as waited"); }`},
+          10_000, 1, true, ${actorId}
+        )
+      `);
+    });
   }
 
   async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-    const result = await db.execute<{ count: number }>(query);
+    const result = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(query));
     return Number(result.rows[0]!.count);
   }
 
@@ -540,9 +542,10 @@ test("a duplicate-key void storm stays exact-once and leaves the request pool re
       `unrelated queries must not queue behind void duplicates (worst canary ${worstCanary}ms)`,
     );
 
-    const status = await h.db.execute<{ status: string; void_requested_at: Date | null }>(h.sql`
+    const { withOrgContext: scopedRead } = await import("@openbooks/engine/src/db.ts");
+    const status = await scopedRead(h.org.orgId, () => h.db.execute<{ status: string; void_requested_at: Date | null }>(h.sql`
       select status, void_requested_at from documents where id = ${documentId}
-    `);
+    `));
     assert.deepEqual(status.rows[0], { status: "voided", void_requested_at: null });
     assert.equal(
       await h.countRows(h.sql`

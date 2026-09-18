@@ -11,7 +11,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { purchasingHome } = await import('./purchasing')
@@ -66,21 +66,21 @@ async function seedPostedBill(
 }
 
 test('restricted spend excludes subsidiary-less bills', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = await createScratchUser(org.orgId, 'Buyer', 'admin')
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Buyer', 'admin'))
     const branchId = randomUUID()
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Spend branch', 'CAD', 'CA')
-    `)
+    `))
     await pinClock('2026-07-15', async () => {
-      await seedPostedBill(org, actorId, { number: 'BILL-BRANCH', subsidiaryId: branchId, total: '100' })
-      await seedPostedBill(org, actorId, { number: 'BILL-NOSUB', subsidiaryId: null, total: '500' })
+      await withBypassContext(() => seedPostedBill(org, actorId, { number: 'BILL-BRANCH', subsidiaryId: branchId, total: '100' }))
+      await withBypassContext(() => seedPostedBill(org, actorId, { number: 'BILL-NOSUB', subsidiaryId: null, total: '500' }))
 
-      const home = await purchasingHome(org.orgId, [branchId])
+      const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, [branchId]))
       assert.equal(home.spend30d, 100, 'branch scope sees only the branch bill')
-      const all = await purchasingHome(org.orgId)
+      const all = await withOrgContext(org.orgId, () => purchasingHome(org.orgId))
       assert.equal(all.spend30d, 600, 'unrestricted callers still see everything')
     })
   } finally {

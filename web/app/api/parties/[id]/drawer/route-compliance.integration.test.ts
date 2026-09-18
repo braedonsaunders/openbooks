@@ -33,7 +33,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { GET } = await import("./route.ts");
@@ -58,9 +58,11 @@ async function fixture(featureOn: boolean): Promise<{ orgId: string; partyId: st
 }
 
 const get = (partyId: string, role?: string) =>
-  GET(
-    new Request(`http://localhost/api/parties/${partyId}/drawer${role ? `?role=${role}` : ""}`),
-    { params: Promise.resolve({ id: partyId }) },
+  withOrgContext(state.orgId, () =>
+    GET(
+      new Request(`http://localhost/api/parties/${partyId}/drawer${role ? `?role=${role}` : ""}`),
+      { params: Promise.resolve({ id: partyId }) },
+    ),
   );
 
 test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)", { skip: !DB }, async () => {

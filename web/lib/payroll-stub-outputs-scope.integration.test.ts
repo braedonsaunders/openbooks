@@ -77,7 +77,7 @@ registerHooks({ resolve(specifier, context, next) {
   return resolved;
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { commitPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
@@ -92,16 +92,16 @@ const { POST: documentAction } = await import("../app/api/documents/actions/rout
  * scope is opaque — its stub PDF is a 404 and emailing its stubs is refused.
  */
 async function opaqueFixture() {
-  const fx = await seedAdoption();
-  await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
-  const { input } = await calculatedRun(fx);
-  await commitPayRun(input);
+  const fx = await withBypassContext(() => seedAdoption());
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+  const { input } = await withBypassContext(() => calculatedRun(fx));
+  await withOrgContext(fx.orgId, () => commitPayRun(input));
   const hidden = randomUUID();
-  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden stub employer', 'CAD', 'CA')`);
-  await db.execute(sql`update parties set subsidiary_id = ${hidden}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+  await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden stub employer', 'CAD', 'CA')`));
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
   return { fx, documentId: input.documentId };
 }
 
@@ -117,10 +117,10 @@ test("stub PDF hides a run carrying an out-of-scope employee", { skip: !process.
   const { fx, documentId } = await opaqueFixture();
   try {
     state.gate = scopedGate(fx, "payroll.read");
-    const refused = await stubsPdf(
+    const refused = await withOrgContext(fx.orgId, () => stubsPdf(
       new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     // The body is a PDF on the leak path, so peek as text: parsing it as
     // JSON would throw instead of reporting the 200.
     const refusedBody = await refused.clone().text();
@@ -130,10 +130,10 @@ test("stub PDF hides a run carrying an out-of-scope employee", { skip: !process.
     // The run IS printable: the unrestricted control receives the stub PDF,
     // proving the scoped refusal above is the population check at work.
     state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
-    const control = await stubsPdf(
+    const control = await withOrgContext(fx.orgId, () => stubsPdf(
       new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(control.status, 200);
     assert.match(
       control.headers.get("content-type") ?? "",
@@ -147,14 +147,14 @@ test("stub email refuses a run carrying an out-of-scope employee", { skip: !proc
   const { fx, documentId } = await opaqueFixture();
   try {
     state.gate = scopedGate(fx, "payroll.run");
-    const refused = await runAction(
+    const refused = await withOrgContext(fx.orgId, () => runAction(
       new Request("https://openbooks.test/api/payroll/runs/fixture", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "email-stubs" }),
       }),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
     assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
@@ -168,27 +168,27 @@ test("approval submission refuses a run carrying an out-of-scope employee", { sk
     // before a single report is resolved — like the GL preview action does.
     state.gate = scopedGate(fx, "payroll.run");
     state.reportResolutions = 0;
-    const refused = await runAction(
+    const refused = await withOrgContext(fx.orgId, () => runAction(
       new Request("https://openbooks.test/api/payroll/runs/fixture", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "submit-approval" }),
       }),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
     assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
     assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
 
     state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
-    const submitted = await runAction(
+    const submitted = await withOrgContext(fx.orgId, () => runAction(
       new Request("https://openbooks.test/api/payroll/runs/fixture", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "submit-approval" }),
       }),
       { params: Promise.resolve({ id: documentId }) },
-    );
+    ));
     assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
     assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
@@ -215,41 +215,41 @@ test("document submit refuses evidence assembly for a run carrying an out-of-sco
   // The generic document submit attaches the same evidence package when the
   // org gates pay runs — through a second route that must enforce the same
   // population opacity. A calculated (still draft-document) run assembles.
-  const fx = await seedAdoption();
-  await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
-  const { input } = await calculatedRun(fx);
-  await db.execute(sql`
+  const fx = await withBypassContext(() => seedAdoption());
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+  const { input } = await withBypassContext(() => calculatedRun(fx));
+  await withBypassContext(() => db.execute(sql`
     insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
     values (${fx.orgId}, 'Pay run approval', 'pay_run', true,
-            ${JSON.stringify(GATING_GRAPH)}::jsonb, ${fx.actorId}, ${fx.actorId})`);
+            ${JSON.stringify(GATING_GRAPH)}::jsonb, ${fx.actorId}, ${fx.actorId})`));
   const hidden = randomUUID();
-  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden submit employer', 'CAD', 'CA')`);
-  await db.execute(sql`update parties set subsidiary_id = ${hidden}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+  await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden submit employer', 'CAD', 'CA')`));
+  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
   try {
     state.gate = scopedGate(fx, "payroll.run");
     state.reportResolutions = 0;
-    const refused = await documentAction(
+    const refused = await withOrgContext(fx.orgId, () => documentAction(
       new Request("https://openbooks.test/api/documents/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "submit", documentId: input.documentId }),
       }),
-    );
+    ));
     assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
     assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
     assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
 
     state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
-    const submitted = await documentAction(
+    const submitted = await withOrgContext(fx.orgId, () => documentAction(
       new Request("https://openbooks.test/api/documents/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "submit", documentId: input.documentId }),
       }),
-    );
+    ));
     assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
     assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
