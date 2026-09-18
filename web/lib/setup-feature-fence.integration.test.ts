@@ -54,10 +54,15 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
     }
     const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
     await writer.connect();await writer.query('begin');
+    // Raw pg sessions carry no test bypass: without this the disable UPDATE
+    // below matches zero rows under FORCE RLS, the flag never lands, and the
+    // write under test sails through with 200 instead of blocking.
+    await writer.query("select set_config('app.bypass_rls','on',true)");
     await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
     if(entity==='item-rate-books')await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`item-rate-books:${org.orgId}`]);
     else await writer.query(`lock table ${table} in share row exclusive mode`);
-    await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
+    const disabled=await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
+    assert.equal(disabled.rowCount,1,'fence writer must stage the feature disable');
     const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
     pending=send(method,entity,{...body,name:'Write after disable'});void pending.catch(()=>{});
     let blocked=false;const deadline=Date.now()+10000;
@@ -107,9 +112,14 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
     const created=await send('POST',entity,initial);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));body.id=(await created.json()).id;
    }
    const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
-   await writer.connect();await writer.query('begin');await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
+   await writer.connect();await writer.query('begin');
+   // Raw pg sessions carry no test bypass: without this the disable UPDATE
+   // below matches zero rows under FORCE RLS and the flag never lands.
+   await writer.query("select set_config('app.bypass_rls','on',true)");
+   await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
    await writer.query(`lock table ${table} in share row exclusive mode`);
-   await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
+   const disabled=await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
+   assert.equal(disabled.rowCount,1,'fence writer must stage the feature disable');
    const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
    pending=send(method,entity,body);void pending.catch(()=>{});
    let blocked=false;const deadline=Date.now()+10000;
