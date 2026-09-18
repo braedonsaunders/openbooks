@@ -37,9 +37,9 @@ registerHooks({
   },
 })
 
-const { db, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof import('../../engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof import('../../engine/src/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/test-fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/test-fixtures.ts') as typeof import('../../engine/src/test-fixtures.ts')
 const { startReconciliation, importStatement, createMatch } = await import(root + 'engine/src/banking.ts')
 // The page's LOADER, not its rendered tree.
 //
@@ -58,37 +58,45 @@ const { loadReconciliation } = await import(
 
 for (const page of ['match', 'reconcile'] as const) {
   test(`bank ${page} page uses primary book and bank-currency amounts`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg()
+    const org = await withBypassContext(() => createScratchOrg())
     try {
-      const actor = await createScratchUser(org.orgId, 'Bank operator', 'admin')
-      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+      const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Bank operator', 'admin'))
+      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`))
       state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Bank operator', email: 'bank@scratch.test',
         roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
       const tax = randomUUID()
-      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${tax},${org.orgId},'TAX','Tax',false)`)
       let primaryLine = ''
-      for (const variant of ['primary-usd', 'tax-usd', 'legacy-cad']) {
-        const entry = randomUUID(), line = randomUUID()
-        const currency = variant === 'legacy-cad' ? 'CAD' : 'USD'
-        const amount = currency === 'USD' ? '135' : '100'
-        const fx = currency === 'USD' ? '1.35' : '1'
-        await db.transaction(async (tx) => {
-          await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-            values(${entry},${org.orgId},${variant === 'tax-usd' ? tax : org.bookId},${org.subsidiaryId},${variant},${org.date},${org.periodId},'draft','manual')`)
-          await tx.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
-            values(${line},${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},${currency},100,${fx}),
-              (${randomUUID()},${org.orgId},${entry},2,${org.accounts.adjustment},${org.subsidiaryId},${'-' + amount},${currency},-100,${fx})`)
-          await tx.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id=${entry}`)
-        })
-        if (variant === 'primary-usd') primaryLine = line
-      }
-      // Legacy differently-denominated rows must not be offered after a
-      // reconcilable account's explicit statement currency is configured.
-      await db.execute(sql`update accounts set currency_restriction='USD',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${tax},${org.orgId},'TAX','Tax',false)`)
+        for (const variant of ['primary-usd', 'tax-usd', 'legacy-cad']) {
+          const entry = randomUUID(), line = randomUUID()
+          const currency = variant === 'legacy-cad' ? 'CAD' : 'USD'
+          const amount = currency === 'USD' ? '135' : '100'
+          const fx = currency === 'USD' ? '1.35' : '1'
+          await db.transaction(async (tx) => {
+            await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+              values(${entry},${org.orgId},${variant === 'tax-usd' ? tax : org.bookId},${org.subsidiaryId},${variant},${org.date},${org.periodId},'draft','manual')`)
+            await tx.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+              values(${line},${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},${currency},100,${fx}),
+                (${randomUUID()},${org.orgId},${entry},2,${org.accounts.adjustment},${org.subsidiaryId},${'-' + amount},${currency},-100,${fx})`)
+            await tx.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id=${entry}`)
+          })
+          if (variant === 'primary-usd') primaryLine = line
+        }
+        // Legacy differently-denominated rows must not be offered after a
+        // reconcilable account's explicit statement currency is configured.
+        await db.execute(sql`update accounts set currency_restriction='USD',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
+      })
+      // Statement import and reconciliation are the product paths: they take
+      // an explicit org ctx and must work under enforcement.
       const ctx = { orgId: org.orgId, userId: actor }
-      await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'USD', statementDate: org.date,
-        lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'usd-deposit' }] }, ctx)
-      const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '100' }, ctx)
+      const { reconId } = await withOrgContext(org.orgId, async () => {
+        await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'USD', statementDate: org.date,
+          lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'usd-deposit' }] }, ctx)
+        const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '100' }, ctx)
+        return { reconId: recon.id }
+      })
+      const recon = { id: reconId }
       await withOrgContext(org.orgId, async () => {
         const loaded = page === 'match'
           ? await loadMatch({ account: org.accounts.bank })

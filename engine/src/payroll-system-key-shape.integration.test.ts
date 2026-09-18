@@ -64,9 +64,17 @@ test(
       let typoSequence = 0;
       for (const typo of TYPO_KEYS) {
         typoSequence += 1;
+        // The driver wraps the PostgreSQL error: the constraint name lives
+        // in the cause, not in the top-level message a bare regex would see.
+        // Match through the wrapper so the pin names the exact constraint.
         await assert.rejects(
           insertComponent(org.orgId, `TYPO-${typoSequence}`, typo),
-          /pay_components_system_key/,
+          (error: unknown) => {
+            const cause = (error as { cause?: { message?: unknown } })?.cause;
+            const text = `${(error as Error)?.message ?? ""} ${cause?.message ?? ""}`;
+            assert.match(text, /pay_components_system_key/);
+            return true;
+          },
           `typo system_key ${JSON.stringify(typo)} must violate the shape check`,
         );
       }

@@ -139,7 +139,13 @@ test('setup evidence reads the committed before-image after waiting for another 
   await authenticate(org);const body={code:'CONCURRENT',name:'Original department',isActive:true};
   const created=await send('POST','departments',body);assert.equal(created.status,200);const {id}=await created.json();
   await writer.connect();await writer.query('begin');
-  await writer.query('update departments set name=$1 where id=$2',['Concurrent committed name',id]);
+  // Raw clients skip the pool's RLS-GUC wrapper: without an explicit scope
+  // the update matches zero rows under enforcement, takes no lock, and the
+  // PATCH below never blocks. Scope the writer and assert its footprint so
+  // a blind writer fails fast instead of after the 10s poll.
+  await writer.query("select set_config('app.bypass_rls','on',true)");
+  const committed = await writer.query('update departments set name=$1 where id=$2',['Concurrent committed name',id]);
+  assert.equal(committed.rowCount, 1, 'concurrent writer must hold the department row');
   const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   pending=send('PATCH','departments',{...body,id,name:'Final reviewed name'});void pending.catch(()=>{});
   let blocked=false;const deadline=Date.now()+10000;
