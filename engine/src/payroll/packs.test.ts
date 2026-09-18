@@ -61,7 +61,21 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
     packStatutoryComponents(country)
       .filter((component) => component.assessedOn === "taxable_income")
       .map((component) => `${country}/${component.code}`));
-  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT"]);
+  // Each pack's own pack.ts carries the sourcing comment for its lines:
+  // GB PAYE (taxable pay after pension deductions, gb/pack.ts PAYE slot);
+  // DE LST (Lohnsteuer on zu versteuerndes Einkommen) and SOLI (a surcharge
+  // on the LST itself, so it moves with it) (de/pack.ts);
+  // FR PAS (CGI art. 204 A: rate x net imposable, fr/pack.ts:53-54);
+  // IE PAYE (cumulative PAYE on taxable pay after pension deductions per the
+  // RPN, ie/pack.ts:66-68); AU PAYG (salary-sacrificed amounts move the one
+  // withholding, au/pack.ts:77-80); IT IRPEF (reddito complessivo net of
+  // oneri deducibili, it/pack.ts:92-93) with ADDREG (same IRPEF base,
+  // it/pack.ts:100-101) and ADDCOM (the comune surcharge, it/pack.ts:108-109);
+  // NL LH (grondslag reduced by employee pension contributions, nl/pack.ts:148-151);
+  // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93).
+  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
+    "GB/PAYE", "DE/LST", "DE/SOLI", "FR/PAS", "IE/PAYE", "AU/PAYG",
+    "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM", "NL/LH", "ES/IRPF"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {
@@ -97,7 +111,8 @@ test("an undeclared levy stops the run rather than defaulting to a class", () =>
       return true;
     },
   );
-  assert.throws(() => packStatutoryComponents("GB"), PayrollPackError);
+  // GB is a registered pack now, so the undeclared-country probe uses "XX".
+  assert.throws(() => packStatutoryComponents("XX"), PayrollPackError);
 });
 
 test("a pack's component codes are unique, so a slot account cannot be ambiguous", () => {

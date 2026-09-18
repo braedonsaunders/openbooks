@@ -89,7 +89,19 @@ test("ES certificate is the real Modelo 145, not a W-4/TD1 clone", () => {
 });
 
 test("ES 2026 is refused by name on taxYears", () => {
-  registerPayrollTaxYears(ES_TAX_YEARS);
+  // ES_TAX_YEARS now ships on the registered ES pack, so the declaration is
+  // already visible via the registry; register only when it is not.
+  let registered = false;
+  try {
+    registerPayrollTaxYears(ES_TAX_YEARS);
+    registered = true;
+  } catch (error) {
+    assert.match(
+      (error as Error).message,
+      /already declared/,
+      "ES tax years must come from exactly one declaration",
+    );
+  }
   try {
     assert.deepEqual(ES_PAYROLL_PACK.taxYears.editions, []);
     const problem = payrollTaxYearProblem("ES", 2026);
@@ -98,7 +110,7 @@ test("ES 2026 is refused by name on taxYears", () => {
     assert.match(problem?.message ?? "", /2026/);
     assert.match(problem?.message ?? "", /engine\/src\/payroll\/es\/rates\.ts/);
   } finally {
-    unregisterPayrollTaxYears("ES");
+    if (registered) unregisterPayrollTaxYears("ES");
   }
 });
 

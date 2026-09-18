@@ -25,7 +25,7 @@
  * consumes them with the repo's bigint-unit helpers (see canada/decimal.ts).
  */
 
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
 /** One marginal band: (from, upTo] taxed at `rate`. `upTo: null` is open. */
 export interface AuMarginalBand {
