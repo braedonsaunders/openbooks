@@ -101,6 +101,11 @@ async function runBootstrap(databaseUrl: string): Promise<void> {
         NODE_ENV: "test",
         OPENBOOKS_DB_URL: databaseUrl,
         OPENBOOKS_RUNTIME_DB_URL: "",
+        // Same reason as the 0064 replay suite: this spawns a bootstrap for a
+        // throwaway database, so CI's shared-database harness flag must not
+        // ride in on ...process.env. bootstrap refuses ownership transfer
+        // without a runtime URL, which is deliberately blank here.
+        OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
         OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION: "",
         ORG_CURRENCY: "USD",
         ORG_COUNTRY: "US",

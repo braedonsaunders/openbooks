@@ -231,6 +231,9 @@ async function applyTailThroughBootstrap(fixture: LegacyFixture): Promise<void> 
         NODE_ENV: "test",
         OPENBOOKS_DB_URL: fixture.databaseUrl,
         OPENBOOKS_RUNTIME_DB_URL: "",
+        // Throwaway bootstrap: CI's shared-database ownership flag must not
+        // ride in, since bootstrap refuses it without a runtime URL.
+        OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
         OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION: "",
         ORG_CURRENCY: "CAD",
         ORG_COUNTRY: "CA",
