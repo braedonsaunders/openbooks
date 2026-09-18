@@ -63,7 +63,7 @@ export function scanFile(path, root = ROOT) {
   // Skip options sit in test-call position — test("name", { skip: ... }) —
   // or in a named options object passed there. Matching bare `{ skip:` would
   // also catch data assertions shaped like { skip: "..." } (fail-closed
-  // markers in netsuite-native.test.ts), so position matters.
+  // markers in some connector suites), so position matters.
   const checkOptions = (index, options) => {
     const skip = options.match(/skip\s*:\s*([^,}][^,}]{0,120}?)\s*(,|}|$)/);
     if (!skip) return;
