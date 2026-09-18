@@ -48,12 +48,23 @@ function fmtQty(v: unknown, locale: string): string {
 
 type OrgRow = { name: string; base_currency: string; brand_primary: string | null }
 
+/**
+ * One documented fallback policy for the whole file: a printed amount is
+ * formatted in the DOCUMENT's currency, else the ORG's base currency — the
+ * same chain every loader below uses, so the formatter and the printed
+ * `currency` value can never disagree again (they once said USD and CAD for
+ * the same question). The org-missing row below is the last resort for a
+ * state the schema forbids (every record carries its org's id): it keeps the
+ * return type total, and its lowercase name reads as the placeholder it is.
+ */
+const MISSING_ORG_FALLBACK: OrgRow = { name: 'openbooks', base_currency: 'CAD', brand_primary: null }
+
 async function orgRow(orgId: string): Promise<OrgRow> {
   const r = (await db.execute<OrgRow>(sql`
     select name, base_currency, settings ->> 'brandPrimary' as brand_primary
       from orgs where id = ${orgId}
   `))
-  return r.rows[0] ?? { name: 'openbooks', base_currency: 'CAD', brand_primary: null }
+  return r.rows[0] ?? MISSING_ORG_FALLBACK
 }
 
 async function customFieldValues(
@@ -111,7 +122,9 @@ async function loadDocumentValues(
   if (!doc) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const format = createMoneyFormatter(locale, String(doc.currency ?? 'USD'))
+  // The documented chain: the document's currency, else the org's base — the
+  // same expression the `currency` merge value below uses. No literal here.
+  const format = createMoneyFormatter(locale, String(doc.currency ?? org.base_currency))
   const { money } = format
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
