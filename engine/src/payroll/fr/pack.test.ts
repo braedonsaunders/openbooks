@@ -43,9 +43,9 @@ test("FR statutory slots are named, assessed, and routable", () => {
   assert.equal(bySystemKey.get("pas|deduction")?.remittance, "tax_authority");
 });
 
-test("FR regions are national: one known region, supported", () => {
+test("FR regions are national: one known region, none supported until PAS computes", () => {
   assert.deepEqual([...FR_PAYROLL_PACK.regions.known], ["FR"]);
-  assert.deepEqual([...FR_PAYROLL_PACK.regions.supported], ["FR"]);
+  assert.deepEqual([...FR_PAYROLL_PACK.regions.supported], []);
 });
 
 test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
