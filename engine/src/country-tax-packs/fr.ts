@@ -53,6 +53,12 @@ export const FRANCE_TAX_PACK: CountryTaxPackDefinition = {
       asOf: "2026-08-01",
     },
     {
+      id: "dgfip_reduced_vat_2014",
+      title: "DGFiP BOFiP LIQ-50 — 10% and 5.5% VAT rates applicable from 1 January 2014 (5.5% left-truncated: predates the 2014 reform, no origin claimed)",
+      url: "https://bofip.impots.gouv.fr/bofip/9226-PGP.html/identifiant=BOI-TVA-LIQ-50-20140319",
+      asOf: "2026-08-01",
+    },
+    {
       id: "dgfip_ca3_2026",
       title: "DGFiP — official 2026 form 3310-CA3-SD",
       url: "https://www.impots.gouv.fr/sites/default/files/formulaires/3310-ca3-sd/2026/3310-ca3-sd_5377.pdf",
@@ -68,11 +74,28 @@ export const FRANCE_TAX_PACK: CountryTaxPackDefinition = {
   jurisdictions: [],
   returnPacks: [FR_CA3_2026],
   returnPackTaxCodes: {
-    FR_CA3: {
-      code: "FR-VAT-STD",
-      name: "France metropolitan standard VAT",
-      ratePercent: 20,
-      rates: [{ ratePercent: 20, effectiveFrom: "2014-01-01", sourceId: "dgfip_standard_vat_2014" }],
-    },
+    FR_CA3: [
+      {
+        code: "FR-VAT-STD",
+        name: "France metropolitan standard VAT",
+        ratePercent: 20,
+        role: "standard",
+        rates: [{ ratePercent: 20, effectiveFrom: "2014-01-01", sourceId: "dgfip_standard_vat_2014" }],
+      },
+      {
+        code: "FR-VAT-RED10",
+        name: "France reduced VAT 10%",
+        ratePercent: 10,
+        role: "reduced",
+        rates: [{ ratePercent: 10, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" }],
+      },
+      {
+        code: "FR-VAT-RED55",
+        name: "France reduced VAT 5.5%",
+        ratePercent: 5.5,
+        role: "reduced",
+        rates: [{ ratePercent: 5.5, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" }],
+      },
+    ],
   },
 };
