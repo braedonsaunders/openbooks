@@ -43,6 +43,12 @@ const NO_MVA_MELDING_2026: TaxReturnPack = {
  * both endpoints could not be sourced from the agency; the 15% band also
  * covers water/sewage per the 2026 decision but no separate code is declared
  * for it — code 31 carries the whole middels band.
+ *
+ * SOURCING: `saft_mva_koder` (Skatteetaten's own SAF-T code specification for
+ * the mva-meldingen return, published on the agency's GitHub) is a named
+ * id-specific exception in the wave5 proof — primary-in-substance on a
+ * non-government host. Lovdata is the official Norwegian legislation
+ * database and needs no exception.
  */
 export const NORWAY_TAX_PACK: CountryTaxPackDefinition = {
   code: "NO_INDIRECT_TAX",

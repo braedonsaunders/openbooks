@@ -140,6 +140,36 @@ test("fifth-wave evidence remains restricted to official government and tax-auth
     // for the mva-meldingen return; the tax agency publishes its machine
     // return specification on GitHub. See the Norway pack doc comment.
     saft_mva_koder: "github.com",
+    // DSIVA's own 2010 ofícios circulados via professional-body mirrors: the
+    // AT portal archives no DSIVA-era ofícios and the gazette PDFs are not
+    // retrievable from this sandbox. Both texts were read in full and state
+    // exactly the cited rates and dates. See the Portugal pack doc comment.
+    at_dp_modelo_instrucoes: "www.aproces.org",
+    dsiva_oc30118_2010_aplicabilidade: "cihc.occ.pt",
+    dsiva_oc30121_2010_taxa_normal: "www.apeca.pt",
+    // Sovos regulatory update on Government Bill 488: the only reachable
+    // attestation of the 15%+10% to 12% consolidation and its 2024-01-01
+    // date. See the Czechia pack doc comment.
+    sovos_cz_consolidation_2024: "sovos.com",
+    // learn.microsoft.com documentation page for the Czech VAT declaration
+    // rows and DPHDP3/DPHKH1 formats: no FS-hosted equivalent is reachable.
+    // See the Czechia pack doc comment.
+    msft_dynamics_cz_rows: "learn.microsoft.com",
+    // 2008 professional circular quoting BKK 2007/13033 (RG 30.12.2007/26742,
+    // 18/8/1 bands valid in 2008): the gazette and mevzuat.gov.tr are
+    // unreachable from this sandbox. See the Türkiye pack doc comment.
+    sirkuler_2008_03_baseline: "www.bilgidenetim.com.tr",
+    // Sovos and TrustUs regulatory pages corroborating the 7346 increase
+    // (18 to 20, 8 to 10, 1 unchanged from 10.07.2023); the Sovos page is
+    // the disclosed path that verified the Resmî Gazete PDF URL, whose PDF
+    // is itself unfetchable from this sandbox (TLS). See the Türkiye pack
+    // doc comment.
+    sovos_tr_kdv_july2023: "sovos.com",
+    trustus_tr_kdv_table: "trustusconsultancy.com",
+    // alomaliye mirror of the GİB KDV1 v41 duyuru corroborating table and
+    // field names; the ebeyan doc center has no curl-reachable duyuru PDF.
+    // See the Türkiye pack doc comment.
+    kdv1_v41_duyuru_mirror: "www.alomaliye.com",
   };
   const seenExceptions = new Set<string>();
   for (const country of maintainedCountries) {

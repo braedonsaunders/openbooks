@@ -33,6 +33,21 @@ const TR_KDV1_2026: TaxReturnPack = {
  * e-Beyanname tables (Matrah / İndirimler kulakçıkları) with per-table
  * transaction-type codes, not stable public numeric box codes, so there are
  * no Casilla-style numbers to transcribe.
+ *
+ * SOURCING: four citations are non-authority, kept as named id-specific
+ * exceptions (wave5 proof). `sirkuler_2008_03_baseline` (2008 professional
+ * circular quoting BKK 2007/13033: 18/8/1 from 2008) carries every
+ * 2008-01-01 row — the underlying RG 30.12.2007/26742 and mevzuat.gov.tr
+ * are unreachable from this sandbox. `sovos_tr_kdv_july2023` and
+ * `trustus_tr_kdv_table` corroborate the 7346 increase (18 to 20, 8 to 10,
+ * 1 unchanged, effective 10.07.2023) and were the path that verified the
+ * Resmî Gazete PDF URL; the RG PDF itself is not fetchable from this
+ * sandbox (TLS timeout on https, http redirects back to https), which is a
+ * sandbox limitation, not corroboration. `kdv1_v41_duyuru_mirror`
+ * (alomaliye mirror of the GİB KDV1 v41 duyuru) corroborates the table and
+ * field names — the ebeyan beyan-doc center is a JS application with no
+ * curl-reachable duyuru PDF. No rate value changes; truncating to
+ * GİB-portal-attested-only would leave no rate history at all.
  */
 export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
   code: "TR_INDIRECT_TAX",

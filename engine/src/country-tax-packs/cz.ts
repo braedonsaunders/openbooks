@@ -34,6 +34,20 @@ const CZ_DPH_2026: TaxReturnPack = {
  * standard band and the pre-2024 10% book band are not transcribed — no
  * origin dates are claimed. Kontrolní hlášení (DPHKH1) is a separate
  * mandatory filing and is not modelled here.
+ *
+ * SOURCING: two citations are non-authority, kept as named id-specific
+ * exceptions (wave5 proof). `sovos_cz_consolidation_2024` (Sovos regulatory
+ * update on Government Bill 488) is the only reachable attestation of the
+ * 15%+10% to 12% consolidation and the 2024-01-01 date — the consolidation
+ * act (349/2023 Sb.) is not retrievable from the e-Sbírka portal from this
+ * sandbox and the FS site serves its guidance through a JS application, so
+ * the FS leaflet (which attests current 21%/12%/books-exempt applicability
+ * only) cannot carry the date. `msft_dynamics_cz_rows` (learn.microsoft.com
+ * documentation page for the Czech VAT declaration rows and DPHDP3/DPHKH1
+ * formats) corroborates the return transcription; no FS-hosted equivalent
+ * is reachable.
+ * Neither changes any rate value; truncating to FS-attested-only would
+ * delete the 2024 consolidation the pack exists to carry.
  */
 export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
   code: "CZ_INDIRECT_TAX",
