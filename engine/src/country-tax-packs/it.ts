@@ -63,15 +63,37 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
       url: "https://www1.agenziaentrate.gov.it/servizi/scadenzario/main.php?chi=1595&come=518&cosa=11479&entroil=02-03-2026&op=4",
       asOf: "2026-08-01",
     },
+    {
+      id: "ade_vat_rates_applicability_2026",
+      title: "Agenzia delle Entrate — applicability of the 4% and 10% reduced VAT rates (current rates page; no statutory start date stated)",
+      url: "https://www.agenziaentrate.gov.it/portale/web/english/general-vat-rules-and-rates",
+      asOf: "2026-09-18",
+    },
   ],
   jurisdictions: [],
   returnPacks: [IT_LIPE_2026],
   returnPackTaxCodes: {
-    IT_LIPE: {
-      code: "IT-VAT-STD",
-      name: "Italy standard VAT",
-      ratePercent: 22,
-      rates: [{ ratePercent: 22, effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" }],
-    },
+    IT_LIPE: [
+      {
+        code: "IT-VAT-STD",
+        name: "Italy standard VAT",
+        ratePercent: 22,
+        rates: [{ ratePercent: 22, effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" }],
+      },
+      {
+        code: "IT-VAT-RED10",
+        name: "Italy reduced VAT 10%",
+        ratePercent: 10,
+        role: "reduced",
+        rates: [{ ratePercent: 10, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+      },
+      {
+        code: "IT-VAT-RED4",
+        name: "Italy minimum VAT 4%",
+        ratePercent: 4,
+        role: "reduced",
+        rates: [{ ratePercent: 4, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+      },
+    ],
   },
 };
