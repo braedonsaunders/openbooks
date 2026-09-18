@@ -4,9 +4,12 @@ import { businessToday, startOfMonth } from '@openbooks/engine/src/business-date
 import { db } from '@openbooks/engine/src/db.ts'
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
+import { randomUUID } from 'node:crypto'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { bankingHome } from '@/lib/module-home/banking'
 import { expensesDashboard } from '@/lib/expenses-dashboard'
+import { listCloseRuns } from '@/lib/application/close'
+import { applicationContextFromSession } from '@/lib/application/context'
 import { openItems } from '@/lib/cash/open-items'
 import { profitAndLoss } from '@/lib/reports/statements'
 import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
@@ -135,6 +138,16 @@ export type DashboardMetrics = {
    * reader's pipeline totals sum raw multi-currency totals org-wide, so the
    * tile deliberately does not touch them. */
   pendingExpenses: number
+  /** Latest close runs (period, book, status, stage, target date) — the same
+   * rows as the /close workspace's recent-runs list. No money involved. */
+  closeRuns: Array<{
+    id: string
+    period: string
+    book: string
+    status: string
+    stage: string | null
+    targetCloseDate: string | null
+  }>
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -204,6 +217,26 @@ export async function loadExpenseSummary(authz: Authz): Promise<{ pendingExpense
   return { pendingExpenses: dashboard.pipeline.pendingCount }
 }
 
+/**
+ * Period-close readiness for the dashboard widget. Returns null for a caller
+ * without `close.run` BEFORE any query runs. Reads `listCloseRuns`, the same
+ * reader as the /close workspace (and orgVitals), so the widget and the
+ * workspace tie by construction. Subsidiary-scoped callers read [] from the
+ * reader itself — the widget reports that honestly as empty.
+ */
+export async function loadCloseReadiness(authz: Authz): Promise<DashboardMetrics['closeRuns'] | null> {
+  if (!can(authz, 'close.run')) return null
+  const runs = await listCloseRuns(applicationContextFromSession(authz, 'api', randomUUID()), { limit: 5 })
+  return runs.map((run) => ({
+    id: run.id,
+    period: run.periodName,
+    book: run.bookCode,
+    status: run.status,
+    stage: run.currentStage,
+    targetCloseDate: run.targetCloseDate,
+  }))
+}
+
 export async function loadDashboardMetrics(
   authz: Authz,
   /**
@@ -251,7 +284,7 @@ export async function loadDashboardMetrics(
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
-  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeRuns, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -285,6 +318,8 @@ export async function loadDashboardMetrics(
     need('unreconciledItems') ? loadReconSummary(authz) : Promise.resolve(null),
     // Same gating shape for expenses.read.
     need('pendingExpenses') ? loadExpenseSummary(authz) : Promise.resolve(null),
+    // Same gating shape for close.run.
+    need('closeRuns') ? loadCloseReadiness(authz) : Promise.resolve(null),
     // Settlement-behaviour averages behind the forecast and the DSO/DPO
     // hints — the same paymentStats reader the cockpits feed into
     // scheduleForecast, so the tile prediction and the cockpit worklist
@@ -499,6 +534,7 @@ export async function loadDashboardMetrics(
     lowestCashWeek: runway?.lowestWeek ?? null,
     unreconciledItems: recon?.unreconciledItems ?? 0,
     pendingExpenses: expenses?.pendingExpenses ?? 0,
+    closeRuns: closeRuns ?? [],
     asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
@@ -547,6 +583,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'asOfDate'],
   'kpi-items-to-reconcile': ['unreconciledItems'],
   'kpi-expenses-awaiting-approval': ['pendingExpenses'],
+  'list-close-readiness': ['closeRuns'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -586,6 +623,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   lowestCashWeek: null,
   unreconciledItems: 0,
   pendingExpenses: 0,
+  closeRuns: [],
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],
