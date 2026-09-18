@@ -771,6 +771,21 @@
           "wcb": "Workers' compensation payable (employer premium)"
         }
       },
+      "DE": {
+        "title": "Germany \u2014 statutory accounts",
+        "description": "Liability accounts for the amounts the Germany pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "lohnsteuer": "Lohnsteuer payable (income tax withheld under the PAP)",
+          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag payable (surcharge on income tax)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer payable (church tax elected by the employee)",
+          "kv": "KV payable (employee + employer Krankenversicherung)",
+          "rv": "RV payable (employee + employer Rentenversicherung)",
+          "av": "AV payable (employee + employer Arbeitslosenversicherung)",
+          "pv": "PV payable (employee + employer Pflegeversicherung)",
+          "umlage": "Umlage payable (employer U1, U2 + Insolvenzgeldumlage)",
+          "unfall": "Berufsgenossenschaft payable (employer accident insurance)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {

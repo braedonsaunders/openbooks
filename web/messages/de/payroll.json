@@ -771,6 +771,21 @@
           "wcb": "Verbindlichkeiten aus Workers' compensation (Arbeitgeberpr\u00e4mie)"
         }
       },
+      "DE": {
+        "title": "Deutschland \u2014 gesetzliche Konten",
+        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das DE-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "lohnsteuer": "Verbindlichkeiten aus Lohnsteuer (Einkommensteuer nach PAP)",
+          "solidaritaetszuschlag": "Verbindlichkeiten aus Solidarit\u00e4tszuschlag (Zuschlag zur Einkommensteuer)",
+          "kirchenlohnsteuer": "Verbindlichkeiten aus Kirchenlohnsteuer (Kirchensteuer, vom Arbeitnehmer gew\u00e4hlt)",
+          "kv": "Verbindlichkeiten aus KV (Krankenversicherung von Arbeitnehmer und Arbeitgeber)",
+          "rv": "Verbindlichkeiten aus RV (Rentenversicherung von Arbeitnehmer und Arbeitgeber)",
+          "av": "Verbindlichkeiten aus AV (Arbeitslosenversicherung von Arbeitnehmer und Arbeitgeber)",
+          "pv": "Verbindlichkeiten aus PV (Pflegeversicherung von Arbeitnehmer und Arbeitgeber)",
+          "umlage": "Verbindlichkeiten aus Umlage (Arbeitgeber U1, U2 + Insolvenzgeldumlage)",
+          "unfall": "Verbindlichkeiten aus Berufsgenossenschaft (Arbeitgeber-Unfallversicherung)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

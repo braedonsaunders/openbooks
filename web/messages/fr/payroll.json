@@ -771,6 +771,21 @@
           "wcb": "Workers' compensation \u00e0 payer (prime employeur)"
         }
       },
+      "DE": {
+        "title": "Allemagne \u2014 comptes l\u00e9gaux",
+        "description": "Comptes de passif pour les montants que le pack allemand retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "slots": {
+          "lohnsteuer": "Lohnsteuer \u00e0 payer (imp\u00f4t sur le revenu)",
+          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag \u00e0 payer (surtaxe sur l\u2019imp\u00f4t sur le revenu)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer \u00e0 payer (imp\u00f4t eccl\u00e9siastique choisi par l\u2019employ\u00e9)",
+          "kv": "KV \u00e0 payer (Krankenversicherung employ\u00e9 et employeur)",
+          "rv": "RV \u00e0 payer (Rentenversicherung employ\u00e9 et employeur)",
+          "av": "AV \u00e0 payer (Arbeitslosenversicherung employ\u00e9 et employeur)",
+          "pv": "PV \u00e0 payer (Pflegeversicherung employ\u00e9 et employeur)",
+          "umlage": "Umlage \u00e0 payer (U1, U2 et Insolvenzgeldumlage employeur)",
+          "unfall": "Berufsgenossenschaft \u00e0 payer (assurance accidents employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {
