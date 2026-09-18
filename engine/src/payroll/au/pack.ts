@@ -7,11 +7,16 @@
  * workers' compensation — plus the TFN declaration, the STP filing, and
  * named refusals for everything not yet transcribed.
  *
- * `installable: false` until a tax year is transcribed. The `country` field
- * cannot yet join the `PayrollCountry` union (`'CA' | 'US'` at
- * ../packs.ts), so the pack is typed to match that interface in every other
- * respect and registers once Orchestrate opens the union — see
- * packs/proposals/payroll-country-union.md (gb-payroll owns the propose).
+ * `installable: true` since FY 2026–27 transcribes Schedule 1 scales 1–3
+ * (with and without the Schedule 8 STSL component) from the registered
+ * instrument F2026L00716. Supported: TFN-quoted residents on scales 1–2,
+ * foreign residents on scale 3. Refused by name: scale 4 (no TFN), scales
+ * 5–6 (Medicare exemption declarations), Schedule 15 (working holiday
+ * makers), every other schedule, and non-standard pay frequencies — see
+ * AU_REFUSED_2027. The `country` field cannot yet join the `PayrollCountry`
+ * union (`'CA' | 'US'` at ../packs.ts), so the pack is typed to match that
+ * interface in every other respect and registers once Orchestrate opens the
+ * union — see packs/proposals/payroll-country-union.md.
  */
 import type {
   PayrollCountryPack,
@@ -36,7 +41,7 @@ const AU_REGIONS: PayrollRegionCoverage = {
 
 export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {
   country: "AU",
-  installable: false,
+  installable: true,
   statutoryCurrency: "AUD",
   // The ATO financial year opens 1 July and is named for the year it closes
   // (2025–26 opens 1 July 2025). Data on the pack, not a code branch.
