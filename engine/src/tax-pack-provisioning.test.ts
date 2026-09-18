@@ -5,8 +5,10 @@ import test from "node:test";
 import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./tax-pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 import {
+  assertPackCodeRateSchedule,
   COUNTRY_TAX_PACKS,
   countryTaxPackForReturn,
+  packRatesCoveringDate,
   packReturnCodesWithTaxCodes,
   packTaxCodesForReturn,
   primaryPackTaxCode,
@@ -15,11 +17,9 @@ import type { EffectiveTaxRate } from "./country-tax-packs/types.ts";
 
 test("every default tax code has an explicit effective-dated rate schedule", () => {
   for (const [packCode, definition] of Object.entries(PACK_DEFAULT_CODES)) {
-    assert.ok(definition.rates?.length, `missing effective-dated rates for ${packCode}`);
-    const openEnded = definition.rates.filter((rate) => rate.effectiveTo === undefined);
-    assert.equal(openEnded.length, 1, `${packCode} must have exactly one current open-ended rate`);
-    assert.equal(definition.rates.at(-1), openEnded[0], `${packCode} current rate must be last`);
-    assert.equal(definition.ratePercent, openEnded[0]!.ratePercent, `${packCode} headline rate is stale`);
+    // Covers-today invariant (F-tax-sunset-001) against the real today; the
+    // shape checks below are date-arithmetic, not today-dependent.
+    assertPackCodeRateSchedule(packCode, definition);
     for (const [index, rate] of definition.rates.entries()) {
       assert.match(rate.effectiveFrom, /^\d{4}-\d{2}-\d{2}$/);
       assert.equal(new Date(`${rate.effectiveFrom}T00:00:00Z`).toISOString().slice(0, 10), rate.effectiveFrom);
@@ -143,14 +143,78 @@ test("every declared code in every return set carries a valid effective-dated sc
     for (const code of packReturnCodesWithTaxCodes(pack)) {
       for (const definition of packTaxCodesForReturn(pack, code)) {
         const label = `${pack.code}/${code}/${definition.code}`;
-        assert.ok(definition.rates?.length, `missing effective-dated rates for ${label}`);
-        const openEnded = definition.rates.filter((rate) => rate.effectiveTo === undefined);
-        assert.equal(openEnded.length, 1, `${label} must have exactly one current open-ended rate`);
-        assert.equal(definition.rates.at(-1), openEnded[0], `${label} current rate must be last`);
-        assert.equal(definition.ratePercent, openEnded[0]!.ratePercent, `${label} headline rate is stale`);
+        assertPackCodeRateSchedule(label, definition);
       }
     }
   }
+});
+
+test("a band in force today with a published end date satisfies the schedule guard", () => {
+  // A decree-style band: current now, closed in the future. The old
+  // open-ended-only guard rejected exactly this shape.
+  const definition = {
+    code: "DEMO-TEMP",
+    name: "Demo temporary band",
+    ratePercent: 8,
+    rates: [
+      { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+      { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+    ],
+  };
+  assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", definition, "2026-09-17");
+});
+
+test("a code whose band ended yesterday fails naming the code, the band, and the missing successor rate", () => {
+  const definition = {
+    code: "DEMO-TEMP",
+    name: "Demo temporary band",
+    ratePercent: 8,
+    rates: [
+      { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+      { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+    ],
+  };
+  assert.throws(
+    () => assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", definition, "2027-01-01"),
+    /DEMO\/RETURN\/DEMO-TEMP has no rate covering 2027-01-01.*8% from 2026-01-01.*2026-12-31.*successor rate/,
+  );
+});
+
+test("the schedule guard rejects zero or multiple current bands and a stale headline", () => {
+  const history = [
+    { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+    { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+  ];
+  // Headline must track the rate current today, not history and not the future.
+  assert.throws(
+    () => assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", { code: "DEMO-TEMP", name: "Demo", ratePercent: 16, rates: history }, "2026-09-17"),
+    /DEMO\/RETURN\/DEMO-TEMP headline rate is stale/,
+  );
+  // Two bands covering today is ambiguous, never admitted.
+  assert.throws(
+    () =>
+      assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
+        code: "DEMO-TEMP",
+        name: "Demo",
+        ratePercent: 8,
+        rates: [
+          ...history,
+          { ratePercent: 10, effectiveFrom: "2026-06-01", sourceId: "demo_overlap" },
+        ],
+      }, "2026-09-17"),
+    /DEMO\/RETURN\/DEMO-TEMP has 2 rates covering 2026-09-17/,
+  );
+  // No band in force yet is a nameable failure, not a silent pass.
+  assert.throws(
+    () =>
+      assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
+        code: "DEMO-TEMP",
+        name: "Demo",
+        ratePercent: 8,
+        rates: [{ ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" }],
+      }, "2025-12-31"),
+    /DEMO\/RETURN\/DEMO-TEMP has no rate covering 2025-12-31/,
+  );
 });
 
 test("Canada GST history is effective-dated instead of backdating the current rate", () => {
@@ -204,8 +268,10 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
     }
     assert.ok(definition, `${jurisdiction.region} is missing its statewide/base rate`);
     assert.ok(definition.rates?.length, `${jurisdiction.region} is missing an effective-dated schedule`);
-    const active = definition.rates.find((rate) =>
-      rate.effectiveFrom <= reviewDate && (!rate.effectiveTo || rate.effectiveTo >= reviewDate));
+    // Same covers-date predicate as the channel guard, pinned to the pack
+    // review date instead of today: jurisdiction data goes stale by version,
+    // not by calendar.
+    const active = packRatesCoveringDate(definition.rates, reviewDate)[0];
     assert.ok(active, `${jurisdiction.region} has no rate effective on the pack review date`);
     assert.equal(active.ratePercent, definition.ratePercent, `${jurisdiction.region} headline rate is not current`);
   }
