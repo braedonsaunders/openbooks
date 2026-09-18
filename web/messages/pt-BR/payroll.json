@@ -726,6 +726,15 @@
           "local_income_tax": "Imposto de renda local a recolher"
         }
       },
+      "NL": {
+        "title": "Países Baixos — contas oficiais (Belastingdienst)",
+        "description": "Contas de passivo para os valores que o pacote dos Países Baixos retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "loonheffing": "Loonheffing a recolher (imposto salarial + seguro nacional)",
+          "werknemersverzekeringen": "Werknemersverzekeringen a recolher (WW, Aof + Whk do empregador)",
+          "zvw": "Zvw a recolher (contribuição patronal de saúde)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

@@ -726,6 +726,15 @@
           "local_income_tax": "Impôt local sur le revenu à payer"
         }
       },
+      "NL": {
+        "title": "Pays-Bas — comptes légaux Belastingdienst",
+        "description": "Comptes de passif pour les montants que le pack néerlandais retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "loonheffing": "Loonheffing à payer (impôt sur les salaires + assurance nationale)",
+          "werknemersverzekeringen": "Werknemersverzekeringen à payer (part employeur WW, Aof + Whk)",
+          "zvw": "Zvw à payer (cotisation maladie employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

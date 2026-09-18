@@ -726,6 +726,15 @@
           "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer"
         }
       },
+      "NL": {
+        "title": "Niederlande — gesetzliche Belastingdienst-Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das NL-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "loonheffing": "Verbindlichkeiten aus Loonheffing (Lohnsteuer + Sozialversicherung)",
+          "werknemersverzekeringen": "Verbindlichkeiten aus Werknemersverzekeringen (Arbeitgeber WW, Aof + Whk)",
+          "zvw": "Verbindlichkeiten aus Zvw (Arbeitgeber-Krankenversicherung)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {

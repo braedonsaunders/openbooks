@@ -726,6 +726,15 @@
           "local_income_tax": "地方所得税未払金"
         }
       },
+      "NL": {
+        "title": "オランダ — Belastingdienst法定勘定",
+        "description": "オランダパックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "loonheffing": "Loonheffing未払金（賃金税＋国民保険）",
+          "werknemersverzekeringen": "Werknemersverzekeringen未払金（事業主負担WW・Aof＋Whk）",
+          "zvw": "Zvw未払金（事業主負担医療保険料）"
+        }
+      },
       "ratesLink": "事業主が入力する料率 — 失業保険税、医療負担金 — は法定料率タブにあります。"
     },
     "usConfig": {

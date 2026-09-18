@@ -726,6 +726,15 @@
           "local_income_tax": "Local income tax payable"
         }
       },
+      "NL": {
+        "title": "Netherlands — Belastingdienst statutory accounts",
+        "description": "Liability accounts for the amounts the Netherlands pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "loonheffing": "Loonheffing payable (wage tax + national insurance)",
+          "werknemersverzekeringen": "Werknemersverzekeringen payable (employer WW, Aof + Whk)",
+          "zvw": "Zvw payable (employer health-insurance contribution)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
