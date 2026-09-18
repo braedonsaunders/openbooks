@@ -133,6 +133,10 @@ async function postBank(
   },
 ): Promise<void> {
   const entry = randomUUID();
+  // Own maintenance transaction: postBank's journal guard must see committed
+  // subsidiary/account rows, so callers stage reference seeds in an earlier
+  // committed block (a nested transaction cannot see the caller's uncommitted
+  // writes, and a context-only scope would escape to the pool).
   await withBypass(async () => {
   await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
     values (${entry}, ${org.orgId}, ${opts.book ?? org.bookId}, ${opts.sub ?? org.subsidiaryId},
@@ -175,8 +179,8 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
   const org = await withBypass(() => createScratchOrg());
   try {
     await withBypass(async () => {
-      const june = await ensurePeriod(org.orgId, 2026, 6, "2026-06-01", "2026-06-30");
-      const august = await ensurePeriod(org.orgId, 2026, 8, "2026-08-01", "2026-08-31");
+      await ensurePeriod(org.orgId, 2026, 6, "2026-06-01", "2026-06-30");
+      await ensurePeriod(org.orgId, 2026, 8, "2026-08-01", "2026-08-31");
       const usSub = randomUUID();
       const usdBank = randomUUID();
       const dormantBank = randomUUID();
@@ -198,6 +202,17 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
       await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId}, 'USD', 'CAD', '2026-07-15'::date, 'spot', 1.35, 'manual')`);
+    });
+    // Postings run in a second committed block: each postBank opens its own
+    // maintenance transaction, which cannot see this block's uncommitted
+    // subsidiary/account rows — the journal subsidiary guard would raise.
+    await withBypass(async () => {
+      const june = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-06-01'`)).rows[0]!.id;
+      const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-08-01'`)).rows[0]!.id;
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
+      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`)).rows[0]!.id;
+      const dormantBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1020'`)).rows[0]!.id;
+      const taxBook = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`)).rows[0]!.id;
       // Summary branch (June) + sliver branch (July) on the root bank.
       await postBank(org, { amount: "500.0000", date: "2026-06-20", period: june, label: "root-jun" });
       await postBank(org, { amount: "1000.0000", label: "root-jul" });

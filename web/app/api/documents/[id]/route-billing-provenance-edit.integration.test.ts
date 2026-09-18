@@ -131,6 +131,11 @@ test('removing a billed-time line from the draft frees its entry', { skip: !DB }
     state.orgId = org.orgId
     state.actorId = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
     const { entries, invoiceId } = await billedTimeInvoice(org, state.actorId, 2)
+    // Generated lines order by (worked_on, id) with random UUIDs, so either
+    // entry may sit on line 1 — capture the order before the edit deletes
+    // the generated rows.
+    const order = (await db.execute<{ time_entry_id: string }>(sql`select time_entry_id from document_lines where document_id = ${invoiceId} and org_id = ${org.orgId} and time_entry_id is not null order by line_number`)).rows.map((row) => row.time_entry_id)
+    assert.deepEqual([...order].sort(), [...entries].sort())
     const saved = await patchDoc(org.orgId, invoiceId, {
       expectedUpdatedAt: await revision(org.orgId, invoiceId),
       lines: [{
@@ -142,12 +147,14 @@ test('removing a billed-time line from the draft frees its entry', { skip: !DB }
       }],
     })
     assert.equal(saved.status, 200, `replacing the generated lines must save, got ${saved.status}: ${JSON.stringify(saved.json)}`)
-    // The kept position stays billed to the invoice; the dropped line no
-    // longer bills its entry — it returns to unbilled instead of pointing
-    // at a deleted row or staying stranded as billed.
-    const kept = (await db.execute<{ status: string; line_document: string | null }>(sql`select billing_status as status, (select document_id::text from document_lines where id = te.invoiced_by_line_id and org_id = te.org_id) as line_document from time_entries te where id=${entries[0]!} and org_id=${org.orgId}`)).rows[0]!
+    // The replacement inherits positionally, not by creation order: the entry
+    // on line 1 stays billed to the invoice, the dropped line's entry returns
+    // to unbilled instead of pointing at a deleted row or stranding.
+    const keptId = order[0]!
+    const freedId = entries.find((id) => id !== keptId)!
+    const kept = (await db.execute<{ status: string; line_document: string | null }>(sql`select billing_status as status, (select document_id::text from document_lines where id = te.invoiced_by_line_id and org_id = te.org_id) as line_document from time_entries te where id=${keptId} and org_id=${org.orgId}`)).rows[0]!
     assert.deepEqual(kept, { status: 'billed', line_document: invoiceId })
-    const freed = (await db.execute<{ status: string; link: string | null }>(sql`select billing_status as status, invoiced_by_line_id::text as link from time_entries where id=${entries[1]!} and org_id=${org.orgId}`)).rows[0]!
+    const freed = (await db.execute<{ status: string; link: string | null }>(sql`select billing_status as status, invoiced_by_line_id::text as link from time_entries where id=${freedId} and org_id=${org.orgId}`)).rows[0]!
     assert.deepEqual(freed, { status: 'unbilled', link: null })
   } finally {
     await dropScratchOrg(org.orgId)
