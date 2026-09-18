@@ -16,12 +16,10 @@
  * row-selection rule was not obtainable); herleidingssituaties and
  * eindheffing tables are not transcribed (see `rates.ts`).
  *
- * Registration is blocked upstream: `PayrollCountry` is still `"CA" | "US"`
- * (`engine/src/payroll/packs.ts`), so this object is typed as the pack with
- * only `country` widened — it registers unchanged once Orchestrate opens the
- * type (see `packs/proposals/payroll-country-union.md`). This module is
- * imported by nothing outside `engine/src/payroll/nl/` and registers nothing
- * in any generic registry, so the CA/US goldens cannot move.
+ * REGISTERED and installable: `PayrollCountry` is now `keyof typeof
+ * PAYROLL_COUNTRY_PACKS`. (This was written while the union was closed, when
+ * the pack registered nothing and was imported by nothing outside
+ * `engine/src/payroll/nl/`; both of those statements are now false.)
  */
 import { PayrollError } from "../../payroll-error.ts";
 import type { PayrollFilingData, PayrollPackFilings } from "../../payroll-filing-registry.ts";

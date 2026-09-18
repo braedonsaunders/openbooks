@@ -23,11 +23,9 @@
  * from 2023; part-time entitlement after 40 hours in the previous 5 weeks;
  * the employer selects the benefit form).
  *
- * `country` is typed `string`, not `PayrollCountry`: the union at packs.ts:190
- * is still `'CA' | 'US'`, so a third pack cannot typecheck its `country`
- * field yet. See packs/proposals/payroll-country-union.md (gb-payroll's
- * propose — do not send a second one). This object registers unchanged once
- * Orchestrate opens the type.
+ * REGISTERED: `PayrollCountry` is now `keyof typeof PAYROLL_COUNTRY_PACKS`, so
+ * this pack is in the registry and installable. (It was written while the
+ * union was closed, with `country` typed `string` to get past it.)
  */
 import { sql } from "drizzle-orm";
 import { add, neg } from "../../money.ts";

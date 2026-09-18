@@ -1,15 +1,10 @@
 /**
- * The GB payroll country pack, assembled and ready to register.
+ * The GB payroll country pack — registered on `PAYROLL_COUNTRY_PACKS`.
  *
- * NOT REGISTERED on `PAYROLL_COUNTRY_PACKS`. The pack interface's `country`
- * member is typed `PayrollCountry` (`"CA" | "US"`, packs.ts:190) — a closed
- * union this shard must not widen by edit, because that union is another
- * country list and widening it here is exactly the country branch the fleet
- * doctrine forbids. Wiring needs Orchestrate to open `PayrollCountry` to the
- * registry keys (or otherwise bless a third pack); see the FLEET-PROPOSE this
- * shard sends. Until then this module is the complete pack behind one symbol,
- * with no `as PayrollCountry` cast and no `=== "GB"` anywhere outside
- * `engine/src/payroll/gb/`.
+ * `PayrollCountry` is the registry's own keys, so no country list needs
+ * widening by hand. The property this module kept while the union was closed
+ * still holds and is worth keeping: no `as PayrollCountry` cast, and no
+ * `=== "GB"` anywhere outside `engine/src/payroll/gb/`.
  *
  * What the pack declares:
  * - statutory slots: PAYE income tax, Class 1 NIC employee (primary) and
