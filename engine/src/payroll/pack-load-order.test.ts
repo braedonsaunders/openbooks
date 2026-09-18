@@ -37,10 +37,24 @@ test("every registered pack loads before the registry is entered", () => {
     ES: ES_PAYROLL_PACK,
   } as const;
   assert.deepEqual(Object.keys(PAYROLL_COUNTRY_PACKS), [
-    "CA", "US", "GB", "DE", "FR", "IE", "AU", "IT", "NL", "ES",
+    // "IT" is held out pending F-reg-003 — see the comment at its registration
+    // site in packs.ts. Restore it here in the same change.
+    "CA", "US", "GB", "DE", "FR", "IE", "AU", "NL", "ES",
   ]);
+  // Held out of the registry, but it must still LOAD cleanly — that is the
+  // load-order property this test exists for, and it is what proves the hold is
+  // a registration decision rather than a broken module.
+  const heldBack = new Set(["IT"]);
   for (const [country, pack] of Object.entries(packs)) {
     assert.equal(pack.country, country, `${country} pack country`);
+    if (heldBack.has(country)) {
+      assert.equal(
+        PAYROLL_COUNTRY_PACKS[country],
+        undefined,
+        `${country} is held out pending F-reg-003 — restore it here and in packs.ts together`,
+      );
+      continue;
+    }
     assert.equal(
       PAYROLL_COUNTRY_PACKS[country]?.country,
       country,
@@ -64,6 +78,12 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
   // order happens to hit first, so this scan is the thing that actually holds.
   //
   // TYPE-only imports from packs.ts are fine — they are erased at runtime.
+  //
+  // LIMIT, worth knowing: this scan only sees a pack importing packs.ts
+  // DIRECTLY. It cannot see a transitive cycle — F-reg-003 runs
+  // packs.ts -> it/pack.ts -> it/compute-statutory.ts -> ../statutory-rates.ts
+  // -> packs.ts, two hops out, and this test passes while the registry crashes.
+  // The load probe above is what actually holds that invariant. Keep both.
   const root = join("engine", "src", "payroll");
   const offenders: string[] = [];
   for (const country of readdirSync(root, { withFileTypes: true })) {
