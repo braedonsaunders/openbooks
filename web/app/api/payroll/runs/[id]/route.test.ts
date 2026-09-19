@@ -75,6 +75,12 @@ const mockSources = new Map<string, string>([
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
+      // The route also imports the partial-refusal acknowledgement (landed
+      // alongside this discard path). A mock that omits an export the route
+      // imports makes the whole module fail to instantiate, so this file
+      // registered ZERO tests rather than failing loudly — which is why the
+      // mock-surface guard exists.
+      export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
       export async function discardPayRun(input) {
         state.discardCalls.push(input)
         if (state.discardBehavior === 'committed') {

@@ -8,7 +8,7 @@ import { calculatePayRun, commitPayRun, createPayRun } from "./payroll-run.ts";
 import { payRunStaleness } from "./payroll-readiness.ts";
 import { dropScratchOrgReporting } from "./test-fixtures.ts";
 
-const SKIP = !process.env.OPENBOOKS_DB_URL;
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function makeAccount(orgId: string, number: string, name: string, type: string): Promise<string> {
   const id = randomUUID();
@@ -84,7 +84,7 @@ async function moneySnapshot(orgId: string, documentId: string) {
   return { stubs, lines };
 }
 
-test("same time type across two items splits into two lines with an identical total", { skip: SKIP }, async () => {
+test("same time type across two items splits into two lines with an identical total", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     // The actual use case end to end at calculate level: production work
@@ -119,7 +119,7 @@ test("same time type across two items splits into two lines with an identical to
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test("mapping items changes no money: gross, statutory lines and net are byte-identical", { skip: SKIP }, async () => {
+test("mapping items changes no money: gross, statutory lines and net are byte-identical", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     // Entries carry items from the start, but neither item names an account:
@@ -151,7 +151,7 @@ test("mapping items changes no money: gross, statutory lines and net are byte-id
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test("unmapped items and item-less hours fall through to the component account", { skip: SKIP }, async () => {
+test("unmapped items and item-less hours fall through to the component account", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     const componentAccount = await makeAccount(fx.orgId, "6030", "Component Wages", "expense");
@@ -176,7 +176,7 @@ test("unmapped items and item-less hours fall through to the component account",
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test("one employee on two items posts two journal debits with the right amounts", { skip: SKIP }, async () => {
+test("one employee on two items posts two journal debits with the right amounts", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     const cogs = await makeAccount(fx.orgId, "5300", "Production Labour", "cogs");
@@ -211,7 +211,7 @@ test("one employee on two items posts two journal debits with the right amounts"
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test("editing an item account after calculate refuses the commit as stale, then posts the new account", { skip: SKIP }, async () => {
+test("editing an item account after calculate refuses the commit as stale, then posts the new account", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     const first = await makeAccount(fx.orgId, "5300", "Production Labour", "cogs");
@@ -249,7 +249,7 @@ test("editing an item account after calculate refuses the commit as stale, then 
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test("recalculate re-stamps a draft; a committed stamp is immutable", { skip: SKIP }, async () => {
+test("recalculate re-stamps a draft; a committed stamp is immutable", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
     const first = await makeAccount(fx.orgId, "5300", "Production Labour", "cogs");
