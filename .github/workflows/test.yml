@@ -49,9 +49,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
-      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/4
+      OPENBOOKS_TEST_SHARD: ${{ matrix.shard }}/5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
