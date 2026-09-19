@@ -107,7 +107,10 @@ const hooks = registerHooks({
   },
 });
 
-const { GET, POST } = (await import("./route.ts?email-action-refusal")) as typeof import("./route.ts");
+// Query-string suffix busts the module cache so the mocked graph above is
+// honoured; kept in a variable so the type checker resolves "./route.ts".
+const routeUrl = "./route.ts?email-action-refusal";
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 function reset(): void {
