@@ -48,18 +48,23 @@ async function employee(
   orgId: string, scheduleId: string, name: string, country: string, province: string,
 ): Promise<string> {
   const id = randomUUID()
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`)
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id, terminated_on)
-    values (${randomUUID()}, ${orgId}, ${id}, null)`)
-  await db.execute(sql`
-    insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
-       created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, ${country}, ${province}, 'salary', true,
-            ${state.actorId}, ${state.actorId})`)
+  // Fixture seeds run under an explicit bypass: this file eagerly loads a web
+  // route, which replaces the process-wide test resolver, so an unscoped
+  // INSERT dies on RLS and an unscoped UPDATE silently matches zero rows.
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`)
+    await db.execute(sql`
+      insert into employee_roles (id, org_id, party_id, terminated_on)
+      values (${randomUUID()}, ${orgId}, ${id}, null)`)
+    await db.execute(sql`
+      insert into employee_payroll_profiles
+        (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
+         created_by, updated_by)
+      values (${orgId}, ${id}, ${scheduleId}, ${country}, ${province}, 'salary', true,
+              ${state.actorId}, ${state.actorId})`)
+  })
   return id
 }
 
