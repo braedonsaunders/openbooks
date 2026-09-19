@@ -22,6 +22,7 @@
     "recoveryAccount": "成本回收科目",
     "incomeAccount": "收入科目",
     "expenseAccount": "费用科目",
+    "payrollCostingAccount": "工资成本科目",
     "taxCode": "税码"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "小时",
     "noIncomeAccount": "无收入科目",
     "noExpenseAccount": "无费用科目",
+    "noPayrollCostingAccount": "无工资成本科目",
     "noRecoveryAccount": "无回收科目",
     "selectAccount": "选择科目…",
     "showOnTimesheet": "在工时表中显示"

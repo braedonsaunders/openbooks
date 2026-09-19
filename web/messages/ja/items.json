@@ -22,6 +22,7 @@
     "recoveryAccount": "原価回収勘定",
     "incomeAccount": "収益勘定",
     "expenseAccount": "費用勘定",
+    "payrollCostingAccount": "給与原価勘定",
     "taxCode": "税コード"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "時間",
     "noIncomeAccount": "収益勘定なし",
     "noExpenseAccount": "費用勘定なし",
+    "noPayrollCostingAccount": "給与原価勘定なし",
     "noRecoveryAccount": "回収勘定なし",
     "selectAccount": "勘定を選択…",
     "showOnTimesheet": "タイムシートに表示"

@@ -22,6 +22,7 @@
     "recoveryAccount": "Cuenta de recuperación de costos",
     "incomeAccount": "Cuenta de ingresos",
     "expenseAccount": "Cuenta de gastos",
+    "payrollCostingAccount": "Cuenta de costo de nómina",
     "taxCode": "Código de impuesto"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "h",
     "noIncomeAccount": "Sin cuenta de ingresos",
     "noExpenseAccount": "Sin cuenta de gastos",
+    "noPayrollCostingAccount": "Sin cuenta de costo de nómina",
     "noRecoveryAccount": "Sin cuenta de recuperación",
     "selectAccount": "Seleccionar cuenta…",
     "showOnTimesheet": "Mostrar en la hoja de horas"

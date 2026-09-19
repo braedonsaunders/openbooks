@@ -16,7 +16,23 @@ interface AccountOpt {
   id: string
   number?: string | null
   name?: string | null
+  type?: string | null
 }
+
+/**
+ * Account types a service item may point its payroll costing at. Expense and
+ * COGS cover the ordinary cases; asset_current_other covers capitalised
+ * labour (every shipped inventory/WIP account carries exactly that type).
+ * Mirrors PAYROLL_COSTING_ACCOUNT_TYPES in web/app/api/items/[id]/route.ts —
+ * the server re-validates, so this filter is guidance, never a gate.
+ */
+const PAYROLL_COSTING_ACCOUNT_TYPES = new Set([
+  'expense',
+  'expense_other',
+  'expense_deferred',
+  'cogs',
+  'asset_current_other',
+])
 interface TaxOpt {
   id: string
   name?: string | null
@@ -39,6 +55,7 @@ interface ItemRecord {
   category: string | null
   income_account_id: string | null
   expense_account_id: string | null
+  payroll_expense_account_id: string | null
   deferred_account_id: string | null
   cost_recovery_account_id: string | null
   tax_code_id: string | null
@@ -58,6 +75,7 @@ interface ItemPayload {
   item: ItemRecord
   incomeAccountName: string | null
   expenseAccountName: string | null
+  payrollCostingAccountName: string | null
   taxCodeName: string | null
 }
 
@@ -151,6 +169,9 @@ export function ItemDrawer({
   )
   const [incomeAccountId, setIncomeAccountId] = useState<string>(it.income_account_id ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState<string>(it.expense_account_id ?? '')
+  const [payrollCostingAccountId, setPayrollCostingAccountId] = useState<string>(
+    it.payroll_expense_account_id ?? '',
+  )
   const [costRecoveryAccountId, setCostRecoveryAccountId] = useState<string>(it.cost_recovery_account_id ?? '')
   const [taxCodeId, setTaxCodeId] = useState<string>(it.tax_code_id ?? '')
   const [showOnTimesheet, setShowOnTimesheet] = useState<boolean>(it.show_on_timesheet === true)
@@ -180,6 +201,16 @@ export function ItemDrawer({
     () => accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
     [accounts],
   )
+  // Where worked hours may land: expense, COGS, or capitalised-labour asset
+  // accounts only. The server re-validates the type, so a stale or
+  // cross-org option here can never persist.
+  const payrollCostingOptions = useMemo(
+    () =>
+      accounts
+        .filter((a) => a.type == null || PAYROLL_COSTING_ACCOUNT_TYPES.has(a.type))
+        .map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
+    [accounts],
+  )
   const ruleOptions = useMemo(
     () => recognitionRules.map((r) => ({ value: r.id, label: `${r.code ? `${r.code} · ` : ''}${r.name ?? ''}`.trim() })),
     [recognitionRules],
@@ -200,6 +231,7 @@ export function ItemDrawer({
       defaultCost: defaultCost || null,
       incomeAccountId: incomeAccountId || null,
       expenseAccountId: expenseAccountId || null,
+      payrollExpenseAccountId: payrollCostingAccountId || null,
       costRecoveryAccountId: costRecoveryAccountId || null,
       taxCodeId: taxCodeId || null,
       ...(timeTracking ? { showOnTimesheet } : {}),
@@ -214,7 +246,7 @@ export function ItemDrawer({
         : {}),
       custom: customValues,
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, payrollCostingAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render).
@@ -237,6 +269,7 @@ export function ItemDrawer({
     setDefaultCost(preserveItemDecimal(it.default_cost))
     setIncomeAccountId(it.income_account_id ?? '')
     setExpenseAccountId(it.expense_account_id ?? '')
+    setPayrollCostingAccountId(it.payroll_expense_account_id ?? '')
     setCostRecoveryAccountId(it.cost_recovery_account_id ?? '')
     setTaxCodeId(it.tax_code_id ?? '')
     setShowOnTimesheet(it.show_on_timesheet === true)
@@ -489,6 +522,23 @@ export function ItemDrawer({
               />
             ) : (
               <p className="text-sm">{payload.expenseAccountName ?? '—'}</p>
+            )}
+          </div>
+          <div className={field}>
+            <Label>{t('labels.payrollCostingAccount')}</Label>
+            {editable ? (
+              <SearchSelect
+                value={payrollCostingAccountId}
+                onChange={setPayrollCostingAccountId}
+                options={payrollCostingOptions}
+                clearable
+                emptyLabel={t('drawer.noPayrollCostingAccount')}
+                placeholder={t('drawer.selectAccount')}
+                sheetTitle={t('labels.payrollCostingAccount')}
+                ariaLabel={t('labels.payrollCostingAccount')}
+              />
+            ) : (
+              <p className="text-sm">{payload.payrollCostingAccountName ?? '—'}</p>
             )}
           </div>
           <div className={field}>

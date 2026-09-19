@@ -22,6 +22,7 @@
     "recoveryAccount": "Compte de récupération des coûts",
     "incomeAccount": "Compte de produits",
     "expenseAccount": "Compte de charges",
+    "payrollCostingAccount": "Compte de coût de paie",
     "taxCode": "Code de taxe"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "h",
     "noIncomeAccount": "Aucun compte de produits",
     "noExpenseAccount": "Aucun compte de charges",
+    "noPayrollCostingAccount": "Aucun compte de coût de paie",
     "noRecoveryAccount": "Aucun compte de récupération",
     "selectAccount": "Sélectionner un compte…",
     "showOnTimesheet": "Afficher sur la feuille de temps"

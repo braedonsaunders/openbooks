@@ -542,6 +542,11 @@ export const items = pgTable(
     category: text("category"), // Absence / Consumables / Equipment / Labor / Services
     incomeAccountId: uuid("income_account_id"),
     expenseAccountId: uuid("expense_account_id"),
+    /** Where hours worked on this item are costed at payroll calculate time.
+     * Null = the item has no opinion; resolution falls through to the pay
+     * component, then the org wage/burden default. Distinct from
+     * expenseAccountId (what this costs when you BUY it). */
+    payrollExpenseAccountId: uuid("payroll_expense_account_id"),
     defaultRate: money("default_rate"),
     /** Standard COST per unit — job cost when the item is charged to a project
      *  (the cost side of a resource_usage/project_charge). Distinct from
