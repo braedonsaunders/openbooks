@@ -521,7 +521,7 @@ test("submitted history cannot be deleted; pure drafts can", { skip: !DB, timeou
   });
 });
 
-test("bare submit flip without stamps, run, and reason is refused", { skip: !DB, timeout: 120_000 }, async (t) => {
+test("submit demands atomic evidence: bare flip refused, complete submit accepted", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
   await isolated(h, async () => {
     const id = await insertDraft(h);
@@ -530,8 +530,20 @@ test("bare submit flip without stamps, run, and reason is refused", { skip: !DB,
       /atomically/,
       "draft -> pending_approval without submission evidence must be refused",
     );
-    const row = await readRequest(h, id);
-    assert.equal(row.status, "draft");
+    const refused = await readRequest(h, id);
+    assert.equal(refused.status, "draft");
+    // Positive control: the same transition with stamps, run, and reason
+    // commits — the refusal above is about missing evidence, not the flip.
+    const runId = await makeFlowRun(h, id);
+    await h.run.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'pending_approval', reason = 'department transfer',
+             submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
+       where id = ${id}`);
+    const submitted = await readRequest(h, id);
+    assert.equal(submitted.status, "pending_approval");
+    assert.equal(submitted.submitted_at === null, false);
+    assert.equal(submitted.flow_run_id, runId);
   });
 });
 
@@ -552,7 +564,7 @@ test("row id and created_at freeze from insert", { skip: !DB, timeout: 120_000 }
   });
 });
 
-test("snapshot binding is null-safe and typed: null, missing, wrong-type, and mismatch all refused", { skip: !DB, timeout: 120_000 }, async (t) => {
+test("snapshot binding is two-valued: presence plus typeof pins refuse null, missing, wrong-type, and mismatch", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
   await isolated(h, async () => {
     const id = await insertDraft(h);
@@ -568,12 +580,17 @@ test("snapshot binding is null-safe and typed: null, missing, wrong-type, and mi
     delete withoutDigest.payload_digest;
     const withoutGates = { ...good };
     delete withoutGates.gates;
+    // Every variant below must evaluate the binding CHECK to FALSE (never
+    // UNKNOWN): a missing key fails `?`, a present JSON null fails its
+    // typeof pin, a wrong scalar type fails its typeof pin, and a wrong
+    // value fails the equality against two non-null sides.
     const variants: Array<[string, Record<string, unknown>]> = [
       ["json-null digest", { ...good, payload_digest: null }],
       ["missing digest key", withoutDigest],
       ["missing gates key", withoutGates],
       ["gates not array", { ...good, gates: { gate_id: randomUUID() } }],
       ["string revision", { ...good, expected_employment_revision: "1" }],
+      ["non-integral revision", { ...good, expected_employment_revision: 1.5 }],
       ["wrong revision", { ...good, expected_employment_revision: 2 }],
       ["wrong flow run", { ...good, flow_run_id: randomUUID() }],
       ["json-null flow run", { ...good, flow_run_id: null }],
@@ -591,6 +608,20 @@ test("snapshot binding is null-safe and typed: null, missing, wrong-type, and mi
     const still = await readRequest(h, id);
     assert.equal(still.status, "pending_approval");
     assert.equal(still.decision_snapshot, null);
+    // Revision binds by INTEGRAL VALUE, not representation: JSON 1.0 denotes
+    // the same counter as JSON 1 and must approve. JSON.stringify drops the
+    // ".0", so the .0 form is spliced into the raw text deliberately.
+    const floatForm = JSON.stringify(good).replace(
+      '"expected_employment_revision":1,',
+      '"expected_employment_revision":1.0,',
+    );
+    assert.ok(floatForm.includes("1.0"), "float revision form must be present in the probe JSON");
+    await h.run.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'approved', decision_snapshot = ${floatForm}::jsonb
+       where id = ${id}`);
+    const approved = await readRequest(h, id);
+    assert.equal(approved.status, "approved");
   });
 });
 
