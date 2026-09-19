@@ -1644,6 +1644,69 @@ export function payrollTaxYearForDate(country: string, date: string): {
 }
 
 /**
+ * The tax years a filing surface may offer, derived from the PACKS — never
+ * from the calendar year.
+ *
+ * A picker built from "the current calendar year and the five before it" is
+ * right for a calendar-year country and wrong for every fiscal-year one: a
+ * September pay date falls in AU tax year 2027 (1 July basis, named for the
+ * closing year) while the calendar still reads 2026, so the year the operator
+ * just paid was unreachable from the finalisation surface — an STP
+ * finalisation that cannot be started. GB (6 April, opening-year naming) can
+ * never strand a posted year this way, but the same calendar derivation gave
+ * it the wrong DEFAULT in January–March (the calendar's new year while the
+ * pack is still in the old one).
+ *
+ * The range is the six-year window ending at the newest year the packs or
+ * the data name — the packs' current tax years, their declared editions, and
+ * the years actually present in the org's payroll data — unioned with every
+ * declared edition and every data year (a posted run's year is offered even
+ * when it falls outside the window). The first element is the default: the
+ * pack's current tax year, not the calendar's. The calendar year is never a
+ * candidate on its own — appending it would re-hide the basis bug for the
+ * next fiscal pack — and serves only as the fallback when no pack is
+ * installed and no data exists yet. Unknown country codes are skipped — an
+ * undeclared pack contributes nothing rather than refusing the whole surface.
+ */
+export function payrollFilingYearOptions(input: {
+  /** The org's business day (ISO date), never UTC today. */
+  today: string;
+  /** Installed pack countries. */
+  countries: readonly string[];
+  /** Tax years actually present in the org's payroll data (posted stubs, carry-ins). */
+  dataYears?: readonly number[];
+}): number[] {
+  const dataYears = (input.dataYears ?? []).filter((year) => Number.isInteger(year));
+  const packYears: number[] = [];
+  const editionYears: number[] = [];
+  for (const country of input.countries) {
+    try {
+      packYears.push(payrollTaxYearForDate(country, input.today).taxYear);
+    } catch {
+      continue;
+    }
+    const support = payrollTaxYearSupport(country);
+    editionYears.push(...payrollSupportedTaxYears(support), ...payrollDraftTaxYears(support));
+  }
+  const named = [...packYears, ...editionYears, ...dataYears];
+  let top = Math.max(...named);
+  if (!Number.isInteger(top)) {
+    // No pack names a year yet (nothing installed, or an undeclared country):
+    // the calendar window is the only honest answer. Anything else here —
+    // including a malformed business date — refuses rather than offering NaN.
+    const calendar = Number(input.today.slice(0, 4));
+    if (!Number.isInteger(calendar)) {
+      throw new PayrollJurisdictionError(`invalid business date "${input.today}"`);
+    }
+    top = calendar;
+  }
+  const years = new Set<number>(dataYears);
+  for (const edition of editionYears) years.add(edition);
+  for (let year = top; year > top - 6; year--) years.add(year);
+  return [...years].sort((a, b) => b - a);
+}
+
+/**
  * The run's resolved jurisdiction: ONE country, ONE legal entity, ONE
  * currency, ONE tax year, computed at calculate time and passed down instead
  * of being re-derived per employee, per query and per filing artifact.
