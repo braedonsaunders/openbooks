@@ -55,7 +55,8 @@
     "projectedAmount": "Valor projetado",
     "periodStart": "Início do período",
     "periodEnd": "Fim do período",
-    "weightedAmount": "Valor ponderado"
+    "weightedAmount": "Valor ponderado",
+    "stage": "Estágio"
   },
   "accounts": {
     "newFallback": "Nova conta",
@@ -88,7 +89,15 @@
       "closedLost": "Perdido",
       "active": "Ativo",
       "inactive": "Inativo"
-    }
+    },
+    "allTitle": "Todas as contas",
+    "allDescription": "Todos os relacionamentos em uma única lista, em qualquer estágio do ciclo de vida.",
+    "relationshipHeading": "Perfil do relacionamento",
+    "untrackedTitle": "Ainda sem perfil de relacionamento",
+    "untrackedDescription": "Esta conta não tem estágio, responsável nem território registrados. Inicie o acompanhamento para gerenciá-la como um relacionamento.",
+    "startTracking": "Iniciar acompanhamento",
+    "stageReason": "Motivo do retrocesso",
+    "stageReasonHint": "Retroceder uma conta no ciclo de vida é registrado junto com o seu motivo."
   },
   "activities": {
     "title": "Atividades",
@@ -148,12 +157,6 @@
       "closedWon": "Ganho",
       "closedLost": "Perdido"
     }
-  },
-  "customer360": {
-    "title": "Cliente 360",
-    "description": "Pipeline comercial unificado, aging de recebíveis, limite de crédito, DSO e telemetria de interações.",
-    "emptyTitle": "Nenhum cliente encontrado",
-    "emptyDescription": "Adicione um cliente para ver a telemetria do Cliente 360."
   },
   "forecastCategories": {
     "omitted": "Omitido",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "Não foi possível criar o rascunho."
+  },
+  "pulse": {
+    "creditHold": "Crédito bloqueado",
+    "terms": "Condições: {terms}",
+    "holdReason": "Motivo do bloqueio:",
+    "openReceivables": "Total de contas a receber em aberto",
+    "overdue": "{amount} em atraso",
+    "allCurrent": "Tudo em dia",
+    "dso": "Prazo médio de recebimento (DSO)",
+    "days": "dias",
+    "customerAvg": "Média do cliente: {customer} d (organização: {org} d)",
+    "orgBenchmark": "Referência da organização: {org} d",
+    "creditHeadroom": "Crédito disponível",
+    "noLimit": "Nenhum limite definido",
+    "limitUsed": "Limite: {limit} ({percent}% utilizado)",
+    "unrestricted": "Crédito comercial sem restrição",
+    "pipelineValue": "Valor do funil ativo",
+    "winRate": "{percent}% de taxa de ganho ({won} ganhas)",
+    "openDeals": "{count} oportunidades em aberto",
+    "agingTitle": "Relatório de idade das contas a receber",
+    "agingDescription": "Contas a receber em aberto na data de hoje, classificadas por faixa de vencimento.",
+    "bucketCurrent": "A vencer",
+    "bucket1To30": "1–30 d",
+    "bucket31To60": "31–60 d",
+    "bucket61To90": "61–90 d",
+    "bucket90Plus": "90+ dias",
+    "creditTitle": "Compromisso de crédito",
+    "creditDescription": "Contas a receber mais pedidos de venda ainda não faturados.",
+    "creditLimit": "Limite de crédito",
+    "openInvoices": "Faturas em aberto (a receber)",
+    "unbilledOrders": "Pedidos de venda não faturados",
+    "headroom": "Margem disponível",
+    "uncapped": "Sem teto",
+    "projectsTitle": "Consolidação de projetos ativos",
+    "projectsCount": "{active} ativos / {total} no total",
+    "contractBudget": "Orçamento contratado",
+    "billedToDate": "Faturado até a data",
+    "billedProgress": "Progresso do faturamento",
+    "timelineTitle": "Linha do tempo de interações",
+    "timelineDescription": "Histórico cronológico de atividades, orçamentos, pedidos de venda, faturas e recebimentos.",
+    "timelineEmpty": "Nenhuma atividade ou transação registrada para esta conta.",
+    "loadFailed": "Não foi possível carregar o pulso desta conta."
   }
 }

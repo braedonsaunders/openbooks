@@ -55,7 +55,8 @@
     "projectedAmount": "Projected amount",
     "weightedAmount": "Weighted amount",
     "periodStart": "Period start",
-    "periodEnd": "Period end"
+    "periodEnd": "Period end",
+    "stage": "Stage"
   },
   "accounts": {
     "newFallback": "New account",
@@ -88,7 +89,15 @@
       "closedLost": "Closed lost",
       "active": "Active",
       "inactive": "Inactive"
-    }
+    },
+    "allTitle": "All accounts",
+    "allDescription": "Every relationship on one list, at every lifecycle stage.",
+    "relationshipHeading": "Relationship profile",
+    "untrackedTitle": "No relationship profile yet",
+    "untrackedDescription": "This account has no lifecycle stage, owner or territory on record. Start tracking to manage it as a relationship.",
+    "startTracking": "Start tracking",
+    "stageReason": "Reason for moving backward",
+    "stageReasonHint": "Moving an account back down the lifecycle is recorded with your reason."
   },
   "activities": {
     "title": "Activities",
@@ -148,12 +157,6 @@
       "closedWon": "Closed won",
       "closedLost": "Closed lost"
     }
-  },
-  "customer360": {
-    "title": "Customer 360",
-    "description": "Unified commercial pipeline, receivables aging, credit limit, DSO, and interaction telemetry.",
-    "emptyTitle": "No customers found",
-    "emptyDescription": "Add a customer to view their Customer 360 telemetry."
   },
   "forecastCategories": {
     "omitted": "Omitted",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "The draft could not be created."
+  },
+  "pulse": {
+    "creditHold": "Credit hold",
+    "terms": "Terms: {terms}",
+    "holdReason": "Hold reason:",
+    "openReceivables": "Total open receivables",
+    "overdue": "{amount} overdue",
+    "allCurrent": "All accounts current",
+    "dso": "Days sales outstanding (DSO)",
+    "days": "days",
+    "customerAvg": "Customer average: {customer}d (organization: {org}d)",
+    "orgBenchmark": "Organization benchmark: {org}d",
+    "creditHeadroom": "Credit headroom",
+    "noLimit": "No limit set",
+    "limitUsed": "Limit: {limit} ({percent}% used)",
+    "unrestricted": "Unrestricted commercial credit",
+    "pipelineValue": "Active pipeline value",
+    "winRate": "{percent}% win rate ({won} won)",
+    "openDeals": "{count} open deals",
+    "agingTitle": "A/R aging schedule",
+    "agingDescription": "Open receivables as of today, classified into aging intervals.",
+    "bucketCurrent": "Current",
+    "bucket1To30": "1–30d",
+    "bucket31To60": "31–60d",
+    "bucket61To90": "61–90d",
+    "bucket90Plus": "90+ days",
+    "creditTitle": "Credit commitment",
+    "creditDescription": "Receivables plus unbilled sales order commitments.",
+    "creditLimit": "Credit limit",
+    "openInvoices": "Open invoices (A/R)",
+    "unbilledOrders": "Unbilled sales orders",
+    "headroom": "Available headroom",
+    "uncapped": "Uncapped",
+    "projectsTitle": "Active project rollup",
+    "projectsCount": "{active} active / {total} total",
+    "contractBudget": "Contract budget",
+    "billedToDate": "Billed to date",
+    "billedProgress": "Billed progress",
+    "timelineTitle": "Interaction timeline",
+    "timelineDescription": "Chronological history of activities, quotes, sales orders, invoices, and payments.",
+    "timelineEmpty": "No recorded activities or transactions for this account.",
+    "loadFailed": "Unable to load this account's pulse."
   }
 }

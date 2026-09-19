@@ -6,6 +6,52 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+No migrations.
+
+### Changed
+
+- One account surface across the relationship lifecycle. Leads, prospects and
+  customers are three stages of one record, but they had three list pages and
+  two record flyouts — and `/entities/customers` inner-joined `customer_roles`,
+  a row written only on promotion, so a real prospect could never appear there
+  and its "potential customer" status could only ever mean a DEMOTED customer.
+  `/crm/leads` and `/crm/prospects` are removed; the customer list now outer-
+  joins both the customer role and the relationship profile and segments on
+  lifecycle stage, carrying the retired lists' sub-status, owner, territory,
+  qualification and last-activity columns. The CRM account drawer is gone: its
+  fields are a Relationship tab of the party flyout, so a company has exactly
+  one record. A customer with no profile can start one from that tab. With the
+  CRM switch off — or without `crm.accounts.read` — the list collapses to the
+  AR customer roll exactly as before.
+- The Customers workspace gets the payroll-style route-tab strip: Overview,
+  Accounts, Opportunities, Activities, Forecasts and Receivables, permission-
+  and feature-filtered in one place rather than per page.
+- The party flyout has ONE tab rail. The shared shell's Details / Attachments /
+  Audit trail strip no longer sits above a second, record-specific strip:
+  Overview, Pulse, Relationship, Invoicing, Pricing, Transactions, Activities,
+  Contacts, Addresses, Attachments and Audit trail are peers.
+- "Customer 360" is now **Pulse**, and it lives only on the customer record.
+  The standalone `/crm/customer-360` page — which picked an arbitrary customer
+  — is deleted. The panel was also entirely hardcoded English and formatted
+  money as `en-US` USD regardless of locale or org currency; it now runs
+  through the catalogs and the money formatter like every other surface.
+
+### Added
+
+- An Add button on the customer flyout's Activities tab, matching Add contact
+  and Add address. It mints the activity already linked to the account and
+  hands off to the activity editor with a return path, so closing lands back
+  on the customer.
+
+### Fixed
+
+- Saved list views no longer sort by a direction chosen for a column they are
+  not sorting by. Orgs are seeded with a snapshot of the system default view,
+  so a snapshot naming a column that has since left the registry fell back to
+  a different column while keeping the stored direction — which listed
+  customers Z→A. Column and direction now move together, and the party-family
+  record types declare `name ascending` explicitly.
+
 ## [0.1.0-alpha.17] - 2026-09-19
 
 No migrations.

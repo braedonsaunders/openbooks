@@ -47,11 +47,6 @@ export {
 } from "./entity-list-query/opportunities"
 
 export {
-  CRM_ACCOUNT_BASE_JOINS,
-  CRM_ACCOUNT_BUILT_IN_EXPR,
-  CRM_ACCOUNT_SORTS,
-  leadWhere,
-  prospectWhere,
   ACTIVITY_BASE_JOINS,
   ACTIVITY_BUILT_IN_EXPR,
   ACTIVITY_SORTS,

@@ -22,8 +22,6 @@
     "employee": "Employee",
     "project": "Project",
     "opportunity": "Opportunity",
-    "lead": "Lead",
-    "prospect": "Prospect",
     "activity": "Activity",
     "item": "Item",
     "account": "Account",

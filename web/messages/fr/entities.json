@@ -322,10 +322,6 @@
   "list": {
     "searchPlaceholder": "Rechercher nom, code, courriel…",
     "shortCode": "Code court",
-    "phone": "Téléphone",
-    "customerStatuses": {
-      "existing": "Clients existants",
-      "potential": "Clients potentiels"
-    }
+    "phone": "Téléphone"
   }
 }

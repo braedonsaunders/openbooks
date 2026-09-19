@@ -960,8 +960,8 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),
-    /function crmAccountRecordType[\s\S]{0,300}featureKey: "crm"/,
-    'lead / prospect list views must follow the CRM switch',
+    /function recordTypeForFeatureState[\s\S]{0,1400}CUSTOMER_CRM_COLUMN_KEYS/,
+    'the unified account list must drop its CRM lifecycle columns when CRM is off',
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),
@@ -2693,8 +2693,8 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),
-    /features\.crm === false && out\.key === ['"]customer['"][\s\S]{0,400}option\.value === ['"]customer['"]/,
-    'customer list customization must drop prospect when CRM is off',
+    /features\.crm === false && out\.key === ['"]customer['"][\s\S]{0,1200}option\.value === ['"]customer['"]/,
+    'customer list customization must drop every non-customer lifecycle stage when CRM is off',
   )
   assert.match(
     read('app/api/parties/[id]/activities/route.ts'),

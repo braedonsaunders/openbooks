@@ -55,7 +55,8 @@
     "projectedAmount": "Montant prévu",
     "periodStart": "Début de la période",
     "periodEnd": "Fin de la période",
-    "weightedAmount": "Montant pondéré"
+    "weightedAmount": "Montant pondéré",
+    "stage": "Étape"
   },
   "accounts": {
     "newFallback": "Nouveau compte",
@@ -88,7 +89,15 @@
       "closedLost": "Perdu",
       "active": "Actif",
       "inactive": "Inactif"
-    }
+    },
+    "allTitle": "Tous les comptes",
+    "allDescription": "Toutes les relations sur une seule liste, à chaque étape du cycle de vie.",
+    "relationshipHeading": "Profil de la relation",
+    "untrackedTitle": "Aucun profil de relation",
+    "untrackedDescription": "Ce compte n'a ni étape, ni responsable, ni territoire enregistré. Lancez le suivi pour le gérer comme une relation.",
+    "startTracking": "Lancer le suivi",
+    "stageReason": "Motif du retour en arrière",
+    "stageReasonHint": "Tout retour en arrière dans le cycle de vie est consigné avec votre motif."
   },
   "activities": {
     "title": "Activités",
@@ -148,12 +157,6 @@
       "closedWon": "Gagnée",
       "closedLost": "Perdue"
     }
-  },
-  "customer360": {
-    "title": "Client 360",
-    "description": "Pipeline commercial unifié, ancienneté des créances, limite de crédit, DSO et télémétrie des interactions.",
-    "emptyTitle": "Aucun client trouvé",
-    "emptyDescription": "Ajoutez un client pour voir sa télémétrie Client 360."
   },
   "forecastCategories": {
     "omitted": "Exclue",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "Le brouillon n’a pas pu être créé."
+  },
+  "pulse": {
+    "creditHold": "Crédit bloqué",
+    "terms": "Conditions : {terms}",
+    "holdReason": "Motif du blocage :",
+    "openReceivables": "Total des créances ouvertes",
+    "overdue": "{amount} en retard",
+    "allCurrent": "Aucun retard",
+    "dso": "Délai moyen de recouvrement (DSO)",
+    "days": "jours",
+    "customerAvg": "Moyenne du client : {customer} j (organisation : {org} j)",
+    "orgBenchmark": "Référence de l'organisation : {org} j",
+    "creditHeadroom": "Encours de crédit disponible",
+    "noLimit": "Aucune limite définie",
+    "limitUsed": "Limite : {limit} ({percent} % utilisé)",
+    "unrestricted": "Crédit commercial sans plafond",
+    "pipelineValue": "Valeur du pipeline actif",
+    "winRate": "Taux de réussite de {percent} % ({won} gagnées)",
+    "openDeals": "{count} affaires ouvertes",
+    "agingTitle": "Balance âgée des créances",
+    "agingDescription": "Créances ouvertes à ce jour, classées par intervalle d'ancienneté.",
+    "bucketCurrent": "Non échu",
+    "bucket1To30": "1–30 j",
+    "bucket31To60": "31–60 j",
+    "bucket61To90": "61–90 j",
+    "bucket90Plus": "90 j et plus",
+    "creditTitle": "Engagement de crédit",
+    "creditDescription": "Créances majorées des commandes clients non facturées.",
+    "creditLimit": "Limite de crédit",
+    "openInvoices": "Factures ouvertes (créances)",
+    "unbilledOrders": "Commandes clients non facturées",
+    "headroom": "Marge disponible",
+    "uncapped": "Sans plafond",
+    "projectsTitle": "Synthèse des projets actifs",
+    "projectsCount": "{active} actifs / {total} au total",
+    "contractBudget": "Budget contractuel",
+    "billedToDate": "Facturé à ce jour",
+    "billedProgress": "Avancement de la facturation",
+    "timelineTitle": "Chronologie des interactions",
+    "timelineDescription": "Historique chronologique des activités, devis, commandes clients, factures et règlements.",
+    "timelineEmpty": "Aucune activité ni transaction enregistrée pour ce compte.",
+    "loadFailed": "Impossible de charger le pouls de ce compte."
   }
 }

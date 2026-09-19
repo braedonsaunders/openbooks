@@ -19,7 +19,7 @@ export interface CustomerAgingBreakdown {
   totalOverdue: number
 }
 
-export interface Customer360Data {
+export interface CustomerPulseData {
   party: {
     id: string
     displayName: string
@@ -81,11 +81,11 @@ export interface Customer360Data {
   }>
 }
 
-export async function loadCustomer360(
+export async function loadCustomerPulse(
   partyId: string,
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
-): Promise<Customer360Data | null> {
+): Promise<CustomerPulseData | null> {
   const asOf = await businessToday(orgId)
   const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined
 
@@ -322,7 +322,7 @@ export async function loadCustomer360(
     `),
   ])
 
-  const timelineItems: Customer360Data['timeline'] = []
+  const timelineItems: CustomerPulseData['timeline'] = []
 
   for (const a of activitiesRes.rows) {
     timelineItems.push({
@@ -336,7 +336,7 @@ export async function loadCustomer360(
   }
 
   for (const d of documentsRes.rows) {
-    let type: Customer360Data['timeline'][number]['type'] = 'invoice'
+    let type: CustomerPulseData['timeline'][number]['type'] = 'invoice'
     if (d.kind === 'quote') type = 'estimate'
     else if (d.kind === 'sales_order') type = 'sales_order'
     else if (d.kind === 'customer_payment') type = 'payment'

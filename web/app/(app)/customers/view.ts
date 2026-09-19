@@ -20,7 +20,7 @@ import { resolveAsOf } from '../../../lib/cash/core'
 import { customersHome, type CustomerExposureRow, type CustomersHome } from '../../../lib/module-home/customers'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { groupTabs } from '../../../components/module-home/group-tabs'
+import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 
 /**
@@ -40,7 +40,7 @@ import type { DirectoryItem } from '../../../components/module-home/ui'
  */
 
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
-type Tabs = Awaited<ReturnType<typeof groupTabs>>
+type Tabs = Awaited<ReturnType<typeof customerGroupTabs>>
 
 export interface CustomerAttentionItem {
   tone: 'negative' | 'warning'
@@ -187,7 +187,7 @@ export async function loadCustomers(
 
   const groupItems = navGroups.find((g) => g.id === 'customers')?.items ?? []
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = await groupTabs('customers', '/customers', { subQs, orgId: authz.user.orgId })
+  const tabs = await customerGroupTabs(authz, '/customers', { subQs })
 
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {

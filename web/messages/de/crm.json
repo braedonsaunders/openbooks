@@ -55,7 +55,8 @@
     "projectedAmount": "Prognostizierter Betrag",
     "periodStart": "Periodenbeginn",
     "periodEnd": "Periodenende",
-    "weightedAmount": "Gewichteter Betrag"
+    "weightedAmount": "Gewichteter Betrag",
+    "stage": "Phase"
   },
   "accounts": {
     "newFallback": "Neues Konto",
@@ -88,7 +89,15 @@
       "closedLost": "Verloren",
       "active": "Aktiv",
       "inactive": "Inaktiv"
-    }
+    },
+    "allTitle": "Alle Konten",
+    "allDescription": "Alle Beziehungen in einer Liste, über sämtliche Lebenszyklusphasen hinweg.",
+    "relationshipHeading": "Beziehungsprofil",
+    "untrackedTitle": "Noch kein Beziehungsprofil",
+    "untrackedDescription": "Für dieses Konto sind weder Phase noch Verantwortliche oder Gebiet hinterlegt. Starten Sie die Nachverfolgung, um es als Beziehung zu führen.",
+    "startTracking": "Nachverfolgung starten",
+    "stageReason": "Grund für den Rückschritt",
+    "stageReasonHint": "Ein Rückschritt im Lebenszyklus wird mit Ihrer Begründung protokolliert."
   },
   "activities": {
     "title": "Aktivitäten",
@@ -148,12 +157,6 @@
       "closedWon": "Gewonnen",
       "closedLost": "Verloren"
     }
-  },
-  "customer360": {
-    "title": "Kunden-360",
-    "description": "Einheitliche Vertriebspipeline, Forderungsalterung, Kreditlimit, DSO und Interaktionsverlauf.",
-    "emptyTitle": "Keine Kunden gefunden",
-    "emptyDescription": "Lege einen Kunden an, um seine Kunden-360-Daten zu sehen."
   },
   "forecastCategories": {
     "omitted": "Ausgelassen",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "Der Entwurf konnte nicht erstellt werden."
+  },
+  "pulse": {
+    "creditHold": "Kreditsperre",
+    "terms": "Zahlungsbedingungen: {terms}",
+    "holdReason": "Grund der Sperre:",
+    "openReceivables": "Offene Forderungen gesamt",
+    "overdue": "{amount} überfällig",
+    "allCurrent": "Alle Posten sind fristgerecht",
+    "dso": "Debitorenlaufzeit (DSO)",
+    "days": "Tage",
+    "customerAvg": "Durchschnitt Kunde: {customer} T (Organisation: {org} T)",
+    "orgBenchmark": "Richtwert der Organisation: {org} T",
+    "creditHeadroom": "Verfügbarer Kreditrahmen",
+    "noLimit": "Kein Limit festgelegt",
+    "limitUsed": "Limit: {limit} ({percent} % genutzt)",
+    "unrestricted": "Unbegrenztes Warenkreditlimit",
+    "pipelineValue": "Wert der aktiven Pipeline",
+    "winRate": "{percent} % Gewinnquote ({won} gewonnen)",
+    "openDeals": "{count} offene Deals",
+    "agingTitle": "Fälligkeitsanalyse der Forderungen",
+    "agingDescription": "Offene Forderungen zum heutigen Stichtag, nach Fälligkeitsintervallen gegliedert.",
+    "bucketCurrent": "Nicht fällig",
+    "bucket1To30": "1–30 T",
+    "bucket31To60": "31–60 T",
+    "bucket61To90": "61–90 T",
+    "bucket90Plus": "90+ Tage",
+    "creditTitle": "Kreditobligo",
+    "creditDescription": "Forderungen zuzüglich noch nicht fakturierter Kundenaufträge.",
+    "creditLimit": "Kreditlimit",
+    "openInvoices": "Offene Rechnungen (Forderungen)",
+    "unbilledOrders": "Nicht fakturierte Kundenaufträge",
+    "headroom": "Verfügbarer Spielraum",
+    "uncapped": "Unbegrenzt",
+    "projectsTitle": "Zusammenfassung aktiver Projekte",
+    "projectsCount": "{active} aktiv / {total} gesamt",
+    "contractBudget": "Auftragsbudget",
+    "billedToDate": "Bisher fakturiert",
+    "billedProgress": "Fakturierungsfortschritt",
+    "timelineTitle": "Zeitleiste der Interaktionen",
+    "timelineDescription": "Chronologischer Verlauf von Aktivitäten, Angeboten, Kundenaufträgen, Rechnungen und Zahlungen.",
+    "timelineEmpty": "Für dieses Konto sind keine Aktivitäten oder Transaktionen erfasst.",
+    "loadFailed": "Der Puls dieses Kontos kann nicht geladen werden."
   }
 }

@@ -21,6 +21,24 @@ interface TransactionDrawerProps {
   actionsMenuHeader?: ReactNode
   /** Record-specific work areas inserted between Details and Attachments. */
   detailTabs?: { key: string; label: ReactNode; content?: ReactNode }[]
+  /**
+   * Rename the leading Details tab. Records whose body already reads as a
+   * named section ("Overview" on a party) pass their own word so the rail
+   * carries ONE vocabulary instead of a generic Details wrapping a second,
+   * record-specific strip underneath it.
+   */
+  detailsLabel?: ReactNode
+  /**
+   * Keep `children` mounted (hidden) while Attachments or Audit trail is
+   * showing, instead of unmounting the record body.
+   *
+   * For a record whose body holds unsaved local state — the party flyout's
+   * employee compensation panels (F-t08-003) — unmounting discards those
+   * edits silently. That was survivable while Attachments sat on a separate
+   * strip most users never touched mid-edit; once it is a peer tab on the
+   * one rail, it is one click away from any field.
+   */
+  keepChildrenMounted?: boolean
   /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
   activeTab?: string
   onActiveTabChange?: (key: string) => void
@@ -56,6 +74,8 @@ export function TransactionDrawer({
   actions,
   actionsMenuHeader,
   detailTabs = [],
+  detailsLabel,
+  keepChildrenMounted = false,
   activeTab: controlledActiveTab,
   onActiveTabChange,
   footer,
@@ -68,7 +88,7 @@ export function TransactionDrawer({
   const searchParams = useSearchParams()
   const [actionsOpen, setActionsOpen] = useState(false)
   const tabs = [
-    { key: 'details', label: t('auditTrail.tabs.details') },
+    { key: 'details', label: detailsLabel ?? t('auditTrail.tabs.details') },
     ...detailTabs.map((tab) => ({ key: tab.key, label: tab.label })),
     { key: 'attachments', label: t('auditTrail.tabs.attachments') },
     { key: 'audit', label: t('auditTrail.tabs.audit') },
@@ -99,7 +119,7 @@ export function TransactionDrawer({
       title={title}
       description={description}
       subtabs={
-        <nav className="-mb-px flex gap-1" aria-label={t('auditTrail.ariaLabel')}>
+        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('auditTrail.ariaLabel')}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -110,7 +130,7 @@ export function TransactionDrawer({
                 setLocalActiveTab(tab.key)
                 onActiveTabChange?.(tab.key)
               }}
-              className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
@@ -156,10 +176,17 @@ export function TransactionDrawer({
       ) : undefined}
       footer={activeTab !== 'attachments' && activeTab !== 'audit' ? footer : undefined}
     >
-      {activeTab === 'details' ? children : activeTab === 'attachments' ? (
-        <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
-      ) : activeTab === 'audit' ? (
-        <AuditTrailPanel table={targetTable} recordId={recordId} />
+      {activeTab === 'attachments' || activeTab === 'audit' ? (
+        <>
+          {keepChildrenMounted ? <div hidden>{children}</div> : null}
+          {activeTab === 'attachments' ? (
+            <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
+          ) : (
+            <AuditTrailPanel table={targetTable} recordId={recordId} />
+          )}
+        </>
+      ) : activeTab === 'details' ? (
+        children
       ) : (
         detailTabs.find((tab) => tab.key === activeTab)?.content ?? children
       )}

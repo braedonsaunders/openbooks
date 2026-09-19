@@ -33,7 +33,6 @@ import {
   TableHeader,
   TableRow,
   TabContent,
-  cn,
 } from '@openbooks/ui'
 import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
@@ -222,10 +221,25 @@ const serializeContacts = (rows: ContactRow[]) => rows.map((row) => {
   };
 })
 
-import { PartyCustomer360Section } from './PartyCustomer360Section'
+import { PartyPulseSection } from './PartyPulseSection'
+import { PartyRelationshipSection } from './PartyRelationshipSection'
 
-// Payroll profile editing lives here, on the native employee entity.
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | '360'
+/**
+ * Payroll profile editing lives here, on the native employee entity.
+ *
+ * `attachments` and `audit` are the shared flyout shell's own panels. They sit
+ * in this union because the party flyout drives ONE rail: the shell used to
+ * render Details / Attachments / Audit trail and the party body a second strip
+ * underneath it, so every work area was two clicks deep behind a "Details"
+ * that named nothing. Here the party owns the whole strip and hands the shell
+ * a controlled tab; `overview` is the shell's `details` slot, renamed.
+ */
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'pulse' | 'relationship' | 'attachments' | 'audit'
+
+/** The rail key the shared shell knows the leading tab by. */
+const SHELL_DETAILS_TAB = 'details'
+const toShellTab = (tab: PartyTab): string => (tab === 'overview' ? SHELL_DETAILS_TAB : tab)
+const fromShellTab = (key: string): PartyTab => (key === SHELL_DETAILS_TAB ? 'overview' : key as PartyTab)
 
 /**
  * Records a visited drawer tab for keep-alive panels (F-t08-003): the
@@ -266,6 +280,10 @@ export function PartyDrawer({
   subsidiaries,
   canManage,
   canReadActivities = false,
+  canManageActivities = false,
+  canReadCrmAccounts = false,
+  canManageCrmAccounts = false,
+  lifecycleStage = null,
   canManageWages = false,
   canManagePayroll = false,
   payrollEnabled = false,
@@ -295,6 +313,21 @@ export function PartyDrawer({
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   canReadActivities?: boolean
+  /** crm.activities.manage — enables the Activities tab's Add button. */
+  canManageActivities?: boolean
+  /** crm.accounts.read + the CRM feature enabled — shows the Relationship
+   *  tab, the lifecycle stage / owner / territory / qualification profile a
+   *  lead or prospect carries instead of a customer role. */
+  canReadCrmAccounts?: boolean
+  /** crm.accounts.manage — the Relationship tab is read-only without it
+   *  (the PATCH route re-checks). */
+  canManageCrmAccounts?: boolean
+  /**
+   * The account's stored `crm_account_profiles.lifecycle_stage`, or null when
+   * it has no relationship profile. Decides whether saving from the account
+   * list may force the AR customer role on — see `forcesCustomerRole`.
+   */
+  lifecycleStage?: 'lead' | 'prospect' | 'customer' | null
   /** admin.setup.manage — wage data is confidential; gates the Wages tab. */
   canManageWages?: boolean
   /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
@@ -338,10 +371,25 @@ export function PartyDrawer({
   // predicate gates the tab button and the deep-link, so a stale
   // ?partyTab=compliance can never strand the drawer on a missing panel.
   const showComplianceTab = complianceEnabled && (role === 'vendor' || (!role && payload.vendor != null))
+  // The relationship (CRM) profile is an account-side concern: it rides the
+  // customer role, and it is what a lead or prospect has INSTEAD of one.
+  const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
+  /**
+   * `role` says which role's FIELDS to show, and opening a record from the
+   * account list used to mean "force the customer role on". It cannot any
+   * more: that list now spans the lifecycle, so merely naming a lead would
+   * have handed it an AR customer role and made it invoiceable. The customer
+   * role is written by PROMOTION (promoteCrmAccount), so a pre-customer
+   * account keeps whatever role state it already had.
+   */
+  const preCustomerStage = lifecycleStage === 'lead' || lifecycleStage === 'prospect'
+  const forcesCustomerRole = role === 'customer' && !preCustomerStage
   const allowedInitialTab =
     (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
     (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll)) ||
     (initialTab === 'activities' && !canReadActivities) ||
+    (initialTab === 'relationship' && !showRelationshipTab) ||
+    (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
     (initialTab === 'compliance' && !showComplianceTab)
       ? 'overview'
       : initialTab
@@ -367,9 +415,15 @@ export function PartyDrawer({
   const p = payload.party
   const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null)
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
-  // 'New party' is the server-side draft sentinel stored in the DB — compare
-  // and persist it verbatim; only the *displayed* fallback is translated.
-  const isPlaceholderName = p.display_name === 'New party'
+  // The server-side draft sentinels stored in the DB — compare and persist
+  // them verbatim; only the *displayed* fallback is translated. The parties
+  // draft writes 'New party'; the relationship draft (a lead or prospect
+  // started from the account list) writes 'New lead'. Both land in this one
+  // flyout, so both must blank the name field.
+  const placeholderName = p.display_name === 'New party' || p.display_name === 'New lead'
+    ? p.display_name
+    : null
+  const isPlaceholderName = placeholderName != null
 
   // -- identity --------------------------------------------------------------
   const [kind, setKind] = useState<string>(p.kind ?? 'company')
@@ -465,13 +519,16 @@ export function PartyDrawer({
   )
   const editable = mode === 'edit' && canManage
 
-  const nameValid = displayName.trim().length > 0 && displayName.trim() !== 'New party'
+  const nameValid = displayName.trim().length > 0
+    && displayName.trim() !== 'New party' && displayName.trim() !== 'New lead'
 
   // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
       kind,
-      displayName: displayName.trim() || (isActive ? displayName : 'New party'),
+      // An unnamed draft keeps the sentinel it was born with, so the server
+      // recognises it as the same draft-completion flow it minted.
+      displayName: displayName.trim() || (isActive ? displayName : (placeholderName ?? 'New party')),
       legalName,
       shortCode,
       email,
@@ -485,7 +542,7 @@ export function PartyDrawer({
         : undefined,
       roles: {
         customer: {
-          enabled: role === 'customer' ? true : customer.enabled,
+          enabled: forcesCustomerRole ? true : customer.enabled,
           paymentTermsId: customer.paymentTermsId || null,
           creditLimit: customer.creditLimit || null,
           ...(multiCurrency ? { currency: customer.currency || null } : {}),
@@ -522,7 +579,7 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `skipDirty` is a
@@ -828,9 +885,14 @@ export function PartyDrawer({
       default: return null
     }
   }
+  // ONE rail, in reading order: what the account is, then how we sell to it,
+  // then what we have done with it, then (appended by the shell) the record's
+  // own evidence. These ride the shared flyout's strip as `detailTabs`, so
+  // the shell renders no second strip above them.
   const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
-    ...(role === 'customer' && !isPlaceholderName ? [{ key: '360' as const, label: 'Customer 360' }] : []),
+    ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pulse' as const, label: t('tabs.pulse') }] : []),
+    ...(showRelationshipTab ? [{ key: 'relationship' as const, label: t('tabs.relationship') }] : []),
     // Invoicing preferences + labor pricing live on their own subtabs (customers only),
     // out of the crowded overview.
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
@@ -843,6 +905,9 @@ export function PartyDrawer({
     ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
     ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
     ...(role === 'employee' && canManagePayroll ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
+    // Attachments and Audit trail close the rail. They are the shared shell's
+    // own panels, so the shell appends them itself — listing them here would
+    // duplicate the buttons.
   ]
 
   const selectForm = (formId: string) => {
@@ -859,6 +924,21 @@ export function PartyDrawer({
       recordId={String(p.id)}
       targetTable="parties"
       canEditAttachments={canManage}
+      detailsLabel={t('tabs.overview')}
+      keepChildrenMounted
+      detailTabs={tabs
+        .filter((item) => item.key !== 'overview')
+        .map((item) => ({
+          key: item.key,
+          label: (
+            <>
+              {item.label}
+              {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
+            </>
+          ),
+        }))}
+      activeTab={toShellTab(tab)}
+      onActiveTabChange={(key) => showTab(fromShellTab(key))}
       title={
         <span className="flex items-center gap-2.5">
           <span>{displayName.trim() || t('newPartyFallback')}</span>
@@ -928,26 +1008,6 @@ export function PartyDrawer({
       }
     >
       <ActionAlert error={refusal} fallbackMessage={t('autosaveFailed')} title={t('saveFailedRetry')} className="mb-4" />
-      <nav className="-mt-2 mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabs.ariaLabel')}>
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            onClick={() => showTab(item.key)}
-            className={cn(
-              'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-              tab === item.key
-                ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-            )}
-          >
-            {item.label}
-            {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
-          </button>
-        ))}
-      </nav>
       <TabContent tabKey={tab}>
       <div className="space-y-7 p-1">
         {tab === 'overview' ? (
@@ -1448,8 +1508,13 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
-        {tab === '360' && role === 'customer' && !isPlaceholderName ? <PartyCustomer360Section partyId={String(p.id)} /> : null}
-        {tab === 'activities' && role === 'customer' && canReadActivities ? <ActivitySublist partyId={String(p.id)} /> : null}
+        {tab === 'pulse' && role === 'customer' && !isPlaceholderName ? <PartyPulseSection partyId={String(p.id)} /> : null}
+        {tab === 'relationship' && showRelationshipTab ? (
+          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} />
+        ) : null}
+        {tab === 'activities' && role === 'customer' && canReadActivities ? (
+          <ActivitySublist partyId={String(p.id)} canManage={canManageActivities} />
+        ) : null}
 
         {tab === 'contacts' ? (
           <section className="space-y-3">
@@ -2131,11 +2196,15 @@ interface ActivityResponse {
   statuses: ActivityRow['status'][]
 }
 
-function ActivitySublist({ partyId }: { partyId: string }) {
+function ActivitySublist({ partyId, canManage }: { partyId: string; canManage: boolean }) {
   const t = useTranslations('parties.drawer')
   const tcrm = useTranslations('crm')
   const tc = useTranslations('common')
   const locale = useLocale()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { busy, execute } = useAppAction()
   const [q, setQ] = useState('')
   const [kind, setKind] = useState('')
   const [status, setStatus] = useState('')
@@ -2170,9 +2239,42 @@ function ActivitySublist({ partyId }: { partyId: string }) {
   }, [kind, page, partyId, q, status, tc])
 
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
+  // Activities are full CRM records with their own editor, so Add mints the
+  // draft already linked to this account and hands off to that editor —
+  // carrying `drawerReturn` so Close lands back on this flyout rather than
+  // stranding the user on the activities list. The row links do the same.
+  const activityHref = (id: string) => {
+    const current = searchParams.toString()
+    const back = current ? `${pathname}?${current}` : pathname
+    return `/crm/activities?activity=${id}&drawerReturn=${encodeURIComponent(back)}`
+  }
+  const addActivity = async () => {
+    let createdId: string | null = null
+    const ok = await execute<{ id?: string }>(
+      async () => {
+        const result = await fetchAction<{ id?: string }>('/api/crm/activities/draft', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ subjectKind: 'account', subjectId: partyId }),
+        })
+        if (result.ok) createdId = result.data?.id ?? null
+        return result
+      },
+      { fallbackMessage: tc('feedback.saveFailed') },
+    )
+    if (ok && createdId) router.push(activityHref(createdId))
+  }
+
   return (
     <section className="space-y-3">
-      <SublistHeading title={tcrm('activities.title')} description={tcrm('activities.description')} icon={<CalendarDays size={16} />} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SublistHeading title={tcrm('activities.title')} description={tcrm('activities.description')} icon={<CalendarDays size={16} />} />
+        {canManage ? (
+          <Button variant="outline" size="sm" disabled={busy} onClick={addActivity}>
+            <Plus size={14} />{t('addActivity')}
+          </Button>
+        ) : null}
+      </div>
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-56 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
@@ -2201,7 +2303,7 @@ function ActivitySublist({ partyId }: { partyId: string }) {
             <TableBody>
               {data.rows.map((row) => (
                 <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
-                  <TableCell><Link href={`/crm/activities?activity=${row.id}`} className="font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.subject}</Link></TableCell>
+                  <TableCell><Link href={activityHref(row.id)} className="font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.subject}</Link></TableCell>
                   <TableCell>{tcrm(`activityKinds.${row.kind}`)}</TableCell>
                   <TableCell><Badge variant={row.status === 'completed' ? 'success' : 'outline'}>{tcrm(`activityStatuses.${row.status}`)}</Badge></TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">{new Date(row.activity_date).toLocaleString(locale)}</TableCell>

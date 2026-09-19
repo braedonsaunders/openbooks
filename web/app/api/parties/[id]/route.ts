@@ -313,7 +313,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const willBeActive = body.isActive ?? (completesPlaceholder ? true : existingParty.is_active)
   const effectiveName = displayName ?? existingParty.display_name.trim()
-  if (willBeActive && (!effectiveName || effectiveName === 'New party')) {
+  if (willBeActive && (!effectiveName || effectiveName === 'New party' || effectiveName === 'New lead')) {
     return bad(body.isActive === true ? 'Give the party a real name before activating it' : 'An active party needs a display name')
   }
 
@@ -422,6 +422,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         throw new PartyPatchConflictError()
       }
 
+      // A relationship draft is TWO inactive rows — the placeholder party and
+      // its crm_account_profiles row — and completing the draft has to lift
+      // both. The account list joins the profile on `cap.is_active`, so a
+      // lead that was named but whose profile stayed inactive vanished from
+      // the very list it was created on: the party was active, the profile
+      // was not, and a lead has no customer role to fall back to.
+      if (completesPlaceholder) {
+        await tx.execute(sql`
+          update crm_account_profiles set is_active = true, updated_at = now(), updated_by = ${user.id}
+           where org_id = ${user.orgId} and party_id = ${id} and not is_active`)
+      }
+
       if (additionalSubsidiaryIds !== undefined) {
         await tx.execute(sql`
           delete from party_subsidiaries where org_id = ${user.orgId} and party_id = ${id}
@@ -448,6 +460,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         } else if (c.enabled === true) {
           if (customerOnHold && (customerHoldReason?.length ?? 0) < 5) {
             throwBad('Customer credit hold requires a reason of at least 5 characters')
+          }
+          // The AR customer role is written by PROMOTION, not by editing a
+          // lead. Opening a lead or prospect from the account list and saving
+          // it must not quietly make it invoiceable — the lifecycle says it
+          // has not been won yet. Only blocked when the role does not already
+          // exist: a customer DEMOTED back to prospect keeps its role, and
+          // must stay saveable.
+          const preCustomer = (await tx.execute<{ stage: string }>(sql`
+            select cp.lifecycle_stage as stage
+              from crm_account_profiles cp
+             where cp.org_id = ${user.orgId} and cp.party_id = ${id}
+               and cp.lifecycle_stage in ('lead', 'prospect')
+               and not exists (
+                 select 1 from customer_roles cr
+                  where cr.org_id = cp.org_id and cr.party_id = cp.party_id and cr.is_active)
+             limit 1`))
+          if (preCustomer.rows[0]) {
+            throwBad(
+              `This account is a ${preCustomer.rows[0].stage}. Promote it to customer on the Relationship tab before giving it receivable terms.`,
+            )
           }
           const paymentTermsId = uuidOrNull(c.paymentTermsId)
           if (paymentTermsId === 'invalid') throwBad('Invalid customer payment terms')

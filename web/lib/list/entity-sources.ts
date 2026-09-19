@@ -24,9 +24,6 @@ import {
   FIXED_ASSET_BASE_JOINS,
   FIXED_ASSET_BUILT_IN_EXPR,
   FIXED_ASSET_SORTS,
-  CRM_ACCOUNT_BASE_JOINS,
-  CRM_ACCOUNT_BUILT_IN_EXPR,
-  CRM_ACCOUNT_SORTS,
   ACTIVITY_BASE_JOINS,
   ACTIVITY_BUILT_IN_EXPR,
   ACTIVITY_SORTS,
@@ -81,10 +78,8 @@ import {
   employeeWhere,
   fixedAssetWhere,
   itemWhere,
-  leadWhere,
   opportunityWhere,
   projectWhere,
-  prospectWhere,
   vendorWhere,
   type EntityAdhoc,
 } from '../customization/entity-list-query'
@@ -268,7 +263,36 @@ const SOURCES: Record<string, EntityListSource> = {
     sorts: CUSTOMER_SORTS,
     defaultSort: sql`p.display_name`,
     statusExpr: CUSTOMER_STATUS_EXPR,
-    quickFilters: [{ paramKey: 'status', filterKey: 'status', defaultValue: 'customer' }],
+    // Lifecycle first (the segment the page is on), then the CRM sub-status,
+    // owner and territory the retired lead/prospect lists used to carry.
+    // Defaulting the segment to `customer` keeps the AR-facing list showing
+    // customers; the chips move it across the rest of the lifecycle.
+    // entity-list-view drops the CRM three when the switch is off.
+    quickFilters: [
+      { paramKey: 'status', filterKey: 'status', defaultValue: 'customer' },
+      {
+        paramKey: 'accountStatus',
+        filterKey: 'status_id',
+        loadOptions: async (orgId) => {
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
+            select id::text as value, name as label
+              from crm_account_statuses
+             where org_id=${orgId} and is_active
+             order by lifecycle_stage, sequence, name`)
+          return result.rows
+        },
+      },
+      {
+        paramKey: 'owner',
+        filterKey: 'owner_user_id',
+        loadOptions: async (orgId) => {
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
+            select id::text as value, name as label from users
+             where org_id=${orgId} and is_active order by name`)
+          return result.rows
+        },
+      },
+    ],
     where: customerWhere,
     drawerParam: 'party',
     basePath: '/entities/customers',
@@ -438,8 +462,6 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/assets',
     statusVariant: (row) => row.status === 'in_service' ? 'success' : row.status === 'draft' ? 'outline' : row.status === 'fully_depreciated' ? 'secondary' : 'warning',
   },
-  lead: crmAccountSource('lead', leadWhere),
-  prospect: crmAccountSource('prospect', prospectWhere),
   activity: {
     recordType: 'activity',
     table: 'crm_activities',
@@ -804,53 +826,6 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/banking/rules',
     statusVariant: (row) => row.status === 'active' ? 'success' : 'secondary',
   },
-}
-
-function crmAccountSource(
-  stage: 'lead' | 'prospect',
-  where: EntityListSource['where'],
-): EntityListSource {
-  return {
-    recordType: stage,
-    table: 'crm_account_profiles',
-    alias: 'cp',
-    idExpr: sql`p.id`,
-    customFieldTable: 'parties',
-    customFieldAlias: 'p',
-    baseJoins: CRM_ACCOUNT_BASE_JOINS,
-    builtInExpr: CRM_ACCOUNT_BUILT_IN_EXPR,
-    sorts: CRM_ACCOUNT_SORTS,
-    defaultSort: sql`cp.last_activity_at`,
-    statusExpr: sql`cp.status_id`,
-    countFilterKey: 'status_id',
-    quickFilters: [
-      {
-        paramKey: 'status',
-        filterKey: 'status_id',
-        loadOptions: async (orgId) => {
-          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
-            select id::text as value, name as label
-              from crm_account_statuses
-             where org_id=${orgId} and lifecycle_stage=${stage} and is_active
-             order by sequence, name`)
-          return result.rows
-        },
-      },
-      {
-        paramKey: 'owner',
-        filterKey: 'owner_user_id',
-        loadOptions: async (orgId) => {
-          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
-            select id::text as value, name as label from users
-             where org_id=${orgId} and is_active order by name`)
-          return result.rows
-        },
-      },
-    ],
-    where,
-    drawerParam: 'account',
-    basePath: stage === 'lead' ? '/crm/leads' : '/crm/prospects',
-  }
 }
 
 export function entityListSource(recordType: string): EntityListSource | undefined {

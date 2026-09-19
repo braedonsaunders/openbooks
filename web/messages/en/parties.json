@@ -40,7 +40,9 @@
       "accounting": "Accounting",
       "compliance": "Compliance",
       "wages": "Wage rates",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "pulse": "Pulse",
+      "relationship": "Relationship"
     },
     "wages": {
       "title": "Wage rates",
@@ -199,7 +201,8 @@
       "saved": "Compliance class saved.",
       "saveFailed": "Saving the compliance class failed.",
       "viewMatrix": "Open the compliance matrix"
-    }
+    },
+    "addActivity": "Add activity"
   },
   "rateBookAssignments": {
     "title": "Labor Pricing",

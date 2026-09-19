@@ -41,6 +41,8 @@ import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/
  */
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
+  // The relationship lifecycle reads as one ramp: unqualified → worked → won.
+  lead: 'outline',
   customer: 'success',
   prospect: 'warning',
   quoted: 'secondary',
@@ -51,6 +53,9 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
   cancelled: 'destructive',
 }
 
+/** Quick filters that read the CRM profile joins (see customerBaseJoins). */
+const CUSTOMER_CRM_QUICK_FILTERS = new Set(['status_id', 'owner_user_id', 'territory_id'])
+
 export async function EntityListView({
   recordType,
   orgId,
@@ -60,11 +65,21 @@ export async function EntityListView({
   drawer,
   emptyAction,
   formatValue,
+  crmAccountsVisible = true,
 }: {
   recordType: string
   orgId: string
   userId: string
   canManage: boolean
+  /**
+   * `crm.accounts.read`, resolved by the page. The customer list spans the
+   * relationship lifecycle only for a viewer who may READ relationships;
+   * without it the list collapses to the AR customer roll, because leads and
+   * prospects are CRM records and `parties.read` alone has never been enough
+   * to see one. Resolved by the caller rather than read here: this renders
+   * inside tests and background paths where `cookies()` has no request scope.
+   */
+  crmAccountsVisible?: boolean
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
@@ -73,10 +88,11 @@ export async function EntityListView({
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
   const catalog = getRecordType(recordType)
-  const [inventoryOn, crmOn] = await Promise.all([
+  const [inventoryOn, crmFeatureOn] = await Promise.all([
     isFeatureEnabled(orgId, 'inventory'),
     recordType === 'customer' ? isFeatureEnabled(orgId, 'crm') : Promise.resolve(true),
   ])
+  const crmOn = recordType === 'customer' ? crmFeatureOn && crmAccountsVisible : crmFeatureOn
   const meta = catalog
     ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn })
     : catalog
@@ -119,22 +135,34 @@ export async function EntityListView({
   const metaDefault = meta.defaultSort && allowedSorts.includes(meta.defaultSort.sortKey)
     ? meta.defaultSort
     : undefined
-  const defaultSort =
-    viewSortKey && allowedSorts.includes(viewSortKey)
-      ? viewSortKey
-      : (metaDefault?.sortKey ?? allowedSorts[0] ?? 'name')
+  // Column AND direction move together. Saved views are seeded snapshots of
+  // defaultListView, so a view whose stored column has since left the registry
+  // (or lost `sortable`) must surrender its direction with it — keeping the
+  // direction alone silently paired "name" with a dated column's `desc` and
+  // listed customers Z→A.
+  const viewSort = viewSortKey && allowedSorts.includes(viewSortKey)
+    ? { sortKey: viewSortKey, dir: view.sort!.dir }
+    : undefined
+  const effectiveSort = viewSort ?? metaDefault
   const params = parseListParams(sp, {
-    sort: defaultSort,
-    dir: view.sort?.dir ?? metaDefault?.dir ?? 'asc',
+    sort: effectiveSort?.sortKey ?? allowedSorts[0] ?? 'name',
+    dir: effectiveSort?.dir ?? 'asc',
     perPage: view.perPage ?? 25,
     allowedSorts,
   })
 
   const showInactive = pickString(sp.showInactive) === 'true'
 
+  // The CRM segments/filters vanish with the lifecycle they read — their
+  // option loaders would query crm_account_statuses for an org that has no
+  // CRM, and their predicates would reference joins that are not in the FROM.
+  const quickFilterDefs = recordType === 'customer' && !crmOn
+    ? source.quickFilters.filter((quick) => !CUSTOMER_CRM_QUICK_FILTERS.has(quick.filterKey))
+    : source.quickFilters
+
   const quickValues: Record<string, string | undefined> = {}
   const quickDefaults: Record<string, string | undefined> = {}
-  for (const quick of source.quickFilters) {
+  for (const quick of quickFilterDefs) {
     const requested = pickString(sp[quick.paramKey])
     const defaultValue = view.filters.some((filter) => filter.key === quick.filterKey)
       ? undefined
@@ -166,7 +194,17 @@ export async function EntityListView({
   // in the picker, while retaining saved-view scope and entity de-duplication.
   const countFilterKey = source.countFilterKey ?? 'status'
   const countView = { ...view, filters: view.filters.filter((filter) => filter.key !== countFilterKey) }
-  const countWhere = source.where(countView, { showInactive, filters: {} }, orgId, allowedSubs)
+  // The count's adhoc must carry the SAME feature context as the page's, or
+  // the two disagree about which shape the query has: the customer builder
+  // reads `crmEnabled` to decide both the status expression and the
+  // role-or-profile membership clause, and a count that assumes CRM is on
+  // emits a predicate over joins the CRM-off FROM never made.
+  const countWhere = source.where(
+    countView,
+    { showInactive, filters: {}, crmEnabled: adhoc.crmEnabled },
+    orgId,
+    allowedSubs,
+  )
   const orderExpr = sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`
@@ -225,7 +263,7 @@ export async function EntityListView({
     // values (custom project types) that no static set can name. No filter
     // mixes both today except billing/project_type, so merging is a no-op
     // everywhere else (F-t11-003).
-    Promise.all(source.quickFilters.map(async (quick) => {
+    Promise.all(quickFilterDefs.map(async (quick) => {
       const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
       const statics = (filterMeta?.options ?? []).map((option) => ({
         value: option.value,
@@ -254,7 +292,7 @@ export async function EntityListView({
     const f = meta.listFilters.find((flt) => flt.key === colKey)
     const opt = f?.options?.find((o) => o.value === value)
     if (opt) return opt.labelKey ? label(opt.labelKey) : opt.value
-    const loaded = source.quickFilters
+    const loaded = quickFilterDefs
       .map((quick, index) => ({ quick, options: loadedQuickOptions[index] ?? [] }))
       .find(({ quick }) => quick.filterKey === colKey)
       ?.options.find((o) => o.value === value)
@@ -268,7 +306,7 @@ export async function EntityListView({
   // filter, so the picker button matches the translated table cells.
   const translateStatusOption = (rawLabel: string): string =>
     source.statusDisplayName ? source.statusDisplayName(rawLabel, label) : rawLabel
-  const quickFilters = source.quickFilters.map((quick, index) => {
+  const quickFilters = quickFilterDefs.map((quick, index) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
     const options = loadedQuickOptions[index] ?? []
     const named = source.statusFilterKey && quick.filterKey === source.statusFilterKey

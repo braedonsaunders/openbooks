@@ -38,9 +38,6 @@ test('default workspaces follow the approved journey-oriented information archit
   )
   assert.deepEqual(DEFAULT_NAV_ORDER.customers, [
     'customers',
-    'crm-customer-360',
-    'crm-leads',
-    'crm-prospects',
     'crm-activities',
     'crm-opportunities',
     'crm-forecasts',

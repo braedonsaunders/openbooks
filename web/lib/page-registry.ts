@@ -1144,18 +1144,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/crm/customer-360': {
-    route: '/crm/customer-360',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/crm/customer-360/view')
-      return {
-        load: (input) => m.loadCustomer360View(input.searchParams ?? {}),
-        spec: (data) => m.customer360Spec(data as never),
-      }
-    },
-  },
   '/crm/forecasts': {
     route: '/crm/forecasts',
     segments: [],
@@ -1168,18 +1156,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/crm/leads': {
-    route: '/crm/leads',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/crm/leads/view')
-      return {
-        load: (input) => m.loadLeads(input.searchParams ?? {}),
-        spec: (data) => m.leadsSpec(data as never),
-      }
-    },
-  },
   '/crm/opportunities': {
     route: '/crm/opportunities',
     segments: [],
@@ -1189,18 +1165,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadOpportunities(input.searchParams ?? {}),
         spec: (data) => m.opportunitiesSpec(data as never),
-      }
-    },
-  },
-  '/crm/prospects': {
-    route: '/crm/prospects',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/crm/prospects/view')
-      return {
-        load: (input) => m.loadProspects(input.searchParams ?? {}),
-        spec: (data) => m.prospectsSpec(data as never),
       }
     },
   },

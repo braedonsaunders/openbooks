@@ -25,13 +25,90 @@ function uuidOrNull(value: unknown): string | null | 'invalid' {
   return valueText === null ? null : isUuid(valueText) ? valueText : 'invalid'
 }
 
+/**
+ * The relationship record for one party, plus the pickers its editor needs.
+ *
+ * `options` rides along because the editor is a TAB of the party flyout, not
+ * a page with its own server loader: one round trip has to answer both "what
+ * is this relationship" and "what may it become", or the tab renders selects
+ * with no choices in them. `account: null` is a 200, not a 404 — a customer
+ * created outside CRM simply has no profile yet, and the tab offers to start
+ * one (see POST).
+ */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('crm.accounts.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const account = await loadCrmAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  return account ? NextResponse.json(account) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  const orgId = gate.user.orgId
+  const visible = (await db.execute(sql`
+    select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`))
+  if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const [account, statuses, owners, territories, sources] = await Promise.all([
+    loadCrmAccount(id, orgId, gate.allowedSubsidiaryIds),
+    db.execute<{ id: string; name: string; lifecycle_stage: string; is_default: boolean }>(sql`
+      select id, name, lifecycle_stage, is_default from crm_account_statuses
+       where org_id = ${orgId} and is_active order by lifecycle_stage, sequence, name`),
+    db.execute<{ id: string; name: string }>(sql`select id, name from users where org_id = ${orgId} and is_active order by name`),
+    db.execute<{ id: string; name: string }>(sql`select id, name from crm_sales_territories where org_id = ${orgId} and is_active order by priority, name`),
+    db.execute<{ id: string; name: string }>(sql`select id, name from crm_lead_sources where org_id = ${orgId} and is_active order by name`),
+  ])
+  return NextResponse.json({
+    account,
+    options: {
+      statuses: statuses.rows,
+      owners: owners.rows,
+      territories: territories.rows,
+      sources: sources.rows,
+    },
+  })
+}
+
+/**
+ * Start tracking an existing party as a relationship.
+ *
+ * Customers minted by the AR side (or by an import) carry a customer role and
+ * no crm_account_profiles row, so PATCH has nothing to update. This opens the
+ * profile at the stage the party already IS — `customer` when it holds an
+ * active customer role, `lead` otherwise — and records the stage event, so
+ * the lifecycle history starts honest instead of claiming a conversion that
+ * never happened. It is deliberately idempotent-ish: an existing profile wins.
+ */
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardFeaturePermission('crm.accounts.manage', 'crm')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const created = await db.transaction(async (tx) => {
+    const party = (await tx.execute<{ id: string }>(sql`
+      select id from parties where id = ${id} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`))
+    if (!party.rows.length) return 'missing' as const
+    const existing = (await tx.execute<{ id: string }>(sql`
+      select id from crm_account_profiles where org_id = ${user.orgId} and party_id = ${id}`))
+    if (existing.rows.length) return 'exists' as const
+    const isCustomer = (await tx.execute(sql`
+      select 1 from customer_roles where org_id = ${user.orgId} and party_id = ${id} and is_active`)).rows.length > 0
+    const stage: Stage = isCustomer ? 'customer' : 'lead'
+    const status = (await tx.execute<{ id: string }>(sql`
+      select id from crm_account_statuses
+       where org_id = ${user.orgId} and lifecycle_stage = ${stage} and is_default and is_active
+       order by sequence limit 1`))
+    const profile = (await tx.execute<{ id: string }>(sql`
+      insert into crm_account_profiles
+        (org_id, party_id, lifecycle_stage, status_id, owner_user_id, converted_at, is_active, created_by, updated_by)
+      values (${user.orgId}, ${id}, ${stage}, ${status.rows[0]?.id ?? null}, ${user.id},
+              ${stage === 'customer' ? sql`now()` : null}, true, ${user.id}, ${user.id})
+      returning id`))
+    await tx.execute(sql`
+      insert into crm_account_stage_events
+        (org_id, account_profile_id, to_stage, source_kind, reason, created_by, updated_by)
+      values (${user.orgId}, ${profile.rows[0]!.id}, ${stage}, 'manual', 'Relationship tracking started', ${user.id}, ${user.id})`)
+    return 'created' as const
+  })
+  if (created === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const account = await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds)
+  return NextResponse.json({ account })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

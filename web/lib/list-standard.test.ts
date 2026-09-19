@@ -16,7 +16,6 @@ const entityLists = [
   'app/(app)/banking/reconciliations/page.tsx',
   'app/(app)/banking/rules/page.tsx',
   'app/(app)/budgets/page.tsx',
-  'app/(app)/crm/AccountList.tsx',
   'app/(app)/crm/activities/page.tsx',
   'app/(app)/crm/opportunities/page.tsx',
   'app/(app)/entities/[role]/page.tsx',

@@ -280,11 +280,11 @@ export async function loadCustomization(
         case 'crm_opportunity_status':
           result = await db.execute(sql`select id::text as value, name as label from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence, name`)
           break
-        case 'crm_account_status_lead':
-          result = await db.execute(sql`select id::text as value, name as label from crm_account_statuses where org_id=${authz.user.orgId} and lifecycle_stage='lead' and is_active order by sequence, name`)
-          break
-        case 'crm_account_status_prospect':
-          result = await db.execute(sql`select id::text as value, name as label from crm_account_statuses where org_id=${authz.user.orgId} and lifecycle_stage='prospect' and is_active order by sequence, name`)
+        // One account list spans the lifecycle, so its sub-status picker
+        // offers every stage's statuses, grouped by stage in the drop-down's
+        // order rather than split across two per-stage sources.
+        case 'crm_account_status':
+          result = await db.execute(sql`select id::text as value, name as label from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage, sequence, name`)
           break
         case 'crm_sales_territory':
           result = await db.execute(sql`select id::text as value, name as label from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority, name`)

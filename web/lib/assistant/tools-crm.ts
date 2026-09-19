@@ -364,7 +364,9 @@ const searchCrmAccounts: AssistantToolDef = {
         isActive: r.is_active,
       })),
     );
-    const stageHref = a.stage === "lead" ? "/crm/leads" : a.stage === "prospect" ? "/crm/prospects" : "/crm/prospects";
+    // One account list, segmented by lifecycle stage: the stage rides in as
+    // the `status` chip the list already reads, not as a separate route.
+    const stageHref = a.stage ? `/entities/customers?status=${a.stage}` : "/entities/customers?status=all";
     return {
       ok: true,
       data: {
@@ -456,7 +458,7 @@ const getCrmAccount: AssistantToolDef = {
         opportunitiesTruncated: opportunities.truncated,
         stageEvents: capList(loaded.stageEvents as Record<string, unknown>[], 20).items,
         assignments: capList(loaded.assignments as Record<string, unknown>[], 20).items,
-        href: "/crm/prospects",
+        href: `/entities/customers?party=${a.partyId}&partyTab=relationship`,
       },
     };
   },

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { groupTabs } from '../../../components/module-home/group-tabs'
+import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
@@ -81,7 +81,7 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     newTriggerLabel: t('actions.new'),
     newCreatingLabel: tCommon('actions.creating'),
     newFailedLabel: t('toasts.createDraftFailed'),
-    tabs: await groupTabs('customers', '/ar', { orgId: authz.user.orgId }),
+    tabs: await customerGroupTabs(authz, '/ar'),
     data,
   }
 }

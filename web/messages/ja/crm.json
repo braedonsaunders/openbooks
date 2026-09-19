@@ -55,7 +55,8 @@
     "projectedAmount": "予測金額",
     "periodStart": "期間開始",
     "periodEnd": "期間終了",
-    "weightedAmount": "加重金額"
+    "weightedAmount": "加重金額",
+    "stage": "ステージ"
   },
   "accounts": {
     "newFallback": "新規アカウント",
@@ -88,7 +89,15 @@
       "closedLost": "失注",
       "active": "アクティブ",
       "inactive": "非アクティブ"
-    }
+    },
+    "allTitle": "すべての取引先",
+    "allDescription": "ライフサイクルのすべての段階の関係を 1 つのリストにまとめています。",
+    "relationshipHeading": "関係プロファイル",
+    "untrackedTitle": "関係プロファイルがまだありません",
+    "untrackedDescription": "この取引先にはステージ、担当者、テリトリーが登録されていません。追跡を開始すると関係として管理できます。",
+    "startTracking": "追跡を開始",
+    "stageReason": "差し戻しの理由",
+    "stageReasonHint": "ライフサイクルを前の段階に戻すと、その理由とともに記録されます。"
   },
   "activities": {
     "title": "アクティビティ",
@@ -148,12 +157,6 @@
       "closedWon": "受注",
       "closedLost": "失注"
     }
-  },
-  "customer360": {
-    "title": "顧客360",
-    "description": "商談パイプライン、売掛金のエージング、与信限度額、DSO、インタラクション履歴を統合表示します。",
-    "emptyTitle": "顧客が見つかりません",
-    "emptyDescription": "顧客を追加すると、顧客360のテレメトリを表示できます。"
   },
   "forecastCategories": {
     "omitted": "除外",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "下書きを作成できませんでした。"
+  },
+  "pulse": {
+    "creditHold": "与信保留",
+    "terms": "支払条件: {terms}",
+    "holdReason": "保留理由:",
+    "openReceivables": "未回収債権の合計",
+    "overdue": "{amount} が期限超過",
+    "allCurrent": "期限超過はありません",
+    "dso": "売上債権回転日数 (DSO)",
+    "days": "日",
+    "customerAvg": "得意先平均: {customer}日 (組織: {org}日)",
+    "orgBenchmark": "組織のベンチマーク: {org}日",
+    "creditHeadroom": "与信の余力",
+    "noLimit": "与信限度額は未設定です",
+    "limitUsed": "限度額: {limit} ({percent}% 使用)",
+    "unrestricted": "与信限度額の制限なし",
+    "pipelineValue": "進行中パイプラインの金額",
+    "winRate": "受注率 {percent}% ({won} 件受注)",
+    "openDeals": "進行中の商談 {count} 件",
+    "agingTitle": "売掛金年齢表",
+    "agingDescription": "本日時点の未回収債権を経過期間別に区分しています。",
+    "bucketCurrent": "期限内",
+    "bucket1To30": "1〜30日",
+    "bucket31To60": "31〜60日",
+    "bucket61To90": "61〜90日",
+    "bucket90Plus": "91日以上",
+    "creditTitle": "与信コミットメント",
+    "creditDescription": "売掛金に未請求の受注残を加えた金額です。",
+    "creditLimit": "与信限度額",
+    "openInvoices": "未回収の請求書 (売掛金)",
+    "unbilledOrders": "未請求の受注",
+    "headroom": "利用可能な余力",
+    "uncapped": "上限なし",
+    "projectsTitle": "進行中プロジェクトの集計",
+    "projectsCount": "進行中 {active} 件 / 合計 {total} 件",
+    "contractBudget": "契約予算",
+    "billedToDate": "請求済累計",
+    "billedProgress": "請求進捗",
+    "timelineTitle": "やり取りのタイムライン",
+    "timelineDescription": "活動、見積、受注、請求、入金の時系列の履歴です。",
+    "timelineEmpty": "この取引先に記録された活動や取引はありません。",
+    "loadFailed": "この取引先のパルスを読み込めません。"
   }
 }

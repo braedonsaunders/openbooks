@@ -550,20 +550,64 @@ const PARTY_LIST_COLUMNS: RecordTypeMeta["listColumns"] = [
   { key: "status", labelKey: "common.labels.status", kind: "status" },
 ];
 
-const CUSTOMER_LIST_COLUMNS: RecordTypeMeta["listColumns"] = PARTY_LIST_COLUMNS.map((column) =>
-  column.key === "status" ? { ...column, sortable: true, sortKey: "status" } : column,
-);
+/**
+ * The customer list is the ONE account surface: with CRM on it spans the whole
+ * relationship lifecycle (lead → prospect → customer), so the built-in `status`
+ * column carries the lifecycle STAGE and the CRM columns below carry the
+ * configured sub-status and the routing/qualification fields the retired
+ * /crm/leads and /crm/prospects lists used to own. CRM off strips all of them
+ * back off in recordTypeForFeatureState — every row is simply a customer.
+ */
+const CUSTOMER_CRM_COLUMN_KEYS = [
+  "crm_status",
+  "owner_name",
+  "territory_name",
+  "qualification_score",
+  "last_activity",
+] as const;
 
+const CUSTOMER_CRM_FILTER_KEYS = ["status_id", "owner_user_id", "territory_id"] as const;
+
+const CUSTOMER_LIST_COLUMNS: RecordTypeMeta["listColumns"] = [
+  ...PARTY_LIST_COLUMNS.map((column) =>
+    column.key === "status"
+      ? { ...column, labelKey: "crm.fields.stage", sortable: true, sortKey: "status" }
+      : column,
+  ),
+  { key: "crm_status", labelKey: "crm.fields.status", kind: "text", sortable: true, sortKey: "crm_status", defaultWidth: 130 },
+  { key: "owner_name", labelKey: "crm.fields.owner", kind: "text", sortable: true, sortKey: "owner" },
+  { key: "territory_name", labelKey: "crm.fields.territory", kind: "text", sortable: true, sortKey: "territory", defaultHidden: true },
+  { key: "qualification_score", labelKey: "crm.fields.qualificationScore", kind: "text", sortable: true, sortKey: "score", defaultHidden: true },
+  { key: "last_activity", labelKey: "crm.fields.lastActivity", kind: "date", sortable: true, sortKey: "activity", defaultHidden: true },
+];
+
+/**
+ * Lifecycle STAGE, the one field that decides what an account is. The old
+ * "existing / potential customer" pair read the same
+ * `crm_account_profiles.lifecycle_stage` but could only ever show a DEMOTED
+ * customer as potential, because real prospects had no customer role and so
+ * never reached this list at all.
+ */
 const CUSTOMER_STATUS_FILTER: RecordTypeMeta["listFilters"][number] = {
   key: "status",
-  labelKey: "common.labels.status",
+  labelKey: "crm.fields.lifecycleStage",
   kind: "select",
   operators: OPERATORS_BY_KIND.select,
   options: [
-    { value: "customer", labelKey: "entities.list.customerStatuses.existing" },
-    { value: "prospect", labelKey: "entities.list.customerStatuses.potential" },
+    { value: "customer", labelKey: "crm.stages.customer" },
+    { value: "prospect", labelKey: "crm.stages.prospect" },
+    { value: "lead", labelKey: "crm.stages.lead" },
   ],
 };
+
+/** CRM-off restores the plain party wording for the one remaining bucket. */
+const CUSTOMER_STATUS_LABEL_KEY = "common.labels.status";
+
+const CUSTOMER_CRM_FILTERS: RecordTypeMeta["listFilters"] = [
+  { key: "status_id", labelKey: "crm.fields.status", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_account_status" },
+  { key: "owner_user_id", labelKey: "crm.fields.owner", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "user" },
+  { key: "territory_id", labelKey: "crm.fields.territory", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_sales_territory" },
+];
 
 const CUSTOMER: RecordTypeMeta = {
   key: "customer",
@@ -585,7 +629,8 @@ const CUSTOMER: RecordTypeMeta = {
   ],
   lineFields: [],
   listColumns: CUSTOMER_LIST_COLUMNS,
-  listFilters: [CUSTOMER_STATUS_FILTER],
+  listFilters: [CUSTOMER_STATUS_FILTER, ...CUSTOMER_CRM_FILTERS],
+  defaultSort: { sortKey: "name", dir: "asc" },
 };
 
 /** CRM opportunities use the universal saved-list-view renderer while their
@@ -631,39 +676,6 @@ const OPPORTUNITY: RecordTypeMeta = {
     { key: "title", labelKey: "crm.fields.title", kind: "text", operators: OPERATORS_BY_KIND.text },
   ],
 };
-
-function crmAccountRecordType(key: "lead" | "prospect"): RecordTypeMeta {
-  return {
-    key,
-    labelKey: `customization.recordTypes.${key}`,
-    category: "entity",
-    featureKey: "crm",
-    supportsForms: false,
-    customFieldTable: "parties",
-    customFieldLineTable: null,
-    headerFields: [],
-    lineFields: [],
-    listColumns: [
-      { key: "account_name", labelKey: "crm.fields.accountName", kind: "reference", sortable: true, sortKey: "name", locked: true },
-      { key: "status", labelKey: "crm.fields.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "owner_name", labelKey: "crm.fields.owner", kind: "text", sortable: true, sortKey: "owner" },
-      { key: "territory_name", labelKey: "crm.fields.territory", kind: "text", sortable: true, sortKey: "territory", defaultHidden: true },
-      { key: "qualification_score", labelKey: "crm.fields.qualificationScore", kind: "text", sortable: true, sortKey: "score" },
-      { key: "last_activity", labelKey: "crm.fields.lastActivity", kind: "date", sortable: true, sortKey: "activity" },
-      { key: "email", labelKey: "common.labels.email", kind: "text", defaultHidden: true },
-      { key: "phone", labelKey: "crm.fields.phone", kind: "text", defaultHidden: true },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
-    ],
-    listFilters: [
-      { key: "status_id", labelKey: "crm.fields.status", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: `crm_account_status_${key}` },
-      { key: "owner_user_id", labelKey: "crm.fields.owner", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "user" },
-      { key: "territory_id", labelKey: "crm.fields.territory", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_sales_territory" },
-    ],
-  };
-}
-
-const LEAD = crmAccountRecordType("lead");
-const PROSPECT = crmAccountRecordType("prospect");
 
 const ACTIVITY: RecordTypeMeta = {
   key: "activity",
@@ -1160,6 +1172,7 @@ const VENDOR: RecordTypeMeta = {
   lineFields: [],
   listColumns: PARTY_LIST_COLUMNS,
   listFilters: [],
+  defaultSort: { sortKey: "name", dir: "asc" },
 };
 
 const EMPLOYEE: RecordTypeMeta = {
@@ -1181,6 +1194,7 @@ const EMPLOYEE: RecordTypeMeta = {
   lineFields: [],
   listColumns: PARTY_LIST_COLUMNS,
   listFilters: [],
+  defaultSort: { sortKey: "name", dir: "asc" },
 };
 
 /**
@@ -1686,8 +1700,6 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   PURCHASE_ORDER,
   CUSTOMER,
   OPPORTUNITY,
-  LEAD,
-  PROSPECT,
   ACTIVITY,
   ITEM,
   ACCOUNT,
@@ -1750,15 +1762,26 @@ export function recordTypeForFeatureState(
     }
   }
   if (features.crm === false && out.key === 'customer') {
+    // CRM off: the list is customers and nothing else. Every lifecycle option
+    // but `customer` goes, and so does each column/filter whose SQL reads the
+    // crm_account_profiles join that customerBaseJoins(false) does not make.
+    const crmColumns = new Set<string>(CUSTOMER_CRM_COLUMN_KEYS)
+    const crmFilters = new Set<string>(CUSTOMER_CRM_FILTER_KEYS)
     out = {
       ...out,
-      listFilters: out.listFilters.map((filter) => {
-        if (filter.key !== 'status' || !filter.options?.length) return filter
-        return {
-          ...filter,
-          options: filter.options.filter((option) => option.value === 'customer'),
-        }
-      }),
+      listColumns: out.listColumns
+        .filter((column) => !crmColumns.has(column.key))
+        .map((column) => (column.key === 'status' ? { ...column, labelKey: CUSTOMER_STATUS_LABEL_KEY } : column)),
+      listFilters: out.listFilters
+        .filter((filter) => !crmFilters.has(filter.key))
+        .map((filter) => {
+          if (filter.key !== 'status' || !filter.options?.length) return filter
+          return {
+            ...filter,
+            labelKey: CUSTOMER_STATUS_LABEL_KEY,
+            options: filter.options.filter((option) => option.value === 'customer'),
+          }
+        }),
     }
   }
   return out
