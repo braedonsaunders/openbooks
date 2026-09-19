@@ -352,17 +352,22 @@ test("every remittance schedule declares a non-empty, unique frequency settings 
   const owners = new Map<string, string>()
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     for (const schedule of pack.remittanceSchedules ?? []) {
+      // Same location format allRemittanceSchedules() builds for its own
+      // errors: a duplicate message must identify both schedules, not just
+      // their country — "both CA and CA" tells a pack author with several
+      // schedules in one country nothing about which two collide.
+      const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`
       assert.ok(
         schedule.frequencySettingsKey,
-        `${country} declares a remittance schedule with no frequency settings key`,
+        `${where} names no frequency settings key`,
       )
       const prior = owners.get(schedule.frequencySettingsKey)
       assert.equal(
         prior,
         undefined,
-        `frequency settings key "${schedule.frequencySettingsKey}" is declared by both ${prior} and ${country}`,
+        `frequency settings key "${schedule.frequencySettingsKey}" is declared by both ${prior} and ${where}`,
       )
-      owners.set(schedule.frequencySettingsKey, country)
+      owners.set(schedule.frequencySettingsKey, where)
     }
   }
   // Non-vacuity: an empty schedule list would pass every assertion above.
