@@ -52,21 +52,36 @@ export function gateSubsidiaryScopeAllows(
 export class GateError extends Error {}
 
 /**
- * A release failure: the adapter threw while releasing the subject, so the
- * whole decide unit rolls back to its savepoint (gate flip, audit evidence,
- * notifications, branch effects, run status) and the decision is NOT
- * recorded — the gate stays pending and the same decision can be retried.
- * The savepoint (not the throw alone) is the guarantee: an outer caller may
- * catch this and still commit without preserving anything from the attempt.
- * The message carries the cause and the remedy for every caller.
+ * The unified atomic decision failure: ANY failure after the gate flip —
+ * resume setup (flow/adapter/graph/subject), branch execution, or release —
+ * rolls the whole decide unit back to its savepoint and records NOTHING. The
+ * gate stays pending and the same decision can be retried. Retry-the-RUN is
+ * never the remedy here: the gate checkpoint is already stamped, so a
+ * re-drive would skip the branch and complete vacuously (original-trigger
+ * retryFlowRun plans from the trigger and stops at the gate). The savepoint
+ * (not the throw alone) is the guarantee: an outer caller may catch this and
+ * still commit without preserving anything from the attempt. The message
+ * carries the stage, the cause, and the remedy for every caller.
  */
-export class ReleaseError extends GateError {
-  constructor(decision: "approved" | "rejected", cause: string) {
+export class DecisionFailedError extends GateError {
+  constructor(args: { decision: "approved" | "rejected"; stage: string; cause: string }) {
     super(
-      `approval release failed: ${cause}. ` +
-        `The decision to ${decision === "approved" ? "approve" : "reject"} was not recorded ` +
+      `approval ${args.stage} failed: ${args.cause}. ` +
+        `The decision to ${args.decision === "approved" ? "approve" : "reject"} was not recorded ` +
         `and the approval is still pending — retry your decision.`,
     );
+    this.name = "DecisionFailedError";
+  }
+}
+
+/**
+ * A release failure — the adapter threw while releasing the subject. Kept as
+ * a named subclass so callers can distinguish the stage; the contract is the
+ * unified one above (nothing recorded, retry the decision).
+ */
+export class ReleaseError extends DecisionFailedError {
+  constructor(decision: "approved" | "rejected", cause: string) {
+    super({ decision, stage: "release", cause });
     this.name = "ReleaseError";
   }
 }
@@ -200,87 +215,19 @@ async function finalizeRunStatus(runId: string, orgId: string, hadFailure: boole
     .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
 }
 
-/** Actionable refusal text: the recorded decision, what failed, the failed run, and its retry path. */
-function decidedBranchError(args: {
-  decision: "approved" | "rejected";
-  resumed: "approve" | "reject";
-  runId: string;
-  stage: string;
-  cause: string;
-}): string {
-  return (
-    `decision ${args.decision} recorded but ${args.stage} failed: ${args.cause}. ` +
-    `Run ${args.runId} is marked failed; fix the cause, then retry the failed run via retryFlowRun.`
-  );
-}
-
-/**
- * Record a decided-but-incomplete branch: mark the run failed with the raw
- * cause (operator-visible on the run row) and return the refusal the caller
- * must surface. The gate decision and its audit evidence stay committed.
- * Only for failures where recording is correct (missing flow/adapter/graph,
- * missing subject, branch-execution failure) — never for release failures,
- * which throw ReleaseError and roll the decision back.
- */
-async function refuseDecidedBranch(args: {
-  runId: string;
-  orgId: string;
-  decision: "approved" | "rejected";
-  resumed: "approve" | "reject";
-  stage: string;
-  cause: string;
-}): Promise<DecideGateFailure> {
-  await finalizeRunStatus(args.runId, args.orgId, true, args.cause);
-  return {
-    ok: false,
-    decision: args.decision,
-    resumed: args.resumed,
-    runId: args.runId,
-    runStatus: "failed",
-    decisionRecorded: true,
-    error: decidedBranchError(args),
-  };
-}
-
 /**
  * A recorded decision whose branch completed: the gate flipped, the branch
- * (if any) ran, and the engine release landed.
+ * (if any) ran, and the engine release landed. There is no recorded-failure
+ * variant — ANY failure after the flip rolls the whole decide unit back to
+ * its savepoint and throws DecisionFailedError (nothing recorded, gate still
+ * pending, retry the decision).
  */
-export interface DecideGateSuccess {
+export interface DecideGateResult {
   ok: true;
   /** Which branch resumed; null = quorum 'all' still waiting on siblings. */
   resumed: "approve" | "reject" | null;
   runStatus: "waiting" | "completed";
 }
-
-/**
- * A RECORDED decision whose branch did not complete — the refusal propagated
- * to the caller instead of resolving to success. The gate flip and its audit
- * evidence are committed (decisionRecorded), and the run is marked failed
- * with the raw cause. This covers branch-execution failures only; a release
- * failure instead throws ReleaseError and rolls the whole decision back
- * (see above). Partial guarantee, stated precisely: branch actions that
- * completed before the failure stay committed (their effect checkpoints
- * stand, so a retry resumes from the failed node instead of double-firing);
- * only the failed effect's own partials rolled back via its savepoint.
- * Callers must treat this as a failure and surface `error` (it names the
- * failed run and its retry path) — never render it as an approval.
- */
-export interface DecideGateFailure {
-  ok: false;
-  /** The decision that was recorded before the branch failed. */
-  decision: "approved" | "rejected";
-  /** The branch that was being resumed when it failed. */
-  resumed: "approve" | "reject";
-  /** The failed run — re-drive it via retryFlowRun once the cause is fixed. */
-  runId: string;
-  runStatus: "failed";
-  decisionRecorded: true;
-  /** Actionable cause: what failed, what was rolled back, how to recover. */
-  error: string;
-}
-
-export type DecideGateResult = DecideGateSuccess | DecideGateFailure;
 
 /**
  * Approve/reject one gate row. Authorization: the row's assignee, a holder of
@@ -456,23 +403,17 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
       const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
       const adapter = getFlowAdapter(gate.subjectKind);
       if (!flow || !adapter) {
-        return refuseDecidedBranch({
-          runId: gate.runId,
-          orgId: gate.orgId,
+        throw new DecisionFailedError({
           decision,
-          resumed: outcome.resume,
-          stage: `the ${outcome.resume} branch`,
+          stage: "resume",
           cause: "flow definition or subject adapter is unavailable",
         });
       }
       const graph = parseFlowGraph(flow.id, flow.graph);
       if (!graph) {
-        return refuseDecidedBranch({
-          runId: gate.runId,
-          orgId: gate.orgId,
+        throw new DecisionFailedError({
           decision,
-          resumed: outcome.resume,
-          stage: `the ${outcome.resume} branch`,
+          stage: "resume",
           cause: "flow graph failed validation",
         });
       }
@@ -583,24 +524,22 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
         }
       }
 
-      await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
+      // A branch failure (missing subject, failed action) rolls the whole
+      // decide unit back like a release failure: the savepoint removes the
+      // flip, the audit, the notifications, and every effect the branch ran
+      // before failing — including a pre-action release that already landed.
+      // Retry-the-RUN cannot heal this (the gate checkpoint is stamped, so a
+      // re-drive skips the branch and completes vacuously); the caller gets
+      // DecisionFailedError and retries the DECISION, which re-runs the full
+      // branch on the still-pending gate.
       if (hadFailure) {
-        return {
-          ok: false,
+        throw new DecisionFailedError({
           decision,
-          resumed: outcome.resume,
-          runId: gate.runId,
-          runStatus: "failed",
-          decisionRecorded: true,
-          error: decidedBranchError({
-            decision,
-            resumed: outcome.resume,
-            runId: gate.runId,
-            stage: `the ${outcome.resume} branch`,
-            cause: error ?? "gate branch failed",
-          }),
-        };
+          stage: "branch",
+          cause: error ?? "gate branch failed",
+        });
       }
+      await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
       const runStatus =
         ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
           ?.status as "waiting" | "completed") ?? "completed";

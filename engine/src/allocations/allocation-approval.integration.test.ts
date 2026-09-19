@@ -11,7 +11,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "../test-fixtures.ts";
-import { decideGate } from "../flows/gates.ts";
+import { decideGate, DecisionFailedError } from "../flows/gates.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { processAllocationRunOutboxRow } from "./scheduling.ts";
@@ -422,8 +422,22 @@ test("a period closed after approval was requested refuses at approval time", { 
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', now(),
               'approval-time close must refuse the posting')`);
-    const decided = await decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id });
-    assert.equal(decided.runStatus, "failed");
+    // A closed period refuses the posting inside the release: under the
+    // unified atomic decision failure contract the whole decide unit rolls
+    // back — the decision is not recorded, the gate stays pending so the
+    // same decision can be retried, and nothing posts.
+    await assert.rejects(
+      decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id }),
+      (e: unknown) => {
+        assert.ok(e instanceof DecisionFailedError, `expected DecisionFailedError, got ${String(e)}`);
+        assert.match(e.message, /was not recorded/);
+        return true;
+      },
+      "a closed period must refuse the approval without recording it",
+    );
+    const stillPending = await pendingGateForRun(preview.id);
+    assert.ok(stillPending, "the gate stays pending so the decision can be retried");
+    assert.equal(stillPending.id, gate.id);
     const row = await runRow(preview.id);
     assert.equal(row.journalEntryId, null);
     assert.equal(await lineageCount(org.orgId, preview.id), 0);
