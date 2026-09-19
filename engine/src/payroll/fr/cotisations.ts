@@ -13,10 +13,21 @@
  *   Cap order (engine-stated, the page is silent): the 192 240 € limit
  *   applies to the brut, then the 98,25 % abattement applies to the capped
  *   figure, i.e. base = min(brut, cap) × 98,25 %.
- * - Reduced rates (maladie 7 %, allocations 3,45 %) are refused by name:
- *   the page states no income condition, so the engine applies the taux
- *   plein to every salary and never the réduit (see
- *   FR_COTISATION_REFUSALS_2026).
+ * - Reduced rates: maladie 7 % is refused by name (the URSSAF page states
+ *   no income condition, so the engine applies the 13 % plein to every
+ *   salary — see FR_COTISATION_REFUSALS_2026). Allocations familiales is
+ *   the opposite case: CSS art. L241-6-1 states the income condition
+ *   (3,45 % at or below 3,5 × SMIC, 5,25 % above), so the engine selects
+ *   the rate from the annualised remuneration.
+ * - Brut/net-imposable bridge (PAS assiette): CGI art. 204 A et s. with
+ *   BOFiP BOI-IR-PAS-20-10-10 I-A §10 — the PAS rate hits the montant net
+ *   imposable, i.e. brut minus the déductible employee lines (vieillesse,
+ *   CSG 6,8 pts per CGI art. 154 quinquies, ARRCO and CEG salariaux per
+ *   CGI art. 83 1°) while the non-déductible CSG fraction (2,4 pts) and
+ *   the CRDS stay in the base (same article: "la fraction restante de la
+ *   CSG, soit 2,4 points, demeure non déductible comme la CRDS"). The
+ *   CET salariale is likewise non déductible (solidarity levy, no rights).
+ *   calculateFrNetImposable2026 derives it; the adapter prices PAS on it.
  * - FNAL reads the employer's effectif and fail-closes when unknown:
  *   "effectif de moins de 50 salariés" → 0,10 % plafonné;
  *   "effectif de 50 salariés et plus" → 0,50 % sur la totalité.
@@ -46,6 +57,7 @@ import { PayrollPackError } from "../payroll-error.ts";
 import {
   FR_AGS_ER_2026,
   FR_ALLOC_FAM_ER_2026,
+  FR_ALLOC_FAM_SEUIL_2026,
   FR_CHOMAGE_ER_2026,
   FR_CRDS_SAL_2026,
   FR_CSA_ER_2026,
@@ -161,6 +173,8 @@ export interface FrCotisations2026Result {
   vieillesseErDeplafonnee: string;
   vieillesseEr: string;
   allocFamEr: string;
+  /** The allocations familiales rate actually applied ("0.0345" or "0.0525"). */
+  allocFamErRate: string;
   chomageEr: string;
   agsEr: string;
   fnalEr: string;
@@ -251,11 +265,21 @@ export function calculateFrCotisations2026(
   const csgNonImp = lineOf(csgBase, rate6(FR_CSG_SAL_2026.nonImposable.rate));
   const crds = lineOf(csgBase, rate6(FR_CRDS_SAL_2026.rate));
 
-  // Employer: plein rates only (réduit refused by name).
+  // Employer: maladie plein only (réduit refused by name). Allocations
+  // familiales selects its rate from the annualised remuneration (CSS art.
+  // L241-6-1, modalités D241-3-1): 3,45 % when brut × periods does not
+  // exceed 3,5 × SMIC annuel, 5,25 % above. Bigint comparison — no float,
+  // no centime rounding at the boundary; at monthly periodicity this is
+  // exactly brut ≤ 3,5 × SMIC mensuel (6 380,605 €).
   const maladieEr = lineOf(brut, rate6(FR_MALADIE_ER_2026.plein.rate));
   const vieilErPlaf = lineOf(plafPer, rate6(FR_VIEILLESSE_ER_2026.plafonnee.rate));
   const vieilErDeplaf = lineOf(brut, rate6(FR_VIEILLESSE_ER_2026.deplafonnee.rate));
-  const allocFamEr = lineOf(brut, rate6(FR_ALLOC_FAM_ER_2026.plein.rate));
+  const allocFamSeuilAnnual = U(FR_ALLOC_FAM_SEUIL_2026.annual);
+  const allocFamAnnualised = brut * BigInt(periods);
+  const allocFamRate = allocFamAnnualised <= allocFamSeuilAnnual
+    ? FR_ALLOC_FAM_ER_2026.reduit.rate
+    : FR_ALLOC_FAM_ER_2026.plein.rate;
+  const allocFamEr = lineOf(brut, rate6(allocFamRate));
   const chomageEr = lineOf(largePer, rate6(FR_CHOMAGE_ER_2026.rate.rate));
   const agsEr = lineOf(largePer, rate6(FR_AGS_ER_2026.rate.rate));
   const csaEr = lineOf(brut, rate6(FR_CSA_ER_2026.rate));
@@ -336,6 +360,7 @@ export function calculateFrCotisations2026(
     vieillesseErDeplafonnee: D(vieilErDeplaf),
     vieillesseEr: D(add(vieilErPlaf, vieilErDeplaf)),
     allocFamEr: D(allocFamEr),
+    allocFamErRate: allocFamRate,
     chomageEr: D(chomageEr),
     agsEr: D(agsEr),
     fnalEr: D(fnalEr),
@@ -362,5 +387,119 @@ export function calculateFrCotisations2026(
     cetBase: D(cetBase),
     cetSal: D(cetSal),
     cetEr: D(cetEr),
+  };
+}
+
+export interface FrNetImposable2026Input {
+  /** Salaire brut of the versement (income + primes), decimal. */
+  brut: string;
+  /** Pay date, ISO YYYY-MM-DD — must fall in calendar 2026. */
+  payDate: string;
+  /** Usual pay periodicity; 12 = monthly caps directly. */
+  periodsPerYear: number;
+}
+
+export interface FrNetImposable2026Result {
+  /** Déductible employee lines, each 4dp (centime-rounded like the payslip). */
+  vieillesseSal: string;
+  /** CSG 6,8 pts — the déductible fraction (CGI art. 154 quinquies). */
+  csgDeductible: string;
+  arrcoSal: string;
+  cegSal: string;
+  /** Non-déductible lines, kept in the base: CSG 2,4 pts, CRDS, CET sal. */
+  csgNonDeductible: string;
+  crds: string;
+  cetSal: string;
+  /** Brut minus ALL employee lines (the "net social" of the payslip). */
+  netSocial: string;
+  /** The PAS assiette: brut minus déductible lines only. */
+  netImposable: string;
+}
+
+/**
+ * Brut/net-imposable bridge for the PAS assiette (CGI art. 204 A et s.,
+ * BOFiP BOI-IR-PAS-20-10-10 I-A §10: assiette = montant net imposable).
+ *
+ * Composition: brut − vieillesse − CSG 6,8 pts (CGI art. 154 quinquies) −
+ * ARRCO − CEG (CGI art. 83 1°). The CSG 2,4 pts, the CRDS and the CET
+ * salariale are non déductibles and stay in the base, i.e.
+ * netImposable = netSocial + csgNonDeductible + crds + cetSal — the
+ * identity the regression test pins so the add-back cannot silently drop.
+ *
+ * Needs no effectif: only employee lines enter, so this stays callable
+ * where FNAL would refuse. Every line reuses the shared primitives
+ * (cappedPerPeriod, lineOf, split6040) on the same inputs, so each figure
+ * here equals its calculateFrCotisations2026 twin to the unit — asserted
+ * in the goldens.
+ */
+export function calculateFrNetImposable2026(
+  input: FrNetImposable2026Input,
+): FrNetImposable2026Result {
+  frCotisationYearForPayDate(input.payDate);
+  frRetraiteYearForPayDate(input.payDate);
+  if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
+    throw new PayrollPackError(
+      `FR net imposable needs a positive integer periodsPerYear, got ${input.periodsPerYear}`,
+    );
+  }
+  let brut: bigint;
+  try {
+    brut = U(input.brut);
+  } catch {
+    throw new PayrollPackError(`FR net imposable brut is not a decimal amount: "${input.brut}"`);
+  }
+  if (brut < 0n) {
+    throw new PayrollPackError(`FR net imposable brut must be non-negative, got "${input.brut}"`);
+  }
+
+  const periods = input.periodsPerYear;
+  const passAnnual = U("48060");
+  const quatrePassAnnual = U("192240");
+
+  const plafPer = cappedPerPeriod(brut, periods, passAnnual, "plafond");
+  const largePer = cappedPerPeriod(brut, periods, quatrePassAnnual, "4 PASS");
+
+  const vieillesse = rCent(roundDiv(plafPer * rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate), RATE6))
+    + rCent(roundDiv(brut * rate6(FR_VIEILLESSE_SAL_2026.deplafonnee.rate), RATE6));
+  const csgBase = rCent(roundDiv(largePer * BigInt(9825), BigInt(10000)));
+  const csgDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.nonImposable.rate));
+  const csgNonDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.imposable.rate));
+  const crds = lineOf(csgBase, rate6(FR_CRDS_SAL_2026.rate));
+
+  const t1Base = plafPer;
+  const huitPass = passAnnual * 8n;
+  const annualised = brut * BigInt(periods);
+  const t2Annualised = annualised < passAnnual
+    ? 0n
+    : annualised - passAnnual > huitPass - passAnnual ? huitPass - passAnnual : annualised - passAnnual;
+  const t2Base = roundDiv(t2Annualised, BigInt(periods));
+
+  const arrcoT1 = split6040(rate6(FR_ARRCO_TAUX_2026.t1.rate));
+  const arrcoT2 = split6040(rate6(FR_ARRCO_TAUX_2026.t2.rate));
+  const cegT1 = split6040(rate6(FR_CEG_2026.t1.rate));
+  const cegT2 = split6040(rate6(FR_CEG_2026.t2.rate));
+  const cetSplit = split6040(rate6(FR_CET_2026.rate));
+
+  const arrco = lineOf(t1Base, arrcoT1.sal) + lineOf(t2Base, arrcoT2.sal);
+  const ceg = lineOf(t1Base, cegT1.sal) + lineOf(t2Base, cegT2.sal);
+  const cetApplies = annualised > passAnnual;
+  const cet = cetApplies ? lineOf(t1Base + t2Base, cetSplit.sal) : 0n;
+
+  // Payslip arithmetic on centime-rounded lines: net social first, then the
+  // non-déductible add-back. netImposable is equivalently brut minus the
+  // déductible lines — both forms are returned so tests pin the identity.
+  const netSocial = brut - vieillesse - (csgDed + csgNonDed) - crds - arrco - ceg - cet;
+  const netImposable = netSocial + csgNonDed + crds + cet;
+
+  return {
+    vieillesseSal: D(vieillesse),
+    csgDeductible: D(csgDed),
+    arrcoSal: D(arrco),
+    cegSal: D(ceg),
+    csgNonDeductible: D(csgNonDed),
+    crds: D(crds),
+    cetSal: D(cet),
+    netSocial: D(netSocial),
+    netImposable: D(netImposable),
   };
 }

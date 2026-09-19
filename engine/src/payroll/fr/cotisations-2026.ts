@@ -64,6 +64,49 @@ export const FR_PASS_2026_URSSAF = {
  */
 export const FR_QUATRE_PASS_2026 = "192240";
 
+/**
+ * SMIC 2026 (salaire minimum de croissance), in force 1 January 2026:
+ *
+ * Décret n° 2025-1228 du 17 décembre 2025 portant relèvement du salaire
+ * minimum de croissance (Journal officiel du 18 décembre 2025): taux
+ * horaire brut 12,02 €, SMIC mensuel brut 1 823,03 € pour 151,67 h.
+ * Corroborated by INSEE (Smic series: 2026 → 12,02 € / 1 823,03 €,
+ * insee.fr) and service-public.fr A17008 (12,02 € horaire, 1 823,03 €
+ * mensuel brut, net 1 443,11 €).
+ *
+ * The annual figure is the published monthly × 12 (1 823,03 × 12 =
+ * 21 876,36) — asserted in the goldens, not re-transcribed.
+ */
+export const FR_SMIC_2026 = {
+  hourly: "12.02",
+  monthly: "1823.03",
+  annual: "21876.36",
+  quote:
+    "Décret n° 2025-1228 du 17 décembre 2025: taux horaire du SMIC 12,02 € "
+    + "bruts, SMIC mensuel brut 1 823,03 € (151,67 h) à compter du 1er janvier 2026",
+} as const;
+
+/**
+ * Allocations familiales reduced-rate ceiling 2026: 3,5 × SMIC annuel.
+ *
+ * CSS art. L241-6-1 fixes the employer rate at 3,45 % for salaries that do
+ * not exceed 3,5 times the SMIC and 5,25 % above it ("n'excède pas 3,5 fois
+ * le montant du Smic"); art. D241-3-1 sets the assessment modalities. The
+ * engine compares the annualised remuneration (brut × periodicity) against
+ * this annual ceiling — at monthly periodicity that is exactly brut ≤ 3,5 ×
+ * SMIC mensuel (6 380,605 €).
+ *
+ * 3,5 × 21 876,36 = 76 567,26 — transcribed, with the relationship asserted
+ * in the goldens (the FR_QUATRE_PASS_2026 pattern).
+ */
+export const FR_ALLOC_FAM_SEUIL_2026 = {
+  multiple: "3.5",
+  annual: "76567.26",
+  quote:
+    "CSS art. L241-6-1: taux réduit 3,45 % pour les rémunérations n'excédant "
+    + "pas 3,5 fois le SMIC, taux plein 5,25 % au-delà (modalités: art. D241-3-1)",
+} as const;
+
 // ---------------------------------------------------------------------------
 // Taux patronaux (employer)
 // ---------------------------------------------------------------------------
@@ -108,8 +151,10 @@ export const FR_VIEILLESSE_ER_2026 = {
 /**
  * "Allocations familiales Taux réduit à 3,45 % Taux plein à 5,25 %"
  *
- * Same posture as maladie: the page states no income condition, so the
- * engine applies the taux plein and refuses the reduced rate by name.
+ * Unlike maladie, the réduit/plein split has a statutory income condition:
+ * CSS art. L241-6-1 (modalités art. D241-3-1) — 3,45 % when the annualised
+ * remuneration does not exceed 3,5 × SMIC (FR_ALLOC_FAM_SEUIL_2026 above),
+ * 5,25 % above it. The engine selects the rate in ./cotisations.ts.
  */
 export const FR_ALLOC_FAM_ER_2026 = {
   plein: { rate: "0.0525", quote: "Allocations familiales Taux plein à 5,25 %" },
@@ -257,7 +302,7 @@ export const FR_TENANT_DECLARED_QUOTES_2026 = {
  */
 export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "Maladie patronale taux réduit 7 %: the page states no income condition for the réduit/plein split — the engine applies the 13 % plein, never the 7 % réduit",
-  "Allocations familiales taux réduit 3,45 %: same — the engine applies the 5,25 % plein",
+  "Allocations familiales taux réduit 3,45 %: COMPUTED — CSS art. L241-6-1 threshold (3,5 × SMIC, FR_ALLOC_FAM_SEUIL_2026 above); the engine selects 3,45 % at or below the ceiling, 5,25 % above",
   "AGS 0,03 % interim variant: needs an employer-type (entreprise de travail temporaire) channel no pack carries — the engine applies 0,25 %",
   "Alsace-Moselle cotisation salariale maladie supplémentaire 1,30 % (transcribed above): needs a workplace-department channel no pack carries",
   "AT/MP (Taux notifié par la Carsat) and versement mobilité (commune-dependent): tenant-declared by design, never table-supplied",
@@ -265,7 +310,7 @@ export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "AGIRC-ARRCO T1/T2 both shares, CEG and CET: transcribed in ./retraite-2026.ts and computed",
   "APEC 0,06 % (transcribed in ./retraite-2026.ts): cadres only — no pack channel carries the employee's cadre status",
   "AGIRC-ARRCO split modified by accord collectif: the page allows a collective agreement to modify the regulated 60/40 — the engine applies 60/40 with no tenant-override channel",
-  "Brut/net-imposable bridge: the stub supplies one earnings figure, used as brut for cotisations and as net imposable for PAS — the déductible-CSG bridge between them is not modelled",
+  "Brut/net-imposable bridge: COMPUTED — the stub's earnings figure is the brut; the PAS assiette (net imposable) is derived in ./cotisations.ts (calculateFrNetImposable2026: brut minus déductible lines, CSG 2,4 pts + CRDS added back)",
 ];
 
 /** 2026 cotisation tables resolve by calendar year and throw otherwise. */

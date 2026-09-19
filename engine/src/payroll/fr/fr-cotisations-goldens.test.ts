@@ -85,8 +85,10 @@ test("hand-worked: 2 000 € brut, monthly, 10 salariés — every line", () => 
   assert.equal(r.vieillesseErPlafonnee, "171.0000");
   assert.equal(r.vieillesseErDeplafonnee, "42.2000");
   assert.equal(r.vieillesseEr, "213.2000");
-  // 2 000 × 5,25 % = 105,00 (NOT the 3,45 % réduit).
-  assert.equal(r.allocFamEr, "105.0000");
+  // 2 000 € annualises to 24 000 €, below the 76 567,26 € ceiling
+  // (3,5 × SMIC, CSS art. L241-6-1) → 2 000 × 3,45 % = 69,00.
+  assert.equal(r.allocFamErRate, "0.0345");
+  assert.equal(r.allocFamEr, "69.0000");
   // 2 000 × 4 % = 80,00 chômage; 2 000 × 0,25 % = 5,00 AGS.
   assert.equal(r.chomageEr, "80.0000");
   assert.equal(r.agsEr, "5.0000");
@@ -259,8 +261,12 @@ test("adapter: 2 000 € June versement pushes PAS, the nine URSSAF lines and th
     },
   };
   const result = await FR_PAYROLL_PACK.computeStatutory(ctx);
-  // May-2026 grille: 2 000 € → 1 928–2 060 → 2,9 % → 58,00 € PAS.
-  assert.equal(result["PAS"], "58.0000");
+  // PAS prices the net imposable, not the 2 000 € brut: 2 000 − 146,00
+  // (vieillesse) − 133,62 (CSG 6,8) − 62,96 (ARRCO) − 17,20 (CEG) =
+  // 1 640,22 € → May-2026 grille 1 635–1 698 → 0,5 % → 8,20 € PAS
+  // (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10).
+  assert.equal(result["NET_IMPOSABLE"], "1640.2200");
+  assert.equal(result["PAS"], "8.2000");
   // 2 000 € brut, all T1: ARRCO 2 000 × 7,87 % = 157,40 (sal 62,96 /
   // er 94,44); CEG 2 000 × 2,15 % = 43,00 (17,20 / 25,80); no CET.
   assert.equal(result["ARRCO_SAL"], "62.9600");
@@ -275,13 +281,13 @@ test("adapter: 2 000 € June versement pushes PAS, the nine URSSAF lines and th
   assert.deepEqual(
     pushed.map((line) => [line.systemKey, line.kind, line.amount, line.sequence]),
     [
-      ["pas", "deduction", "58.0000", 110],
+      ["pas", "deduction", "8.2000", 110],
       ["vieillesse", "deduction", "146.0000", 120],
       ["csg", "deduction", "180.7800", 130],
       ["crds", "deduction", "9.8300", 135],
       ["maladie_er", "employer_contribution", "260.0000", 210],
       ["vieillesse_er", "employer_contribution", "213.2000", 211],
-      ["allocfam_er", "employer_contribution", "105.0000", 215],
+      ["allocfam_er", "employer_contribution", "69.0000", 215],
       ["chomage_er", "employer_contribution", "80.0000", 225],
       ["ags_er", "employer_contribution", "5.0000", 226],
       ["cdn_er", "employer_contribution", "8.3200", 230],
