@@ -303,4 +303,101 @@ test('profile GET serves every pack identifier declaration', { skip: !DB }, asyn
   }
 })
 
+test('profile POST saves the same valid US profile concurrently without a 422', { skip: !DB }, async () => {
+  // The reported defect: an intermittent 422 saving a valid US profile. Drive
+  // it the way it was reported — many concurrent saves of the same employee,
+  // then many concurrent saves across employees — and require every one to
+  // succeed. A regression that refuses committed-looking rows under
+  // concurrency turns any of these red with the 422 body attached.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const list = (await (await get()).json()) as {
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>
+    }
+    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+    const body = (id: string, allowances: number) => ({
+      employeePartyId: id, payScheduleId: scheduleId,
+      country: 'US', province: usState, payBasis: 'hourly',
+      sin: '123-45-6789', w4Allowances: allowances,
+    })
+    const sameEmployee = await Promise.all(
+      Array.from({ length: 40 }, (_, i) => post(body(employeeId, i % 100))),
+    )
+    for (const [i, response] of sameEmployee.entries()) {
+      assert.equal(response.status, 200, `same-employee save ${i}: ${await response.clone().text()}`)
+    }
+    const others: string[] = []
+    await withBypassContext(async () => {
+      for (let i = 0; i < 5; i++) {
+        const id = randomUUID()
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${id}, ${org.orgId}, 'person', ${`Load Hire ${i}`}, true, '{}'::jsonb)`)
+        await db.execute(sql`
+          insert into employee_roles (id, org_id, party_id, terminated_on)
+          values (${randomUUID()}, ${org.orgId}, ${id}, null)`)
+        others.push(id)
+      }
+    })
+    const acrossEmployees = await Promise.all(
+      others.flatMap((id, ei) =>
+        Array.from({ length: 8 }, (_, i) => post(body(id, (ei * 8 + i) % 100)))),
+    )
+    for (const [i, response] of acrossEmployees.entries()) {
+      assert.equal(response.status, 200, `cross-employee save ${i}: ${await response.clone().text()}`)
+    }
+    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
+    assert.equal(rows.rows[0]!.count, String(1 + others.length))
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile POST holds the employee row lock across the scope check and upsert', { skip: !DB }, async () => {
+  // The scope comment promises a re-home racing the save cannot slip between
+  // the subsidiary check and the write. That holds only while the locking
+  // reads and the upsert share one transaction: hold an uncommitted re-home
+  // (a plain row update) on a second connection and require the real POST to
+  // block on the employee lock rather than sailing through on released locks.
+  // It then proceeds to 200 once the contender rolls back — the write is
+  // refused-or-validated, never stale.
+  const { org, employeeId, scheduleId } = await fixture()
+  const holder = await withBypassContext(() => pool.connect())
+  assert.ok(holder, 'a second database connection is required to stage the racing re-home')
+  try {
+    const list = (await (await get()).json()) as {
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>
+    }
+    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+    // The holder connection carries bypass GUCs from its acquisition above,
+    // so this block states the scope the raw queries already run under.
+    await withBypassContext(async () => {
+      await holder.query('begin')
+      await holder.query('update parties set display_name = $1 where id = $2', ['Re-homed Rival', employeeId])
+    })
+    let settled = false
+    const pending = post({
+      employeePartyId: employeeId, payScheduleId: scheduleId,
+      country: 'US', province: usState, payBasis: 'hourly', sin: '123-45-6789',
+    }).finally(() => { settled = true })
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    assert.equal(
+      settled, false,
+      'the save must block on the in-flight re-home: its reads hold the employee row to commit',
+    )
+    await holder.query('rollback')
+    const response = await pending
+    assert.equal(response.status, 200, await response.clone().text())
+    const saved = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*) as count from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.equal(saved.rows[0]!.count, '1')
+  } finally {
+    try { await holder.query('rollback') } catch { /* already settled above */ }
+    holder.release()
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test.after(async () => { await pool.end() })
