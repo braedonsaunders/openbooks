@@ -345,6 +345,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the IT-100.2A percentage method's own — see the
+ * module header.
+ */
+export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  WV_EXEMPT: "Exempt from West Virginia withholding",
+  WV_SCHEDULE: "West Virginia schedule",
+  WV_PERIOD: "West Virginia payroll period",
+  WV_EXEMPTION: "West Virginia exemption",
+  WV_TAXABLE: "West Virginia taxable income",
+  WV_BAND_OVER: "West Virginia band excess",
+  WV_TAX: "West Virginia tax",
+};
+
 export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   state: "WV",
   label: "West Virginia income tax",

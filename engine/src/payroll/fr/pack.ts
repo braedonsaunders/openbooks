@@ -6,7 +6,7 @@ import type {
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
-import { computeFrStatutory } from "./compute-statutory.ts";
+import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -386,4 +386,5 @@ export const FR_PAYROLL_PACK = {
   withholding: () => FR_WITHHOLDING,
   computeStatutory: computeFrStatutory,
   statutoryEngineLabel: "PAS",
+  factorLabels: { ...FR_FACTOR_LABELS },
 } satisfies Omit<PayrollCountryPack, "country"> & { country: "FR" };

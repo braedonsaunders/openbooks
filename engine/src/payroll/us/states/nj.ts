@@ -685,6 +685,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the NJ-WT percentage method's own — see the module
+ * header.
+ */
+export const NJ_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  NJ_EXEMPT: "Exempt from New Jersey withholding (NJ-W4 line 6)",
+  NJ_RATE_TABLE: "New Jersey rate table applied",
+  NJ_ALLOWANCE_VALUE: "New Jersey allowance value",
+  NJ_EXEMPTION: "New Jersey exemption",
+  NJ_TAXABLE: "New Jersey taxable income",
+  NJ_BRACKET_RATE: "New Jersey bracket rate (printed percent)",
+  NJ_TAX: "New Jersey tax",
+};
+
 export const NJ_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NJ",
   label: "New Jersey gross income tax",

@@ -271,6 +271,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the GB-1210 percentage method's own — see the
+ * module header.
+ */
+export const VT_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  VT_EXEMPT: "Exempt from Vermont withholding",
+  VT_WAGES: "Vermont wages this period",
+  VT_ALLOWANCE: "Vermont allowance",
+  VT_TAXABLE: "Vermont taxable wages",
+  VT_WITHHELD: "Vermont tax withheld this period",
+};
+
 export const VT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "VT",
   label: "Vermont income tax",

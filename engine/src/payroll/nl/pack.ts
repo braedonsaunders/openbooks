@@ -29,7 +29,7 @@ import type {
 } from "../packs.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
-import { computeNlStatutory } from "./loonheffing.ts";
+import { computeNlStatutory, NL_FACTOR_LABELS } from "./loonheffing.ts";
 import { NL_PACK_RATES, NL_TAX_YEARS } from "./rates.ts";
 
 // ---------------------------------------------------------------------------
@@ -245,6 +245,7 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // by name, and refuses bonuses by name (bijzondere tarieven).
   computeStatutory: computeNlStatutory,
   statutoryEngineLabel: "Loonbelastingtabellen",
+  factorLabels: { ...NL_FACTOR_LABELS },
 };
 
 export { NL_CERTIFICATES, NL_PACK_RATES as NL_RATES, NL_TAX_YEARS, NL_WITHHOLDING };

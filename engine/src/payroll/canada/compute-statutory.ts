@@ -6,6 +6,28 @@ import type { Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass stamps itself (the payroll inputs, the employer-side
+ * shares, and the employer-levy factors). The T4127 and TP-1015 letters
+ * live beside their engines.
+ */
+export const CA_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  B: "Bonus / non-periodic pay this period",
+  I: "Periodic income this period",
+  PI: "Pensionable earnings this period",
+  IE: "Insurable earnings this period",
+  QPIP: "QPIP premium",
+  EI_ER: "EI premium (employer)",
+  QPIP_ER: "QPIP premium (employer)",
+  WCB: "Workers' compensation premium (employer)",
+  WCB_EARN: "Workers' compensation assessable earnings",
+  EHT: "Employer Health Tax",
+  EHT_EARN: "EHT remuneration (Ontario)",
+  HSF: "Health Services Fund (employer)",
+  HSF_EARN: "HSF remuneration subject",
+};
+
 export type CanadaYtdRow = {
   pensionable: string;
   insurable: string;

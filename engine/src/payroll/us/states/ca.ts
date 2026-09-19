@@ -563,6 +563,25 @@ export function caAnnualizedMethod(input: {
   return { annualTax: D(annual), perPeriod: D(divIntCents(annual, input.periodsPerYear)) };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the 2026 Method B schedule's own — see the
+ * module header.
+ */
+export const CA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CA_EXEMPT: "Exempt from California withholding",
+  CA_GROSS: "California gross wages this period",
+  CA_LOW_INCOME: "California low-income exemption (Table 1, Step 1)",
+  CA_EST_DEDUCTION: "California estimated deduction (Table 2, Step 2)",
+  CA_SUBJECT: "California wages subject to withholding",
+  CA_STD_DEDUCTION: "California standard deduction (Table 3, Step 3)",
+  CA_TAXABLE: "California taxable income",
+  CA_COMPUTED_TAX: "California computed tax (Step 4)",
+  CA_CREDIT: "California exemption allowance credit (Table 4, Step 5)",
+  CA_NET: "California net tax after credit",
+  CA_TAX: "California tax withheld this period",
+};
+
 export const CA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CA",
   label: "California PIT",

@@ -20,6 +20,21 @@ export type UsYtdRow = {
 };
 
 /**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass stamps itself (the payroll inputs plus the withholding
+ * resolution it resolved). The engine trace keys live beside their engines
+ * (Pub 15-T, the state files, withholding.ts).
+ */
+export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  B: "Bonus / non-periodic pay this period",
+  I: "Periodic income this period",
+  PI: "Pensionable earnings this period",
+  IE: "Insurable earnings this period",
+  WITHHOLDING_RESIDENCE: "Withholding residence region",
+  WITHHOLDING_RESIDENCE_SOURCE: "Withholding residence source",
+};
+
+/**
  * Read the employee's year-to-date statutory inputs from committed payroll.
  * Calculated runs are drafts and may be abandoned; counting them would let
  * unpaid figures consume FICA/FUTA/SUI room in a later run.

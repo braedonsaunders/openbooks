@@ -251,63 +251,15 @@ function dimensionOptions(
 const VARIANCE_FLAG_PERCENT = 15
 
 /**
- * Human names for the statutory trace factors (CRA T4127 notation + the US
- * Pub 15-T trace). Domain constants, not UI copy — the CRA/IRS letter codes
- * stay visible beside them so the trace still maps to the guides.
+ * The only trace factors NO pack declares: the deduction-protection
+ * shortfall keys stamped by the generic pay-run engine itself
+ * (engine/src/payroll-run.ts), not by any country's statutory engine.
+ * Everything else resolves through the run's pack-declared `factorLabels`
+ * prop — a flat web-layer map keyed by short codes could not tell
+ * California's CA_TAX from Canada's CA, so it is gone.
  */
-const FACTOR_LABELS: Record<string, string> = {
-  // Inputs
-  I: 'Periodic income this period',
-  B: 'Bonus / non-periodic pay this period',
-  PI: 'Pensionable earnings this period',
-  IE: 'Insurable earnings this period',
+const GENERIC_FACTOR_LABELS: Record<string, string> = {
   PROT_SHORT: 'Protected-earnings shortfall (unpaid this period)',
-  // CRA T4127
-  A: 'Annual taxable income',
-  A_step2: 'Annual taxable income excluding this bonus',
-  C: 'CPP/QPP contribution',
-  C2: 'Second additional CPP/QPP (CPP2)',
-  EI: 'EI premium',
-  EI_ER: 'EI premium (employer)',
-  QPIP: 'QPIP premium',
-  QPIP_ER: 'QPIP premium (employer)',
-  WCB: "Workers' compensation premium (employer)",
-  WCB_EARN: "Workers' compensation assessable earnings",
-  EHT: 'Employer Health Tax',
-  EHT_EARN: 'EHT remuneration (Ontario)',
-  F5: 'Enhanced-CPP tax deduction',
-  F5A: 'Enhanced-CPP deduction on periodic pay',
-  F5B: 'Enhanced-CPP deduction on the bonus',
-  TC: 'Federal TD1 claim amount',
-  TCP: 'Provincial TD1 claim amount',
-  K1: 'Federal personal credit',
-  K2: 'Federal CPP/EI credit',
-  K4: 'Canada employment amount credit',
-  K1P: 'Provincial personal credit',
-  K2P: 'Provincial CPP/EI credit',
-  K4P: 'Provincial employment amount credit',
-  K5P: 'Provincial supplemental credit',
-  T3: 'Basic federal tax (annual)',
-  T1: 'Federal tax (annual)',
-  T4: 'Basic provincial tax (annual)',
-  V1: 'Ontario surtax',
-  V2: 'Ontario Health Premium',
-  S: 'Provincial tax reduction',
-  T2: 'Provincial tax (annual)',
-  T: 'Income tax this period',
-  TB: 'Tax on the bonus (payable now)',
-  // IRS Pub 15-T
-  AAWA: 'Annual adjusted wage amount',
-  FIT: 'Federal income tax this period',
-  FIT_S: 'Federal tax on supplemental wages',
-  SS: 'Social Security tax',
-  SS_TAXABLE: 'Social Security taxable wages',
-  MED: 'Medicare tax',
-  MED2: 'Additional Medicare tax',
-  FUTA: 'Federal unemployment (employer)',
-  SUTA: 'State unemployment (employer)',
-  TW: 'Taxable wages this period',
-  TWP: 'Projected annual taxable wages',
 }
 
 /**
@@ -366,6 +318,8 @@ export function RunWizard(props: {
   regionLabel: string
   /** Statutory engine names by stub country for the trace heading. */
   traceEngines: Record<string, string>
+  /** Pack-declared trace-factor labels by stub country for the trace rows. */
+  factorLabels: Record<string, Record<string, string>>
   /** Engine-computed pre-flight: what blocks the run, what to look at. */
   readiness: Readiness
   /** Whether the stubs still reflect the inputs they were built from. */
@@ -902,6 +856,7 @@ export function RunWizard(props: {
           registerBuckets={props.registerBuckets}
           regionLabel={props.regionLabel}
           traceEngines={props.traceEngines}
+          factorLabels={props.factorLabels}
           fmt={fmt}
         />
       )}
@@ -1491,6 +1446,7 @@ function ReviewStep({
   registerBuckets,
   regionLabel,
   traceEngines,
+  factorLabels,
   fmt,
   adjustments,
   components,
@@ -1509,6 +1465,7 @@ function ReviewStep({
   registerBuckets: RegisterBucket[]
   regionLabel: string
   traceEngines: Record<string, string>
+  factorLabels: Record<string, Record<string, string>>
   fmt: (v: string | number | null | undefined) => string
   adjustments: AdjustmentRow[]
   components: ComponentOption[]
@@ -1796,6 +1753,7 @@ function ReviewStep({
           buckets={registerBuckets}
           regionLabel={regionLabel}
           traceEngines={traceEngines}
+          factorLabels={factorLabels}
         />
       )}
 
@@ -1914,6 +1872,7 @@ function StubDrawer({
   buckets,
   regionLabel,
   traceEngines,
+  factorLabels,
 }: {
   stub: StubRow
   variance: { percent: number; flagged: boolean } | null
@@ -1927,6 +1886,7 @@ function StubDrawer({
   buckets: RegisterBucket[]
   regionLabel: string
   traceEngines: Record<string, string>
+  factorLabels: Record<string, Record<string, string>>
 }) {
   const t = useTranslations('payroll')
   const held = withholding(stub, buckets)
@@ -1934,7 +1894,16 @@ function StubDrawer({
   // (T4127 for CA, Pub 15-T for US) — never a hardcoded country (F-t08-012).
   const traceEngine = traceEngines[stub.country ?? ''] ?? Object.values(traceEngines)[0] ?? ''
   const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
-  const factorLabel = (key: string) => FACTOR_LABELS[key] ?? key
+  // Labels resolve through the stub country's pack declaration (server-
+  // supplied), then the generic-engine keys, then the raw key — the pack
+  // owns its notation, so California's CA_TAX never reads as Canada's CA.
+  const stubLabels = factorLabels[stub.country ?? ''] ?? {}
+  const factorLabel = (key: string) => {
+    const labelled = stubLabels[key] ?? GENERIC_FACTOR_LABELS[key]
+    if (labelled !== undefined) return labelled
+    if (key.startsWith('PROT_SHORT:')) return key.slice('PROT_SHORT:'.length)
+    return key
+  }
   const [adjComponent, setAdjComponent] = useState('')
   const [adjAmount, setAdjAmount] = useState('')
   const [adjNote, setAdjNote] = useState('')

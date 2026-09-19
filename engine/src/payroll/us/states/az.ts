@@ -158,6 +158,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are Form A-4's own — see the module header.
+ */
+export const AZ_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  AZ_ZERO: "Arizona zero-percent election (Form A-4 line 2)",
+  AZ_PRINTED_PERCENT: "Arizona elected withholding percent (Form A-4 line 1)",
+  AZ_RATE: "Arizona withholding rate",
+  AZ_WAGES: "Arizona gross taxable wages this period",
+  AZ_TAX: "Arizona tax this period",
+  AZ_EXTRA: "Arizona additional amount (Form A-4 line 1)",
+};
+
 export const AZ_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AZ",
   label: "Arizona income tax",

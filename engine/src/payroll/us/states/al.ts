@@ -190,6 +190,23 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the ALDOR booklet's own (Formula lines 1–6) — see
+ * the module header.
+ */
+export const AL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  AL_GI: "Alabama gross income (annualized)",
+  AL_STANDARD_DEDUCTION: "Alabama standard deduction",
+  AL_FEDERAL_ANNUAL: "Alabama federal-tax deduction (annualized)",
+  AL_PERSONAL_EXEMPTION: "Alabama personal exemption",
+  AL_DEPENDENTS: "Alabama dependent allowance",
+  AL_DEDUCTIONS: "Alabama total deductions",
+  AL_TAXABLE: "Alabama taxable income",
+  AL_ANNUAL_TAX: "Alabama tax (annual)",
+  AL_WITHHELD: "Alabama tax withheld this period",
+};
+
 export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AL",
   label: "Alabama income tax",

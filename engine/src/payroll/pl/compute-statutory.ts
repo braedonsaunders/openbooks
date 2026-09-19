@@ -388,6 +388,33 @@ export function calculatePlPit2026(input: PlPit2026Input): PlPit2026Result {
  * Refuses anything but taxYear 2026, non-monthly periodicity, and any
  * undeclared certificate answer — silence here would be wrong money.
  */
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the PIT/ZUS computation's own
+ * (podstawa, składki, zaliczka, fundusze) — see tables-2026.ts.
+ */
+export const PL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  BRUTTO: "Przychód (brutto)",
+  PODSTAWA_SP: "Podstawa wymiaru składek społecznych",
+  EMERYT_EE: "Składka emerytalna (pracownik)",
+  RENT_EE: "Składka rentowa (pracownik)",
+  CHOR_EE: "Składka chorobowa (pracownik)",
+  ZUS_EE: "Składki ZUS (pracownik, razem)",
+  PODSTAWA_ZDR: "Podstawa wymiaru składki zdrowotnej",
+  ZDR: "Składka zdrowotna (NFZ)",
+  KUP: "Koszty uzyskania przychodu",
+  DOCHOD: "Dochód",
+  PODSTAWA_12: "Podstawa opodatkowania (12%)",
+  PODSTAWA_32: "Podstawa opodatkowania (32%)",
+  POMNIEJSZENIE: "Pomniejszenie zaliczki (oświadczenie)",
+  ZALICZKA: "Zaliczka na PIT",
+  EMERYT_ER: "Składka emerytalna (pracodawca)",
+  RENT_ER: "Składka rentowa (pracodawca)",
+  FP: "Fundusz Pracy (pracodawca)",
+  FS: "Fundusz Solidarnościowy (pracodawca)",
+  FGSP: "FGŚP (pracodawca)",
+};
+
 export async function computePlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

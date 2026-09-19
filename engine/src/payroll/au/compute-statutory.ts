@@ -217,6 +217,15 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
   return { payg: D(period * DOLLAR), sg: D(sg) };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. I/PI are the pack's payroll inputs.
+ */
+export const AU_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  I: "Periodic income this period",
+  PI: "Pensionable earnings this period",
+};
+
 export async function computeAuStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

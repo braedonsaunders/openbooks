@@ -377,6 +377,24 @@ export interface ItStatutoryRates {
  * pure engine, with tenant rates injected. Unit tests drive this (no
  * Postgres); the production entry below resolves the rates first.
  */
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the DPR 600/1973 computation's own
+ * (IRPEF, addizionali, INPS shares, trattamento integrativo) — see the
+ * module's transcribed basis.
+ */
+export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  I: "Periodic income this period",
+  PI: "Pensionable earnings this period",
+  IRPEF: "IRPEF (imposta sul reddito delle persone fisiche)",
+  ADDREG: "Addizionale regionale all'IRPEF",
+  ADDCOM: "Addizionale comunale all'IRPEF",
+  INPS_W: "INPS — contributi IVS a carico del lavoratore",
+  INPS_ER: "INPS — contributi IVS a carico del datore",
+  TI: "Trattamento integrativo",
+  SOMMA: "Somma di cui al comma 4 (L. 207/2024)",
+};
+
 export async function computeItStatutoryWithRates(
   ctx: PayrollStatutoryComputeContext,
   rates: ItStatutoryRates,

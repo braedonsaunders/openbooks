@@ -394,6 +394,24 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (state and county). Terms are Departmental Notice #1's own —
+ * see the module header.
+ */
+export const IN_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  IN_EXEMPT: "Exempt from Indiana withholding",
+  IN_ANNUAL_EXEMPTION: "Indiana annual exemption",
+  IN_PERIOD_EXEMPTION: "Indiana exemption this period",
+  IN_TAXABLE: "Indiana taxable wages",
+  IN_STATE_TAX: "Indiana state tax",
+  IN_SUPPLEMENTAL_TAX: "Indiana tax on supplemental wages",
+  IN_COUNTY_CODE: "Indiana county code",
+  IN_COUNTY_RATE: "Indiana county tax rate",
+  IN_COUNTY_TAX: "Indiana county tax",
+  IN_WITHHELD: "Indiana tax withheld this period",
+};
+
 export const IN_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IN",
   label: "Indiana income tax",

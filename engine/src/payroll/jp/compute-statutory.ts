@@ -47,6 +47,20 @@ export interface JpStatutoryRates {
  * pure engine, with the tenant health rate injected. Unit tests drive this
  * (no Postgres); the production entry below resolves the rate first.
  */
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the NTA 月額表 and shaho tables' own
+ * (源泉徴収, pension and health half-shares) — see withholding-2026.ts.
+ */
+export const JP_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  JP_GENSEN_BASE: "源泉徴収 base (after social insurance)",
+  JP_GENSEN: "源泉徴収 income tax",
+  JP_PENSION_W: "厚生年金 (employee share)",
+  JP_PENSION_ER: "厚生年金 (employer share)",
+  JP_HEALTH_W: "健康保険 (employee share)",
+  JP_HEALTH_ER: "健康保険 (employer share)",
+};
+
 export async function computeJpStatutoryWithRates(
   ctx: PayrollStatutoryComputeContext,
   rates: JpStatutoryRates,

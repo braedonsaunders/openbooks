@@ -136,6 +136,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the DR 1098 worksheet's own — see the module header.
+ */
+export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CO_ANNUAL_WAGES: "Colorado annualized wages",
+  CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",
+  CO_ANNUAL_TAXABLE: "Colorado taxable income (annual)",
+  CO_ANNUAL_TAX: "Colorado tax (annual)",
+  CO_WITHHELD: "Colorado tax withheld this period",
+};
+
 export const CO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CO",
   label: "Colorado income tax",

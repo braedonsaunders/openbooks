@@ -45,7 +45,7 @@ import type {
 } from "../packs.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { SG_CERTIFICATES } from "./certificates.ts";
-import { computeSgStatutory } from "./cpf.ts";
+import { computeSgStatutory, SG_FACTOR_LABELS } from "./cpf.ts";
 import { SG_PACK_RATES, SG_TAX_YEARS } from "./rates.ts";
 
 // ---------------------------------------------------------------------------
@@ -274,6 +274,7 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   // non-periodic (AW) pay by name, and any non-monthly period count by name.
   computeStatutory: computeSgStatutory,
   statutoryEngineLabel: "CPF",
+  factorLabels: { ...SG_FACTOR_LABELS },
 };
 
 export { SG_CERTIFICATES, SG_PACK_RATES as SG_RATES, SG_TAX_YEARS, SG_WITHHOLDING };

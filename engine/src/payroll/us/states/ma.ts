@@ -334,6 +334,31 @@ export function maSupplementalWithholding(input: {
   return { tax: D(tax), factors };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (percentage method Steps 1–7 plus the section G supplemental
+ * method). Terms are Circular M's own — see the module header.
+ */
+export const MA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MA_PERIOD: "Massachusetts payroll period",
+  MA_STUDENT_EXEMPT: "Massachusetts student exemption (M-4 box D)",
+  MA_BELOW_WITHHOLDING_FLOOR: "Massachusetts low-wage no-withholding floor",
+  MA_RETIREMENT_DEDUCTION: "Massachusetts retirement-contribution subtraction (Step 1)",
+  MA_RETIREMENT_DEDUCTION_SOURCE: "Massachusetts retirement-deduction source",
+  MA_EXEMPTION_FACTOR: "Massachusetts exemption factor (Step 2)",
+  MA_NET_WAGES: "Massachusetts net wages",
+  MA_ANNUALIZED: "Massachusetts annualized wages (Step 3)",
+  MA_ANNUAL_TAX: "Massachusetts tax (annual, Step 4)",
+  MA_HEAD_OF_HOUSEHOLD: "Massachusetts head-of-household subtraction (Step 6)",
+  MA_BLINDNESS: "Massachusetts blindness subtraction (Step 7)",
+  MA_TAX: "Massachusetts tax this period",
+  MA_SUPPLEMENTAL_TAX: "Massachusetts tax on supplemental wages (section G)",
+  MA_SUPP_STEP3: "Massachusetts supplemental step 3 amount",
+  MA_SUPP_STEP4: "Massachusetts supplemental step 4 amount",
+  MA_SUPP_ABOVE_THRESHOLD: "Massachusetts supplemental amount above surtax threshold",
+  MA_SUPP_TAX: "Massachusetts supplemental tax",
+};
+
 export const MA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MA",
   label: "Massachusetts income tax",

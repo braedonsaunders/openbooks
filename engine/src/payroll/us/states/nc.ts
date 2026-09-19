@@ -284,6 +284,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the NC-30 percentage method's own — see the module
+ * header.
+ */
+export const NC_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  NC_METHOD: "North Carolina method applied",
+  NC_SCHEDULE: "North Carolina schedule",
+  NC_EXEMPT: "Exempt from North Carolina withholding",
+  NC_STANDARD_DEDUCTION: "North Carolina standard deduction",
+  NC_ALLOWANCES: "North Carolina allowances",
+  NC_NET_WAGES: "North Carolina net wages",
+  NC_TAX: "North Carolina tax",
+};
+
 export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NC",
   label: "North Carolina income tax",

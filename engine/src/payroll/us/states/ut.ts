@@ -330,6 +330,27 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Line numbers are Publication 14's own computer-formula lines —
+ * see the module header.
+ */
+export const UT_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  UT_EDITION: "Utah edition in force",
+  UT_RATE: "Utah withholding rate",
+  UT_EXEMPT: "Exempt from Utah withholding",
+  UT_SCHEDULE: "Utah schedule (filing status)",
+  UT_PERIOD: "Utah payroll period",
+  UT_WAGES: "Utah wages subject to federal withholding",
+  UT_LINE2: "Utah line 2 (rate applied to wages)",
+  UT_BASE_ALLOWANCE: "Utah base allowance (line 3)",
+  UT_LINE4: "Utah line 4 (wages over threshold)",
+  UT_THRESHOLD: "Utah phase-out threshold",
+  UT_LINE5: "Utah line 5 (phase-out amount)",
+  UT_LINE6: "Utah line 6 (allowance less phase-out)",
+  UT_TAX: "Utah tax",
+};
+
 export const UT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "UT",
   label: "Utah income tax",

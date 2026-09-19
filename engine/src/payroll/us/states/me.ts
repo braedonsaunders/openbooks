@@ -179,6 +179,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the 2026 percentage method's own (Steps 1–6) —
+ * see the module header.
+ */
+export const ME_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  ME_EXEMPT: "Exempt from Maine withholding",
+  ME_ANNUAL_WAGES: "Maine annualized wages",
+  ME_ALLOWANCES: "Maine personal allowances",
+  ME_STANDARD_DEDUCTION: "Maine standard deduction",
+  ME_TAXABLE: "Maine taxable income",
+  ME_ANNUAL_TAX: "Maine tax (annual)",
+  ME_WITHHELD: "Maine tax withheld this period",
+};
+
 export const ME_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ME",
   label: "Maine income tax",

@@ -210,6 +210,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the Computer Formula's own — see the module header.
+ */
+export const MN_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MN_EXEMPT: "Exempt from Minnesota withholding",
+  MN_SCHEDULE: "Minnesota schedule (marital status)",
+  MN_ANNUAL_WAGES: "Minnesota annualized wages",
+  MN_ANNUAL_ALLOWANCE: "Minnesota annual allowance",
+  MN_TAXABLE: "Minnesota taxable income",
+  MN_ANNUAL_TAX: "Minnesota tax (annual)",
+  MN_WITHHELD: "Minnesota tax withheld this period",
+};
+
 export const MN_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MN",
   label: "Minnesota income tax",

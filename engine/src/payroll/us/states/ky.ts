@@ -131,6 +131,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the 42A003 2026 formula's own — see the module
+ * header.
+ */
+export const KY_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  KY_EXEMPT: "Exempt from Kentucky withholding",
+  KY_ANNUAL_WAGES: "Kentucky annualized wages",
+  KY_TAXABLE: "Kentucky taxable income",
+  KY_ANNUAL_TAX: "Kentucky tax (annual)",
+  KY_TAX: "Kentucky tax this period",
+  KY_WITHHELD: "Kentucky tax withheld this period",
+};
+
 export const KY_WITHHOLDING: UsStateWithholdingEngine = {
   state: "KY",
   label: "Kentucky income tax",

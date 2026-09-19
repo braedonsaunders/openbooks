@@ -172,6 +172,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Section 2 percentage method worksheet's own —
+ * see the module header.
+ */
+export const ND_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  ND_EXEMPT: "Exempt from North Dakota withholding",
+  ND_ANNUAL_WAGES: "North Dakota annualized wages",
+  ND_ANNUAL_TAX: "North Dakota tax (annual)",
+  ND_WITHHELD: "North Dakota tax withheld this period",
+};
+
 export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ND",
   label: "North Dakota income tax",

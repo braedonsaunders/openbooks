@@ -287,6 +287,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the KW-100 percentage formula's own — see the
+ * module header.
+ */
+export const KS_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  KS_EXEMPT: "Exempt from Kansas withholding",
+  KS_WAGES: "Kansas wages this period",
+  KS_ALLOWANCE: "Kansas allowance",
+  KS_TAXABLE: "Kansas taxable wages",
+  KS_WITHHELD: "Kansas tax withheld this period",
+};
+
 export const KS_WITHHOLDING: UsStateWithholdingEngine = {
   state: "KS",
   label: "Kansas income tax",

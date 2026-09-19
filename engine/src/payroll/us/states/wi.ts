@@ -215,6 +215,22 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the W-166 Alternate Method's own — see the module
+ * header.
+ */
+export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  WI_EXEMPT: "Exempt from Wisconsin withholding",
+  WI_SCHEDULE: "Wisconsin schedule (marital status)",
+  WI_ANNUAL_GROSS: "Wisconsin annual gross",
+  WI_DEDUCTION: "Wisconsin deduction",
+  WI_EXEMPTION: "Wisconsin exemption",
+  WI_ANNUAL_NET: "Wisconsin annual net income",
+  WI_ANNUAL_TAX: "Wisconsin tax (annual)",
+  WI_WITHHELD: "Wisconsin tax withheld this period",
+};
+
 export const WI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "WI",
   label: "Wisconsin income tax",

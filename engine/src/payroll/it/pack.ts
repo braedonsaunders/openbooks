@@ -25,7 +25,7 @@
  */
 import type { PayrollCountryPack } from "../packs.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
-import { computeItStatutory } from "./compute-statutory.ts";
+import { computeItStatutory, IT_FACTOR_LABELS } from "./compute-statutory.ts";
 import { itPackFilings } from "./filings.ts";
 import { IT_JURISDICTIONS } from "./jurisdictions.ts";
 import { IT_PACK_RATES, IT_TAX_YEARS } from "./rates.ts";
@@ -160,6 +160,7 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
     },
   ],
   computeStatutory: computeItStatutory,
+  factorLabels: { ...IT_FACTOR_LABELS },
   // The withholding computation lives under the sostituto statute itself; no
   // single named table publication exists until the first edition lands.
   statutoryEngineLabel: "DPR 600/1973",

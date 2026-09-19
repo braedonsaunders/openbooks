@@ -37,7 +37,7 @@ import type {
   PayrollCountryPack,
   PayrollStatutorySlot,
 } from "../packs.ts";
-import { computeGbStatutory } from "./compute-statutory.ts";
+import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
 import { gbPackFilings } from "./filings.ts";
 import {
   GB_CERTIFICATES,
@@ -189,4 +189,5 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   // exactly that — like Canada.
   computeStatutory: computeGbStatutory,
   statutoryEngineLabel: "PAYE",
+  factorLabels: { ...GB_FACTOR_LABELS },
 };

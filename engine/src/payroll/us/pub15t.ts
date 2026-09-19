@@ -102,6 +102,26 @@ export interface Pub15TResult {
   factors: Record<string, string>;
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the IRS's own from Pub 15-T Worksheet 1A —
+ * step 2g is the annual tentative withholding and step 2h the per-period
+ * one, so TW is annual and TWP is per-period, and both are TAX, not wages.
+ */
+export const PUB15T_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  AAWA: "Adjusted annual wage amount (Worksheet 1A step 1)",
+  TW: "Tentative withholding, annual (Worksheet 1A step 2g)",
+  TWP: "Tentative withholding per pay period (Worksheet 1A step 2h)",
+  FIT: "Federal income tax withheld this period",
+  FIT_S: "Federal tax on supplemental wages (flat rate)",
+  SS_TAXABLE: "Social Security taxable wages this period",
+  SS: "Social Security tax (employee)",
+  MED: "Medicare tax (employee)",
+  MED2: "Additional Medicare tax (employee)",
+  FUTA: "Federal unemployment tax (employer)",
+  SUTA: "State unemployment tax (employer)",
+};
+
 const ZERO = 0n;
 
 function opt(value: string | undefined): bigint {

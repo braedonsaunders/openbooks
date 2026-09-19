@@ -150,6 +150,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Computer Payroll Accounting formula's own —
+ * see the module header.
+ */
+export const MS_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MS_EXEMPT: "Exempt from Mississippi withholding",
+  MS_ANNUAL_WAGES: "Mississippi annualized wages",
+  MS_EXEMPTION: "Mississippi exemption amount",
+  MS_STANDARD_DEDUCTION: "Mississippi standard deduction",
+  MS_TAXABLE: "Mississippi taxable income",
+  MS_ANNUAL_TAX: "Mississippi tax (annual)",
+  MS_WITHHELD: "Mississippi tax withheld this period",
+};
+
 export const MS_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MS",
   label: "Mississippi income tax",

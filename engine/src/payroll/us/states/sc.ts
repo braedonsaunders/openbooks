@@ -142,6 +142,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the WH-1603F 2026 formula's own — see the module
+ * header.
+ */
+export const SC_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  SC_EXEMPT: "Exempt from South Carolina withholding",
+  SC_ANNUAL_WAGES: "South Carolina annualized wages",
+  SC_PERSONAL_ALLOWANCE: "South Carolina personal allowance",
+  SC_STANDARD_DEDUCTION: "South Carolina standard deduction",
+  SC_TAXABLE: "South Carolina taxable income",
+  SC_ANNUAL_TAX: "South Carolina tax (annual)",
+  SC_WITHHELD: "South Carolina tax withheld this period",
+};
+
 export const SC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "SC",
   label: "South Carolina income tax",

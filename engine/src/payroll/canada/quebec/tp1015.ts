@@ -124,6 +124,25 @@ export interface Tp1015Result {
   factors: Record<string, string>;
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the FINAL
+ * factor keys (QC_-prefixed, as the trace stamps them). Every letter is
+ * Revenu Québec's own TP-1015.F-V notation with its section — see the
+ * module header.
+ */
+export const TP1015_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  QC_H: "Deduction for workers (TP-1015 s. 2.1.1 Step 1)",
+  QC_CS: "Additional-QPP deduction (s. 2.1.1 Step 1)",
+  QC_CSA: "Additional-QPP deduction on periodic pay (s. 2.1.1 Step 1)",
+  QC_CSB: "Additional-QPP deduction on this period's lump sums (s. 2.1.2)",
+  QC_E: "Personal tax credits (s. 2.1.1 Step 2)",
+  QC_I: "Annual taxable income, periodic (s. 2.1.1 Step 1)",
+  QC_Y: "Annual tax on periodic income (s. 2.1.1 Step 2)",
+  QC_A: "Income tax to withhold on periodic pay, this period (s. 2.1.1 Step 3)",
+  QC_I2: "Annual taxable income incl. lump sums (s. 2.1.2 Step 1)",
+  QC_AB: "Income tax on the lump sum (s. 2.1.2 Method 2)",
+};
+
 const ZERO = 0n;
 
 function opt(value: string | undefined): bigint {

@@ -21,7 +21,7 @@
 import type { PayrollCountryPack } from "../packs.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import { PL_CERTIFICATES } from "./certificates.ts";
-import { computePlStatutory } from "./compute-statutory.ts";
+import { computePlStatutory, PL_FACTOR_LABELS } from "./compute-statutory.ts";
 import { plPackFilings } from "./filings.ts";
 import { PL_JURISDICTIONS } from "./jurisdictions.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
@@ -192,4 +192,5 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   withholding: () => PL_WITHHOLDING,
   computeStatutory: computePlStatutory,
   statutoryEngineLabel: "PIT/ZUS",
+  factorLabels: { ...PL_FACTOR_LABELS },
 };

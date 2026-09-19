@@ -756,6 +756,27 @@ function computeNys(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (State Methods II/III, City Method II, Yonkers resident and
+ * nonresident methods). Terms are the NYS-50-T publications' own — see the
+ * module header.
+ */
+export const NY_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  NYS_ALLOWANCE: "New York State allowance",
+  NYS_NET: "New York State net wages",
+  NYS_ANNUALIZED_NET: "New York State annualized net wages",
+  NYS_METHOD: "New York State method applied (II or III)",
+  NYS_METHOD3_RATE: "New York State Method III rate",
+  NYS_TAX: "New York State tax",
+  NYC_ALLOWANCE: "New York City allowance",
+  NYC_NET: "New York City net wages",
+  NYC_TAX: "New York City tax",
+  YONKERS_BASE: "Yonkers surcharge base (state tax)",
+  YONKERS_TAX: "Yonkers tax",
+  YONKERS_EXCLUSION: "Yonkers nonresident exclusion",
+};
+
 export const NY_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NY",
   label: "New York State income tax",

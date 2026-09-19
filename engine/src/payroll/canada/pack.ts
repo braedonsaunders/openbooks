@@ -2,7 +2,9 @@ import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
 } from "../packs.ts";
-import { computeCaStatutory } from "./compute-statutory.ts";
+import { CA_COMPUTE_FACTOR_LABELS, computeCaStatutory } from "./compute-statutory.ts";
+import { T4127_FACTOR_LABELS } from "./t4127.ts";
+import { TP1015_FACTOR_LABELS } from "./quebec/tp1015.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./cra/remittance.ts";
 import { applyCaEmployerLevies } from "./employer-levies.ts";
 import { CA_JURISDICTIONS } from "./employment-standards.ts";
@@ -224,4 +226,12 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   applyEmployerLevies: applyCaEmployerLevies,
   computeStatutory: computeCaStatutory,
   statutoryEngineLabel: "T4127",
+  // Pack-declared trace labels, aggregated from the modules that trace
+  // them: T4127, TP-1015 (QC_-prefixed final keys), and the compute pass's
+  // own inputs and employer-levy factors.
+  factorLabels: {
+    ...T4127_FACTOR_LABELS,
+    ...TP1015_FACTOR_LABELS,
+    ...CA_COMPUTE_FACTOR_LABELS,
+  },
 };

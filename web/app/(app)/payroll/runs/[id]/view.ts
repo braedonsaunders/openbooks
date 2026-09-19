@@ -33,7 +33,7 @@ import {
   resolvedPaymentMethodSql,
 } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
-import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
@@ -102,6 +102,13 @@ export interface PayRunWizardData {
   regionLabel: string
   /** Statutory engine names by stub country for the trace heading. */
   traceEngines: Record<string, string>
+  /**
+   * Pack-declared trace-factor labels by stub country, resolved through the
+   * pack registry exactly like traceEngines. Dynamic keys the run actually
+   * carries (SIT_/LIT_ mirrors) are pre-resolved server-side through the
+   * pack's describeFactor, so the client payload stays plain data.
+   */
+  factorLabels: Record<string, Record<string, string>>
   canRun: boolean
   initialStep: WizardStep
   /**
@@ -301,6 +308,27 @@ export async function loadPayRunWizard(
     const traceEngines: Record<string, string> = Object.fromEntries(
       packsInRun.map((pack) => [pack.country, pack.statutoryEngineLabel]),
     )
+    // Trace-factor labels by stub country, from each pack's own declaration
+    // — never a web-layer map, which cannot tell California's CA_TAX from
+    // Canada's CA. Keys the static map misses but the run carries (the
+    // SIT_/LIT_ stub-line mirrors, whose codes include operator-entered
+    // sub-regions) resolve here through the pack's describeFactor; anything
+    // still unresolved renders raw, exactly as before.
+    const factorLabels: Record<string, Record<string, string>> = Object.fromEntries(
+      packsInRun.map((pack) => {
+        const labels: Record<string, string> = { ...pack.factorLabels }
+        for (const stub of stubs) {
+          if (stub.country !== pack.country) continue
+          for (const key of Object.keys(stub.factors ?? {})) {
+            if (labels[key] === undefined) {
+              const resolved = factorLabelForPack(pack, key)
+              if (resolved !== key) labels[key] = resolved
+            }
+          }
+        }
+        return [pack.country, labels]
+      }),
+    )
 
     const previousNet: Record<string, string> = {}
     for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
@@ -410,6 +438,7 @@ export async function loadPayRunWizard(
       registerBuckets,
       regionLabel,
       traceEngines,
+      factorLabels,
       canRun: can(authz, 'payroll.run'),
       initialStep,
       calculationErrors,
@@ -457,6 +486,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         registerBuckets: data.registerBuckets,
         regionLabel: data.regionLabel,
         traceEngines: data.traceEngines,
+        factorLabels: data.factorLabels,
         canRun: data.canRun,
         initialStep: data.initialStep,
         calculationErrors: data.calculationErrors,

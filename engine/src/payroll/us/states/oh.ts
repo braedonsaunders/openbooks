@@ -725,6 +725,25 @@ function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (state formula plus school-district taxes). Terms are the
+ * Optional Computer Formula's own — see the module header.
+ */
+export const OH_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  OH_EDITION: "Ohio edition in force",
+  OH_ANNUAL_EXEMPTION: "Ohio annual exemption",
+  OH_TAXABLE_WAGE: "Ohio taxable wage (annual)",
+  OH_BAND_RATE: "Ohio band rate",
+  OH_ANNUAL_TAX: "Ohio tax (annual)",
+  OH_TAX: "Ohio tax this period",
+  OH_SD_CODE: "Ohio school-district code",
+  OH_SD_BASE: "Ohio school-district base (traditional or earned-income)",
+  OH_SD_RATE: "Ohio school-district rate (printed percent)",
+  OH_SD_TAXABLE: "Ohio school-district taxable income",
+  OH_SD_TAX: "Ohio school-district tax",
+};
+
 export const OH_WITHHOLDING: UsStateWithholdingEngine = {
   state: "OH",
   label: "Ohio income tax",

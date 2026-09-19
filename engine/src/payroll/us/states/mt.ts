@@ -257,6 +257,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. W = A + (B × (G − C)) is the guide's own formula — see the
+ * module header.
+ */
+export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MT_EXEMPT: "Exempt from Montana withholding",
+  MT_GROSS: "Montana gross wages this period",
+  MT_UNROUNDED: "Montana tax before rounding",
+  MT_WITHHELD: "Montana tax withheld this period",
+};
+
 export const MT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MT",
   label: "Montana income tax",

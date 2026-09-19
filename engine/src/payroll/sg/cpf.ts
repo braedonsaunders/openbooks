@@ -236,6 +236,18 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
  * - CPF prices per calendar month, so anything but 12 periods per year is
  *   refused by name.
  */
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the CPF Board's own (employee and
+ * employer shares, Skills Development Levy) — see the module header.
+ */
+export const SG_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CPF_EE: "CPF — employee share",
+  CPF_ER: "CPF — employer share",
+  CPF_TOTAL: "CPF — total",
+  SDL: "Skills Development Levy",
+};
+
 export async function computeSgStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

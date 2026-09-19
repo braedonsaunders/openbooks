@@ -21,7 +21,7 @@ import type {
   PayrollRegionCoverage,
 } from "../packs.ts";
 import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_WITHHOLDING } from "./jurisdictions.ts";
-import { computeAuStatutory } from "./compute-statutory.ts";
+import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
 import { auPackFilings } from "./filings.ts";
 import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
 
@@ -122,4 +122,5 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   ],
   computeStatutory: computeAuStatutory,
   statutoryEngineLabel: "PAYG withholding",
+  factorLabels: { ...AU_FACTOR_LABELS },
 };
