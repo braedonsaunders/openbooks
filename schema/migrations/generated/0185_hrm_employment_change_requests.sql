@@ -594,7 +594,7 @@ BEGIN
         'HRM change request awaiting approval resolves to approved, rejected, or withdrawn — transition to % is refused.', NEW.status;
     ELSIF OLD.status = 'approved' AND NEW.status <> 'applied' THEN
       RAISE EXCEPTION
-        'HRM change request approved resolves only to applied — transition to % is refused. Withdraw or reject before approval instead.';
+        'HRM change request approved resolves only to applied — transition to % is refused. Withdraw or reject before approval instead.', NEW.status;
     ELSIF OLD.status IN ('rejected', 'withdrawn', 'applied') THEN
       RAISE EXCEPTION
         'HRM change request % is terminal — file a new request for a revised proposal instead.', OLD.status;
