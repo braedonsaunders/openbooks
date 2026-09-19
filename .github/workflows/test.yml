@@ -65,6 +65,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qpdf
       - name: Unit test shard
         shell: bash
+        env:
+          # Measured per-file cost. scripts/test-timings-merge.mjs folds the
+          # shard records into scripts/test-timings.json, which is what packs
+          # the shards on the next run.
+          OPENBOOKS_TEST_TIMINGS: .local/test-timings.json
         run: |
           set -o pipefail
           timeout --signal=TERM --kill-after=10s 8m npm run test:unit 2>&1 | tee unit.txt
@@ -76,6 +81,7 @@ jobs:
           path: |
             unit.txt
             .local/test-selection.json
+            .local/test-timings.json
 
   database:
     runs-on: ubuntu-latest
@@ -195,6 +201,10 @@ jobs:
         shell: bash
         env:
           COLLECT_COVERAGE: ${{ github.event_name == 'workflow_dispatch' }}
+          # Measured per-file cost. The 16 shards held an even 63-64 files each
+          # and still spread 312s-632s; this is the record that replaces file
+          # count with cost as the thing being balanced.
+          OPENBOOKS_TEST_TIMINGS: .local/test-timings.json
         run: |
           set -o pipefail
           coverage=()
@@ -254,6 +264,7 @@ jobs:
             lcov.info
             coverage.txt
             .local/test-selection.json
+            .local/test-timings.json
             .local/fixture-lifecycle-receipt.txt
           if-no-files-found: ignore
 
@@ -477,9 +488,24 @@ jobs:
           --test --test-force-exit
           engine/src/backup-restore.integration.test.ts
 
-  e2e:
+  # The browser tests used to be one 24-minute serial job, and that job alone
+  # was the pipeline's critical path: every other partition finished inside 16
+  # minutes while this one built the app, ran the eight-spec `app` project, then
+  # ran ten workflow suites one after another. The work was already disjoint —
+  # the `app` project ignores e2e/workflows, and every workflow suite demands
+  # its own pristine tenant — so the serialisation bought no isolation it did
+  # not already have. Both halves now fan out.
+  #
+  # Every shard rebuilds the app instead of sharing one build artifact. The
+  # build is ~3.5 minutes, so funnelling the shards through a single build job
+  # would add a dependency edge longer than the fan-out removes.
+  e2e-app:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -525,12 +551,137 @@ jobs:
         # ADMIN_EMAIL is set — the admin login the specs authenticate with.
         run: npx tsx scripts/bootstrap.ts
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate ephemeral browser session secret
+        run: |
+          node --input-type=module <<'NODE'
+          import { randomBytes } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          const secret = randomBytes(48).toString('base64');
+          console.log(`::add-mask::${secret}`);
+          appendFileSync(process.env.GITHUB_ENV, `SESSION_SECRET=${secret}\n`);
+          NODE
+
+      - name: Restore Next compiler cache
+        # Restore-only. The previous key carried github.sha, so the primary key
+        # could never hit, a fresh entry was written on every green run, and the
+        # measured restore was 0s on every run inspected — the shards were
+        # paying a cold 3.5-minute build each time. Keying on the web sources
+        # themselves makes an untouched frontend an exact hit, and one job owns
+        # the write so the shards cannot race each other for it.
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx', 'web/**/*.css', 'web/next.config.*') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Build browser application
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+        run: npm run build -w web
+
+      - name: Save Next compiler cache
+        # One writer, so eight shards do not race to upload the same key.
+        if: always() && matrix.shard == 1
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx', 'web/**/*.css', 'web/next.config.*') }}
+
+      - name: Playwright app suite
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          E2E_PRODUCTION: "1"
+          E2E_IGNORE_HTTPS_ERRORS: "1"
+        run: npx playwright test --project app --shard=${{ matrix.shard }}/3
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report-app-${{ matrix.shard }}
+          path: |
+            playwright-report/
+            test-results/
+            e2e-server.log
+          if-no-files-found: ignore
+
+  # One job per pair of workflow suites. The suites compose one cross-module
+  # year-end story but each provisions its own tenant profile (close-to-reporting
+  # provisions a USD base while quote-to-cash provisions CAD, and they share
+  # document sequences), so each still runs against its own pristine clone with
+  # serial workers — exactly as when they were steps. Pairs are balanced on
+  # measured runtime so no job is left holding the two slowest suites.
+  e2e-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # "<spec basename>:<database suffix>", balanced by observed runtime.
+          - group: close-and-procure
+            suites: "close-to-reporting:close procure-to-pay:procure"
+          - group: cash-and-tax
+            suites: "quote-to-cash:qtc fx-and-tax:fxtax"
+          - group: bank-and-payroll
+            suites: "bank-to-books:bank payroll:payroll"
+          - group: subscription-and-project
+            suites: "subscription-to-revenue:subrev project-cost-to-cash:w1"
+          - group: inventory-and-dashboard
+            suites: "inventory-to-cogs:inv dashboard:dash"
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_e2e
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      PGPASSWORD: openbooks
+      ADMIN_EMAIL: e2e@openbooks.test
+      ADMIN_NAME: E2E Admin
+      ADMIN_PASSWORD: e2e-test-password-123
+      E2E_EMAIL: e2e@openbooks.test
+      E2E_PASSWORD: e2e-test-password-123
+      E2E_APPROVER_EMAIL: approver@openbooks.test
+      E2E_APPROVER_PASSWORD: approver-test-password-123
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema + seed admin
+        run: npx tsx scripts/bootstrap.ts
+
       - name: Seed workflow approver
-        # The close-to-reporting workflow (e2e/workflows) requires a second
-        # actor: independent close approval and the controlled-reopen decision
-        # both refuse the requesting user, and no HTTP endpoint creates users.
-        # Both sessions log in through the real /api/login; the extra user is
-        # inert for every other spec.
+        # The close-to-reporting workflow requires a second actor: independent
+        # close approval and the controlled-reopen decision both refuse the
+        # requesting user, and no HTTP endpoint creates users. Both sessions log
+        # in through the real /api/login; the extra user is inert elsewhere.
         env:
           E2E_SEED_APPROVER: "1"
           E2E_APPROVER_EMAIL: approver@openbooks.test
@@ -551,27 +702,27 @@ jobs:
           NODE
 
       - name: Restore Next compiler cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: web/.next/cache
-          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx', 'web/**/*.css', 'web/next.config.*') }}
           restore-keys: |
             next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Snapshot pristine workflow databases
-        # Every workflow suite assumes a pristine tenant, and no single tenant
-        # can host them all (close-to-reporting provisions a USD base while
-        # quote-to-cash provisions CAD; suites also consume shared document
-        # sequences). Snapshot the bootstrapped tenant once, right after
-        # seeding and before the build or any server can touch it, then clone
-        # one database per suite file. Template sources must have no sessions;
+        # Snapshot the bootstrapped tenant once, right after seeding and before
+        # the build or any server can touch it, then clone one database per
+        # suite in this group. Template sources must have no sessions;
         # PGDATABASE=postgres keeps our own session off the template source.
         env:
           PGDATABASE: postgres
+          SUITES: ${{ matrix.suites }}
+        shell: bash
         run: |
+          set -o pipefail
           psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_tmpl TEMPLATE openbooks_e2e"
-          for suite in close payroll procure qtc dash bank subrev fxtax inv w1; do
-            psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_${suite} TEMPLATE openbooks_e2e_tmpl"
+          for pair in $SUITES; do
+            psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_${pair##*:} TEMPLATE openbooks_e2e_tmpl"
           done
 
       - name: Build browser application
@@ -579,94 +730,32 @@ jobs:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
         run: npm run build -w web
 
-      - name: Playwright app suite
+      - name: Playwright workflow suites
+        # Both suites in the group run even if the first fails, so one push
+        # reports every broken workflow rather than only the earliest. The
+        # group still gates the merge: any failure exits non-zero.
         env:
-          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          SUITES: ${{ matrix.suites }}
           E2E_PRODUCTION: "1"
           E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project app
-
-      - name: Playwright workflow suite (close-to-reporting)
-        # One step per suite file, each on its own pristine clone (see
-        # "Snapshot pristine workflow databases"): the suites compose one
-        # cross-module year-end story, but every file provisions its own
-        # tenant profile, so sharing one database makes them order-dependent.
-        # Serial workers within each file; one trace bundle per step. These
-        # steps gate the merge — no continue-on-error.
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_close
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/close-to-reporting.spec.ts
-
-      - name: Playwright workflow suite (payroll)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_payroll
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/payroll.spec.ts
-
-      - name: Playwright workflow suite (procure-to-pay)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_procure
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/procure-to-pay.spec.ts
-
-      - name: Playwright workflow suite (quote-to-cash)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_qtc
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/quote-to-cash.spec.ts
-
-      - name: Playwright workflow suite (dashboard)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_dash
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/dashboard.spec.ts
-
-      - name: Playwright workflow suite (project-cost-to-cash)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_w1
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/project-cost-to-cash.spec.ts
-
-      - name: Playwright workflow suite (inventory-to-cogs)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_inv
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/inventory-to-cogs.spec.ts
-
-      - name: Playwright workflow suite (fx-and-tax)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_fxtax
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/fx-and-tax.spec.ts
-
-      - name: Playwright workflow suite (subscription-to-revenue)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_subrev
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/subscription-to-revenue.spec.ts
-
-      - name: Playwright workflow suite (bank-to-books)
-        env:
-          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_bank
-          E2E_PRODUCTION: "1"
-          E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test --project workflows --workers=1 e2e/workflows/bank-to-books.spec.ts
+        shell: bash
+        run: |
+          set -o pipefail
+          status=0
+          for pair in $SUITES; do
+            spec="${pair%%:*}"
+            echo "::group::playwright workflows ${spec}"
+            OPENBOOKS_DB_URL="postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD}@localhost:5433/openbooks_e2e_${pair##*:}" \
+              npx playwright test --project workflows --workers=1 "e2e/workflows/${spec}.spec.ts" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.group }}
           path: |
             playwright-report/
             test-results/
