@@ -4146,6 +4146,10 @@
     }
   },
   "features": {
+    "hrm": {
+      "title": "Ressources humaines",
+      "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement. Lit le socle RH ; ne pilote jamais la paie."
+    },
     "crm": {
       "title": "CRM",
       "description": "Prospects, opportunités, activités et prévisions de ventes."

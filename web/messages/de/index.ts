@@ -59,6 +59,7 @@ import timesheets from './timesheets.json'
 import laborPricing from './labor-pricing.json'
 import applications from './applications.json'
 import compliance from './compliance.json'
+import hrm from './hrm.json'
 
 export default {
   common,
@@ -119,4 +120,5 @@ export default {
   timesheets,
   applications,
   compliance,
+  hrm,
 } as const

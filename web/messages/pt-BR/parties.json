@@ -32,6 +32,7 @@
     "activated": "Parte ativada",
     "deactivated": "Parte desativada",
     "tabs": {
+      "employment": "Emprego",
       "ariaLabel": "Seções do registro da parte",
       "overview": "Visão geral",
       "transactions": "Transações",

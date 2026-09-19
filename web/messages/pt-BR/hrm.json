@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "Recursos humanos",
+    "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração.",
+    "tabs": {
+      "overview": "Visão geral"
+    },
+    "vitals": {
+      "headcount": "Headcount",
+      "headcountSub": "Em {date}",
+      "employers": "Empregadores",
+      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
+      "departments": "Departamentos",
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+    },
+    "groups": {
+      "title": "Headcount por empregador e departamento",
+      "employer": "Empregador",
+      "department": "Departamento",
+      "headcount": "Headcount",
+      "unassigned": "Não atribuído",
+      "empty": "Nenhum emprego está em vigor em {date}.",
+      "total": "Total"
+    },
+    "directory": {
+      "title": "Diretório"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "Episódios de emprego",
+      "status": "Status",
+      "effective": "Vigência",
+      "recorded": "Registrado",
+      "present": "Atual",
+      "empty": "Nenhuma versão de emprego está registrada."
+    },
+    "status": {
+      "offered": "Ofertado",
+      "active": "Ativo",
+      "on_leave": "Em licença",
+      "suspended": "Suspenso",
+      "terminated": "Desligado"
+    },
+    "asOf": {
+      "title": "Atribuição vigente",
+      "dateLabel": "Data de vigência",
+      "refusalTitle": "Resolução recusada"
+    },
+    "assignments": {
+      "title": "Atribuições",
+      "jobTitle": "Cargo",
+      "department": "Departamento",
+      "fte": "FTE",
+      "primary": "Principal",
+      "primaryYes": "Principal",
+      "effective": "Vigência",
+      "recorded": "Registrado",
+      "empty": "Nenhuma atribuição cobre esta data."
+    },
+    "noRecord": {
+      "title": "Sem registro de emprego",
+      "description": "Esta pessoa ainda não tem registro de emprego. Registros de emprego são criados pelo fluxo de autoria de RH."
+    },
+    "multiple": {
+      "title": "Mais de um registro de emprego",
+      "description": "{count} registros de emprego nomeiam esta pessoa. O registro não pode ser escolhido automaticamente: resolva as duplicidades antes de ler o estado por data."
+    },
+    "changeRequests": {
+      "title": "Solicitações de alteração",
+      "status": "Status",
+      "binding": "Vínculo",
+      "bindingValue": "Revisão da solicitação {request} contra revisão do emprego {expected}",
+      "submitted": "Enviada",
+      "viewInApprovals": "Ver em aprovações",
+      "noRun": "Rascunho: ainda não há execução de aprovação.",
+      "empty": "Ainda não há solicitações de alteração.",
+      "statusNames": {
+        "draft": "Rascunho",
+        "pending_approval": "Aguardando aprovação",
+        "approved": "Aprovada",
+        "rejected": "Rejeitada",
+        "withdrawn": "Retirada",
+        "applied": "Aplicada"
+      }
+    }
+  }
+}

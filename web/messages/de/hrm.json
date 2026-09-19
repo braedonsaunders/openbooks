@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "Personalwesen",
+    "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen.",
+    "tabs": {
+      "overview": "Übersicht"
+    },
+    "vitals": {
+      "headcount": "Personalbestand",
+      "headcountSub": "Stand {date}",
+      "employers": "Arbeitgeber",
+      "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
+      "departments": "Abteilungen",
+      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}"
+    },
+    "groups": {
+      "title": "Personalbestand nach Arbeitgeber und Abteilung",
+      "employer": "Arbeitgeber",
+      "department": "Abteilung",
+      "headcount": "Personalbestand",
+      "unassigned": "Nicht zugeordnet",
+      "empty": "Zum Stichtag {date} sind keine Beschäftigungen aktiv.",
+      "total": "Gesamt"
+    },
+    "directory": {
+      "title": "Verzeichnis"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "Beschäftigungsepisoden",
+      "status": "Status",
+      "effective": "Gültig",
+      "recorded": "Erfasst",
+      "present": "Heute",
+      "empty": "Es sind keine Beschäftigungsversionen erfasst."
+    },
+    "status": {
+      "offered": "Angeboten",
+      "active": "Aktiv",
+      "on_leave": "Beurlaubt",
+      "suspended": "Suspendiert",
+      "terminated": "Beendet"
+    },
+    "asOf": {
+      "title": "Gültige Zuordnung",
+      "dateLabel": "Gültigkeitsdatum",
+      "refusalTitle": "Auflösung abgelehnt"
+    },
+    "assignments": {
+      "title": "Zuordnungen",
+      "jobTitle": "Stellenbezeichnung",
+      "department": "Abteilung",
+      "fte": "VZÄ",
+      "primary": "Primär",
+      "primaryYes": "Primär",
+      "effective": "Gültig",
+      "recorded": "Erfasst",
+      "empty": "Keine Zuordnung deckt dieses Datum ab."
+    },
+    "noRecord": {
+      "title": "Kein Beschäftigungsdatensatz",
+      "description": "Für diese Person ist noch kein Beschäftigungsdatensatz vorhanden. Beschäftigungsdatensätze werden über den HRM-Erfassungsprozess angelegt."
+    },
+    "multiple": {
+      "title": "Mehr als ein Beschäftigungsdatensatz",
+      "description": "{count} Beschäftigungsdatensätze nennen diese Person. Der Datensatz kann nicht automatisch ausgewählt werden — lösen Sie die Duplikate auf, bevor Sie den Stichtagsstand lesen."
+    },
+    "changeRequests": {
+      "title": "Änderungsanträge",
+      "status": "Status",
+      "binding": "Bindung",
+      "bindingValue": "Antragsrevision {request} gegen Beschäftigungsrevision {expected}",
+      "submitted": "Eingereicht",
+      "viewInApprovals": "In Genehmigungen anzeigen",
+      "noRun": "Entwurf — noch kein Genehmigungslauf.",
+      "empty": "Noch keine Änderungsanträge.",
+      "statusNames": {
+        "draft": "Entwurf",
+        "pending_approval": "Genehmigung ausstehend",
+        "approved": "Genehmigt",
+        "rejected": "Abgelehnt",
+        "withdrawn": "Zurückgezogen",
+        "applied": "Angewendet"
+      }
+    }
+  }
+}

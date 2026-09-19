@@ -32,6 +32,7 @@
     "activated": "往来单位已启用",
     "deactivated": "往来单位已停用",
     "tabs": {
+      "employment": "雇用",
       "ariaLabel": "往来单位记录分区",
       "overview": "概览",
       "transactions": "交易",

@@ -1,5 +1,6 @@
 {
   "modules": {
+    "hrm": "人事",
     "dashboard": "ダッシュボード",
     "assistant": "AI アシスタント",
     "continuous-close": "決算モニター",

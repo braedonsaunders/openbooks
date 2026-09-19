@@ -2969,7 +2969,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3392, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3394, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3306,8 +3306,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3392
-  const ADMIN_I2_SOURCE_HASH = '8441265c2b239668ca967dbae955c64fa7d7422dc2166c380951b10df6ccb78e'
+  const ADMIN_I2_SOURCE_COUNT = 3394
+  const ADMIN_I2_SOURCE_HASH = '960b164c3939bce247ccca404d1ac2c076b82dee75f0d46a7c28c316a1ad5ca3'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5057,8 +5057,8 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
-  "nav": 105,
-  "parties": 215,
+  "nav": 106,
+  "parties": 216,
   "payments": 255,
   "pdfTemplates": 50,
   "purchaseOrders": 55,

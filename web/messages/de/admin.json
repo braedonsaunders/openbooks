@@ -4146,6 +4146,10 @@
     }
   },
   "features": {
+    "hrm": {
+      "title": "Personalwesen",
+      "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen. Liest die HRM-Grundlage; steuert nie die Lohnabrechnung."
+    },
     "bankFeeds": {
       "title": "Bankfeeds",
       "description": "Automatisierte Bankanbindung – SFTP-Dateiablagen und Live-Feeds von Plaid, GoCardless und TrueLayer."
