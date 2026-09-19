@@ -95,6 +95,8 @@ const allocationQueryCatalogMigrationPath =
   "schema/migrations/generated/0161_allocation_query_catalog.sql";
 const allocationOutboxScopeMigrationPath =
   "schema/migrations/generated/0162_scheduler_outbox_allocation_scope.sql";
+const payrollProfileCountryNoDefaultMigrationPath =
+  "schema/migrations/generated/0190_payroll_profile_country_no_default.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -375,6 +377,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0187_pay_component_treatment_shape.sql",
     "0188_hrm_change_request_wipe_allowance.sql",
     "0189_pay_components_country_identity.sql",
+    "0190_payroll_profile_country_no_default.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1841,4 +1844,21 @@ test("forecast snapshots admit an organization target: neither owner nor team", 
     schemaSource,
     /check\("crm_forecast_snapshot_target", sql`num_nonnulls\(\$\{t\.ownerUserId\}, \$\{t\.salesTeamId\}\) <= 1`\)/,
   );
+});
+
+test("payroll profile country drops its Canada default and fails closed", () => {
+  // 0190 removes the storage-layer Canada fallthrough while keeping NOT
+  // NULL: a future writer that omits country gets a loud violation instead
+  // of a silently Canadian employee. Historical rows are untouched by
+  // design — a defaulted 'CA' is indistinguishable from a chosen one.
+  const migration = readFileSync(payrollProfileCountryNoDefaultMigrationPath, "utf8");
+  assert.match(
+    migration,
+    /ALTER TABLE public\.employee_payroll_profiles\s+ALTER COLUMN country DROP DEFAULT;/,
+  );
+  assert.doesNotMatch(migration, /DROP NOT NULL/);
+  assert.doesNotMatch(migration, /UPDATE\s+public\.employee_payroll_profiles/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
 });
