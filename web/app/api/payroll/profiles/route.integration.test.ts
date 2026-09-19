@@ -83,11 +83,23 @@ test('profile POST refuses money and percent fields wider than their columns', {
       ['vacation percent too wide', { vacationPercent: '1234' }, /vacationPercent is limited to 3 digits before the decimal point — got 4/],
       ['vacation percent not a number', { vacationPercent: 'abc' }, /vacationPercent must be a percentage — "abc" is not a number/],
       ['vacation percent negative', { vacationPercent: '-1' }, /vacationPercent cannot be negative — got -1/],
+      // The echo is bounded: the body is arbitrary JSON, so an object must not
+      // come back as "[object Object]" and a long paste must not come back
+      // whole. Name the type, cap the string.
+      ['claim amount object', { federalClaimAmount: { a: 1 } }, /federalClaimAmount must be an amount — "a object" is not a number/],
+      ['claim amount long paste', { federalClaimAmount: 'x'.repeat(500) }, /is not a number/],
     ] as const) {
       const response = await post({ ...base, ...patch })
       assert.equal(response.status, 422, `${label}: ${await response.clone().text()}`)
       assert.match(((await response.json()) as { error: string }).error, message)
     }
+    // The boundary itself, both sides. numeric(19,4) is fifteen whole digits:
+    // fifteen must SAVE and sixteen must refuse, or the limit in the message
+    // is a number nobody has checked.
+    const sixteen = await post({ ...base, federalClaimAmount: '1234567890123456' })
+    assert.equal(sixteen.status, 422, await sixteen.clone().text())
+    assert.match(((await sixteen.json()) as { error: string }).error, /limited to 15 digits before the decimal point — got 16/)
+
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
     assert.equal(rows.rows[0]!.count, '0')
