@@ -258,7 +258,9 @@ test("live catalog preserves RESTRICT composite scoping after bootstrap RLS refr
              k.confdeltype as del, k.confupdtype as upd,
              k.condeferrable as defer
         from pg_constraint k join pg_class c on c.oid = k.conrelid
-       where k.contype = 'f' and k.conname like '%_tenant_fkey'
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public'
+         and k.contype = 'f' and k.conname like '%_tenant_fkey'
          and c.relname in ('worker_employments', 'worker_employment_versions',
            'employment_assignments', 'employment_assignment_versions',
            'employment_changes', 'reporting_relationships')`)
@@ -274,8 +276,9 @@ test("live catalog preserves RESTRICT composite scoping after bootstrap RLS refr
     await db.execute<{ tbl: string; force: boolean; policies: number }>(sql`
       select c.relname as tbl, c.relforcerowsecurity as force,
              count(p.polname)::int as policies
-        from pg_class c left join pg_policy p on p.polrelid = c.oid
-       where c.relname in ('worker_employments', 'worker_employment_versions',
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        left join pg_policy p on p.polrelid = c.oid
+       where n.nspname = 'public' and c.relname in ('worker_employments', 'worker_employment_versions',
            'employment_assignments', 'employment_assignment_versions',
            'employment_changes', 'reporting_relationships', 'hrm_graph_revisions')
        group by c.relname, c.relforcerowsecurity`)
@@ -1153,25 +1156,37 @@ test("tenant RLS through a restricted role: invisible cross-org, writes refused"
   const orgB = await createScratchOrg();
   const admin = await pool.connect();
   try {
-    await admin.query(`DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runner') THEN
-        CREATE ROLE app_runner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-      END IF; END $$;`);
-    // Restrictive privilege assertion: the role under test must never bypass
-    // RLS, whatever database this suite lands on. Declared here, not assumed.
+    // The runner is a proven-restricted role. A privileged session (the Mac
+    // review database) declares a dedicated app_runner; the canonical harness
+    // connects as the constrained runtime role and cannot CREATE ROLE, so the
+    // connected role itself is the runner. Either way the privilege check
+    // below is asserted, not assumed.
+    const me = (
+      await admin.query(
+        `select current_user as name, rolsuper as super, rolcreaterole as cr from pg_roles where rolname = current_user`,
+      )
+    ).rows[0] as { name: string; super: boolean; cr: boolean };
+    const runner = me.super || me.cr ? "app_runner" : me.name;
+    if (runner === "app_runner") {
+      await admin.query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runner') THEN
+          CREATE ROLE app_runner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+        END IF; END $$;`);
+      await admin.query(`GRANT CONNECT ON DATABASE ${admin.database} TO app_runner`);
+      await admin.query(`GRANT USAGE ON SCHEMA public TO app_runner`);
+      await admin.query(
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runner`,
+      );
+    }
     const priv = (
       await admin.query(
-        `select rolbypassrls as bypass, rolsuper as super from pg_roles where rolname = 'app_runner'`,
+        `select rolbypassrls as bypass, rolsuper as super from pg_roles where rolname = $1`,
+        [runner],
       )
     ).rows as { bypass: boolean; super: boolean }[];
-    assert.equal(priv.length, 1, "app_runner must exist (declared above)");
-    assert.equal(priv[0]!.bypass, false, "app_runner must not bypass RLS");
-    assert.equal(priv[0]!.super, false, "app_runner must not be superuser");
-    await admin.query(`GRANT CONNECT ON DATABASE ${admin.database} TO app_runner`);
-    await admin.query(`GRANT USAGE ON SCHEMA public TO app_runner`);
-    await admin.query(
-      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runner`,
-    );
+    assert.equal(priv.length, 1, `${runner} must exist`);
+    assert.equal(priv[0]!.bypass, false, `${runner} must not bypass RLS`);
+    assert.equal(priv[0]!.super, false, `${runner} must not be superuser`);
     const s = await seed(orgA.orgId, orgA.subsidiaryId, "rls");
     const setup = await session(true);
     try {
@@ -1186,7 +1201,9 @@ test("tenant RLS through a restricted role: invisible cross-org, writes refused"
     try {
       await c.query("begin");
       await c.query("select set_config('app.bypass_rls', 'off', true)");
-      await c.query("SET ROLE app_runner");
+      await c.query(`SET ROLE ${runner}`);
+      const who = (await c.query("select current_user as u")).rows[0] as { u: string };
+      assert.equal(who.u, runner, "role switch must take effect before the RLS assertions");
       await c.query("select set_config('app.current_org', $1, true)", [orgB.orgId]);
       const foreign = (await c.query(`select count(*)::int as n from worker_employments`)).rows[0]!
         .n as number;
