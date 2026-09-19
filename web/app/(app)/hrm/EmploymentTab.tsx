@@ -4,8 +4,10 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Label } from '@openbooks/ui'
+import { Button, Label } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { ChangeRequestActions } from './ChangeRequestActions'
+import { ChangeRequestDrawer } from './ChangeRequestDrawer'
 
 /**
  * The employee drawer's Employment tab — the ONE place the native
@@ -67,13 +69,27 @@ function todayCivil(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function EmploymentTab({ employmentId }: { employmentId: string }) {
+export function EmploymentTab({
+  employmentId,
+  canManageHrm,
+  departmentOptions = [],
+}: {
+  employmentId: string
+  /** hrm.employment.manage — readers see the request list only, without authoring actions. */
+  canManageHrm: boolean
+  departmentOptions?: { value: string; label: string }[]
+}) {
   const t = useTranslations('hrm')
   const [date, setDate] = useState(todayCivil)
+  const [revision, setRevision] = useState(0)
+  const [proposing, setProposing] = useState(false)
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
   })
   const requestId = useRef(0)
+  const reload = (): void => {
+    setRevision((current) => current + 1)
+  }
 
   // A sequence guard drops stale responses so an older as-of never
   // overwrites a newer date's resolution.
@@ -107,7 +123,7 @@ export function EmploymentTab({ employmentId }: { employmentId: string }) {
     return () => {
       cancelled = true
     }
-  }, [employmentId, date])
+  }, [employmentId, date, revision])
 
   // Catalog-backed enum labels with a raw fallback: a status the catalog
   // does not know yet renders as its stored value, never a raw key path.
@@ -243,9 +259,16 @@ export function EmploymentTab({ employmentId }: { employmentId: string }) {
       </section>
 
       <section aria-label={t('employment.changeRequests.title')}>
-        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t('employment.changeRequests.title')}
-        </h3>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.changeRequests.title')}
+          </h3>
+          {canManageHrm ? (
+            <Button size="sm" variant="outline" onClick={() => setProposing(true)}>
+              {t('employment.changeRequests.proposeButton')}
+            </Button>
+          ) : null}
+        </div>
         {state.changeRequests.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.changeRequests.empty')}</p>
         ) : (
@@ -277,11 +300,30 @@ export function EmploymentTab({ employmentId }: { employmentId: string }) {
                     </span>
                   )}
                 </span>
+                {canManageHrm ? (
+                  <span className="basis-full">
+                    <ChangeRequestActions
+                      request={{ id: request.id, status: request.status }}
+                      employmentId={employmentId}
+                      departmentOptions={departmentOptions}
+                      onChanged={reload}
+                    />
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </section>
+      {proposing && canManageHrm ? (
+        <ChangeRequestDrawer
+          employmentId={employmentId}
+          initialRequest={null}
+          departmentOptions={departmentOptions}
+          onClose={() => setProposing(false)}
+          onSaved={reload}
+        />
+      ) : null}
     </div>
   )
 }

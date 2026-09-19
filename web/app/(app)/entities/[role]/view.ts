@@ -225,6 +225,9 @@ export async function loadEntityRole(
                     workerPartyId: partyId,
                   })),
                 ],
+                // Authoring rides the manage grant; readers see the request
+                // list only. The change-request routes re-check this grant.
+                canManageHrm: can(authz, 'hrm.employment.manage'),
               }
             : null,
           canReadCrmAccounts,
