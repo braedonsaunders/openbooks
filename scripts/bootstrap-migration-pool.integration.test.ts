@@ -59,8 +59,15 @@ test(
       await releaseMigrationClient(client);
     }
 
-    // The cap was real: the same slow statement through a request-shaped
-    // pool dies with exactly the error operators saw on slow hosts.
+    // The cap was real: the same slow statement through a request-shaped pool
+    // is refused. WHICH timer wins is a race — the request pool arms both a
+    // client-side `query_timeout` and a server-side `statement_timeout` at the
+    // same value, so a slow host trips the client timer ("Query read timeout",
+    // which is what operators reported) and a fast one lets the server cancel
+    // first ("canceling statement due to statement timeout"). The claim under
+    // test is that the statement is REFUSED, not which of the two equivalent
+    // timers got there first, so accept either and assert nothing about the
+    // race.
     const capped = new pg.Pool({
       connectionString: env.OPENBOOKS_DB_URL,
       max: 1,
@@ -69,7 +76,10 @@ test(
       statement_timeout: 500,
     });
     try {
-      await assert.rejects(capped.query("select pg_sleep(1.5)"), /Query read timeout/);
+      await assert.rejects(
+        capped.query("select pg_sleep(1.5)"),
+        /Query read timeout|canceling statement due to statement timeout/,
+      );
     } finally {
       await capped.end();
     }
