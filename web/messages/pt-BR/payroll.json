@@ -804,6 +804,15 @@
           "seguridad_social": "Seguridad Social a recolher (contribui\u00e7\u00f5es de funcion\u00e1rio e empregador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
         }
       },
+      "JP": {
+        "title": "Japão — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote do Japão retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "gensen": "Imposto retido a recolher (tabela mensal NTA)",
+          "kosei_nenkin": "Pensão dos empregados a recolher (partes do funcionário e do empregador)",
+          "kenko_hoken": "Seguro de saúde a recolher (partes do funcionário e do empregador)"
+        }
+      },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
     },
     "usConfig": {

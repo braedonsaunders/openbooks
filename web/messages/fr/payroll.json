@@ -804,6 +804,15 @@
           "seguridad_social": "Seguridad Social \u00e0 payer (cotisations employ\u00e9 et employeur : contingencias comunes, ch\u00f4mage, FOGASA, formation, MEI)"
         }
       },
+      "JP": {
+        "title": "Japon — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack japonais retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "gensen": "Impôt prélevé à la source à payer (table mensuelle NTA)",
+          "kosei_nenkin": "Assurance pension des employés à payer (parts employé et employeur)",
+          "kenko_hoken": "Assurance maladie à payer (parts employé et employeur)"
+        }
+      },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
     },
     "usConfig": {

@@ -22,6 +22,7 @@ import { IT_PAYROLL_PACK } from "./it/pack.ts";
 import { NL_PAYROLL_PACK } from "./nl/pack.ts";
 import { ES_PAYROLL_PACK } from "./es/pack.ts";
 import { SG_PAYROLL_PACK } from "./sg/pack.ts";
+import { JP_PAYROLL_PACK } from "./jp/pack.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 
 test("every registered pack loads before the registry is entered", () => {
@@ -37,9 +38,10 @@ test("every registered pack loads before the registry is entered", () => {
     NL: NL_PAYROLL_PACK,
     ES: ES_PAYROLL_PACK,
     SG: SG_PAYROLL_PACK,
+    JP: JP_PAYROLL_PACK,
   } as const;
   assert.deepEqual(Object.keys(PAYROLL_COUNTRY_PACKS), [
-    "CA", "US", "GB", "DE", "FR", "IE", "AU", "IT", "NL", "ES", "SG",
+    "CA", "US", "GB", "DE", "FR", "IE", "AU", "IT", "NL", "ES", "SG", "JP",
   ]);
   for (const [country, pack] of Object.entries(packs)) {
     assert.equal(pack.country, country, `${country} pack country`);

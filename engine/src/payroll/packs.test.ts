@@ -73,11 +73,12 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // oneri deducibili, it/pack.ts:92-93) with ADDREG (same IRPEF base,
   // it/pack.ts:100-101) and ADDCOM (the comune surcharge, it/pack.ts:108-109);
   // NL LH (grondslag reduced by employee pension contributions, nl/pack.ts:148-151);
-  // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93).
+  // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93);
+  // JP GENSEN (looked up on pay after social-insurance premiums, jp/pack.ts).
   assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
     "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/PAYE", "AU/PAYG",
     "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
-    "NL/LH", "ES/IRPF"]);
+    "NL/LH", "ES/IRPF", "JP/GENSEN"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {

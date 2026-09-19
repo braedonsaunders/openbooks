@@ -804,6 +804,15 @@
           "seguridad_social": "Verbindlichkeiten aus Seguridad Social (Arbeitnehmer- und Arbeitgeberbeitr\u00e4ge: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
         }
       },
+      "JP": {
+        "title": "Japan — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das JP-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "gensen": "Abzuführende Quellensteuer (NTA-Monatstabelle)",
+          "kosei_nenkin": "Verbindlichkeiten aus Employees' Pension (Arbeitnehmer- und Arbeitgeberanteile)",
+          "kenko_hoken": "Verbindlichkeiten aus Krankenversicherung (Arbeitnehmer- und Arbeitgeberanteile)"
+        }
+      },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
     },
     "usConfig": {
