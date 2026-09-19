@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
@@ -144,14 +145,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (run.runStatus !== 'draft' && run.runStatus !== 'calculated') {
     return NextResponse.json({ error: 'assertions can only be filed on an uncommitted run' }, { status: 422 })
   }
-  let body: {
+  // Through the shared boundary like every other mutation route, so the
+  // financial-boundary guard holds: a route that parses its own body is a
+  // route whose validation nobody can audit centrally.
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data as {
     employeePartyId?: unknown; paidOnCommission?: unknown;
     holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
-  }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'invalid request body' }, { status: 400 })
   }
   const { employeePartyId, paidOnCommission } = body
   if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {

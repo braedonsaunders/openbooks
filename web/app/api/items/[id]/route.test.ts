@@ -275,6 +275,7 @@ test('PATCH commits a locked before/after accounting snapshot with actor and rea
     income_account_id: originalItem.income_account_id,
     expense_account_id: originalItem.expense_account_id,
     cost_recovery_account_id: null,
+    payroll_expense_account_id: null,
     tax_code_id: null,
     show_on_timesheet: false,
     recognition_rule_id: null,
