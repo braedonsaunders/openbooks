@@ -102,6 +102,7 @@ const US_REGIONS: PayrollRegionCoverage = {
 
 export const US_PAYROLL_PACK: PayrollCountryPack = {
   country: "US",
+  name: "United States",
   installable: true,
   // Pub 15-T produces USD; the IRS tax year is the calendar year.
   statutoryCurrency: "USD",

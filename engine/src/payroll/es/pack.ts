@@ -62,6 +62,7 @@ const ES_REGIONS: PayrollRegionCoverage = {
 
 export const ES_PAYROLL_PACK: EsPayrollPack = {
   country: "ES",
+  name: "Spain",
   installable: true,
   // The AEAT pack computes in euro; IRPF and TGSS settle in euro.
   statutoryCurrency: "EUR",

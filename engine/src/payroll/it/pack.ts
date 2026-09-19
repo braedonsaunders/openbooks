@@ -39,6 +39,7 @@ export type ItPayrollPackDeclaration = Omit<PayrollCountryPack, "country"> & {
 
 export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   country: "IT",
+  name: "Italy",
   installable: true,
   // IRPEF produces EUR; the Italian tax year is the calendar year
   // (periodo d'imposta = anno solare).

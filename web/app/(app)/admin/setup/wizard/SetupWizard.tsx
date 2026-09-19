@@ -52,7 +52,7 @@ import {
   type TeamSize,
   type WorkspaceProfile,
 } from '@/lib/workspace-profile'
-import { initialPayrollPack, packDescription, packTitle, type WizardT } from './payroll-pack-display'
+import { initialPayrollPack, packDescription, packTitle, type WizardPayrollPack, type WizardT } from './payroll-pack-display'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ export function SetupWizard(props: {
   suppressOnWizardRoute?: boolean
   /** Installable payroll country packs, in registry order — declared by the
    *  server from the pack registry, never a list in this file. */
-  payrollPacks?: string[]
+  payrollPacks?: WizardPayrollPack[]
   onClose?: () => void
 }) {
   const t = useTranslations('admin.setup.wizard')
@@ -1013,7 +1013,7 @@ function RhythmStep(props: {
 function PayrollStep(props: {
   t: WizardT
   /** Installable packs, in registry order — the cards render whatever is declared. */
-  packs: string[]
+  packs: WizardPayrollPack[]
   pack: PayrollPack
   setPack: (value: PayrollPack) => void
 }) {
@@ -1027,7 +1027,7 @@ function PayrollStep(props: {
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('payroll.packQuestion')}</legend>
         <div className="grid gap-3 sm:grid-cols-2">
-          {packs.map((code) => {
+          {packs.map(({ country: code, name }) => {
             const selected = pack === code
             return (
               <button
@@ -1046,7 +1046,7 @@ function PayrollStep(props: {
                   <Landmark size={18} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{packTitle(t, code)}</span>
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{packTitle(t, code, name)}</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{packDescription(t, code)}</span>
                 </span>
                 {selected && (

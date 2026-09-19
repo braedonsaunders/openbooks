@@ -180,6 +180,7 @@ function sgPackFilings(): PayrollPackFilings {
  */
 export const SG_PAYROLL_PACK: PayrollCountryPack = {
   country: "SG",
+  name: "Singapore",
   installable: true,
   statutorySlots: [
     {

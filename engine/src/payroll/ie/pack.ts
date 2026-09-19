@@ -464,6 +464,7 @@ export async function computeIeStatutory(
 
 export const IE_PAYROLL_PACK: IePayrollPack = {
   country: "IE",
+  name: "Ireland",
   installable: true,
   // Revenue's engine computes euro; the Irish tax year is the calendar year.
   statutoryCurrency: "EUR",

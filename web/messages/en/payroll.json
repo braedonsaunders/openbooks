@@ -763,7 +763,7 @@
         }
       },
       "AU": {
-        "title": "Australia \u2014 ATO statutory accounts",
+        "title": "Australia — ATO statutory accounts",
         "description": "Liability accounts for the amounts the Australia pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "payg": "PAYG withholding payable (income tax, Medicare levy + STSL repayments)",
@@ -772,11 +772,11 @@
         }
       },
       "DE": {
-        "title": "Germany \u2014 statutory accounts",
+        "title": "Germany — statutory accounts",
         "description": "Liability accounts for the amounts the Germany pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "lohnsteuer": "Lohnsteuer payable (income tax withheld under the PAP)",
-          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag payable (surcharge on income tax)",
+          "solidaritaetszuschlag": "Solidaritätszuschlag payable (surcharge on income tax)",
           "kirchenlohnsteuer": "Kirchenlohnsteuer payable (church tax elected by the employee)",
           "kv": "KV payable (employee + employer Krankenversicherung)",
           "rv": "RV payable (employee + employer Rentenversicherung)",
@@ -787,21 +787,29 @@
         }
       },
       "FR": {
-        "title": "France \u2014 statutory accounts",
+        "title": "France — statutory accounts",
         "description": "Liability accounts for the amounts the France pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "pas": "PAS payable (income tax withheld at source)",
           "salariales": "Employee social contributions payable (assurance vieillesse, CSG + CRDS)",
           "retraite_comp": "Supplementary pension payable (employee + employer AGIRC-ARRCO, CEG + CET)",
-          "patronales": "Employer social contributions payable (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+          "patronales": "Employer social contributions payable (URSSAF: maladie, vieillesse, chômage, AT/MP, versement mobilité)"
         }
       },
       "ES": {
-        "title": "Spain \u2014 statutory accounts",
+        "title": "Spain — statutory accounts",
         "description": "Liability accounts for the amounts the Spain pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "irpf": "IRPF payable (income tax withholding at the annual tipo rate)",
-          "seguridad_social": "Seguridad Social payable (employee + employer contributions: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+          "seguridad_social": "Seguridad Social payable (employee + employer contributions: contingencias comunes, desempleo, FOGASA, formación, MEI)"
+        }
+      },
+      "SG": {
+        "title": "Singapore — statutory accounts",
+        "description": "Liability accounts for the amounts the Singapore pack withholds and accrues. Singapore withholds no monthly income tax — IRAS assesses annually and the employer reports — so there is no income-tax account to map.",
+        "slots": {
+          "cpf": "CPF payable (employee and employer shares, remitted to the CPF Board)",
+          "sdl": "Skills Development Levy payable (employer-only, collected with the CPF contribution)"
         }
       },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."

@@ -119,9 +119,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   country: typeof GB_COUNTRY_CODE;
 } = {
   country: GB_COUNTRY_CODE,
+  name: "United Kingdom",
   // 2026/27 rUK + SCT editions transcribed (GB_TAX_YEARS), engine behind
-  // both, parity harnesses green: installable, pending registry wiring by
-  // Orchestrate.
+  // both, parity harnesses green: installable.
   installable: true,
   statutorySlots: GB_STATUTORY_SLOTS,
   // PAYE and NIC are remitted to the HMRC Accounts Office on the employer's

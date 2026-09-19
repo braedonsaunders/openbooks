@@ -321,6 +321,7 @@ const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
 
 export const FR_PAYROLL_PACK = {
   country: "FR",
+  name: "France",
   // installable flips to true once packAccounts.FR.slots.* statutory-account
   // labels land in web/messages (labels shard owns all seven locales) — the
   // messages-catalog gate fires on those four keys until then, so the flip
