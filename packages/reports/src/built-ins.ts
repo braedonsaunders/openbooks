@@ -577,6 +577,29 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       sorts: [{ column: 'lifecycle_stage', direction: 'asc' }],
     },
   },
+  {
+    slug: 'headcount-statement',
+    name: 'Headcount statement',
+    description:
+      'Headcount and full-time equivalents as of the report date, one row per employer subsidiary and department with an organization total. Requires the HRM employment permission.',
+    query: {
+      entity: 'hrm_headcount',
+      mode: 'summarize',
+      columns: [],
+      // One row per subsidiary × department group. The organization total
+      // rides the shared summary band (Total headcount / Total FTE), which
+      // the ExportData conversion repeats as footer rows — so the statement
+      // PDF, CSV and XLSX all carry it with no bespoke total row.
+      breakouts: [{ column: 'subsidiary' }, { column: 'department' }],
+      measures: [
+        { fn: 'sum', column: 'headcount', label: 'Headcount' },
+        { fn: 'sum', column: 'fte_total', label: 'Full-time equivalents' },
+      ],
+      filters: null,
+      groupBy: null,
+      limit: 1000,
+    },
+  },
 ]
 
 /** O(1) catalog lookup shared by native routes, exports, and saved views. */

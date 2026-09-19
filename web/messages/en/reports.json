@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "CRM activities",
         "description": "Sales and relationship activities including tasks, calls, events, emails, and notes."
+      },
+      "hrm_headcount": {
+        "label": "Headcount",
+        "description": "One row per employer subsidiary and department: employments in service at the report as-of date, with full-time-equivalent totals from the effective primary assignment. Requires the HRM employment permission."
+      },
+      "hrm_employment_history": {
+        "label": "Employment history",
+        "description": "One row per employment version — person, employer, status, effective and recorded stamps, and the closure evidence reason. Requires the HRM employment permission."
+      },
+      "hrm_change_requests": {
+        "label": "Change requests",
+        "description": "One row per employment change request — status, kind, employment, requester, submission and decision stamps, bound approval run and revision binding. Requires the HRM employment permission."
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "Private",
         "created_at": "Created at",
         "id": "Activity (id)"
+      },
+      "hrm_headcount": {
+        "subsidiary": "Subsidiary",
+        "department": "Department",
+        "headcount": "Headcount",
+        "fte_total": "FTE total",
+        "subsidiary_id": "Subsidiary (id)",
+        "department_id": "Department (id)"
+      },
+      "hrm_employment_history": {
+        "person": "Person",
+        "employer": "Employer",
+        "status": "Status",
+        "effective_from": "Effective from",
+        "effective_to": "Effective to",
+        "recorded_at": "Recorded at",
+        "recorded_until": "Recorded until",
+        "version_no": "Version",
+        "change_reason": "Change reason",
+        "employment_id": "Employment (id)",
+        "worker_id": "Person (id)"
+      },
+      "hrm_change_requests": {
+        "status": "Status",
+        "kind": "Kind",
+        "employment": "Employment",
+        "employer": "Employer",
+        "requested_by": "Requested by",
+        "submitted_at": "Submitted at",
+        "decided_at": "Decided at",
+        "flow_run_id": "Approval run (id)",
+        "request_revision": "Request revision",
+        "expected_employment_revision": "Expected employment revision",
+        "applied_at": "Applied at",
+        "reason": "Reason",
+        "created_at": "Created at",
+        "id": "Request (id)",
+        "employment_id": "Employment (id)"
       }
     },
     "enumValues": {
@@ -1184,6 +1234,16 @@
       "reversed": "Reversed",
       "submitted": "Submitted",
       "rejected": "Rejected",
+      "offered": "Offered",
+      "on_leave": "On leave",
+      "suspended": "Suspended",
+      "terminated": "Terminated",
+      "withdrawn": "Withdrawn",
+      "applied": "Applied",
+      "hire": "Hire",
+      "status_change": "Status change",
+      "assignment_change": "Assignment change",
+      "termination": "Termination",
       "time_and_materials": "Time & materials",
       "fixed_price": "Fixed price",
       "cost_plus": "Cost plus",
@@ -1365,6 +1425,10 @@
     "crm-lead-conversion-funnel": {
       "name": "Lead lifecycle & source summary",
       "description": "CRM relationship profiles categorized by lifecycle stage, status, and acquisition lead source."
+    },
+    "headcount-statement": {
+      "name": "Headcount statement",
+      "description": "Headcount and full-time equivalents as of the report date, one row per employer subsidiary and department with an organization total. Requires the HRM employment permission."
     }
   },
   "generalLedger": {
