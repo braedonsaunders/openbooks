@@ -8,6 +8,97 @@ changes; each release documents required operator action.
 
 No migrations.
 
+## [0.1.0-alpha.17] - 2026-09-19
+
+Three forward migrations (0180-0182). The swarm release script migrates before
+it swaps, so no manual step is required.
+
+**Operator action, multi-country payroll only.** An organization running BOTH
+the United Kingdom and Ireland packs shared ONE `PAYE` component between them
+(see below). Ireland now seeds its own `IEPAYE`, which starts unmapped, and a
+pay run refuses by name until someone maps the Irish PAYE slot in Payroll setup
+→ Accounts & posting. The refusal is loud and names the remedy; the remedy is
+to map the slot and recalculate. An organization running only one of the two
+packs is unaffected.
+
+### Payroll
+
+- **No Dutch employee could be paid at all.** The pipeline hands packs money in
+  the canonical 4-decimal ledger form — even `"0.0000"` for an empty base —
+  and the Netherlands and Singapore packs each hand-rolled a parser accepting
+  one or two decimals, so every NL calculation died on its own money-parse
+  refusal. The money contract is now written on the shared statutory compute
+  context and both packs converge on it. The four per-employee Dutch inputs
+  (age class, AWf low, AOf high, and the employer's own Whk beschikking
+  percentage) also had no entry surface anywhere, so no NL employee could be
+  configured even once the parse defect was gone; they are pack-declared
+  certificates on the profile, and the German and French row-backed forms light
+  up on the same surface.
+- **France over-withheld from every employee, twice over.** The prélèvement à
+  la source was applied to gross rather than to the net imposable — the assiette
+  is gross less deductible social contributions plus the non-deductible 2,4
+  points of CSG (CGI art. 204 A–M; BOFiP BOI-IR-PAS-20-10-10) — which
+  over-withheld roughly 30,58 € a month on a 3 400 € salary. And allocations
+  familiales were charged at the flat 5,25 % with no taux réduit: 3,45 % applies
+  at or below 3,5 SMIC (CSS art. L241-6-1, D241-3-1).
+- **Ireland had no PAYE component of its own.** `pay_components` is unique on
+  (org, code) and on (org, system_key, kind), so installing Ireland after the
+  United Kingdom hit `on conflict do nothing` and Irish runs pushed onto the
+  British component — each country's account mapping erasing the other's.
+  Ireland seeds `IEPAYE`/`ie_paye`; withheld payroll tax is wired through a
+  new `payrollDeductions` chart ROLE rather than any hardcoded account number.
+- **A statutory rate could save successfully and resolve to nothing.** A rate
+  written with a scope key the slot does not declare stored cleanly, returned
+  `{ok}`, and then resolved to `null` forever — so the engine priced the levy
+  as unconfigured, refusing or accruing zero, with a rate visibly on file. The
+  write now refuses a scope point the declaration does not admit, and an update
+  matching zero rows throws instead of reporting success.
+- **Remittance bills posted to the wrong legal entity, in the wrong currency.**
+  The bill stamped the root subsidiary unconditionally and took that root's base
+  currency, while the accruals it clears were credited on whichever entity ran
+  the payroll — so the liability never cleared per entity. Remittance groups
+  now carry per-entity slices: the consolidated totals remain the worksheet
+  reading, the slices are the write path, and a group spanning two entities
+  raises one bill per entity. A filing account registered to a different entity
+  than the accruals refuses, naming both.
+- **A partially-refused pay run committed and posted silently.** Calculation
+  refusals are persisted per employee, and a commit is gated on them unless the
+  refusals are explicitly acknowledged against the run's digest.
+- **Canadian employees were unpayable in any period containing a statutory
+  holiday**, and the attestations that answer the eligibility question are now
+  persisted rather than re-demanded on every recalculation.
+- **Two currencies were added together and labelled with one symbol.** A mixed
+  currency sum is now refused or translated, never added as raw units.
+- Live-but-unconfigured employer levies refuse BY NAME rather than accruing
+  0.00 in silence, and Québec-only rate slots no longer demand a Revenu Québec
+  account from an Ontario-only employer.
+- **Pay runs could be scoped to the wrong subsidiary.** The wizard asks, drafts
+  are discardable, and re-scoping re-resolves rather than inheriting.
+- **Trace factors rendered as raw codes.** One flat 49-entry label map, keyed by
+  bare short codes and shared by every country, covered 543 codes the packs
+  actually trace; the rest fell through to the raw key beside a UI that already
+  prints it, so an unlabelled factor rendered the code TWICE — a Maryland admin
+  auditing a run read `MD_PA_LOCAL_EXEMPT   MD_PA_LOCAL_EXEMPT`. The flat
+  namespace was itself the defect: `CA_TAX` is California while `CA` is
+  Canada's country code, and `DE_WITHHELD` is Delaware while `DE` is Germany's.
+  Labels are now a pack-declared channel resolved through the registry, with a
+  guard that derives the traced set rather than restating it.
+- **Saving a payroll profile on a freshly created employee returned "employee
+  or pay schedule is not available."** Creating a person leaves the party
+  inactive until the record is saved, and one message covered four distinct
+  causes — no such party, inactive party, inactive employee role, and no such
+  schedule — so the refusal was undiagnosable from the outside. Each cause now
+  names itself, and the draft case says what to do.
+- Employee identifiers are pack-declared rather than a hardcoded nine-digit
+  SIN/SSN shape, which had made ten countries' employees unsaveable.
+- Per-item payroll expense routing: an earning line posts to the service item's
+  own expense account where one is set, so direct labour can reach cost of
+  sales, and item accounts join the staleness digest so an account edited after
+  calculation refuses the commit rather than posting a stale mapping.
+- German Konfession help text no longer tells administrators church tax is not
+  withheld, and the payroll setup write path accepts every country its own
+  picker offers.
+
 ### Changed
 
 - One account surface across the relationship lifecycle. Leads, prospects and
@@ -51,10 +142,6 @@ No migrations.
   a different column while keeping the stored direction — which listed
   customers Z→A. Column and direction now move together, and the party-family
   record types declare `name ascending` explicitly.
-
-## [0.1.0-alpha.17] - 2026-09-19
-
-No migrations.
 
 ### Fixed
 
