@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import React from 'react'
-import type { PackProfileDeclaration } from './EmployeesPanel'
+import type { PackProfileDeclaration, StoredCertificateRow } from './EmployeesPanel'
 
 // All module setup — including every top-level await — completes before the
 // first test() registration below (canonical registration order).
@@ -86,6 +86,8 @@ const xxPack: PackProfileDeclaration = {
       key: 'xx_form',
       form: 'XX-1',
       label: 'Fixture withholding certificate',
+      citation: 'Fixture revenue authority, Fixture Form XX-1 (2026)',
+      storage: 'profile_columns' as const,
       scope: { level: 'country' },
       fields: [
         {
@@ -110,7 +112,13 @@ const xxPack: PackProfileDeclaration = {
   exemptionFlags: [],
 }
 
-function render(overrides: Record<string, unknown> = {}): string {
+function render(
+  overrides: Record<string, unknown> = {},
+  packProfiles: Record<string, PackProfileDeclaration> = { XX: xxPack },
+  countries: string[] = ['XX'],
+  storedCertificates: StoredCertificateRow[] = [],
+): string {
+  const profileCountry = (overrides.country as string | undefined) ?? countries[0]!
   return renderToStaticMarkup(
     <NextIntlClientProvider locale="en" messages={{ 'payroll': messages }}>
       <ProfileEditor
@@ -121,7 +129,7 @@ function render(overrides: Record<string, unknown> = {}): string {
           employee_name: 'Fixture Hire',
           pay_schedule_id: 'sched',
           schedule_name: null,
-          country: 'XX',
+          country: profileCountry,
           province: '',
           labour_jurisdiction: null,
           pay_basis: 'hourly',
@@ -157,8 +165,9 @@ function render(overrides: Record<string, unknown> = {}): string {
         schedules={[{ id: 'sched', name: 'Monthly', frequency: 'monthly' }]}
         filingAccounts={[]}
         labourJurisdictions={{}}
-        countries={['XX']}
-        packProfiles={{ XX: xxPack }}
+        countries={countries}
+        packProfiles={packProfiles}
+        storedCertificates={storedCertificates}
         onClose={() => {}}
         onSaved={() => {}}
       />
@@ -190,4 +199,128 @@ test('profile editor renders a pack it has never heard of', () => {
   // resolves through the existing locale key for the data concept.
   assert.match(html, /id="pp-xx_form-free"/)
   assert.match(html, /Income tax exempt/)
+})
+
+// A pack whose certificates store in rows: every kind renders from the same
+// declaration the column path reads, with the pack's own labels, help,
+// citation and required-ness — and a region-scoped form stays hidden until
+// the employee works in its region.
+const yyPack: PackProfileDeclaration = {
+  subdivisionLabel: 'region',
+  subdivisions: ['AA', 'ZZ'],
+  supportedSubdivisions: ['AA', 'ZZ'],
+  unsupportedReason: 'withholding for {region} is not implemented by the YY pack',
+  unsupportedReasons: {},
+  certificates: [
+    {
+      key: 'yy_notice',
+      form: 'YY-9',
+      label: 'Fixture coding notice',
+      citation: 'Fixture revenue authority, Coding notices (2026)',
+      storage: 'certificate_rows',
+      scope: { level: 'country' },
+      fields: [
+        {
+          key: 'tax_code',
+          label: 'Tax code',
+          kind: 'code',
+          required: true,
+          help: 'The code exactly as issued.',
+        },
+        {
+          key: 'plan',
+          label: 'Plan choice',
+          kind: 'choice',
+          choices: [
+            { value: 'a', label: 'Plan A' },
+            { value: 'b', label: 'Plan B' },
+          ],
+          help: 'Pick a plan.',
+        },
+        {
+          key: 'allowances',
+          label: 'Allowances',
+          kind: 'count',
+          min: '0',
+          max: '3',
+          help: 'How many.',
+        },
+        {
+          key: 'extra',
+          label: 'Extra amount',
+          kind: 'amount',
+          decimals: 2,
+          help: 'Withheld on top.',
+        },
+        {
+          key: 'marker',
+          label: 'Special marker',
+          kind: 'flag',
+          help: 'A fixture checkbox.',
+        },
+      ],
+    },
+    {
+      key: 'yy_regional',
+      form: 'YY-R',
+      label: 'Fixture regional form',
+      citation: 'Fixture revenue authority, Regional form (2026)',
+      storage: 'certificate_rows',
+      scope: { level: 'region', region: 'ZZ' },
+      fields: [
+        {
+          key: 'regional_code',
+          label: 'Regional code',
+          kind: 'code',
+          help: 'Only for ZZ employees.',
+        },
+      ],
+    },
+  ],
+  exemptionFlags: [],
+}
+
+test('profile editor renders row-backed certificate fields generically', () => {
+  const html = render({}, { YY: yyPack }, ['YY'])
+  // Form heading plus the pack's citation, exactly as declared.
+  assert.match(html, /YY-9 · Fixture coding notice/)
+  assert.match(html, /Fixture revenue authority, Coding notices \(2026\)/)
+  // Every kind renders with its declared label and an id carrying the pack's
+  // own certificate and field keys; the required code field is marked.
+  assert.match(html, /id="pp-yy_notice-tax_code"/)
+  assert.match(html, /Tax code \*/)
+  assert.match(html, /id="pp-yy_notice-plan"/)
+  assert.match(html, /<option value="a"[^>]*>Plan A<\/option>/)
+  assert.match(html, /<option value="b"[^>]*>Plan B<\/option>/)
+  assert.match(html, /id="pp-yy_notice-allowances"/)
+  assert.match(html, /<option value="3"[^>]*>3<\/option>/)
+  assert.doesNotMatch(html, /<option value="4"[^>]*>4<\/option>/)
+  assert.match(html, /id="pp-yy_notice-extra"/)
+  assert.match(html, /id="pp-yy_notice-marker"/)
+  // The region-scoped form does NOT offer itself: the employee works nowhere.
+  assert.doesNotMatch(html, /YY-R · Fixture regional form/)
+  assert.doesNotMatch(html, /id="pp-yy_regional-regional_code"/)
+})
+
+test('a region-scoped certificate offers itself only in its own region', () => {
+  const elsewhere = render({ province: 'AA' }, { YY: yyPack }, ['YY'])
+  assert.doesNotMatch(elsewhere, /YY-R · Fixture regional form/)
+  const home = render({ province: 'ZZ' }, { YY: yyPack }, ['YY'])
+  assert.match(home, /YY-R · Fixture regional form/)
+  assert.match(home, /id="pp-yy_regional-regional_code"/)
+  // …and the country-level form renders in both.
+  assert.match(elsewhere, /YY-9 · Fixture coding notice/)
+  assert.match(home, /YY-9 · Fixture coding notice/)
+})
+
+test('row-backed answers prefill from the current filing', () => {
+  const html = render({}, { YY: yyPack }, ['YY'], [
+    {
+      certificateKey: 'yy_notice',
+      answers: { tax_code: '1257L', marker: 'true' },
+      effectiveFrom: '2026-04-06',
+    },
+  ])
+  assert.match(html, /value="1257L"/)
+  assert.match(html, /id="pp-yy_notice-marker"[^>]*checked/)
 })

@@ -11,6 +11,7 @@ import {
   type PackProfileDeclaration,
   type ProfileRow,
   type ScheduleOption,
+  type StoredCertificateRow,
 } from './EmployeesPanel'
 
 /**
@@ -29,10 +30,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     labourJurisdictions: Record<string, LabourJurisdictionOption[]>
     countries: string[]
     packProfiles: Record<string, PackProfileDeclaration>
+    storedCertificates: StoredCertificateRow[]
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, schedules: [], filingAccounts: [],
-    labourJurisdictions: {}, countries: [], packProfiles: {}, defaultCountry: '',
+    labourJurisdictions: {}, countries: [], packProfiles: {}, storedCertificates: [],
+    defaultCountry: '',
   })
   const [version, setVersion] = useState(0)
 
@@ -59,6 +62,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
             labourJurisdictions: j.labourJurisdictions ?? {},
             countries,
             packProfiles: j.packProfiles ?? {},
+            storedCertificates: Array.isArray(j.storedCertificates) ? j.storedCertificates : [],
             // The API derives this from the employee's own legal entity (or
             // the root subsidiary, or the org's sole installed pack) —
             // '' when nothing answers, and then the operator chooses.
@@ -152,6 +156,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
       labourJurisdictions={state.labourJurisdictions}
       countries={state.countries}
       packProfiles={state.packProfiles}
+      storedCertificates={state.storedCertificates}
       onClose={() => {}}
       onSaved={() => setVersion((v) => v + 1)}
     />
