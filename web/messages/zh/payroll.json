@@ -833,6 +833,14 @@
           "inss": "INSS应付（雇员缴款加雇主缴款：patronal、RAT和terceiros）",
           "fgts": "FGTS应付（雇主向Caixa工人账户缴存8%）"
         }
+      },
+      "SG": {
+        "title": "新加坡 — 法定科目 (CPF)",
+        "description": "新加坡包代扣和累积金额的负债科目。新加坡不按月代扣个人所得税——由 IRAS 按年核定、雇主仅负责申报——因此没有需要映射的所得税科目。",
+        "slots": {
+          "cpf": "应付 CPF(雇员与雇主两部分,缴往 CPF 局)",
+          "sdl": "应付技能发展税 (SDL)(仅雇主承担,随 CPF 缴款一并征收)"
+        }
       }
     },
     "usConfig": {

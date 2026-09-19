@@ -48,25 +48,30 @@ function brl4(centsValue: bigint): string {
 /** "312.89" (2dp calculator output) → exact centavos. */
 function centsOf2dp(value: string): bigint {
   const match = /^(\d+)\.(\d{2})$/.exec(value);
-  if (!match) fail(`internal error: expected 2dp amount, got "${value}"`);
-  return BigInt(match[1]) * 100n + BigInt(match[2]);
+  const [, whole, hundredths] = match ?? [];
+  if (whole === undefined || hundredths === undefined) {
+    fail(`internal error: expected 2dp amount, got "${value}"`);
+  }
+  return BigInt(whole) * 100n + BigInt(hundredths);
 }
 
 /** Parse an exact percent string ("2", "1.50") to a rational. */
 function percentParts(percent: string, what: string): { num: bigint; den: bigint } {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(percent.trim());
-  if (!match) fail(`${what} is not a percent: "${percent}"`);
-  const frac = match[2] ?? "";
+  const whole = match?.[1];
+  if (whole === undefined) fail(`${what} is not a percent: "${percent}"`);
+  const frac = match?.[2] ?? "";
   const den = 10n ** BigInt(frac.length);
-  return { num: BigInt(match[1]) * den + BigInt(frac || "0"), den: den * 100n };
+  return { num: BigInt(whole) * den + BigInt(frac || "0"), den: den * 100n };
 }
 
 /** Parse an exact factor string ("1.5", "0.5000") to a rational. */
 function factorParts(factor: string, what: string): { num: bigint; den: bigint } {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(factor.trim());
-  if (!match) fail(`${what} is not a factor: "${factor}"`);
-  const frac = match[2] ?? "";
-  return { num: BigInt(match[1]) * 10n ** BigInt(frac.length) + BigInt(frac || "0"), den: 10n ** BigInt(frac.length) };
+  const whole = match?.[1];
+  if (whole === undefined) fail(`${what} is not a factor: "${factor}"`);
+  const frac = match?.[2] ?? "";
+  return { num: BigInt(whole) * 10n ** BigInt(frac.length) + BigInt(frac || "0"), den: 10n ** BigInt(frac.length) };
 }
 
 /** Truncate an exact rational of centavos toward zero (all inputs ≥ 0). */

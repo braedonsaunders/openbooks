@@ -833,6 +833,14 @@
           "inss": "INSS a recolher (contribuição do segurado mais patronal, RAT e terceiros do empregador)",
           "fgts": "FGTS a recolher (depósitos de 8% do empregador nas contas vinculadas dos trabalhadores na Caixa)"
         }
+      },
+      "SG": {
+        "title": "Singapura — contas oficiais (CPF)",
+        "description": "Contas de passivo para os valores que o pacote de Singapura retém e provisiona. Singapura não retém imposto de renda mensal — a IRAS lança anualmente e o empregador apenas declara —, portanto não há conta de imposto de renda a mapear.",
+        "slots": {
+          "cpf": "CPF a pagar (parcelas do empregado e do empregador, recolhidas ao CPF Board)",
+          "sdl": "Skills Development Levy (SDL) a pagar (somente empregador, recolhida junto com a contribuição ao CPF)"
+        }
       }
     },
     "usConfig": {

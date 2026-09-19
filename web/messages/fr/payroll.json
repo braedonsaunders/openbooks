@@ -833,6 +833,14 @@
           "inss": "INSS à payer (cotisation salariale plus patronale, RAT et terceiros de l’employeur)",
           "fgts": "FGTS à payer (dépôts patronaux de 8 % sur les comptes des salariés auprès de Caixa)"
         }
+      },
+      "SG": {
+        "title": "Singapour — comptes légaux (CPF)",
+        "description": "Comptes de passif pour les montants que le pack Singapour retient et provisionne. Singapour ne prélève aucun impôt sur le revenu mensuel — l'IRAS impose annuellement et l'employeur ne fait que déclarer —, il n'y a donc aucun compte d'impôt sur le revenu à mapper.",
+        "slots": {
+          "cpf": "CPF à payer (parts salariale et patronale, versées au CPF Board)",
+          "sdl": "Skills Development Levy (SDL) à payer (employeur uniquement, collectée avec la cotisation CPF)"
+        }
       }
     },
     "usConfig": {

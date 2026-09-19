@@ -833,6 +833,14 @@
           "inss": "INSS por pagar (aporte del empleado más patronal, RAT y terceiros del empleador)",
           "fgts": "FGTS por pagar (depósitos del empleador del 8% en las cuentas de los trabajadores en Caixa)"
         }
+      },
+      "SG": {
+        "title": "Singapur — cuentas legales (CPF)",
+        "description": "Cuentas de pasivo para los montos que el paquete de Singapur retiene y devenga. Singapur no retiene impuesto sobre la renta mensual — el IRAS liquida anualmente y el empleador solo informa —, por lo que no hay cuenta de impuesto sobre la renta que asignar.",
+        "slots": {
+          "cpf": "CPF a pagar (aportes del empleado y del empleador, remitidos al CPF Board)",
+          "sdl": "Skills Development Levy (SDL) a pagar (solo empleador, recaudada junto con el aporte al CPF)"
+        }
       }
     },
     "usConfig": {
