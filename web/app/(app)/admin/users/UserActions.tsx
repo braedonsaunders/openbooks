@@ -314,7 +314,8 @@ function LinkPersonDrawer({
   const [selectedOption, setSelectedOption] = useState<{ value: string; label: string } | null>(initialOption)
   const [options, setOptions] = useState<PersonOption[]>([])
   const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(false)
+  // True from mount: the first page is fetched as soon as the drawer opens.
+  const [loading, setLoading] = useState(true)
   const [statusMessage, setStatusMessage] = useState<string | undefined>(undefined)
   const [reason, setReason] = useState('')
   const [attested, setAttested] = useState(false)
@@ -328,8 +329,6 @@ function LinkPersonDrawer({
   // is merged back when the page does not contain it.
   useEffect(() => {
     const id = (requestId.current += 1)
-    setLoading(true)
-    setStatusMessage(undefined)
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     params.set('limit', '25')
@@ -461,7 +460,11 @@ function LinkPersonDrawer({
             loading={loading}
             statusMessage={statusMessage}
             statusTone={statusMessage ? 'error' : 'muted'}
-            onSearchChange={setQuery}
+            onSearchChange={(next) => {
+              setQuery(next)
+              setLoading(true)
+              setStatusMessage(undefined)
+            }}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('linkPersonSignalsNote')}</p>
         </div>
