@@ -12,35 +12,58 @@
  * Identity: a candidate is keyed by (orgId, sourceNamespace, sourceId).
  * Duplicate keys are all retained and all refused as ambiguous, never
  * silently discarded; rows sort by (orgId, sourceNamespace, sourceId) with
- * the content fingerprint as the stable tie-break for duplicate variants,
- * so the report is invariant under input order.
+ * the source fingerprint plus a full-row identity hash as the deterministic
+ * tie-break, so the report JSON is invariant under input order even when two
+ * variants differ only in operator evidence the fingerprint excludes.
  *
  * Idempotency: already_migrated requires a binding whose canonical
  * org/worker/employer plus source fingerprint and version are provable from
  * the input row itself. Same sourceId plus an employment id is NOT proof.
- * Every check still runs under a consistent binding (no short-circuit), and
- * any changed source (fingerprint or version drift) is a binding_conflict
- * refusal. The worker_employments table is never consulted. A duplicate key
- * outranks even a consistent binding: the binding may attach to the wrong
- * variant, so both variants refuse as ambiguous.
+ * The fingerprint is SHA-256 (node:crypto, pure builtin, no IO) over a
+ * versioned canonical encoding — no handrolled hash guards preserved
+ * migration identity. Every check still runs under a consistent binding (no
+ * short-circuit), and any changed source (fingerprint or version drift) is a
+ * binding_conflict refusal. The worker_employments table is never consulted.
+ * A duplicate key outranks even a consistent binding: the binding may attach
+ * to the wrong variant, so both variants refuse as ambiguous. A conflicting
+ * binding never authorizes erasing or re-migrating: the prior binding is
+ * preserved and the remedy requires reconciled controlled-correction
+ * evidence.
  *
- * Employment proof: parties.kind and bare active flags prove nothing. A
- * missing subsidiary is UNKNOWN, never the org root. Inactive, eliminated,
- * or cross-org employers are invalid. An inactive newly-sourced party with a
- * role but no payroll is only a draft SUSPECT (requires_review), never proof
- * to delete or exclude. Role-less payroll is an evidence case that stays in
- * the report, never silently skipped. Historic stub employers may be real
- * transfers: unmapped stubs need review, they never invalidate a valid
- * current employer. Actual service dates stay distinct from the
+ * Employment proof: parties.kind and bare active flags prove nothing — an
+ * inactive role flag may be data maintenance, not a termination, so it never
+ * demands a fabricated terminated_on. A missing subsidiary is UNKNOWN, never
+ * the org root. Inactive, eliminated, or cross-org employers are invalid;
+ * subsidiary facts that contradict each other on one id refuse as ambiguous
+ * instead of letting array order pick the verdict. An inactive newly-sourced
+ * party with a role but no payroll is only a draft SUSPECT (requires_review),
+ * never proof to delete or exclude. Role-less payroll is an evidence case
+ * that stays in the report, never silently skipped. Historic stub employers
+ * may be real transfers: unmapped stubs need review, they never invalidate a
+ * valid current employer. Actual service dates stay distinct from the
  * observation-start anchor: nothing backfills hired_on.
+ *
+ * Source hired_on/terminated_on are civil EVENT dates, not half-open
+ * interval endpoints: only terminated before hired is a contradiction, and a
+ * same-day hire plus termination is valid. No boundary semantics are
+ * inherited here; the future canonical writer owns the interval mapping and
+ * must require explicit source boundary semantics first. Conflicting dated
+ * evidence (source versus operator mapping) refuses as ambiguous rather than
+ * silently preferring one side.
  *
  * Observation uses the canonical current-state vocabulary
  * offered|active|on_leave|suspended|terminated|unknown with an asserted
  * instant and provenance. A valid current observation with a known employer
  * may be ready for observation-date migration with historicalCoverage
  * "unknown" plus a nonblocking note — an invented hire date is never
- * demanded. An empty inventory reports "empty_not_evaluated", never a clean
- * migration claim.
+ * demanded. The candidate current-state mapping is emitted only when no
+ * blocking issue exists. An empty inventory reports "empty_not_evaluated",
+ * never a clean migration claim.
+ *
+ * historicalCoverage stays "unknown": a known service start does not
+ * establish status or assignment history, and no input evidences that
+ * coverage. The precise known service start and its provenance are reported
+ * separately and never conflate the two.
  *
  * Operator mapping evidence (resolution) is validated for shape and
  * consistency only. approvedBy/approvedAt/rationale are untrusted input to
@@ -54,6 +77,7 @@
  * > ambiguous > insufficient_employment_evidence > requires_review > ready.
  */
 
+import { createHash } from "node:crypto";
 import { compareCivilDates, isCivilDate } from "./temporal.ts";
 
 export const PREFLIGHT_CODES = [
@@ -208,7 +232,14 @@ export interface PersonPreflight {
   readonly sourceId: string;
   readonly nativePartyId: string;
   readonly classification: PreflightCode;
+  /**
+   * Stays "unknown": no input evidences full status/assignment history.
+   * Kept for the future coverage-evidence slice; never derived from hired_on.
+   */
   readonly historicalCoverage: "known" | "unknown";
+  /** Precise known service start and its provenance, or null when unknown. */
+  readonly serviceStart: string | null;
+  readonly serviceStartProvenance: string | null;
   readonly issues: readonly PreflightIssue[];
   readonly notes: readonly PreflightNote[];
   /** Present only when an employer-valid current-state mapping resolves. */
@@ -261,6 +292,26 @@ function isRecordedInstant(value: unknown): value is string {
  * Operator evidence (observation, resolution) is excluded: later assertions
  * must not read as source drift. Evidence handles are excluded likewise.
  */
+const FINGERPRINT_VERSION = "openbooks/hrm-migration-preflight/source-fingerprint/v1";
+const ROW_IDENTITY_VERSION = "openbooks/hrm-migration-preflight/row-identity/v1";
+
+/** Stable canonical encoding: object keys sorted recursively, arrays ordered. */
+function canonicalEncode(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalEncode).join(",")}]`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalEncode(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function sha256Hex(version: string, encoded: string): string {
+  return createHash("sha256").update(`${version}\n${encoded}`, "utf8").digest("hex");
+}
+
 export function fingerprintSourceRow(row: SourcePersonRow): string {
   const role = row.role !== null && row.role.present
     ? {
@@ -278,27 +329,34 @@ export function fingerprintSourceRow(row: SourcePersonRow): string {
       countryContext: row.payroll.countryContext,
     }
     : null;
-  const projected = JSON.stringify({
-    sourceVersion: row.sourceVersion,
-    party: {
-      kind: row.party.kind,
-      isActive: row.party.isActive,
-      subsidiaryId: row.party.subsidiaryId,
-      sourceIsNew: row.party.sourceIsNew,
-    },
-    employer: {
-      asserted: row.employer.assertedSubsidiaryId,
-      historic: [...row.employer.historicSubsidiaryIds].sort(),
-    },
-    role,
-    payroll,
-  });
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < projected.length; i++) {
-    hash ^= projected.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return sha256Hex(
+    FINGERPRINT_VERSION,
+    canonicalEncode({
+      sourceVersion: row.sourceVersion,
+      party: {
+        kind: row.party.kind,
+        isActive: row.party.isActive,
+        subsidiaryId: row.party.subsidiaryId,
+        sourceIsNew: row.party.sourceIsNew,
+      },
+      employer: {
+        asserted: row.employer.assertedSubsidiaryId,
+        historic: [...row.employer.historicSubsidiaryIds].sort(),
+      },
+      role,
+      payroll,
+    }),
+  );
+}
+
+/**
+ * Full-row identity hash for the sort tie-break. Covers the entire row —
+ * including operator evidence the source fingerprint deliberately excludes —
+ * so duplicate variants that differ only outside the fingerprint still sort
+ * deterministically. Never used as migration identity.
+ */
+function rowIdentityHash(row: SourcePersonRow): string {
+  return sha256Hex(ROW_IDENTITY_VERSION, canonicalEncode(row));
 }
 
 function duplicateKey(row: SourcePersonRow): string {
@@ -348,9 +406,11 @@ function checkBinding(
       level: "binding_conflict",
       detail: `idempotency binding conflicts and refuses: ${mismatches.join("; ")}.`,
       remedy:
-        "Supply collector evidence reconciling the binding against the current source inventory " +
-        "(canonical org, worker party, employer, source version, and fingerprint), or retire the " +
-        "stale binding before re-migrating; the worker_employments table is never consulted as proof.",
+        "Preserve the prior binding: never erase it and never re-migrate into a duplicate " +
+        "employment. Supply reconciled controlled-correction evidence (corrected canonical org, " +
+        "worker party, employer, source version, and fingerprint with operator approval) that " +
+        "supersedes the binding through the migration correction path; the worker_employments " +
+        "table is never consulted as proof.",
     });
     return false;
   }
@@ -389,16 +449,35 @@ function checkEmployer(
     });
     return;
   }
-  const fact = row.employer.subsidiaryFacts.find((candidate) => candidate.id === effectiveEmployer) ?? null;
-  if (fact === null) {
+  const matching = row.employer.subsidiaryFacts.filter((candidate) => candidate.id === effectiveEmployer);
+  const distinct = new Set(matching.map((candidate) =>
+    `${candidate.orgId}\0${candidate.isActive}\0${candidate.isEliminated}`,
+  ));
+  if (distinct.size > 1) {
     ctx.issues.push({
-      code: "employer_unknown_reference",
-      level: "invalid_employer",
-      detail: `employer ${effectiveEmployer} matches no known legal subsidiary fact for this inventory.`,
+      code: "conflicting_subsidiary_evidence",
+      level: "ambiguous",
+      detail:
+        `subsidiary facts contradict each other on id ${effectiveEmployer}: refusing to let ` +
+        `fact order decide whether the employer is valid.`,
       remedy:
-        "Supply collector evidence with the legal subsidiary facts for the org, including the " +
-        "asserted employer, or correct the asserted employer reference.",
+        "Supply collector evidence with one coherent legal subsidiary fact per id and org " +
+        "(active, eliminated, and owning org agreed), so the employer verdict is order-invariant.",
     });
+    return;
+  }
+  const fact = matching[0] ?? null;
+  if (fact === null) {
+    if (distinct.size === 0) {
+      ctx.issues.push({
+        code: "employer_unknown_reference",
+        level: "invalid_employer",
+        detail: `employer ${effectiveEmployer} matches no known legal subsidiary fact for this inventory.`,
+        remedy:
+          "Supply collector evidence with the legal subsidiary facts for the org, including the " +
+          "asserted employer, or correct the asserted employer reference.",
+      });
+    }
   } else if (fact.orgId !== row.orgId) {
     ctx.issues.push({
       code: "employer_cross_org",
@@ -535,14 +614,15 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
   if (resolution.terminatedOn !== null && !isCivilDate(resolution.terminatedOn)) {
     problems.push(`mapped terminated_on ${resolution.terminatedOn} is not a valid YYYY-MM-DD date`);
   }
+  // Civil event dates: only terminated strictly before hired contradicts.
   if (
     resolution.hiredOn !== null &&
     resolution.terminatedOn !== null &&
     isCivilDate(resolution.hiredOn) &&
     isCivilDate(resolution.terminatedOn) &&
-    compareCivilDates(resolution.terminatedOn, resolution.hiredOn) <= 0
+    compareCivilDates(resolution.terminatedOn, resolution.hiredOn) < 0
   ) {
-    problems.push("mapped terminated_on is not after mapped hired_on");
+    problems.push("mapped terminated_on is before mapped hired_on");
   }
   if (problems.length > 0) {
     ctx.issues.push({
@@ -566,8 +646,8 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
 function checkEvidence(
   row: SourcePersonRow,
   observationCurrent: boolean,
-  resolutionHiredOn: string | null,
-  resolutionApplied: boolean,
+  observationTerminated: boolean,
+  resolution: { applied: boolean; hiredOn: string | null; terminatedOn: string | null },
   ctx: RowContext,
 ): { serviceStart: string | null; serviceStartProvenance: string | null } {
   const role = row.role !== null && row.role.present ? row.role : null;
@@ -608,8 +688,14 @@ function checkEvidence(
   }
   let serviceStart: string | null = null;
   let serviceStartProvenance: string | null = null;
+  let serviceEnd: string | null = null;
   if (role !== null) {
-    if (role.hiredOn !== null && !isCivilDate(role.hiredOn)) {
+    // Source hired_on/terminated_on are civil EVENT dates, not half-open
+    // interval endpoints: only terminated strictly before hired contradicts;
+    // a same-day hire plus termination is valid and migrates as-is.
+    const roleHiredValid = role.hiredOn !== null && isCivilDate(role.hiredOn);
+    const roleTerminatedValid = role.terminatedOn !== null && isCivilDate(role.terminatedOn);
+    if (role.hiredOn !== null && !roleHiredValid) {
       ctx.issues.push({
         code: "invalid_service_date",
         level: "ambiguous",
@@ -618,20 +704,8 @@ function checkEvidence(
           "Supply collector evidence with the actual hire date as a real YYYY-MM-DD calendar date " +
           "plus its provenance; the observation-start anchor must never be copied into hired_on.",
       });
-    } else if (role.hiredOn !== null && isNonEmpty(role.dateProvenance)) {
-      serviceStart = role.hiredOn;
-      serviceStartProvenance = role.dateProvenance;
-    } else if (role.hiredOn !== null) {
-      ctx.issues.push({
-        code: "missing_service_date_provenance",
-        level: "requires_review",
-        detail: `role hired_on ${role.hiredOn} carries no provenance, so it cannot anchor history.`,
-        remedy:
-          "Supply collector evidence naming where the hire date was observed (source record and " +
-          "provenance); an unprovenanced date is not migrated as fact.",
-      });
     }
-    if (role.terminatedOn !== null && !isCivilDate(role.terminatedOn)) {
+    if (role.terminatedOn !== null && !roleTerminatedValid) {
       ctx.issues.push({
         code: "invalid_service_date",
         level: "ambiguous",
@@ -640,27 +714,89 @@ function checkEvidence(
           "Supply collector evidence with the actual termination date as a real YYYY-MM-DD calendar " +
           "date plus its provenance; historical status is never invented.",
       });
-    } else if (
+    }
+    // Conflicting dated evidence refuses: the mapping never silently loses
+    // to the source, and the source never silently loses to the mapping.
+    if (
+      roleHiredValid &&
+      resolution.applied &&
+      resolution.hiredOn !== null &&
+      resolution.hiredOn !== role.hiredOn
+    ) {
+      ctx.issues.push({
+        code: "conflicting_service_dates",
+        level: "ambiguous",
+        detail:
+          `source hired_on ${role.hiredOn} disagrees with mapped hired_on ${resolution.hiredOn}; ` +
+          `refusing to choose which service start is real.`,
+        remedy:
+          "Supply collector evidence reconciling the hire date (one agreed YYYY-MM-DD date with " +
+          "provenance, or a corrected operator mapping).",
+      });
+    } else if (roleHiredValid && isNonEmpty(role.dateProvenance)) {
+      serviceStart = role.hiredOn;
+      serviceStartProvenance = role.dateProvenance;
+    } else if (roleHiredValid) {
+      ctx.issues.push({
+        code: "missing_service_date_provenance",
+        level: "requires_review",
+        detail: `role hired_on ${role.hiredOn} carries no provenance, so it cannot anchor history.`,
+        remedy:
+          "Supply collector evidence naming where the hire date was observed (source record and " +
+          "provenance); an unprovenanced date is not migrated as fact.",
+      });
+    } else if (resolution.applied && resolution.hiredOn !== null) {
+      serviceStart = resolution.hiredOn;
+      serviceStartProvenance = "operator-employer-date-mapping";
+    }
+    if (
+      roleTerminatedValid &&
+      resolution.applied &&
+      resolution.terminatedOn !== null &&
+      resolution.terminatedOn !== role.terminatedOn
+    ) {
+      ctx.issues.push({
+        code: "conflicting_service_dates",
+        level: "ambiguous",
+        detail:
+          `source terminated_on ${role.terminatedOn} disagrees with mapped terminated_on ` +
+          `${resolution.terminatedOn}; refusing to choose which service end is real.`,
+        remedy:
+          "Supply collector evidence reconciling the termination date (one agreed YYYY-MM-DD date " +
+          "with provenance, or a corrected operator mapping).",
+      });
+    } else if (roleTerminatedValid) {
+      serviceEnd = role.terminatedOn;
+    } else if (resolution.applied && resolution.terminatedOn !== null) {
+      serviceEnd = resolution.terminatedOn;
+    }
+    if (
       serviceStart !== null &&
-      role.terminatedOn !== null &&
-      compareCivilDates(role.terminatedOn, serviceStart) <= 0
+      serviceEnd !== null &&
+      compareCivilDates(serviceEnd, serviceStart) < 0
     ) {
       ctx.issues.push({
         code: "contradictory_service_dates",
         level: "ambiguous",
-        detail: `role terminated_on ${role.terminatedOn} is not after hired_on ${serviceStart}.`,
+        detail:
+          `terminated_on ${serviceEnd} is before hired_on ${serviceStart}; same-day hire plus ` +
+          `termination is valid, earlier termination is not.`,
         remedy:
-          "Supply collector evidence reconciling the service dates (corrected hire/termination dates " +
-          "with provenance); a non-positive episode is refused, never auto-ordered.",
+          "Supply collector evidence reconciling the service event dates (corrected hire/termination " +
+          "dates with provenance); a termination before the hire is refused, never auto-ordered.",
       });
     }
-    if (role.isActive === false && role.terminatedOn === null) {
+    // A bare inactive flag is not employment proof in either direction: it
+    // may be data maintenance, so it never demands a fabricated
+    // terminated_on. Only observed/corroborated termination (a current
+    // terminated observation) requires the actual termination date.
+    if (observationTerminated && serviceEnd === null) {
       ctx.issues.push({
         code: "missing_termination_date",
         level: "requires_review",
         detail:
-          "the role reports inactive but no terminated_on date exists; the termination date is not " +
-          "invented from flags or from the observation anchor.",
+          "termination is observed as the current status but no terminated_on date exists; the " +
+          "termination date is not invented from flags or from the observation anchor.",
         remedy:
           "Supply collector evidence with the actual termination date (YYYY-MM-DD) and its provenance.",
       });
@@ -677,10 +813,6 @@ function checkEvidence(
           "Supply collector evidence reconciling the role and payroll country contexts to one stored value.",
       });
     }
-  }
-  if (serviceStart === null && resolutionApplied && resolutionHiredOn !== null) {
-    serviceStart = resolutionHiredOn;
-    serviceStartProvenance = "operator-employer-date-mapping";
   }
   const hasCorroboration = payroll !== null || observationCurrent;
   if (serviceStart === null && role !== null) {
@@ -836,12 +968,23 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
     });
   }
   const observationCurrent = checkObservation(row, ctx);
-  const evidence = checkEvidence(row, observationCurrent, resolution.hiredOn, resolution.applied, ctx);
+  const observationTerminated = observationCurrent && row.observation?.status === "terminated";
+  const evidence = checkEvidence(
+    row,
+    observationCurrent,
+    observationTerminated,
+    { applied: resolution.applied, hiredOn: resolution.hiredOn, terminatedOn: resolution.terminatedOn },
+    ctx,
+  );
   const fingerprint = fingerprintSourceRow(row);
   const bindingConsistent = checkBinding(row, fingerprint, effectiveEmployer, ctx);
 
+  // The candidate emits only when nothing blocks: any retained issue —
+  // including an invalid employer under a valid observation — nulls it.
+  // Notes are nonblocking and never suppress the candidate.
   let candidate: CandidateMapping | null = null;
   if (
+    ctx.issues.length === 0 &&
     observationCurrent &&
     effectiveEmployer !== null &&
     row.observation !== null &&
@@ -881,7 +1024,12 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
     sourceId: row.sourceId,
     nativePartyId: row.nativePartyId,
     classification,
-    historicalCoverage: evidence.serviceStart !== null ? "known" : "unknown",
+    // Always unknown: a known service start never establishes status or
+    // assignment history, and no input evidences that coverage. The precise
+    // known start travels separately below.
+    historicalCoverage: "unknown",
+    serviceStart: evidence.serviceStart,
+    serviceStartProvenance: evidence.serviceStartProvenance,
     issues,
     notes: ctx.notes,
     candidate,
@@ -906,6 +1054,7 @@ export function preflightEmploymentMigration(rows: readonly SourcePersonRow[]): 
   }
   const decorated = rows.map((row) => ({
     fingerprint: fingerprintSourceRow(row),
+    tieBreak: rowIdentityHash(row),
     result: classifyRow(row, (seen.get(duplicateKey(row)) ?? 0) > 1),
   }));
   decorated.sort((a, b) => {
@@ -915,6 +1064,7 @@ export function preflightEmploymentMigration(rows: readonly SourcePersonRow[]): 
     }
     if (a.result.sourceId !== b.result.sourceId) return a.result.sourceId < b.result.sourceId ? -1 : 1;
     if (a.fingerprint !== b.fingerprint) return a.fingerprint < b.fingerprint ? -1 : 1;
+    if (a.tieBreak !== b.tieBreak) return a.tieBreak < b.tieBreak ? -1 : 1;
     return 0;
   });
   const reportRows = decorated.map((entry) => entry.result);
