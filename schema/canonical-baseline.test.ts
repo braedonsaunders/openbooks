@@ -374,6 +374,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0186_payroll_employment_context.sql",
     "0187_pay_component_treatment_shape.sql",
     "0188_hrm_change_request_wipe_allowance.sql",
+    "0189_pay_components_country_identity.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
