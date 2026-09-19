@@ -56,6 +56,16 @@ async function usPayrollOrg(): Promise<Fixture> {
         netPayAccountId: netPayable,
         wagesTo: "expense",
         countries: ["US"],
+        // Presence-only SUI for every work state below: a live-but-
+        // unconfigured SUI refuses by name at calculate, and these tests
+        // assert W-2 boxes, never SUI amounts.
+        us: {
+          sui: Object.fromEntries(
+            ["NY", "AZ", "CA", "TX"].map((state) => [
+              state, { rate: "0.03", wageBase: "7000" },
+            ]),
+          ),
+        },
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "US");

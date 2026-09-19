@@ -130,6 +130,22 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+  // Presence-only SUI for every work state below: a live-but-unconfigured
+  // SUI refuses by name at calculate, and these tests assert withholding,
+  // never SUI amounts. Nested merge — a top-level `||` would replace the
+  // whole payroll blob and drop the accounts above.
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(
+      coalesce(settings, '{}'::jsonb),
+      '{payroll,us}',
+      coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
+        sui: Object.fromEntries(
+          ["CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX"].map((state) => [
+            state, { rate: "0.03", wageBase: "7000" },
+          ]),
+        ),
+      })}::jsonb
+    ) where id = ${org.orgId}`);
 
   const subsidiaryId = randomUUID();
   await db.execute(sql`

@@ -844,6 +844,10 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
   scope: "region",
   systemKeys: ["eht"],
   regions: ["BC", "MB", "NL", "ON"],
+  // Decided silence: the exemption makes zero legitimate (an Ontario employer
+  // under it owes no EHT), so an unconfigured province accrues nothing and
+  // the run still pays — never a refusal.
+  whenUnconfigured: "zero",
   citation:
     "ON: Employer Health Tax Act, RSO 1990 c E.11 · BC: Employer Health Tax Act, SBC 2018 c 42 · "
     + "MB: Health and Post Secondary Education Tax Levy Act, CCSM c H24 · "
@@ -891,6 +895,10 @@ const CA_HSF_SLOT: PayrollStatutoryRateSlot = {
   scope: "region",
   systemKeys: ["hsf"],
   regions: ["QC"],
+  // A QC employer always owes the HSF at its own payroll-determined rate, so
+  // a live-but-unconfigured slot refuses by name at calculate rather than
+  // accruing 0.00 in silence. Outside QC the slot never evaluates at all.
+  whenUnconfigured: "refuse",
   citation:
     "Revenu Québec, TP-1015.F-V s. 5 · \"Total Payroll Threshold and Health "
     + "Services Fund Contribution Rate\" (2026 table) · \"Remuneration Subject "

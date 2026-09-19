@@ -111,6 +111,10 @@ export const JP_PACK_RATES: PayrollPackRates = {
       label: "健康保険料率 — Health insurance rate in force",
       scope: "region",
       systemKeys: ["health"],
+      // The engine already refuses an unconfigured prefecture at the rate
+      // channel rather than pricing a neighbour's rate; the declaration
+      // records that refusal here.
+      whenUnconfigured: "refuse",
       fields: [
         {
           key: "rate",

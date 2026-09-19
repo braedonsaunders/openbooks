@@ -453,6 +453,11 @@ const US_SUI_SLOT: PayrollStatutoryRateSlot = {
   scope: "filing_account",
   systemKeys: ["suta"],
   programType: "us_state_sui",
+  // A misconfigured SUI (rates on file, none resolving for this employee's
+  // assigned filing account) used to accrue 0.00 in silence while the run
+  // balanced. Refuse by name at calculate instead — an employer always owes
+  // SUI where the slot is live.
+  whenUnconfigured: "refuse",
   citation: "State unemployment insurance law; the rate is the state's annual experience-rate notice",
   variesBecause:
     "SUI is experience-rated: the state assigns a rate to each registered employer account each "
@@ -487,6 +492,9 @@ const US_FUTA_SLOT: PayrollStatutoryRateSlot = {
   label: "Effective FUTA rate",
   scope: "region",
   systemKeys: ["futa"],
+  // Decided silence: the pack carries the standard 0.6% effective rate, so an
+  // unconfigured state still accrues the published default — never a refusal.
+  whenUnconfigured: "zero",
   citation: "IRC 3301/3302; USDOL annual credit-reduction determination (Form 940 Schedule A)",
   variesBecause:
     "The 5.4% credit is reduced for states with outstanding federal unemployment loans, and USDOL "
@@ -523,6 +531,9 @@ const US_PA_LOCAL_EIT_SLOT: PayrollStatutoryRateSlot = {
   scope: "sub_region",
   systemKeys: ["pa_local_eit"],
   regions: ["PA"],
+  // The withholding engine already refuses a missing side by name rather than
+  // picking one; the declaration records that refusal here.
+  whenUnconfigured: "refuse",
   citation: "Act 32 of 2008; PA DCED official tax register (Find Your Withholding Rates by Address)",
   variesBecause:
     "Every Pennsylvania municipality and school district sets its own earned income tax rate and "

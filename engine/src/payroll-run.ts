@@ -24,8 +24,10 @@ import {
   jurisdictionKey,
   labourJurisdictionProblem,
   legacyStatutoryLiabilityAccount,
+  packRates,
   packStatutoryComponents,
   PayrollJurisdictionError,
+  PayrollPackError,
   payrollJurisdictionDeclared,
   payrollPack,
   assertPayrollRegionSupported,
@@ -36,6 +38,11 @@ import {
   type PayrollAssessedOn,
   type PayrollRunContext,
 } from "./payroll/packs.ts";
+import {
+  assertConfiguredStatutoryRates,
+  resolveStatutoryRates,
+  type StatutoryRateResolution,
+} from "./payroll/statutory-rates.ts";
 import { createPushStatutory } from "./payroll/push-statutory.ts";
 import { assessStubAggregateLevies } from "./payroll/employer-aggregate-priors.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./payroll/statutory-context.ts";
@@ -2074,6 +2081,19 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       select settings->'payroll'->>'wageExpenseAccountId' as v from orgs where id = ${orgId}
     `)).rows[0]?.v ?? null);
     const errors: PayRunCalculationError[] = [];
+    // One statutory-rate resolution per (country, year) for the whole run,
+    // passed down — never a query per employee. Only called for packs that
+    // declare a `refuse` slot (the per-stub gate below checks first), so the
+    // packRates lookup inside cannot throw here.
+    const rateResolutions = new Map<string, Promise<StatutoryRateResolution>>();
+    const statutoryRatesFor = (country: string, taxYear: number): Promise<StatutoryRateResolution> => {
+      const key = `${country}:${taxYear}`;
+      const cached = rateResolutions.get(key);
+      if (cached) return cached;
+      const pending = resolveStatutoryRates(orgId, packRates(country), taxYear);
+      rateResolutions.set(key, pending);
+      return pending;
+    };
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
 
@@ -2125,6 +2145,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
           wageExpenseAccountId: runWageExpenseAccountId,
+          statutoryRatesFor,
           eftFallbackToCheque,
           statHolidayPay,
           holidayEligibility: input.holidayEligibility,
@@ -3512,6 +3533,11 @@ async function calculateStub(
     /** Org wage expense default, read once per calculate: the last rung of
      * time-driven earning line expense resolution. */
     wageExpenseAccountId: string | null;
+    /**
+     * The run's statutory-rate resolution per (country, year), built once and
+     * shared by every stub — never a query per employee.
+     */
+    statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
     eftFallbackToCheque: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
@@ -3537,6 +3563,26 @@ async function calculateStub(
   const { country, region: province } = jurisdiction;
   const taxYear = jurisdiction.taxYear;
   const pack = installablePackOrThrow(country);
+
+  // ---- Live-but-unconfigured `refuse` slots stop the employee BY NAME -----
+  // BEFORE any money is computed: a misconfiguration (rates on file, none
+  // resolving for this employee's region and assigned filing account) must be
+  // loud, because a silent zero still balances. The sentence is the readiness
+  // detector's own — the run and the warning cannot disagree. Packs with no
+  // rate declaration, or none declaring `refuse`, cost no query here.
+  let packRefuses = false;
+  try {
+    packRefuses = packRates(country).slots.some((slot) => slot.whenUnconfigured === "refuse");
+  } catch (error) {
+    if (!(error instanceof PayrollPackError)) throw error;
+  }
+  if (packRefuses) {
+    assertConfiguredStatutoryRates(
+      await ctx.statutoryRatesFor(country, taxYear),
+      { region: province, filingAccountId: jurisdiction.filingAccountId },
+      emp.display_name ?? employeePartyId,
+    );
+  }
 
   const lines: Line[] = [];
   // Entitlement movements are written to the ledger only after the stub rows

@@ -256,6 +256,9 @@ const DE_KVZ_SLOT = {
   label: "Krankenkassenindividueller Zusatzbeitrag",
   scope: "org",
   systemKeys: ["kv"],
+  // The 2026 engine already refuses without the fund's own rate; the
+  // declaration records that refusal here.
+  whenUnconfigured: "refuse",
   fields: [
     {
       key: "rate",

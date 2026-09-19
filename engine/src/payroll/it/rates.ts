@@ -94,6 +94,10 @@ export const IT_PACK_RATES: PayrollPackRates = {
       label: "Addizionale regionale all'IRPEF — aliquota deliberata",
       scope: "region",
       systemKeys: ["regional_surtax"],
+      // The engine already refuses an unconfigured domicile region by name
+      // rather than guessing the deliberated rate; the declaration records
+      // that refusal here.
+      whenUnconfigured: "refuse",
       fields: [
         {
           key: "rate",
@@ -116,6 +120,9 @@ export const IT_PACK_RATES: PayrollPackRates = {
       label: "Addizionale comunale all'IRPEF — aliquota deliberata",
       scope: "sub_region",
       systemKeys: ["municipal_surtax"],
+      // The engine already refuses an unconfigured domicile comune by name;
+      // the declaration records that refusal here.
+      whenUnconfigured: "refuse",
       fields: [
         {
           key: "rate",

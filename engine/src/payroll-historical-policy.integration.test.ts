@@ -78,6 +78,19 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
+  // A QC employer always owes the HSF at its own rate: a live-but-
+  // unconfigured slot refuses by name at calculate, so the shared fixture
+  // carries a rate and a mapping (inert for every ON test). HSF routing is
+  // pinned elsewhere; here the slot just needs an account so a QC commit
+  // posts.
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+            ${actorId}, ${actorId})`);
+  await db.execute(sql`
+    update pay_components set liability_account_id = ${craPayable}
+     where org_id = ${org.orgId} and system_key = 'hsf'`);
 
   const scheduleId = randomUUID();
   await db.execute(sql`

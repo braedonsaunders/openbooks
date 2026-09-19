@@ -46,6 +46,9 @@ const US_OH_MUNICIPAL_SLOT: PayrollStatutoryRateSlot = {
   scope: "sub_region",
   systemKeys: ["oh_municipal"],
   regions: ["OH"],
+  // The withholding engine already refuses a missing municipal rate by name;
+  // the declaration records that refusal here.
+  whenUnconfigured: "refuse",
   citation: "Ohio Rev. Code Chapter 718; the municipality's own income tax ordinance",
   variesBecause:
     "Every Ohio municipality sets its own income tax rate by ordinance and changes it on its own "
@@ -85,6 +88,9 @@ const US_MI_CITY_SLOT: PayrollStatutoryRateSlot = {
   scope: "sub_region",
   systemKeys: ["mi_city"],
   regions: ["MI"],
+  // The withholding engine already refuses a missing city rate by name; the
+  // declaration records that refusal here.
+  whenUnconfigured: "refuse",
   citation:
     "Michigan City Income Tax Act, MCL 141.501 et seq.; the city's own income tax ordinance",
   variesBecause:

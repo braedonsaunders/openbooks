@@ -125,8 +125,37 @@ export interface PayrollStatutoryRateSlot {
    * Regions the levy exists in, for `region`, `sub_region` and
    * `filing_account` scope. Absent = every region the pack knows. A region
    * outside the list is refused rather than accepted and ignored.
+   *
+   * This IS the slot's appliesWhen (WHERE/WHEN the slot is live). The rate
+   * side already honours it — `unconfiguredStatutoryRates` below skips a
+   * slot whose regions do not contain the scope point — and the money path
+   * must honour it everywhere else rather than invent a second field.
    */
   regions?: readonly string[];
+  /**
+   * WHAT TO DO when the slot is live for a scope point the run actually pays
+   * and nobody configured it — the second half of the two-field model. The
+   * two fields are never collapsed into one enum: they answer different
+   * questions, and Ontario EHT is the case that proves it (it APPLIES in
+   * Ontario and zero is LEGITIMATE there under the exemption, which a single
+   * enum cannot say while still carrying the region).
+   *
+   * REQUIRED, so a pack author cannot omit the answer by accident and every
+   * slot's answer is visible in the declaration:
+   *
+   *   - `refuse` — the money path refuses BY NAME at calculate, reusing the
+   *     detector's sentence. For a levy the employer always owes when the
+   *     slot is live: a misconfiguration must be loud, because a silent zero
+   *     is under-accrued statutory money that still balances.
+   *   - `zero` — DECIDED silence: today's behaviour is correct here (an
+   *     exemption makes zero legitimate, no consumer reads the slot, or the
+   *     pack carries a published default). Compute when configured, zero (or
+   *     the default) when not, never refuse.
+   *   - `legacy` — NOT YET REVIEWED: behave exactly as today (compute when
+   *     configured, zero when not, never refuse) until explicitly migrated to
+   *     `refuse` or `zero`. The safe default, and visibly so.
+   */
+  whenUnconfigured: "refuse" | "zero" | "legacy";
   fields: readonly PayrollRateField[];
   /** The statute or publication the rate is assessed under. */
   citation: string;
@@ -698,4 +727,36 @@ export function unconfiguredStatutoryRates(
     }
   }
   return found;
+}
+
+/**
+ * The money-path half of the two-field model: a slot the pack declares
+ * `whenUnconfigured: "refuse"` that is LIVE for this scope point and resolves
+ * to nothing refuses BY NAME here, with the detector's own sentence above —
+ * the same function readiness reports, so the run and the warning can never
+ * disagree about what is missing.
+ *
+ * Per scope point, never per tenant: a tenant holding SUI rates for three
+ * states still refuses for the employee whose assigned filing account matches
+ * none of them, because `resolution.resolve` is asked exactly the question
+ * the money path is about to get wrong — does a rate resolve for THIS
+ * employee, at THIS region, on THIS assigned filing account.
+ *
+ * Slots declaring `zero` or `legacy` keep today's behaviour — this function
+ * never sees them. Slots that do not apply (`regions`) never reach the
+ * detector at all: inert means absent, not zero. `sub_region` slots are
+ * skipped here for lack of a sub-region point and keep their pack-owned
+ * channel (the US local withholding engines, the IT comunale), which already
+ * refuses by name.
+ */
+export function assertConfiguredStatutoryRates(
+  resolution: StatutoryRateResolution,
+  point: StatutoryRatePoint,
+  employeeName: string,
+): void {
+  for (const item of unconfiguredStatutoryRates(resolution, [point])) {
+    const slot = resolution.slots.find((declared) => declared.key === item.slotKey);
+    if (slot?.whenUnconfigured !== "refuse") continue;
+    throw new PayrollPackError(`${employeeName}: ${item.message}`);
+  }
 }
