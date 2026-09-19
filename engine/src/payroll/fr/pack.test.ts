@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem } from "../certificates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 import {
   payrollTaxYearProblem,
@@ -30,6 +31,11 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     nonPeriodic: "0",
     pensionable: "2000.00",
     insurable: "0",
+    reducedBases: reduceTaxBases(
+      [],
+      { income: "2000.00", nonPeriodic: "0", pensionable: "2000.00", insurable: "0" },
+      FR_PAYROLL_PACK.deductionTreatments,
+    ),
     deduction: () => "0",
     pushStatutory: () => {},
     storedCertificates: [],

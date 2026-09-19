@@ -111,6 +111,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   // TUIR deducts them was not established in this pass — so null (no tax
   // treatment) until sourced, never a guessed factor.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices IRPEF off gross, so
+  // the pack declares an empty vocabulary rather than an unhonored one.
+  deductionTreatments: [],
   filings: itPackFilings,
   statutoryRates: IT_PACK_RATES,
   taxYears: IT_TAX_YEARS,

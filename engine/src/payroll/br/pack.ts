@@ -78,6 +78,9 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   // Union dues open no withholding treatment: contribuição assistencial is a
   // consensual deduction, never a statutory one.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices IRRF off gross, so
+  // the pack declares an empty vocabulary rather than an unhonored one.
+  deductionTreatments: [],
   filings: brPackFilings,
   statutoryRates: BR_PACK_RATES,
   taxYears: BR_TAX_YEARS,

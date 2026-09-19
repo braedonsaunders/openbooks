@@ -236,6 +236,10 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // treatment, and that is employer-side. Declared null so dues lines carry
   // no treatment.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices loonheffing off
+  // gross, so the pack declares an empty vocabulary rather than an
+  // unhonored one.
+  deductionTreatments: [],
   filings: nlPackFilings,
   statutoryRates: NL_PACK_RATES,
   taxYears: NL_TAX_YEARS,

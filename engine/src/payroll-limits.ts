@@ -419,9 +419,18 @@ export function applyDeductionProtection(
  */
 export function protectionNeedsIteration(
   components: readonly { taxTreatment?: string | null }[],
+  /**
+   * Whether a non-`"none"` treatment moves the statutory pass. The pay-run
+   * pipeline passes a pack-aware predicate (`protectionTreatmentIterates`
+   * over the run's pack): a treatment the pack declares as reducing a base
+   * moves the statutory pass when protection caps it, so the two iterate to
+   * settlement. Absent, every pre-tax tag iterates — the conservative
+   * reading callers without a pack use.
+   */
+  isPreTax: (treatment: string) => boolean = (treatment) => treatment !== "none",
 ): boolean {
   return components.some(
-    (component) => component.taxTreatment != null && component.taxTreatment !== "none",
+    (component) => component.taxTreatment != null && isPreTax(component.taxTreatment),
   );
 }
 

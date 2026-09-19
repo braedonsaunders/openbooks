@@ -170,6 +170,19 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   // PAYE gives employee-paid union dues no T4127-U1-style deduction from
   // taxable pay.
   employeeUnionDuesTaxTreatment: null,
+  deductionTreatments: [
+    // Net-pay-arrangement pension contributions reduce taxable pay for PAYE
+    // (period pay prices income plus bonuses less pension) but NOT
+    // NIC-able earnings — so only `income` is named, and the engine keeps
+    // subtracting via `deduction()` exactly as before.
+    {
+      key: "pension_f",
+      label: "Pension (RPP/RRSP, factor F)",
+      labelKey: "options.payTaxTreatment.pensionF",
+      help: "Workplace pension (net-pay arrangement): reduces PAYE taxable pay, not National Insurance earnings.",
+      reduces: ["income"],
+    },
+  ],
   statutoryCurrency: "GBP",
   // HMRC's year opens 6 April and is named for the year it opens (2026/27).
   taxYear: { basis: "fiscal", startMonth: 4, startDay: 6, namedBy: "opening_year" },

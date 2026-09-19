@@ -56,6 +56,8 @@ function fixturePack(): PayrollCountryPack {
       insurable: "fixture insurable earnings",
     },
     employeeUnionDuesTaxTreatment: null,
+    // The fixture declares no pre-tax vocabulary (empty, stated).
+    deductionTreatments: [],
     statutoryCurrency: "GBP",
     // HMRC-shaped year (opens 6 April, named for the opening year) so the
     // run-context assertions exercise a non-calendar definition.

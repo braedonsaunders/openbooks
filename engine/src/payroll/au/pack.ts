@@ -85,6 +85,19 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // Union dues give PAYG withholding no per-period treatment (deductible on
   // the annual return only), so the engine stamps nothing.
   employeeUnionDuesTaxTreatment: null,
+  deductionTreatments: [
+    // Salary-sacrificed amounts reduce assessable income for PAYG
+    // withholding, but NOT ordinary-time earnings for the superannuation
+    // guarantee — so the declaration reduces the income leg only, the
+    // generic layer hands the engine the reduced base, and SG prices the
+    // untouched pensionable leg (see compute-statutory.ts).
+    {
+      key: "salary_sacrifice",
+      label: "Salary sacrifice (PAYG)",
+      help: "Pre-tax salary-sacrificed amount: reduces the PAYG withholding base, not the superannuation guarantee base.",
+      reduces: ["income"],
+    },
+  ],
   filings: auPackFilings,
   statutoryRates: AU_PACK_RATES,
   taxYears: AU_TAX_YEARS,
@@ -96,8 +109,11 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
       components: [
         // PAYG withholding collects income tax, the Medicare levy and STSL
         // repayments through the one withholding, driven by the TFN
-        // declaration answers. Salary-sacrificed amounts move it, so it is
-        // re-derived by the protection fixpoint like every income tax.
+        // declaration answers. Salary-sacrificed amounts reduce its base via
+        // the pack's `salary_sacrifice` deduction treatment: the generic
+        // layer hands the engine income net of tagged lines
+        // (`reducedBases.income`), so the line is re-derived by the
+        // protection fixpoint like every income tax.
         { code: "PAYG", name: "PAYG withholding", systemKey: "payg_withholding", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
       ],
     },

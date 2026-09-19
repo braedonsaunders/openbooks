@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { calculateFrCotisations2026 } from "./cotisations.ts";
 import {
   FR_AGS_ER_2026,
@@ -240,6 +241,13 @@ test("adapter: 2 000 € June versement pushes PAS, the nine URSSAF lines and th
     nonPeriodic: "0",
     pensionable: "2000.00",
     insurable: "0",
+    // FR declares no pre-tax treatments: the reduced legs equal the raw
+    // legs by construction — derived via the real helper, not mirrored.
+    reducedBases: reduceTaxBases(
+      [],
+      { income: "2000.00", nonPeriodic: "0", pensionable: "2000.00", insurable: "0" },
+      FR_PAYROLL_PACK.deductionTreatments,
+    ),
     deduction: () => "0",
     pushStatutory: (systemKey, kind, _description, amount, sequence) => {
       pushed.push({ systemKey, kind, amount, sequence });
@@ -322,6 +330,11 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
     nonPeriodic: "0",
     pensionable: "2000.00",
     insurable: "0",
+    reducedBases: reduceTaxBases(
+      [],
+      { income: "2000.00", nonPeriodic: "0", pensionable: "2000.00", insurable: "0" },
+      FR_PAYROLL_PACK.deductionTreatments,
+    ),
     deduction: () => "0",
     pushStatutory: () => {},
     storedCertificates: [],

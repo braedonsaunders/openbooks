@@ -14,6 +14,7 @@ import test from "node:test";
 import { PayrollError } from "../../payroll-error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { JP_CERTIFICATES } from "./certificates.ts";
 import {
   computeJpStatutoryWithRates,
@@ -174,6 +175,16 @@ function fakeCtx(overrides: {
     nonPeriodic: overrides.nonPeriodic ?? "0.0000",
     pensionable: "0.0000",
     insurable: "0.0000",
+    reducedBases: reduceTaxBases(
+      [],
+      {
+        income: overrides.income ?? "300000.0000",
+        nonPeriodic: overrides.nonPeriodic ?? "0.0000",
+        pensionable: "0.0000",
+        insurable: "0.0000",
+      },
+      JP_PAYROLL_PACK.deductionTreatments,
+    ),
     periodsPerYear: overrides.periodsPerYear ?? 12,
     region: overrides.region ?? "13",
     country: "JP",

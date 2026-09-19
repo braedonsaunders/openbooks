@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { calculateFrPas2026 } from "./compute-statutory.ts";
 import {
   calculateFrCotisations2026,
@@ -53,6 +54,11 @@ function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeConte
     nonPeriodic: "0",
     pensionable: brut,
     insurable: "0",
+    reducedBases: reduceTaxBases(
+      [],
+      { income: brut, nonPeriodic: "0", pensionable: brut, insurable: "0" },
+      FR_PAYROLL_PACK.deductionTreatments,
+    ),
     deduction: () => "0",
     pushStatutory: (systemKey, kind, _description, amount) => {
       pushed.push({ systemKey, kind, amount });

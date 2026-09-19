@@ -37,6 +37,7 @@ import {
   PAYROLL_COUNTRY_PACKS,
   type EmployeePayrollContext,
   type PayrollAssessedOn,
+  type PayrollDeductionTreatment,
   type PayrollRunContext,
 } from "./payroll/packs.ts";
 import {
@@ -92,6 +93,7 @@ import {
   type EarningsAssessedLine,
   type ProtectionBase,
 } from "./payroll-limits.ts";
+import { protectionTreatmentIterates, reduceTaxBases } from "./payroll/treatment-bases.ts";
 
 /**
  * Pay run pipeline: create → calculate → commit → (standard document post).
@@ -2562,7 +2564,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 /** Which rung of the expense-account resolution answered for a stub line. */
 export type ExpenseAccountSource = "item" | "component" | "org_default";
 
-interface Line {
+export interface Line {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string; hours?: string; rate?: string; amount: string;
@@ -3668,14 +3670,16 @@ async function applyEntitlementPlanMovements(
  * protected orders (the live line objects), their uncapped requests, and
  * the settled result for shortfall reporting.
  */
-async function settleDeductionProtection(args: {
+export async function settleDeductionProtection(args: {
   lines: Line[];
   gross: string;
   /** `${emp.display_name ?? partyId}`, named in the non-convergence refusal. */
   employeeLabel: string;
+  /** The run's pack vocabulary: decides which protected treatments iterate. */
+  packTreatments: readonly PayrollDeductionTreatment[];
   runStatutoryPass: () => Promise<void>;
 }) {
-  const { lines, gross, employeeLabel, runStatutoryPass } = args;
+  const { lines, gross, employeeLabel, packTreatments, runStatutoryPass } = args;
   const protectedLines = lines.filter(
     (l) => l.kind === "deduction" && l.protectionBase && l.protectionBase !== "none",
   );
@@ -3725,7 +3729,17 @@ async function settleDeductionProtection(args: {
   let lastProtection: ReturnType<typeof protectionPass> | null = null;
   if (protectedLines.length === 0) {
     await runStatutoryPass();
-  } else if (!protectionNeedsIteration(protectedLines.map((l) => ({ taxTreatment: l.taxTreatment })))) {
+  } else if (
+    !protectionNeedsIteration(
+      protectedLines.map((l) => ({ taxTreatment: l.taxTreatment })),
+      // A protected order iterates only when its treatment moves this run's
+      // statutory pass: a protected salary-sacrifice order raises taxable
+      // income when capped, which lowers net, which lowers the cap. An
+      // after-tax garnishment takes the fast path; an undeclared tag fails
+      // closed to iteration (see protectionTreatmentIterates).
+      (treatment) => protectionTreatmentIterates(packTreatments, treatment),
+    )
+  ) {
     await runStatutoryPass();
     lastProtection = protectionPass();
     applyPass(lastProtection.applied);
@@ -4105,6 +4119,21 @@ async function calculateStub(
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
 
+  // Pack-declared pre-tax treatments, computed generically: each base less
+  // the deduction lines carrying a treatment the pack declares as reducing
+  // it. The pack's engine prices off the reduced legs (AU salary sacrifice
+  // moves PAYG but leaves the superannuation guarantee leg whole); engines
+  // that predate the channel read the raw legs plus `deduction()` and are
+  // untouched by it. Recomputed per pass inside runStatutoryPass below, so
+  // the protection fixpoint re-derives treatment-sensitive levies from the
+  // deductions each pass actually takes.
+  const packTreatments = pack.deductionTreatments;
+  const reducedBases = () => reduceTaxBases(
+    lines,
+    { income, nonPeriodic, pensionable, insurable },
+    packTreatments,
+  );
+
   // ---- Employer-aggregate levies: pack declares, generic computes --------
   // The pack's `employerAggregateLevies` for this tax year (absent on both
   // built-in packs today, so this whole block is inert until a pack declares
@@ -4133,7 +4162,9 @@ async function calculateStub(
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
-      income, nonPeriodic, pensionable, insurable, deduction,
+      income, nonPeriodic, pensionable, insurable,
+      reducedBases: reducedBases(),
+      deduction,
       pushStatutory, storedCertificates, certificateFor, bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
@@ -4173,6 +4204,7 @@ async function calculateStub(
     await settleDeductionProtection({
       lines, gross,
       employeeLabel: emp.display_name ?? employeePartyId,
+      packTreatments,
       runStatutoryPass,
     });
 

@@ -25,6 +25,7 @@ import {
   registerPayrollWithholding,
   unregisterPayrollWithholding,
 } from "../withholding-jurisdictions.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { NL_PAYROLL_PACK, NL_TAX_YEARS, NL_WITHHOLDING } from "./pack.ts";
 
 test("the NL pack exists and is an installable EUR calendar-year pack", () => {
@@ -208,6 +209,18 @@ function stubContext(
     },
     employerLevies: EMPTY_EMPLOYER_LEVY_FACTORS,
     ...overrides,
+    // NL declares no pre-tax treatments: derived from the final legs (an
+    // explicit override wins), so a leg override cannot drift from its base.
+    reducedBases: overrides.reducedBases ?? reduceTaxBases(
+      [],
+      {
+        income: overrides.income ?? "999.0000",
+        nonPeriodic: overrides.nonPeriodic ?? "0.0000",
+        pensionable: overrides.pensionable ?? "999.0000",
+        insurable: overrides.insurable ?? "999.0000",
+      },
+      NL_PAYROLL_PACK.deductionTreatments,
+    ),
   };
   return { ctx, pushed };
 }

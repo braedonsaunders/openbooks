@@ -148,6 +148,54 @@ export type PayrollRemittanceTreatment = "tax_authority" | "external" | "interna
 export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
 /**
+ * Which of the generic engine's handed bases a pre-tax deduction reduces.
+ * The generic layer sums earning lines into four bases — `income` (taxable
+ * periodic earnings), `nonPeriodic` (taxable bonuses and back pay),
+ * `pensionable` and `insurable` (the pack's two contributory accumulators) —
+ * and a treatment's `reduces` names the legs a line carrying it comes off.
+ */
+export type PayrollTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insurable";
+
+/**
+ * One pre-tax treatment in a pack's vocabulary: a `pay_components.tax_treatment`
+ * value the pack's law gives meaning, plus WHICH bases it reduces.
+ *
+ * "Pre-tax" is not one thing — a deduction reduces SOME bases and not
+ * others, and which ones is jurisdiction law. Salary-sacrificed amounts
+ * reduce the PAYG base but not the superannuation guarantee base; a 401(k)
+ * elective reduces FIT but not social security or Medicare; an RPP/RRSP
+ * contribution reduces T4127 factor F but neither CPP nor EI. A generic
+ * boolean would move every base at once and ship a plausible-looking wrong
+ * number, so each declaration names its legs.
+ *
+ * Convention, so combined-base arithmetic stays exact: a treatment that
+ * reduces the income-tax base declares `reduces: ["income"]`. The generic
+ * layer subtracts tagged lines from the income leg in full; an engine that
+ * taxes bonuses jointly adds the raw `nonPeriodic` leg back (the IE
+ * pattern: taxable pay is gross less pension, priced as reduced income plus
+ * untouched non-periodic pay). No treatment in the fleet reduces
+ * `pensionable` or `insurable` — a treatment that did would move a social
+ * insurance base, which is exactly the wrong-money case this vocabulary
+ * exists to prevent by declaration.
+ */
+export interface PayrollDeductionTreatment {
+  /** `pay_components.tax_treatment` value (`salary_sacrifice`, `pension_f`, …). */
+  key: string;
+  /** English fallback label for the component dialog; the UI prefers `labelKey`. */
+  label: string;
+  /**
+   * `admin.setup.options.*` message key where a catalogued translation
+   * exists (the Canadian factor treatments). Absent for treatments whose
+   * only name is the pack's own English label.
+   */
+  labelKey?: string;
+  /** Operator help: what the treatment is and which bases it reduces. */
+  help: string;
+  /** The generic bases a line carrying this treatment reduces. */
+  reduces: readonly PayrollTaxBaseKey[];
+}
+
+/**
  * What an employer-aggregate levy's base accumulates. The generic layer sums
  * non-accrual earning lines by flag — `gross` is every earning, `taxable` is
  * the taxable subset — reusing the same line flags the per-employee engine
@@ -584,6 +632,16 @@ export interface PayrollCountryPack {
    * must declare `null` and its dues lines carry no treatment.
    */
   employeeUnionDuesTaxTreatment: string | null;
+  /**
+   * The pack's pre-tax deduction vocabulary (see `PayrollDeductionTreatment`).
+   * REQUIRED, like `contributoryBases`: the component dialog offers exactly
+   * these treatments for the pack's employees, and the generic layer computes
+   * the reduced bases from them — a treatment key the pack does not declare
+   * is inert on its runs, so a foreign factor can never leak across packs.
+   * A pack with no transcribed pre-tax treatment declares `[]` and says so;
+   * silence is not a statement.
+   */
+  deductionTreatments: readonly PayrollDeductionTreatment[];
   /**
    * The ONE currency the pack's statutory engine computes, remits and files
    * in. T4127 produces CAD and Pub 15-T produces USD; there is no currency

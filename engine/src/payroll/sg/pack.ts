@@ -264,6 +264,10 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   // Union dues buy no CPF treatment: contributions price on OW regardless.
   // Declared null so dues lines carry no treatment.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: every SG statutory component is
+  // earnings-assessed, so the pack declares an empty vocabulary rather than
+  // an unhonored one.
+  deductionTreatments: [],
   filings: sgPackFilings,
   statutoryRates: SG_PACK_RATES,
   taxYears: SG_TAX_YEARS,

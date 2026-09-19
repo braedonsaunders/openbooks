@@ -119,6 +119,10 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
   // source was not established in this pass — so null (no tax treatment)
   // until sourced, never a guessed factor.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices withholding off
+  // gross, so the pack declares an empty vocabulary rather than an
+  // unhonored one.
+  deductionTreatments: [],
   filings: jpPackFilings,
   statutoryRates: JP_PACK_RATES,
   taxYears: JP_TAX_YEARS,

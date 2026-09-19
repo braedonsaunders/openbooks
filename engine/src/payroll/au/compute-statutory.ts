@@ -230,8 +230,8 @@ export async function computeAuStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, income, pensionable, periodsPerYear,
-    pushStatutory, certificateFor, bool,
+    taxYear, pensionable, periodsPerYear,
+    reducedBases, pushStatutory, certificateFor, bool,
   } = ctx;
   if (taxYear !== 2027) {
     throw new PayrollPackError(
@@ -256,8 +256,14 @@ export async function computeAuStatutory(
       `AU Medicare levy variation declaration exemption answer "${medicareExemption}" is not a declared choice`,
     );
   }
+  // PAYG prices the income leg AFTER pack-declared pre-tax treatments:
+  // salary-sacrificed amounts reduce assessable income, so the withholding
+  // is assessed on the reduced base. Superannuation guarantee prices
+  // ordinary-time earnings, which salary sacrifice does NOT reduce — the
+  // pensionable leg arrives whole and is passed through untouched.
+  const paygIncome = reducedBases.income;
   const result = calculateAu2027({
-    income,
+    income: paygIncome,
     residency,
     workingHolidayMaker: bool(answers["working_holiday_maker"] ?? null),
     claimsThreshold: bool(answers["tax_free_threshold"] ?? null),
@@ -275,5 +281,5 @@ export async function computeAuStatutory(
     result.sg,
     210,
   );
-  return { I: income, PI: pensionable };
+  return { I: paygIncome, PI: pensionable };
 }

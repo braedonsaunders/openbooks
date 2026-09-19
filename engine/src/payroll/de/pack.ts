@@ -341,6 +341,10 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   // The engine computes no Lohnsteuer yet, so it gives employee-paid
   // Gewerkschaftsbeiträge no tax treatment at all.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the PAP engine prices laufende Bezüge
+  // off gross, so the pack declares an empty vocabulary rather than an
+  // unhonored one.
+  deductionTreatments: [],
   filings: dePackFilings,
   statutoryRates: DE_PACK_RATES,
   taxYears: DE_TAX_YEARS,
