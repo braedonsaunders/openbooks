@@ -400,7 +400,9 @@ test('change-request register reads drafts, pending and decided requests', { ski
     // an error), so this must not ride on ambient test bypass.
     const gate = await withOrgContext(scratch.orgId, async () => (await db.execute<{ id: string }>(sql`
       select id from flow_gates where subject_id = ${decided.id} order by created_at`)).rows[0]!.id)
-    const outcome = await decideGate({ gateId: gate, decision: 'approved', userId: ids.approverId })
+    // decideGate reads the gate under tenant RLS as well; scope the decision like the lookup.
+    const outcome = await withOrgContext(scratch.orgId, () =>
+      decideGate({ gateId: gate, decision: 'approved', userId: ids.approverId }))
     assert.equal(outcome.ok, true)
 
     await withOrgContext(scratch.orgId, async () => {
