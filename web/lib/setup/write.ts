@@ -232,12 +232,22 @@ function writableSetupEntity(
   features: { multiSubsidiary: boolean; equipment: boolean; fieldTickets: boolean },
 ): SetupEntity {
   const next = setupEntityForFeatureState(entity, features)
-  if (features.equipment) return next
+  // Pay schedules keep their subsidiary control coercible even while the
+  // feature is off. `validateEntityIntegrity` governs that entity through
+  // the dedicated engine rule, which validates the submitted id against the
+  // org — and the onboarding wizard names the sole subsidiary on a
+  // single-entity tenant. Dropping the field here would silently persist the
+  // root default instead of the validated choice (and an unscoped row in a
+  // tenant that later grows a second entity).
+  const scoped = entity.key === 'pay-schedules' && !features.multiSubsidiary
+    ? { ...next, fields: [...next.fields, ...entity.fields.filter((field) => field.ref === 'subsidiaries')] }
+    : next
+  if (features.equipment) return scoped
   const trigger = entity.fields.find((field) => field.key === 'trigger')
-  if (!trigger?.options?.some((option) => option.value === 'equipment_charge')) return next
+  if (!trigger?.options?.some((option) => option.value === 'equipment_charge')) return scoped
   return {
-    ...next,
-    fields: next.fields.map((field) => (
+    ...scoped,
+    fields: scoped.fields.map((field) => (
       field.key === 'trigger' ? { ...field, options: trigger.options } : field
     )),
   }
@@ -251,9 +261,16 @@ export async function validateEntityIntegrity(
   rowId?: string,
   executor: SqlExecutor = db,
 ): Promise<string | null> {
-  const submittedSubsidiaryScope = entity.fields
-    .filter((field) => field.ref === 'subsidiaries')
-    .some((field) => Boolean(body[field.key]))
+  // `pay-schedules` is exempt from the generic feature fence: its dedicated
+  // rule below (`payScheduleSubsidiaryProblem`) is the complete subsidiary
+  // check for that entity — a valid subsidiary id is always accepted, an
+  // absent one refused only in a multi-entity org. Firing the fence first
+  // would refuse the onboarding wizard's single-entity default, which names
+  // the org's sole subsidiary while the fence is closed.
+  const submittedSubsidiaryScope = entity.key !== 'pay-schedules'
+    && entity.fields
+      .filter((field) => field.ref === 'subsidiaries')
+      .some((field) => Boolean(body[field.key]))
   if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId, executor))) {
     return 'Subsidiaries are not enabled for this organization'
   }
