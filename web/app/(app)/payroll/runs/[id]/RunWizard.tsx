@@ -18,6 +18,7 @@ import {
   Loader2,
   RefreshCw,
   Send,
+  Trash2,
 } from 'lucide-react'
 import {
   Badge,
@@ -40,6 +41,7 @@ import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 import { HolidayAttestations } from './HolidayAttestations'
 import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
+import { confirmDialog } from '../../../../../lib/confirm'
 import { decimalAbs, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
 import { bucketAmounts, type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
 
@@ -462,6 +464,11 @@ export function RunWizard(props: {
     && (refusals.length === 0 || refusalsAcked)
   const canPost =
     props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
+  // Discarding is the escape hatch for a run frozen to the wrong entity: it
+  // is offered while the run has no accounting consequence. The engine holds
+  // the exact boundary (committed, posted, paid, linked all refuse there), so
+  // this flag is only the common case — a draft that has never committed.
+  const discardable = props.canRun && docDraft && !committed
 
   /** Step completion, derived — never client-side bookkeeping. */
   const complete: Record<WizardStep, boolean> = {
@@ -719,6 +726,28 @@ export function RunWizard(props: {
     }
   }
 
+  async function discardDraft() {
+    const confirmed = await confirmDialog({
+      title: t('run.discardTitle'),
+      message: t('run.discardBody'),
+      confirmLabel: t('run.discardDraft'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, { method: 'DELETE' })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      toast.success(t('run.discardDone'))
+      router.push('/payroll/runs')
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const steps: { key: WizardStep; label: string }[] = [
     { key: 'period', label: t('wizard.steps.period') },
     { key: 'readiness', label: t('wizard.steps.readiness') },
@@ -750,6 +779,11 @@ export function RunWizard(props: {
         <span>
           {t('columns.employees')}: <span className="font-medium tabular-nums">{run.employee_count}</span>
         </span>
+        {discardable && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void discardDraft()}>
+            <Trash2 size={14} aria-hidden /> {t('run.discardDraft')}
+          </Button>
+        )}
       </div>
 
       {voided && (

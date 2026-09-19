@@ -432,6 +432,10 @@
     "calculateDone": "Paie calculée.",
     "commitDone": "Paie comptabilisée.",
     "postDone": "Paie reportée.",
+    "discardDraft": "Abandonner le brouillon",
+    "discardTitle": "Abandonner ce brouillon ?",
+    "discardBody": "La paie et son calcul sont supprimés. Sans effet comptable, et la période peut être payée à nouveau avec une nouvelle paie.",
+    "discardDone": "Brouillon abandonné.",
     "empty": "Aucun bulletin. Calculez la paie pour les générer.",
     "lineKind": {
       "earning": "Gain",
@@ -581,6 +585,9 @@
       "periodsHelp": "Le nombre légal de périodes avec lequel le moteur de retenues annualise — 52 hebdomadaires, 26 bimensuelles, 24 semi-mensuelles, 12 mensuelles.",
       "anchor": "Fin de période d’ancrage",
       "anchorHelp": "N’importe quelle vraie date de fin de période sur ce calendrier; toutes les autres périodes sont projetées vers l’avant et vers l’arrière à partir d’elle.",
+      "subsidiary": "Filiale payante",
+      "subsidiaryHelp": "L’entité juridique que ce calendrier paie. Une paie fige son entité payante et sa devise dès sa création.",
+      "subsidiaryRequired": "Choisir la filiale …",
       "noPermission": "La création des calendriers de paie exige la permission Paramétrage. Demandez à un administrateur d’en ajouter un sous l’onglet Calendriers de paie, puis continuez."
     },
     "vendors": {

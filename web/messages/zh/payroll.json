@@ -432,6 +432,10 @@
     "calculateDone": "工资核算已计算。",
     "commitDone": "工资核算已确认。",
     "postDone": "工资核算已过账。",
+    "discardDraft": "舍弃草稿",
+    "discardTitle": "舍弃这笔草稿核算？",
+    "discardBody": "该核算及其计算将被删除。不产生会计影响,该期间可用新的核算重新发放。",
+    "discardDone": "草稿已舍弃。",
     "empty": "没有工资条。请计算本次核算以生成。",
     "lineKind": {
       "earning": "应发项",
@@ -581,6 +585,9 @@
       "periodsHelp": "代扣引擎年化所用的法定期间数——每周 52、双周 26、半月 24、每月 12。",
       "anchor": "锚定期末",
       "anchorHelp": "该日历上任何真实的期末日期;其余期间都以此向前向后推算。",
+      "subsidiary": "付款子公司",
+      "subsidiaryHelp": "该日历付款的法人实体。发薪核算在创建时冻结付款实体和币种。",
+      "subsidiaryRequired": "选择子公司 …",
       "noPermission": "创建发薪计划需要设置权限。请管理员在发薪计划页签添加一个,然后继续。"
     },
     "vendors": {

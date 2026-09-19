@@ -1594,7 +1594,7 @@ export function resolvePayrollRunContext(input: {
   const currency = subsidiary.baseCurrency ?? "";
   if (currency !== pack.statutoryCurrency) {
     throw new PayrollJurisdictionError(
-      `${entity} is a ${pack.country} payroll entity, whose statutory engine computes in `
+      `${entity} is a payroll entity in ${pack.country}, whose statutory engine computes in `
       + `${pack.statutoryCurrency}, but its functional currency is `
       + `${currency || "unset"} — payroll cannot be run until they agree`,
     );
@@ -1672,8 +1672,8 @@ export function resolveEmployeePayrollContext(input: {
   if (country && country !== run.country) {
     problems.push(
       `their payroll profile is on the ${country} country pack, but this run pays from `
-      + `${run.subsidiaryName}, a ${run.country} legal entity — a ${country} employee cannot be `
-      + `paid ${run.country} statutory withholdings`,
+      + `${run.subsidiaryName} (${run.country} legal entity) — employees on the ${country} pack `
+      + `cannot be paid ${run.country} statutory withholdings`,
     );
   }
 
@@ -1682,9 +1682,9 @@ export function resolveEmployeePayrollContext(input: {
   // US-entity employee ended up on a Canadian run with nothing complaining.
   if (employee.subsidiaryCountry && employee.subsidiaryCountry !== run.country) {
     problems.push(
-      `they belong to a ${employee.subsidiaryCountry} legal entity but this run pays from `
-      + `${run.subsidiaryName} (${run.country}) — pay them from a ${employee.subsidiaryCountry} `
-      + "pay schedule scoped to their own entity",
+      `their legal entity is in ${employee.subsidiaryCountry} but this run pays from `
+      + `${run.subsidiaryName} (${run.country}) — pay them from a pay schedule scoped to `
+      + "their own entity",
     );
   }
 
@@ -1694,7 +1694,7 @@ export function resolveEmployeePayrollContext(input: {
   if (employee.filingAccountCountry && employee.filingAccountCountry !== run.country) {
     problems.push(
       `their payroll filing account ${employee.filingAccountNumber ?? employee.filingAccountId} `
-      + `is a ${employee.filingAccountCountry} account, which cannot file a ${run.country} return`,
+      + `files in ${employee.filingAccountCountry} — this run files in ${run.country}`,
     );
   }
 
@@ -1708,7 +1708,10 @@ export function resolveEmployeePayrollContext(input: {
   }
 
   if (problems.length > 0) {
-    throw new PayrollJurisdictionError(`${who}: ${problems.join("; ")}`);
+    // No employee name here: the caller reports it through its own
+    // per-employee channel (PayRunCalculation.errors[].employee, rendered as
+    // "name: message"), so prefixing it would print the name twice.
+    throw new PayrollJurisdictionError(problems.join("; "));
   }
 
   return {

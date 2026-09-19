@@ -147,6 +147,8 @@ export interface PayrollLauncherData {
   frequencies: { value: string; labelKey: string }[]
   canManageEntities: boolean
   schedules: { id: string; name: string }[]
+  /** Active legal entities, for the wizard's pay-schedule subsidiary step. */
+  subsidiaries: { id: string; name: string }[]
   bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
 }
 
@@ -166,12 +168,15 @@ export async function launcherDataFor({
   canManageEntities: boolean
   allowedSubsidiaryIds?: PayrollSubsidiaryScope
 }): Promise<PayrollLauncherData> {
-  const [setup, bankProfiles, schedulesRes] = await Promise.all([
+  const [setup, bankProfiles, schedulesRes, subsidiariesRes] = await Promise.all([
     payrollSetupState(orgId, allowedSubsidiaryIds),
     payrollBankProfiles(orgId),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from pay_schedules
        where org_id = ${orgId} and is_active order by name`),
+    db.execute<{ id: string; name: string }>(sql`
+      select id, name from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination order by name`),
   ])
   // The pay-schedule form options come from the registry entity's OWN field
   // declaration — the wizard renders the same select the setup drawer does.
@@ -191,6 +196,7 @@ export async function launcherDataFor({
     frequencies,
     canManageEntities,
     schedules: schedulesRes.rows,
+    subsidiaries: subsidiariesRes.rows,
     bankProfiles: bankProfiles.map((p) => ({
       id: p.id,
       name: p.name,

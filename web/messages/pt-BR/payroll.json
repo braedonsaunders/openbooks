@@ -432,6 +432,10 @@
     "calculateDone": "Folha calculada.",
     "commitDone": "Folha lançada.",
     "postDone": "Folha contabilizada.",
+    "discardDraft": "Descartar rascunho",
+    "discardTitle": "Descartar este rascunho?",
+    "discardBody": "A folha e seu cálculo são excluídos. Não há efeito contábil, e o período pode ser pago novamente com uma nova folha.",
+    "discardDone": "Rascunho descartado.",
     "empty": "Sem holerites. Calcule a folha para gerá-los.",
     "lineKind": {
       "earning": "Provento",
@@ -581,6 +585,9 @@
       "periodsHelp": "A quantidade oficial de períodos com que o motor de retenção anualiza — 52 semanal, 26 quinzenal, 24 duas vezes ao mês, 12 mensal.",
       "anchor": "Fim de período âncora",
       "anchorHelp": "Qualquer data real de fim de período neste calendário; todos os demais períodos são projetados para frente e para trás a partir dela.",
+      "subsidiary": "Subsidiária pagadora",
+      "subsidiaryHelp": "A entidade jurídica que este cronograma paga. Uma folha congela sua entidade pagadora e sua moeda ao ser criada.",
+      "subsidiaryRequired": "Escolher a subsidiária …",
       "noPermission": "Criar cronogramas de folha exige a permissão de Configuração. Peça a um administrador para adicionar um na aba Cronogramas de folha e continue."
     },
     "vendors": {

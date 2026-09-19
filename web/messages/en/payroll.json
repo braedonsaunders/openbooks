@@ -432,6 +432,10 @@
     "calculateDone": "Pay run calculated.",
     "commitDone": "Pay run committed.",
     "postDone": "Pay run posted.",
+    "discardDraft": "Discard draft",
+    "discardTitle": "Discard this draft run?",
+    "discardBody": "The run and its calculation are deleted. It has no accounting consequence, and the period can be paid again with a new run.",
+    "discardDone": "Draft run discarded.",
     "empty": "No stubs. Calculate the run to generate them.",
     "lineKind": {
       "earning": "Earning",
@@ -581,6 +585,9 @@
       "periodsHelp": "The statutory period count the withholding engine annualizes with — 52 weekly, 26 biweekly, 24 semi-monthly, 12 monthly.",
       "anchor": "Anchor period end",
       "anchorHelp": "Any real period-end date on this calendar; every other period is projected forward and backward from it.",
+      "subsidiary": "Paying subsidiary",
+      "subsidiaryHelp": "The legal entity this calendar pays for. A pay run freezes its paying entity and currency when it is created.",
+      "subsidiaryRequired": "Choose the subsidiary …",
       "noPermission": "Creating pay schedules needs the Setup permission. Ask an administrator to add one on the Pay schedules tab, then continue."
     },
     "vendors": {

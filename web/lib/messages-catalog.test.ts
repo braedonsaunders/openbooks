@@ -1721,6 +1721,10 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.run.calculateDone': 'ab4d17df1be5e14501d827733d62e0c092b6122f48f95892cb125628339db90c',
   'payroll.run.commit': '82a9c46ffa4789945d9f2359d75891558ef6faa8dee09e4b25e4e0597704f5bd',
   'payroll.run.commitDone': 'c658f4ed443d30ae20af749910d66fa1791cab0edd50e4eabd63e71667a2cc31',
+  'payroll.run.discardBody': '46819196134b1b7432643ca63d242ff13469f69a49230a507a90f0124b3240bf',
+  'payroll.run.discardDone': '4e89be9429f925b46539563074130a8b9c61509b311fb2c78fd2c5e95e9f3296',
+  'payroll.run.discardDraft': 'cb30147eec19a75829e93b86d1cc01a88fa43a68ecce2bbd2aef06dcfe7b70ea',
+  'payroll.run.discardTitle': 'b0991148c0e46622f6956d5b85d4d96f10db2323eadb14bde23004c67489a0d8',
   'payroll.run.employerCost': 'a9a907e63324e4e63486704af9ec6da5620d92ab53bd1200749d40c329558b9e',
   'payroll.run.empty': 'c8eb26bf0e9fd229af9c93f881f1a5cf1e769399b34133b12141dd997d1151ba',
   'payroll.run.lineKind.deduction': '269c3f89d7f948718293656d2f2040409319ff11e650c98c87edcb25f28997c7',
@@ -3415,7 +3419,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1143, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1149, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3516,7 +3520,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1143, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1149, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

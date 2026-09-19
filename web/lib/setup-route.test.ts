@@ -87,6 +87,8 @@ const mockSources = new Map<string, string>([
     `
       export function payPeriodsPerYearProblem() { return null }
       export function semiMonthlyAnchorProblem() { return null }
+      export async function payScheduleSubsidiaryProblem() { return null }
+      export async function rescopePayScheduleRuns() { return { reresolved: 0, untouched: 0 } }
     `,
   ],
   [

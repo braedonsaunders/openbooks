@@ -114,8 +114,10 @@ test("a CA-profile employee paid by a US entity is REFUSED, never silently withh
     }),
     (error: unknown) =>
       error instanceof PayrollJurisdictionError
-      && /Scoped Sam:/.test(error.message)
-      && /on the CA country pack, but this run pays from Acme US Inc, a US legal entity/
+      // The name rides the caller's per-employee channel (rendered as
+      // "name: message"), so the message itself must not repeat it.
+      && !/Scoped Sam/.test(error.message)
+      && /on the CA country pack, but this run pays from Acme US Inc \(US legal entity\)/
         .test(error.message),
   );
 });
@@ -147,7 +149,7 @@ test("an employee of a different legal entity than the run pays from is refused"
         subsidiaryId: "sub-us", subsidiaryCountry: "US",
       },
     }),
-    /belong to a US legal entity but this run pays from Acme Canada Ltd \(CA\)/,
+    /legal entity is in US but this run pays from Acme Canada Ltd \(CA\)/,
   );
 });
 
@@ -161,7 +163,7 @@ test("a CRA program account on a US employee is refused — a filing account is 
         filingAccountNumber: "999999999RP0001",
       },
     }),
-    /999999999RP0001 is a CA account, which cannot file a US return/,
+    /999999999RP0001 files in CA — this run files in US/,
   );
 });
 
@@ -181,10 +183,10 @@ test("every broken link in the chain is reported at once, not one refusal per at
   } catch (error) {
     assert.ok(error instanceof PayrollJurisdictionError);
     const message = error.message;
-    assert.match(message, /^Tangled Terry: /);
+    assert.ok(!message.includes("Tangled Terry"), "the name must not repeat in the message");
     assert.match(message, /on the CA country pack/);
-    assert.match(message, /belong to a CA legal entity/);
-    assert.match(message, /cannot file a US return/);
+    assert.match(message, /legal entity is in CA/);
+    assert.match(message, /this run files in US/);
     assert.match(message, /unknown CA province "TX"/);
   }
 });
