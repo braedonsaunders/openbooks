@@ -29,7 +29,7 @@ import { computeItStatutory, IT_FACTOR_LABELS } from "./compute-statutory.ts";
 import { itPackFilings } from "./filings.ts";
 import { IT_JURISDICTIONS } from "./jurisdictions.ts";
 import { IT_PACK_RATES, IT_TAX_YEARS } from "./rates.ts";
-import { IT_REGION_CODES } from "./regions.ts";
+import { IT_REGION_CODES, IT_REGIONS } from "./regions.ts";
 import { IT_WITHHOLDING } from "./withholding.ts";
 
 /** The pack declaration minus the still-closed country union member. */
@@ -64,6 +64,7 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   regions: {
     label: "regione",
     known: IT_REGION_CODES,
+    regionNames: Object.fromEntries(IT_REGIONS.map((region) => [region.code, region.name])),
     // All 20, because `supported` asks whether the ENGINE computes the
     // region's income tax end to end — not whether the region publishes its
     // own withholding tables. It does: IRPEF nationally, plus the addizionale

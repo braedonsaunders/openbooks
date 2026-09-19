@@ -147,6 +147,50 @@ test('every installable pack scopes its own treatment list, starting with after-
   }
 })
 
+test('static fallbacks name every installable pack, treatment and program type', async () => {
+  // The unresolved descriptor is what renders where no server resolution ran
+  // AND what the write path validates against there — so a fallback that
+  // lists only CA/US (or only Canadian treatments) both SHOWS and REFUSES
+  // wrong. These pin the static snapshots to the registries they shadow: a
+  // fifteenth pack, treatment or program type fails here until the fallback
+  // grows with it.
+  const packRegistry: typeof import('@openbooks/engine/src/payroll/packs.ts') =
+    await import('@openbooks/engine/src/payroll/packs.ts')
+  const filingRegistry: typeof import('@openbooks/engine/src/payroll-filing-registry.ts') =
+    await import('@openbooks/engine/src/payroll-filing-registry.ts')
+  const { declaredPayrollFilings } = filingRegistry
+  const installable = packRegistry.installablePayrollPacks().map((pack) => pack.country).sort()
+  assert.ok(installable.length > 2, 'expected more than the two built-ins')
+
+  const components = SETUP_ENTITIES.find((candidate) => candidate.key === 'pay-components')
+  assert.ok(components, 'the pay-components entity exists')
+  const countryFallback = (components.fields ?? [])
+    .find((field) => field.key === 'country')
+    ?.options?.map((option) => option.value)
+    .sort()
+  assert.deepEqual(countryFallback, installable, 'the static country fallback trails the registry')
+
+  const treatmentFallback = (components.fields ?? []).find((field) => field.key === 'taxTreatment')
+  const staticTreatments = (treatmentFallback?.options ?? []).map((option) => option.value).sort()
+  const resolved = resolveDynamicSetupOptions(components)
+  const union = (resolved.fields?.find((field) => field.key === 'taxTreatment')?.options ?? [])
+    .map((option) => option.value)
+    .sort()
+  assert.deepEqual(staticTreatments, union, 'the static treatment fallback trails the derived union')
+
+  const accounts = SETUP_ENTITIES.find((candidate) => candidate.key === 'payroll-filing-accounts')
+  assert.ok(accounts, 'the payroll-filing-accounts entity exists')
+  const staticPrograms = (accounts.fields ?? [])
+    .find((field) => field.key === 'programType')
+    ?.options?.map((option) => option.value)
+    .sort()
+  const declaredPrograms = declaredPayrollFilings()
+    .flatMap((pack) => pack.programTypes.map((type) => type.key))
+    .sort()
+  assert.ok(declaredPrograms.length > 3, 'expected more than the three built-ins')
+  assert.deepEqual(staticPrograms, declaredPrograms, 'the static program-type fallback trails the filings')
+})
+
 test('the declared payroll packs are all writable as a filing-account country', async () => {
   // The persona's exact case. Every country the pack registry declares filings
   // for must be acceptable to the write path, or that country cannot have a

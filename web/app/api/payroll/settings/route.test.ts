@@ -119,7 +119,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?payroll-settings-atomicity-test";
-const { PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
@@ -527,6 +527,54 @@ test(
         ((await steady.json()) as { warnings?: unknown[] }).warnings ?? [],
         [],
       );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "settings GET serves installable packs as country/name pairs from the registry",
+  { skip: !DB },
+  async () => {
+    // The onboarding wizard rendered every pack past CA/US as a bare code
+    // because this endpoint handed out codes only. The pairs come from the
+    // same registry declaration as the packs tab, so the two surfaces cannot
+    // disagree about what is installable or what it is called.
+    const { installablePayrollPacks, PAYROLL_COUNTRY_PACKS } = await import(
+      "../../../../../engine/src/payroll/packs.ts"
+    );
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return {
+        ...org,
+        actorId: await createScratchUser(
+          org.orgId,
+          "Payroll Admin",
+          "payroll_admin",
+        ),
+      };
+    });
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      // The route handlers that mutate wrap themselves in the org
+      // transaction; reads rely on the ambient request-org context, which
+      // only exists inside withOrgContext outside a Next request store.
+      const installed = await withOrgContext(fixture.orgId, () =>
+        POST(request("POST", { action: "install-pack", country: "GB" })),
+      );
+      assert.equal(installed.status, 200, await installed.clone().text());
+      const res = await withOrgContext(fixture.orgId, () => GET());
+      assert.equal(res.status, 200, await res.clone().text());
+      const body = (await res.json()) as {
+        installable: string[];
+        installablePacks: { country: string; name: string }[];
+        packs: { country: string; name: string; slots: unknown[] }[];
+      };
+      assert.deepEqual(body.installablePacks, installablePayrollPacks());
+      const gb = body.packs.find((pack) => pack.country === "GB");
+      assert.equal(gb?.name, PAYROLL_COUNTRY_PACKS["GB"]!.name);
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);

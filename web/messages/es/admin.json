@@ -2322,7 +2322,7 @@
       },
       "payroll-filing-accounts": {
         "title": "Cuentas de declaración",
-        "description": "Programa de nómina, EIN y cuentas estatales de desempleo bajo las cuales el empleador remite y declara. Cada empleado tiene una asignada en su perfil de nómina."
+        "description": "Cuentas fiscales bajo las cuales el empleador retiene y declara — una por programa de declaración de su país. Los empleados tienen una asignada en su perfil de nómina."
       },
       "entitlement-plans": {
         "title": "Planes de derechos",
@@ -2429,7 +2429,7 @@
       "categoryId": "Categoría de activo",
       "convention": "Convención",
       "lifeMonths": "Vida (meses)",
-      "depreciationMethodId": "Fórmula personalizada",
+      "depreciationMethodId": "Método de depreciación",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultDepreciationMethodId": "Fórmula predeterminada",
@@ -2621,8 +2621,7 @@
       "dateBasis": "Base de fecha",
       "unitsTotal": "Unidades totales",
       "network": "Red",
-      "lastFour": "Últimos cuatro",
-      "depreciationMethodId": "Método de depreciación"
+      "lastFour": "Últimos cuatro"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -3709,7 +3708,6 @@
         "note": "Esto crea su base contable y su espacio inicial. La guía de puesta en marcha mostrará lo que falte antes de su primer apunte real. Cada función opcional sigue ajustable desde Configuración → Funciones.",
         "notePreserved": "Esto actualiza la clasificación de la empresa y las recomendaciones de espacio sin cambiar el plan existente ni el historial contabilizado. Cada función opcional sigue ajustable desde Configuración → Funciones.",
         "payrollPack": "Paquete de nómina por país",
-        "payrollPackCanada": "Canadá (CRA T4127)",
         "payrollPackNone": "Ninguno — instalar más tarde desde Nómina"
       },
       "applying": {
@@ -3771,13 +3769,12 @@
         "description": "La nómina funciona con paquetes por país instalables: cada paquete trae el motor de retenciones reglamentarias y los componentes de esa jurisdicción.",
         "packQuestion": "¿Qué paquete de país debe instalarse?",
         "packs": {
-          "canada": {
+          "ca": {
             "title": "Canadá",
             "description": "Motor reglamentario CRA T4127, todas las provincias y territorios, verificado contra el PDOC de la CRA."
           },
           "us": {
-            "title": "Estados Unidos",
-            "description": "Previsto, aún no disponible."
+            "title": "Estados Unidos"
           }
         },
         "checklist": {

@@ -2367,7 +2367,7 @@
       },
       "payroll-filing-accounts": {
         "title": "Contas de recolhimento",
-        "description": "Programa de folha, EIN e contas estaduais de seguro-desemprego sob os quais o empregador recolhe e declara. Funcionários recebem uma delas no perfil de folha."
+        "description": "Contas fiscais sob as quais o empregador recolhe e declara — uma por programa de declaração do seu país. Os funcionários têm uma atribuída em seu perfil de folha de pagamento."
       },
       "entitlement-plans": {
         "title": "Planos de direitos",
@@ -2497,7 +2497,7 @@
       "categoryId": "Categoria de ativo",
       "convention": "Convenção",
       "lifeMonths": "Vida útil (meses)",
-      "depreciationMethodId": "Fórmula personalizada",
+      "depreciationMethodId": "Método de depreciação",
       "departmentId": "Departamento",
       "defaultMethod": "Método padrão",
       "defaultDepreciationMethodId": "Fórmula padrão",
@@ -2666,8 +2666,7 @@
       "dateBasis": "Base de data",
       "unitsTotal": "Unidades totais",
       "network": "Bandeira",
-      "lastFour": "Últimos quatro",
-      "depreciationMethodId": "Método de depreciação"
+      "lastFour": "Últimos quatro"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3719,7 +3718,6 @@
         "note": "Isto cria sua base contábil e workspace inicial. O guia de prontidão mostra o que ainda falta antes do primeiro lançamento real. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
         "notePreserved": "Isto atualiza classificação da empresa e recomendações de workspace sem mudar o plano existente nem o histórico lançado. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
         "payrollPack": "Pacote de país da folha",
-        "payrollPackCanada": "Canadá (CRA T4127)",
         "payrollPackNone": "Nenhum — instale depois pela configuração da Folha"
       },
       "applying": {
@@ -3781,13 +3779,12 @@
         "description": "A folha roda em pacotes de país instaláveis — cada pacote traz o motor legal de retenção e os componentes daquela jurisdição.",
         "packQuestion": "Qual pacote de país deve ser instalado?",
         "packs": {
-          "canada": {
+          "ca": {
             "title": "Canadá",
             "description": "Motor legal CRA T4127, todas as províncias e territórios, verificado contra o PDOC da CRA."
           },
           "us": {
-            "title": "Estados Unidos",
-            "description": "Planejado — ainda indisponível."
+            "title": "Estados Unidos"
           }
         },
         "checklist": {

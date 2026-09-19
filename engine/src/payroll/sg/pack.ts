@@ -228,6 +228,9 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   regions: {
     label: "country",
     known: ["SG"],
+    // The single national region IS the country: its display name is the
+    // pack's own name, stated explicitly so the coverage test holds it.
+    regionNames: { SG: "Singapore" },
     // CPF/SDL are national: the engine computes the Singapore lines end to
     // end for 2026, so the country itself is supported and no subnational
     // region is declared. Residency status and age band are certificate

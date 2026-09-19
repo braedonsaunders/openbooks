@@ -20,6 +20,14 @@ test('setup wizard names no payroll pack in code', () => {
   assert.doesNotMatch(code, /payrollPackCanada\b/)
 })
 
+// The review step shows the pack's served name, not its code: it is handed
+// the installable packs list for the lookup, so a new pack reads correctly
+// with no edit here.
+test('review step renders the served pack name', () => {
+  assert.match(code, /payrollPacks=\{installablePacks\}/)
+  assert.match(code, /packTitle\(t, payrollPack, payrollPackName\)/)
+})
+
 // Preselect only what is derived: a sole installable pack, else nothing.
 test('wizard preselects no pack unless exactly one is installable', () => {
   const pack = (country: string) => ({ country, name: `${country} name` })

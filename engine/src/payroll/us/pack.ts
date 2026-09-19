@@ -146,9 +146,32 @@ const US_JURISDICTIONS: readonly PayrollJurisdiction[] = [
 ];
 
 
+/**
+ * Display name per state postal code, for pickers and labels. USPS
+ * Publication 28, Appendix B ("State Abbreviations"): the postal code is
+ * the addressing fact and the name is what a person reads. Declared here —
+ * beside the coverage that reads it — so no generic layer maps codes to
+ * names.
+ */
+const US_STATE_NAMES: Readonly<Record<string, string>> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
+  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana",
+  ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan",
+  MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota",
+  OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota",
+  TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia",
+  WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+
 const US_REGIONS: PayrollRegionCoverage = {
   label: "state",
   known: US_STATES,
+  regionNames: US_STATE_NAMES,
   /**
    * DERIVED, never a second literal list. It is the states whose income tax the
    * pack computes end to end PLUS the states that levy none — and the previous
@@ -210,24 +233,24 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     // reported wages and FICA/FUTA price their own legs, so wiring FIT to
     // the reduced leg is a separate, untranscribed change — the declaration
     // states the law, it does not claim the FIT engine models it.
+    // Labels name the pack's own instruments: the shared catalog keys
+    // (options.payTaxTreatment.*) carry the Canadian factor names, so the US
+    // treatments state their own English labels and no labelKey.
     {
       key: "pension_f",
-      label: "Pension (RPP/RRSP, factor F)",
-      labelKey: "options.payTaxTreatment.pensionF",
+      label: "Pension (401(k) elective deferral)",
       help: "401(k) elective deferrals: reduce FIT-able wages, not Social Security or Medicare wages.",
       reduces: ["income"],
     },
     {
       key: "union_dues",
-      label: "Union dues (U1)",
-      labelKey: "options.payTaxTreatment.unionDues",
+      label: "Union dues (pre-tax)",
       help: "Pre-tax union dues: reduce FIT-able wages where the state honors them, not Social Security or Medicare wages.",
       reduces: ["income"],
     },
     {
       key: "alimony",
-      label: "Alimony (F2)",
-      labelKey: "options.payTaxTreatment.alimony",
+      label: "Alimony (pre-2019)",
       help: "Pre-2019 alimony: reduce FIT-able wages where the state honors them, not Social Security or Medicare wages.",
       reduces: ["income"],
     },

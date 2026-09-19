@@ -287,7 +287,7 @@
       "remittanceHint": "按科目列示的贷方：本轮计算确认的负债。",
       "netPay": "应付员工净工资",
       "nextTitle": "后续步骤",
-      "nextRemit": "用供应商账单向各机构缴纳代扣款项（CRA、工会基金、福利机构）。",
+      "nextRemit": "用供应商账单向各机构缴纳代扣款项。",
       "nextPay": "从净工资应付科目向员工付款。该付款将结清本轮计算确认的负债。",
       "amount": "金额",
       "paid": "已付款",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {已安装 # 个法定组成} other {已安装 # 个法定组成}}",
       "hint": "安装包会植入法定工资组成并启用该辖区的代扣引擎。现有组成绝不覆盖。",
       "canada": {
-        "title": "加拿大",
-        "description": "加拿大工资核算、代缴和年终的法定代扣。",
         "edition": "{edition, selectordinal, one {第#版} two {第#版} few {第#版} other {第#版}}(自 {effective} 生效)",
         "engine": "CRA T4127 法定引擎 —",
         "coverage": "覆盖全部省和地区。魁北克:含 QPP、QPIP、联邦和省所得税代扣;省所得税由 Revenu Québec 征管。",
@@ -702,8 +700,6 @@
         "verified": "已按 CRA PDOC 逐分钱核验。"
       },
       "us": {
-        "title": "美国",
-        "description": "美国工资核算的联邦法定代扣:所得税、社会保障税、医疗保险税和失业税。",
         "engine": "IRS Pub 15-T 百分比法引擎(2026),含 W-4 第 2–4 步和 2020 年前减免数。",
         "coverage": "支持 49 个州:40 个计税引擎 + 9 个无税州(AK、FL、NV、NH、SD、TN、TX、WA、WY)。DC 和 NM 待官方金标,暂拒。",
         "components": "法定工资组成:联邦所得税、社会保障税、医疗保险税(含附加医疗保险税)、FUTA 和 SUI。",

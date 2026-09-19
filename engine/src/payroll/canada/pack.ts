@@ -9,7 +9,7 @@ import { CRA_REMITTANCE_SCHEDULE } from "./cra/remittance.ts";
 import { applyCaEmployerLevies } from "./employer-levies.ts";
 import { CA_JURISDICTIONS } from "./employment-standards.ts";
 import { caPackFilings } from "./filings.ts";
-import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./jurisdictions.ts";
+import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS, PROVINCE_NAMES } from "./jurisdictions.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./quebec/remittance.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
@@ -40,6 +40,7 @@ const CA_PROVINCES: readonly Province[] = [
 const CA_REGIONS: PayrollRegionCoverage = {
   label: "province",
   known: CA_PROVINCES,
+  regionNames: PROVINCE_NAMES,
   // Every province including Quebec: T4127 computes the federal side (with
   // the abatement, QPP, QPIP) and engine/src/payroll/canada/quebec computes
   // TP-1015 provincial income tax; the RL-1 registers onto the CA year-end

@@ -2367,7 +2367,7 @@
       },
       "payroll-filing-accounts": {
         "title": "申报账户",
-        "description": "雇主汇缴与申报所用的工资项目、EIN 与州失业账户。员工在其工资档案中指定其一。"
+        "description": "雇主用于代扣和申报的税务账户——其国家包声明的每个申报项目对应一个。员工在其工资档案中被分配一个账户。"
       },
       "entitlement-plans": {
         "title": "假期权益计划",
@@ -2497,7 +2497,7 @@
       "categoryId": "资产类别",
       "convention": "惯例",
       "lifeMonths": "使用寿命（月）",
-      "depreciationMethodId": "自定义公式",
+      "depreciationMethodId": "折旧方法",
       "departmentId": "部门",
       "defaultMethod": "默认方法",
       "defaultDepreciationMethodId": "默认公式",
@@ -2666,8 +2666,7 @@
       "dateBasis": "日期基准",
       "unitsTotal": "总单位数",
       "network": "卡组织",
-      "lastFour": "后四位",
-      "depreciationMethodId": "折旧方法"
+      "lastFour": "后四位"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3719,7 +3718,6 @@
         "note": "这将创建核算基础与起始工作区。就绪指南会列出首次实际过账前尚需的事项。每项可选功能仍可在“公司设置 → 功能”下调整。",
         "notePreserved": "这将更新公司归类与工作区推荐，不改现有科目与已过账历史。每项可选功能仍可在“公司设置 → 功能”下调整。",
         "payrollPack": "工资国家包",
-        "payrollPackCanada": "加拿大（CRA T4127）",
         "payrollPackNone": "无——以后从工资设置安装"
       },
       "applying": {
@@ -3781,13 +3779,12 @@
         "description": "工资靠可安装的国家包运行——每个包带来该辖区的法定代扣引擎与组成。",
         "packQuestion": "应安装哪个国家包？",
         "packs": {
-          "canada": {
+          "ca": {
             "title": "加拿大",
             "description": "CRA T4127 法定引擎，覆盖所有省与地区，已按 CRA PDOC 核验。"
           },
           "us": {
-            "title": "美国",
-            "description": "规划中——暂未提供。"
+            "title": "美国"
           }
         },
         "checklist": {

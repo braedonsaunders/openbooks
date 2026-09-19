@@ -58,6 +58,7 @@ const FREEDONIA: PayrollCountryPack = {
     known: ["Z1", "Z2"],
     supported: ["Z1"],
     unsupportedReason: "canton {region} is not implemented by the ZZ payroll pack",
+    regionNames: { Z1: "Zenda", Z2: "Zembla" },
   },
   jurisdictions: [
     {

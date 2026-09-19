@@ -2435,7 +2435,7 @@
       },
       "payroll-filing-accounts": {
         "title": "Anmeldekonten",
-        "description": "Lohnprogramm-, EIN- und Arbeitslosenversicherungskonten der Bundesstaaten, unter denen der Arbeitgeber abführt und meldet. Mitarbeitern wird eines in ihrem Lohnprofil zugeordnet."
+        "description": "Steuerkonten, unter denen der Arbeitgeber abführt und meldet — eines je Meldeprogramm des Länderpakets. Beschäftigte erhalten eines davon in ihrem Lohnprofil."
       },
       "entitlement-plans": {
         "title": "Anspruchspläne",
@@ -2542,7 +2542,7 @@
       "categoryId": "Anlagekategorie",
       "convention": "Konvention",
       "lifeMonths": "Nutzungsdauer (Monate)",
-      "depreciationMethodId": "Benutzerdefinierte Formel",
+      "depreciationMethodId": "Abschreibungsmethode",
       "departmentId": "Abteilung",
       "defaultMethod": "Standardmethode",
       "defaultDepreciationMethodId": "Standardformel",
@@ -2734,8 +2734,7 @@
       "dateBasis": "Datumsbasis",
       "unitsTotal": "Gesamteinheiten",
       "network": "Netzwerk",
-      "lastFour": "Letzte vier",
-      "depreciationMethodId": "Abschreibungsmethode"
+      "lastFour": "Letzte vier"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3748,7 +3747,6 @@
         "note": "Dies erstellt Ihre buchhalterische Grundlage und Ihren Startarbeitsbereich. Die Bereitschaftsanleitung zeigt alles, was vor Ihrer ersten Live-Buchung noch fehlt. Jede optionale Fähigkeit bleibt anpassbar unter Unternehmenseinstellungen → Funktionen.",
         "notePreserved": "Dies aktualisiert Unternehmensklassifizierung und Arbeitsbereichsempfehlungen, ohne bestehenden Kontenplan oder gebuchte Historie zu ändern. Jede optionale Fähigkeit bleibt anpassbar unter Unternehmenseinstellungen → Funktionen.",
         "payrollPack": "Lohn-Länderpaket",
-        "payrollPackCanada": "Kanada (CRA T4127)",
         "payrollPackNone": "Keines – später aus der Lohneinrichtung installieren",
         "sampleCompany": "Erkundungsarbeitsbereich",
         "sampleCompanyNo": "Nicht jetzt",
@@ -3858,12 +3856,11 @@
         "installError": "Lohnabrechnung wurde aktiviert, aber das Länderpaket konnte nicht installiert werden. Sie können es unter Lohneinrichtung → Länderpakete installieren.",
         "packQuestion": "Welches Länderpaket soll installiert werden?",
         "packs": {
-          "canada": {
+          "ca": {
             "description": "Gesetzliche CRA-T4127-Engine, alle Provinzen & Territorien, gegen CRA-PDOC verifiziert.",
             "title": "Kanada"
           },
           "us": {
-            "description": "Geplant – noch nicht verfügbar.",
             "title": "Vereinigte Staaten"
           }
         },

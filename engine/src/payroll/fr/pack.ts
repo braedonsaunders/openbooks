@@ -41,6 +41,9 @@ import { FR_TAX_YEARS } from "./rates.ts";
 const FR_REGIONS: Omit<PayrollCountryPack, "country">["regions"] = {
   label: "country",
   known: ["FR"],
+  // The single national region IS the country: its display name is the
+  // pack's own name, stated explicitly so the coverage test holds it.
+  regionNames: { FR: "France" },
   supported: ["FR"],
   unsupportedReason:
     "income tax withholding for {region} is not implemented: PAS does not compute end to end. "

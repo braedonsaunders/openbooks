@@ -509,6 +509,7 @@ export function SetupWizard(props: {
           includeSampleCompany={includeSampleCompany}
           payrollOn={toggles.payroll}
           payrollPack={payrollPack}
+          payrollPacks={installablePacks}
           seedChartOfAccounts={Boolean(
             props.canSwitchIndustry
             && selectedIndustry
@@ -1229,9 +1230,13 @@ function ReviewStep(props: {
   includeSampleCompany: boolean
   payrollOn: boolean
   payrollPack: PayrollPack
+  payrollPacks: WizardPayrollPack[]
   seedChartOfAccounts: boolean
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, seedChartOfAccounts } = props
+  const { t, name, legalName, country, currency, fiscalMonth, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
+  const payrollPackName = payrollPack
+    ? (payrollPacks.find((pack) => pack.country === payrollPack)?.name ?? payrollPack)
+    : null
   const fiscalMonthName = new Intl.DateTimeFormat(undefined, { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(2026, fiscalMonth - 1, 1)),
   )
@@ -1262,7 +1267,7 @@ function ReviewStep(props: {
         {payrollOn && (
           <ReviewRow
             label={t('review.payrollPack')}
-            value={payrollPack ? packTitle(t, payrollPack) : t('review.payrollPackNone')}
+            value={payrollPack && payrollPackName ? packTitle(t, payrollPack, payrollPackName) : t('review.payrollPackNone')}
           />
         )}
         {industry && (

@@ -53,6 +53,9 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   regions: {
     label: "country",
     known: ["BR"],
+    // The single national region IS the country: its display name is the
+    // pack's own name, stated explicitly so the coverage test holds it.
+    regionNames: { BR: "Brazil" },
     supported: ["BR"],
     unsupportedReason:
       "income tax withholding for {region} is not implemented: the national IRRF table does not compute end to end. "

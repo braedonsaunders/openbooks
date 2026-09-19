@@ -67,6 +67,7 @@ function fixturePack(): PayrollCountryPack {
       known: ["ENG", "SCT", "WLS", "NIR"],
       supported: ["ENG"],
       unsupportedReason: "income tax withholding for {region} is not implemented by the GB fixture pack",
+      regionNames: { ENG: "England", SCT: "Scotland", WLS: "Wales", NIR: "Northern Ireland" },
     },
     jurisdictions: [],
     filings: () => ({ country: "GB", programTypes: [], yearEnd: [] }),

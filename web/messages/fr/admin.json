@@ -2322,7 +2322,7 @@
       },
       "payroll-filing-accounts": {
         "title": "Comptes de déclaration",
-        "description": "Programme de paie, EIN et comptes d’assurance-chômage d’État sous lesquels l’employeur verse et déclare. Chaque employé en reçoit un sur son profil de paie."
+        "description": "Comptes fiscaux sous lesquels l'employeur reverse et déclare — un par programme de déclaration de son pays. Les employés se voient attribuer l'un d'eux dans leur profil de paie."
       },
       "entitlement-plans": {
         "title": "Régimes de droits",
@@ -2429,7 +2429,7 @@
       "categoryId": "Catégorie d’immobilisation",
       "convention": "Convention",
       "lifeMonths": "Durée (mois)",
-      "depreciationMethodId": "Formule personnalisée",
+      "depreciationMethodId": "Méthode d'amortissement",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultDepreciationMethodId": "Formule par défaut",
@@ -2621,8 +2621,7 @@
       "dateBasis": "Base de dates",
       "unitsTotal": "Unités totales",
       "network": "Réseau",
-      "lastFour": "Quatre derniers",
-      "depreciationMethodId": "Méthode d'amortissement"
+      "lastFour": "Quatre derniers"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3709,7 +3708,6 @@
         "note": "Ceci crée votre base comptable et votre espace de départ. Le guide de mise en service indiquera ce qui manque avant votre première écriture réelle. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
         "notePreserved": "Ceci met à jour la classification de l'entreprise et les recommandations d'espace sans modifier le plan existant ni l'historique comptabilisé. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
         "payrollPack": "Module de paie par pays",
-        "payrollPackCanada": "Canada (ARC T4127)",
         "payrollPackNone": "Aucun — à installer plus tard depuis la Paie"
       },
       "applying": {
@@ -3771,13 +3769,12 @@
         "description": "La paie repose sur des modules par pays installables — chaque module apporte le moteur de retenues réglementaires et les composants de cette juridiction.",
         "packQuestion": "Quel module pays faut-il installer ?",
         "packs": {
-          "canada": {
+          "ca": {
             "title": "Canada",
             "description": "Moteur réglementaire ARC T4127, toutes provinces et territoires, vérifié contre le PDOC de l'ARC."
           },
           "us": {
-            "title": "États-Unis",
-            "description": "Prévu — pas encore disponible."
+            "title": "États-Unis"
           }
         },
         "checklist": {

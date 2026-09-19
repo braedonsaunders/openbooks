@@ -2435,7 +2435,7 @@
       },
       "payroll-filing-accounts": {
         "title": "申告口座",
-        "description": "事業者が納付・申告する給与プログラム・EIN・州失業保険の口座です。従業員には給与プロフィールで1つ割り当てます。"
+        "description": "雇用主が納付・申告を行う税務口座——国パックが宣言する申告プログラムごとに1つ。従業員は給与プロファイルでいずれかを割り当てられます。"
       },
       "entitlement-plans": {
         "title": "休暇付与プラン",
@@ -2542,7 +2542,7 @@
       "categoryId": "資産カテゴリ",
       "convention": "計上規約",
       "lifeMonths": "耐用期間（月数）",
-      "depreciationMethodId": "カスタム計算式",
+      "depreciationMethodId": "減価償却方法",
       "departmentId": "部門",
       "defaultMethod": "既定の方法",
       "defaultDepreciationMethodId": "既定の計算式",
@@ -2734,8 +2734,7 @@
       "dateBasis": "日付基準",
       "unitsTotal": "総単位数",
       "network": "ネットワーク",
-      "lastFour": "下4桁",
-      "depreciationMethodId": "減価償却方法"
+      "lastFour": "下4桁"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3748,7 +3747,6 @@
         "note": "会計基礎と開始ワークスペースを作成します。最初の実記帳前に不足があれば本番ガイドに表示されます。任意の機能は「会社設定 → 機能」から調整可能です。",
         "notePreserved": "既存の勘定科目表や記帳履歴を変えずに、会社分類とワークスペース推奨を更新します。任意の機能は「会社設定 → 機能」から調整可能です。",
         "payrollPack": "給与の国別パック",
-        "payrollPackCanada": "カナダ（CRA T4127）",
         "payrollPackNone": "なし — 後で給与設定からインストール",
         "sampleCompany": "探索用ワークスペース",
         "sampleCompanyNo": "今は作成しない",
@@ -3858,12 +3856,11 @@
         "installError": "給与は有効化されましたが、国別パックをインストールできませんでした。「給与設定 → 国別パック」からインストールできます。",
         "packQuestion": "どの国別パックをインストールしますか？",
         "packs": {
-          "canada": {
+          "ca": {
             "description": "CRA T4127法定エンジン、全州・準州対応、CRA PDOCで検証済み。",
             "title": "カナダ"
           },
           "us": {
-            "description": "予定 — まだ利用できません。",
             "title": "米国"
           }
         },

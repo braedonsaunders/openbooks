@@ -287,7 +287,7 @@
       "remittanceHint": "Credits by account: the liabilities this run recorded.",
       "netPay": "Net pay to employees",
       "nextTitle": "What's next",
-      "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
+      "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill.",
       "nextPay": "Pay employees from the net pay payable account. The payment relieves the liability this run recorded.",
       "amount": "Amount",
       "paid": "Paid",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {# statutory component installed} other {# statutory components installed}}",
       "hint": "Installing a pack seeds the statutory pay components and switches on that jurisdiction's withholding engine. Existing components are never overwritten.",
       "canada": {
-        "title": "Canada",
-        "description": "Statutory withholding for Canadian pay runs, remittances, and year-end.",
         "edition": "{edition, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} edition (effective {effective})",
         "engine": "CRA T4127 statutory engine —",
         "coverage": "All provinces & territories. Quebec: QPP, QPIP, federal and provincial income tax withholding are included; provincial income tax is administered by Revenu Québec.",
@@ -702,8 +700,6 @@
         "verified": "Verified penny-exact against CRA PDOC."
       },
       "us": {
-        "title": "United States",
-        "description": "Federal statutory withholding for US pay runs: income tax, Social Security, Medicare, and unemployment.",
         "engine": "IRS Pub 15-T percentage-method engine (2026) with W-4 Steps 2–4 and pre-2020 allowances.",
         "coverage": "49 supported states: 40 taxing engines plus the nine no-tax states (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC and NM are refused pending official goldens.",
         "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",

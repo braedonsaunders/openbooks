@@ -143,8 +143,19 @@ function labourJurisdictionOptions(): Record<string, { key: string; name: string
  * actually populate.
  */
 export interface PackProfileDeclaration {
+  /**
+   * The pack's own display name, served alongside the codes so the country
+   * picker never falls back to a bare code. A surface handed only codes
+   * has nothing to show but codes.
+   */
+  countryName: string
   subdivisionLabel: string
   subdivisions: string[]
+  /**
+   * Display name per subdivision code, from the pack's own
+   * `regions.regionNames` declaration — what the region picker shows.
+   */
+  subdivisionNames: Record<string, string>
   supportedSubdivisions: string[]
   unsupportedReason: string
   unsupportedReasons: Record<string, string>
@@ -171,8 +182,10 @@ function packProfileDeclarations(): Record<string, PackProfileDeclaration> {
   for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
     const pack = PAYROLL_COUNTRY_PACKS[country]!
     byCountry[country] = {
+      countryName: pack.name,
       subdivisionLabel: pack.regions.label,
       subdivisions: [...pack.regions.known],
+      subdivisionNames: { ...pack.regions.regionNames },
       supportedSubdivisions: [...pack.regions.supported],
       unsupportedReason: pack.regions.unsupportedReason,
       unsupportedReasons: { ...(pack.regions.unsupportedReasons ?? {}) },

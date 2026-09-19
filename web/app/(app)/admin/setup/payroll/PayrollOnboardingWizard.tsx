@@ -48,9 +48,11 @@ interface SetupCheck {
 /** GET /api/payroll/settings — the wizard's whole world, refetched per step. */
 interface SettingsPayload {
   settings: Record<string, unknown>
-  packs: { country: string; slots: { key: string; accountId: string | null }[] }[]
+  packs: { country: string; name: string; slots: { key: string; accountId: string | null }[] }[]
   paymentMethods: { eftFallbackToCheque: boolean }
   installable: string[]
+  /** Installable packs as (country, name) pairs — what the buttons show. */
+  installablePacks: { country: string; name: string }[]
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
   setup: { installedCountries: string[]; checks: SetupCheck[]; blockers: number; warnings: number }
@@ -66,8 +68,38 @@ const FREQUENCY_PERIODS: Record<string, number> = {
   monthly: 12,
 }
 
-/** settingsPage.packs.* i18n keys per pack country. */
-const PACK_I18N: Record<string, 'canada' | 'us'> = { CA: 'canada', US: 'us' }
+/**
+ * Pack display strings. The locale wins where a `settingsPage.packs.<key>`
+ * namespace exists for the pack; otherwise the PACK'S OWN NAME (served by
+ * the settings API from the pack declaration) is used — never the bare
+ * country code. A per-pack map here is what rendered every pack past CA/US
+ * as "GB"/"DE"/"FR", so there is no map here.
+ */
+function packTitle(
+  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  code: string,
+  name: string,
+): string {
+  const key = `packs.${code.toLowerCase()}.title`
+  return tSettings.has(key as never) ? tSettings(key as never) : name
+}
+
+function packDescription(
+  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  code: string,
+): string {
+  const key = `packs.${code.toLowerCase()}.description`
+  return tSettings.has(key as never) ? tSettings(key as never) : ''
+}
+
+function packAccountsTitle(
+  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  code: string,
+  name: string,
+): string {
+  const key = `packAccounts.${code}.title`
+  return tSettings.has(key as never) ? tSettings(key as never) : name
+}
 
 export function PayrollOnboardingWizard(props: {
   onClose: () => void
@@ -438,10 +470,9 @@ export function PayrollOnboardingWizard(props: {
       {data && step === 'packs' && (
         <StepFrame title={t('packs.title')} description={t('packs.description')}>
           <div className="grid gap-3 sm:grid-cols-2">
-            {data.installable.map((country) => {
+            {data.installablePacks.map(({ country, name }) => {
               const selected = selectedCountries.has(country)
               const installed = data.setup.installedCountries.includes(country)
-              const packKey = PACK_I18N[country]
               return (
                 <button
                   key={country}
@@ -467,10 +498,10 @@ export function PayrollOnboardingWizard(props: {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {packKey ? tSettings(`packs.${packKey}.title`) : country}
+                      {packTitle(tSettings, country, name)}
                     </span>
                     <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                      {packKey ? tSettings(`packs.${packKey}.description`) : country}
+                      {packDescription(tSettings, country)}
                     </span>
                     {installed && (
                       <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-900/60 dark:text-teal-300">
@@ -511,9 +542,7 @@ export function PayrollOnboardingWizard(props: {
           {data.packs.filter((pack) => selectedCountries.has(pack.country)).map((pack) => (
             <fieldset key={pack.country} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
               <legend className="px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {PACK_I18N[pack.country]
-                  ? tSettings(`packAccounts.${pack.country}.title` as never)
-                  : pack.country}
+                {packAccountsTitle(tSettings, pack.country, pack.name)}
               </legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 {pack.slots.map((slot) => (
