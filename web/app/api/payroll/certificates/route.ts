@@ -112,7 +112,12 @@ export async function POST(req: Request) {
 
   if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
   const subsidiaryId = await employeeSubsidiaryId(orgId, body.employeePartyId)
-  if (subsidiaryId === undefined) return NextResponse.json({ error: 'employee is not available' }, { status: 422 })
+  if (subsidiaryId === undefined) {
+    return NextResponse.json(
+      { error: `no employee "${body.employeePartyId}" in this organization — create the employee record before filing a certificate` },
+      { status: 422 },
+    )
+  }
   const denied = guardSubsidiaryScope(gate, subsidiaryId)
   if (denied) return denied
 
