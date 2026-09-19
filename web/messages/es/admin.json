@@ -4143,6 +4143,10 @@
     }
   },
   "features": {
+    "hrm": {
+      "title": "Recursos humanos",
+      "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio. Lee la base de RR. HH.; nunca dirige la nómina."
+    },
     "crm": {
       "title": "CRM",
       "description": "Prospectos, oportunidades, actividades y pronósticos de ventas."

@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "人事",
+    "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。",
+    "tabs": {
+      "overview": "概要"
+    },
+    "vitals": {
+      "headcount": "人員数",
+      "headcountSub": "{date} 時点",
+      "employers": "雇用主",
+      "employersSub": "{count, plural, other {# 子会社}}",
+      "departments": "部門",
+      "departmentsSub": "{count, plural, other {# 部門}}"
+    },
+    "groups": {
+      "title": "雇用主・部門別の人員数",
+      "employer": "雇用主",
+      "department": "部門",
+      "headcount": "人員数",
+      "unassigned": "未割り当て",
+      "empty": "{date} 時点で在籍中の雇用はありません。",
+      "total": "合計"
+    },
+    "directory": {
+      "title": "名簿"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "雇用エピソード",
+      "status": "ステータス",
+      "effective": "有効",
+      "recorded": "記録",
+      "present": "現在",
+      "empty": "雇用バージョンは記録されていません。"
+    },
+    "status": {
+      "offered": "内定",
+      "active": "在籍",
+      "on_leave": "休職中",
+      "suspended": "停職中",
+      "terminated": "退職"
+    },
+    "asOf": {
+      "title": "有効な配属",
+      "dateLabel": "有効日",
+      "refusalTitle": "解決を拒否しました"
+    },
+    "assignments": {
+      "title": "配属",
+      "jobTitle": "職名",
+      "department": "部門",
+      "fte": "FTE換算",
+      "primary": "主",
+      "primaryYes": "主配属",
+      "effective": "有効",
+      "recorded": "記録",
+      "empty": "この日付を対象とする配属はありません。"
+    },
+    "noRecord": {
+      "title": "雇用記録なし",
+      "description": "この人物にはまだ雇用記録がありません。雇用記録はHRMの作成フローで作成されます。"
+    },
+    "multiple": {
+      "title": "複数の雇用記録",
+      "description": "{count} 件の雇用記録がこの人物を指しています。記録を自動で選ぶことはできません。時点状態を読み取る前に重複を解消してください。"
+    },
+    "changeRequests": {
+      "title": "変更申請",
+      "status": "ステータス",
+      "binding": "バインディング",
+      "bindingValue": "申請リビジョン {request}（雇用リビジョン {expected} に対して）",
+      "submitted": "提出済み",
+      "viewInApprovals": "承認で表示",
+      "noRun": "下書き — 承認ランはまだありません。",
+      "empty": "変更申請はまだありません。",
+      "statusNames": {
+        "draft": "下書き",
+        "pending_approval": "承認待ち",
+        "approved": "承認済み",
+        "rejected": "却下",
+        "withdrawn": "取り下げ",
+        "applied": "適用済み"
+      }
+    }
+  }
+}

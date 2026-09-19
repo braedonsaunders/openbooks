@@ -29,6 +29,7 @@
     "activated": "Tiers activé",
     "deactivated": "Tiers désactivé",
     "tabs": {
+      "employment": "Emploi",
       "ariaLabel": "Sections du dossier du tiers",
       "overview": "Aperçu",
       "transactions": "Transactions",

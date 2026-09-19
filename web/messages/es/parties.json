@@ -29,6 +29,7 @@
     "activated": "Tercero activado",
     "deactivated": "Tercero desactivado",
     "tabs": {
+      "employment": "Empleo",
       "ariaLabel": "Secciones del registro del tercero",
       "overview": "Resumen",
       "transactions": "Transacciones",

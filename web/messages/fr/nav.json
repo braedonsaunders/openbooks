@@ -1,5 +1,6 @@
 {
   "modules": {
+    "hrm": "Ressources humaines",
     "dashboard": "Tableau de bord",
     "assistant": "Assistant IA",
     "continuous-close": "Agents",

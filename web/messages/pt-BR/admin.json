@@ -4143,6 +4143,10 @@
     }
   },
   "features": {
+    "hrm": {
+      "title": "Recursos humanos",
+      "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração. Lê a base de RH; nunca conduz a folha de pagamento."
+    },
     "crm": {
       "title": "CRM",
       "description": "Leads, prospects, oportunidades, atividades e previsões de vendas."
