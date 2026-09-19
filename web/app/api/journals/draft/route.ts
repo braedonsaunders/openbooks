@@ -90,7 +90,7 @@ function scopeErrorResponse(error: unknown): NextResponse | null {
 }
 
 /** Instant-into-draft: create an empty draft manual journal and return its id. */
-export async function POST(req?: Request) {
+export async function POST(req: Request) {
   const gate = await guardPermission("gl.post");
   if (gate instanceof NextResponse) return gate;
   const parsed = await readDraftBody(req);

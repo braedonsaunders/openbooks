@@ -20,7 +20,7 @@ registerHooks({
   },
 })
 
-const { toActionFailure } = await import('./route')
+const { toActionFailure } = await import('./action-failure')
 const { PostingError } = await import('@openbooks/engine/src/posting.ts')
 const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/control-accounts.ts')
 const { PayrollError } = await import('@openbooks/engine/src/payroll-error.ts')

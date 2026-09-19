@@ -104,7 +104,8 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?bulk-gates-boundary-test'
-const { MAX_BULK_ITEMS, POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const { MAX_BULK_ITEMS } = await import('./bulk-limit.ts')
 hooks.deregister()
 
 function reset(allowedSubsidiaryIds: Set<string> | null = null): void {

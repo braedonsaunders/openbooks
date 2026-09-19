@@ -5,7 +5,8 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { encryptAccountNumber } from '@openbooks/engine/src/payments.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
-import { guardPermission, guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
+import { guardPermission } from '../../../../../lib/authz'
+import { denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
@@ -62,15 +63,6 @@ function validateBody(body: Body, creating: boolean): string | null {
 /** Require the opaque six-digit PostgreSQL revision token on every mutation. */
 function canonicalRevision(value: unknown): string | null {
   return isDocumentRevisionToken(value) ? value : null
-}
-
-/** Party record boundary shared by every verb here (null-subsidiary parties are org-wide). */
-export async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {
-  const row = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${gate.user.orgId}`,
-  ))
-  if (!row.rows[0]) return NextResponse.json({ error: 'party not found' }, { status: 404 })
-  return guardSubsidiaryScope(gate, row.rows[0].subsidiaryId, { orgWideNull: true })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

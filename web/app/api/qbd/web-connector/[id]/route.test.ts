@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { POST, QBD_MAX_BODY_BYTES } from "./route.ts";
+import { POST } from "./route.ts";
+import { QBD_MAX_BODY_BYTES } from "./body-limit.ts";
 
 const CONNECTION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
