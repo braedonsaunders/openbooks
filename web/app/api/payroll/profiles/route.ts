@@ -80,7 +80,7 @@ const profileBodySchema = z.looseObject({
 // Match the compliance editor's explicit, non-secret audit projection. A
 // sealed taxpayer identifier is sensitive too; retain only presence/last3.
 const PROFILE_AUDIT_COLUMNS = sql`
-  id, org_id, employee_party_id, pay_schedule_id, country, province,
+  id, org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
   residence_region, labour_jurisdiction, pay_basis,
   federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
   additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
