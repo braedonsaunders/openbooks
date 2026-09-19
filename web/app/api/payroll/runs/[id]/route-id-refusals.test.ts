@@ -26,8 +26,9 @@ const stateKey = Symbol.for('openbooks.payroll-run-id-refusals-test')
 interface RouteState {
   ownedSubsidiaryId: string | null
   adjustmentCalls: unknown[]
+  excludedIds: string[]
 }
-const routeState: RouteState = { ownedSubsidiaryId: 'sub-1', adjustmentCalls: [] }
+const routeState: RouteState = { ownedSubsidiaryId: 'sub-1', adjustmentCalls: [], excludedIds: [] }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = routeState
 
 // The route canonicalizes hours through the engine's real helper, so the mock
@@ -50,7 +51,16 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-id-refusals-test')]
       export const db = {
-        execute() { return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }) },
+        // set-scope diffs the requested scope against the CURRENT exclusions:
+        // answer that read from state, and the owning-document read as before.
+        execute(query) {
+          let text = ''
+          try { text = JSON.stringify(query) } catch { text = '' }
+          if (text.includes('pay_run_adjustments')) {
+            return Promise.resolve({ rows: state.excludedIds.map((id) => ({ employee_party_id: id })) })
+          }
+          return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] })
+        },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }
     `,
@@ -162,6 +172,7 @@ function uuid(n: number): string {
 function reset() {
   routeState.ownedSubsidiaryId = 'sub-1'
   routeState.adjustmentCalls = []
+  routeState.excludedIds = []
 }
 
 function validAdd(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -495,7 +506,8 @@ test('set-scope refuses 2001 roster employees naming the limit, accepts 2000', a
   const res = await post(validScope({ employeePartyIds: [twoThousand[0]], rosterPartyIds: twoThousand }))
   assert.equal(res.status, 200)
   assert.deepEqual(await res.json(), { ok: true, included: 1, excluded: 1999 })
-  assert.equal(routeState.adjustmentCalls.length, 2000)
+  // The kept member is already in scope and staying: diffed, not replayed.
+  assert.equal(routeState.adjustmentCalls.length, 1999)
 })
 
 test('set-scope names a bad included id AND its index', async () => {
@@ -526,6 +538,30 @@ test('set-scope accepts an empty included list and an empty roster', async () =>
   const emptyRoster = await post(validScope({ employeePartyIds: [], rosterPartyIds: [] }))
   assert.equal(emptyRoster.status, 200)
   assert.deepEqual(await emptyRoster.json(), { ok: true, included: 0, excluded: 0 })
+})
+
+test('set-scope mutates only what changes: members staying in or out are skipped', async () => {
+  reset()
+  routeState.excludedIds = [uuid(2)]
+  const res = await post(validScope({ employeePartyIds: [uuid(1)], rosterPartyIds: [uuid(1), uuid(2)] }))
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), { ok: true, included: 1, excluded: 1 })
+  // uuid(1) is in scope and staying; uuid(2) is out and staying out.
+  assert.equal(routeState.adjustmentCalls.length, 0)
+})
+
+test('set-scope mutates only what changes: one removal and one re-add', async () => {
+  reset()
+  routeState.excludedIds = [uuid(2)]
+  const res = await post(validScope({ employeePartyIds: [uuid(1), uuid(2)], rosterPartyIds: [uuid(1), uuid(2), uuid(3)] }))
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), { ok: true, included: 2, excluded: 1 })
+  // uuid(1) stays in (skipped); uuid(2) is re-added; uuid(3) is removed.
+  assert.equal(routeState.adjustmentCalls.length, 2)
+  const actions = (routeState.adjustmentCalls as { mutation: { action: string; employeePartyId: string } }[])
+    .map((call) => `${call.mutation.action}:${call.mutation.employeePartyId}`)
+    .sort()
+  assert.deepEqual(actions, [`exclude:${uuid(3)}`, `include:${uuid(2)}`])
 })
 
 // ---------------------------------------------------------------------------
