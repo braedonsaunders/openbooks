@@ -13,6 +13,9 @@
 // entity here and it appears in all three.
 
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
+import { HRM_REPORT_ENTITIES } from './hrm-entities'
+
+export { HRM_REPORT_ENTITIES } from './hrm-entities'
 
 export type ReportColumnKind =
   | 'text'
@@ -166,20 +169,9 @@ export type ReportEntity = {
   latestOrderExpr?: string
 }
 
-/** Sentinel in static FROM SQL for the org-calendar as-of day (entitlement
- *  limit effective-dating). Compilers replace every occurrence with one bound
- *  parameter; the token is never sent to Postgres. */
-export const REPORT_AS_OF = '__report_as_of__'
+import { REPORT_AS_OF } from './report-as-of'
 
-export function bindReportFromAsOf(
-  from: string,
-  asOf: string | undefined,
-  bind: (value: string) => string,
-): string {
-  if (!from.includes(REPORT_AS_OF)) return from
-  if (!asOf) throw new Error('report entity FROM requires asOf')
-  return from.split(REPORT_AS_OF).join(bind(asOf))
-}
+export { REPORT_AS_OF, bindReportFromAsOf } from './report-as-of'
 
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -1381,6 +1373,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'created_at', direction: 'desc' },
   },
+  // Workforce reports over the HRM employment foundation (0184) and the
+  // change-request ledger (0185). Declared in hrm-entities.ts so the HRM
+  // read path stays beside the registry without growing this file; the
+  // spread keeps REPORT_ENTITIES the single list every surface derives
+  // from (builder, saved views, card studio).
+  ...HRM_REPORT_ENTITIES,
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
