@@ -513,8 +513,28 @@ export async function POST(req: Request) {
           from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active
           for share`),
     ]))
-    if (refs.some((result) => result.rows.length !== 1)) {
-      return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
+    // The two locking reads above stay exactly as they are: one round trip on
+    // the success path. A zero-row inner join is a single outcome for three
+    // employee-side causes (no such party, inactive party, no active role),
+    // so the refusal below re-reads with a left join to resolve WHICH
+    // predicate failed — but only on this failure path, never on success.
+    if (refs[0].rows.length !== 1 || refs[1].rows.length !== 1) {
+      if (refs[0].rows.length !== 1) {
+        const employee = (await db.execute<{ partyActive: boolean | null; roleActive: boolean | null }>(sql`
+          select p.is_active as "partyActive", er.is_active as "roleActive"
+            from parties p left join employee_roles er
+              on er.party_id = p.id and er.org_id = p.org_id
+           where p.org_id = ${orgId} and p.id = ${body.employeePartyId}`)).rows[0]
+        if (!employee) return NextResponse.json({ error: 'employee is not available' }, { status: 422 })
+        if (!employee.partyActive) {
+          return NextResponse.json(
+            { error: 'this employee is still a draft — save the employee record first, then set up payroll' },
+            { status: 422 },
+          )
+        }
+        return NextResponse.json({ error: 'employee role is not active for this party' }, { status: 422 })
+      }
+      return NextResponse.json({ error: 'pay schedule is not available' }, { status: 422 })
     }
     // The employee and schedule are both payroll records. Resolve their legal
     // entities before the upsert so a restricted operator cannot re-home a
