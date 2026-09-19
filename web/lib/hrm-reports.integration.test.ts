@@ -396,8 +396,10 @@ test('change-request register reads drafts, pending and decided requests', { ski
     await submitChangeRequest({
       orgId: scratch.orgId, actorId: ids.submitterId, requestId: decided.id, reason: 'backfill the cohort',
     })
-    const gate = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${decided.id} order by created_at`)).rows[0]!.id
+    // Explicitly scoped: RLS denies context-free reads with zero rows (never
+    // an error), so this must not ride on ambient test bypass.
+    const gate = await withOrgContext(scratch.orgId, async () => (await db.execute<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${decided.id} order by created_at`)).rows[0]!.id)
     const outcome = await decideGate({ gateId: gate, decision: 'approved', userId: ids.approverId })
     assert.equal(outcome.ok, true)
 
@@ -511,31 +513,40 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       assert.equal(none.rowCount, 0)
     })
 
-    // The run-path gate: permission + feature, never empty rows.
+    // The run-path gate: permission + feature, never empty rows. Each
+    // principal reads under its own org scope — RLS denies context-free
+    // reads with zero rows (never an error), so these must not ride on
+    // ambient test bypass.
     const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
-    for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
-      assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
-    }
-    assert.ok(!(await hiddenReportEntityKeys(reader)).some((key) => key.startsWith('hrm_')), 'hrm entities stay listed')
+    await withOrgContext(scratch.orgId, async () => {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
+        assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
+      }
+      assert.ok(!(await hiddenReportEntityKeys(reader)).some((key) => key.startsWith('hrm_')), 'hrm entities stay listed')
+    })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
-    for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
-      assert.equal(await canRunReportEntity(noPerm, { entity: key }), false, `${key} refuses without the permission`)
-    }
-    assert.deepEqual(
-      (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
-      ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
-    )
+    await withOrgContext(scratch.orgId, async () => {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
+        assert.equal(await canRunReportEntity(noPerm, { entity: key }), false, `${key} refuses without the permission`)
+      }
+      assert.deepEqual(
+        (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
+        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
+      )
+    })
 
     // Feature off (never enabled on this org): every execution path refuses.
     const darkReader = fakeAuthz(dark.orgId, ['reports.read', 'hrm.employment.read'], null)
-    for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
-      assert.equal(await canRunReportEntity(darkReader, { entity: key }), false, `${key} refuses with the feature off`)
-    }
-    assert.deepEqual(
-      (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
-      ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
-    )
+    await withOrgContext(dark.orgId, async () => {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
+        assert.equal(await canRunReportEntity(darkReader, { entity: key }), false, `${key} refuses with the feature off`)
+      }
+      assert.deepEqual(
+        (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
+        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
+      )
+    })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
     await withBypass(() => dropScratchOrg(dark.orgId))
