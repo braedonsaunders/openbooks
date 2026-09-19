@@ -164,8 +164,59 @@ async function syncMembers(
   }
 }
 
+/**
+ * The entity a write is validated against, WITH its dynamic options resolved.
+ *
+ * `resolveDynamicSetupOptions` is the same resolution the render path applies
+ * before handing the descriptor to the client, and the write path must use it
+ * too or the two disagree about what a field accepts. They did: a field may
+ * declare BOTH a static `options` list and a dynamic `optionsSource`, the
+ * static list being (per dynamic-options.ts) "the fallback for any surface
+ * that renders without resolving". The picker resolved and offered all
+ * fourteen declared payroll countries; `coerceField`'s `select` check never
+ * resolved and validated against the fallback, which is still the CA/US pair
+ * from before the registry opened. So creating a German filing account sent a
+ * correct `country: "DE"` and got 400 "country has an invalid value" — the
+ * server refusing a code its own picker had offered. `programType` had the
+ * same split (ca_rp/us_ein/us_state_sui statically, every declared pack's
+ * program types dynamically).
+ *
+ * Resolving here means one source of truth for what a field accepts, so a
+ * newly registered pack's countries and program types become writable with no
+ * registry edit — which was the stated intent of `optionsSource` all along.
+ */
 function resolveEntity(entityKey: string): SetupEntity | null {
   return SETUP_ENTITY_BY_KEY.get(entityKey) ?? null
+}
+
+/**
+ * The entity to VALIDATE a write against: the same descriptor, with its dynamic
+ * options resolved.
+ *
+ * A field may declare BOTH a static `options` list and a dynamic
+ * `optionsSource`, the static list being (per dynamic-options.ts) "the fallback
+ * for any surface that renders without resolving". The RENDER path resolves and
+ * offered all fourteen declared payroll countries; the write path did not, so
+ * `coerceField`'s `select` check validated against the fallback — still the
+ * CA/US pair from before the pack registry opened. Creating a German filing
+ * account sent a correct `country: "DE"` and got 400 "country has an invalid
+ * value": the server refusing a code its own picker had offered.
+ *
+ * Imported DYNAMICALLY and called LATE, after the read-only and permission
+ * guards, for two reasons: dynamic-options is server-only and reaches into the
+ * engine's pack registry, and a read-only entity must fail closed WITHOUT
+ * loading it (web/lib/setup-route.test.ts pins that a currency mutation
+ * answers 405 with zero database calls — a top-level import breaks it).
+ */
+async function entityForValidation(entity: SetupEntity): Promise<SetupEntity> {
+  if (!hasDynamicOptions(entity)) return entity
+  const { resolveDynamicSetupOptions } = await import('./dynamic-options')
+  return resolveDynamicSetupOptions(entity)
+}
+
+/** Cheap, pure check so the dynamic import happens only where it is needed. */
+function hasDynamicOptions(entity: SetupEntity): boolean {
+  return (entity.fields ?? []).some((field) => field.optionsSource != null)
 }
 
 async function setupEntityEnabled(entity: SetupEntity, orgId: string, executor: Pick<typeof db, 'execute'> = db): Promise<boolean> {
@@ -797,7 +848,7 @@ export async function createSetupRecord(
   const createEntity = entity.key === 'item-rate-books' && !multiCurrency
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
-  const built = buildRow(createEntity, body, { forCreate: true })
+  const built = buildRow(await entityForValidation(createEntity), body, { forCreate: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) {
@@ -1016,7 +1067,7 @@ export async function updateSetupRecord(
   const patchEntity = entity.key === 'item-rate-books' && !multiCurrency
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
-  const built = buildRow(patchEntity, body, { forCreate: false })
+  const built = buildRow(await entityForValidation(patchEntity), body, { forCreate: false })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) {
