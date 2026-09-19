@@ -496,8 +496,26 @@ export async function POST(req: Request) {
     // The profile money columns are numeric(19,4): fifteen whole digits. The
     // shape check admits any magnitude, so a pasted 20-digit figure died in
     // the upsert with a storage error. Fail closed with the existing refusal.
-    if (value === null || compareDecimal(value, '0') < 0 || wholeDigits(value) > 15) {
-      return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+    // Three distinct causes; name which one and what the operator supplied.
+    // One message covering all three is what made the twenty-digit paste
+    // undiagnosable in the first place.
+    if (value === null) {
+      return NextResponse.json(
+        { error: `${key} must be an amount — "${String(body[key])}" is not a number` },
+        { status: 422 },
+      )
+    }
+    if (compareDecimal(value, '0') < 0) {
+      return NextResponse.json(
+        { error: `${key} cannot be negative — got ${value}` },
+        { status: 422 },
+      )
+    }
+    if (wholeDigits(value) > 15) {
+      return NextResponse.json(
+        { error: `${key} is limited to 15 digits before the decimal point — got ${wholeDigits(value)}` },
+        { status: 422 },
+      )
     }
     money[key] = normalizeMoney(value)
   }
@@ -505,8 +523,23 @@ export async function POST(req: Request) {
   if (body.vacationPercent !== null && body.vacationPercent !== undefined && body.vacationPercent !== '') {
     const vacationRaw = canonicalDecimal(body.vacationPercent, 4)
     // vacation_percent is numeric(7,4): three whole digits for the same reason.
-    if (vacationRaw === null || compareDecimal(vacationRaw, '0') < 0 || wholeDigits(vacationRaw) > 3) {
-      return NextResponse.json({ error: 'invalid vacationPercent' }, { status: 422 })
+    if (vacationRaw === null) {
+      return NextResponse.json(
+        { error: `vacationPercent must be a percentage — "${String(body.vacationPercent)}" is not a number` },
+        { status: 422 },
+      )
+    }
+    if (compareDecimal(vacationRaw, '0') < 0) {
+      return NextResponse.json(
+        { error: `vacationPercent cannot be negative — got ${vacationRaw}` },
+        { status: 422 },
+      )
+    }
+    if (wholeDigits(vacationRaw) > 3) {
+      return NextResponse.json(
+        { error: `vacationPercent is limited to 3 digits before the decimal point — got ${wholeDigits(vacationRaw)}` },
+        { status: 422 },
+      )
     }
     vacationPercent = normalizeMoney(vacationRaw)
   }
