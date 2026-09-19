@@ -69,12 +69,19 @@ const JEAN = {
   },
 };
 const CA_TOTALS = { gross: "6640.0000", net: "4758.3600", cost: "595.1700" };
+// Sam is the US employee, so the employer also owes state unemployment on his
+// earnings: 3000.0000 x 3.4% = 102.0000, well under the 7,000.00 taxable wage
+// base, so the whole period is assessable. SUI is experience-rated and
+// tenant-entered by design, so the rate is configured in the provisioning step
+// rather than carried by the pack; an unconfigured us_sui slot refuses this
+// employee by name instead of accruing 0.00. It does not touch gross, net or
+// any remittance group — the SUTA component declares remittance "external".
 const SAM = {
   base: "Sam Rivera",
   gross: "3000.0000",
   net: "2316.0600",
-  cost: "247.5000",
-  lines: { FIT: "320.3800", SS: "186.0000", MED: "43.5000", SIT: "134.0600" },
+  cost: "349.5000",
+  lines: { FIT: "320.3800", SS: "186.0000", MED: "43.5000", SIT: "134.0600", SUTA: "102.0000" },
 };
 // Per-component remittance goldens for the seeded inputs: every agency
 // total is the sum of its components' rows (CRA 1636.83, RQ 839.98,
@@ -662,6 +669,22 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           values: { rate: "1.65" },
         }),
         "QC health services fund rate",
+      );
+      // State unemployment, likewise tenant-entered: the state assigns each
+      // registered employer its own experience rate every year and publishes
+      // no figure a payroll system could carry as a constant. 3.4% is
+      // California's new-employer rate and 7,000.00 its taxable wage base.
+      // The slot is scoped to the filing account the employee is assigned.
+      ok(
+        await api(rq, ctx.baseURL, "PUT", "/api/payroll/settings/rates", {
+          country: "US",
+          rateKey: "us_sui",
+          region: "CA",
+          filingAccountId: ctx.filingUS,
+          taxYear: 2026,
+          values: { rate: "0.034", wageBase: "7000.00" },
+        }),
+        "CA state unemployment rate",
       );
       // Per-component remittance destinations are mapped after the runs
       // commit, when the remittance summary exposes each component's id
