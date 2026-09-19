@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   getChangeRequest,
@@ -7,7 +7,7 @@ import {
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
-import { changeRequestErrorResponse } from "../_lib";
+import { changeRequestErrorResponse, patchChangeRequestBody } from "../_lib";
 
 export const runtime = "nodejs";
 
@@ -36,12 +36,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, patchChangeRequestBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { payload?: unknown };
-  if (body.payload === undefined) {
-    return NextResponse.json({ error: "payload required" }, { status: 400 });
-  }
+  const body = parsedBody.data;
   try {
     const request = await updateChangeRequestPayload({
       orgId: gate.user.orgId,
