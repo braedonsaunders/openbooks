@@ -214,6 +214,7 @@ test("clean employees collect to ready rows with observation candidates", { skip
 
     const preflight = preflightEmploymentMigration(collected.rows);
     assert.deepEqual(preflight.counts.ready, 2);
+    assert.equal(preflight.rows.length, 2, "both collected persons are classified");
     for (const evaluated of preflight.rows) {
       assert.equal(evaluated.classification, "ready");
       assert.equal(evaluated.historicalCoverage, "unknown");
@@ -555,6 +556,7 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(againReport.totals.alreadyMigrated, 2);
     assert.equal(againReport.totals.wouldMigrate, 0);
     assert.equal(againReport.totals.refused, 0);
+    assert.equal(againReport.persons.length, 2, "the re-run reports both persons");
     for (const person of againReport.persons) {
       assert.equal(person.classification, "already_migrated");
       assert.equal(person.outcome, "already_migrated");
