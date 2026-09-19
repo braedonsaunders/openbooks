@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "Ressources humaines",
+    "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement.",
+    "tabs": {
+      "overview": "Vue d'ensemble"
+    },
+    "vitals": {
+      "headcount": "Effectif",
+      "headcountSub": "Au {date}",
+      "employers": "Employeurs",
+      "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
+      "departments": "Services",
+      "departmentsSub": "{count, plural, one {# service} other {# services}}"
+    },
+    "groups": {
+      "title": "Effectif par employeur et par service",
+      "employer": "Employeur",
+      "department": "Service",
+      "headcount": "Effectif",
+      "unassigned": "Non affecté",
+      "empty": "Aucun emploi n'est en cours au {date}.",
+      "total": "Total"
+    },
+    "directory": {
+      "title": "Annuaire"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "Épisodes d'emploi",
+      "status": "Statut",
+      "effective": "Effet",
+      "recorded": "Enregistré",
+      "present": "En cours",
+      "empty": "Aucune version d'emploi n'est enregistrée."
+    },
+    "status": {
+      "offered": "Proposé",
+      "active": "Actif",
+      "on_leave": "En congé",
+      "suspended": "Suspendu",
+      "terminated": "Terminé"
+    },
+    "asOf": {
+      "title": "Affectation en vigueur",
+      "dateLabel": "Date d'effet",
+      "refusalTitle": "Résolution refusée"
+    },
+    "assignments": {
+      "title": "Affectations",
+      "jobTitle": "Intitulé du poste",
+      "department": "Service",
+      "fte": "ETP",
+      "primary": "Principale",
+      "primaryYes": "Principale",
+      "effective": "Effet",
+      "recorded": "Enregistré",
+      "empty": "Aucune affectation ne couvre cette date."
+    },
+    "noRecord": {
+      "title": "Aucun dossier d'emploi",
+      "description": "Cette personne n'a pas encore de dossier d'emploi. Les dossiers d'emploi sont créés par le flux de rédaction RH."
+    },
+    "multiple": {
+      "title": "Plus d'un dossier d'emploi",
+      "description": "{count} dossiers d'emploi désignent cette personne. Le dossier ne peut pas être choisi automatiquement : résolvez les doublons avant de lire l'état à date."
+    },
+    "changeRequests": {
+      "title": "Demandes de changement",
+      "status": "Statut",
+      "binding": "Liaison",
+      "bindingValue": "Révision de demande {request} contre révision d'emploi {expected}",
+      "submitted": "Soumise",
+      "viewInApprovals": "Voir dans les approbations",
+      "noRun": "Brouillon : aucune exécution d'approbation pour l'instant.",
+      "empty": "Aucune demande de changement pour l'instant.",
+      "statusNames": {
+        "draft": "Brouillon",
+        "pending_approval": "En attente d'approbation",
+        "approved": "Approuvée",
+        "rejected": "Rejetée",
+        "withdrawn": "Retirée",
+        "applied": "Appliquée"
+      }
+    }
+  }
+}

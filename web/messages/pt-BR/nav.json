@@ -1,5 +1,6 @@
 {
   "modules": {
+    "hrm": "Recursos humanos",
     "dashboard": "Painel",
     "assistant": "Assistente de IA",
     "continuous-close": "Monitor de Fechamento",

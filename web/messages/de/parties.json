@@ -32,6 +32,7 @@
     "activated": "Geschäftspartner aktiviert",
     "deactivated": "Geschäftspartner deaktiviert",
     "tabs": {
+      "employment": "Beschäftigung",
       "ariaLabel": "Abschnitte des Geschäftspartner-Datensatzes",
       "overview": "Übersicht",
       "transactions": "Transaktionen",

@@ -1,5 +1,6 @@
 {
   "modules": {
+    "hrm": "人力资源",
     "dashboard": "仪表板",
     "assistant": "AI 助手",
     "continuous-close": "结账监控",

@@ -32,6 +32,7 @@
     "activated": "取引先を有効化しました",
     "deactivated": "取引先を無効化しました",
     "tabs": {
+      "employment": "雇用",
       "ariaLabel": "取引先レコードのセクション",
       "overview": "概要",
       "transactions": "取引",

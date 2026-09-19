@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "Recursos humanos",
+    "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio.",
+    "tabs": {
+      "overview": "Resumen"
+    },
+    "vitals": {
+      "headcount": "Plantilla",
+      "headcountSub": "A {date}",
+      "employers": "Empleadores",
+      "employersSub": "{count, plural, one {# filial} other {# filiales}}",
+      "departments": "Departamentos",
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+    },
+    "groups": {
+      "title": "Plantilla por empleador y departamento",
+      "employer": "Empleador",
+      "department": "Departamento",
+      "headcount": "Plantilla",
+      "unassigned": "Sin asignar",
+      "empty": "No hay empleos en vigor a {date}.",
+      "total": "Total"
+    },
+    "directory": {
+      "title": "Directorio"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "Episodios de empleo",
+      "status": "Estado",
+      "effective": "Vigencia",
+      "recorded": "Registrado",
+      "present": "Actual",
+      "empty": "No hay versiones de empleo registradas."
+    },
+    "status": {
+      "offered": "Ofrecido",
+      "active": "Activo",
+      "on_leave": "De permiso",
+      "suspended": "Suspendido",
+      "terminated": "Finalizado"
+    },
+    "asOf": {
+      "title": "Asignación vigente",
+      "dateLabel": "Fecha de vigencia",
+      "refusalTitle": "Resolución rechazada"
+    },
+    "assignments": {
+      "title": "Asignaciones",
+      "jobTitle": "Puesto",
+      "department": "Departamento",
+      "fte": "ETC",
+      "primary": "Principal",
+      "primaryYes": "Principal",
+      "effective": "Vigencia",
+      "recorded": "Registrado",
+      "empty": "Ninguna asignación cubre esta fecha."
+    },
+    "noRecord": {
+      "title": "Sin registro de empleo",
+      "description": "Esta persona aún no tiene registro de empleo. Los registros de empleo se crean mediante el flujo de autoría de RR. HH."
+    },
+    "multiple": {
+      "title": "Más de un registro de empleo",
+      "description": "{count} registros de empleo nombran a esta persona. El registro no puede elegirse automáticamente: resuelva los duplicados antes de leer el estado a fecha."
+    },
+    "changeRequests": {
+      "title": "Solicitudes de cambio",
+      "status": "Estado",
+      "binding": "Vinculación",
+      "bindingValue": "Revisión de solicitud {request} frente a revisión de empleo {expected}",
+      "submitted": "Enviada",
+      "viewInApprovals": "Ver en aprobaciones",
+      "noRun": "Borrador: aún no hay ejecución de aprobación.",
+      "empty": "Aún no hay solicitudes de cambio.",
+      "statusNames": {
+        "draft": "Borrador",
+        "pending_approval": "Pendiente de aprobación",
+        "approved": "Aprobada",
+        "rejected": "Rechazada",
+        "withdrawn": "Retirada",
+        "applied": "Aplicada"
+      }
+    }
+  }
+}

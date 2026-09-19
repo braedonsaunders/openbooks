@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "人力资源",
+    "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。",
+    "tabs": {
+      "overview": "概览"
+    },
+    "vitals": {
+      "headcount": "人员数量",
+      "headcountSub": "截至 {date}",
+      "employers": "雇主",
+      "employersSub": "{count, plural, other {# 家子公司}}",
+      "departments": "部门",
+      "departmentsSub": "{count, plural, other {# 个部门}}"
+    },
+    "groups": {
+      "title": "按雇主和部门统计的人员数量",
+      "employer": "雇主",
+      "department": "部门",
+      "headcount": "人员数量",
+      "unassigned": "未分配",
+      "empty": "截至 {date} 没有在职的雇用。",
+      "total": "合计"
+    },
+    "directory": {
+      "title": "名录"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "雇用阶段",
+      "status": "状态",
+      "effective": "生效",
+      "recorded": "记录",
+      "present": "至今",
+      "empty": "尚未记录任何雇用版本。"
+    },
+    "status": {
+      "offered": "已录用",
+      "active": "在职",
+      "on_leave": "休假中",
+      "suspended": "停职",
+      "terminated": "已离职"
+    },
+    "asOf": {
+      "title": "生效的岗位分配",
+      "dateLabel": "生效日期",
+      "refusalTitle": "解析被拒绝"
+    },
+    "assignments": {
+      "title": "岗位分配",
+      "jobTitle": "职位名称",
+      "department": "部门",
+      "fte": "全职当量",
+      "primary": "主要",
+      "primaryYes": "主要岗位",
+      "effective": "生效",
+      "recorded": "记录",
+      "empty": "没有岗位分配覆盖此日期。"
+    },
+    "noRecord": {
+      "title": "没有雇用记录",
+      "description": "此人尚无雇用记录。雇用记录通过人力资源编制流程创建。"
+    },
+    "multiple": {
+      "title": "存在多条雇用记录",
+      "description": "{count} 条雇用记录指向此人。无法自动选择记录——请先解决重复项，再读取时点状态。"
+    },
+    "changeRequests": {
+      "title": "变更申请",
+      "status": "状态",
+      "binding": "绑定",
+      "bindingValue": "申请修订 {request}（对应雇用修订 {expected}）",
+      "submitted": "已提交",
+      "viewInApprovals": "在审批中查看",
+      "noRun": "草稿——尚无审批流程。",
+      "empty": "尚无变更申请。",
+      "statusNames": {
+        "draft": "草稿",
+        "pending_approval": "待审批",
+        "approved": "已批准",
+        "rejected": "已拒绝",
+        "withdrawn": "已撤回",
+        "applied": "已应用"
+      }
+    }
+  }
+}
