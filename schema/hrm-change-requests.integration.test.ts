@@ -92,21 +92,25 @@ type Harness = {
   cleanupOrgs: string[];
 };
 
-let harness: Harness | null = null;
+// One harness per top-level test. The pooled fixture lifecycle resets and
+// releases a leased scratch org at every top-level test boundary, so a
+// harness memoized across tests would keep ids for rows that no longer
+// exist (the first run of this file failed every test after the first with
+// "Key is not present in table worker_employments"). Each test therefore
+// leases its own org and drops it in its own after-hook; the suite-level
+// hook only drains anything a test failed to register.
+const harnesses: Harness[] = [];
 
-// Suite-level teardown: every scratch org leased by any test in this file
-// is released exactly once, no matter which test built the harness first.
-// With rollback containment there are no committed request rows to fight
-// the immutable-evidence triggers on the way out.
 after(async () => {
-  if (!harness) return;
   const [{ dropScratchOrgReporting }] = await import("../engine/src/test-fixtures.ts");
-  for (const id of harness.cleanupOrgs) await dropScratchOrgReporting(id);
-  harness = null;
+  for (const h of harnesses.splice(0)) for (const id of h.cleanupOrgs.splice(0)) await dropScratchOrgReporting(id);
 });
 
-async function ctx(_t?: unknown): Promise<Harness> {
-  if (!harness) {
+type TestAfter = { after?: (fn: () => Promise<void>) => void };
+
+async function ctx(t?: unknown): Promise<Harness> {
+  let harness: Harness;
+  {
     const [{ db }, { createScratchOrg, createScratchUser }] = await Promise.all([
       import("../engine/src/db.ts"),
       import("../engine/src/test-fixtures.ts"),
@@ -141,6 +145,16 @@ async function ctx(_t?: unknown): Promise<Harness> {
       secondEmploymentId,
       cleanupOrgs: [org.orgId],
     };
+  }
+  harnesses.push(harness);
+  const hook = (t as TestAfter | undefined)?.after;
+  if (typeof hook === "function") {
+    hook.call(t, async () => {
+      const [{ dropScratchOrgReporting }] = await import("../engine/src/test-fixtures.ts");
+      for (const id of harness.cleanupOrgs.splice(0)) await dropScratchOrgReporting(id);
+      const at = harnesses.indexOf(harness);
+      if (at >= 0) harnesses.splice(at, 1);
+    });
   }
   return harness;
 }
