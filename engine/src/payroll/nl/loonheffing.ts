@@ -1,4 +1,11 @@
+import { toCents } from "../../money.ts";
 import { PayrollError } from "../../payroll-error.ts";
+import {
+  certificateAmount,
+  certificateChoice,
+  certificateFlag,
+  type ResolvedCertificate,
+} from "../certificates.ts";
 import type {
   PayrollStatutoryComputeContext,
 } from "../statutory-context.ts";
@@ -46,11 +53,22 @@ import {
 // Exact decimal parsing
 // ---------------------------------------------------------------------------
 
+/**
+ * Pipeline money → eurocents through the ledger's own boundary (money.ts
+ * `toCents`, the pack-interface contract on `PayrollStatutoryComputeContext`).
+ * Accepts every shape the pipeline emits — "0.0000" included — and rounds a
+ * sub-cent fraction half-up to the cent ("rekenkundig", the publications'
+ * own word for their per-step rounding). Negatives are refused by name: the
+ * loonheffing bases are non-negative by construction.
+ */
 function parseCents(value: string, what: string): bigint {
-  const raw = value.trim();
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(raw);
-  if (!m) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
-  const cents = BigInt(m[1]!) * 100n + BigInt((m[2] ?? "") + "00".slice(0, 2 - (m[2] ?? "").length));
+  let cents: bigint;
+  try {
+    cents = toCents(value);
+  } catch {
+    throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+  }
+  if (cents < 0n) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
   return cents;
 }
 
@@ -440,16 +458,21 @@ function finishCalculation(args: {
 /**
  * Phase 9 — NL pack statutory pass (Rekenvoorschriften 2026).
  *
- * Declared inputs arrive on the employee/run records — no generic-layer
- * channel carries them, so no FLEET-PROPOSE is needed:
+ * Every per-employee input arrives through the pack's own declared
+ * certificates (`./certificates.ts`), read with the generic typed readers —
+ * the same channel the DE ELStAM and FR PAS answers travel. Nothing is read
+ * off `employee_payroll_profiles` columns: no column carries an NL fact, so
+ * this wiring needs no profile migration, no API branch and no UI edit that
+ * names the country:
  *
- * - `nl_age_class`: "under_aow" (default), "aow_1945" or "aow_1946";
- * - the loonheffingskorting election from the `nl_loonheffingen` certificate
- *   (`apply_loonheffingskorting`; absent form means not applied);
- * - `nl_awf_low` / `nl_aof_high` ("true"/"false", required when SV base > 0);
- * - `nl_whk_percent` (the beschikking percentage, required when SV base > 0);
- * - `nl_aok_apply`, `nl_jgk_apply` ("true" to elect);
- * - `nl_sv_wage_ytd` (declared cumulative SV wage, default 0).
+ * - `nl_loonheffingen` (the opgaaf): `apply_loonheffingskorting` (absent form
+ *   means not applied), `age_class` ("under_aow" default, "aow_1945" or
+ *   "aow_1946"), `aok_apply` / `jgk_apply` (elected kortingen);
+ * - `nl_premies` (the employer's SV administration): `awf_laag` /
+ *   `aof_hoog` (no defaults — required when the SV base prices above zero),
+ *   `whk_percent` (the beschikking percentage, no lawful default — required
+ *   when the SV base prices above zero), `sv_loon_ytd` (declared cumulative
+ *   SV wage, default 0).
  *
  * The SV-loon (`insurable`) defaults to the loonheffing wage when the
  * pipeline supplies none; stated here, not guessed per employee.
@@ -457,26 +480,31 @@ function finishCalculation(args: {
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { region, taxYear, periodsPerYear: P, income, nonPeriodic, insurable, emp, pushStatutory, bool, assertRegionSupported, certificateFor } = ctx;
+  const { region, taxYear, periodsPerYear: P, income, nonPeriodic, insurable, pushStatutory, assertRegionSupported, certificateFor } = ctx;
   assertRegionSupported(region);
   nlRatesForTaxYear(taxYear);
 
-  const certificate = certificateFor("nl_loonheffingen");
-  const applyKorting = certificate === null
-    ? false
-    : bool(certificate.answers["apply_loonheffingskorting"] ?? null);
-
-  const ageRaw = emp.nl_age_class ?? null;
-  const ageClass: NlAgeClass = ageRaw === null || ageRaw === ""
+  const opgaaf = certificateFor("nl_loonheffingen");
+  const applyKorting = opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
+  const ageClass: NlAgeClass = opgaaf === null
     ? "under_aow"
-    : ageRaw as NlAgeClass;
+    : (certificateChoice(opgaaf, "age_class") ?? "under_aow") as NlAgeClass;
+  const aokApply = opgaaf === null ? false : certificateFlag(opgaaf, "aok_apply");
+  const jgkApply = opgaaf === null ? false : certificateFlag(opgaaf, "jgk_apply");
 
-  const flag = (value: string | null | undefined): boolean | null => {
-    if (value === null || value === undefined || value === "") return null;
-    return bool(value);
+  const premies = certificateFor("nl_premies");
+  // A flag answer is only meaningful when actually answered: the SV legs
+  // below distinguish "hoge premie" (false) from "undeclared" (null, refused
+  // when the base prices). The typed reader cannot see that difference, so
+  // presence is read off the resolved answers first.
+  const flagOrNull = (resolved: ResolvedCertificate | null, key: string): boolean | null => {
+    const raw = resolved?.answers[key] ?? null;
+    if (raw === null || raw === "") return null;
+    if (resolved === null) return null;
+    return certificateFlag(resolved, key);
   };
-
-  const whkRaw = emp.nl_whk_percent ?? null;
+  const whkRaw = premies?.answers["whk_percent"] ?? null;
+  const ytdRaw = premies?.answers["sv_loon_ytd"] ?? null;
 
   const result = calculateNlStatutory({
     income,
@@ -484,12 +512,16 @@ export async function computeNlStatutory(
     applyKorting,
     ageClass,
     svWage: insurable === "" ? null : insurable,
-    svWageYtd: emp.nl_sv_wage_ytd ?? null,
-    awfLow: flag(emp.nl_awf_low),
-    aofHigh: flag(emp.nl_aof_high),
-    whkPercent: whkRaw === "" ? null : whkRaw,
-    aokApply: flag(emp.nl_aok_apply) === true,
-    jgkApply: flag(emp.nl_jgk_apply) === true,
+    svWageYtd: ytdRaw === null || ytdRaw === ""
+      ? null
+      : premies === null ? null : certificateAmount(premies, "sv_loon_ytd"),
+    awfLow: flagOrNull(premies, "awf_laag"),
+    aofHigh: flagOrNull(premies, "aof_hoog"),
+    whkPercent: whkRaw === null || whkRaw === ""
+      ? null
+      : premies === null ? null : certificateAmount(premies, "whk_percent"),
+    aokApply,
+    jgkApply,
     nonPeriodic,
   });
 

@@ -433,6 +433,123 @@ export function certificateDeclarationProblem(certificate: PayrollCertificate): 
   return null;
 }
 
+/**
+ * Why a set of answers is not storable against a certificate declaration, or
+ * null. The WRITE half of the typed readers below: the certificates API and
+ * any other entry surface validate here, so an answer the declaration does
+ * not admit is refused before it is stored — never stored where no engine
+ * reads it, and never read back as a surprise.
+ *
+ * Mirrors `resolveCertificate`'s precedence: an absent or empty answer falls
+ * back to the field's declared default at read time, so it is only a problem
+ * when the field is required AND declares no default. Stored answers stay
+ * canonical ("true"/"false" for flags, the field's decimal scale for
+ * amounts): the readers accept legacy spellings, the writer does not mint
+ * them.
+ */
+export function certificateAnswersProblem(
+  certificate: PayrollCertificate,
+  answers: Record<string, unknown>,
+): string | null {
+  if (answers === null || typeof answers !== "object" || Array.isArray(answers)) {
+    return "answers must be an object keyed by field key";
+  }
+  const byKey = new Map(certificate.fields.map((field) => [field.key, field]));
+  for (const key of Object.keys(answers)) {
+    if (!byKey.has(key)) {
+      return `"${key}" is not a field of ${certificate.form} — it declares `
+        + (certificate.fields.map((field) => field.key).join(", ") || "no fields");
+    }
+  }
+  for (const field of certificate.fields) {
+    const raw = answers[field.key];
+    if (raw === undefined || raw === null || raw === "") {
+      if (field.required && field.default == null) return `"${field.key}" is required on ${certificate.form}`;
+      continue;
+    }
+    if (typeof raw !== "string") return `"${field.key}" must be a string answer`;
+    const value = raw.trim();
+    if (value === "") {
+      if (field.required && field.default == null) return `"${field.key}" is required on ${certificate.form}`;
+      continue;
+    }
+    const problem = fieldAnswerProblem(certificate, field, value);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+/** Compare two same-scale decimal strings without floating point. */
+function compareScaled(a: string, b: string): number {
+  const norm = (s: string): { neg: boolean; whole: string; frac: string } => {
+    const neg = s.startsWith("-");
+    const unsigned = neg ? s.slice(1) : s;
+    const [whole = "0", frac = ""] = unsigned.split(".");
+    return { neg, whole: whole.replace(/^0+(?=\d)/, ""), frac };
+  };
+  const x = norm(a);
+  const y = norm(b);
+  if (x.neg !== y.neg) return x.neg ? -1 : 1;
+  const xa = x.whole.padStart(y.whole.length, "0");
+  const ya = y.whole.padStart(x.whole.length, "0");
+  // Same-width whole parts and same-scale fracs: digit strings compare
+  // lexicographically exactly as the numbers compare.
+  const xs = xa + x.frac;
+  const ys = ya + y.frac;
+  const order = xs < ys ? -1 : xs > ys ? 1 : 0;
+  return x.neg ? -order : order;
+}
+
+function fieldAnswerProblem(
+  certificate: PayrollCertificate,
+  field: PayrollCertificateField,
+  value: string,
+): string | null {
+  const at = `${certificate.form} · ${field.label}`;
+  if (field.kind === "choice") {
+    if (!field.choices!.some((choice) => choice.value === value)) {
+      return `${at}: "${value}" is not one of `
+        + field.choices!.map((choice) => choice.value).join(", ");
+    }
+    return null;
+  }
+  if (field.kind === "flag") {
+    if (value !== "true" && value !== "false") {
+      return `${at}: "${value}" is not "true" or "false"`;
+    }
+    return null;
+  }
+  if (field.kind === "count") {
+    if (!/^\d+$/.test(value)) return `${at}: "${value}" is not a whole count`;
+    const count = Number(value);
+    if (field.min != null && count < Number(field.min)) return `${at}: ${count} is below the declared minimum ${field.min}`;
+    if (field.max != null && count > Number(field.max)) return `${at}: ${count} is above the declared maximum ${field.max}`;
+    return null;
+  }
+  if (field.kind === "amount") {
+    let canonical: string;
+    try {
+      canonical = normalizeDecimal(value, field.decimals!);
+    } catch {
+      return `${at}: "${value}" is not a decimal at up to ${field.decimals} places`;
+    }
+    // Bounds compare at the declared scale: normalize the bound the same
+    // way so "10" and "10.00" compare equal.
+    if (field.min != null) {
+      const bound = normalizeDecimal(field.min, field.decimals!);
+      if (compareScaled(canonical, bound) < 0) return `${at}: ${value} is below the declared minimum ${field.min}`;
+    }
+    if (field.max != null) {
+      const bound = normalizeDecimal(field.max, field.decimals!);
+      if (compareScaled(canonical, bound) > 0) return `${at}: ${value} is above the declared maximum ${field.max}`;
+    }
+    return null;
+  }
+  // `code`: the answer IS the jurisdiction/member code — free text, nonempty
+  // (emptiness is "unanswered" and handled above).
+  return null;
+}
+
 function fieldDeclarationProblem(field: PayrollCertificateField): string | null {
   if (!field.help) return "every certificate field needs help text — the operator is reading a "
     + "tax form they did not write";

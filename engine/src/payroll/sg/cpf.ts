@@ -1,3 +1,4 @@
+import { toCents } from "../../money.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import type {
   PayrollStatutoryComputeContext,
@@ -33,11 +34,21 @@ import {
 // Exact parsing
 // ---------------------------------------------------------------------------
 
+/**
+ * Pipeline money → cents through the ledger's own boundary (money.ts
+ * `toCents`, the pack-interface contract on `PayrollStatutoryComputeContext`).
+ * Accepts every shape the pipeline emits — "0.0000" included — and rounds a
+ * sub-cent fraction half-up to the cent. Negatives are refused by name.
+ */
 function parseCents(value: string, what: string): bigint {
-  const raw = value.trim();
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(raw);
-  if (!m) throw new PayrollError(`the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
-  return BigInt(m[1]!) * 100n + BigInt((m[2] ?? "") + "00".slice(0, 2 - (m[2] ?? "").length));
+  let cents: bigint;
+  try {
+    cents = toCents(value);
+  } catch {
+    throw new PayrollError(`the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+  }
+  if (cents < 0n) throw new PayrollError(`the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+  return cents;
 }
 
 /** Canonical numeric(19,4) from cents, matching the CA/US factor format. */

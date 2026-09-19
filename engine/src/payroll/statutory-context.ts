@@ -106,6 +106,22 @@ export interface PayrollStatutoryComputeContext {
   periodsPerYear: number;
   /** Employee headcount of the paying employer, isolated to its legal entity. */
   employerEmployeeCount?: number;
+  /**
+   * THE MONEY CONTRACT. Every amount below is the ledger's canonical
+   * numeric(19,4) decimal string (engine/src/money.ts `toUnits`/`fromUnits`):
+   * up to 4 decimal places, trailing zeros included, plain integers accepted
+   * ("0.0000", "999.0000", "0", "0.00" are all legal money; "" is not money —
+   * it means absent, and only `insurable`/`nonPeriodic` admit it).
+   *
+   * `calculateStub` sums earning lines with money.ts `sum`, so these ALWAYS
+   * arrive at 4 decimals — even "0.0000" for an empty base. A pack MUST parse
+   * them with money.ts (`toUnits`, or `toCents` for cent-based publications)
+   * and MUST NOT use its own 1-or-2-decimal regex: that shape refuses the
+   * pipeline's canonical output and no Dutch employee gets paid. Sub-cent
+   * fractions round half-up to the cent through `toCents` unless the
+   * publication states its own boundary rule (BR truncates per
+   * BR_2026_ROUNDING, stated there).
+   */
   income: string;
   nonPeriodic: string;
   pensionable: string;
