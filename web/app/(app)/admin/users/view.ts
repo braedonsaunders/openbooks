@@ -60,6 +60,8 @@ export interface AdminUsersData {
     actions: string
     you: string
     unassignedRole: string
+    linkedPerson: string
+    unlinkedPerson: string
   }
   total: number
   currentPage: number
@@ -109,12 +111,17 @@ export async function loadAdminUsers(
       is_active: boolean
       last_login_at: string | null
       is_pending: boolean
+      party_id: string | null
+      party_name: string | null
+      party_kind: string | null
     }>(sql`
       select u.id, u.name, u.email, u.is_active, u.last_login_at,
              (u.is_active and u.last_login_at is null
               and exists (select 1 from auth_password_resets r
-                           where r.user_id = u.id and r.used_at is null and r.expires_at > now())) as is_pending
+                           where r.user_id = u.id and r.used_at is null and r.expires_at > now())) as is_pending,
+             u.party_id, p.display_name as party_name, p.kind as party_kind
         from users u
+        left join parties p on p.id = u.party_id and p.org_id = u.org_id
        where ${where}
        order by ${orderBy}
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`),
@@ -185,6 +192,9 @@ export async function loadAdminUsers(
       statusVariant: u.is_pending ? 'warning' : u.is_active ? 'success' : 'destructive',
       lastSignIn: u.last_login_at ? dateTime(u.last_login_at, locale) : '—',
       assigned: rolesByUser.get(u.id) ?? [],
+      partyId: u.party_id,
+      partyName: u.party_name,
+      partyKind: u.party_kind,
     })),
     allRoles: allRoles.map((r) => ({ id: r.id, name: r.name, isBuiltIn: r.is_built_in })),
     labels: {
@@ -196,6 +206,8 @@ export async function loadAdminUsers(
       actions: tCommon('labels.actions'),
       you: t('you'),
       unassignedRole: t('unassignedRole'),
+      linkedPerson: t('table.linkedPerson'),
+      unlinkedPerson: t('unlinkedPerson'),
     },
     total,
     currentPage: listParams.page,
