@@ -785,6 +785,16 @@ export function PartyDrawer({
       confirmLabel: next ? t('activate') : t('deactivate'),
     })
     if (!reason) return
+    // Activating is a drawer submit too: an operator who picks a subsidiary
+    // and then activates without a prior save must not lose the choice —
+    // the party would stay org-wide (NULL) and every later payroll-profile
+    // default would fall through to the root entity's country. Only an
+    // EXPLICIT choice rides along, never the root default, so activating an
+    // org-wide party cannot silently re-scope it. Deactivation carries
+    // status only.
+    const initialSubsidiaryId = p.subsidiary_id ?? rootSubsidiaryId
+    const activateCarriesSubsidiary =
+      next && multiSubsidiary && subsidiaryId !== initialSubsidiaryId
     await execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
@@ -794,6 +804,12 @@ export function PartyDrawer({
             isActive: next,
             expectedUpdatedAt: p.updated_at,
             changeReason: reason,
+            ...(activateCarriesSubsidiary
+              ? {
+                  subsidiaryId: subsidiaryId || null,
+                  additionalSubsidiaryIds: [...additionalSubsidiaryIds].filter((id) => id !== subsidiaryId),
+                }
+              : {}),
           }),
         }),
       {
