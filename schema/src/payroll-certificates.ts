@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { workerEmployments } from "./hrm";
 
 /**
  * An employee's answers on a PACK-DECLARED tax certificate — the form they file
@@ -39,6 +40,8 @@ export const employeeTaxCertificates = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     /** Country pack that declares the certificate. */
     country: text("country").notNull(),
     /** The pack's own certificate key ("us_ca_de4", "ca_td1_ON"). */
@@ -56,6 +59,12 @@ export const employeeTaxCertificates = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "employee_tax_certificates_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("employee_tax_certificates_employment").on(t.orgId, t.employmentId),
     // One CURRENT certificate per employee per jurisdiction point. Two would
     // make "what did this employee answer?" ambiguous, and an ambiguous
     // withholding election is wrong money that changes answer between queries.

@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -12,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
+import { workerEmployments } from "./hrm";
 
 /**
  * Entitlement plans — the ONE mechanism behind every employee "pay bank":
@@ -164,6 +166,13 @@ export const entitlementPlanLimits = pgTable(
     orgId: orgRef(),
     planId: uuid("plan_id").notNull(),
     employeePartyId: uuid("employee_party_id"),
+    /**
+     * HRM employment link (0186): set ONLY on person-scope rows
+     * (employee_party_id IS NOT NULL — enforced by
+     * entitlement_plan_limits_employment_scope in the migration).
+     * Null = not yet stamped or a non-person scope, never "no employment".
+     */
+    employmentId: uuid("employment_id"),
     jobTitle: text("job_title"),
     tradeId: uuid("trade_id"),
     departmentId: uuid("department_id"),
@@ -176,6 +185,12 @@ export const entitlementPlanLimits = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "entitlement_plan_limits_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("entitlement_plan_limits_employment").on(t.orgId, t.employmentId),
     index("entitlement_plan_limits_plan").on(t.orgId, t.planId, t.effectiveFrom),
     index("entitlement_plan_limits_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
     index("entitlement_plan_limits_job_title").on(t.orgId, t.jobTitle, t.effectiveFrom),
@@ -303,6 +318,8 @@ export const entitlementLedger = pgTable(
     orgId: orgRef(),
     planId: uuid("plan_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     movementDate: date("movement_date").notNull(),
     amount: money("amount").notNull(),
     hours: numeric("hours", { precision: 12, scale: 2 }),
@@ -315,6 +332,12 @@ export const entitlementLedger = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "entitlement_ledger_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("entitlement_ledger_employment").on(t.orgId, t.employmentId),
     index("entitlement_ledger_plan_employee").on(
       t.orgId, t.planId, t.employeePartyId, t.movementDate,
     ),
