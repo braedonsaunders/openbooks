@@ -24,6 +24,7 @@ const ASSISTANT_TOOL_FILES = [
   "./tools-construction.ts",
   "./tools-files.ts",
   "./tools-payroll.ts",
+  "./tools-hrm.ts",
   "./tools-projects.ts",
   "./tools-reports.ts",
   "./tools-setup.ts",
