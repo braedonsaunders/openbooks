@@ -327,4 +327,24 @@ test('profiles GET serves every declared certificate plus stored rows for prefil
   }
 })
 
+test('filing for a missing employee names the employee id', { skip: !DB }, async () => {
+  // The refusal was 'employee is not available' — no id, no remedy. It must
+  // name the employee it was given and what to do instead.
+  const { org } = await setup()
+  try {
+    const missing = randomUUID()
+    const response = await post({
+      employeePartyId: missing, country: 'GB', certificateKey: 'gb_tax_code_notice',
+      answers: { tax_code: '1257L' },
+    })
+    assert.equal(response.status, 422, await response.clone().text())
+    assert.match(
+      ((await response.json()) as { error: string }).error,
+      new RegExp(`no employee "${missing}" in this organization`),
+    )
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test.after(async () => { await pool.end() })
