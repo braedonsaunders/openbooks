@@ -191,6 +191,7 @@ const ROW: RemittanceRow = {
   component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",
   system_key: "qpip", country: "CA", remittance_party_id: null, liability_account_id: "liab-1",
   filing_account_id: ACCOUNT.id, filingUnknown: false, province: "QC", amount: "100.00",
+  subsidiary_id: "sub-1", currency: "CAD", sliceAmount: "100.00",
 };
 
 test("grouping carries each group's schedule provenance", () => {

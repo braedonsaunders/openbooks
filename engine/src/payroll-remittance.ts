@@ -41,8 +41,12 @@ type RemittanceExecutor = Pick<typeof db, "execute">;
  * (the component's remittance party — union funds set theirs on their
  * auto-provisioned components; CA statutory components fall back to the org's
  * CRA remittance vendor) AND by the employees' payroll filing account, and
- * materializes ONE vendor bill per (destination, filing account) that DEBITS
- * the liability accounts. The bill then rides the normal AP review/post/pay
+ * materializes one vendor bill per (destination, filing account, legal
+ * entity) that DEBITS the liability accounts. A group spanning several
+ * entities splits into one bill per entity — each stamped with the entity
+ * whose books credited its accruals, in that entity's currency — because a
+ * bill debiting entity A's books can never clear liabilities credited on
+ * entity B's. The bill then rides the normal AP review/post/pay
  * machinery — payroll never grows a second payment path.
  *
  * Grouping by filing account is what makes a multi-account employer correct: a
@@ -63,6 +67,35 @@ export interface RemittanceComponentLine {
   amount: string;
 }
 
+/**
+ * One legal entity's share of a remittance group, in that entity's own
+ * currency. A group stays keyed (destination, filing account) with
+ * consolidated totals for the PD7A worksheet; the slices are the WRITE path —
+ * a vendor bill is a single-entity AP document, so the bill creator raises
+ * one bill per slice, stamped with the slice's subsidiary and currency.
+ * Slice amounts are native accrual units (never translated): every stub in a
+ * slice accrues in its entity's currency, so the slice total is what the
+ * bill debits, to the cent.
+ */
+export interface RemittanceEntitySlice {
+  /** The entity whose books credited these accruals. Never null: a bill
+   *  cannot be stamped without a legal entity, so accruals with no source
+   *  entity stay in the consolidated group only and refuse at bill time. */
+  subsidiaryId: string;
+  /** Display name for operators choosing which entity's bill to raise. */
+  subsidiaryName: string | null;
+  /** The entity's base currency — the bill's currency. */
+  currency: string;
+  /** This entity's component lines in native units. */
+  components: RemittanceComponentLine[];
+  /** This entity's share in native units. */
+  total: string;
+  /** Live bills already raised that may cover this slice: exact
+   *  subsidiary-marker matches plus legacy bills with no entity marker
+   *  (which covered the consolidated group and fail closed at bill time). */
+  existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
+}
+
 export interface RemittanceGroup {
   partyId: string | null;
   partyName: string | null;
@@ -76,6 +109,14 @@ export interface RemittanceGroup {
    * group must render as unfiled/unknown rather than as an attributed filer.
    */
   hasUnknownFilingAccount: boolean;
+  /**
+   * True when any accrual in the group comes from a source with no legal
+   * entity (a pay run document with no subsidiary). That money stays in the
+   * consolidated totals for visibility, but no bill may be raised from the
+   * group until it is attributed: a vendor bill cannot be stamped without
+   * an entity, and stamping the root would repeat this defect.
+   */
+  hasEntitylessAccruals: boolean;
   /**
    * The vendor settings keys that routed rows into this group (the pack or
    * regional declaration each row resolved through — never a jurisdiction).
@@ -101,6 +142,15 @@ export interface RemittanceGroup {
   provinces: string[];
   components: RemittanceComponentLine[];
   total: string;
+  /**
+   * Per-entity slices for the WRITE path — one entry per legal entity whose
+   * books credited the group's accruals, each in that entity's currency.
+   * The consolidated `components`/`total`/`grossPayroll`/`employeeCount`
+   * above are the READ path (the PD7A worksheet figure, per filing account)
+   * and are unchanged by slicing: do not derive worksheet figures from
+   * slices, and do not derive bills from the consolidated totals.
+   */
+  slices: RemittanceEntitySlice[];
   /** PD7A worksheet context: gross pay and employee count in the period,
    *  counted within this filing account (the PD7A is filed per account).
    *  Stated in the organization's base currency: a multi-currency scope is
@@ -267,7 +317,7 @@ async function mixedCurrencyAccruals(
       kind: "deduction" | "employer_contribution" | "credit";
       system_key: string | null; country: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
-      filingUnknown: boolean; province: string;
+      filingUnknown: boolean; province: string; subsidiary_id: string | null;
       currency: string; period_id: string; period_end: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
@@ -275,6 +325,7 @@ async function mixedCurrencyAccruals(
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
            s.province,
+           source_document.subsidiary_id,
            s.currency_code as currency,
            period.id as period_id, period.ends_on::text as period_end,
            sum(l.amount) as amount
@@ -294,6 +345,7 @@ async function mixedCurrencyAccruals(
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province,
+              source_document.subsidiary_id,
               s.currency_code, period.id, period.ends_on
      order by c.sequence, c.code
   `));
@@ -353,6 +405,12 @@ async function mixedCurrencyAccruals(
       filing_account_id: row.filing_account_id,
       filingUnknown: row.filingUnknown,
       province: row.province,
+      subsidiary_id: row.subsidiary_id,
+      currency: row.currency,
+      // Native units for the entity slice; translated units for the
+      // consolidated group. A credit nets against the destination in both
+      // readings, so the negation below applies to both.
+      sliceAmount: row.kind === "credit" ? neg(row.amount) : row.amount,
       amount: translate(row.amount, row.currency, row.period_id),
     }))
     .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
@@ -444,7 +502,8 @@ export async function payrollRemittanceSummary(
       kind: "deduction" | "employer_contribution" | "credit";
       system_key: string | null; country: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
-      filingUnknown: boolean; province: string; amount: string;
+      filingUnknown: boolean; province: string; subsidiary_id: string | null;
+      currency: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
            -- Historical accrual evidence only. Current component or statutory
@@ -453,6 +512,12 @@ export async function payrollRemittanceSummary(
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
            s.province,
+           -- The WRITE path's grouping dimension: which entity's books
+           -- credited the accrual, and in which currency. Splitting rows by
+           -- entity changes nothing consolidated — groupRemittanceRows folds
+           -- them back — so single-entity figures stay byte-identical.
+           source_document.subsidiary_id,
+           s.currency_code as currency,
            sum(l.amount) as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -463,7 +528,8 @@ export async function payrollRemittanceSummary(
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
-              l.liability_account_id, ${filingAccount}, s.province
+              l.liability_account_id, ${filingAccount}, s.province,
+              source_document.subsidiary_id, s.currency_code
      order by c.sequence, c.code
   `));
   // Internal accruals never remit, and each pack declares its own — so the
@@ -472,11 +538,17 @@ export async function payrollRemittanceSummary(
   // A `credit` row is money the employer reclaims from the destination, so it
   // nets AGAINST the group's withholdings (F24 compensation): the summary's
   // group total is what the employer actually sends, never the gross levy.
+  // The slice amount rides along natively: this path is single-currency, so
+  // it agrees with the consolidated amount by construction.
   rows = queried.rows
     .filter((row) =>
       row.system_key == null
       || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
     )
+    .map((row) => ({
+      ...row,
+      sliceAmount: row.kind === "credit" ? neg(row.amount) : row.amount,
+    }))
     .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
 
   const context = (await executor.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
@@ -535,8 +607,19 @@ export async function payrollRemittanceSummary(
   const resolveAccount = (row: (typeof rows)[number]): string | null =>
     row.liability_account_id;
 
+  // Slice labelling: every accrual names its entity, and the entity names
+  // its currency. Read from the same snapshot as the rows above.
+  const subsidiaryRows = (await executor.execute<{ id: string; name: string | null; currency: string | null }>(sql`
+    select id::text as id, name, base_currency as currency from subsidiaries
+     where org_id = ${orgId} and is_active
+  `));
+  const subsidiaries = new Map(
+    subsidiaryRows.rows.map((s) => [s.id, { name: s.name, currency: s.currency }]),
+  );
+
   const groups = groupRemittanceRows({
     rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
+    subsidiaries,
   });
 
   // One group, one destination, one schedule. Provenance first: rows that
@@ -578,10 +661,11 @@ export async function payrollRemittanceSummary(
   const bills = await executor.execute<{
       id: string; document_number: string; status: string; total: string;
       party_id: string | null; filing_account_id: string | null;
-      from: string | null; to: string | null;
+      subsidiary_id: string | null; from: string | null; to: string | null;
     }>(sql`
     select id, document_number, status, total, party_id,
            custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
+           custom->'payrollRemittance'->>'subsidiaryId' as subsidiary_id,
            custom->'payrollRemittance'->>'from' as from,
            custom->'payrollRemittance'->>'to' as to
       from documents
@@ -598,14 +682,28 @@ export async function payrollRemittanceSummary(
       component.accountLabel = component.liabilityAccountId
         ? (accountLabel.get(component.liabilityAccountId) ?? null) : null;
     }
-    group.existingBills = bills.rows
-      .filter((b) =>
-        b.from != null && b.to != null
-        && b.from <= range.to && b.to >= range.from
-        &&
-        groupKey(b.party_id ?? null, b.filing_account_id) ===
-          groupKey(group.partyId, group.filingAccount.id))
+    for (const slice of group.slices) {
+      for (const component of slice.components) {
+        component.accountLabel = component.liabilityAccountId
+          ? (accountLabel.get(component.liabilityAccountId) ?? null) : null;
+      }
+    }
+    const matched = bills.rows.filter((b) =>
+      b.from != null && b.to != null
+      && b.from <= range.to && b.to >= range.from
+      &&
+      groupKey(b.party_id ?? null, b.filing_account_id) ===
+        groupKey(group.partyId, group.filingAccount.id));
+    group.existingBills = matched
       .map((b) => ({ documentId: b.id, documentNumber: b.document_number, status: b.status, total: b.total }));
+    // Each slice sees its own bills plus legacy bills with no entity marker
+    // (which covered the consolidated group and may cover this slice — the
+    // bill creator fails closed on them rather than guessing).
+    for (const slice of group.slices) {
+      slice.existingBills = matched
+        .filter((b) => b.subsidiary_id == null || b.subsidiary_id === slice.subsidiaryId)
+        .map((b) => ({ documentId: b.id, documentNumber: b.document_number, status: b.status, total: b.total }));
+    }
   }
   return [...groups.values()].sort((a, b) =>
     (a.partyName ?? "￿").localeCompare(b.partyName ?? "￿")
@@ -634,11 +732,13 @@ export async function assertPayrollRemittanceBillCurrent(
     from: string | null;
     to: string | null;
     filing_account_id: string | null;
+    subsidiary_id: string | null;
   }>(sql`
     select party_id::text as party_id, total::text as total,
            custom->'payrollRemittance'->>'from' as from,
            custom->'payrollRemittance'->>'to' as to,
-           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
+           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
+           custom->'payrollRemittance'->>'subsidiaryId' as subsidiary_id
       from documents
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
@@ -676,11 +776,13 @@ export async function assertPayrollRemittanceBillCurrent(
     from: string | null;
     to: string | null;
     filing_account_id: string | null;
+    subsidiary_id: string | null;
   }>(sql`
     select party_id::text as party_id, total::text as total,
            custom->'payrollRemittance'->>'from' as from,
            custom->'payrollRemittance'->>'to' as to,
-           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
+           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
+           custom->'payrollRemittance'->>'subsidiaryId' as subsidiary_id
       from documents
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
@@ -704,7 +806,13 @@ export async function assertPayrollRemittanceBillCurrent(
       "payroll remittance source is no longer committed; regenerate this bill",
     );
   }
-  if (cmp(group.total, locked.total) !== 0) {
+  // An entity-stamped bill reconciles against its own slice (native units);
+  // a legacy bill with no entity marker reconciles against the consolidated
+  // group exactly as before.
+  const expected = locked.subsidiary_id
+    ? group.slices.find((slice) => slice.subsidiaryId === locked.subsidiary_id)?.total ?? null
+    : group.total;
+  if (expected == null || cmp(expected, locked.total) !== 0) {
     throw new PayrollError(
       "payroll remittance bill no longer matches committed payroll; regenerate this bill",
     );
@@ -733,6 +841,21 @@ export type RemittanceRow = {
   /** True when any stub behind the row never had its filing account attributed. */
   filingUnknown: boolean;
   province: string;
+  /**
+   * The legal entity whose books credited this accrual — the pay run
+   * document's subsidiary. Null only for legacy rows that predate entity
+   * pinning; such money stays consolidated and refuses at bill time.
+   */
+  subsidiary_id: string | null;
+  /** The stub's accrual currency (its entity's currency in practice). */
+  currency: string;
+  /**
+   * This row's contribution to its ENTITY slice in native units. The `amount`
+   * above is the consolidated contribution (translated to the org base in a
+   * mixed-currency scope, native otherwise); the two agree whenever the
+   * scope is single-currency. Bills sum `sliceAmount`, never `amount`.
+   */
+  sliceAmount: string;
   amount: string;
 };
 
@@ -769,10 +892,20 @@ export function groupRemittanceRows(input: {
    * shape; absent means no provenance, and no group carries a schedule key.
    */
   resolveVendorKey?: (row: RemittanceRow) => string | null;
+  /**
+   * The org's subsidiaries for slice labelling. Optional so existing callers
+   * keep their shape; absent means slices carry the stub currency and a null
+   * name, and the bill creator — which always resolves authoritatively
+   * inside its own transaction — refuses what it cannot stamp.
+   */
+  subsidiaries?: Map<string, { name: string | null; currency: string | null }>;
 }): Map<string, RemittanceGroup> {
   const groups = new Map<string, RemittanceGroup>();
   const provincesByGroup = new Map<string, Set<string>>();
   const vendorKeysByGroup = new Map<string, Set<string>>();
+  const slicesByGroup = new Map<string, Map<string, {
+    components: RemittanceComponentLine[]; total: string; currencies: Set<string>;
+  }>>();
   for (const row of input.rows) {
     if (cmp(row.amount, "0") === 0) continue;
     const partyId = input.resolveParty(row);
@@ -782,10 +915,12 @@ export function groupRemittanceRows(input: {
       partyId, partyName: null,
       filingAccount: filingAccountRef(row.filing_account_id, input.filingAccounts),
       hasUnknownFilingAccount: false,
+      hasEntitylessAccruals: false,
       vendorKeys: [],
       schedule: null,
       provinces: [],
       components: [], total: "0",
+      slices: [],
       grossPayroll: runContext?.gross ?? "0",
       employeeCount: runContext?.employees ?? 0,
       existingBills: [],
@@ -807,6 +942,36 @@ export function groupRemittanceRows(input: {
       });
     }
     group.total = add(group.total, row.amount);
+    // The WRITE path folds the same rows a second time, by legal entity, in
+    // native units. Rows with no source entity stay consolidated only: no
+    // bill can be stamped without an entity, so the creator refuses the
+    // group while `hasEntitylessAccruals` is set.
+    if (row.subsidiary_id == null) {
+      group.hasEntitylessAccruals = true;
+    } else {
+      const slices = slicesByGroup.get(key) ?? new Map<string, {
+        components: RemittanceComponentLine[]; total: string; currencies: Set<string>;
+      }>();
+      const slice = slices.get(row.subsidiary_id) ?? {
+        components: [], total: "0", currencies: new Set<string>(),
+      };
+      const sliceExisting = slice.components.find(
+        (component) => component.componentId === row.component_id && component.kind === row.kind,
+      );
+      if (sliceExisting) {
+        sliceExisting.amount = add(sliceExisting.amount, row.sliceAmount);
+      } else {
+        slice.components.push({
+          componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
+          systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
+          accountLabel: null, amount: row.sliceAmount,
+        });
+      }
+      slice.total = add(slice.total, row.sliceAmount);
+      slice.currencies.add(row.currency);
+      slices.set(row.subsidiary_id, slice);
+      slicesByGroup.set(key, slices);
+    }
     groups.set(key, group);
     const provinces = provincesByGroup.get(key) ?? new Set<string>();
     provinces.add(row.province);
@@ -821,16 +986,44 @@ export function groupRemittanceRows(input: {
   for (const [key, group] of groups) {
     group.provinces = [...(provincesByGroup.get(key) ?? [])].sort();
     group.vendorKeys = [...(vendorKeysByGroup.get(key) ?? [])].sort();
+    group.slices = [...(slicesByGroup.get(key) ?? [])]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([subsidiaryId, slice]) => {
+        const known = input.subsidiaries?.get(subsidiaryId);
+        const native = [...slice.currencies].sort();
+        return {
+          subsidiaryId,
+          subsidiaryName: known?.name ?? null,
+          // The entity's own base currency when known; otherwise the stubs'
+          // single currency when they agree. The bill creator re-resolves
+          // this authoritatively and refuses anything it cannot stamp.
+          currency: known?.currency ?? (native.length === 1 ? native[0]! : ""),
+          components: slice.components,
+          total: slice.total,
+          existingBills: [],
+        };
+      });
   }
   return groups;
 }
 
-/** Bill memo naming the period and, for multi-account employers, the account. */
-function remittanceMemo(group: RemittanceGroup, from: string, to: string): string {
+/**
+ * Bill memo naming the period and, for multi-account employers, the account.
+ * A multi-entity group's per-slice bills additionally name the entity, so two
+ * drafts for one period are distinguishable in AP; a single-slice group keeps
+ * the historical memo byte-identical.
+ */
+function remittanceMemo(
+  group: RemittanceGroup,
+  from: string,
+  to: string,
+  entityName: string | null = null,
+): string {
   const account = group.filingAccount.accountNumber
     ? ` · ${group.filingAccount.accountNumber}`
     : "";
-  return `Payroll remittance ${from} – ${to}${account}`;
+  const entity = entityName ? ` · ${entityName}` : "";
+  return `Payroll remittance ${from} – ${to}${account}${entity}`;
 }
 
 /**
@@ -1186,31 +1379,38 @@ export async function scheduledFrequencyAdvisory(
 
 /**
  * The identity of one remittance bill: destination vendor × period window ×
- * filing account. One bill per key — the key is both the advisory lock's
- * scope and the structured marker searched back before a second bill is minted.
+ * filing account × legal entity. One bill per key — the key is both the
+ * advisory lock's scope and the structured marker searched back before a
+ * second bill is minted. The entity segment is what keeps two concurrent
+ * creators for different slices of one multi-entity group from minting the
+ * same slice twice while letting each slice proceed independently.
  */
 export interface RemittanceBillKey {
   partyId: string;
   from: string;
   to: string;
   filingAccountId: string | null;
+  subsidiaryId?: string | null;
 }
 
 /** The transaction advisory lock that serializes creation for one key. */
 export function remittanceBillLockKey(orgId: string, key: RemittanceBillKey): string {
-  return `payroll-remittance-bill:${orgId}:${key.partyId}:${key.from}:${key.to}:${key.filingAccountId ?? ""}`;
+  return `payroll-remittance-bill:${orgId}:${key.partyId}:${key.from}:${key.to}:${key.filingAccountId ?? ""}:${key.subsidiaryId ?? ""}`;
 }
 
 /**
- * The fence shared by every period for one remittance destination and filing
- * account. Periods are deliberately not part of this key: two overlapping
- * windows must serialize before the overlap check can decide which one wins.
+ * The fence shared by every period for one remittance destination, filing
+ * account and legal entity. Periods are deliberately not part of this key:
+ * two overlapping windows must serialize before the overlap check can decide
+ * which one wins. The entity IS part of this key: without it, two concurrent
+ * creators each raising a different slice of the same group would serialize
+ * on one lock and — worse — neither would see the other's marker.
  */
 export function remittanceFenceLockKey(
   orgId: string,
-  key: Pick<RemittanceBillKey, "partyId" | "filingAccountId">,
+  key: Pick<RemittanceBillKey, "partyId" | "filingAccountId"> & Pick<RemittanceBillKey, "subsidiaryId">,
 ): string {
-  return `payroll-remittance-fence:${orgId}:${key.partyId}:${key.filingAccountId ?? ""}`;
+  return `payroll-remittance-fence:${orgId}:${key.partyId}:${key.filingAccountId ?? ""}:${key.subsidiaryId ?? ""}`;
 }
 
 /**
@@ -1251,17 +1451,48 @@ export function overlappingRemittanceMessage(
  * a private org-level series hardcoded 'BILL-' forks the org's vendor-bill
  * numbering and collides outright once the org's real series emits the same
  * prefix and number. Preference follows the AP path's own rule
- * (web/lib/bills.ts): the root subsidiary's series when the org scopes its
+ * (web/lib/bills.ts): the billed entity's series when the org scopes its
  * vendor bills per subsidiary, else the org-wide series. Null when neither
  * exists, and the caller seeds 'BILL-' exactly as it always did.
  */
 export function pickRemittanceSequence(
   rows: readonly { prefix: string; subsidiaryId: string | null }[],
-  rootSubsidiaryId: string,
+  billedSubsidiaryId: string,
 ): { prefix: string; subsidiaryId: string | null } | null {
-  return rows.find((row) => row.subsidiaryId === rootSubsidiaryId)
+  return rows.find((row) => row.subsidiaryId === billedSubsidiaryId)
     ?? rows.find((row) => row.subsidiaryId === null)
     ?? null;
+}
+
+/**
+ * Which entity slice of a remittance group a bill is raised for. A caller
+ * naming `subsidiaryId` bills exactly that slice; otherwise the group must
+ * hold exactly one slice — a group spanning several entities never bills as
+ * one document (that would re-merge what double-entry keeps apart), it
+ * splits: one call per slice. Pure, so the split-or-refuse rule is verifiable
+ * without a database.
+ */
+export function pickRemittanceSlice(
+  group: RemittanceGroup,
+  subsidiaryId: string | null,
+): RemittanceEntitySlice {
+  if (subsidiaryId != null) {
+    const slice = group.slices.find((candidate) => candidate.subsidiaryId === subsidiaryId);
+    if (!slice) throw new PayrollError("nothing to remit to this vendor for the period");
+    return slice;
+  }
+  if (group.slices.length === 1) return group.slices[0]!;
+  if (group.slices.length === 0) {
+    throw new PayrollError(
+      "this remittance group includes payroll with no legal entity — attribute its pay runs "
+      + "to a subsidiary before remitting",
+    );
+  }
+  throw new PayrollError(
+    `this remittance spans ${group.slices.length} legal entities `
+    + `(${group.slices.map((slice) => `${slice.subsidiaryName ?? slice.subsidiaryId}: ${slice.total} ${slice.currency}`).join("; ")}) `
+    + "— raise one bill per entity",
+  );
 }
 
 /**
@@ -1273,7 +1504,14 @@ export function pickRemittanceSequence(
  * omit it (or pass null) for the unassigned bucket of a single-account org.
  * One bill per account keeps each PD7A remittance separately traceable.
  *
- * Creating is IDEMPOTENT per (destination, period, filing account): a
+ * `subsidiaryId` selects the legal entity being remitted. A bill is a
+ * single-entity AP document: it is stamped with the entity whose books
+ * credited the accruals, in that entity's currency, and debits that entity's
+ * liabilities so they clear. Omit it for a single-entity group; a group
+ * spanning several entities splits — one call per slice — and an omitted
+ * `subsidiaryId` there is refused naming the entities.
+ *
+ * Creating is IDEMPOTENT per (destination, period, filing account, entity): a
  * transaction-scoped advisory lock serializes concurrent creators (a
  * double-click, a retried request), and an existing non-voided bill for the
  * same key is refused by name rather than minted twice.
@@ -1286,6 +1524,7 @@ export async function createRemittanceBill(
     from: string;
     to: string;
     filingAccountId?: string | null;
+    subsidiaryId?: string | null;
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<{ documentId: string; documentNumber: string }> {
@@ -1298,15 +1537,40 @@ export async function createRemittanceBill(
     throw new PayrollError("remittance period must be valid dates with from on or before to");
   }
 
+  // Auto mode must discover WHICH entity before it can fence it. This
+  // preflight read may go stale — the canonical summary inside the
+  // transaction re-resolves and governs — but it can only resolve to a
+  // refusal or to a slice the canonical pass re-checks.
+  let entityId = input.subsidiaryId ?? null;
+  if (entityId == null) {
+    const preflight = await payrollRemittanceSummary(
+      orgId,
+      { from: input.from, to: input.to },
+      input.allowedSubsidiaryIds,
+    );
+    const found = preflight.find(
+      (g) => g.partyId === input.partyId && g.filingAccount.id === filingAccountId,
+    );
+    if (!found) throw new PayrollError("nothing to remit to this vendor for the period");
+    if (found.hasUnknownFilingAccount) {
+      throw new PayrollError(
+        "this remittance group includes payroll with an unknown historical filing account — reconcile its original payroll evidence before remitting",
+      );
+    }
+    entityId = pickRemittanceSlice(found, null).subsidiaryId;
+  }
+
   return await db.transaction(async (tx) => {
-    // Serialize every period for this destination and filing account BEFORE
-    // reading the accruals. The explicit READ COMMITTED mode is intentional:
-    // PostgreSQL takes a fresh statement snapshot after a blocked advisory
-    // lock returns, so accruals committed while this creator waited are in the
-    // canonical summary below.
+    // Serialize every period for this destination, filing account AND entity
+    // BEFORE reading the accruals. The explicit READ COMMITTED mode is
+    // intentional: PostgreSQL takes a fresh statement snapshot after a
+    // blocked advisory lock returns, so accruals committed while this creator
+    // waited are in the canonical summary below. Two creators for different
+    // slices hold different locks and proceed independently; two for the same
+    // slice serialize, and the second meets the first's marker.
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${remittanceFenceLockKey(orgId, {
-        partyId: input.partyId, filingAccountId,
+        partyId: input.partyId, filingAccountId, subsidiaryId: entityId,
       })}, 0))
     `);
 
@@ -1317,43 +1581,42 @@ export async function createRemittanceBill(
        where v.org_id = ${orgId} and v.party_id = ${input.partyId} and v.is_active
     `));
     if (!vendor.rows.length) throw new PayrollError("the remittance destination must be an active vendor");
-    const sub = (await tx.execute<{ id: string; base_currency: string | null }>(sql`
-      select s.id, s.base_currency from subsidiaries s
-       where s.org_id = ${orgId} and s.parent_id is null and s.is_active
-       order by s.created_at limit 1
-    `));
-    if (!sub.rows[0]) throw new PayrollError("no active root subsidiary");
     if (
       input.allowedSubsidiaryIds != null
       && (!(vendor.rows[0]!.party_id)
         || !payrollSubsidiaryInScope(
           input.allowedSubsidiaryIds,
-          vendor.rows[0]!.subsidiary_id ?? sub.rows[0].id,
+          vendor.rows[0]!.subsidiary_id ?? entityId,
         ))
     ) {
       throw new PayrollError("nothing to remit to this vendor for the period");
     }
-    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, sub.rows[0].id)) {
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, entityId)) {
       throw new PayrollError("nothing to remit to this vendor for the period");
     }
 
-    if (filingAccountId) {
-      const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from payroll_filing_accounts
+    // The registration this run is filed under — metadata ABOUT the
+    // obligation, never the bill's entity. When it names another entity, the
+    // run was filed under the wrong registration: refuse, naming both.
+    const filing = filingAccountId
+      ? (await tx.execute<{
+        subsidiary_id: string | null; account_number: string | null; name: string | null;
+      }>(sql`
+        select subsidiary_id, account_number, name from payroll_filing_accounts
          where org_id = ${orgId} and id = ${filingAccountId} and is_active
-      `));
-      const accountSub = account.rows[0]?.subsidiary_id ?? null;
-      if (!account.rows[0]) throw new PayrollError("nothing to remit to this vendor for the period");
-      if (
-        input.allowedSubsidiaryIds != null
-        && !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, accountSub ?? sub.rows[0].id)
-      ) {
-        throw new PayrollError("nothing to remit to this vendor for the period");
-      }
+      `)).rows[0] ?? null
+      : null;
+    if (filingAccountId && !filing) throw new PayrollError("nothing to remit to this vendor for the period");
+    if (
+      input.allowedSubsidiaryIds != null
+      && filing
+      && !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, filing.subsidiary_id ?? entityId)
+    ) {
+      throw new PayrollError("nothing to remit to this vendor for the period");
     }
 
-    // Recompute from this transaction's snapshot only after the destination
-    // fence is held. A pay run committed after a caller's preflight summary is
+    // Recompute from this transaction's snapshot only after the entity fence
+    // is held. A pay run committed after a caller's preflight summary is
     // therefore included in this canonical bill, rather than stranded behind
     // an exact-period duplicate marker.
     const groups = await payrollRemittanceSummary(
@@ -1374,16 +1637,82 @@ export async function createRemittanceBill(
         "this remittance group includes payroll with an unknown historical filing account — reconcile its original payroll evidence before remitting",
       );
     }
-    const missing = group.components.filter((c) => !c.liabilityAccountId);
+    const slice = pickRemittanceSlice(group, input.subsidiaryId ?? null);
+    if (slice.subsidiaryId !== entityId) {
+      // The group re-sliced between preflight and fence: another entity's
+      // payroll committed (or voided) while this creator waited. Refuse
+      // rather than bill a slice the caller never saw.
+      throw new PayrollError("nothing to remit to this vendor for the period");
+    }
+    const missing = slice.components.filter((c) => !c.liabilityAccountId);
     if (missing.length > 0) {
       throw new PayrollError(
         `no liability account for: ${missing.map((c) => c.name).join(", ")} — set it in Payroll setup → Accounts & posting`,
       );
     }
 
-    // The structured marker written below is the bill's identity. Search all
-    // live markers for this destination/account and reject any intersecting
-    // date window, not only exact from/to equality.
+    // The AUTHORITATIVE entity resolution. The summary labelled this slice
+    // from its own snapshot; the bill stamps what the subsidiaries table says
+    // in this transaction — an inactive entity, a missing currency, or
+    // accruals that do not belong to one currency cannot become a bill.
+    const entity = (await tx.execute<{ id: string; name: string | null; base_currency: string | null }>(sql`
+      select id, name, base_currency from subsidiaries
+       where org_id = ${orgId} and id = ${entityId} and is_active
+    `)).rows[0] ?? null;
+    if (!entity) {
+      throw new PayrollError(
+        `cannot remit this payroll: its subsidiary is missing or inactive — attribute its pay runs to an active subsidiary before remitting`,
+      );
+    }
+    if (!entity.base_currency) {
+      throw new PayrollError(
+        `cannot remit ${entity.name ?? "this entity"}'s payroll: it has no base currency — set one on the subsidiary before remitting`,
+      );
+    }
+    const stubCurrencies = await sliceStubCurrencies(tx, orgId, {
+      from: input.from, to: input.to, partyId: input.partyId, filingAccountId, entityId,
+    });
+    if (stubCurrencies.length !== 1 || stubCurrencies[0] !== entity.base_currency) {
+      throw new PayrollError(
+        `cannot remit ${entity.name ?? "this entity"}'s payroll in ${entity.base_currency}: `
+        + `its accruals are stated in ${stubCurrencies.length ? stubCurrencies.join(", ") : "no currency"} `
+        + "— reconcile the pay runs before remitting",
+      );
+    }
+
+    // Payroll filed under another entity's registration is a compliance fact,
+    // not a preference. The filing account's entity must equal the accruals'
+    // entity; when it does not, the message names both entities and the runs
+    // behind the slice so the operator can act without opening a console.
+    if (filing && filing.subsidiary_id != null && filing.subsidiary_id !== entityId) {
+      const accountEntity = (await tx.execute<{ name: string | null }>(sql`
+        select name from subsidiaries where org_id = ${orgId} and id = ${filing.subsidiary_id}
+      `)).rows[0]?.name ?? null;
+      const runs = (await tx.execute<{ document_number: string }>(sql`
+        select distinct d.document_number
+          from pay_stubs s
+          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+         where s.org_id = ${orgId} and s.pay_date between ${input.from} and ${input.to}
+           and d.subsidiary_id = ${entityId}
+           and s.filing_account_id is not distinct from ${filingAccountId}
+         order by d.document_number
+      `)).rows.map((r) => r.document_number);
+      throw new PayrollError(
+        `cannot remit ${entity.name ?? "this entity"}'s payroll under filing account `
+        + `${filing.account_number ?? filing.name ?? filingAccountId} `
+        + `(registered to ${accountEntity ?? "another entity"}): `
+        + `pay run${runs.length === 1 ? "" : "s"} ${runs.length ? runs.join(", ") : "unknown"} `
+        + `accrued on ${entity.name ?? "this entity"}'s books — remit under `
+        + `${entity.name ?? "this entity"}'s registration instead`,
+      );
+    }
+
+    // The structured marker written below is the bill's identity. Search live
+    // markers for this destination/account/entity and reject any intersecting
+    // date window, not only exact from/to equality. A legacy bill with no
+    // entity marker covered the consolidated group, so it fails closed for
+    // every slice rather than risking a double remittance.
     const overlap = (await tx.execute<{
       document_number: string | null; subsidiary_id: string | null; from: string; to: string;
     }>(sql`
@@ -1396,6 +1725,8 @@ export async function createRemittanceBill(
          and custom->'payrollRemittance'->>'from' <= ${input.to}
          and custom->'payrollRemittance'->>'to' >= ${input.from}
          and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${filingAccountId}
+         and ((custom->'payrollRemittance'->>'subsidiaryId') is null
+              or (custom->'payrollRemittance'->>'subsidiaryId') = ${entityId})
       order by custom->'payrollRemittance'->>'from', created_at
       limit 1
     `));
@@ -1420,15 +1751,16 @@ export async function createRemittanceBill(
 
     // Number off the org's EXISTING vendor_bill series — its prefix, padding
     // and current position — falling back to seeding the org-level 'BILL-'
-    // series only when the org has no vendor_bill numbering at all.
+    // series only when the org has no vendor_bill numbering at all. The
+    // billed entity's own series wins, exactly like the AP path's rule.
     const sequences = (await tx.execute<{ prefix: string; subsidiary_id: string | null }>(sql`
       select prefix, subsidiary_id from number_sequences
        where org_id = ${orgId} and document_kind = 'vendor_bill'
-         and (subsidiary_id = ${sub.rows[0]!.id} or subsidiary_id is null)
+         and (subsidiary_id = ${entityId} or subsidiary_id is null)
     `));
     const chosen = pickRemittanceSequence(
       sequences.rows.map((row) => ({ prefix: row.prefix, subsidiaryId: row.subsidiary_id })),
-      sub.rows[0]!.id,
+      entityId,
     );
     const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
@@ -1440,7 +1772,7 @@ export async function createRemittanceBill(
     `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
 
-    const total = sum(group.components.map((c) => c.amount));
+    const total = sum(slice.components.map((c) => c.amount));
     // The bill's due date comes from the DESTINATION's schedule when a pack
     // declares one (Revenu Québec's, today) — the filing account's CRA
     // remitter type is a registration with another agency and never applies
@@ -1454,13 +1786,14 @@ export async function createRemittanceBill(
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, memo, subtotal, tax_total, total, custom,
                              created_by, updated_by)
-      values (${orgId}, 'vendor_bill', ${number}, ${input.partyId}, ${sub.rows[0]!.id}, ${input.to},
+      values (${orgId}, 'vendor_bill', ${number}, ${input.partyId}, ${entityId}, ${input.to},
               ${dueDate},
-              ${sub.rows[0]!.base_currency}, 'draft',
-              ${remittanceMemo(group, input.from, input.to)}, ${total}, '0', ${total},
+              ${entity.base_currency}, 'draft',
+              ${remittanceMemo(group, input.from, input.to, group.slices.length > 1 ? (entity.name ?? null) : null)}, ${total}, '0', ${total},
               ${JSON.stringify({
                 payrollRemittance: {
                   partyId: input.partyId, from: input.from, to: input.to, filingAccountId,
+                  subsidiaryId: entityId,
                   // The filing account's CRA registration, for operators
                   // reconciling the bill against the PD7A. It did NOT date
                   // this bill when a destination schedule governs — see
@@ -1480,7 +1813,7 @@ export async function createRemittanceBill(
     `));
     const documentId = doc.rows[0]!.id;
     let lineNumber = 1;
-    for (const component of group.components) {
+    for (const component of slice.components) {
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount, created_by, updated_by)
@@ -1491,4 +1824,34 @@ export async function createRemittanceBill(
     }
     return { documentId, documentNumber: number };
   }, { isolationLevel: "read committed" });
+}
+
+/**
+ * The distinct stub currencies behind one entity slice of one group — the
+ * ground truth for whether the slice can be stamped in its entity's base
+ * currency. Re-read in the creator's transaction, not trusted from a
+ * preflight summary.
+ */
+async function sliceStubCurrencies(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  key: { from: string; to: string; partyId: string; filingAccountId: string | null; entityId: string },
+): Promise<string[]> {
+  // The destination half of the group key is deliberately absent: components
+  // resolve destinations through pack declarations the SQL cannot re-derive,
+  // and the slice's entity × filing account × period already identifies the
+  // accruals the summary folded in. A second destination sharing the slice
+  // would only ADD a currency, failing safer.
+  const rows = (await tx.execute<{ currency: string }>(sql`
+    select distinct s.currency_code as currency
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where l.org_id = ${orgId} and s.pay_date between ${key.from} and ${key.to}
+       and l.kind in ('deduction', 'employer_contribution', 'credit')
+       and d.subsidiary_id = ${key.entityId}
+       and s.filing_account_id is not distinct from ${key.filingAccountId}
+  `));
+  return rows.rows.map((r) => r.currency).sort();
 }
