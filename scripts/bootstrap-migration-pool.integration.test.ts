@@ -60,26 +60,25 @@ test(
     }
 
     // The cap was real: the same slow statement through a request-shaped pool
-    // is refused. WHICH timer wins is a race — the request pool arms both a
-    // client-side `query_timeout` and a server-side `statement_timeout` at the
-    // same value, so a slow host trips the client timer ("Query read timeout",
-    // which is what operators reported) and a fast one lets the server cancel
-    // first ("canceling statement due to statement timeout"). The claim under
-    // test is that the statement is REFUSED, not which of the two equivalent
-    // timers got there first, so accept either and assert nothing about the
-    // race.
+    // is refused by the CLIENT timer — "Query read timeout", the string
+    // operators actually reported from slow hosts.
+    //
+    // The server cap is deliberately widened to 5s here so only the client
+    // timer can fire. The request pool arms both at the same value in
+    // production, which makes WHICH one wins a race against host speed; an
+    // assertion that tolerates either would still pass if the client-side
+    // mechanism broke entirely and the server cancelled instead. Removing the
+    // race is therefore stronger than tolerating it. The server-side path has
+    // its own test below.
     const capped = new pg.Pool({
       connectionString: env.OPENBOOKS_DB_URL,
       max: 1,
       connectionTimeoutMillis: 10_000,
       query_timeout: 500,
-      statement_timeout: 500,
+      statement_timeout: 5_000,
     });
     try {
-      await assert.rejects(
-        capped.query("select pg_sleep(1.5)"),
-        /Query read timeout|canceling statement due to statement timeout/,
-      );
+      await assert.rejects(capped.query("select pg_sleep(1.5)"), /Query read timeout/);
     } finally {
       await capped.end();
     }
