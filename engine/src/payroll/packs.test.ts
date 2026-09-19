@@ -339,3 +339,32 @@ test("every installable pack names its statutory engine and declares withholding
     }
   }
 });
+
+test("every remittance schedule declares a non-empty, unique frequency settings key", () => {
+  // declaredRemittanceFrequencySettingsKeys() is a bare .map with no dedup
+  // while its sibling declaredRemittanceVendorSettingsKeys() builds a Set —
+  // yet the frequency helper's doc comment claims "the same derivation
+  // pattern as the vendor keys". A duplicate key would validate a value
+  // against whichever schedule loads first, so the same input changes verdict
+  // when an unrelated pack installs, silently, on a frequency that drives
+  // when money is due. Deduping would hide that pack-authoring mistake behind
+  // silent first-one-wins, so fail loudly here instead.
+  const owners = new Map<string, string>()
+  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+    for (const schedule of pack.remittanceSchedules ?? []) {
+      assert.ok(
+        schedule.frequencySettingsKey,
+        `${country} declares a remittance schedule with no frequency settings key`,
+      )
+      const prior = owners.get(schedule.frequencySettingsKey)
+      assert.equal(
+        prior,
+        undefined,
+        `frequency settings key "${schedule.frequencySettingsKey}" is declared by both ${prior} and ${country}`,
+      )
+      owners.set(schedule.frequencySettingsKey, country)
+    }
+  }
+  // Non-vacuity: an empty schedule list would pass every assertion above.
+  assert.ok(owners.size >= 2, "expected more than one declared frequency key")
+})
