@@ -363,6 +363,18 @@ export async function GET(req: Request) {
   })
 }
 
+/**
+ * What the operator supplied, safe to put in a refusal. The body is arbitrary
+ * JSON: an object would stringify to "[object Object]" and tell them nothing,
+ * and a pasted megabyte would come back whole. Name the type instead, and cap
+ * the echo — a refusal has to be readable in a toast.
+ */
+function suppliedValue(raw: unknown): string {
+  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
+  if (typeof raw !== 'string') return Array.isArray(raw) ? 'a list' : `a ${raw === null ? 'null' : typeof raw}`
+  return raw.length > 40 ? `${raw.slice(0, 40)}… (${raw.length} characters)` : raw
+}
+
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -501,7 +513,7 @@ export async function POST(req: Request) {
     // undiagnosable in the first place.
     if (value === null) {
       return NextResponse.json(
-        { error: `${key} must be an amount — "${String(body[key])}" is not a number` },
+        { error: `${key} must be an amount — "${suppliedValue(body[key])}" is not a number` },
         { status: 422 },
       )
     }
@@ -525,7 +537,7 @@ export async function POST(req: Request) {
     // vacation_percent is numeric(7,4): three whole digits for the same reason.
     if (vacationRaw === null) {
       return NextResponse.json(
-        { error: `vacationPercent must be a percentage — "${String(body.vacationPercent)}" is not a number` },
+        { error: `vacationPercent must be a percentage — "${suppliedValue(body.vacationPercent)}" is not a number` },
         { status: 422 },
       )
     }
