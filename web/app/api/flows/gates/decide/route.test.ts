@@ -20,7 +20,7 @@ interface RouteState {
   scopeChecks: Array<string | null>;
   decisions: Array<Record<string, unknown>>;
   decideThrow: string | null;
-  decideResult: { ok: true; resumed: string; runStatus: string } | { ok: false; decision: string; resumed: string; runId: string; runStatus: string; decisionRecorded: true; error: string };
+  decideResult: { ok: true; resumed: string; runStatus: string };
 }
 
 const stateKey = Symbol.for("openbooks.flow-decide-route-test");
@@ -208,24 +208,6 @@ if (isVitest) {
         signature: undefined,
       },
     ]);
-  });
-
-  test("a recorded-but-incomplete decision leaves as a 500 with the refusal intact", async () => {
-    reset(new Set([SUBJECT_SUBSIDIARY]));
-    routeState.decideResult = {
-      ok: false,
-      decision: "approved",
-      resumed: "approve",
-      runId: "00000000-0000-4000-8000-000000000021",
-      runStatus: "failed",
-      decisionRecorded: true,
-      error: "decision approved recorded but release failed: boom. Run 00000000-0000-4000-8000-000000000021 is marked failed; fix the cause, then retry the failed run via retryFlowRun.",
-    };
-
-    const response = await postRoute!(request());
-
-    assert.equal(response.status, 500);
-    assert.deepEqual(await response.json(), routeState.decideResult);
   });
 
   test("an engine throw delegates to the shared error mapping, never a 200", async () => {

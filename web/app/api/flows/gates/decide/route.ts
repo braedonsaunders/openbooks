@@ -42,6 +42,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    // decideGate either records the decision and completes its branch, or
+    // throws: ANY post-flip failure rolls the whole decide unit back to its
+    // savepoint (DecisionFailedError — decision NOT recorded, gate still
+    // pending, retry the decision). gateErrorResponse maps that to a 500
+    // with the cause and remedy intact.
     const res = await decideGate({
       gateId: body.gateId,
       decision: body.decision!,
@@ -50,10 +55,6 @@ export async function POST(req: Request) {
       comment: body.comment,
       signature: body.signature,
     })
-    // A recorded decision whose branch did not complete is a server-side
-    // failure, not a success: the refusal carries the failed run and its
-    // retry path, so it must leave as a 500 with that body intact.
-    if (!res.ok) return NextResponse.json(res, { status: 500 })
     return NextResponse.json(res)
   } catch (e) {
     return gateErrorResponse(e)

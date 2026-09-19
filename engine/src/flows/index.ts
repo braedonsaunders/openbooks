@@ -28,10 +28,9 @@ export {
   worklistGates,
   gateDecisionCapability,
   GateError,
+  DecisionFailedError,
   ReleaseError,
   type DecideGateResult,
-  type DecideGateSuccess,
-  type DecideGateFailure,
   type WorklistGate,
 } from "./gates.ts";
 export {
