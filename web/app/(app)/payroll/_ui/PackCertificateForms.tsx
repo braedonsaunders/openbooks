@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * Pack-declared certificate answers — the entry surface for every row-backed
@@ -160,8 +161,9 @@ export function CertificateForm(props: {
           effectiveFrom: effectiveFrom || null,
         }),
       })
-      const body = (await res.json()) as { error?: string }
-      if (!res.ok) throw new Error(body.error ?? 'save failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the certificate'))
       toast.success('Certificate saved')
       onSaved()
     } catch (error) {
@@ -225,11 +227,12 @@ export function PackCertificateForms(props: { partyId: string; country: string }
     ;(async () => {
       try {
         const res = await fetch(`/api/payroll/certificates?employee=${partyId}`)
+        // The status is checked before the body is parsed (see above).
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load certificates'))
         const body = (await res.json()) as {
           declarations?: Record<string, { certificates: DeclaredRowCertificate[] }>
           stored?: StoredCertificateRow[]
         }
-        if (!res.ok) throw new Error('failed to load certificates')
         if (!cancelled) {
           setState({
             status: 'ready',
