@@ -804,6 +804,15 @@
           "seguridad_social": "Seguridad Social\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3b\u7f34\u6b3e\uff1acontingencias comunes\u3001desempleo\u3001FOGASA\u3001formaci\u00f3n\u3001MEI\uff09"
         }
       },
+      "JP": {
+        "title": "日本 — 法定科目",
+        "description": "日本包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "gensen": "源泉所得税应付（NTA月表）",
+          "kosei_nenkin": "厚生年金应付（雇员和雇主份额）",
+          "kenko_hoken": "健康保险应付（雇员和雇主份额）"
+        }
+      },
       "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
     },
     "usConfig": {

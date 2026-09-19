@@ -804,6 +804,15 @@
           "seguridad_social": "Seguridad Social\u672a\u6255\u91d1\uff08\u5f93\u696d\u54e1\u30fb\u4e8b\u696d\u4e3b\u8ca0\u62c5\u62e0\u51fa\u91d1\uff1acontingencias comunes\u30fbdesempleo\u30fbFOGASA\u30fbformaci\u00f3n\u30fbMEI\uff09"
         }
       },
+      "JP": {
+        "title": "日本 — 法定勘定",
+        "description": "日本パックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "gensen": "源泉徴収税未払金（月額表による所得税源泉徴収）",
+          "kosei_nenkin": "厚生年金保険料未払金（従業員・事業主負担分）",
+          "kenko_hoken": "健康保険料未払金（従業員・事業主負担分）"
+        }
+      },
       "ratesLink": "事業主が入力する料率 — 失業保険税、医療負担金 — は法定料率タブにあります。"
     },
     "usConfig": {

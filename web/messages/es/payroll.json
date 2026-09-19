@@ -804,6 +804,15 @@
           "seguridad_social": "Seguridad Social por pagar (cotizaciones de empleado y empleador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
         }
       },
+      "JP": {
+        "title": "Japón — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete JP retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "gensen": "Impuesto retenido por pagar (tabla mensual NTA)",
+          "kosei_nenkin": "Pensión de empleados por pagar (partes de empleado y empleador)",
+          "kenko_hoken": "Seguro de salud por pagar (partes de empleado y empleador)"
+        }
+      },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
     },
     "usConfig": {

@@ -812,6 +812,15 @@
           "sdl": "Skills Development Levy payable (employer-only, collected with the CPF contribution)"
         }
       },
+      "JP": {
+        "title": "Japan — statutory accounts",
+        "description": "Liability accounts for the amounts the Japan pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "gensen": "Withholding income tax payable (NTA monthly table)",
+          "kosei_nenkin": "Employees' pension payable (employee + employer half-shares)",
+          "kenko_hoken": "Health insurance payable (employee + employer half-shares)"
+        }
+      },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
