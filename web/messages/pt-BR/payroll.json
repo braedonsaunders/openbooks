@@ -977,7 +977,7 @@
       "year": "Ano fiscal",
       "yearHelp": "Alíquotas oficiais valem para um ano fiscal — um aviso de alíquota estadual, uma determinação de redução de crédito, uma isenção provincial. Alíquotas de um ano nunca reinterpretam a folha de outro ano.",
       "add": "Adicionar alíquota",
-      "remove": "Remover",
+      "remove": "Substituir",
       "empty": "Nenhuma alíquota oficial informada para este ano.",
       "gapsTitle": "Não configurado para este ano",
       "allAccounts": "Todas as contas",

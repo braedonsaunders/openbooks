@@ -977,7 +977,7 @@
       "year": "Steuerjahr",
       "yearHelp": "Gesetzliche Sätze werden für ein Steuerjahr vergeben — ein Staatssatzbescheid, eine Gutschriftskürzungsfeststellung, eine Provinzbefreiung. Für ein Jahr eingetragene Sätze deuten die Lohnabrechnung eines anderen Jahres niemals um.",
       "add": "Satz hinzufügen",
-      "remove": "Entfernen",
+      "remove": "Ablösen",
       "empty": "Für dieses Jahr sind keine gesetzlichen Sätze eingetragen.",
       "gapsTitle": "Für dieses Jahr nicht eingerichtet",
       "allAccounts": "Alle Konten",

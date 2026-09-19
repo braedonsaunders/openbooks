@@ -977,7 +977,7 @@
       "year": "Année d’imposition",
       "yearHelp": "Les taux légaux sont attribués pour une année d’imposition — un avis de taux d’État, une décision de réduction de crédit, une exemption provinciale. Les taux saisis pour une année ne réinterprètent jamais la paie d’une autre année.",
       "add": "Ajouter un taux",
-      "remove": "Retirer",
+      "remove": "Remplacer",
       "empty": "Aucun taux légal n’est saisi pour cette année.",
       "gapsTitle": "Non configuré pour cette année",
       "allAccounts": "Tous les comptes",
