@@ -4,11 +4,17 @@
  *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json>
  *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply
  *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply --allow-partial
+ *   npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> [--operator-mappings=<map.json>] > rows.json
+ *   npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> --apply [--operator-mappings=<map.json>]
  *
  * The input file is the collector output: a JSON array of SourcePersonRow
- * (see engine/src/hrm/migration-preflight.ts). The default is a dry run that
- * writes nothing; --apply writes. Everything for the org runs in ONE
- * transaction and any refusal rolls the whole org back, unless
+ * (see engine/src/hrm/migration-preflight.ts); --input=- reads it from
+ * stdin. --collect=<uuid> builds those rows from the live database with the
+ * legacy evidence collector (see engine/src/hrm/migration-collect.ts) and
+ * prints ONLY the JSON array to stdout, so `> rows.json` captures a clean
+ * file; the person count and evidence hash go to stderr. The default is a
+ * dry run that writes nothing; --apply writes. Everything for the org runs
+ * in ONE transaction and any refusal rolls the whole org back, unless
  * --allow-partial accepts the ready subset with the rest listed.
  *
  * Production interlock (fail closed): --apply proceeds without controls
@@ -28,6 +34,11 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "../engine/src/db.ts";
 import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
 import {
+  collectLegacyEmployments,
+  EmploymentCollectionError,
+  type OperatorEmploymentMapping,
+} from "../engine/src/hrm/migration-collect.ts";
+import {
   EmploymentMigrationError,
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,
@@ -43,11 +54,61 @@ function usage(): string {
   return [
     "usage: npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> [--apply] [--allow-partial]",
     "       [--allow-production --dry-run-hash=<sha256>] (production apply only)",
+    "       npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> [--operator-mappings=<map.json>] [--apply]",
+    "         [--allow-partial] [--org=<uuid>] > rows.json",
     "",
     "Migrates one org's legacy person-keyed employment facts into the canonical",
     "0184 tables exactly once. Default is a dry run: evaluates, prints the",
     "report (human summary plus JSON), writes nothing.",
+    "With --collect, rows are built from the live database and only the JSON",
+    "array goes to stdout (count and evidence hash go to stderr); without",
+    "--apply the run ends after collecting. --input=- reads rows from stdin.",
   ].join("\n");
+}
+
+function readStdin(): string {
+  return readFileSync(0, "utf8");
+}
+
+function isOperatorMapping(value: unknown): value is OperatorEmploymentMapping {
+  if (typeof value !== "object" || value === null) return false;
+  const mapping = value as Record<string, unknown>;
+  return (
+    typeof mapping.partyId === "string" &&
+    (mapping.employerSubsidiaryId === null ||
+      typeof mapping.employerSubsidiaryId === "string") &&
+    (mapping.hiredOn === null || typeof mapping.hiredOn === "string") &&
+    (mapping.terminatedOn === null || typeof mapping.terminatedOn === "string") &&
+    typeof mapping.approvedBy === "string" &&
+    typeof mapping.approvedAt === "string" &&
+    typeof mapping.rationale === "string"
+  );
+}
+
+function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch (error) {
+    console.error(
+      `hrm-migrate-employments: cannot read operator mappings file ${path}: ${(error as Error).message}`,
+    );
+    return null;
+  }
+  const list = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { mappings?: unknown }).mappings)
+      ? (parsed as { mappings: unknown[] }).mappings
+      : null;
+  if (list === null || !list.every(isOperatorMapping)) {
+    console.error(
+      `hrm-migrate-employments: operator mappings file ${path} must be a JSON array (or ` +
+        '{"mappings": [...]} ) of {partyId, employerSubsidiaryId|null, hiredOn|null, ' +
+        "terminatedOn|null, approvedBy, approvedAt, rationale}",
+    );
+    return null;
+  }
+  return list as OperatorEmploymentMapping[];
 }
 
 function fail(message: string): number {
@@ -115,8 +176,13 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
         "Export OPENBOOKS_DB_URL (and OPENBOOKS_RUNTIME_DB_URL) for the target database first.",
     );
   }
-  const orgId = args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
+  const orgFlag = args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
   const inputPath = args.find((a) => a.startsWith("--input="))?.slice("--input=".length) ?? null;
+  const collectOrg =
+    args.find((a) => a.startsWith("--collect="))?.slice("--collect=".length) ?? null;
+  const mappingsPath =
+    args.find((a) => a.startsWith("--operator-mappings="))?.slice("--operator-mappings=".length) ??
+    null;
   const apply = args.includes("--apply");
   const allowPartial = args.includes("--allow-partial");
   const allowProduction = args.includes("--allow-production");
@@ -125,6 +191,8 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
     (a) =>
       !a.startsWith("--org=") &&
       !a.startsWith("--input=") &&
+      !a.startsWith("--collect=") &&
+      !a.startsWith("--operator-mappings=") &&
       !a.startsWith("--dry-run-hash=") &&
       a !== "--apply" &&
       a !== "--allow-partial" &&
@@ -134,27 +202,92 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
     console.error(usage());
     return fail(`unknown arguments: ${unknown.join(" ")}`);
   }
-  if (orgId === null || !UUID_PATTERN.test(orgId)) {
+  if (collectOrg !== null && inputPath !== null) {
     console.error(usage());
-    return fail("--org=<uuid> is required; refusing to migrate without an explicit tenant scope");
+    return fail("refusing --collect with --input: one run builds rows from the live database or reads them, never both");
   }
-  if (inputPath === null || inputPath.length === 0) {
+  if (mappingsPath !== null && collectOrg === null) {
     console.error(usage());
-    return fail("--input=<rows.json> is required: the collector output array of source person rows");
+    return fail("refusing --operator-mappings without --collect: operator overrides attach at collection time");
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(inputPath, "utf8")) as unknown;
-  } catch (error) {
-    return fail(`cannot read input file ${inputPath}: ${(error as Error).message}`);
-  }
-  if (!Array.isArray(parsed) || !parsed.every(isSourcePersonRow)) {
+  // --collect carries the tenant scope; --org may repeat it but never
+  // override it with a second org.
+  const orgId = collectOrg ?? orgFlag;
+  if (orgFlag !== null && collectOrg !== null && orgFlag !== collectOrg) {
     return fail(
-      `input file ${inputPath} must be a JSON array of source person rows ` +
-        "(orgId, sourceNamespace, sourceId, nativePartyId, sourceVersion with the classifier inventories)",
+      `--org=${orgFlag} disagrees with --collect=${collectOrg}; refusing a two-org run ` +
+        "— migrate one org per run",
     );
   }
-  const rows = parsed as SourcePersonRow[];
+  if (orgId === null || !UUID_PATTERN.test(orgId)) {
+    console.error(usage());
+    return fail("--org=<uuid> (or --collect=<uuid>) is required; refusing to migrate without an explicit tenant scope");
+  }
+  let rows: SourcePersonRow[];
+  if (collectOrg !== null) {
+    if (!UUID_PATTERN.test(collectOrg)) {
+      console.error(usage());
+      return fail(`--collect=${collectOrg} is not a valid UUID; refusing to collect without an explicit tenant scope`);
+    }
+    let operatorMappings: OperatorEmploymentMapping[] | undefined;
+    if (mappingsPath !== null) {
+      const read = readOperatorMappings(mappingsPath);
+      if (read === null) return 1;
+      operatorMappings = read;
+    }
+    try {
+      const collected = await collectLegacyEmployments(collectOrg, { operatorMappings });
+      rows = [...collected.rows];
+      if (!apply) {
+        // Machine contract on stdout (redirect-safe); humans read stderr.
+        process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+        console.error(
+          `hrm-migrate-employments: collected ${rows.length} person(s) for org ` +
+            `${collectOrg}; evidence hash ${collected.evidenceHash}`,
+        );
+        if (rows.length === 0) {
+          return fail(
+            "collection is empty: no employee roles exist for this org, so there is " +
+              "no evidence to migrate — an empty inventory is never a clean claim",
+          );
+        }
+        return 0;
+      }
+      console.error(
+        `hrm-migrate-employments: collected ${rows.length} person(s) for org ` +
+          `${collectOrg}; evidence hash ${collected.evidenceHash}`,
+      );
+    } catch (error) {
+      if (error instanceof EmploymentCollectionError) {
+        return fail(error.message);
+      }
+      throw error;
+    }
+  } else {
+    if (inputPath === null || inputPath.length === 0) {
+      console.error(usage());
+      return fail("--input=<rows.json> is required: the collector output array of source person rows");
+    }
+    let raw: string;
+    try {
+      raw = inputPath === "-" ? readStdin() : readFileSync(inputPath, "utf8");
+    } catch (error) {
+      return fail(`cannot read input ${inputPath}: ${(error as Error).message}`);
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch (error) {
+      return fail(`cannot parse input ${inputPath}: ${(error as Error).message}`);
+    }
+    if (!Array.isArray(parsed) || !parsed.every(isSourcePersonRow)) {
+      return fail(
+        `input ${inputPath} must be a JSON array of source person rows ` +
+          "(orgId, sourceNamespace, sourceId, nativePartyId, sourceVersion with the classifier inventories)",
+      );
+    }
+    rows = parsed as SourcePersonRow[];
+  }
   const foreign = rows.find((row) => row.orgId !== orgId);
   if (foreign !== undefined) {
     return fail(
@@ -227,7 +360,10 @@ if (isEntrypoint()) {
     try {
       process.exitCode = await runHrmMigrationCli({ argv: process.argv.slice(2) });
     } catch (error) {
-      if (error instanceof EmploymentMigrationError) {
+      if (
+        error instanceof EmploymentMigrationError ||
+        error instanceof EmploymentCollectionError
+      ) {
         console.error(`hrm-migrate-employments: ${error.message}`);
       } else {
         console.error(error);
