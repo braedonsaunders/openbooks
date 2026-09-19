@@ -824,6 +824,15 @@
           "zus_er": "Verbindlichkeiten aus Sozialbeiträgen der Arbeitgeber (emerytalne, rentowe + wypadkowe)",
           "fundusze_er": "Verbindlichkeiten aus Arbeitsfonds der Arbeitgeber (FP, FS + FGŚP)"
         }
+      },
+      "BR": {
+        "title": "Brasilien — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das BR-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "irrf": "Verbindlichkeiten aus IRRF (monatlicher Einbehalt auf die Basis nach INSS, Angehörigen und vereinfachtem Abzug)",
+          "inss": "Verbindlichkeiten aus INSS (Arbeitnehmerbeitrag plus Arbeitgeberbeiträge: patronal, RAT und terceiros)",
+          "fgts": "Verbindlichkeiten aus FGTS (8 % Arbeitgeberablagen auf den Arbeitnehmerkonten bei Caixa)"
+        }
       }
     },
     "usConfig": {

@@ -824,6 +824,15 @@
           "zus_er": "事業主社会保険料未払金（emerytalne・rentowe＋wypadkowe）",
           "fundusze_er": "事業主労働基金未払金（FP・FS＋FGŚP）"
         }
+      },
+      "BR": {
+        "title": "ブラジル — 法定勘定",
+        "description": "ブラジルパックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "irrf": "IRRF未払金（INSS・扶養家族・簡易控除後の課税標準に対する月次源泉徴収）",
+          "inss": "INSS未払金（従業員負担拠出＋事業主負担：patronal・RAT・terceiros）",
+          "fgts": "FGTS未払金（Caixaの労働者口座への事業主8％拠出）"
+        }
       }
     },
     "usConfig": {

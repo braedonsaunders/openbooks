@@ -824,6 +824,15 @@
           "zus_er": "Contribuições sociais do empregador a recolher (emerytalne, rentowe + wypadkowe)",
           "fundusze_er": "Fundos trabalhistas do empregador a recolher (FP, FS + FGŚP)"
         }
+      },
+      "BR": {
+        "title": "Brasil — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote do Brasil retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "irrf": "IRRF a recolher (retenção mensal sobre a base após INSS, dependentes e desconto simplificado)",
+          "inss": "INSS a recolher (contribuição do segurado mais patronal, RAT e terceiros do empregador)",
+          "fgts": "FGTS a recolher (depósitos de 8% do empregador nas contas vinculadas dos trabalhadores na Caixa)"
+        }
       }
     },
     "usConfig": {

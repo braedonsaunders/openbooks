@@ -824,6 +824,15 @@
           "zus_er": "Cotisations sociales employeur à payer (emerytalne, rentowe + wypadkowe)",
           "fundusze_er": "Fonds pour l’emploi employeur à payer (FP, FS + FGŚP)"
         }
+      },
+      "BR": {
+        "title": "Brésil — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack brésilien retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "irrf": "IRRF à payer (retenue mensuelle sur la base après INSS, personnes à charge et décote simplifiée)",
+          "inss": "INSS à payer (cotisation salariale plus patronale, RAT et terceiros de l’employeur)",
+          "fgts": "FGTS à payer (dépôts patronaux de 8 % sur les comptes des salariés auprès de Caixa)"
+        }
       }
     },
     "usConfig": {
