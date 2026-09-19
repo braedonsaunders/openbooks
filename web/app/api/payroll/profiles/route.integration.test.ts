@@ -96,6 +96,12 @@ test('profile POST refuses money and percent fields wider than their columns', {
       // A single comma with any other tail is genuinely ambiguous: name both
       // readings rather than picking one.
       ['claim amount ambiguous comma', { federalClaimAmount: '1,234' }, /federalClaimAmount is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/],
+      // Dot-grouping with a decimal comma ("1.234,56") reads by the same
+      // rule every locale shares: the last separator is the decimal point.
+      // The dot-last mirror ("1,234.56") must keep its grouping message —
+      // that is the regression risk.
+      ['claim amount dot grouping', { federalClaimAmount: '1.234,56' }, /federalClaimAmount must use "\." as the decimal point — write "1\.234,56" as "1234\.56"/],
+      ['claim amount comma grouping unchanged', { federalClaimAmount: '1,234.56' }, /federalClaimAmount must not contain a thousands separator — remove , from "1,234\.56"/],
       ['claim amount currency', { federalClaimAmount: '$1200' }, /federalClaimAmount must not contain a currency symbol — remove \$ from "\$1200"/],
       ['claim amount scientific', { federalClaimAmount: '1.5E+05' }, /federalClaimAmount must be written out in full, not in scientific notation/],
       ['vacation percent too wide', { vacationPercent: '1234' }, /vacationPercent is limited to 3 digits before the decimal point — got 4/],

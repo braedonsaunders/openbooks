@@ -411,6 +411,19 @@ function decimalNullCause(raw: unknown): DecimalNullCause {
   if (plain) return { cause: 'scale', decimals: plain[3]?.length ?? 0 }
   const ungrouped = text.replace(/[,_'\u2019\s\u00a0\u2009]/g, '')
   if (ungrouped !== text && PLAIN_DECIMAL.test(ungrouped)) {
+    // When a dot and a comma both appear, the last one is the decimal
+    // point — true across essentially every locale, so it is a rule rather
+    // than a guess. "1.234,56" is dot-grouping with a decimal comma (the
+    // standard money format in DE, IT, ES, NL, BR and PT): strip the dots
+    // and read the comma as the point. "1,234.56" keeps the grouping
+    // message below, unchanged.
+    if (text.includes('.') && text.includes(',') && text.lastIndexOf(',') > text.lastIndexOf('.')) {
+      const dotted = text.replace(/\./g, '').replace(',', '.')
+      // Any tail length: a too-long tail rewrites to a plain figure the
+      // scale branch then refuses honestly ("1.234,56789" -> "1234.56789"
+      // -> at most 4 places), instead of guessing here.
+      if (/^([+-]?\d+)\.(\d+)$/.test(dotted)) return { cause: 'decimal-comma', dotted }
+    }
     // A comma is two readings, not one: seven installed packs are
     // decimal-comma locales, so "12,34" is twelve-thirty-four written
     // correctly, and "remove the comma" would store 1234 — a 100x error.
