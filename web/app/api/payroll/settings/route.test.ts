@@ -119,13 +119,15 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?payroll-settings-atomicity-test";
-const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
   await import("../../../../../engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("../../../../../engine/src/test-fixtures.ts");
+const { PAYROLL_COUNTRY_PACKS, remittanceScheduleForFrequencyKey } =
+  await import("../../../../../engine/src/payroll/packs.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -534,6 +536,560 @@ test(
   },
 );
 
+// Collapsed-refusal splits (queue item 28, batch 2). Every refusal below
+// names the cause, the value received, and a remedy that exists; statuses
+// and accept/refuse sets are unchanged from the single-sentence refusals.
+
+async function refusalOf(
+  response: Response,
+): Promise<{ status: number; error: string }> {
+  const body = (await response.json()) as { error?: string };
+  return { status: response.status, error: String(body.error ?? "") };
+}
+
+async function scratchPayrollOrg(): Promise<{
+  orgId: string;
+  actorId: string;
+  accounts: Record<string, string>;
+  vendorId: string;
+}> {
+  return withBypass(async () => {
+    const org = await createScratchOrg();
+    return {
+      ...org,
+      actorId: await createScratchUser(
+        org.orgId,
+        "Payroll Admin",
+        "payroll_admin",
+      ),
+    };
+  });
+}
+
+test(
+  "payroll account settings refuse by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { netPayAccountId: 42 })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid netPayAccountId")
+          && mistyped.error.includes("must be an account id")
+          && mistyped.error.includes('"42"')
+          && mistyped.error.includes("Payroll setup → Accounts"),
+        `non-string account refuses by cause: ${mistyped.error}`,
+      );
+
+      const malformed = await refusalOf(
+        await PUT(request("PUT", { netPayAccountId: "not-an-id" })),
+      );
+      assert.equal(malformed.status, 422);
+      assert.ok(
+        malformed.error.includes("invalid netPayAccountId")
+          && malformed.error.includes('"not-an-id" is not an account id'),
+        `non-uuid account refuses by cause: ${malformed.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      const accepted = await PUT(
+        request("PUT", {
+          netPayAccountId: fixture.accounts.ap,
+          wageExpenseAccountId: fixture.accounts.cogs,
+        }),
+      );
+      assert.equal(accepted.status, 200);
+      const stored = (await payrollState(fixture.orgId)).settings ?? {};
+      assert.equal(stored.netPayAccountId, fixture.accounts.ap);
+      assert.equal(stored.wageExpenseAccountId, fixture.accounts.cogs);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "remittance vendor settings refuse by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { craRemittancePartyId: 7 })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid craRemittancePartyId")
+          && mistyped.error.includes("must be a vendor id")
+          && mistyped.error.includes('"7"')
+          && mistyped.error.includes("active vendor in this organization"),
+        `non-string vendor refuses by cause: ${mistyped.error}`,
+      );
+
+      const malformed = await refusalOf(
+        await PUT(request("PUT", { craRemittancePartyId: "nope" })),
+      );
+      assert.equal(malformed.status, 422);
+      assert.ok(
+        malformed.error.includes("invalid craRemittancePartyId")
+          && malformed.error.includes('"nope" is not a vendor id'),
+        `non-uuid vendor refuses by cause: ${malformed.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      await withBypass(() =>
+        db.execute(
+          sql`insert into vendor_roles (org_id, party_id, is_active) values (${fixture.orgId}, ${fixture.vendorId}, true)`,
+        ),
+      );
+      const accepted = await PUT(
+        request("PUT", { craRemittancePartyId: fixture.vendorId }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).settings?.craRemittancePartyId,
+        fixture.vendorId,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "remittance frequencies refuse by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const bands = remittanceScheduleForFrequencyKey(
+        "rqRemittanceFrequency",
+      )!.frequencies.map((band) => band.frequency);
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { rqRemittanceFrequency: 3 })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid rqRemittanceFrequency")
+          && mistyped.error.includes("must be a frequency name")
+          && mistyped.error.includes('"3"')
+          && bands.every((band) => mistyped.error.includes(`"${band}"`)),
+        `non-string frequency refuses by cause with valid bands: ${mistyped.error}`,
+      );
+
+      const crossSchedule = await refusalOf(
+        await PUT(request("PUT", { rqRemittanceFrequency: "accelerated_2" })),
+      );
+      assert.equal(crossSchedule.status, 422);
+      assert.ok(
+        crossSchedule.error.includes("invalid rqRemittanceFrequency")
+          && crossSchedule.error.includes(
+            '"accelerated_2" is not a frequency of this schedule',
+          )
+          && crossSchedule.error.includes("valid frequencies are")
+          && bands.every((band) => crossSchedule.error.includes(`"${band}"`)),
+        `wrong-schedule frequency refuses by cause: ${crossSchedule.error}`,
+      );
+
+      const accepted = await PUT(
+        request("PUT", { rqRemittanceFrequency: "twice_monthly" }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).settings?.rqRemittanceFrequency,
+        "twice_monthly",
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "boolean payroll settings refuse non-booleans by name",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+
+      const cheque = await refusalOf(
+        await PUT(request("PUT", { eftFallbackToCheque: "yes" })),
+      );
+      assert.equal(cheque.status, 422);
+      assert.ok(
+        cheque.error.includes("invalid eftFallbackToCheque")
+          && cheque.error.includes("must be true or false")
+          && cheque.error.includes('"yes"'),
+        `non-boolean cheque fallback refuses by cause: ${cheque.error}`,
+      );
+
+      const holiday = await refusalOf(
+        await PUT(request("PUT", { statutoryHolidayPay: 1 })),
+      );
+      assert.equal(holiday.status, 422);
+      assert.ok(
+        holiday.error.includes("invalid statutoryHolidayPay")
+          && holiday.error.includes("must be true or false")
+          && holiday.error.includes('"1"'),
+        `non-boolean holiday pay refuses by cause: ${holiday.error}`,
+      );
+
+      const accepted = await PUT(
+        request("PUT", {
+          eftFallbackToCheque: true,
+          statutoryHolidayPay: true,
+        }),
+      );
+      assert.equal(accepted.status, 200);
+      const stored = (await payrollState(fixture.orgId)).settings ?? {};
+      assert.equal(stored.eftFallbackToCheque, true);
+      assert.equal(stored.statutoryHolidayPay, true);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "t4Transmitter refuses by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+
+      const nulled = await refusalOf(
+        await PUT(request("PUT", { t4Transmitter: null })),
+      );
+      assert.equal(nulled.status, 422);
+      assert.ok(
+        nulled.error.includes("invalid t4Transmitter")
+          && nulled.error.includes("got null"),
+        `null transmitter refuses by cause: ${nulled.error}`,
+      );
+
+      const listed = await refusalOf(
+        await PUT(request("PUT", { t4Transmitter: [] })),
+      );
+      assert.equal(listed.status, 422);
+      assert.ok(
+        listed.error.includes("invalid t4Transmitter")
+          && listed.error.includes("got a list"),
+        `list transmitter refuses by cause: ${listed.error}`,
+      );
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { t4Transmitter: "x" })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid t4Transmitter")
+          && mistyped.error.includes('got "x"'),
+        `string transmitter refuses by cause: ${mistyped.error}`,
+      );
+
+      const badField = await refusalOf(
+        await PUT(request("PUT", { t4Transmitter: { bn: 123 } })),
+      );
+      assert.equal(badField.status, 422);
+      assert.ok(
+        badField.error.includes("invalid t4Transmitter.bn")
+          && badField.error.includes("must be text")
+          && badField.error.includes('"123"'),
+        `non-string transmitter field refuses by cause: ${badField.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      const accepted = await PUT(
+        request("PUT", {
+          t4Transmitter: { bn: " 123456789 ", name: "Acme" },
+        }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.deepEqual(
+        (await payrollState(fixture.orgId)).settings?.t4Transmitter,
+        { bn: "123456789", name: "Acme" },
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "stubPassword refuses by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+
+      const nulled = await refusalOf(
+        await PUT(request("PUT", { stubPassword: null })),
+      );
+      assert.equal(nulled.status, 422);
+      assert.ok(
+        nulled.error.includes("invalid stubPassword")
+          && nulled.error.includes("got null"),
+        `null stub password refuses by cause: ${nulled.error}`,
+      );
+
+      const listed = await refusalOf(
+        await PUT(request("PUT", { stubPassword: [] })),
+      );
+      assert.equal(listed.status, 422);
+      assert.ok(
+        listed.error.includes("invalid stubPassword")
+          && listed.error.includes("got a list"),
+        `list stub password refuses by cause: ${listed.error}`,
+      );
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { stubPassword: "x" })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid stubPassword")
+          && mistyped.error.includes('got "x"'),
+        `string stub password refuses by cause: ${mistyped.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      const accepted = await PUT(
+        request("PUT", { stubPassword: { enabled: false, expression: "" } }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.deepEqual(
+        (await payrollState(fixture.orgId)).settings?.stubPassword,
+        { enabled: false, expression: "" },
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "countries refuses by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+      const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(", ");
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { countries: "CA" })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid countries")
+          && mistyped.error.includes("must be a list")
+          && mistyped.error.includes('got "CA"'),
+        `non-list countries refuses by cause: ${mistyped.error}`,
+      );
+
+      const unknown = await refusalOf(
+        await PUT(request("PUT", { countries: ["XX"] })),
+      );
+      assert.equal(unknown.status, 422);
+      assert.ok(
+        unknown.error.includes("invalid countries")
+          && unknown.error.includes('"XX" is not an installed payroll country')
+          && unknown.error.includes(`installed countries are: ${installed}`),
+        `unknown country refuses by cause: ${unknown.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      const accepted = await PUT(request("PUT", { countries: ["CA"] }));
+      assert.equal(accepted.status, 200);
+      assert.deepEqual(
+        (await payrollState(fixture.orgId)).settings?.countries,
+        ["CA"],
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "slotAccounts refuses by named cause",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const before = await payrollState(fixture.orgId);
+      const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(", ");
+      const caPack = PAYROLL_COUNTRY_PACKS.CA;
+      assert.ok(caPack, "expected the CA pack to be registered");
+      const declared = caPack.statutorySlots.map(
+        (slot) => `"${slot.key}"`,
+      );
+
+      const nulled = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: null })),
+      );
+      assert.equal(nulled.status, 422);
+      assert.ok(
+        nulled.error.includes("invalid slotAccounts")
+          && nulled.error.includes("got null"),
+        `null slot accounts refuses by cause: ${nulled.error}`,
+      );
+
+      const listed = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: [] })),
+      );
+      assert.equal(listed.status, 422);
+      assert.ok(
+        listed.error.includes("invalid slotAccounts")
+          && listed.error.includes("got a list"),
+        `list slot accounts refuses by cause: ${listed.error}`,
+      );
+
+      const mistyped = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: "x" })),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.ok(
+        mistyped.error.includes("invalid slotAccounts")
+          && mistyped.error.includes('got "x"'),
+        `string slot accounts refuses by cause: ${mistyped.error}`,
+      );
+
+      const unknownCountry = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: { XX: {} } })),
+      );
+      assert.equal(unknownCountry.status, 422);
+      assert.ok(
+        unknownCountry.error.includes("invalid pack XX")
+          && unknownCountry.error.includes(
+            'no payroll pack is installed for "XX"',
+          )
+          && unknownCountry.error.includes(
+            `installed countries are: ${installed}`,
+          ),
+        `unknown pack refuses by cause: ${unknownCountry.error}`,
+      );
+
+      const nullSlots = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: { CA: null } })),
+      );
+      assert.equal(nullSlots.status, 422);
+      assert.ok(
+        nullSlots.error.includes("invalid pack CA")
+          && nullSlots.error.includes("got null"),
+        `null country slots refuses by cause: ${nullSlots.error}`,
+      );
+
+      const mistypedSlots = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: { CA: "x" } })),
+      );
+      assert.equal(mistypedSlots.status, 422);
+      assert.ok(
+        mistypedSlots.error.includes("invalid pack CA")
+          && mistypedSlots.error.includes('got "x"'),
+        `string country slots refuses by cause: ${mistypedSlots.error}`,
+      );
+
+      const unknownSlot = await refusalOf(
+        await PUT(request("PUT", { slotAccounts: { CA: { nope: null } } })),
+      );
+      assert.equal(unknownSlot.status, 422);
+      assert.ok(
+        unknownSlot.error.includes("invalid slot CA/nope")
+          && unknownSlot.error.includes('no statutory slot "nope"')
+          && declared.every((key) => unknownSlot.error.includes(key)),
+        `unknown slot refuses by cause with declared slots: ${unknownSlot.error}`,
+      );
+
+      const mistypedAccount = await refusalOf(
+        await PUT(
+          request("PUT", { slotAccounts: { CA: { income_tax: 5 } } }),
+        ),
+      );
+      assert.equal(mistypedAccount.status, 422);
+      assert.ok(
+        mistypedAccount.error.includes(
+          "invalid account for CA/income_tax",
+        )
+          && mistypedAccount.error.includes("must be an account id or null")
+          && mistypedAccount.error.includes('"5"'),
+        `non-string slot account refuses by cause: ${mistypedAccount.error}`,
+      );
+
+      const malformedAccount = await refusalOf(
+        await PUT(
+          request("PUT", { slotAccounts: { CA: { income_tax: "nope" } } }),
+        ),
+      );
+      assert.equal(malformedAccount.status, 422);
+      assert.ok(
+        malformedAccount.error.includes(
+          "invalid account for CA/income_tax",
+        ) && malformedAccount.error.includes('"nope" is not an account id'),
+        `non-uuid slot account refuses by cause: ${malformedAccount.error}`,
+      );
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "slotAccounts maps a declared slot onto a real account",
+  { skip: !DB },
+  async () => {
+    const fixture = await scratchPayrollOrg();
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      const installed = await POST(
+        request("POST", { action: "install-pack", country: "CA" }),
+      );
+      assert.equal(installed.status, 200);
+
+      const accepted = await PUT(
+        request("PUT", {
+          slotAccounts: { CA: { income_tax: fixture.accounts.ap } },
+        }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).taxAccount,
+        fixture.accounts.ap,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
 test(
   "settings GET serves installable packs as country/name pairs from the registry",
   { skip: !DB },
@@ -580,4 +1136,4 @@ test(
       await dropScratchOrg(fixture.orgId);
     }
   },
-);
+)

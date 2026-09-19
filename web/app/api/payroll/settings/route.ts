@@ -25,6 +25,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardRootSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
+import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'
 
 export const dynamic = 'force-dynamic'
 
@@ -321,7 +322,15 @@ export async function PUT(req: Request) {
   for (const key of ACCOUNT_KEYS) {
     if (!(key in body)) continue
     const v = body[key] ?? null
-    if (v !== null && (typeof v !== 'string' || !isUuid(v))) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+    // Same accept/refuse set as before, split causes: a non-string is not an
+    // account reference at all, while a string that is not a uuid names a
+    // value no picker could have produced.
+    if (v !== null && typeof v !== 'string') {
+      return NextResponse.json({ error: `invalid ${key}: must be an account id — got "${suppliedValue(v)}"; choose the account in Payroll setup → Accounts` }, { status: 422 })
+    }
+    if (v !== null && !isUuid(v)) {
+      return NextResponse.json({ error: `invalid ${key}: "${v}" is not an account id — choose the account in Payroll setup → Accounts` }, { status: 422 })
+    }
   }
   const validated = await validatePayrollAccounts(orgId, body)
   if (validated instanceof NextResponse) return validated
@@ -352,8 +361,14 @@ export async function PUT(req: Request) {
   for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
     if (!(vendorKey in body)) continue
     const party = body[vendorKey] ?? null
-    if (party !== null && (typeof party !== 'string' || !isUuid(party))) {
-      return NextResponse.json({ error: `invalid ${vendorKey}` }, { status: 422 })
+    // Same accept/refuse set as before, split causes. The existence check
+    // below ("active vendor in this organization is required") still owns the
+    // unknown-but-well-formed id; these two own the malformed value.
+    if (party !== null && typeof party !== 'string') {
+      return NextResponse.json({ error: `invalid ${vendorKey}: must be a vendor id — got "${suppliedValue(party)}"; choose an active vendor in this organization` }, { status: 422 })
+    }
+    if (party !== null && !isUuid(party)) {
+      return NextResponse.json({ error: `invalid ${vendorKey}: "${party}" is not a vendor id — choose an active vendor in this organization` }, { status: 422 })
     }
   }
   const vendorError = await validateRemittanceVendors(orgId, body)
@@ -369,10 +384,21 @@ export async function PUT(req: Request) {
   for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
     if (!(frequencyKey in body)) continue
     const value = body[frequencyKey] ?? null
+    if (value === null) continue
     const schedule = remittanceScheduleForFrequencyKey(frequencyKey)
-    if (value !== null
-      && (typeof value !== 'string' || !schedule || !remittanceFrequencyBand(schedule, value))) {
-      return NextResponse.json({ error: `invalid ${frequencyKey}` }, { status: 422 })
+    // Unreachable by construction: the key came off this very schedule list
+    // (both helpers derive from allRemittanceSchedules in packs.ts), so the
+    // find cannot miss. Fail closed without blaming the operator's value —
+    // a missing schedule is a declaration inconsistency, not bad input.
+    if (!schedule) {
+      return NextResponse.json({ error: `invalid ${frequencyKey}: no remittance schedule declares "${frequencyKey}", so "${suppliedValue(value)}" cannot be checked — no value can be accepted for this setting right now` }, { status: 422 })
+    }
+    const bands = schedule.frequencies.map((band) => `"${band.frequency}"`).join(', ')
+    if (typeof value !== 'string') {
+      return NextResponse.json({ error: `invalid ${frequencyKey}: must be a frequency name — got "${suppliedValue(value)}"; choose one of ${bands}` }, { status: 422 })
+    }
+    if (!remittanceFrequencyBand(schedule, value)) {
+      return NextResponse.json({ error: `invalid ${frequencyKey}: "${value}" is not a frequency of this schedule — valid frequencies are ${bands}; frequencies belong to one schedule only, so a value from another schedule is never valid here` }, { status: 422 })
     }
   }
   for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
@@ -385,7 +411,7 @@ export async function PUT(req: Request) {
   // being paid on paper.
   if ('eftFallbackToCheque' in body) {
     if (typeof body.eftFallbackToCheque !== 'boolean') {
-      return NextResponse.json({ error: 'invalid eftFallbackToCheque' }, { status: 422 })
+      return NextResponse.json({ error: `invalid eftFallbackToCheque: must be true or false — got "${suppliedValue(body.eftFallbackToCheque)}"; pass true to fall back to a cheque when bank details are missing, or false to block the run instead` }, { status: 422 })
     }
     settings.eftFallbackToCheque = body.eftFallbackToCheque
   }
@@ -394,14 +420,22 @@ export async function PUT(req: Request) {
   }
   if ('t4Transmitter' in body) {
     const cfg = body.t4Transmitter
-    if (typeof cfg !== 'object' || cfg === null || Array.isArray(cfg)) {
-      return NextResponse.json({ error: 'invalid t4Transmitter' }, { status: 422 })
+    // Same accept/refuse set as before, split three ways: null, a list, and
+    // anything else that is not an object refuse with their own cause.
+    if (cfg === null) {
+      return NextResponse.json({ error: 'invalid t4Transmitter: must be an object — got null; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it' }, { status: 422 })
+    }
+    if (Array.isArray(cfg)) {
+      return NextResponse.json({ error: 'invalid t4Transmitter: must be an object — got a list; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it' }, { status: 422 })
+    }
+    if (typeof cfg !== 'object') {
+      return NextResponse.json({ error: `invalid t4Transmitter: must be an object — got "${suppliedValue(cfg)}"; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it` }, { status: 422 })
     }
     const keys = ['bn', 'transmitterNumber', 'name', 'contactName', 'contactEmail', 'contactPhone']
     const clean: Record<string, string> = {}
     for (const key of keys) {
       const v = (cfg as Record<string, unknown>)[key]
-      if (v != null && typeof v !== 'string') return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+      if (v != null && typeof v !== 'string') return NextResponse.json({ error: `invalid t4Transmitter.${key}: must be text — got "${suppliedValue(v)}"; pass a string, null, or omit it` }, { status: 422 })
       if (typeof v === 'string' && v.trim()) clean[key] = v.trim()
     }
     settings.t4Transmitter = clean
@@ -412,8 +446,16 @@ export async function PUT(req: Request) {
   // time rather than at stub-email time. No password is ever stored.
   if ('stubPassword' in body) {
     const rawPolicy = body.stubPassword
-    if (typeof rawPolicy !== 'object' || rawPolicy === null || Array.isArray(rawPolicy)) {
-      return NextResponse.json({ error: 'invalid stubPassword' }, { status: 422 })
+    // Same accept/refuse set as before, split three ways: null, a list, and
+    // anything else that is not an object refuse with their own cause.
+    if (rawPolicy === null) {
+      return NextResponse.json({ error: 'invalid stubPassword: must be an object — got null; pass { enabled, expression } or omit it' }, { status: 422 })
+    }
+    if (Array.isArray(rawPolicy)) {
+      return NextResponse.json({ error: 'invalid stubPassword: must be an object — got a list; pass { enabled, expression } or omit it' }, { status: 422 })
+    }
+    if (typeof rawPolicy !== 'object') {
+      return NextResponse.json({ error: `invalid stubPassword: must be an object — got "${suppliedValue(rawPolicy)}"; pass { enabled, expression } or omit it` }, { status: 422 })
     }
     const policy = rawPolicy as Record<string, unknown>
     const expression = typeof policy.expression === 'string' ? policy.expression.trim() : ''
@@ -435,11 +477,18 @@ export async function PUT(req: Request) {
   }
   if ('countries' in body) {
     const countries = body.countries
-    if (
-      !Array.isArray(countries)
-      || countries.some((c) => !(String(c) in PAYROLL_COUNTRY_PACKS))
-    ) {
-      return NextResponse.json({ error: 'invalid countries' }, { status: 422 })
+    // Same accept/refuse set as before, split causes: a non-list is not a
+    // country selection at all, while a list names WHICH entry no pack
+    // declares. The installed list comes from the pack registry itself —
+    // never a literal list here, so a new pack is nameable the moment it
+    // registers.
+    if (!Array.isArray(countries)) {
+      return NextResponse.json({ error: `invalid countries: must be a list of installed country codes — got "${suppliedValue(countries)}"; pass the countries to install, or omit it` }, { status: 422 })
+    }
+    const unknown = countries.find((c) => !(String(c) in PAYROLL_COUNTRY_PACKS))
+    if (unknown !== undefined) {
+      const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
+      return NextResponse.json({ error: `invalid countries: "${suppliedValue(unknown)}" is not an installed payroll country — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove it` }, { status: 422 })
     }
     settings.countries = [...new Set(countries.map(String))]
   }
@@ -448,7 +497,7 @@ export async function PUT(req: Request) {
   // gross pay.
   if ('statutoryHolidayPay' in body) {
     if (typeof body.statutoryHolidayPay !== 'boolean') {
-      return NextResponse.json({ error: 'invalid statutoryHolidayPay' }, { status: 422 })
+      return NextResponse.json({ error: `invalid statutoryHolidayPay: must be true or false — got "${suppliedValue(body.statutoryHolidayPay)}"; pass true to enable statutory holiday pay, or false to leave gross pay unchanged` }, { status: 422 })
     }
     settings.statutoryHolidayPay = body.statutoryHolidayPay
   }
@@ -467,20 +516,40 @@ export async function PUT(req: Request) {
   // Writes land on the mapped components' liability accounts, never in the blob.
   if ('slotAccounts' in body) {
     const slotAccounts = body.slotAccounts
-    if (typeof slotAccounts !== 'object' || slotAccounts === null || Array.isArray(slotAccounts)) {
-      return NextResponse.json({ error: 'invalid slotAccounts' }, { status: 422 })
+    // Same accept/refuse set as before, split causes at the top level and
+    // named by country and slot below — a caller sending a map cannot tell
+    // which entry failed from a bare field name.
+    if (slotAccounts === null) {
+      return NextResponse.json({ error: 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got null; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it' }, { status: 422 })
+    }
+    if (Array.isArray(slotAccounts)) {
+      return NextResponse.json({ error: 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got a list; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it' }, { status: 422 })
+    }
+    if (typeof slotAccounts !== 'object') {
+      return NextResponse.json({ error: `invalid slotAccounts: must be an object mapping each country to its slot accounts — got "${suppliedValue(slotAccounts)}"; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it` }, { status: 422 })
     }
     for (const [country, slots] of Object.entries(slotAccounts as Record<string, unknown>)) {
       const pack = PAYROLL_COUNTRY_PACKS[country]
-      if (!pack || typeof slots !== 'object' || slots === null) {
-        return NextResponse.json({ error: `invalid pack ${country}` }, { status: 422 })
+      if (!pack) {
+        const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
+        return NextResponse.json({ error: `invalid pack ${country}: no payroll pack is installed for "${country}" — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove the entry` }, { status: 422 })
+      }
+      if (slots === null) {
+        return NextResponse.json({ error: `invalid pack ${country}: slot accounts must be an object — got null; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry` }, { status: 422 })
+      }
+      if (typeof slots !== 'object') {
+        return NextResponse.json({ error: `invalid pack ${country}: slot accounts must be an object — got "${suppliedValue(slots)}"; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry` }, { status: 422 })
       }
       for (const [slotKey, accountId] of Object.entries(slots as Record<string, unknown>)) {
         if (!pack.statutorySlots.some((slot) => slot.key === slotKey)) {
-          return NextResponse.json({ error: `invalid slot ${country}/${slotKey}` }, { status: 422 })
+          const declared = pack.statutorySlots.map((slot) => `"${slot.key}"`).join(', ')
+          return NextResponse.json({ error: `invalid slot ${country}/${slotKey}: no statutory slot "${slotKey}" is declared for "${country}" — declared slots are: ${declared}; map each declared slot to an account id or null` }, { status: 422 })
         }
-        if (accountId !== null && (typeof accountId !== 'string' || !isUuid(accountId))) {
-          return NextResponse.json({ error: `invalid account for ${country}/${slotKey}` }, { status: 422 })
+        if (accountId !== null && typeof accountId !== 'string') {
+          return NextResponse.json({ error: `invalid account for ${country}/${slotKey}: must be an account id or null — got "${suppliedValue(accountId)}"; choose the account in Payroll setup → Accounts, or pass null to clear it` }, { status: 422 })
+        }
+        if (accountId !== null && !isUuid(accountId)) {
+          return NextResponse.json({ error: `invalid account for ${country}/${slotKey}: "${accountId}" is not an account id — choose the account in Payroll setup → Accounts, or pass null to clear it` }, { status: 422 })
         }
       }
     }
