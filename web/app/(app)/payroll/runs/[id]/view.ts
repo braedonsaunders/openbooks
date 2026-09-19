@@ -2,6 +2,14 @@ import 'server-only'
 
 import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import {
+  parsePayRunCalculationErrors,
+  parsePayRunRefusalAcknowledgement,
+  payRunCalculationRefusals,
+  payRunRefusalDigest,
+  type PayRunCalculationError,
+  type PayRunRefusalAcknowledgement,
+} from '@openbooks/engine/src/payroll-run.ts'
+import {
   lockAndCheckPayrollRunPopulation,
   payrollSubsidiaryScopeFilter,
 } from '@openbooks/engine/src/payroll-scope.ts'
@@ -96,6 +104,17 @@ export interface PayRunWizardData {
   traceEngines: Record<string, string>
   canRun: boolean
   initialStep: WizardStep
+  /**
+   * The latest calculate's per-employee outcomes, persisted wholesale at
+   * calculate time — what commit gates on and the wizard renders. Loader
+   * state, not client memory, so the first calculate's exceptions survive a
+   * refresh that used to wipe them.
+   */
+  calculationErrors: PayRunCalculationError[]
+  /** Recorded decision to commit despite refusals, if one was taken. */
+  refusalAcknowledgement: PayRunRefusalAcknowledgement | null
+  /** Whether the recorded acknowledgement binds to the current refusal set. */
+  refusalsAcknowledged: boolean
 }
 
 export async function loadPayRunWizard(
@@ -109,12 +128,13 @@ export async function loadPayRunWizard(
   const t = await getTranslations('payroll')
 
   return db.transaction(async () => {
-    const runs = (await db.execute<RunHeader>(sql`
+    const runs = (await db.execute<RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }>(sql`
       select r.document_id, d.document_number, d.status as document_status, d.currency,
              d.posted_entry_id, s.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,
-             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
+             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
+             r.calculation_errors, r.refusal_acknowledgement
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
@@ -339,6 +359,16 @@ export async function loadPayRunWizard(
        where org_id = ${orgId} and slug = 'payroll-register' limit 1
     `))).rows[0] ?? null
 
+    // The refusal record the commit gate binds to, parsed once for every
+    // consumer below: the wizard's exception list, the GL-step acknowledgement
+    // panel, and the acknowledged flag that enables the commit button.
+    const calculationErrors = parsePayRunCalculationErrors(run.calculation_errors) ?? []
+    const refusalAcknowledgement = parsePayRunRefusalAcknowledgement(run.refusal_acknowledgement)
+    const currentRefusals = payRunCalculationRefusals(calculationErrors)
+    const refusalsAcknowledged = currentRefusals.length === 0
+      || (refusalAcknowledgement != null
+        && refusalAcknowledgement.errorsDigest === payRunRefusalDigest(currentRefusals))
+
     // Readiness, staleness, funding and the per-employee diff are engine-owned
     // (one source of truth for what blocks a run, what it costs, and what moved).
     const [readiness, staleness, funding, changes] = await Promise.all([
@@ -382,6 +412,9 @@ export async function loadPayRunWizard(
       traceEngines,
       canRun: can(authz, 'payroll.run'),
       initialStep,
+      calculationErrors,
+      refusalAcknowledgement,
+      refusalsAcknowledged,
     }
   })
 }
@@ -426,6 +459,9 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         traceEngines: data.traceEngines,
         canRun: data.canRun,
         initialStep: data.initialStep,
+        calculationErrors: data.calculationErrors,
+        refusalAcknowledgement: data.refusalAcknowledgement,
+        refusalsAcknowledged: data.refusalsAcknowledged,
       }),
     ],
   })

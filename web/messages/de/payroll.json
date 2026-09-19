@@ -250,7 +250,9 @@
         "changed": "Geändert"
       },
       "protectionShortfallTitle": "{count, plural, one {# Abrechnung konnte einen geschützten Abzug nicht voll nehmen} other {# Abrechnungen konnten einen geschützten Abzug nicht voll nehmen}}",
-      "protectionShortfallHint": "Geschützter Verdienst deckelte diese Abzüge. Der unbeglichene Rest bleibt geschuldet — informieren Sie den Gläubiger oder tragen Sie ihn in den nächsten Lauf vor."
+      "protectionShortfallHint": "Geschützter Verdienst deckelte diese Abzüge. Der unbeglichene Rest bleibt geschuldet — informieren Sie den Gläubiger oder tragen Sie ihn in den nächsten Lauf vor.",
+      "allRefusedTitle": "{count, plural, one {# Mitarbeiter abgelehnt — niemand konnte berechnet werden} other {# Mitarbeiter abgelehnt — niemand konnte berechnet werden}}",
+      "allRefusedHint": "Jeder Mitarbeiter im Umfang wurde abgelehnt, daher hat dieser Lauf keine Abrechnungen. Korrigieren Sie die Eingaben und berechnen Sie neu, oder bestätigen Sie die Ablehnungen vor dem Festschreiben."
     },
     "gl": {
       "needsCalculation": "Berechnen Sie den Lauf, um seine Kontenwirkung vorzuschauen.",
@@ -265,7 +267,14 @@
       "credits": "Haben",
       "balanced": "Ausgeglichen",
       "staleBlocked": "Berechnen Sie den Lauf vor dem Festschreiben neu.",
-      "commitHint": "Festschreiben friert die Abrechnungen ein und schreibt diese Zeilen in das Lohnlaufdokument. Der Lauf bleibt bis zur Buchung prüfbar."
+      "commitHint": "Festschreiben friert die Abrechnungen ein und schreibt diese Zeilen in das Lohnlaufdokument. Der Lauf bleibt bis zur Buchung prüfbar.",
+      "refusedTitle": "{count, plural, one {# Mitarbeiter im Lauf-Umfang abgelehnt} other {# Mitarbeiter im Lauf-Umfang abgelehnt}}",
+      "refusedHint": "Diese Mitarbeiter haben keine Abrechnung in diesem Lauf und werden nicht bezahlt. Das Festschreiben ist blockiert, bis Sie genau diese Gruppe bestätigen oder die Eingaben korrigieren und neu berechnen.",
+      "refusedBlocked": "Festschreiben blockiert — {count, plural, one {# abgelehnter Mitarbeiter muss} other {# abgelehnte Mitarbeiter müssen}} bestätigt werden.",
+      "ackLabel": "Ich verstehe, dass {count, plural, one {dieser Mitarbeiter} other {diese # Mitarbeiter}} aus den oben genannten Gründen in diesem Lauf nicht bezahlt werden.",
+      "ackRecord": "Bestätigung aufzeichnen",
+      "ackRecorded": "Bestätigung für {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} aufgezeichnet.",
+      "ackRecordedNote": "Bestätigt am {date} — diese Entscheidung ist im Lauf aufgezeichnet."
     },
     "finish": {
       "notCommitted": "Erfassen Sie den Lauf im Hauptbuch-Schritt vor dem Buchen.",
@@ -291,7 +300,10 @@
       "emailStubs": "Abrechnungen per E-Mail versenden",
       "stubsEmailed": "{sent, plural, one {# Abrechnung} other {# Abrechnungen}} per E-Mail versendet.",
       "stubsEmailedPartial": "{sent} versendet; übersprungen (keine E-Mail oder fehlgeschlagen): {skipped}",
-      "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken"
+      "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken",
+      "partialTitle": "{count, plural, one {Teillauf — # Mitarbeiter per Entscheidung ausgenommen} other {Teillauf — # Mitarbeiter per Entscheidung ausgenommen}}",
+      "partialRecorded": "Bestätigt am {date}. Diese Entscheidung ist im Lauf aufgezeichnet.",
+      "partialRecovery": "Um die ausgenommenen Mitarbeiter zu bezahlen: Liefern Sie die fehlenden Eingaben nach, sobald deren Erfassungsmaske verfügbar ist, und zahlen Sie sie dann in einem Sonderlauf. Ein gebuchter Lauf wird niemals nachträglich geändert."
     },
     "adjust": {
       "title": "Anpassungen",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "Für Lohnläufe gilt keine Genehmigungsrichtlinie",
     "approvalPending": "Genehmigung ausstehend ({count} offen) — Festschreibung und Buchung sind blockiert",
     "printSet": "Drucksatz (nur Druckausgabe)",
-    "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt"
+    "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt",
+    "calculateRefusedAll": "Niemand konnte berechnet werden — {count, plural, one {# Mitarbeiter wurde abgelehnt} other {# Mitarbeiter wurden abgelehnt}}. Korrigieren Sie die Eingaben und berechnen Sie neu, oder bestätigen Sie sie vor dem Festschreiben."
   },
   "profiles": {
     "addEmployee": "Mitarbeiter ohne Profil",

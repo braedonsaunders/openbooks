@@ -29,6 +29,10 @@ import {
   cn,
 } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import type {
+  PayRunCalculationError,
+  PayRunRefusalAcknowledgement,
+} from '@openbooks/engine/src/payroll-run.ts'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
@@ -375,6 +379,17 @@ export function RunWizard(props: {
   separationSections: YearEndFilingSection[]
   canRun: boolean
   initialStep: WizardStep
+  /**
+   * The latest calculate's per-employee outcomes, persisted server-side at
+   * calculate time. The exception list renders from THIS, not only from the
+   * calculate response's memory — so the first calculate's refusals survive a
+   * refresh that used to wipe them.
+   */
+  calculationErrors: PayRunCalculationError[]
+  /** Recorded decision to commit despite refusals, if one was taken. */
+  refusalAcknowledgement: PayRunRefusalAcknowledgement | null
+  /** Whether the recorded acknowledgement binds to the current refusal set. */
+  refusalsAcknowledged: boolean
 }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -388,7 +403,32 @@ export function RunWizard(props: {
 
   const [step, setStep] = useState<WizardStep>(props.initialStep)
   const [busy, setBusy] = useState(false)
-  const [calcErrors, setCalcErrors] = useState<{ employee: string; message: string }[]>([])
+  // The loader is the authority on the persisted refusal record: these start
+  // from the run row (so the FIRST calculate's exceptions survive a refresh)
+  // and are re-synced whenever a refresh delivers a newer row.
+  const [calcErrors, setCalcErrors] = useState<PayRunCalculationError[]>(props.calculationErrors)
+  const [acknowledgement, setAcknowledgement] = useState<PayRunRefusalAcknowledgement | null>(
+    props.refusalAcknowledgement,
+  )
+  const [refusalsAcked, setRefusalsAcked] = useState(props.refusalsAcknowledged)
+  /**
+   * Every mutation below (calculate, acknowledge, scope and adjustment edits)
+   * returns the run's authoritative refusal state in its own response, so
+   * local state is set from responses — never synced from props in an effect.
+   */
+  function applyRefusalState(j: {
+    errors?: unknown
+    refusalAcknowledgement?: PayRunRefusalAcknowledgement | null
+    refusalsAcknowledged?: boolean
+  }) {
+    if (Array.isArray(j.errors)) setCalcErrors(j.errors as PayRunCalculationError[])
+    if (j.refusalAcknowledgement !== undefined) setAcknowledgement(j.refusalAcknowledgement)
+    if (j.refusalsAcknowledged !== undefined) setRefusalsAcked(j.refusalsAcknowledged)
+  }
+  /** In-scope refusals: entries that are not warnings on real stubs and not out-of-scope. */
+  const refusals = calcErrors.filter(
+    (entry) => entry.kind !== 'warning' && entry.kind !== 'out-of-scope',
+  )
   const [dry, setDry] = useState<{
     employees: number
     gross: string
@@ -411,9 +451,14 @@ export function RunWizard(props: {
 
   const blocked = props.readiness.blockers > 0
   const canCalculate = props.canRun && docDraft && run.run_status !== 'committed' && !blocked
-  // Stale stubs must never be committed: recalculate first, always.
+  // Stale stubs must never be committed: recalculate first, always. And a run
+  // with unacknowledged in-scope refusals must never commit silently: the
+  // commit button stays off until the operator acknowledges exactly this
+  // refusal set (the engine enforces the same gate, so a scripted call can
+  // never slip past a stale tab either).
   const canCommit =
     props.canRun && docDraft && run.run_status === 'calculated' && !props.staleness.stale
+    && (refusals.length === 0 || refusalsAcked)
   const canPost =
     props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
 
@@ -469,13 +514,53 @@ export function RunWizard(props: {
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
       if (action === 'calculate') {
-        setCalcErrors(Array.isArray(j.errors) ? j.errors : [])
+        const freshErrors: PayRunCalculationError[] = Array.isArray(j.errors) ? j.errors : []
+        applyRefusalState(j)
         setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
         setStep('review')
+        // Zero stubs with refusals is not a success ("Calculated £0.00 / 0
+        // employees" read as one): say plainly that nobody could be paid.
+        const freshRefusals = freshErrors.filter(
+          (entry) => entry.kind !== 'warning' && entry.kind !== 'out-of-scope',
+        )
+        if ((j.employees ?? 0) === 0 && freshRefusals.length > 0) {
+          toast.warning(t('run.calculateRefusedAll', { count: freshRefusals.length }))
+        } else {
+          toast.success(t(`run.${action}Done`))
+        }
       } else {
         setStep('finish')
+        toast.success(t(`run.${action}Done`))
       }
-      toast.success(t(`run.${action}Done`))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Record the deliberate decision to commit while in-scope employees are
+   * refused. The server acknowledges its CURRENT stored refusal set — the
+   * client never names the set — so what is recorded is exactly what the
+   * exception list showed.
+   */
+  async function acknowledgeRefusals() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'acknowledge-refusals' }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (j.acknowledgement) {
+        setAcknowledgement(j.acknowledgement)
+        setRefusalsAcked(true)
+      }
+      toast.success(t('wizard.gl.ackRecorded', { count: refusals.length }))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -532,7 +617,7 @@ export function RunWizard(props: {
         })
         const rj = await recalc.json()
         if (!recalc.ok) throw new Error(rj.error ?? 'failed')
-        setCalcErrors(Array.isArray(rj.errors) ? rj.errors : [])
+        applyRefusalState(rj)
         setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       }
       toast.success(t('wizard.period.scopeSaved', { count: includedPartyIds.length }))
@@ -561,7 +646,7 @@ export function RunWizard(props: {
       })
       const rj = await recalc.json()
       if (!recalc.ok) throw new Error(rj.error ?? 'failed')
-      setCalcErrors(Array.isArray(rj.errors) ? rj.errors : [])
+      applyRefusalState(rj)
       setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       toast.success(t('wizard.adjust.applied'))
       router.refresh()
@@ -785,9 +870,14 @@ export function RunWizard(props: {
           calculated={calculated}
           committed={committed || posted}
           canCommit={canCommit}
+          canAcknowledge={props.canRun && docDraft && run.run_status === 'calculated'}
           stale={props.staleness.stale}
           funding={props.funding}
           busy={busy}
+          refusals={refusals}
+          acknowledgement={acknowledgement}
+          refusalsAcked={refusalsAcked}
+          onAcknowledge={() => void acknowledgeRefusals()}
           onRetry={() => {
             setGl((g) => ({ ...g, state: 'loading' }))
             void loadGlPreview()
@@ -812,6 +902,7 @@ export function RunWizard(props: {
           bankAccounts={props.bankAccounts}
           funding={props.funding}
           canRun={props.canRun}
+          acknowledgement={acknowledgement}
           fmt={fmt}
         />
       )}
@@ -1351,7 +1442,7 @@ function ReviewStep({
   stubs: StubRow[]
   previousNet: Record<string, string>
   changes: StubChange[]
-  calcErrors: { employee: string; message: string }[]
+  calcErrors: PayRunCalculationError[]
   calculated: boolean
   registerReportId: string | null
   registerBuckets: RegisterBucket[]
@@ -1404,8 +1495,24 @@ function ReviewStep({
       return next
     })
 
+  const refusedCount = calcErrors.filter(
+    (entry) => entry.kind !== 'warning' && entry.kind !== 'out-of-scope',
+  ).length
+
   return (
     <div className="space-y-4">
+      {/* Zero stubs with refusals is a refused calculation, not an empty one:
+          the totals below would otherwise read "£0.00 / 0 employees" as if the
+          run simply had nothing to pay. */}
+      {calculated && stubs.length === 0 && refusedCount > 0 && (
+        <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+          <p className="flex items-center gap-2 font-semibold">
+            <AlertTriangle size={15} aria-hidden />
+            {t('wizard.review.allRefusedTitle', { count: refusedCount })}
+          </p>
+          <p className="mt-1">{t('wizard.review.allRefusedHint')}</p>
+        </div>
+      )}
       {excludedRows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
           <span className="text-slate-500 dark:text-slate-400">{t('wizard.adjust.excludedLabel')}</span>
@@ -2019,9 +2126,14 @@ function GlStep({
   calculated,
   committed,
   canCommit,
+  canAcknowledge,
   stale,
   funding,
   busy,
+  refusals,
+  acknowledgement,
+  refusalsAcked,
+  onAcknowledge,
   onRetry,
   onCommit,
   fmt,
@@ -2030,14 +2142,20 @@ function GlStep({
   calculated: boolean
   committed: boolean
   canCommit: boolean
+  canAcknowledge: boolean
   stale: boolean
   funding: Funding
   busy: boolean
+  refusals: PayRunCalculationError[]
+  acknowledgement: PayRunRefusalAcknowledgement | null
+  refusalsAcked: boolean
+  onAcknowledge: () => void
   onRetry: () => void
   onCommit: () => void
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
+  const [ackChecked, setAckChecked] = useState(false)
 
   if (!calculated) {
     return (
@@ -2082,6 +2200,49 @@ function GlStep({
 
   return (
     <div className="space-y-4">
+      {/* Refused employees are named HERE, at commit — not only in the review
+          step's exception list. The commit button stays off until the operator
+          acknowledges exactly this set, with the refusal text in front of
+          them; the acknowledgement is recorded on the run for audit. */}
+      {refusals.length > 0 && !committed && (
+        <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+          <p className="mb-1 flex items-center gap-2 font-semibold">
+            <AlertTriangle size={15} aria-hidden />
+            {t('wizard.gl.refusedTitle', { count: refusals.length })}
+          </p>
+          <p className="mb-2">{t('wizard.gl.refusedHint')}</p>
+          <ul className="ml-6 list-disc space-y-0.5">
+            {refusals.map((entry) => (
+              <li key={entry.employeePartyId}>
+                <span className="font-medium">{entry.employee}</span>: {entry.message}
+              </li>
+            ))}
+          </ul>
+          {refusalsAcked && acknowledgement ? (
+            <p className="mt-2 text-xs">
+              {t('wizard.gl.ackRecordedNote', {
+                count: acknowledgement.refusals.length,
+                date: acknowledgement.acknowledgedAt.slice(0, 10),
+              })}
+            </p>
+          ) : canAcknowledge ? (
+            <div className="mt-3 space-y-2">
+              <label className="flex cursor-pointer items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-red-600"
+                  checked={ackChecked}
+                  onChange={(e) => setAckChecked(e.target.checked)}
+                />
+                <span>{t('wizard.gl.ackLabel', { count: refusals.length })}</span>
+              </label>
+              <Button size="sm" variant="outline" disabled={busy || !ackChecked} onClick={onAcknowledge}>
+                {t('wizard.gl.ackRecord', { count: refusals.length })}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('wizard.gl.hint')}</p>
         {canCommit ? (
@@ -2091,6 +2252,8 @@ function GlStep({
           </Button>
         ) : stale && !committed ? (
           <span className="text-sm text-amber-600 dark:text-amber-400">{t('wizard.gl.staleBlocked')}</span>
+        ) : refusals.length > 0 && !refusalsAcked && !committed ? (
+          <span className="text-sm text-red-600 dark:text-red-400">{t('wizard.gl.refusedBlocked', { count: refusals.length })}</span>
         ) : null}
         {committed && (
           <Badge variant="default">{t('status.committed')}</Badge>
@@ -2292,6 +2455,7 @@ function FinishStep({
   bankAccounts,
   funding,
   canRun,
+  acknowledgement,
   fmt,
 }: {
   run: RunHeader
@@ -2308,6 +2472,7 @@ function FinishStep({
   bankAccounts: { id: string; label: string }[]
   funding: Funding
   canRun: boolean
+  acknowledgement: PayRunRefusalAcknowledgement | null
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
@@ -2407,6 +2572,30 @@ function FinishStep({
           )}
         </div>
       </div>
+
+      {/* A partial run committed deliberately: who was left out and why stays
+          visible after posting, with the honest recovery — answer the missing
+          input once its surface ships, then pay the missing employees on an
+          off-cycle run. A posted run is never edited in place. */}
+      {acknowledgement && acknowledgement.refusals.length > 0 && (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+          <p className="mb-1 flex items-center gap-2 font-semibold">
+            <AlertTriangle size={15} aria-hidden />
+            {t('wizard.finish.partialTitle', { count: acknowledgement.refusals.length })}
+          </p>
+          <ul className="ml-6 list-disc space-y-0.5">
+            {acknowledgement.refusals.map((entry) => (
+              <li key={entry.employeePartyId}>
+                <span className="font-medium">{entry.employee}</span>: {entry.message}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs">
+            {t('wizard.finish.partialRecorded', { date: acknowledgement.acknowledgedAt.slice(0, 10) })}
+          </p>
+          <p className="mt-1 text-xs">{t('wizard.finish.partialRecovery')}</p>
+        </div>
+      )}
 
       {!run.paid_at && <FundingPanel funding={funding} fmt={fmt} />}
 

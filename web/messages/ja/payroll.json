@@ -250,7 +250,9 @@
         "changed": "変更"
       },
       "protectionShortfallTitle": "{count, plural, one {# 件の明細で保護控除を全額控除できませんでした} other {# 件の明細で保護控除を全額控除できませんでした}}",
-      "protectionShortfallHint": "保護対象支給額の上限により控除が制限されました。未払残高は未払いのままです。債権者に連絡するか、次回計算に繰り越してください。"
+      "protectionShortfallHint": "保護対象支給額の上限により控除が制限されました。未払残高は未払いのままです。債権者に連絡するか、次回計算に繰り越してください。",
+      "allRefusedTitle": "{count, plural, one {# 名が拒否され、誰も計算できませんでした} other {# 名が拒否され、誰も計算できませんでした}}",
+      "allRefusedHint": "対象の従業員全員が拒否されたため、この計算には明細がありません。入力を修正して再計算するか、確定する前に拒否を承認してください。"
     },
     "gl": {
       "needsCalculation": "計算を実行して総勘定元帳への影響をプレビューしてください。",
@@ -265,7 +267,14 @@
       "credits": "貸方",
       "balanced": "貸借一致",
       "staleBlocked": "確定する前に計算をやり直してください。",
-      "commitHint": "確定すると明細が凍結され、この明細行が給与計算書類に書き込まれます。転記するまで確認は可能です。"
+      "commitHint": "確定すると明細が凍結され、この明細行が給与計算書類に書き込まれます。転記するまで確認は可能です。",
+      "refusedTitle": "{count, plural, one {対象の従業員 # 名が拒否されました} other {対象の従業員 # 名が拒否されました}}",
+      "refusedHint": "これらの従業員には今回の明細がなく、支払われません。このグループを承認するか、入力を修正して再計算するまで確定はできません。",
+      "refusedBlocked": "確定はブロックされています — {count, plural, one {拒否された # 名の承認が} other {拒否された # 名の承認が}}必要です。",
+      "ackLabel": "上記の理由により{count, plural, one {この従業員} other {この # 名}}が今回支払われないことを理解しました。",
+      "ackRecord": "承認を記録する",
+      "ackRecorded": "{count, plural, one {# 名の承認を記録しました} other {# 名の承認を記録しました}}。",
+      "ackRecordedNote": "{date}に承認済み — この判断はこの計算に記録されています。"
     },
     "finish": {
       "notCommitted": "転記する前に総勘定元帳ステップでその処理をコミットしてください。",
@@ -291,7 +300,10 @@
       "emailStubs": "明細をメール送信",
       "stubsEmailed": "{sent, plural, one {# 件の明細をメール送信しました。} other {# 件の明細をメール送信しました。}}",
       "stubsEmailedPartial": "{sent}件送信済み。スキップ（メールアドレスなし／失敗）:{skipped}",
-      "printCheques": "{count, plural, one {# 枚の小切手を印刷} other {# 枚の小切手を印刷}}"
+      "printCheques": "{count, plural, one {# 枚の小切手を印刷} other {# 枚の小切手を印刷}}",
+      "partialTitle": "{count, plural, one {部分的な支給 — 判断により # 名が除外されました} other {部分的な支給 — 判断により # 名が除外されました}}",
+      "partialRecorded": "{date}に承認済み。この判断はこの計算に記録されています。",
+      "partialRecovery": "除外された従業員に支払うには、入力画面が利用可能になり次第、不足している入力を登録し、臨時計算で支払ってください。転記済みの計算を後から変更することはありません。"
     },
     "adjust": {
       "title": "調整",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "給与計算に適用される承認ポリシーはありません",
     "approvalPending": "承認待ち ({count} 件) — 確定と転記はブロックされています",
     "printSet": "印刷セット (印刷配布のみ)",
-    "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません"
+    "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません",
+    "calculateRefusedAll": "誰も計算できませんでした — {count, plural, one {# 名が拒否されました} other {# 名が拒否されました}}。入力を修正して再計算するか、確定する前に承認してください。"
   },
   "profiles": {
     "addEmployee": "プロファイル未登録の従業員",

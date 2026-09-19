@@ -250,7 +250,9 @@
         "changed": "Cambiado"
       },
       "protectionShortfallTitle": "{count, plural, one {# recibo no pudo tomar una deducción protegida completa} other {# recibos no pudieron tomar una deducción protegida completa}}",
-      "protectionShortfallHint": "Los ingresos protegidos toparon estas deducciones. El saldo impago sigue adeudado — avise al acreedor o llévelo al próximo ciclo."
+      "protectionShortfallHint": "Los ingresos protegidos toparon estas deducciones. El saldo impago sigue adeudado — avise al acreedor o llévelo al próximo ciclo.",
+      "allRefusedTitle": "{count, plural, one {# empleado rechazado — no se pudo calcular a nadie} other {# empleados rechazados — no se pudo calcular a nadie}}",
+      "allRefusedHint": "Todos los empleados del alcance fueron rechazados, por lo que este ciclo no tiene recibos. Corrija los datos y recalcule, o acepte los rechazos antes de contabilizar."
     },
     "gl": {
       "needsCalculation": "Calcule el ciclo para previsualizar su impacto contable.",
@@ -265,7 +267,14 @@
       "credits": "Haber",
       "balanced": "Cuadrado",
       "staleBlocked": "Recalcule el ciclo antes de contabilizar.",
-      "commitHint": "Contabilizar congela los recibos y escribe estas líneas en el documento del ciclo. El ciclo sigue revisable hasta su contabilización."
+      "commitHint": "Contabilizar congela los recibos y escribe estas líneas en el documento del ciclo. El ciclo sigue revisable hasta su contabilización.",
+      "refusedTitle": "{count, plural, one {# empleado del alcance rechazado} other {# empleados del alcance rechazados}}",
+      "refusedHint": "Estos empleados no tienen recibo en este ciclo y no serán pagados. La contabilización está bloqueada hasta que acepte exactamente este grupo o corrija los datos y recalcule.",
+      "refusedBlocked": "Contabilización bloqueada — {count, plural, one {# empleado rechazado debe ser aceptado} other {# empleados rechazados deben ser aceptados}}.",
+      "ackLabel": "Entiendo que {count, plural, one {este empleado} other {estos # empleados}} no serán pagados en este ciclo, por los motivos indicados arriba.",
+      "ackRecord": "Registrar aceptación",
+      "ackRecorded": "Aceptación registrada para {count, plural, one {# empleado} other {# empleados}}.",
+      "ackRecordedNote": "Aceptado el {date} — esta decisión queda registrada en el ciclo."
     },
     "finish": {
       "notCommitted": "Confirme el ciclo en el paso de contabilidad antes de contabilizar.",
@@ -291,7 +300,10 @@
       "emailStubs": "Enviar recibos",
       "stubsEmailed": "{sent, plural, one {# recibo} other {# recibos}} enviados por correo.",
       "stubsEmailedPartial": "{sent} enviados; omitidos (sin correo o fallidos): {skipped}",
-      "printCheques": "Imprimir {count, plural, one {# cheque de nómina} other {# cheques de nómina}}"
+      "printCheques": "Imprimir {count, plural, one {# cheque de nómina} other {# cheques de nómina}}",
+      "partialTitle": "{count, plural, one {Ciclo parcial — # empleado excluido por decisión} other {Ciclo parcial — # empleados excluidos por decisión}}",
+      "partialRecorded": "Aceptado el {date}. Esta decisión queda registrada en el ciclo.",
+      "partialRecovery": "Para pagar a los empleados excluidos: aporte los datos faltantes cuando su pantalla de captura esté disponible y págueles en un ciclo fuera de nómina. Un ciclo contabilizado nunca se modifica después."
     },
     "adjust": {
       "title": "Ajustes",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "Ninguna política de aprobación aplica a los ciclos de nómina",
     "approvalPending": "En espera de aprobación ({count} pendientes) — la confirmación y contabilización están bloqueadas",
     "printSet": "Juego de impresión (solo impresión)",
-    "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo"
+    "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo",
+    "calculateRefusedAll": "No se pudo calcular a nadie — {count, plural, one {# empleado fue rechazado} other {# empleados fueron rechazados}}. Corrija los datos y recalcule, o acéptelos antes de contabilizar."
   },
   "profiles": {
     "addEmployee": "Empleado sin perfil",

@@ -250,7 +250,9 @@
         "changed": "Changed"
       },
       "protectionShortfallTitle": "{count, plural, one {# stub could not take a protected deduction in full} other {# stubs could not take a protected deduction in full}}",
-      "protectionShortfallHint": "Protected earnings capped these deductions. The unpaid balance stays owing — tell the creditor or carry it to the next run."
+      "protectionShortfallHint": "Protected earnings capped these deductions. The unpaid balance stays owing — tell the creditor or carry it to the next run.",
+      "allRefusedTitle": "{count, plural, one {# employee refused — nobody could be calculated} other {# employees refused — nobody could be calculated}}",
+      "allRefusedHint": "Every in-scope employee was refused, so this run has no stubs. Fix the input and recalculate, or acknowledge the refusals before committing."
     },
     "gl": {
       "needsCalculation": "Calculate the run to preview its GL impact.",
@@ -265,7 +267,14 @@
       "credits": "Credit",
       "balanced": "Balanced",
       "staleBlocked": "Recalculate the run before committing.",
-      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. The run remains reviewable until it is posted."
+      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. The run remains reviewable until it is posted.",
+      "refusedTitle": "{count, plural, one {# in-scope employee refused} other {# in-scope employees refused}}",
+      "refusedHint": "These employees have no stub on this run and will not be paid. Commit is blocked until you acknowledge exactly this set or fix the input and recalculate.",
+      "refusedBlocked": "{count, plural, one {# refused employee needs acknowledgement} other {# refused employees need acknowledgement}} before commit.",
+      "ackLabel": "I understand {count, plural, one {this employee} other {these # employees}} will not be paid on this run, for the reasons listed above.",
+      "ackRecord": "Record acknowledgement",
+      "ackRecorded": "Acknowledgement recorded for {count, plural, one {# employee} other {# employees}}.",
+      "ackRecordedNote": "Acknowledged on {date} — this decision is recorded on the run."
     },
     "finish": {
       "notCommitted": "Commit the run in the GL step before posting.",
@@ -291,7 +300,10 @@
       "emailStubs": "Email stubs",
       "stubsEmailed": "{sent, plural, one {# stub} other {# stubs}} emailed.",
       "stubsEmailedPartial": "{sent} emailed; skipped (no email or failed): {skipped}",
-      "printCheques": "Print {count, plural, one {# cheque} other {# cheques}}"
+      "printCheques": "Print {count, plural, one {# cheque} other {# cheques}}",
+      "partialTitle": "{count, plural, one {Partial run — # employee left out by decision} other {Partial run — # employees left out by decision}}",
+      "partialRecorded": "Acknowledged on {date}. This decision is recorded on the run.",
+      "partialRecovery": "To pay the employees left out: supply the missing input once its entry screen is available, then pay them on an off-cycle run. A posted run is never edited in place."
     },
     "adjust": {
       "title": "Adjustments",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "No approval policy applies to pay runs",
     "approvalPending": "Awaiting approval ({count} outstanding) — commit and posting are blocked",
     "printSet": "Print set (print delivery only)",
-    "stubsPrintOnly": "{count} employees are print-only and were not emailed"
+    "stubsPrintOnly": "{count} employees are print-only and were not emailed",
+    "calculateRefusedAll": "Nobody could be calculated — {count, plural, one {# employee was refused} other {# employees were refused}}. Fix the input and recalculate, or acknowledge them before committing."
   },
   "profiles": {
     "addEmployee": "Employee without a profile",

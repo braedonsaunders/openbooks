@@ -250,7 +250,9 @@
         "changed": "Modifié"
       },
       "protectionShortfallTitle": "{count, plural, one {# bulletin n’a pas pu prendre une retenue protégée en entier} other {# bulletins n’ont pas pu prendre une retenue protégée en entier}}",
-      "protectionShortfallHint": "Les gains protégés ont plafonné ces retenues. Le solde impayé reste dû — avisez le créancier ou reportez-le à la prochaine paie."
+      "protectionShortfallHint": "Les gains protégés ont plafonné ces retenues. Le solde impayé reste dû — avisez le créancier ou reportez-le à la prochaine paie.",
+      "allRefusedTitle": "{count, plural, one {# employé refusé — personne n'a pu être calculé} other {# employés refusés — personne n'a pu être calculé}}",
+      "allRefusedHint": "Chaque employé du périmètre a été refusé : cette paie ne contient aucun bulletin. Corrigez les données et recalculez, ou validez les refus avant de comptabiliser."
     },
     "gl": {
       "needsCalculation": "Calculez la paie pour prévisualiser son impact GL.",
@@ -265,7 +267,14 @@
       "credits": "Crédit",
       "balanced": "Équilibré",
       "staleBlocked": "Recalculez la paie avant de comptabiliser.",
-      "commitHint": "La comptabilisation fige les bulletins et écrit ces lignes dans le document de paie. La paie reste vérifiable jusqu’à son report."
+      "commitHint": "La comptabilisation fige les bulletins et écrit ces lignes dans le document de paie. La paie reste vérifiable jusqu’à son report.",
+      "refusedTitle": "{count, plural, one {# employé du périmètre refusé} other {# employés du périmètre refusés}}",
+      "refusedHint": "Ces employés n'ont pas de bulletin dans cette paie et ne seront pas payés. La comptabilisation est bloquée jusqu'à ce que vous validiez exactement ce groupe ou corrigiez les données et recalculiez.",
+      "refusedBlocked": "Comptabilisation bloquée — {count, plural, one {# employé refusé doit être validé} other {# employés refusés doivent être validés}}.",
+      "ackLabel": "Je comprends que {count, plural, one {cet employé} other {ces # employés}} ne seront pas payés dans cette paie, pour les raisons indiquées ci-dessus.",
+      "ackRecord": "Enregistrer la validation",
+      "ackRecorded": "Validation enregistrée pour {count, plural, one {# employé} other {# employés}}.",
+      "ackRecordedNote": "Validé le {date} — cette décision est enregistrée dans la paie."
     },
     "finish": {
       "notCommitted": "Validez le cycle à l'étape du grand livre avant la comptabilisation.",
@@ -291,7 +300,10 @@
       "emailStubs": "Envoyer les bulletins",
       "stubsEmailed": "{sent, plural, one {# bulletin} other {# bulletins}} envoyés.",
       "stubsEmailedPartial": "{sent} envoyés ; ignorés (sans courriel ou échec) : {skipped}",
-      "printCheques": "Imprimer {count, plural, one {# chèque} other {# chèques}}"
+      "printCheques": "Imprimer {count, plural, one {# chèque} other {# chèques}}",
+      "partialTitle": "{count, plural, one {Paie partielle — # employé exclu par décision} other {Paie partielle — # employés exclus par décision}}",
+      "partialRecorded": "Validé le {date}. Cette décision est enregistrée dans la paie.",
+      "partialRecovery": "Pour payer les employés exclus : fournissez les données manquantes dès que leur écran de saisie est disponible, puis payez-les dans une paie hors cycle. Une paie reportée n'est jamais modifiée après coup."
     },
     "adjust": {
       "title": "Ajustements",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "Aucune politique d'approbation ne s'applique aux paies",
     "approvalPending": "En attente d'approbation ({count} en suspens) — la comptabilisation et l'affichage sont bloqués",
     "printSet": "Jeu d'impression (impression seulement)",
-    "stubsPrintOnly": "{count} employés sont en impression seulement et n'ont pas été avisés par courriel"
+    "stubsPrintOnly": "{count} employés sont en impression seulement et n'ont pas été avisés par courriel",
+    "calculateRefusedAll": "Personne n'a pu être calculé — {count, plural, one {# employé refusé} other {# employés refusés}}. Corrigez les données et recalculez, ou validez-les avant de comptabiliser."
   },
   "profiles": {
     "addEmployee": "Employé sans dossier",

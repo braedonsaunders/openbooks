@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, env } from './db.ts'
-import { allocateProportionally, calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from './payroll-run.ts'
+import { acknowledgePayRunRefusals, allocateProportionally, calculatePayRun, commitPayRun, createPayRun, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement, payRunRefusalDigest, seedPayrollComponents } from './payroll-run.ts'
+import { mutatePayRunAdjustment } from './payroll-run-adjustments.ts'
 import { createRetroPayRun, proposeRetroPay } from './payroll-retro-store.ts'
 import { PayrollError } from './payroll-error.ts'
 import { abs, add, cmp, div, neg, sum } from './money.ts'
@@ -390,3 +391,312 @@ test(
     }
   },
 )
+
+/* Partial-refusal pins: three in-scope employees where two refuse must never
+// commit silently. One calculates; the other two are refused by name with the
+// engine's own refusal text. A fourth employee, deliberately excluded from the
+// run's scope, is not "left out" and appears nowhere in the refusal set. */
+async function partialRefusalFixture(label: string) {
+  const org = await createScratchOrg()
+  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const account = async (number: string, name: string, type: string) => {
+    const id = randomUUID()
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                            reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+              '[]'::jsonb, '{}'::jsonb, true)`)
+    return id
+  }
+  const wageExpense = await account('6000', 'Wages expense', 'expense')
+  const netPayable = await account('2300', 'Wages payable', 'liability_current')
+  const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({
+      payroll: {
+        wageExpenseAccountId: wageExpense,
+        netPayAccountId: netPayable,
+        cppPayableAccountId: craPayable,
+        eiPayableAccountId: craPayable,
+        taxPayableAccountId: craPayable,
+        wagesTo: 'expense',
+      },
+    })}::jsonb where id = ${org.orgId}`)
+  await seedPayrollComponents(org.orgId, actorId, 'CA')
+  const scheduleId = randomUUID()
+  await db.execute(sql`
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                               pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${org.orgId}, ${`${label} Schedule`}, 'biweekly', 26, '2026-07-18',
+            3, true, ${actorId}, ${actorId})`)
+  const addEmployee = async (name: string, payBasis: string, rateBasis: string | null) => {
+    const employeeId = randomUUID()
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`)
+    if (rateBasis) {
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', ${rateBasis}, '2026-01-01', true,
+                ${actorId}, ${actorId})`)
+    }
+    await db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                             pay_basis, federal_claim_code, provincial_claim_code,
+                                             vacation_method, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', ${payBasis}, 1, 1,
+              'accrue', true, ${actorId}, ${actorId})`)
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                billing_status, costing_basis, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, '2026-07-06', '8', 'approved', false,
+              'unbilled', 'actual', ${actorId}, ${actorId})`)
+    return employeeId
+  }
+  const paidId = await addEmployee(`${label} Paid`, 'hourly', 'hour')
+  const noRateId = await addEmployee(`${label} NoRate`, 'hourly', null)
+  const salaryId = await addEmployee(`${label} Salary`, 'salary', 'hour')
+  const excludedId = await addEmployee(`${label} Excluded`, 'hourly', 'hour')
+  const run = await createPayRun({
+    orgId: org.orgId, actorId, payScheduleId: scheduleId,
+    periodStart: '2026-07-05', periodEnd: '2026-07-18',
+  })
+  await mutatePayRunAdjustment({
+    orgId: org.orgId, documentId: run.documentId, actorId,
+    mutation: { action: 'exclude', employeePartyId: excludedId },
+  })
+  return { orgId: org.orgId, actorId, scheduleId, documentId: run.documentId, paidId, noRateId, salaryId, excludedId }
+}
+
+async function storedRunColumns(orgId: string, documentId: string) {
+  return (await db.execute<{ calculation_errors: unknown; refusal_acknowledgement: unknown; run_status: string }>(sql`
+    select calculation_errors, refusal_acknowledgement, run_status from pay_runs
+     where org_id = ${orgId} and document_id = ${documentId}`)).rows[0]!
+}
+
+test('a run with refused in-scope employees cannot commit silently', { skip: !DB }, async () => {
+  // The defect: one of three calculated, two refused, and commit posted with
+  // zero errors. Commit must refuse instead, naming both employees WITH the
+  // refusal text — and the deliberately excluded fourth employee is not
+  // "left out", so they appear nowhere.
+  const f = await partialRefusalFixture('Silent')
+  try {
+    const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.equal(calculated.employees, 1)
+    assert.equal(calculated.errors.length, 2)
+    const byName = new Map(calculated.errors.map((entry) => [entry.employee, entry]))
+    assert.match(byName.get('Silent NoRate')!.message, /no labor cost rate covers this employee/)
+    assert.match(byName.get('Silent Salary')!.message, /no annual labor cost rate/)
+    assert.ok(!calculated.errors.some((entry) => entry.employee === 'Silent Excluded'),
+      'a deliberately excluded employee is not a refusal')
+    // The first calculate persists its exceptions wholesale: commit and the
+    // run page read the same refusals the calculate saw.
+    const stored = parsePayRunCalculationErrors(
+      (await storedRunColumns(f.orgId, f.documentId)).calculation_errors,
+    )
+    assert.deepEqual(stored, calculated.errors)
+    await assert.rejects(
+      commitPayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId }),
+      (error: unknown) => {
+        assert.ok(error instanceof PayrollError)
+        assert.match(error.message, /2 in-scope employees were refused/)
+        assert.match(error.message, /Silent NoRate/)
+        assert.match(error.message, /no labor cost rate covers this employee for the period/)
+        assert.match(error.message, /Silent Salary/)
+        assert.match(error.message, /salaried employee has no annual labor cost rate/)
+        assert.ok(!error.message.includes('Silent Excluded'), 'the excluded employee is not named')
+        return true
+      },
+      'commit names both refused employees with their refusal text',
+    )
+    const after = await storedRunColumns(f.orgId, f.documentId)
+    assert.equal(after.run_status, 'calculated', 'the refused commit writes nothing')
+    const lines = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from document_lines
+       where org_id = ${f.orgId} and document_id = ${f.documentId}`)).rows[0]?.count
+    assert.equal(lines, 0, 'no GL projection is materialized by a refused commit')
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
+test('acknowledged refusals commit and the acknowledgement is recorded', { skip: !DB }, async () => {
+  // The only path past the gate besides fixing the input: an explicit
+  // acknowledgement that names who is left out and why, retrievable after
+  // posting so an auditor can see the decision months later.
+  const f = await partialRefusalFixture('Acked')
+  try {
+    await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    const acknowledgement = await acknowledgePayRunRefusals({
+      orgId: f.orgId, documentId: f.documentId, actorId: f.actorId,
+    })
+    assert.equal(acknowledgement.acknowledgedBy, f.actorId)
+    assert.deepEqual(
+      acknowledgement.refusals.map((entry) => entry.employee).sort(),
+      ['Acked NoRate', 'Acked Salary'],
+    )
+    assert.ok(acknowledgement.refusals.every((entry) => entry.message.length > 0),
+      'the acknowledgement carries the refusal text, not just names')
+    const committed = await commitPayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.ok(committed.lines > 0, 'the acknowledged run commits')
+    const after = await storedRunColumns(f.orgId, f.documentId)
+    assert.equal(after.run_status, 'committed')
+    const recordedAck = parsePayRunRefusalAcknowledgement(after.refusal_acknowledgement)
+    assert.ok(recordedAck, 'the acknowledgement survives the commit')
+    assert.deepEqual(
+      recordedAck.refusals.map((entry) => entry.employee).sort(),
+      ['Acked NoRate', 'Acked Salary'],
+    )
+    assert.ok(recordedAck.refusals.every((entry) => entry.message.length > 0))
+    const refusals = (parsePayRunCalculationErrors(after.calculation_errors) ?? [])
+      .filter((entry) => entry.kind === 'refusal')
+    assert.equal(recordedAck.errorsDigest, payRunRefusalDigest(refusals),
+      'the recorded acknowledgement binds to the committed refusal set')
+    const audit = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from audit_log
+       where org_id = ${f.orgId} and table_name = 'pay_runs' and row_id = ${f.documentId}
+         and changes->>'operation' = 'acknowledge-refusals'`)).rows[0]?.count
+    assert.equal(audit, 1, 'the acknowledgement decision is in the audit log')
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
+test('an acknowledgement does not authorise a different refusal set', { skip: !DB }, async () => {
+  // Guardrail: acknowledging "NoRate and Salary are out" and then fixing
+  // NoRate must not wave Salary's replacement set through — the old
+  // acknowledgement binds to the set it named.
+  const f = await partialRefusalFixture('Rebind')
+  try {
+    await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    await acknowledgePayRunRefusals({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                    is_active, created_by, updated_by)
+      values (${f.orgId}, ${f.noRateId}, 'CAD', '30', 'hour', '2026-01-01', true,
+              ${f.actorId}, ${f.actorId})`)
+    const recalculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    // Wholesale replace: the fixed employee leaves exactly one stored refusal.
+    assert.deepEqual(recalculated.errors.map((entry) => entry.employee), ['Rebind Salary'])
+    const stored = parsePayRunCalculationErrors(
+      (await storedRunColumns(f.orgId, f.documentId)).calculation_errors,
+    )
+    assert.deepEqual((stored ?? []).map((entry) => entry.employee), ['Rebind Salary'])
+    await assert.rejects(
+      commitPayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId }),
+      /1 in-scope employee was refused.*Rebind Salary/,
+      'the stale acknowledgement does not authorise the new refusal set',
+    )
+    await acknowledgePayRunRefusals({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    await commitPayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    const after = await storedRunColumns(f.orgId, f.documentId)
+    assert.equal(after.run_status, 'committed', 'a fresh acknowledgement authorises the current set')
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
+test('a fully fixed run commits with no acknowledgement demanded', { skip: !DB }, async () => {
+  // Guardrail: a successful calculate clears the refusal record, so the gate
+  // is not a permanent tax — refuse, fix everything, recalculate, commit.
+  const f = await partialRefusalFixture('Fixed')
+  try {
+    await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                    is_active, created_by, updated_by)
+      values (${f.orgId}, ${f.noRateId}, 'CAD', '30', 'hour', '2026-01-01', true,
+              ${f.actorId}, ${f.actorId})`)
+    await db.execute(sql`
+      update labor_cost_rates set effective_to = '2026-06-30', updated_at = now()
+       where org_id = ${f.orgId} and employee_party_id = ${f.salaryId}
+         and effective_from = '2026-01-01'`)
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                    is_active, created_by, updated_by)
+      values (${f.orgId}, ${f.salaryId}, 'CAD', '90000', 'year', '2026-07-01', true,
+              ${f.actorId}, ${f.actorId})`)
+    const recalculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.deepEqual(recalculated.errors, [])
+    assert.equal(recalculated.employees, 3)
+    const after = await storedRunColumns(f.orgId, f.documentId)
+    assert.deepEqual(parsePayRunCalculationErrors(after.calculation_errors), [],
+      'a successful calculate stores the empty set, not the old refusals')
+    await commitPayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.equal((await storedRunColumns(f.orgId, f.documentId)).run_status, 'committed')
+    await assert.rejects(
+      acknowledgePayRunRefusals({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId }),
+      /already committed/,
+      'there is nothing left to acknowledge after the commit',
+    )
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
+test('a run where every in-scope employee refuses is not a success', { skip: !DB }, async () => {
+  // The "Calculated £0.00 / 0 employees" case: zero stubs with a clean shape
+  // must still refuse to commit, and the calculate result itself carries the
+  // refusals rather than reading as a clean zero.
+  const org = await createScratchOrg()
+  const actorId = (await seedFlowActors(org.orgId)).adminId
+  try {
+    const account = async (number: string, name: string, type: string) => {
+      const id = randomUUID()
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                '[]'::jsonb, '{}'::jsonb, true)`)
+      return id
+    }
+    const wageExpense = await account('6000', 'Wages expense', 'expense')
+    const netPayable = await account('2300', 'Wages payable', 'liability_current')
+    const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
+    await db.execute(sql`
+      update orgs set settings = settings || ${JSON.stringify({
+        payroll: {
+          wageExpenseAccountId: wageExpense,
+          netPayAccountId: netPayable,
+          cppPayableAccountId: craPayable,
+          eiPayableAccountId: craPayable,
+          taxPayableAccountId: craPayable,
+          wagesTo: 'expense',
+        },
+      })}::jsonb where id = ${org.orgId}`)
+    await seedPayrollComponents(org.orgId, actorId, 'CA')
+    const scheduleId = randomUUID()
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active, created_by, updated_by)
+      values (${scheduleId}, ${org.orgId}, 'AllRefused Schedule', 'biweekly', 26, '2026-07-18',
+              3, true, ${actorId}, ${actorId})`)
+    for (const name of ['AllRefused A', 'AllRefused B']) {
+      const employeeId = randomUUID()
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`)
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_method, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                'accrue', true, ${actorId}, ${actorId})`)
+    }
+    const run = await createPayRun({
+      orgId: org.orgId, actorId, payScheduleId: scheduleId,
+      periodStart: '2026-07-05', periodEnd: '2026-07-18',
+    })
+    const calculated = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })
+    assert.equal(calculated.employees, 0)
+    assert.equal(calculated.errors.length, 2, 'zero stubs still carries both refusals')
+    await assert.rejects(
+      commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
+      /2 in-scope employees were refused/,
+      'an all-refused run cannot commit without acknowledgement',
+    )
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})

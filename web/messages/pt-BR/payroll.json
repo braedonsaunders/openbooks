@@ -250,7 +250,9 @@
         "changed": "Alterado"
       },
       "protectionShortfallTitle": "{count, plural, one {# holerite não suportou um desconto protegido integral} other {# holerites não suportaram um desconto protegido integral}}",
-      "protectionShortfallHint": "Os ganhos protegidos limitaram estes descontos. O saldo não pago continua devido — avise o credor ou transfira para a próxima folha."
+      "protectionShortfallHint": "Os ganhos protegidos limitaram estes descontos. O saldo não pago continua devido — avise o credor ou transfira para a próxima folha.",
+      "allRefusedTitle": "{count, plural, one {# funcionário recusado — ninguém pôde ser calculado} other {# funcionários recusados — ninguém pôde ser calculado}}",
+      "allRefusedHint": "Todos os funcionários do escopo foram recusados, por isso esta folha não tem holerites. Corrija os dados e recalcule, ou confirme as recusas antes de lançar."
     },
     "gl": {
       "needsCalculation": "Calcule a folha para ver o impacto no razão.",
@@ -265,7 +267,14 @@
       "credits": "Crédito",
       "balanced": "Balanceado",
       "staleBlocked": "Recalcule a folha antes de lançar.",
-      "commitHint": "O lançamento congela os holerites e grava estas linhas no documento da folha. A folha segue revisável até ser contabilizada."
+      "commitHint": "O lançamento congela os holerites e grava estas linhas no documento da folha. A folha segue revisável até ser contabilizada.",
+      "refusedTitle": "{count, plural, one {# funcionário do escopo recusado} other {# funcionários do escopo recusados}}",
+      "refusedHint": "Esses funcionários não têm holerite nesta folha e não serão pagos. O lançamento está bloqueado até que você confirme exatamente este grupo ou corrija os dados e recalcule.",
+      "refusedBlocked": "Lançamento bloqueado — {count, plural, one {# funcionário recusado precisa} other {# funcionários recusados precisam}} de confirmação.",
+      "ackLabel": "Entendo que {count, plural, one {este funcionário} other {estes # funcionários}} não serão pagos nesta folha, pelos motivos listados acima.",
+      "ackRecord": "Registrar confirmação",
+      "ackRecorded": "Confirmação registrada para {count, plural, one {# funcionário} other {# funcionários}}.",
+      "ackRecordedNote": "Confirmado em {date} — esta decisão fica registrada na folha."
     },
     "finish": {
       "notCommitted": "Confirme a execução na etapa do razão antes de lançar.",
@@ -291,7 +300,10 @@
       "emailStubs": "Enviar contracheques",
       "stubsEmailed": "{sent, plural, one {# contracheque} other {# contracheques}} enviados por e-mail.",
       "stubsEmailedPartial": "{sent} enviados; ignorados (sem e-mail ou falha): {skipped}",
-      "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}"
+      "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}",
+      "partialTitle": "{count, plural, one {Folha parcial — # funcionário excluído por decisão} other {Folha parcial — # funcionários excluídos por decisão}}",
+      "partialRecorded": "Confirmado em {date}. Esta decisão fica registrada na folha.",
+      "partialRecovery": "Para pagar os funcionários excluídos: informe os dados faltantes assim que sua tela de entrada estiver disponível e pague-os em uma folha extra. Uma folha contabilizada nunca é alterada depois."
     },
     "adjust": {
       "title": "Ajustes",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "Nenhuma política de aprovação se aplica às folhas",
     "approvalPending": "Aguardando aprovação ({count} pendentes) — lançamento e contabilização bloqueados",
     "printSet": "Jogo de impressão (somente impressão)",
-    "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail"
+    "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail",
+    "calculateRefusedAll": "Ninguém pôde ser calculado — {count, plural, one {# funcionário foi recusado} other {# funcionários foram recusados}}. Corrija os dados e recalcule, ou confirme antes de lançar."
   },
   "profiles": {
     "addEmployee": "Funcionário sem perfil",

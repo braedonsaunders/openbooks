@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
+import { acknowledgePayRunRefusals, calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
@@ -80,7 +80,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
              r.pay_schedule_id, s.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.tax_year, r.run_status,
-             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
+             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
+             r.calculation_errors, r.refusal_acknowledgement
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
@@ -341,6 +342,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (body.action === 'approval-state') {
       return NextResponse.json({ ok: true, ...(await payRunApprovalState(gate.user.orgId, id)) })
+    }
+    // Record an explicit decision to commit while in-scope employees are
+    // refused. Taken against the run's CURRENT stored refusal set server-side
+    // — never a caller-supplied list — so the acknowledgement necessarily
+    // names exactly who is being left out, with the refusal text verbatim.
+    if (body.action === 'acknowledge-refusals') {
+      const acknowledgement = await acknowledgePayRunRefusals({
+        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json({ ok: true, acknowledgement })
     }
     if (body.action === 'commit') {
       // Money must not move before approval: commit materializes the GL
