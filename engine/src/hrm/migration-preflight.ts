@@ -3,8 +3,9 @@
  *
  * Scope: classifies collector-supplied source inventory for ONE-TIME migration
  * into canonical worker_employments. It performs no DML, no compatibility
- * fallback, and no database, pool, or environment access: the only import is
- * the pure civil-date helpers from ./temporal.ts. The collector that fetches
+ * fallback, and no database, pool, or environment access: the only imports
+ * are the pure civil-date helpers from ./temporal.ts plus node:crypto (pure
+ * builtin SHA-256, no IO) for the source fingerprint. The collector that fetches
  * source rows belongs to a later slice; fixtures in tests are synthetic and
  * claim no real tenant counts. No salary, SIN, address, or other PII field
  * exists anywhere in this contract — only evidence identifiers.
@@ -254,8 +255,14 @@ export interface PreflightReport {
   readonly counts: Record<PreflightCode, number>;
 }
 
-function isNonEmpty(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
+/**
+ * Evidence presence: whitespace-only counts as missing. Callers keep the
+ * exact input text (identity keys, fingerprints, and sort order all use raw
+ * values, never trimmed copies) and refuse blank evidence with a precise
+ * remedy instead of coercing it.
+ */
+function isNonBlank(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 /** Empty string is missing, matching collector normalization. */
@@ -371,7 +378,7 @@ interface RowContext {
 
 function addProvenance(ctx: RowContext, values: readonly (string | null)[]): void {
   for (const value of values) {
-    if (isNonEmpty(value) && !ctx.provenance.includes(value)) ctx.provenance.push(value);
+    if (isNonBlank(value) && !ctx.provenance.includes(value)) ctx.provenance.push(value);
   }
 }
 
@@ -391,15 +398,18 @@ function checkBinding(
   if (binding.canonicalEmployerSubsidiaryId !== effectiveEmployer) {
     mismatches.push("canonical employer differs from the row effective employer");
   }
-  if (!isNonEmpty(binding.canonicalEmploymentId)) mismatches.push("canonical employment id is missing");
+  if (!isNonBlank(binding.canonicalEmploymentId)) mismatches.push("canonical employment id is missing");
   if (binding.sourceVersion !== row.sourceVersion) {
     mismatches.push(`source version drifted (bound ${binding.sourceVersion}, row ${row.sourceVersion})`);
+  }
+  if (!isNonBlank(binding.sourceVersion) || !isNonBlank(row.sourceVersion)) {
+    mismatches.push("source version is missing or blank and cannot prove consistency");
   }
   if (binding.sourceFingerprint !== fingerprint) {
     mismatches.push("source fingerprint differs: the source changed since binding");
   }
   if (!isRecordedInstant(binding.boundAt)) mismatches.push("boundAt is not a valid UTC instant");
-  if (!isNonEmpty(binding.provenance)) mismatches.push("binding provenance is missing");
+  if (!isNonBlank(binding.provenance)) mismatches.push("binding provenance is missing");
   if (mismatches.length > 0) {
     ctx.issues.push({
       code: "binding_conflict",
@@ -568,7 +578,7 @@ function checkObservation(row: SourcePersonRow, ctx: RowContext): boolean {
     return false;
   }
   if (observation.status === "unknown") return false;
-  if (!isRecordedInstant(observation.observedAt) || !isNonEmpty(observation.provenance)) {
+  if (!isRecordedInstant(observation.observedAt) || !isNonBlank(observation.provenance)) {
     ctx.issues.push({
       code: "invalid_observation_evidence",
       level: "ambiguous",
@@ -605,9 +615,9 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
     return empty;
   }
   const problems: string[] = [];
-  if (!isNonEmpty(resolution.approvedBy)) problems.push("approver is missing");
+  if (!isNonBlank(resolution.approvedBy)) problems.push("approver is missing");
   if (!isRecordedInstant(resolution.approvedAt)) problems.push("approval instant is not a valid UTC stamp");
-  if (!isNonEmpty(resolution.rationale)) problems.push("rationale is missing");
+  if (!isNonBlank(resolution.rationale)) problems.push("rationale is missing");
   if (resolution.hiredOn !== null && !isCivilDate(resolution.hiredOn)) {
     problems.push(`mapped hired_on ${resolution.hiredOn} is not a valid YYYY-MM-DD date`);
   }
@@ -643,6 +653,23 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
   };
 }
 
+/**
+ * One explicit date-evidence contract across role presence combinations:
+ * observed termination requires an actual terminated_on date, never invented
+ * from flags or from the observation anchor.
+ */
+function addMissingTerminationDate(ctx: RowContext): void {
+  ctx.issues.push({
+    code: "missing_termination_date",
+    level: "requires_review",
+    detail:
+      "termination is observed as the current status but no terminated_on date exists; the " +
+      "termination date is not invented from flags or from the observation anchor.",
+    remedy:
+      "Supply collector evidence with the actual termination date (YYYY-MM-DD) and its provenance.",
+  });
+}
+
 function checkEvidence(
   row: SourcePersonRow,
   observationCurrent: boolean,
@@ -662,16 +689,32 @@ function checkEvidence(
         "if so, its actual service dates with provenance.",
     });
   }
+  // Operator mappings prove dates independently of any legacy role: a
+  // complete mapping is consumed even when no role exists. An internally
+  // contradictory mapping was already refused above (resolution would not be
+  // applied), and a source-versus-mapping conflict needs source dates to
+  // contradict, so there is nothing to silently prefer here.
+  const mappedStart = resolution.applied ? resolution.hiredOn : null;
+  const mappedEnd = resolution.applied ? resolution.terminatedOn : null;
+  const mappedStartProvenance = mappedStart !== null ? "operator-employer-date-mapping" : null;
   if (role === null && payroll === null) {
+    // One explicit date-evidence contract across role presence: observed
+    // termination requires an actual terminated_on date, never invented
+    // from the observation anchor.
+    if (observationTerminated && mappedEnd === null) {
+      addMissingTerminationDate(ctx);
+    }
     if (observationCurrent) {
-      ctx.notes.push({
-        code: "service_start_unknown",
-        detail:
-          "current employment is observed but no role, payroll profile, or actual service start is " +
-          "known: the migration may proceed on the observation date while historical coverage stays " +
-          "unknown. The observation-start anchor is not copied into hired_on.",
-      });
-      return { serviceStart: null, serviceStartProvenance: null };
+      if (mappedStart === null) {
+        ctx.notes.push({
+          code: "service_start_unknown",
+          detail:
+            "current employment is observed but no role, payroll profile, or actual service start is " +
+            "known: the migration may proceed on the observation date while historical coverage stays " +
+            "unknown. The observation-start anchor is not copied into hired_on.",
+        });
+      }
+      return { serviceStart: mappedStart, serviceStartProvenance: mappedStartProvenance };
     }
     ctx.issues.push({
       code: "insufficient_employment_evidence",
@@ -684,7 +727,7 @@ function checkEvidence(
         "provenance, a payroll profile, or an operator-asserted current observation with " +
         "instant and provenance. Current active flags alone are never enough.",
     });
-    return { serviceStart: null, serviceStartProvenance: null };
+    return { serviceStart: mappedStart, serviceStartProvenance: mappedStartProvenance };
   }
   let serviceStart: string | null = null;
   let serviceStartProvenance: string | null = null;
@@ -733,7 +776,7 @@ function checkEvidence(
           "Supply collector evidence reconciling the hire date (one agreed YYYY-MM-DD date with " +
           "provenance, or a corrected operator mapping).",
       });
-    } else if (roleHiredValid && isNonEmpty(role.dateProvenance)) {
+    } else if (roleHiredValid && isNonBlank(role.dateProvenance)) {
       serviceStart = role.hiredOn;
       serviceStartProvenance = role.dateProvenance;
     } else if (roleHiredValid) {
@@ -789,17 +832,10 @@ function checkEvidence(
     // A bare inactive flag is not employment proof in either direction: it
     // may be data maintenance, so it never demands a fabricated
     // terminated_on. Only observed/corroborated termination (a current
-    // terminated observation) requires the actual termination date.
+    // terminated observation) requires the actual termination date — the
+    // same explicit contract the role-less branches below share.
     if (observationTerminated && serviceEnd === null) {
-      ctx.issues.push({
-        code: "missing_termination_date",
-        level: "requires_review",
-        detail:
-          "termination is observed as the current status but no terminated_on date exists; the " +
-          "termination date is not invented from flags or from the observation anchor.",
-        remedy:
-          "Supply collector evidence with the actual termination date (YYYY-MM-DD) and its provenance.",
-      });
+      addMissingTerminationDate(ctx);
     }
     if (role.countryContext !== null && payroll !== null && payroll.countryContext !== null &&
       role.countryContext !== payroll.countryContext) {
@@ -850,6 +886,15 @@ function checkEvidence(
     }
   }
   if (role === null && payroll !== null) {
+    // Role-less payroll consumes a complete operator mapping the same way:
+    // mapped dates are preserved, never discarded for lack of a role.
+    const serviceStart = mappedStart;
+    const serviceStartProvenance = mappedStartProvenance;
+    // Same explicit date-evidence contract as every other role presence:
+    // observed termination requires an actual terminated_on date.
+    if (observationTerminated && mappedEnd === null) {
+      addMissingTerminationDate(ctx);
+    }
     if (observationCurrent) {
       ctx.notes.push({
         code: "roleless_payroll_evidence",
@@ -858,13 +903,15 @@ function checkEvidence(
           "in the report as an evidence case and may migrate on the observation date; the consumer " +
           "must still confirm the role mapping.",
       });
-      ctx.notes.push({
-        code: "service_start_unknown",
-        detail:
-          "no actual service start is known: the migration may proceed on the observation date " +
-          "while historical coverage stays unknown. The observation-start anchor is not copied " +
-          "into hired_on.",
-      });
+      if (serviceStart === null) {
+        ctx.notes.push({
+          code: "service_start_unknown",
+          detail:
+            "no actual service start is known: the migration may proceed on the observation date " +
+            "while historical coverage stays unknown. The observation-start anchor is not copied " +
+            "into hired_on.",
+        });
+      }
     } else {
       ctx.issues.push({
         code: "roleless_payroll_evidence",
@@ -878,6 +925,7 @@ function checkEvidence(
           "observation with instant and provenance.",
       });
     }
+    return { serviceStart, serviceStartProvenance };
   }
   if (
     !row.party.isActive &&
@@ -920,10 +968,11 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
     row.existingBinding !== null ? row.existingBinding.provenance : null,
   ]);
   if (
-    !isNonEmpty(row.orgId) ||
-    !isNonEmpty(row.sourceNamespace) ||
-    !isNonEmpty(row.sourceId) ||
-    !isNonEmpty(row.nativePartyId)
+    !isNonBlank(row.orgId) ||
+    !isNonBlank(row.sourceNamespace) ||
+    !isNonBlank(row.sourceId) ||
+    !isNonBlank(row.nativePartyId) ||
+    !isNonBlank(row.sourceVersion)
   ) {
     ctx.issues.push({
       code: "invalid_source_identity",

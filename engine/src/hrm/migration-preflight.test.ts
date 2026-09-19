@@ -536,8 +536,8 @@ test("canonical observation vocabulary: non-canonical status refuses", () => {
   assert.ok(row.issues.some((issue) => issue.code === "invalid_observation_status"));
 });
 
-test("terminated observation with known employer readies on the observation date", () => {
-  const row = onlyRow(
+test("terminated observation without a termination date needs review with or without a role", () => {
+  const roleless = onlyRow(
     preflightEmploymentMigration([
       baseRow({
         role: null,
@@ -546,11 +546,48 @@ test("terminated observation with known employer readies on the observation date
       }),
     ]),
   );
+  assert.equal(roleless.classification, "requires_review");
+  assert.ok(roleless.issues.some((issue) => issue.code === "missing_termination_date"));
+  assert.equal(roleless.candidate, null);
+  assert.equal(roleless.historicalCoverage, "unknown");
+
+  const rolelessPayroll = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        observation: { status: "terminated", observedAt: "2026-08-15T00:00:00Z", provenance: "op-9" },
+      }),
+    ]),
+  );
+  assert.equal(rolelessPayroll.classification, "requires_review");
+  assert.ok(rolelessPayroll.issues.some((issue) => issue.code === "missing_termination_date"));
+  assert.equal(rolelessPayroll.candidate, null);
+});
+
+test("role-less terminated observation with a mapped termination date readies", () => {
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        payroll: null,
+        observation: { status: "terminated", observedAt: "2026-08-15T00:00:00Z", provenance: "op-9" },
+        resolution: {
+          kind: "operator-employer-date-mapping",
+          employerSubsidiaryId: null,
+          hiredOn: null,
+          terminatedOn: "2026-08-10",
+          approvedBy: "op-7",
+          approvedAt: "2026-09-10T12:00:00Z",
+          rationale: "release record",
+        },
+      }),
+    ]),
+  );
   assert.equal(row.classification, "ready");
   assert.equal(row.historicalCoverage, "unknown");
   assert.equal(row.candidate?.status, "terminated");
   assert.equal(row.candidate?.effectiveFrom, "2026-08-15");
-  assert.equal(row.candidate?.serviceStart, null);
+  assert.ok(!row.issues.some((issue) => issue.code === "missing_termination_date"));
 });
 
 test("already_migrated retains other issues instead of short-circuiting", () => {
@@ -713,4 +750,153 @@ test("output carries no PII-shaped payload", () => {
   assert.ok(!text.includes("salary"));
   assert.ok(!text.includes("sin_encrypted"));
   assert.ok(!text.includes("address"));
+});
+
+test("whitespace-only observation provenance refuses; it never reads as ready", () => {
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        payroll: null,
+        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "   " },
+      }),
+    ]),
+  );
+  assert.equal(row.classification, "ambiguous");
+  assert.ok(row.issues.some((issue) => issue.code === "invalid_observation_evidence"));
+  assert.equal(row.candidate, null);
+});
+
+test("whitespace-only identity refuses and keys are never silently trimmed", () => {
+  const blank = onlyRow(preflightEmploymentMigration([baseRow({ sourceId: "   " })]));
+  assert.equal(blank.classification, "ambiguous");
+  assert.ok(blank.issues.some((issue) => issue.code === "invalid_source_identity"));
+  assert.equal(blank.candidate, null);
+
+  const blankVersion = onlyRow(
+    preflightEmploymentMigration([baseRow({ sourceId: "ver-blank", sourceVersion: "  " })]),
+  );
+  assert.ok(blankVersion.issues.some((issue) => issue.code === "invalid_source_identity"));
+
+  const report = preflightEmploymentMigration([
+    baseRow({ sourceId: " a" }),
+    baseRow({ sourceId: "a" }),
+  ]);
+  assert.equal(report.rows.length, 2);
+  assert.ok(!report.rows.some((row) => row.issues.some((issue) => issue.code === "duplicate_source_key")));
+});
+
+test("whitespace-only binding provenance is a binding conflict, never migrated", () => {
+  const template = baseRow({ sourceId: "bind-blank-prov" });
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      {
+        ...template,
+        existingBinding: { ...bindingFor(template, "emp-1"), provenance: "   " },
+      },
+    ]),
+  );
+  assert.equal(row.classification, "binding_conflict");
+  assert.ok(row.issues.some((issue) => issue.code === "binding_conflict"));
+});
+
+test("whitespace-only operator approver or rationale is incomplete mapping evidence", () => {
+  const variants = [
+    { approvedBy: "   ", rationale: "transfer letter filed" },
+    { approvedBy: "op-7", rationale: "\t " },
+  ];
+  for (const [approvedBy, rationale] of variants.map((variant) => [variant.approvedBy, variant.rationale] as const)) {
+    const row = onlyRow(
+      preflightEmploymentMigration([
+        baseRow({
+          resolution: {
+            kind: "operator-employer-date-mapping",
+            employerSubsidiaryId: null,
+            hiredOn: null,
+            terminatedOn: null,
+            approvedBy,
+            approvedAt: "2026-09-10T12:00:00Z",
+            rationale,
+          },
+        }),
+      ]),
+    );
+    assert.ok(row.issues.some((issue) => issue.code === "incomplete_resolution_evidence"));
+    assert.equal(row.classification, "requires_review");
+  }
+});
+
+test("whitespace-only hire-date provenance needs review instead of anchoring history", () => {
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({ role: { ...baseRow().role!, dateProvenance: "  " } }),
+    ]),
+  );
+  assert.ok(row.issues.some((issue) => issue.code === "missing_service_date_provenance"));
+  assert.equal(row.serviceStart, null);
+  assert.equal(row.classification, "requires_review");
+});
+
+test("mapped service dates are preserved without a role", () => {
+  const mapping = {
+    kind: "operator-employer-date-mapping",
+    employerSubsidiaryId: null,
+    hiredOn: "2022-01-01",
+    terminatedOn: null,
+    approvedBy: "op-7",
+    approvedAt: "2026-09-10T12:00:00Z",
+    rationale: "signed offer letter",
+  } as const;
+  const bare = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        payroll: null,
+        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
+        resolution: { ...mapping },
+      }),
+    ]),
+  );
+  assert.equal(bare.classification, "ready");
+  assert.equal(bare.serviceStart, "2022-01-01");
+  assert.equal(bare.serviceStartProvenance, "operator-employer-date-mapping");
+  assert.equal(bare.candidate?.serviceStart, "2022-01-01");
+  assert.equal(bare.historicalCoverage, "unknown");
+
+  const withPayroll = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
+        resolution: { ...mapping },
+      }),
+    ]),
+  );
+  assert.equal(withPayroll.classification, "ready");
+  assert.equal(withPayroll.serviceStart, "2022-01-01");
+  assert.ok(!withPayroll.notes.some((note) => note.code === "service_start_unknown"));
+});
+
+test("contradictory mapped dates are refused without a role", () => {
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        role: null,
+        payroll: null,
+        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
+        resolution: {
+          kind: "operator-employer-date-mapping",
+          employerSubsidiaryId: null,
+          hiredOn: "2022-01-01",
+          terminatedOn: "2021-12-31",
+          approvedBy: "op-7",
+          approvedAt: "2026-09-10T12:00:00Z",
+          rationale: "conflicting records",
+        },
+      }),
+    ]),
+  );
+  assert.ok(row.issues.some((issue) => issue.code === "incomplete_resolution_evidence"));
+  assert.notEqual(row.classification, "ready");
+  assert.equal(row.candidate, null);
 });
