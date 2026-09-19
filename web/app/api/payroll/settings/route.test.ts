@@ -119,7 +119,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?payroll-settings-atomicity-test";
-const { PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
