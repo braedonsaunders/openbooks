@@ -670,17 +670,37 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         }),
         "QC health services fund rate",
       );
-      // State unemployment, likewise tenant-entered: the state assigns each
-      // registered employer its own experience rate every year and publishes
-      // no figure a payroll system could carry as a constant. 3.4% is
-      // California's new-employer rate and 7,000.00 its taxable wage base.
-      // The slot is scoped to the filing account the employee is assigned.
+      // State unemployment is registered SEPARATELY from the federal EIN: a
+      // SUI rate is held by a us_state_sui account, and the route refuses it
+      // against a us_ein account by name. That is the employer's real filing
+      // topology, so the suite mints the state account rather than reusing the
+      // EIN.
+      const suiAccountId = field(
+        ok(
+          await api(rq, ctx.baseURL, "POST", "/api/admin/setup/payroll-filing-accounts", {
+            accountNumber: `CA-${String(Date.now()).slice(-7)}`,
+            name: `${TAG} CA SUI`,
+            country: "US",
+            programType: "us_state_sui",
+            stateCode: "CA",
+            isDefault: true,
+            isActive: true,
+            subsidiaryId: ctx.subUS,
+          }),
+          "CA SUI filing account",
+        ),
+        "id",
+      );
+      // The rate is tenant-entered by design: the state assigns each registered
+      // employer its own experience rate every year and publishes no figure a
+      // payroll system could carry as a constant. 3.4% is California's
+      // new-employer rate and 7,000.00 its taxable wage base.
       ok(
         await api(rq, ctx.baseURL, "PUT", "/api/payroll/settings/rates", {
           country: "US",
           rateKey: "us_sui",
           region: "CA",
-          filingAccountId: ctx.filingUS,
+          filingAccountId: suiAccountId,
           taxYear: 2026,
           values: { rate: "0.034", wageBase: "7000.00" },
         }),
