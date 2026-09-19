@@ -646,9 +646,15 @@ test("RLS restricts by identity under a proven-restricted role", { skip: !DB, ti
     await h.run.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
       values (${otherEmployment}, ${other.orgId}, ${other.customerId}, ${other.subsidiaryId}, 1)`);
+    // A scratch org seeds no users; the second org's actor is written on the
+    // rollback-contained executor so it vanishes with the rest of the test.
+    const otherActor = randomUUID();
+    await h.run.execute(sql`
+      insert into users (id, org_id, email, name, password_hash, is_active)
+      values (${otherActor}, ${other.orgId}, ${`u-${otherActor.slice(0, 8)}@scratch.test`}, 'HRM other-org actor', 'x', true)`);
     const otherUsers = (await h.run.execute<{ id: string }>(sql`
-      select id from users where org_id = ${other.orgId} order by created_at limit 1`)).rows;
-    assert.ok(otherUsers[0], "second scratch org must seed a user");
+      select id from users where id = ${otherActor} and org_id = ${other.orgId}`)).rows;
+    assert.ok(otherUsers[0], "second org actor must be a real user row");
     const ownId = await insertDraft(h);
     const otherId = randomUUID();
     await h.run.execute(sql`
