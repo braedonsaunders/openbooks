@@ -50,6 +50,22 @@ function staleRevision(expected: unknown, actual: unknown): boolean {
   return !isDocumentRevisionToken(expected) || expected !== actual
 }
 
+/**
+ * Which subsidiary predicate failed, diagnosed on the failure path only: a
+ * missing row, an inactive subsidiary, and an elimination entity refuse
+ * separately, each naming the id (and the name when the row exists) — never
+ * one sentence for all three.
+ */
+async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<string> {
+  const row = (await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(sql`
+    select name, is_active as "isActive", is_elimination as "isElimination"
+      from subsidiaries
+     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0]
+  if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
+  if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
+  return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
+}
+
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
   return async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -154,7 +170,10 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       }
     }
     if (body.subsidiaryId !== undefined && body.subsidiaryId !== null && typeof body.subsidiaryId !== 'string') {
-      return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+      return NextResponse.json(
+        { error: `order subsidiary must be a subsidiary id string — received ${typeof body.subsidiaryId}` },
+        { status: 422 },
+      )
     }
     if (body.memo !== undefined && body.memo !== null && typeof body.memo !== 'string') {
       return NextResponse.json({ error: 'Invalid order memo' }, { status: 422 })
@@ -196,7 +215,10 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         return NextResponse.json({ error: 'Subsidiaries are not enabled' }, { status: 422 })
       }
       if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(body.subsidiaryId)) {
-        return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+        return NextResponse.json(
+          { error: `subsidiary "${body.subsidiaryId}" is outside your visible subsidiaries — choose a subsidiary in scope or ask an administrator for access` },
+          { status: 422 },
+        )
       }
       const subsidiary = (await db.execute(sql`
         select 1 from subsidiaries
@@ -204,10 +226,16 @@ export function makePATCH(cfg: OrderHandlerConfig) {
            and is_active and not is_elimination
       `))
       if (!subsidiary.rows[0]) {
-        return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+        return NextResponse.json(
+          { error: await subsidiaryProblem(user.orgId, body.subsidiaryId) },
+          { status: 422 },
+        )
       }
     } else if (body.subsidiaryId === null && gate.allowedSubsidiaryIds) {
-      return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+      return NextResponse.json(
+        { error: 'clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead' },
+        { status: 422 },
+      )
     }
 
     // --- status transitions ------------------------------------------------
