@@ -1779,6 +1779,12 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "allocations.run",
     "allocations.approve",
     "feedback.use",
+    // HRM employment foundation: read sees records, manage authors
+    // changes, approve holds approval authority (separation of duties is
+    // enforced separately over the service-loaded request).
+    "hrm.employment.read",
+    "hrm.employment.manage",
+    "hrm.employment.approve",
   ];
   assert.deepEqual(
     snapshot,
