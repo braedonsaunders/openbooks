@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   createChangeRequestDraft,
@@ -7,7 +7,7 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
-import { changeRequestErrorResponse } from "./_lib";
+import { changeRequestErrorResponse, createChangeRequestBody } from "./_lib";
 
 export const runtime = "nodejs";
 
@@ -48,15 +48,9 @@ export async function POST(req: Request) {
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createChangeRequestBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { employmentId?: string; payload?: unknown };
-  if (typeof body.employmentId !== "string" || !isUuid(body.employmentId)) {
-    return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
-  }
-  if (body.payload === undefined) {
-    return NextResponse.json({ error: "payload required" }, { status: 400 });
-  }
+  const body = parsedBody.data;
   try {
     const request = await createChangeRequestDraft({
       orgId: gate.user.orgId,
