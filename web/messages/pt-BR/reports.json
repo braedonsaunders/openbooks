@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "Atividades de CRM",
         "description": "Atividades comerciais e relacionais, incluindo tarefas, ligações, eventos, e-mails e anotações."
+      },
+      "hrm_headcount": {
+        "label": "Headcount",
+        "description": "Uma linha por subsidiária empregadora e departamento: empregos em vigor na data-base do relatório, com totais de equivalentes em tempo integral da atribuição principal vigente. Requer a permissão de emprego de RH."
+      },
+      "hrm_employment_history": {
+        "label": "Histórico de emprego",
+        "description": "Uma linha por versão de emprego: pessoa, empregador, status, carimbos de vigência e registro, e o motivo da evidência de encerramento. Requer a permissão de emprego de RH."
+      },
+      "hrm_change_requests": {
+        "label": "Solicitações de alteração",
+        "description": "Uma linha por solicitação de alteração de emprego: status, tipo, emprego, solicitante, carimbos de envio e decisão, execução de aprovação vinculada e vínculo de revisão. Requer a permissão de emprego de RH."
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "Privado",
         "created_at": "Criado em",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "Subsidiária",
+        "department": "Departamento",
+        "headcount": "Headcount",
+        "fte_total": "Total FTE",
+        "subsidiary_id": "Subsidiária (id)",
+        "department_id": "Departamento (id)"
+      },
+      "hrm_employment_history": {
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "status": "Status",
+        "effective_from": "Vigente a partir de",
+        "effective_to": "Vigente até",
+        "recorded_at": "Registrado em",
+        "recorded_until": "Registrado até",
+        "version_no": "Versão",
+        "change_reason": "Motivo da alteração",
+        "employment_id": "Emprego (id)",
+        "worker_id": "Pessoa (id)"
+      },
+      "hrm_change_requests": {
+        "status": "Status",
+        "kind": "Tipo",
+        "employment": "Emprego",
+        "employer": "Empregador",
+        "requested_by": "Solicitado por",
+        "submitted_at": "Enviado em",
+        "decided_at": "Decidido em",
+        "flow_run_id": "Execução de aprovação (id)",
+        "request_revision": "Revisão da solicitação",
+        "expected_employment_revision": "Revisão de emprego esperada",
+        "applied_at": "Aplicado em",
+        "reason": "Motivo",
+        "created_at": "Criado em",
+        "id": "Solicitação (id)",
+        "employment_id": "Emprego (id)"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "Conciliado exatamente",
       "clean_within_tolerance": "Conciliado dentro da tolerância",
       "differences": "Diferenças a resolver",
-      "no_comparable_data": "Nada foi comparado"
+      "no_comparable_data": "Nada foi comparado",
+      "offered": "Ofertado",
+      "on_leave": "Em licença",
+      "suspended": "Suspenso",
+      "terminated": "Desligado",
+      "withdrawn": "Retirada",
+      "applied": "Aplicada",
+      "hire": "Contratação",
+      "status_change": "Alteração de status",
+      "assignment_change": "Alteração de atribuição",
+      "termination": "Desligamento"
     }
   },
   "operators": {
@@ -1365,6 +1425,10 @@
     "crm-lead-conversion-funnel": {
       "name": "Ciclo de vida e origens de leads",
       "description": "Perfis de relacionamento categorizados por estágio de ciclo de vida, status e canal de origem."
+    },
+    "headcount-statement": {
+      "name": "Demonstrativo de headcount",
+      "description": "Headcount e equivalentes em tempo integral na data do relatório, uma linha por subsidiária empregadora e departamento com o total da organização. Requer a permissão de emprego de RH."
     }
   },
   "generalLedger": {

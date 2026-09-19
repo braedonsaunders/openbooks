@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "CRMアクティビティ",
         "description": "タスク、通話、商談イベント、メール、メモ等の顧客対応履歴。"
+      },
+      "hrm_headcount": {
+        "label": "人員数",
+        "description": "雇用主の子会社と部門ごとに1行：レポート基準日時点で在籍中の雇用と、有効な主配属から集計したFTE換算の合計。HRM雇用権限が必要です。"
+      },
+      "hrm_employment_history": {
+        "label": "雇用履歴",
+        "description": "雇用バージョンごとに1行：人物、雇用主、ステータス、有効・記録のスタンプ、およびクローズ証跡の理由。HRM雇用権限が必要です。"
+      },
+      "hrm_change_requests": {
+        "label": "変更申請",
+        "description": "雇用変更申請ごとに1行：ステータス、種類、雇用、申請者、提出・決定のスタンプ、バインドされた承認ラン、リビジョンのバインディング。HRM雇用権限が必要です。"
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "非公開",
         "created_at": "作成日時",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "子会社",
+        "department": "部門",
+        "headcount": "人員数",
+        "fte_total": "FTE換算合計",
+        "subsidiary_id": "子会社（ID）",
+        "department_id": "部門（ID）"
+      },
+      "hrm_employment_history": {
+        "person": "人物",
+        "employer": "雇用主",
+        "status": "ステータス",
+        "effective_from": "有効開始日",
+        "effective_to": "有効終了日",
+        "recorded_at": "記録日時",
+        "recorded_until": "記録終了日時",
+        "version_no": "バージョン",
+        "change_reason": "変更理由",
+        "employment_id": "雇用（ID）",
+        "worker_id": "人物（ID）"
+      },
+      "hrm_change_requests": {
+        "status": "ステータス",
+        "kind": "種類",
+        "employment": "雇用",
+        "employer": "雇用主",
+        "requested_by": "申請者",
+        "submitted_at": "提出日時",
+        "decided_at": "決定日時",
+        "flow_run_id": "承認ラン（ID）",
+        "request_revision": "申請リビジョン",
+        "expected_employment_revision": "想定雇用リビジョン",
+        "applied_at": "適用日時",
+        "reason": "理由",
+        "created_at": "作成日時",
+        "id": "申請（ID）",
+        "employment_id": "雇用（ID）"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "完全照合済み",
       "clean_within_tolerance": "許容範囲内で照合済み",
       "differences": "要解消の差異",
-      "no_comparable_data": "比較対象がありません"
+      "no_comparable_data": "比較対象がありません",
+      "offered": "内定",
+      "on_leave": "休職中",
+      "suspended": "停職中",
+      "terminated": "退職",
+      "withdrawn": "取り下げ",
+      "applied": "適用済み",
+      "hire": "採用",
+      "status_change": "ステータス変更",
+      "assignment_change": "配属変更",
+      "termination": "退職手続き"
     }
   },
   "operators": {
@@ -1365,6 +1425,10 @@
     "crm-lead-conversion-funnel": {
       "name": "リード獲得元＆ステージ概要",
       "description": "ライフサイクルステージ、ステータス、獲得経路別のプロファイル集計。"
+    },
+    "headcount-statement": {
+      "name": "人員数計算書",
+      "description": "レポート日時点の人員数とFTE換算。雇用主の子会社と部門ごとに1行、組織合計付き。HRM雇用権限が必要です。"
     }
   },
   "generalLedger": {
