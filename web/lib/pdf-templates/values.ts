@@ -5,6 +5,7 @@ import { documentBalanceDueLateral } from '@openbooks/engine/src/balance-due.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
+import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -271,8 +272,15 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
   // unstable as a contract (T4127 traces federal T/TB but its A is annual
   // income; TP-1015 traces QC_A/QC_AB; every US state traces its own
   // <STATE>_WITHHELD keys), so any literal key list silently drops a
-  // jurisdiction. The five income-tax system keys are the closed,
-  // schema-enumerated set instead.
+  // jurisdiction. The component set is derived from the pack declarations
+  // instead (incomeTaxWithholdingSystemKeys: every deduction assessed on
+  // taxable income, across all registered packs), so a new pack's withholding
+  // is counted on the day it registers. A literal CA/US list lived here once
+  // and printed YTD tax 0.00 for nine packs — never restore one.
+  const incomeTaxKeys = sql.join(
+    incomeTaxWithholdingSystemKeys().map((key) => sql`${key}`),
+    sql`, `,
+  )
   const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum(income_tax_lines.tax), 0) as tax
@@ -284,7 +292,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id and c.org_id = l.org_id
          where l.org_id = s.org_id and l.stub_id = s.id
-           and c.system_key in ('income_tax', 'qc_income_tax', 'fit', 'state_income_tax', 'local_income_tax')
+           and c.system_key in (${incomeTaxKeys})
       ) income_tax_lines on true
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
        and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
