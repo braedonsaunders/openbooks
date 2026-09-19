@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
 import { installedPayrollCountries, payrollStatutoryRateGaps } from '@openbooks/engine/src/payroll-readiness.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import { PayrollPackError, packRates, payrollPack, statutoryRateSlot } from '@openbooks/engine/src/payroll/packs.ts'
 import { normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
@@ -238,7 +239,18 @@ export async function PUT(req: Request) {
   // The pack declaration is the only validator — scope, region, program type and
   // every field's scale and range come from it, exactly as filing-account
   // program types are validated against the pack's filing declaration.
-  const pack = payrollPack(parsed.country)
+  // Inside the refusal path: `country` is any non-empty string off the request,
+  // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
+  // was a 500; the thrown message already names the implemented countries.
+  let pack
+  try {
+    pack = payrollPack(parsed.country)
+  } catch (error) {
+    if (error instanceof PayrollError) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
+    throw error
+  }
   const problem = statutoryRateProblem({
     rates: pack.statutoryRates,
     regions: pack.regions,
@@ -284,7 +296,20 @@ export async function DELETE(req: Request) {
   if (scopeDenied) return scopeDenied
   const id = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
-  const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
-  if (!removed) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json({ ok: true })
+  try {
+    const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
+    if (!removed) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    // `deleteStatutoryRate` REFUSES every row that exists: statutory rows are
+    // effective-dated payroll inputs, superseded rather than deleted. That
+    // refusal is deliberate and carries the remedy in its message, so it must
+    // reach the operator as a 422 like every other payroll refusal — uncaught
+    // it became a 500, and the UI's `res.json()` then failed on the non-JSON
+    // error body, so the toast showed a parse error instead of the remedy.
+    if (error instanceof PayrollError) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
+    throw error
+  }
 }
