@@ -22,6 +22,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateAu2027, computeAuStatutory } from "./compute-statutory.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
+import { AU_PAYROLL_PACK } from "./pack.ts";
 
 const RESIDENT = {
   residency: "australian_resident",
@@ -253,6 +255,13 @@ function stubCtx(overrides: Record<string, unknown> = {}): Parameters<typeof com
     taxYear: 2027,
     income: "5000",
     pensionable: "5000",
+    // No deduction lines in this stub, so the reduced legs equal the raw
+    // legs — derived via the real helper, not mirrored.
+    reducedBases: reduceTaxBases(
+      [],
+      { income: "5000", nonPeriodic: "0.0000", pensionable: "5000", insurable: "0.0000" },
+      AU_PAYROLL_PACK.deductionTreatments,
+    ),
     periodsPerYear: 12,
     certificateFor: () => ({
       certificate: {},
