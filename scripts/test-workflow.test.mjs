@@ -37,8 +37,13 @@ test('units, database shards and simulation run independently without omitted te
   assert.match(unit, /timeout --signal=TERM --kill-after=10s 8m npm run test:unit/)
   assert.match(unit, /timeout-minutes: 12/)
   assert.match(unit, /apt-get install -y qpdf/)
-  assert.match(unit, /shard: \[1, 2, 3, 4\]/)
-  assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/4/)
+  // Pinned together so the matrix and the denominator cannot drift apart.
+  // Raised 4 -> 5 when shard 2 hit the 8m wall on tip-of-main: the passing
+  // shards ran 297s/403s/445s against a 480s budget, so shard 4 was at 93%
+  // and the packing was already even to 3s. The partition had outgrown four
+  // shards rather than been packed badly.
+  assert.match(unit, /shard: \[1, 2, 3, 4, 5\]/)
+  assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/5/)
   assert.match(integration, /npm run test:integration/)
   assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
   assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]/)
