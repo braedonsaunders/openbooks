@@ -90,9 +90,18 @@ for (const [suite, count] of [['unit', 4], ['integration', 16]]) test(`${suite} 
     const median = measured[Math.floor(measured.length / 2)] ?? 0
     const loads = shards.map((shard) => shard.reduce((total, file) => total + (timings[file] ?? median), 0))
     const mean = loads.reduce((total, load) => total + load, 0) / count
+    // Compare against what any packer could achieve, not against the mean. A
+    // single file cannot be split across runners, so the best possible slowest
+    // shard is bounded below by the heaviest file as well as by the mean --
+    // today the heaviest integration file is already 57% of a mean shard, and
+    // a bound of mean alone would eventually red main over a test nobody can
+    // rebalance. Judging the packer against max(mean, heaviest) keeps this a
+    // statement about the packer rather than about the suite's shape.
+    const heaviest = Math.max(...files.map((file) => timings[file] ?? median))
+    const achievable = Math.max(mean, heaviest)
     assert.ok(
-      Math.max(...loads) <= mean * 1.2,
-      `slowest ${suite} shard is ${(Math.max(...loads) / 1000).toFixed(0)}s against a mean of ${(mean / 1000).toFixed(0)}s`,
+      Math.max(...loads) <= achievable * 1.2,
+      `slowest ${suite} shard is ${(Math.max(...loads) / 1000).toFixed(0)}s against an achievable ${(achievable / 1000).toFixed(0)}s`,
     )
   } else {
     assert.ok(Math.max(...shards.map((shard) => shard.length)) - Math.min(...shards.map((shard) => shard.length)) <= 1)
