@@ -20,7 +20,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { db, env, pool, withBypassContext } from "../engine/src/db.ts";
+import { db, env, longPool, pool, withBypassContext } from "../engine/src/db.ts";
+import {
+  connectMigrationClient,
+  describeBootstrapMigrationFailure,
+  releaseMigrationClient,
+} from "./bootstrap-migration-client.ts";
 import { ensureCloseDefaults } from "../engine/src/close.ts";
 import { provisionOrganizationDefaults } from "../engine/src/organization-provisioning.ts";
 import { SUPPORTED_CURRENCIES } from "../engine/src/currencies.ts";
@@ -807,7 +812,10 @@ async function executeTrackedMigration(
   digest: string,
   recordedDigest?: string,
 ): Promise<void> {
-  const client = await pool.connect();
+  // Long DDL rides the timeout-free maintenance pool: the request pool's 120s
+  // client query_timeout aborts the whole-schema baseline on a slow host.
+  const client = await connectMigrationClient();
+  const started = Date.now();
   try {
     await client.query("begin");
     if (filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME) {
@@ -839,11 +847,9 @@ async function executeTrackedMigration(
     await client.query("commit");
   } catch (err) {
     await client.query("rollback").catch(() => {});
-    throw new Error(
-      `[bootstrap] ${filename} failed: ${(err as Error).message}`,
-    );
+    throw new Error(describeBootstrapMigrationFailure(filename, err, Date.now() - started));
   } finally {
-    client.release();
+    await releaseMigrationClient(client);
   }
 }
 
@@ -993,7 +999,20 @@ async function applyRowLevelSecurity(): Promise<void> {
   const policyState = state.rows[0]!;
   if (policyState.applied_digest !== digest || policyState.catalog_drift) {
     console.log("[bootstrap] refreshing row-level security catalog");
-    await pool.query(content);
+    // Long DDL like the migrations above: no 120s client cap. Previously this
+    // failure surfaced raw, so a client-side "Query read timeout" reached the
+    // operator with neither cause nor remedy.
+    const started = Date.now();
+    const rlsClient = await connectMigrationClient();
+    try {
+      await rlsClient.query(content);
+    } catch (err) {
+      throw new Error(
+        describeBootstrapMigrationFailure("environments.sql", err, Date.now() - started),
+      );
+    } finally {
+      await releaseMigrationClient(rlsClient);
+    }
     await db.execute(sql`
       insert into public._applied_migrations (filename, sha256)
       values ('environments.sql', ${digest})
@@ -1697,6 +1716,10 @@ async function main(): Promise<void> {
     }
     lockClient.release();
     await pool.end();
+    // Migration and RLS DDL now check out longPool sessions, which (unlike the
+    // governed read pool) keep the process alive while idle. Without this the
+    // bootstrap process hangs after "[bootstrap] done".
+    await longPool.end();
   }
 }
 
