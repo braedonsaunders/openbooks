@@ -303,7 +303,8 @@ test('party edits may not assign primary or additional subsidiaries outside scop
 
 test('bank-account verbs share one party scope gate', () => {
   const src = source('app/api/parties/[id]/bank-accounts/route.ts')
-  assert.match(src, /async function denyOutsidePartyScope\(/)
+  const gate = source('app/api/parties/[id]/bank-accounts/party-scope.ts')
+  assert.match(gate, /async function denyOutsidePartyScope\(/)
   assert.ok(count(src, 'await denyOutsidePartyScope(gate, partyId)') >= 3,
     'POST, PATCH and DELETE each gate the owning party')
 })

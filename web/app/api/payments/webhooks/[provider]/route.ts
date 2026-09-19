@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * enforced on the actual streamed bytes before verification touches them,
  * so an unbounded body can never be buffered on this sessionless surface.
  */
-export const WEBHOOK_MAX_BODY_BYTES = 10 * 1024 * 1024;
+const WEBHOOK_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 function webhookResponse(result: ProviderWebhookResult, status = 200) {
   return NextResponse.json(

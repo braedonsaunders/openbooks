@@ -5,7 +5,7 @@ import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { denyOutsidePartyScope } from '../route'
+import { denyOutsidePartyScope } from '../party-scope'
 
 export const runtime = 'nodejs'
 

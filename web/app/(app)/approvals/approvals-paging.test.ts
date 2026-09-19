@@ -29,6 +29,10 @@ const bulkRoute = readFileSync(
   new URL('../../api/flows/gates/bulk/route.ts', import.meta.url),
   'utf8',
 )
+const bulkLimit = readFileSync(
+  new URL('../../api/flows/gates/bulk/bulk-limit.ts', import.meta.url),
+  'utf8',
+)
 
 test('approvals union legs window in SQL with parameterized limits', () => {
   // Every leg carries a SQL LIMIT prefix (a static `limit 500` user picker
@@ -50,10 +54,13 @@ test('approvals select-all is page-scoped and says so', () => {
 test('one approvals page always fits one bulk request', () => {
   assert.match(limits, /APPROVALS_BULK_BATCH_MAX\s*=\s*50/)
   for (const [name, src] of [
-    ['bulk route', bulkRoute],
     ['loader', view],
     ['table', table],
   ] as const) {
     assert.match(src, /APPROVALS_BULK_BATCH_MAX/, `${name} must use the shared ceiling`)
   }
+  // The bulk route reaches the ceiling through its MAX_BULK_ITEMS alias; the
+  // alias itself must stay bound to the shared ceiling so the two cannot drift.
+  assert.match(bulkRoute, /MAX_BULK_ITEMS/, 'bulk route must use the shared ceiling')
+  assert.match(bulkLimit, /MAX_BULK_ITEMS\s*=\s*APPROVALS_BULK_BATCH_MAX/, 'bulk alias must stay bound to the shared ceiling')
 })
