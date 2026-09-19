@@ -250,7 +250,9 @@
         "changed": "已变更"
       },
       "protectionShortfallTitle": "{count, plural, one {# 张工资条} other {# 张工资条}}未能足额扣除受保护扣款",
-      "protectionShortfallHint": "受保护收入上限限制了这些扣款。未缴余额仍欠——请告知债权人或结转至下次核算。"
+      "protectionShortfallHint": "受保护收入上限限制了这些扣款。未缴余额仍欠——请告知债权人或结转至下次核算。",
+      "allRefusedTitle": "{count, plural, one {# 名员工被拒绝 — 无人能够计算} other {# 名员工被拒绝 — 无人能够计算}}",
+      "allRefusedHint": "范围内所有员工均被拒绝，因此本次核算没有工资条。请修正输入并重新计算，或在提交前确认这些拒绝。"
     },
     "gl": {
       "needsCalculation": "请计算本次核算以预览其总账影响。",
@@ -265,7 +267,14 @@
       "credits": "贷方",
       "balanced": "已平衡",
       "staleBlocked": "提交前请重新计算本次核算。",
-      "commitHint": "确认将冻结工资条并将这些分录写入工资核算单据。过账前核算仍可复核。"
+      "commitHint": "确认将冻结工资条并将这些分录写入工资核算单据。过账前核算仍可复核。",
+      "refusedTitle": "{count, plural, one {范围内的 # 名员工被拒绝} other {范围内的 # 名员工被拒绝}}",
+      "refusedHint": "这些员工在本次核算中没有工资条，将不会获得支付。在您确认此集合、或修正输入并重新计算之前，提交将被阻止。",
+      "refusedBlocked": "提交已被阻止 — {count, plural, one {被拒绝的 # 名员工需要确认} other {被拒绝的 # 名员工需要确认}}。",
+      "ackLabel": "我理解{count, plural, one {该员工} other {这 # 名员工}}因上述原因将不会在本次核算中获得支付。",
+      "ackRecord": "记录确认",
+      "ackRecorded": "已为{count, plural, one {# 名员工} other {# 名员工}}记录确认。",
+      "ackRecordedNote": "确认日期：{date} — 该决定已记录在本次核算中。"
     },
     "finish": {
       "notCommitted": "请先在总账步骤提交本轮计算，然后再过账。",
@@ -291,7 +300,10 @@
       "emailStubs": "发送工资单邮件",
       "stubsEmailed": "{sent, plural, one {已通过邮件发送 # 份工资单。} other {已通过邮件发送 # 份工资单。}}",
       "stubsEmailedPartial": "已发送 {sent}；已跳过（无邮箱或失败）：{skipped}",
-      "printCheques": "{count, plural, one {打印 # 张支票} other {打印 # 张支票}}"
+      "printCheques": "{count, plural, one {打印 # 张支票} other {打印 # 张支票}}",
+      "partialTitle": "{count, plural, one {部分核算 — 经决定排除 # 名员工} other {部分核算 — 经决定排除 # 名员工}}",
+      "partialRecorded": "确认日期：{date}。该决定已记录在本次核算中。",
+      "partialRecovery": "若要向被排除的员工支付：在其录入界面可用后补足缺失的输入，然后通过核算外单支付。已过账的核算绝不在事后修改。"
     },
     "adjust": {
       "title": "调整",
@@ -437,7 +449,8 @@
     "approvalNotRequired": "没有适用于工资核算的审批政策",
     "approvalPending": "等待审批(还有 {count} 项)——确认和过账已被阻止",
     "printSet": "打印套件(仅用于打印分发)",
-    "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件"
+    "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件",
+    "calculateRefusedAll": "无人能够计算 — {count, plural, one {# 名员工被拒绝} other {# 名员工被拒绝}}。请修正输入并重新计算，或在提交前确认。"
   },
   "profiles": {
     "addEmployee": "无档案员工",

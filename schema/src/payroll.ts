@@ -393,6 +393,18 @@ export const payRuns = pgTable(
     calculationSourceSnapshot: jsonb("calculation_source_snapshot"),
     /** SHA-256 of calculationSourceSnapshot's canonical JSON representation. */
     calculationSourceDigest: text("calculation_source_digest"),
+    /**
+     * Per-employee calculation outcomes from the latest calculate, replaced
+     * wholesale on every pass (migration 0182). Commit gates on the in-scope
+     * refusals; null predates refusal tracking and forces a recalculation.
+     */
+    calculationErrors: jsonb("calculation_errors"),
+    /**
+     * Recorded operator decision to commit despite in-scope refusals: who was
+     * left out with the refusal text, who acknowledged, when, and the digest
+     * of the exact refusal set acknowledged (migration 0182).
+     */
+    refusalAcknowledgement: jsonb("refusal_acknowledgement"),
     /** Set by recordPayRunPayment: the DR-payable/CR-bank settlement entry. */
     paidAt: timestamp("paid_at", { withTimezone: true }),
     paidEntryId: uuid("paid_entry_id"),

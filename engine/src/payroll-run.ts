@@ -1560,9 +1560,152 @@ export interface CapturedStub {
   lines: CapturedStubLine[];
 }
 
+/**
+ * One employee's refused or warned calculation outcome.
+ *
+ * This is the persisted refusal record (migration 0182): calculate writes the
+ * whole array wholesale on every pass, commit gates on the `refusal` entries,
+ * and the run page renders them back. `employee` is the display name at
+ * calculate time — narrative, not identity; the gate and the acknowledgement
+ * bind to `employeePartyId`. `message` is the pack's (or engine's) own
+ * refusal/warning text, carried verbatim, never rewritten.
+ *
+ * `kind` is what keeps the gate honest: only an in-scope employee with no
+ * stub (`refusal`) can block a commit. A `warning` rides a stub that exists
+ * (an entitlement bank over its limit — correct output the operator decides
+ * on), and `out-of-scope` is the run's own scope rule refusing someone it was
+ * never meant to pay (a final-pay stranger); neither blocks.
+ *
+ * The index signature is deliberate room, not looseness: the holiday
+ * attestation work extends these entries additively (holiday keys, needed
+ * facts) without reshaping what commit already binds to.
+ */
+export interface PayRunCalculationError {
+  employeePartyId: string;
+  employee: string;
+  message: string;
+  kind: "refusal" | "warning" | "out-of-scope";
+  [key: string]: unknown;
+}
+
+/**
+ * A recorded decision to commit a run that leaves in-scope employees unpaid.
+ *
+ * `errorsDigest` binds the acknowledgement to the EXACT in-scope refusal set
+ * it names (see `payRunRefusalDigest`): acknowledging one refusal set and
+ * then recalculating into another leaves a stale acknowledgement the commit
+ * gate refuses, so an operator can never wave through a situation they did
+ * not see. `refusals` is the human-readable half — who was left out and why,
+ * retrievable long after posting.
+ */
+export interface PayRunRefusalAcknowledgement {
+  version: 1;
+  acknowledgedBy: string;
+  acknowledgedAt: string;
+  errorsDigest: string;
+  refusals: PayRunCalculationError[];
+}
+
+/** The in-scope refusals inside a stored error set — what the gate binds to. */
+export function payRunCalculationRefusals(
+  errors: PayRunCalculationError[],
+): PayRunCalculationError[] {
+  return errors.filter((entry) => entry.kind === "refusal");
+}
+
+/**
+ * Digest of an in-scope refusal set, sorted by party so entry order can never
+ * distinguish two identical sets. The acknowledgement records this digest and
+ * commit recomputes it; any recalculation that changes who is refused (or
+ * why, the messages are digested too) invalidates the old acknowledgement.
+ */
+export function payRunRefusalDigest(refusals: PayRunCalculationError[]): string {
+  const ordered = [...refusals].sort((a, b) =>
+    a.employeePartyId < b.employeePartyId ? -1 : a.employeePartyId > b.employeePartyId ? 1 : 0,
+  );
+  return createHash("sha256").update(canonicalJson(ordered)).digest("hex");
+}
+
+/**
+ * Parse the persisted calculation errors. Null (legacy runs calculated before
+ * refusal tracking, or never calculated) is NOT the same as empty: callers
+ * must send the run through a recalculation rather than assume nobody was
+ * refused. Corrupt entries fail the same closed way.
+ */
+export function parsePayRunCalculationErrors(
+  value: unknown,
+): PayRunCalculationError[] | null {
+  if (value == null) return null;
+  const raw = typeof value === "string" ? (() => {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  })() : value;
+  if (!Array.isArray(raw)) return null;
+  const parsed: PayRunCalculationError[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.employeePartyId !== "string" || typeof record.employee !== "string"
+        || typeof record.message !== "string"
+        || (record.kind !== "refusal" && record.kind !== "warning" && record.kind !== "out-of-scope")) {
+      return null;
+    }
+    parsed.push({ ...record } as PayRunCalculationError);
+  }
+  return parsed;
+}
+
+/** Parse a stored refusal acknowledgement; corrupt or absent reads as none. */
+export function parsePayRunRefusalAcknowledgement(
+  value: unknown,
+): PayRunRefusalAcknowledgement | null {
+  if (value == null) return null;
+  const raw = typeof value === "string" ? (() => {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  })() : value;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (record.version !== 1 || typeof record.acknowledgedBy !== "string"
+      || typeof record.acknowledgedAt !== "string" || typeof record.errorsDigest !== "string"
+      || parsePayRunCalculationErrors(record.refusals) == null) {
+    return null;
+  }
+  return {
+    version: 1,
+    acknowledgedBy: String(record.acknowledgedBy),
+    acknowledgedAt: String(record.acknowledgedAt),
+    errorsDigest: String(record.errorsDigest),
+    refusals: parsePayRunCalculationErrors(record.refusals) ?? [],
+  };
+}
+
+/**
+ * The commit refusal: names every refused in-scope employee WITH the pack's
+ * own words for why, so the operator sees at POST exactly what the exception
+ * list showed at calculate — and how a posted partial run is completed.
+ */
+function refusedCommitMessage(refusals: PayRunCalculationError[]): string {
+  const shown = refusals.slice(0, 10).map((entry) => `${entry.employee}: ${entry.message}`);
+  const more = refusals.length > shown.length
+    ? `, and ${refusals.length - shown.length} more`
+    : "";
+  const count = `${refusals.length} in-scope ${refusals.length === 1 ? "employee was" : "employees were"}`;
+  return `pay run cannot be committed — ${count} refused at calculation `
+    + `(${shown.join("; ")}${more}) — acknowledge the refused employees on the run `
+    + `or fix the input and recalculate. A posted partial run can only be completed `
+    + `with an off-cycle run once the missing input is supplied.`;
+}
+
 export interface PayRunCalculation {
   employees: number;
-  errors: { employee: string; message: string }[];
+  errors: PayRunCalculationError[];
   gross: string;
   net: string;
   employerCost: string;
@@ -1573,6 +1716,15 @@ export interface PayRunCalculation {
    * of it surviving.
    */
   stubs?: CapturedStub[];
+  /**
+   * The run's acknowledgement AFTER this calculate, read in the same
+   * transaction: a successful calculate clears any stale acknowledgement
+   * (nothing refused, nothing to acknowledge), otherwise the stored record
+   * survives untouched. Valid exactly when `refusalsAcknowledged`, so the
+   * caller never has to re-derive the gate client-side.
+   */
+  refusalAcknowledgement: PayRunRefusalAcknowledgement | null;
+  refusalsAcknowledged: boolean;
 }
 
 /**
@@ -1921,7 +2073,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const runWageExpenseAccountId = ((await tx.execute<{ v: string | null }>(sql`
       select settings->'payroll'->>'wageExpenseAccountId' as v from orgs where id = ${orgId}
     `)).rows[0]?.v ?? null);
-    const errors: { employee: string; message: string }[] = [];
+    const errors: PayRunCalculationError[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
 
@@ -1934,11 +2086,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       // termination run would be paid a full period and have every bank
       // drained. Employment that has not ended cannot be paid a final cheque:
       // refuse, by name, rather than pay.
+      //
+      // Out-of-scope, not a refusal: the run was never meant to pay this
+      // person, so the commit gate (which binds to `refusal` entries only)
+      // must not nag about them, though the exception list still shows them.
       if (runType === "termination" && !emp.terminated_on) {
         errors.push({
+          employeePartyId: emp.party_id!,
           employee: name,
           message: "a final pay run pays only employees whose employment has ended — "
             + "this employee has no termination date, so they are not in its scope",
+          kind: "out-of-scope",
         });
         continue;
       }
@@ -1979,28 +2137,39 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         count += 1;
         // A bank at or over its limit is not a calculation failure — the stub
         // is correct and the operator decides. It rides the same per-employee
-        // channel the wizard already renders.
+        // channel the wizard already renders, marked so the commit gate (which
+        // binds to refusals) never blocks a run whose stubs are all correct.
         for (const warning of result.warnings) {
           errors.push({
+            employeePartyId: emp.party_id!,
             employee: name,
             message: warning.kind === "over_limit"
               ? `${warning.planCode} balance ${warning.balance} exceeds its ${warning.threshold} limit`
               : `${warning.planCode} balance ${warning.balance} has reached its ${warning.threshold} notify threshold`,
+            kind: "warning",
           });
         }
       } catch (error) {
-        errors.push({ employee: name, message: error instanceof Error ? error.message : String(error) });
+        errors.push({
+          employeePartyId: emp.party_id!,
+          employee: name,
+          message: error instanceof Error ? error.message : String(error),
+          kind: "refusal",
+        });
       }
     }
 
     const result: PayRunCalculation = {
       employees: count, errors,
       gross: grossTotal, net: netTotal, employerCost: employerTotal,
+      refusalAcknowledgement: null, refusalsAcknowledged: true,
     };
     // A dry run has done all the real work; throwing here discards the stubs
     // it wrote so the operator's preview costs the run nothing. A simulation is
     // a dry run whose OUTPUT is the point, so the stubs are read back first —
-    // inside this transaction, immediately before it is thrown away.
+    // inside this transaction, immediately before it is thrown away. Neither
+    // persists anything, so the acknowledgement state they report is the
+    // stored one, bound to the stored refusal set.
     if (input.simulate) {
       result.stubs = await captureCalculatedStubs(
         tx,
@@ -2008,9 +2177,21 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         documentId,
         input.allowedSubsidiaryIds,
       );
+    }
+    if (input.simulate || input.dryRun) {
+      const stored = (await tx.execute<{ errors: unknown; acknowledgement: unknown }>(sql`
+        select calculation_errors as errors, refusal_acknowledgement as acknowledgement
+          from pay_runs where org_id = ${orgId} and document_id = ${documentId}
+      `)).rows[0];
+      const storedRefusals = payRunCalculationRefusals(
+        parsePayRunCalculationErrors(stored?.errors) ?? [],
+      );
+      result.refusalAcknowledgement = parsePayRunRefusalAcknowledgement(stored?.acknowledgement);
+      result.refusalsAcknowledged = storedRefusals.length === 0
+        || (result.refusalAcknowledgement != null
+          && result.refusalAcknowledgement.errorsDigest === payRunRefusalDigest(storedRefusals));
       throw new DryRunRollback(result);
     }
-    if (input.dryRun) throw new DryRunRollback(result);
 
     const calculationSource = await payRunCalculationSource(
       orgId,
@@ -2022,15 +2203,49 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     if (!calculationSource) throw new PayrollError("pay run not found");
     const calculationSourceDigest = payRunCalculationSourceDigest(calculationSource);
 
+    // The refusal record is REPLACED wholesale on every calculate — never
+    // appended, never merged — so a recalculation that fixes two of three
+    // refusals leaves exactly one stored, and a fully successful calculate
+    // stores the empty set. Commit and the run page read this same column, so
+    // what they see is what this calculate saw: the first calculate's
+    // exceptions survive the response that carried them instead of living in
+    // the caller's memory alone.
     await tx.execute(sql`
       update pay_runs set run_status = 'calculated', calculated_at = now(),
              gross_total = ${grossTotal}, net_total = ${netTotal},
              employer_cost_total = ${employerTotal}, employee_count = ${count},
              calculation_source_snapshot = ${JSON.stringify(calculationSource)}::jsonb,
              calculation_source_digest = ${calculationSourceDigest},
+             calculation_errors = ${JSON.stringify(errors)}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
     `);
+    // Nothing refused, nothing to acknowledge: a stale acknowledgement from an
+    // older refusal set must not linger on a run that is now clean, or the
+    // gate would read as a permanent tax on every future commit.
+    const refusalsNow = payRunCalculationRefusals(errors);
+    if (refusalsNow.length === 0) {
+      await tx.execute(sql`
+        update pay_runs set refusal_acknowledgement = null,
+               updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and document_id = ${documentId}
+           and refusal_acknowledgement is not null
+      `);
+      result.refusalAcknowledgement = null;
+      result.refusalsAcknowledged = true;
+    } else {
+      // Refusals persist, and so does whatever acknowledgement was there: the
+      // commit gate re-binds it by digest, and the caller gets the same
+      // answer without a second read of its own.
+      result.refusalAcknowledgement = parsePayRunRefusalAcknowledgement(
+        (await tx.execute<{ acknowledgement: unknown }>(sql`
+          select refusal_acknowledgement as acknowledgement from pay_runs
+           where org_id = ${orgId} and document_id = ${documentId}
+        `)).rows[0]?.acknowledgement,
+      );
+      result.refusalsAcknowledged = result.refusalAcknowledgement != null
+        && result.refusalAcknowledgement.errorsDigest === payRunRefusalDigest(refusalsNow);
+    }
     return result;
   }), { isolationLevel: "repeatable read" });
 }
@@ -3861,6 +4076,84 @@ async function payRunGlLegs(
 }
 
 /**
+ * Record an explicit, auditable decision to commit a run that leaves in-scope
+ * employees unpaid. The acknowledgement is taken against the run's CURRENT
+ * stored refusal set — never a caller-supplied list — so it necessarily names
+ * exactly who is being left out and carries the pack's own refusal text for
+ * each of them. There are legitimate partial runs (a mid-period hire, unpaid
+ * leave); silence is not one of them, so this is the only path past the
+ * commit gate besides fixing the input and recalculating.
+ *
+ * Like commit, this enforces on its own transaction: the run must be
+ * calculated and its document editable, and acknowledging a clean run (or one
+ * that was never calculated) is refused rather than recorded vacuously.
+ */
+export async function acknowledgePayRunRefusals(input: {
+  orgId: string;
+  documentId: string;
+  actorId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+}): Promise<PayRunRefusalAcknowledgement> {
+  const { orgId, documentId, actorId } = input;
+  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
+    const runRows = (await tx.execute<Record<string, unknown>>(sql`
+      select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+      where r.org_id = ${orgId} and r.document_id = ${documentId} for update
+    `));
+    const run = runRows.rows[0];
+    if (!run) throw new PayrollError("pay run not found");
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
+      throw new PayrollError("pay run not found");
+    }
+    if (run.run_status === "committed") throw new PayrollError("pay run is already committed");
+    if (run.run_status !== "calculated") {
+      throw new PayrollError("calculate the pay run before acknowledging its refusals");
+    }
+    if (run.doc_status !== "draft" && run.doc_status !== "approved") {
+      throw new PayrollError("pay run document is not editable");
+    }
+    const storedErrors = parsePayRunCalculationErrors(run.calculation_errors);
+    if (!storedErrors) {
+      throw new PayrollError(
+        "recalculate the pay run before acknowledging its refusals — its calculation predates refusal tracking",
+      );
+    }
+    const refusals = payRunCalculationRefusals(storedErrors);
+    if (refusals.length === 0) {
+      throw new PayrollError("no refused employees to acknowledge on this pay run");
+    }
+    const acknowledgement: PayRunRefusalAcknowledgement = {
+      version: 1,
+      acknowledgedBy: actorId,
+      acknowledgedAt: new Date().toISOString(),
+      errorsDigest: payRunRefusalDigest(refusals),
+      refusals,
+    };
+    await tx.execute(sql`
+      update pay_runs set refusal_acknowledgement = ${JSON.stringify(acknowledgement)}::jsonb,
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and document_id = ${documentId}
+    `);
+    const afterRun = (await tx.execute<Record<string, unknown>>(sql`
+      select * from pay_runs where org_id = ${orgId} and document_id = ${documentId}
+    `)).rows[0];
+    if (!afterRun) throw new PayrollError("pay run not found");
+    // Committing authorizes pay; acknowledging authorizes leaving people out.
+    // Same evidence shape as the commit transition, so an auditor finds both
+    // decisions in the same place, months later.
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'pay_runs', ${documentId}, 'update',
+              ${JSON.stringify({ operation: "acknowledge-refusals", before: run, after: afterRun })}::jsonb, ${actorId})
+    `);
+    return acknowledgement;
+  }));
+}
+
+/**
  * Commit: materialize the balanced GL projection into document_lines and claim
  * the period's time entries. The document then posts through the standard
  * submit/post action (RULES.pay_run maps lines 1:1, signed, like a journal).
@@ -4012,6 +4305,35 @@ export async function commitPayRun(input: {
       throw new PayrollError(staleCalculationMessage(
         sourceReasons.length > 0 ? sourceReasons : ["selection"],
       ));
+    }
+
+    // The refusal gate. A refusal does not shrink the payroll silently: while
+    // an in-scope employee has no stub, commit is refused unless the operator
+    // has explicitly acknowledged EXACTLY this refusal set. The
+    // acknowledgement binds to the refusal digest, so acknowledging one set
+    // and recalculating into another leaves a stale acknowledgement this gate
+    // refuses. Runs calculated before refusal tracking (null, not empty)
+    // recalculate first — absence of evidence is not evidence of absence.
+    //
+    // Placed after the source-digest check and before the first GL write, so
+    // a refused commit writes nothing at all.
+    const storedErrors = parsePayRunCalculationErrors(
+      (run as Record<string, unknown>).calculation_errors,
+    );
+    if (!storedErrors) {
+      throw new PayrollError(
+        "recalculate the pay run before committing — its calculation predates refusal tracking",
+      );
+    }
+    const refusals = payRunCalculationRefusals(storedErrors);
+    if (refusals.length > 0) {
+      const acknowledgement = parsePayRunRefusalAcknowledgement(
+        (run as Record<string, unknown>).refusal_acknowledgement,
+      );
+      if (!acknowledgement
+          || acknowledgement.errorsDigest !== payRunRefusalDigest(refusals)) {
+        throw new PayrollError(refusedCommitMessage(refusals));
+      }
     }
 
     const { legs, debitTotal, lineLiabilities } = await payRunGlLegs(
