@@ -63,6 +63,21 @@ const ES_REGIONS: PayrollRegionCoverage = {
 export const ES_PAYROLL_PACK: EsPayrollPack = {
   country: "ES",
   name: "Spain",
+  // Dirección General de la Policía (DGP): "número de DNI con letra | NIE
+  // con letra" — a DNI is 8 digits plus a verification letter and a NIE is
+  // X/Y/Z plus 7 digits plus a letter (EU TIN-ES factsheet likewise). The
+  // mod-23 control letter is NOT enforced (unsourced here). Needed for the
+  // Modelo 190 annual withholding summary.
+  employeeIdentifier: {
+    label: "DNI/NIE",
+    pattern: "(?:\\d{8}[A-Z]|[XYZ]\\d{7}[A-Z])",
+    formatHelp: "DNI: 8 digits + letter; NIE: X/Y/Z + 7 digits + letter",
+    example: "12345678Z",
+    requiredForPayroll: true,
+    neededFor: "Modelo 190",
+    citation: "DGP: 'número de DNI con letra | NIE con letra' (EU TIN-ES: DNI 8 digits + letter; NIE X/Y/Z + 7 digits + letter)",
+    numericEntry: false,
+  },
   installable: true,
   // The AEAT pack computes in euro; IRPF and TGSS settle in euro.
   statutoryCurrency: "EUR",

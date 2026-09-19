@@ -295,6 +295,21 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
 } = {
   country: "DE",
   name: "Germany",
+  // § 139b Abgabenordnung: the Bundeszentralamt für Steuern (BZSt) assigns
+  // every registered person a lifelong Steuerliche Identifikationsnummer
+  // (IdNr) of 11 digits. Length and digit shape only — the MOD 11,10 check
+  // digit is real but unsourced here, so it is NOT enforced; ELStAM rejects
+  // what is wrong. Needed for ELStAM retrieval and the Lohnsteuerbescheinigung.
+  employeeIdentifier: {
+    label: "Steuerliche Identifikationsnummer",
+    pattern: "\\d{11}",
+    formatHelp: "11 digits",
+    example: "12345678901",
+    requiredForPayroll: true,
+    neededFor: "ELStAM",
+    citation: "§ 139b AO: the BZSt assigns an 11-digit Steuerliche Identifikationsnummer (IdNr) for life",
+    numericEntry: true,
+  },
   installable: true,
   statutoryCurrency: "EUR",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },

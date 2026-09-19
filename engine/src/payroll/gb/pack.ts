@@ -120,6 +120,23 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
 } = {
   country: GB_COUNTRY_CODE,
   name: "United Kingdom",
+  // HMRC National Insurance Manual NIM39110: "A NINO is made up of 2
+  // letters, 6 numbers and a final letter, which is always A, B, C, or D"
+  // (e.g. "QQ 12 34 56 A" — HMRC's own example, illustrative only, so QQ
+  // prefixes validate). Spaced and unspaced presentations both validate as
+  // given. Prefix exclusions are NOT enforced — the wrong rejection is the
+  // defect — and there is no checksum to enforce. Needed for RTI (the FPS
+  // carries the NINO), including while the RTI filing itself is refused.
+  employeeIdentifier: {
+    label: "National Insurance number",
+    pattern: "[A-Z]{2}( ?\\d{2}){3} ?[A-D]",
+    formatHelp: "2 letters, 6 digits, 1 letter A–D",
+    example: "QQ 12 34 56 C",
+    requiredForPayroll: true,
+    neededFor: "RTI",
+    citation: "HMRC NIM39110: 'A NINO is made up of 2 letters, 6 numbers and a final letter, which is always A, B, C, or D'",
+    numericEntry: false,
+  },
   // 2026/27 rUK + SCT editions transcribed (GB_TAX_YEARS), engine behind
   // both, parity harnesses green: installable.
   installable: true,

@@ -27,6 +27,7 @@ import {
   packRemittanceSchedules,
   packRemittanceVendorSettingsKeys,
   packSlotState,
+  packWarnsOnMissingIdentifier,
   PayrollPackError,
   payrollJurisdictionDeclared,
   PAYROLL_COUNTRY_PACKS,
@@ -632,7 +633,11 @@ export async function payRunReadiness(
     flag("warning", "employee.noBankDetails", eftOnPaper, { href: employeesHref });
   }
 
-  const noSin = people.filter((p) => !p.has_sin);
+  // Pack-declared, never a country list: the warning fires for an employee
+  // without a sealed identifier only when their pack requires one AND names
+  // a filing that needs it. A pack with no filing to feed, or with a
+  // voluntary identifier, warns about nothing.
+  const noSin = people.filter((p) => !p.has_sin && packWarnsOnMissingIdentifier(p.country));
   if (noSin.length) flag("warning", "employee.noSin", noSin, { href: employeesHref });
 
   // --- Statutory holiday pay ------------------------------------------------

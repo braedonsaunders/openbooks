@@ -40,6 +40,22 @@ export type ItPayrollPackDeclaration = Omit<PayrollCountryPack, "country"> & {
 export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   country: "IT",
   name: "Italy",
+  // Agenzia delle Entrate: the codice fiscale is a 16-character alphanumeric
+  // code (surname, name, birth year/month/sex, birthplace code, check
+  // letter). The numeric slots tolerate letters: omocodia substitutes
+  // L–W for digits, so a digits-only pattern would reject valid codes.
+  // No check letter is enforced (unsourced here). Needed for the
+  // Certificazione Unica.
+  employeeIdentifier: {
+    label: "codice fiscale",
+    pattern: "[A-Z]{6}[A-Z0-9]{2}[A-Z][A-Z0-9]{2}[A-Z][A-Z0-9]{3}[A-Z]",
+    formatHelp: "16 alphanumeric characters",
+    example: "RSSMRA85T10A562S",
+    requiredForPayroll: true,
+    neededFor: "Certificazione Unica",
+    citation: "Agenzia delle Entrate: the codice fiscale is a 16-character alphanumeric code (DPR 605/1973)",
+    numericEntry: false,
+  },
   installable: true,
   // IRPEF produces EUR; the Italian tax year is the calendar year
   // (periodo d'imposta = anno solare).

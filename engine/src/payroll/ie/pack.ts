@@ -465,6 +465,21 @@ export async function computeIeStatutory(
 export const IE_PAYROLL_PACK: IePayrollPack = {
   country: "IE",
   name: "Ireland",
+  // Revenue (Tax Reference Numbers, stamp duty TDM): "PPS numbers contain
+  // 7 digits followed by either one or two letters, for example, 1234567D"
+  // (Citizens Information: "always 7 numbers followed by either one or
+  // 2 letters"). No year-end filing is declared by this pack, so neededFor
+  // is null and the missing-identifier warnings stay silent for Ireland.
+  employeeIdentifier: {
+    label: "PPSN",
+    pattern: "\\d{7}[A-Z]{1,2}",
+    formatHelp: "7 digits followed by 1–2 letters",
+    example: "1234567T",
+    requiredForPayroll: true,
+    neededFor: null,
+    citation: "Revenue: 'PPS numbers contain 7 digits followed by either one or two letters, for example, 1234567D'",
+    numericEntry: false,
+  },
   installable: true,
   // Revenue's engine computes euro; the Irish tax year is the calendar year.
   statutoryCurrency: "EUR",

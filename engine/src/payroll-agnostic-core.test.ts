@@ -37,6 +37,19 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const FREEDONIA: PayrollCountryPack = {
   country: "ZZ" as PayrollCountryPack["country"],
   name: "Freedonia",
+  // Freedonia answers the identifier question like every pack must: a
+  // required 5-digit payroll number no filing needs (Freedonia files
+  // nothing), so the missing-identifier warnings stay silent for ZZ.
+  employeeIdentifier: {
+    label: "Freedonian payroll number",
+    pattern: "\\d{5}",
+    formatHelp: "5 digits",
+    example: "12345",
+    requiredForPayroll: true,
+    neededFor: null,
+    citation: "test fixture — no authority",
+    numericEntry: true,
+  },
   installable: false,
   statutoryCurrency: "ZZD",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },

@@ -16,7 +16,7 @@ import {
   remittanceDueDateExplained,
   remittanceGroupUsesQuebecCalendar,
 } from "../payroll-remittance.ts";
-import { payrollTaxYearForDate } from "../payroll/packs.ts";
+import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 
@@ -337,16 +337,20 @@ export async function payrollFindings(
           })),
         });
       }
+      // The gate is pack-declared, never a country list: this loop already
+      // runs once per INSTALLED pack, and gating on two countries would
+      // silently exempt every other pack's employees from the year-end
+      // identifier check. The pack's own declaration answers instead — the
+      // warning fires only when the pack requires the identifier AND names
+      // a filing that needs it, so a pack with no filing to feed warns
+      // about nothing while one that names one still warns.
+      if (!packWarnsOnMissingIdentifier(country)) continue;
       const noSin = (await db.execute<{ employees: number }>(sql`
         select count(*)::int as employees
           from employee_payroll_profiles prof
          where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
            and prof.sin_encrypted is null
       `));
-      // No country gate: this loop already runs once per INSTALLED pack, and
-      // the run-readiness screen warns `employee.noSin` for every country.
-      // Gating here on CA/US would silently exempt the ninth pack's
-      // employees from the year-end identifier check.
       if (Number(noSin.rows[0]?.employees ?? 0) > 0) {
         const people = (await db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as name

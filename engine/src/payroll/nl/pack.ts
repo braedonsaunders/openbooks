@@ -138,6 +138,21 @@ function nlPackFilings(): PayrollPackFilings {
 export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "NL" } = {
   country: "NL",
   name: "Netherlands",
+  // Belastingdienst / Rijksoverheid: the burgerservicenummer (BSN) is the
+  // 9-digit personal number for contact with the government, issued on BRP
+  // registration. Length and digit shape only — the elfproef (11-test) is
+  // real but unsourced here, so it is NOT enforced. Needed for the
+  // loonaangifte (wage tax return).
+  employeeIdentifier: {
+    label: "burgerservicenummer (BSN)",
+    pattern: "\\d{9}",
+    formatHelp: "9 digits",
+    example: "111222333",
+    requiredForPayroll: true,
+    neededFor: "loonaangifte",
+    citation: "Belastingdienst: the BSN is the 9-digit personal number for contact with the government (BRP)",
+    numericEntry: true,
+  },
   installable: true,
   statutorySlots: [
     {

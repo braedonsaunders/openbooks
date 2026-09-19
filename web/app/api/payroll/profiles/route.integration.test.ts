@@ -72,7 +72,7 @@ test('profile POST refuses money and percent fields wider than their columns', {
   // upsert with a storage error. Fail closed with the named 422 instead.
   const { org, employeeId, scheduleId } = await fixture()
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly' }
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
     for (const [label, patch, message] of [
       ['claim amount', { federalClaimAmount: '99999999999999999999' }, /invalid federalClaimAmount/],
       ['vacation percent', { vacationPercent: '1234' }, /invalid vacationPercent/],
@@ -170,20 +170,134 @@ test('profile POST validates withholding answers against the pack declaration', 
     }
     const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
     for (const [label, patch, status, message] of [
-      ['US filing status', { country: 'US', province: usState, filingStatus: 'single' }, 200, null],
-      ['unknown status', { country: 'US', province: usState, filingStatus: 'separate' }, 422, /invalid filingStatus/],
-      ['CA filing status', { country: 'CA', province: 'ON', filingStatus: 'single' }, 422, /invalid filingStatus/],
-      ['CA claim code', { country: 'CA', province: 'ON', federalClaimCode: 5 }, 200, null],
-      ['CA claim code band', { country: 'CA', province: 'ON', federalClaimCode: 11 }, 422, /claim code must be 0–10/],
-      ['US claim code', { country: 'US', province: usState, federalClaimCode: 1 }, 422, /not declared/],
-      ['US allowances', { country: 'US', province: usState, w4Allowances: 5 }, 200, null],
-      ['US allowances band', { country: 'US', province: usState, w4Allowances: 100 }, 422, /invalid w4Allowances/],
-      ['CA allowances', { country: 'CA', province: 'ON', w4Allowances: 1 }, 422, /invalid w4Allowances/],
+      ['US filing status', { country: 'US', province: usState, filingStatus: 'single', sin: '123-45-6789' }, 200, null],
+      ['unknown status', { country: 'US', province: usState, filingStatus: 'separate', sin: '123-45-6789' }, 422, /invalid filingStatus/],
+      ['CA filing status', { country: 'CA', province: 'ON', filingStatus: 'single', sin: '046454286' }, 422, /invalid filingStatus/],
+      ['CA claim code', { country: 'CA', province: 'ON', federalClaimCode: 5, sin: '046454286' }, 200, null],
+      ['CA claim code band', { country: 'CA', province: 'ON', federalClaimCode: 11, sin: '046454286' }, 422, /claim code must be 0–10/],
+      ['US claim code', { country: 'US', province: usState, federalClaimCode: 1, sin: '123-45-6789' }, 422, /not declared/],
+      ['US allowances', { country: 'US', province: usState, w4Allowances: 5, sin: '123-45-6789' }, 200, null],
+      ['US allowances band', { country: 'US', province: usState, w4Allowances: 100, sin: '123-45-6789' }, 422, /invalid w4Allowances/],
+      ['CA allowances', { country: 'CA', province: 'ON', w4Allowances: 1, sin: '046454286' }, 422, /invalid w4Allowances/],
     ] as const) {
       const response = await post({ ...base, ...patch })
       assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
       if (message) assert.match(((await response.json()) as { error: string }).error, message)
     }
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile POST validates the sealed identifier against the pack declaration', { skip: !DB }, async () => {
+  // The old validator stripped non-digits and demanded nine: every
+  // alphanumeric identifier was mangled and every non-9-digit one refused.
+  // The pack's own pattern judges the value as given; refusals name the
+  // pack's own label and shape, so the 422 is worth showing.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    const list = (await (await get()).json()) as {
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>
+    }
+    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+    for (const [label, patch, status, message] of [
+      ['GB NINO', { country: 'GB', province: 'ENG', sin: 'QQ123456C' }, 200, null],
+      ['GB spaced NINO', { country: 'GB', province: 'ENG', sin: 'QQ 12 34 56 C' }, 200, null],
+      ['FR Corsican NIR', { country: 'FR', province: 'FR', sin: '254022A03300522' }, 200, null],
+      ['US hyphenated SSN', { country: 'US', province: usState, sin: '123-45-6789' }, 200, null],
+      ['stripped NINO digits', { country: 'GB', province: 'ENG', sin: '123456' }, 422, /National Insurance number/],
+      ['stripped Corsican NIR', { country: 'FR', province: 'FR', sin: '25402203300522' }, 422, /numéro de sécurité sociale/],
+      ['spaced US SSN', { country: 'US', province: usState, sin: '12345 6789' }, 422, /SSN/],
+      ['dashed CA SIN', { country: 'CA', province: 'ON', sin: '046-454-286' }, 422, /SIN/],
+      // Saves never refuse for a missing identifier — required-ness is the
+      // readiness warnings' job — so an omitted key keeps the sealed value.
+      ['missing CA SIN keeps', { country: 'CA', province: 'ON' }, 200, null],
+    ] as const) {
+      const response = await post({ ...base, ...patch })
+      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
+      if (message) assert.match(((await response.json()) as { error: string }).error, message)
+    }
+    // Nothing was persisted by the refusals: the last accepted value (the
+    // hyphenated SSN) is what the row holds, sealed.
+    const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
+      select (sin_encrypted is not null) as present, sin_last3 as "last3"
+        from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.equal(stored.rows[0]!.present, true)
+    assert.equal(stored.rows[0]!.last3, '789')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile POST saves an identifier-less employee where the pack does not require one', { skip: !DB }, async () => {
+  // Quoting a TFN is voluntary, so the AU pack declares its identifier not
+  // required: the save succeeds and clears the sealed value.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    const seeded = await post({ ...base, country: 'AU', province: 'NSW', sin: '123456782' })
+    assert.equal(seeded.status, 200, await seeded.clone().text())
+    const cleared = await post({ ...base, country: 'AU', province: 'NSW', sin: '' })
+    assert.equal(cleared.status, 200, await cleared.clone().text())
+    const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
+      select (sin_encrypted is not null) as present, sin_last3 as "last3"
+        from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.equal(stored.rows[0]!.present, false)
+    assert.equal(stored.rows[0]!.last3, null)
+    // Omitting the key entirely keeps the cleared state and still saves.
+    const omitted = await post({ ...base, country: 'AU', province: 'NSW' })
+    assert.equal(omitted.status, 200, await omitted.clone().text())
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile GET never echoes the sealed identifier, only its last three', { skip: !DB }, async () => {
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const saved = await post({
+      employeePartyId: employeeId, payScheduleId: scheduleId,
+      country: 'GB', province: 'ENG', payBasis: 'hourly', sin: 'QQ123456C',
+    })
+    assert.equal(saved.status, 200, await saved.clone().text())
+    const response = await get(`?employee=${employeeId}`)
+    assert.equal(response.status, 200, await response.clone().text())
+    const body = (await response.json()) as { profile: Record<string, unknown> }
+    assert.equal(body.profile['sin_last3'], '56C')
+    assert.ok(!('sin' in body.profile), 'the sealed value is never echoed')
+    assert.ok(!('sin_encrypted' in body.profile), 'the ciphertext is never echoed')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile GET serves every pack identifier declaration', { skip: !DB }, async () => {
+  // The editor labels the sealed field from the pack — NINO, PPSN, NIR —
+  // never a hardcoded "SIN / SSN".
+  const { org } = await fixture()
+  try {
+    const body = (await (await get()).json()) as {
+      packProfiles: Record<string, {
+        identifier: {
+          label: string; formatHelp: string; example: string;
+          required: boolean; neededFor: string | null; numericEntry: boolean;
+        }
+      }>
+    }
+    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES)
+    for (const [country, profile] of Object.entries(body.packProfiles)) {
+      assert.ok(profile.identifier.label.length > 0, `${country} declares an identifier label`)
+      assert.ok(profile.identifier.formatHelp.length > 0, `${country} declares an identifier shape`)
+      assert.ok(profile.identifier.example.length > 0, `${country} declares an identifier example`)
+    }
+    assert.equal(body.packProfiles['GB']!.identifier.label, 'National Insurance number')
+    assert.equal(body.packProfiles['IE']!.identifier.label, 'PPSN')
+    assert.equal(body.packProfiles['IE']!.identifier.neededFor, null)
+    assert.equal(body.packProfiles['AU']!.identifier.required, false)
+    assert.equal(body.packProfiles['CA']!.identifier.required, true)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

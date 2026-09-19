@@ -40,6 +40,21 @@ const AU_REGIONS: PayrollRegionCoverage = {
 export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {
   country: "AU",
   name: "Australia",
+  // ATO: a TFN is "a unique number (usually 9 digits)". Quoting it is
+  // VOLUNTARY — "It is not an offence not to quote your TFN" — and an
+  // employee without one is withheld at the top marginal rate instead, so
+  // requiredForPayroll is false and the profile API saves an
+  // identifier-less employee. neededFor is null: no filing demands it.
+  employeeIdentifier: {
+    label: "Tax File Number",
+    pattern: "\\d{9}",
+    formatHelp: "9 digits",
+    example: "123456782",
+    requiredForPayroll: false,
+    neededFor: null,
+    citation: "ATO: a TFN is 'a unique number (usually 9 digits)'; 'It is not an offence not to quote your TFN'",
+    numericEntry: true,
+  },
   installable: true,
   statutoryCurrency: "AUD",
   // The ATO financial year opens 1 July and is named for the year it closes
