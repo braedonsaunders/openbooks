@@ -54,6 +54,33 @@ async function end(client: PoolClient, commit: boolean): Promise<void> {
   }
 }
 
+// A refused statement aborts its Postgres transaction, so every immediate
+// refusal under test runs inside a savepoint that is rolled back: the
+// transaction stays healthy and later steps prove what commits. Deferred
+// refusals (asserted on end/commit) need no savepoint.
+async function refused(
+  client: PoolClient,
+  run: () => Promise<unknown>,
+  match: RegExp,
+): Promise<void>;
+async function refused(
+  client: PoolClient,
+  run: () => Promise<unknown>,
+  match: (error: unknown) => boolean,
+): Promise<void>;
+async function refused(
+  client: PoolClient,
+  run: () => Promise<unknown>,
+  match: unknown,
+): Promise<void> {
+  await client.query("savepoint refused_probe");
+  try {
+    await assert.rejects(run(), match as RegExp);
+  } finally {
+    await client.query("rollback to savepoint refused_probe");
+  }
+}
+
 interface Seed {
   orgId: string;
   subId: string;
@@ -117,6 +144,29 @@ interface ClosedEntry {
   row: string;
 }
 
+// Full-row image for the evidence before element: to_jsonb of the live row,
+// no column subtracted. Must equal to_jsonb(OLD) at the deferred forward
+// check (UPDATE) — the closing transition only fires from a live row, so no
+// exclusion is needed and none is claimed.
+const HRM_CLOSE_TABLES = new Set([
+  "worker_employment_versions",
+  "employment_assignment_versions",
+  "reporting_relationships",
+]);
+
+async function beforeImage(
+  client: PoolClient,
+  table: string,
+  rowId: string,
+): Promise<unknown> {
+  assert.ok(HRM_CLOSE_TABLES.has(table), `close table allowlist: ${table}`);
+  const rows = (
+    await client.query(`select to_jsonb(v) as before from ${table} v where id = $1::uuid`, [rowId])
+  ).rows as { before: unknown }[];
+  assert.equal(rows.length, 1, `close row must be live: ${table} ${rowId}`);
+  return rows[0]!.before;
+}
+
 async function mkEvidence(
   client: PoolClient,
   s: Seed,
@@ -130,13 +180,26 @@ async function mkEvidence(
     closed?: ClosedEntry[];
   } = {},
 ): Promise<string> {
+  // Evidence is written BEFORE the close in these tests, so every named row
+  // is still live: read its exact image now, which is what the deferred
+  // guard compares against OLD at commit.
+  const closed: Record<string, unknown>[] = [];
+  for (const c of opts.closed ?? []) {
+    closed.push({
+      table: c.table,
+      identity: c.identity,
+      version_no: c.version,
+      row_id: c.row,
+      before: await beforeImage(client, c.table, c.row),
+    });
+  }
   return (
     await client.query(
       `insert into employment_changes
          (org_id, employment_id, assignment_id, revision, supersedes_id, change_kind,
           prior_snapshot, reason, recorded_source, recorded_by, recorded_source_ref,
           closed_versions)
-       values ($1, $2, $3::uuid, $4, $5::uuid, $6, '{}', 'test evidence ' || $4,
+       values ($1, $2, $3::uuid, $4, $5::uuid, $6, '{}', $11,
          $7, $8::uuid, $9, $10::jsonb) returning id`,
       [
         s.orgId,
@@ -148,14 +211,8 @@ async function mkEvidence(
         opts.actor ?? "user",
         opts.actor === "system" ? null : s.userId,
         opts.actor === "system" ? "hrm-test" : null,
-        JSON.stringify(
-          (opts.closed ?? []).map((c) => ({
-            table: c.table,
-            identity: c.identity,
-            version_no: c.version,
-            row_id: c.row,
-          })),
-        ),
+        JSON.stringify(closed),
+        `test evidence ${revision}`,
       ],
     )
   ).rows[0]!.id as string;
@@ -198,7 +255,7 @@ test("live catalog preserves RESTRICT composite scoping after bootstrap RLS refr
     }>(sql`
       select c.relname as child, k.conname as name,
              array_length(k.conkey, 1) as cols,
-             k.confdeltype as del, k.confupdatetype as upd,
+             k.confdeltype as del, k.confupdtype as upd,
              k.condeferrable as defer
         from pg_constraint k join pg_class c on c.oid = k.conrelid
        where k.contype = 'f' and k.conname like '%_tenant_fkey'
@@ -234,17 +291,26 @@ test("bitemporal overlap rejected; disjoint effective slices sharing recorded ti
   const org = await createScratchOrg();
   try {
     const s = await seed(org.orgId, org.subsidiaryId, "bitemp");
-    const c = await session(true);
+    // Same effective window, overlapping recorded window: ambiguous. The
+    // exclusion is DEFERRABLE (close/insert/evidence commit in any order in
+    // one transaction), so the overlap is tolerated mid-transaction and the
+    // COMMIT refuses with 23P01. Separate transaction: the refusal poisons it.
+    const bad = await session(true);
     try {
-      const e = await mkEmployment(c, s, "E1");
-      await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
-      // Same effective window, overlapping recorded window: ambiguous. Deferred:
-      // the implicit-transaction commit must refuse with 23P01.
+      const e = await mkEmployment(bad, s, "E1");
+      await mkVersion(bad, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+      await mkVersion(bad, s, e, 2, "active", "2024-01-01", null, "2024-06-01T00:00:00Z");
       await assert.rejects(
-        mkVersion(c, s, e, 2, "active", "2024-01-01", null, "2024-06-01T00:00:00Z"),
+        end(bad, true),
         (error: unknown) => code(error) === "23P01",
       );
-      // Disjoint effective slices may share recorded windows: allowed.
+    } catch (error) {
+      await end(bad, false);
+      throw error;
+    }
+    // Disjoint effective slices may share recorded windows: allowed.
+    const c = await session(true);
+    try {
       const e2 = await mkEmployment(c, s, "E2");
       await mkVersion(c, s, e2, 1, "active", "2024-01-01", "2024-06-01", "2024-01-01T00:00:00Z");
       await mkVersion(c, s, e2, 2, "on_leave", "2024-06-01", null, "2024-01-02T00:00:00Z");
@@ -278,16 +344,19 @@ test("legitimate correction: close + successor + linked evidence commits in one 
       await end(c, true);
       const check = await session(true);
       try {
+        // EXACT UTC text: ::text would render in the session TimeZone, so
+        // convert explicitly (JS Date would also truncate microseconds).
         const rows = (
           await check.query(
-            `select recorded_at::text as ra, recorded_until::text as ru
+            `select (recorded_at at time zone 'UTC')::text as ra,
+                    (recorded_until at time zone 'UTC')::text as ru
              from worker_employment_versions where employment_id = $1 order by version_no`,
             [e],
           )
         ).rows as { ra: string; ru: string | null }[];
         assert.equal(rows.length, 2);
-        assert.equal(rows[0]!.ru, "2024-03-01 00:00:00+00");
-        assert.equal(rows[1]!.ra, "2024-03-01 00:00:00+00");
+        assert.equal(rows[0]!.ru, "2024-03-01 00:00:00");
+        assert.equal(rows[1]!.ra, "2024-03-01 00:00:00");
         await end(check, true);
       } catch (error) {
         await end(check, false);
@@ -392,12 +461,12 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
   try {
     const attempt = async (
       label: string,
-      build: (c: PoolClient, s: Seed) => Promise<void>,
+      build: (c: PoolClient, s: Seed, tag: string) => Promise<void>,
     ): Promise<void> => {
       const s = await seed(org.orgId, org.subsidiaryId, label);
       const c = await session(true);
       try {
-        await build(c, s);
+        await build(c, s, label);
         await assert.rejects(end(c, true), (error: unknown) => code(error) === "23514", label);
       } catch (error) {
         await end(c, false);
@@ -405,8 +474,8 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
       }
     };
     // Self-supersession.
-    await attempt("self", async (c, s) => {
-      const e = await mkEmployment(c, s, "E1");
+    await attempt("self", async (c, s, tag) => {
+      const e = await mkEmployment(c, s, tag);
       const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
       const change = await mkEvidence(c, s, e, 2, {
         closed: [{ table: "worker_employment_versions", identity: e, version: 1, row: v1 }],
@@ -420,8 +489,8 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
       );
     });
     // Non-adjacent successor (gap between close and successor start).
-    await attempt("gap", async (c, s) => {
-      const e = await mkEmployment(c, s, "E1");
+    await attempt("gap", async (c, s, tag) => {
+      const e = await mkEmployment(c, s, tag);
       const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
       const change = await mkEvidence(c, s, e, 2, {
         closed: [{ table: "worker_employment_versions", identity: e, version: 1, row: v1 }],
@@ -430,9 +499,9 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
       await mkVersion(c, s, e, 2, "active", "2024-01-01", null, "2024-04-01T00:00:00Z");
     });
     // Evidence bound to another identity's row.
-    await attempt("foreign", async (c, s) => {
-      const e1 = await mkEmployment(c, s, "E1");
-      const e2 = await mkEmployment(c, s, "E2");
+    await attempt("foreign", async (c, s, tag) => {
+      const e1 = await mkEmployment(c, s, `${tag}-1`);
+      const e2 = await mkEmployment(c, s, `${tag}-2`);
       const v1 = await mkVersion(c, s, e1, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
       await mkVersion(c, s, e2, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
       const change = await mkEvidence(c, s, e1, 2, {
@@ -441,18 +510,32 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
       await closeVersion(c, s, e1, 1, "2024-03-01T00:00:00Z", change);
       await mkVersion(c, s, e1, 2, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
     });
-    // Stale-transaction evidence: event committed earlier, closure now.
+    // Stale-transaction evidence: tx1 commits a COMPLETE valid closure
+    // (evidence and close in the same transaction, as the reverse proof
+    // demands — pre-committing evidence for a future close is itself
+    // refused). tx2 then closes the successor row while linking tx1's event:
+    // same employment, but a foreign transaction, so the commit refuses.
     const s = await seed(org.orgId, org.subsidiaryId, "stale");
     const setup = await session(true);
     let e = "";
-    let v1 = "";
     let change = "";
     try {
-      e = await mkEmployment(setup, s, "E1");
-      v1 = await mkVersion(setup, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+      e = await mkEmployment(setup, s, "stale-1");
+      const v1 = await mkVersion(
+        setup,
+        s,
+        e,
+        1,
+        "active",
+        "2024-01-01",
+        null,
+        "2024-01-01T00:00:00Z",
+      );
       change = await mkEvidence(setup, s, e, 1, {
         closed: [{ table: "worker_employment_versions", identity: e, version: 1, row: v1 }],
       });
+      await closeVersion(setup, s, e, 1, "2024-02-01T00:00:00Z", change);
+      await mkVersion(setup, s, e, 2, "active", "2024-01-01", null, "2024-02-01T00:00:00Z");
       await end(setup, true);
     } catch (error) {
       await end(setup, false);
@@ -460,8 +543,8 @@ test("adversarial closures: self, gapped successor, foreign evidence, stale even
     }
     const c2 = await session(true);
     try {
-      await closeVersion(c2, s, e, 1, "2024-03-01T00:00:00Z", change);
-      await mkVersion(c2, s, e, 2, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
+      await closeVersion(c2, s, e, 2, "2024-03-01T00:00:00Z", change);
+      await mkVersion(c2, s, e, 3, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
       await assert.rejects(end(c2, true), (error: unknown) => code(error) === "23514", "stale");
     } catch (error) {
       await end(c2, false);
@@ -479,23 +562,27 @@ test("three-valued-logic holes stay shut: null provenance, sourceless system act
     const c = await session(true);
     try {
       // service_start set with NULL provenance: must fail, not pass-as-NULL.
-      await assert.rejects(
-        c.query(
-          `insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id, service_start)
-           values ($1, $2, $3, '2020-05-01'::date)`,
-          [s.orgId, s.partyId, s.subId],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id, service_start)
+             values ($1, $2, $3, '2020-05-01'::date)`,
+            [s.orgId, s.partyId, s.subId],
+          ),
         (error: unknown) => code(error) === "23514",
       );
       // system actor with NULL source ref: must fail, not pass-as-NULL.
       const e = await mkEmployment(c, s, "E1");
-      await assert.rejects(
-        c.query(
-          `insert into employment_changes
-             (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_source)
-           values ($1, $2, 1, 'created', '{}', 'ok reason', 'system')`,
-          [s.orgId, e],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into employment_changes
+               (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_source)
+             values ($1, $2, 1, 'created', '{}', 'ok reason', 'system')`,
+            [s.orgId, e],
+          ),
         (error: unknown) => code(error) === "23514",
       );
       // NaN FTE: numeric NaN sorts above ordinary numbers, so fte > 0 alone
@@ -507,13 +594,15 @@ test("three-valued-logic holes stay shut: null provenance, sourceless system act
           [s.orgId, e],
         )
       ).rows[0]!.id as string;
-      await assert.rejects(
-        c.query(
-          `insert into employment_assignment_versions
-             (org_id, assignment_id, employment_id, version_no, fte, effective_from, recorded_at)
-           values ($1, $2, $3, 1, 'NaN', '2024-01-01'::date, now())`,
-          [s.orgId, a, e],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into employment_assignment_versions
+               (org_id, assignment_id, employment_id, version_no, fte, effective_from, recorded_at)
+             values ($1, $2, $3, 1, 'NaN', '2024-01-01'::date, now())`,
+            [s.orgId, a, e],
+          ),
         (error: unknown) => code(error) === "23514",
       );
       await end(c, true);
@@ -534,36 +623,63 @@ test("closure allowlist: content edits refused, audit touch allowed, deletes ref
     try {
       const e = await mkEmployment(c, s, "E1");
       await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
-      await assert.rejects(
-        c.query(
-          `update worker_employment_versions set status = 'terminated'
-           where employment_id = $1 and version_no = 1`,
-          [e],
-        ),
+      // The delete probes below must match REAL rows: triggers fire per row,
+      // so deleting from an empty table would vacuously succeed.
+      await mkEvidence(c, s, e, 1, { kind: "created" });
+      await refused(
+        c,
+        () =>
+          c.query(
+            `update worker_employment_versions set status = 'terminated'
+             where employment_id = $1 and version_no = 1`,
+            [e],
+          ),
         /append-only/,
       );
-      await assert.rejects(
-        c.query(
-          `update worker_employment_versions set recorded_at = '2023-01-01T00:00:00Z'
-           where employment_id = $1 and version_no = 1`,
-          [e],
-        ),
+      // A live row names no successor yet, so content edits stop at the
+      // first branch (append-only), never reaching the allowlist branch.
+      await refused(
+        c,
+        () =>
+          c.query(
+            `update worker_employment_versions set recorded_at = '2023-01-01T00:00:00Z'
+             where employment_id = $1 and version_no = 1`,
+            [e],
+          ),
+        /append-only/,
+      );
+      await refused(
+        c,
+        () =>
+          c.query(
+            `update worker_employment_versions set created_by = $1
+             where employment_id = $2 and version_no = 1`,
+            [s.userId, e],
+          ),
+        /append-only/,
+      );
+      // The allowlist branch itself: a closing transition that ALSO rewrites
+      // content is refused even though the closing columns are present.
+      await refused(
+        c,
+        () =>
+          c.query(
+            `update worker_employment_versions
+                set recorded_until = '2024-03-01T00:00:00Z', superseded_by = 2,
+                    status = 'terminated'
+             where employment_id = $1 and version_no = 1`,
+            [e],
+          ),
         /closure sets/,
       );
-      await assert.rejects(
-        c.query(
-          `update worker_employment_versions set created_by = $1
-           where employment_id = $2 and version_no = 1`,
-          [s.userId, e],
-        ),
-        /closure sets/,
-      );
-      await assert.rejects(
-        c.query(`delete from worker_employment_versions where employment_id = $1`, [e]),
+      await refused(
+        c,
+        () => c.query(`delete from worker_employment_versions where employment_id = $1`, [e]),
         /never deleted/,
       );
-      await assert.rejects(
-        c.query(`delete from employment_changes where employment_id = $1`, [e]),
+      await refused(
+        c,
+        () => c.query(`delete from employment_changes where employment_id = $1`, [e]),
         /immutable/,
       );
       // Pure audit touch passes the allowlist.
@@ -610,11 +726,43 @@ test("single primary per employment at any bitemporal point; reassignment allowe
           [s.orgId, aid, e, v, primary, from, rec],
         );
       await ins(a, 1, true, "2024-01-01", "2024-01-01T00:00:00Z");
-      // Second primary overlapping in BOTH dimensions: refused.
-      await assert.rejects(
-        ins(b, 1, true, "2024-01-01", "2024-02-01T00:00:00Z"),
-        (error: unknown) => code(error) === "23P01",
-      );
+      // Second primary overlapping in BOTH dimensions: refused at commit
+      // (the primary exclusion is DEFERRABLE like the overlap exclusions).
+      // Separate transaction: the refusal poisons it.
+      const bad = await session(true);
+      try {
+        const be = await mkEmployment(bad, s, "E-dup");
+        const ba = (
+          await bad.query(
+            `insert into employment_assignments (org_id, employment_id, assignment_key)
+             values ($1, $2, 'primary') returning id`,
+            [s.orgId, be],
+          )
+        ).rows[0]!.id as string;
+        const bb = (
+          await bad.query(
+            `insert into employment_assignments (org_id, employment_id, assignment_key)
+             values ($1, $2, 'extra') returning id`,
+            [s.orgId, be],
+          )
+        ).rows[0]!.id as string;
+        const bins = (aid: string, v: number, primary: boolean, from: string, rec: string) =>
+          bad.query(
+            `insert into employment_assignment_versions
+               (org_id, assignment_id, employment_id, version_no, is_primary, effective_from, recorded_at)
+             values ($1, $2, $3, $4, $5, $6::date, $7::timestamptz)`,
+            [s.orgId, aid, be, v, primary, from, rec],
+          );
+        await bins(ba, 1, true, "2024-01-01", "2024-01-01T00:00:00Z");
+        await bins(bb, 1, true, "2024-01-01", "2024-02-01T00:00:00Z");
+        await assert.rejects(
+          end(bad, true),
+          (error: unknown) => code(error) === "23P01",
+        );
+      } catch (error) {
+        await end(bad, false);
+        throw error;
+      }
       // Sequential primary (disjoint effective): allowed.
       await ins(b, 1, false, "2024-01-01", "2024-02-01T00:00:00Z");
       await end(c, true);
@@ -629,8 +777,10 @@ test("single primary per employment at any bitemporal point; reassignment allowe
 
 test("stable identity pinned: assignment parent and employment org/employer cannot move", { skip }, async () => {
   const org = await createScratchOrg();
+  const orgB = await createScratchOrg();
   try {
     const s = await seed(org.orgId, org.subsidiaryId, "pin");
+    // Assignment parent: immediate BEFORE trigger, refused in-transaction.
     const c = await session(true);
     try {
       const e1 = await mkEmployment(c, s, "E1");
@@ -642,19 +792,9 @@ test("stable identity pinned: assignment parent and employment org/employer cann
           [s.orgId, e1],
         )
       ).rows[0]!.id as string;
-      await assert.rejects(
-        c.query(`update employment_assignments set employment_id = $1 where id = $2`, [e2, a]),
-        /immutable/,
-      );
-      await assert.rejects(
-        c.query(`update worker_employments set org_id = $1 where id = $2`, [org.orgId, e1]),
-        /immutable/,
-      );
-      await assert.rejects(
-        c.query(`update worker_employments set employer_subsidiary_id = $1 where id = $2`, [
-          org.subsidiaryId,
-          e1,
-        ]),
+      await refused(
+        c,
+        () => c.query(`update employment_assignments set employment_id = $1 where id = $2`, [e2, a]),
         /immutable/,
       );
       await end(c, true);
@@ -662,8 +802,53 @@ test("stable identity pinned: assignment parent and employment org/employer cann
       await end(c, false);
       throw error;
     }
+    // Employment org/employer: the identity guard is a DEFERRED constraint
+    // trigger (merge marker must be visible at commit), so each genuine move
+    // — to a REAL other org / subsidiary, never a same-value no-op — is
+    // proven at commit. Separate transactions so one refusal poisons nothing.
+    // Org move re-points worker AND employer into orgB in the same UPDATE so
+    // both composite FKs pass and the guard (org check first) is what fires.
+    const probeO = await seed(org.orgId, org.subsidiaryId, "pin-org");
+    const oc = await session(true);
+    try {
+      const partyB = (
+        await oc.query(
+          `insert into parties (org_id, kind, display_name) values ($1, 'person', 'Pin Dependent') returning id`,
+          [orgB.orgId],
+        )
+      ).rows[0]!.id as string;
+      const e = await mkEmployment(oc, probeO, "E-org");
+      await oc.query(
+        `update worker_employments
+            set org_id = $1, worker_party_id = $2, employer_subsidiary_id = $3 where id = $4`,
+        [orgB.orgId, partyB, orgB.subsidiaryId, e],
+      );
+      await assert.rejects(end(oc, true), /immutable/, "pin-org");
+    } catch (error) {
+      await end(oc, false);
+      throw error;
+    }
+    const sub2 = (
+      await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+        values (${org.orgId}, ${org.subsidiaryId}, 'Second Legal', 'CAD', 'CA') returning id`)
+    ).rows[0]!.id;
+    const probeE = await seed(org.orgId, org.subsidiaryId, "pin-emp");
+    const ec = await session(true);
+    try {
+      const e = await mkEmployment(ec, probeE, "E-emp");
+      await ec.query(`update worker_employments set employer_subsidiary_id = $1 where id = $2`, [
+        sub2,
+        e,
+      ]);
+      await assert.rejects(end(ec, true), /immutable/, "pin-emp");
+    } catch (error) {
+      await end(ec, false);
+      throw error;
+    }
   } finally {
     await dropScratchOrgReporting(org.orgId);
+    await dropScratchOrgReporting(orgB.orgId);
   }
 });
 
@@ -682,32 +867,39 @@ test("evidence provenance: foreign assignment, cross-employment supersedes, acto
           [s.orgId, e2],
         )
       ).rows[0]!.id as string;
-      await assert.rejects(
-        c.query(
-          `insert into employment_changes
-             (org_id, employment_id, assignment_id, revision, change_kind, prior_snapshot, reason,
-              recorded_source, recorded_by)
-           values ($1, $2, $3::uuid, 1, 'created', '{}', 'x', 'user', $4::uuid)`,
-          [s.orgId, e1, foreign, s.userId],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into employment_changes
+               (org_id, employment_id, assignment_id, revision, change_kind, prior_snapshot, reason,
+                recorded_source, recorded_by)
+             values ($1, $2, $3::uuid, 1, 'created', '{}', 'x', 'user', $4::uuid)`,
+            [s.orgId, e1, foreign, s.userId],
+          ),
         /same employment/,
       );
-      await assert.rejects(
-        c.query(
-          `insert into employment_changes
-             (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
-              recorded_source, recorded_source_ref)
-           values ($1, $2, 1, 'created', '{}', '   ', 'system', 'hrm-test')`,
-        ),
-        /reason|non-blank|btrim/i,
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into employment_changes
+               (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+                recorded_source, recorded_source_ref)
+             values ($1, $2, 1, 'created', '{}', '   ', 'system', 'hrm-test')`,
+            [s.orgId, e1],
+          ),
+        /blank|reason|btrim/i,
       );
-      await assert.rejects(
-        c.query(
-          `insert into employment_changes
-             (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_source)
-           values ($1, $2, 1, 'created', '{}', 'ok reason', 'user')`,
-          [s.orgId, e1],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into employment_changes
+               (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_source)
+             values ($1, $2, 1, 'created', '{}', 'ok reason', 'user')`,
+            [s.orgId, e1],
+          ),
         /actor|recorded_by/i,
       );
       await end(c, true);
@@ -722,30 +914,49 @@ test("evidence provenance: foreign assignment, cross-employment supersedes, acto
 
 test("native merge moves stable employments with marker; bare remap refused", { skip }, async () => {
   const org = await createScratchOrg();
-  // Second legal employer for the two-employment merge case.
+  // Second legal employer for the two-employment merge case: a child of the
+  // root (the org root is unique per org, so a second root is refused).
   const sub2 = (
     await db.execute<{ id: string }>(sql`
-      insert into subsidiaries (org_id, name, base_currency, country)
-      values (${org.orgId}, 'Second Legal', 'CAD', 'CA') returning id`)
+      insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+      values (${org.orgId}, ${org.subsidiaryId}, 'Second Legal', 'CAD', 'CA') returning id`)
   ).rows[0]!.id;
   try {
     const s = await seed(org.orgId, org.subsidiaryId, "merge");
-    const c = await session(true);
-    let first = "";
-    let second = "";
+    // The survivor party must outlive the refused remap transaction below
+    // (which rolls back), so it is committed in its own setup transaction.
+    const sc = await session(true);
     let survivor = "";
     try {
-      first = await mkEmployment(c, s, "E1");
-      await mkVersion(c, s, first, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+      survivor = await mkParty(sc, s.orgId, "survivor");
+      await end(sc, true);
+    } catch (error) {
+      await end(sc, false);
+      throw error;
+    }
+    // Employments committed FIRST: the refused remap below rolls its whole
+    // transaction back, so rows it must later move cannot be created there.
+    const setup = await session(true);
+    let first = "";
+    let second = "";
+    try {
+      first = await mkEmployment(setup, s, "E1");
+      await mkVersion(setup, s, first, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
       second = (
-        await c.query(
+        await setup.query(
           `insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id, employment_number)
            values ($1, $2, $3, 'E2') returning id`,
           [s.orgId, s.partyId, sub2],
         )
       ).rows[0]!.id as string;
+      await end(setup, true);
+    } catch (error) {
+      await end(setup, false);
+      throw error;
+    }
+    const c = await session(true);
+    try {
       // Bare remap with no merge marker: deferred guard rolls back.
-      survivor = await mkParty(c, s.orgId, "survivor");
       await c.query(`update worker_employments set worker_party_id = $1 where id = $2`, [
         survivor,
         first,
@@ -768,7 +979,10 @@ test("native merge moves stable employments with marker; bare remap refused", { 
       runId: "hrm-test-run",
     });
     assert.equal(result.alreadyMerged, false);
-    const moved = (result.moved ?? []).find((m) => m.table === "worker_employments");
+    // Move keys are table.column (party-merges moveSimple), not bare table.
+    const moved = (result.moved ?? []).find(
+      (m) => m.table === "worker_employments.worker_party_id",
+    );
     assert.equal(moved?.rows, 2);
     const check = await session(true);
     try {
@@ -820,7 +1034,7 @@ test("manager cycle through a later effective slice is found; matrix is free", {
       await line(m, p1, "2024-01-01", "2025-01-01", rel());
       await line(m, p2, "2025-01-01", null, rel());
       // Cycle E->M->P2->E is reachable only through P2's later slice: refused.
-      await assert.rejects(line(p2, e, "2024-01-01", null, rel()), /management cycle/);
+      await refused(c, () => line(p2, e, "2024-01-01", null, rel()), /management cycle/);
       // Matrix edges never participate: the same triangle as matrix passes.
       await c.query(
         `insert into reporting_relationships
@@ -851,6 +1065,14 @@ for (const isolation of ["read committed", "repeatable read"] as const) {
       try {
         ea = await mkEmployment(setup, { ...s, partyId: await mkParty(setup, s.orgId, "A") }, "A");
         eb = await mkEmployment(setup, { ...s, partyId: await mkParty(setup, s.orgId, "B") }, "B");
+        // First-write seed path: no reporting write has happened yet, so the
+        // race below exercises the ON CONFLICT DO NOTHING initialization too.
+        const pre = (
+          await setup.query(`select count(*)::int as n from hrm_graph_revisions where org_id = $1`, [
+            s.orgId,
+          ])
+        ).rows as { n: number }[];
+        assert.equal(pre[0]!.n, 0, "race must start on a fresh graph row");
         await end(setup, true);
       } catch (error) {
         await end(setup, false);
@@ -864,51 +1086,59 @@ for (const isolation of ["read committed", "repeatable read"] as const) {
         await client.query(`begin isolation level ${isolation}`);
         await client.query("select set_config('app.bypass_rls', 'on', true)");
       }
-      await a.query(edge(ea, eb));
-      const outcome: PromiseSettledResult<unknown> = await b
-        .query(edge(eb, ea))
-        .then(
-          (value): PromiseSettledResult<unknown> => ({ status: "fulfilled", value }),
-          (reason): PromiseSettledResult<unknown> => ({ status: "rejected", reason }),
-        );
-      // Do NOT pre-commit the loser: a rejected INSERT aborts only itself
-      // inside an explicit transaction; commit/rollback decides the rest.
-      // Await the loser first so its fate is known before touching A.
-      if (outcome.status === "fulfilled") {
-        await b.query("commit").catch(() => undefined);
-      } else {
-        await b.query("rollback").catch(() => undefined);
-      }
-      await a.query("commit").catch(() => undefined);
-      // Fail-closed either way: the loser is refused (cycle 23514 under read
-      // committed, serialization 40001 under repeatable read), so at most
-      // one of the two opposite edges survives.
-      if (outcome.status === "fulfilled") {
-        const check = await session(true);
+      // Each side commits independently the moment its own INSERT resolves.
+      // Holding either side open while awaiting the other deadlocks the
+      // harness: the graph-revision seed row serializes the two writers, so
+      // the loser blocks until the winner commits, then fails closed (cycle
+      // 23514 under read committed once the winner's edge is visible,
+      // serialization 40001 under repeatable read).
+      const run = async (client: PoolClient, sub: string, mgr: string): Promise<"committed"> => {
         try {
-          const rows = (
-            await check.query(
-              `select count(*)::int as n from reporting_relationships
-               where org_id = $1 and kind = 'line' and superseded_by is null
-                 and ((employment_id = $2 and manager_employment_id = $3)
-                   or (employment_id = $3 and manager_employment_id = $2))`,
-              [s.orgId, ea, eb],
-            )
-          ).rows as { n: number }[];
-          assert.ok(rows[0]!.n <= 1, `both opposite edges survived under ${isolation}`);
-          await end(check, true);
+          await client.query(edge(sub, mgr));
+          await client.query("commit");
+          return "committed";
         } catch (error) {
-          await end(check, false);
+          await client.query("rollback").catch(() => undefined);
           throw error;
         }
-      } else {
-        const got = code(outcome.reason);
-        assert.ok(
-          got === "23514" || got === "40001",
-          `loser refused with cycle or serialization, got ${got}: ${String(
-            (outcome.reason as Error)?.message ?? outcome.reason,
-          ).slice(0, 200)}`,
-        );
+      };
+      const [oa, ob] = await Promise.allSettled([run(a, ea, eb), run(b, eb, ea)]);
+      // Exactly one side must commit: on this fresh graph row the seed
+      // INSERT conflict serializes the writers (the pre-count above proves
+      // no seed row existed), so the loser only proceeds after the winner
+      // commits and then fails closed.
+      const committed = [oa, ob].filter((o) => o.status === "fulfilled").length;
+      assert.equal(committed, 1, `exactly one edge must commit under ${isolation}`);
+      for (const [name, o] of [
+        ["a", oa],
+        ["b", ob],
+      ] as const) {
+        if (o.status === "rejected") {
+          const got = code(o.reason);
+          assert.ok(
+            got === "23514" || got === "40001",
+            `${name} refused with cycle or serialization, got ${got}: ${String(
+              (o.reason as Error)?.message ?? o.reason,
+            ).slice(0, 200)}`,
+          );
+        }
+      }
+      const check = await session(true);
+      try {
+        const rows = (
+          await check.query(
+            `select count(*)::int as n from reporting_relationships
+             where org_id = $1 and kind = 'line' and superseded_by is null
+               and ((employment_id = $2 and manager_employment_id = $3)
+                 or (employment_id = $3 and manager_employment_id = $2))`,
+            [s.orgId, ea, eb],
+          )
+        ).rows as { n: number }[];
+        assert.ok(rows[0]!.n <= 1, `both opposite edges survived under ${isolation}`);
+        await end(check, true);
+      } catch (error) {
+        await end(check, false);
+        throw error;
       }
     } finally {
       a.release();
@@ -927,6 +1157,16 @@ test("tenant RLS through a restricted role: invisible cross-org, writes refused"
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runner') THEN
         CREATE ROLE app_runner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
       END IF; END $$;`);
+    // Restrictive privilege assertion: the role under test must never bypass
+    // RLS, whatever database this suite lands on. Declared here, not assumed.
+    const priv = (
+      await admin.query(
+        `select rolbypassrls as bypass, rolsuper as super from pg_roles where rolname = 'app_runner'`,
+      )
+    ).rows as { bypass: boolean; super: boolean }[];
+    assert.equal(priv.length, 1, "app_runner must exist (declared above)");
+    assert.equal(priv[0]!.bypass, false, "app_runner must not bypass RLS");
+    assert.equal(priv[0]!.super, false, "app_runner must not be superuser");
     await admin.query(`GRANT CONNECT ON DATABASE ${admin.database} TO app_runner`);
     await admin.query(`GRANT USAGE ON SCHEMA public TO app_runner`);
     await admin.query(
@@ -951,12 +1191,14 @@ test("tenant RLS through a restricted role: invisible cross-org, writes refused"
       const foreign = (await c.query(`select count(*)::int as n from worker_employments`)).rows[0]!
         .n as number;
       assert.equal(foreign, 0);
-      await assert.rejects(
-        c.query(
-          `insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-           values ($1, $2, $3)`,
-          [orgA.orgId, s.partyId, orgA.subsidiaryId],
-        ),
+      await refused(
+        c,
+        () =>
+          c.query(
+            `insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
+             values ($1, $2, $3)`,
+            [orgA.orgId, s.partyId, orgA.subsidiaryId],
+          ),
         /row-level security|policy/i,
       );
       await c.query("RESET ROLE");
@@ -979,13 +1221,330 @@ test("history preserved: employment deletes restricted", { skip }, async () => {
     try {
       const e = await mkEmployment(c, s, "E1");
       await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
-      await assert.rejects(
-        c.query(`delete from worker_employments where id = $1`, [e]),
+      await refused(
+        c,
+        () => c.query(`delete from worker_employments where id = $1`, [e]),
         (error: unknown) => code(error) === "23503",
       );
       await end(c, true);
     } catch (error) {
       await end(c, false);
+      throw error;
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("finite civil time: boundary dates commit, infinity/BC/year-10000 refused", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const s = await seed(org.orgId, org.subsidiaryId, "finite");
+    const c = await session(true);
+    try {
+      // Full supported span commits: earliest civil date through latest.
+      const e = await mkEmployment(c, s, "E1");
+      await mkVersion(c, s, e, 1, "active", "0001-01-01", "9999-12-31", "2024-01-01T00:00:00Z");
+      // Known service start at the earliest boundary commits with provenance.
+      await c.query(
+        `insert into worker_employments
+           (org_id, worker_party_id, employer_subsidiary_id, employment_number, service_start, service_start_provenance)
+         values ($1, $2, $3, 'E2', '0001-01-01'::date, 'prior-provider export')`,
+        [s.orgId, s.partyId, s.subId],
+      );
+      await end(c, true);
+    } catch (error) {
+      await end(c, false);
+      throw error;
+    }
+    // Each refusal runs on a FRESH employment with a single version, so the
+    // bitemporal exclusion cannot fire: only the finite-time CHECK can refuse.
+    const refuse = async (
+      label: string,
+      from: string,
+      recordedAt: string,
+    ): Promise<void> => {
+      const probe = await seed(org.orgId, org.subsidiaryId, label);
+      const c = await session(true);
+      try {
+        const e = await mkEmployment(c, probe, label);
+        await refused(
+          c,
+          () => mkVersion(c, probe, e, 1, "active", from, null, recordedAt),
+          (error: unknown) => code(error) === "23514",
+        );
+        await end(c, true);
+      } catch (error) {
+        await end(c, false);
+        throw error;
+      }
+    };
+    await refuse("infinite-effective", "infinity", "2024-01-01T00:00:00Z");
+    await refuse("bc-effective", "0001-01-01 BC", "2024-01-01T00:00:00Z");
+    await refuse("infinite-recorded", "2024-01-01", "infinity");
+    const c2 = await session(true);
+    try {
+      // Year 10000 is past the reader's last representable instant.
+      await refused(
+        c2,
+        () =>
+          c2.query(
+            `insert into worker_employments
+               (org_id, worker_party_id, employer_subsidiary_id, service_start, service_start_provenance)
+             values ($1, $2, $3, '10000-01-01'::date, 'prior-provider export')`,
+            [s.orgId, s.partyId, s.subId],
+          ),
+        (error: unknown) => code(error) === "23514",
+      );
+      await end(c2, true);
+    } catch (error) {
+      await end(c2, false);
+      throw error;
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("dangling successor refused: superseded_by must name a real version", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const s = await seed(org.orgId, org.subsidiaryId, "dangle");
+    const c = await session(true);
+    try {
+      const e = await mkEmployment(c, s, "E1");
+      const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+      const change = await mkEvidence(c, s, e, 2, {
+        closed: [{ table: "worker_employment_versions", identity: e, version: 1, row: v1 }],
+      });
+      // Version 2 is never inserted: the pointer dangles.
+      await c.query(
+        `update worker_employment_versions
+            set recorded_until = '2024-03-01T00:00:00Z', superseded_by = 99,
+                closed_by_change_id = $1::uuid
+          where employment_id = $2 and version_no = 1`,
+        [change, e],
+      );
+      await assert.rejects(end(c, true), /dangling/);
+    } catch (error) {
+      await end(c, false);
+      throw error;
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("forged or omitted before-image refused at commit", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const attempt = async (
+      label: string,
+      mutate: (before: Record<string, unknown>) => Record<string, unknown> | undefined,
+    ): Promise<void> => {
+      const s = await seed(org.orgId, org.subsidiaryId, label);
+      const c = await session(true);
+      try {
+        const e = await mkEmployment(c, s, label);
+        const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+        const live = (await beforeImage(c, "worker_employment_versions", v1)) as Record<
+          string,
+          unknown
+        >;
+        const forged = mutate({ ...live });
+        const element: Record<string, unknown> = {
+          table: "worker_employment_versions",
+          identity: e,
+          version_no: 1,
+          row_id: v1,
+        };
+        if (forged !== undefined) element.before = forged;
+        const change = (
+          await c.query(
+            `insert into employment_changes
+               (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+                recorded_source, recorded_by, closed_versions)
+             values ($1, $2, 2, 'corrected', '{}', 'test evidence 2', 'user', $3::uuid, $4::jsonb)
+             returning id`,
+            [s.orgId, e, s.userId, JSON.stringify([element])],
+          )
+        ).rows[0]!.id as string;
+        await closeVersion(c, s, e, 1, "2024-03-01T00:00:00Z", change);
+        await mkVersion(c, s, e, 2, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
+        await assert.rejects(end(c, true), /before-image/, label);
+      } catch (error) {
+        await end(c, false);
+        throw error;
+      }
+    };
+    // Same identifiers, invented content: the status never said terminated.
+    await attempt("forged", (before) => ({ ...before, status: "terminated" }));
+    // Same identifiers, no image at all.
+    await attempt("omitted", () => undefined);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("duplicate closure entries refused: exactly one element per closure", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const s = await seed(org.orgId, org.subsidiaryId, "dup");
+    const c = await session(true);
+    try {
+      const e = await mkEmployment(c, s, "E1");
+      const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+      const before = await beforeImage(c, "worker_employment_versions", v1);
+      const element = {
+        table: "worker_employment_versions",
+        identity: e,
+        version_no: 1,
+        row_id: v1,
+        before,
+      };
+      // Same closure named twice with the same (correct) image: no single
+      // before-image can be authoritative, so the commit must refuse.
+      const change = (
+        await c.query(
+          `insert into employment_changes
+             (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+              recorded_source, recorded_by, closed_versions)
+           values ($1, $2, 2, 'corrected', '{}', 'test evidence 2', 'user', $3::uuid, $4::jsonb)
+           returning id`,
+          [s.orgId, e, s.userId, JSON.stringify([element, element])],
+        )
+      ).rows[0]!.id as string;
+      await closeVersion(c, s, e, 1, "2024-03-01T00:00:00Z", change);
+      await mkVersion(c, s, e, 2, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
+      await assert.rejects(end(c, true), /more than once/, "dup");
+    } catch (error) {
+      await end(c, false);
+      throw error;
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("evidence false claims refused: nonexistent row and unlinked live row", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const attempt = async (
+      label: string,
+      extra: (c: PoolClient, s: Seed, e: string) => Promise<Record<string, unknown>>,
+    ): Promise<void> => {
+      const s = await seed(org.orgId, org.subsidiaryId, label);
+      const c = await session(true);
+      try {
+        const e = await mkEmployment(c, s, label);
+        const v1 = await mkVersion(c, s, e, 1, "active", "2024-01-01", null, "2024-01-01T00:00:00Z");
+        const change = (
+          await c.query(
+            `insert into employment_changes
+               (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+                recorded_source, recorded_by, closed_versions)
+             values ($1, $2, 2, 'corrected', '{}', 'test evidence 2', 'user', $3::uuid, $4::jsonb)
+             returning id`,
+            [
+              s.orgId,
+              e,
+              s.userId,
+              JSON.stringify([
+                {
+                  table: "worker_employment_versions",
+                  identity: e,
+                  version_no: 1,
+                  row_id: v1,
+                  before: await beforeImage(c, "worker_employment_versions", v1),
+                },
+                await extra(c, s, e),
+              ]),
+            ],
+          )
+        ).rows[0]!.id as string;
+        await closeVersion(c, s, e, 1, "2024-03-01T00:00:00Z", change);
+        await mkVersion(c, s, e, 2, "active", "2024-01-01", null, "2024-03-01T00:00:00Z");
+        // The genuine closure proves forward; the extra element must fail
+        // the reverse proof at commit.
+        await assert.rejects(end(c, true), /real closed row/, label);
+      } catch (error) {
+        await end(c, false);
+        throw error;
+      }
+    };
+    // Well-formed identifiers, correct shape, but no such row exists.
+    await attempt("ghost", async () => ({
+      table: "worker_employment_versions",
+      identity: "00000000-0000-4000-8000-ffffffffffff",
+      version_no: 1,
+      row_id: "00000000-0000-4000-8000-ffffffffffff",
+      before: {},
+    }));
+    // A real LIVE row of the same employment with its exact image — but it
+    // was never closed by this event, so the link-back fails. Two live
+    // versions coexist here (disjoint effective slices sharing recorded time
+    // is legal).
+    const live = await seed(org.orgId, org.subsidiaryId, "live");
+    const lc = await session(true);
+    try {
+      const e = await mkEmployment(lc, live, "live-1");
+      const v1 = await mkVersion(
+        lc,
+        live,
+        e,
+        1,
+        "active",
+        "2024-01-01",
+        "2024-06-01",
+        "2024-01-01T00:00:00Z",
+      );
+      const v2 = await mkVersion(
+        lc,
+        live,
+        e,
+        2,
+        "active",
+        "2024-06-01",
+        null,
+        "2024-02-01T00:00:00Z",
+      );
+      const change = (
+        await lc.query(
+          `insert into employment_changes
+             (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+              recorded_source, recorded_by, closed_versions)
+           values ($1, $2, 2, 'corrected', '{}', 'test evidence 2', 'user', $3::uuid, $4::jsonb)
+           returning id`,
+          [
+            live.orgId,
+            e,
+            live.userId,
+            JSON.stringify([
+              {
+                table: "worker_employment_versions",
+                identity: e,
+                version_no: 1,
+                row_id: v1,
+                before: await beforeImage(lc, "worker_employment_versions", v1),
+              },
+              {
+                table: "worker_employment_versions",
+                identity: e,
+                version_no: 2,
+                row_id: v2,
+                before: await beforeImage(lc, "worker_employment_versions", v2),
+              },
+            ]),
+          ],
+        )
+      ).rows[0]!.id as string;
+      // v2 (version_no 2, recorded 02-01) is v1's genuine successor; v2
+      // itself stays live, so the extra element claims a row this event
+      // never closed.
+      await closeVersion(lc, live, e, 1, "2024-02-01T00:00:00Z", change);
+      await assert.rejects(end(lc, true), /real closed row/, "live");
+    } catch (error) {
+      await end(lc, false);
       throw error;
     }
   } finally {
