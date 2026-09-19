@@ -107,7 +107,7 @@ after(async () => {
 
 async function ctx(_t?: unknown): Promise<Harness> {
   if (!harness) {
-    const [{ db }, { createScratchOrg }] = await Promise.all([
+    const [{ db }, { createScratchOrg, createScratchUser }] = await Promise.all([
       import("../engine/src/db.ts"),
       import("../engine/src/test-fixtures.ts"),
     ]);
@@ -119,9 +119,12 @@ async function ctx(_t?: unknown): Promise<Harness> {
     assert.ok(org.customerId, "scratch org must seed a party for the worker leg");
     assert.ok(org.vendorId, "scratch org must seed a second party for the worker leg");
     assert.ok(org.subsidiaryId, "scratch org must seed a subsidiary for the employer leg");
+    // A scratch org seeds no users: the submission actor is created here as a
+    // real user row (role assignment included) rather than assumed.
+    const actorId = await createScratchUser(org.orgId, "HRM request actor", "hrm_request_actor");
     const users = (await db.execute<{ id: string }>(sql`
-      select id from users where org_id = ${org.orgId} order by created_at limit 1`)).rows;
-    assert.ok(users[0], "scratch org must seed at least one user for submission actors");
+      select id from users where id = ${actorId} and org_id = ${org.orgId}`)).rows;
+    assert.ok(users[0], "submission actor must be a real user row in the scratch org");
     const employmentId = randomUUID();
     const secondEmploymentId = randomUUID();
     for (const [id, party] of [[employmentId, org.customerId], [secondEmploymentId, org.vendorId]] as const) {
