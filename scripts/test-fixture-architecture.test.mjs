@@ -417,6 +417,102 @@ test("real pooled leases restore committed baseline rows and stay cross-tenant i
   await dropScratchOrg(recycled.orgId);
 });
 
+test("narrowed resets mark exactly the dirtied tables and restore a pristine slot", {
+  skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
+}, async () => {
+  const {
+    createScratchOrg,
+    createScratchUser,
+    dropScratchOrg,
+    listOrgIdTables,
+    probeScratchOrgTouchedTables,
+  } = await import("../engine/src/test-fixtures.ts");
+  const { db, withBypassContext } = await import("../engine/src/db.ts");
+  const { sql } = await import("drizzle-orm");
+  const { randomUUID } = await import("node:crypto");
+
+  const org = await createScratchOrg();
+  const tables = [...new Set([...(await withBypassContext(() => listOrgIdTables())), "orgs"])];
+  const probe = (target) => withBypassContext(() => probeScratchOrgTouchedTables(target, tables));
+
+  const fresh = await probe(org);
+  assert.deepEqual(fresh.tables, [], "a fresh slot touches nothing");
+  assert.equal(fresh.special, false, "a fresh slot holds no orphan evidence");
+
+  // Dirty core and tail tables, mutate two baseline rows without changing
+  // their cardinalities (the symmetric-difference path, not just the count
+  // path), delete a baseline row, and leave a password-reset row that only
+  // the special-evidence probe can see (no org_id column).
+  const docIds = [randomUUID(), randomUUID(), randomUUID()];
+  await withBypassContext(() => db.transaction(async (tx) => {
+    for (const [index, docId] of docIds.entries()) {
+      await tx.execute(sql`
+        insert into documents (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by)
+        values (${docId}, ${org.orgId}, 'customer_invoice', 'draft', ${`NARROW-${index}`}, '2026-07-15', 'CAD', '10.00', '0.00', '10.00', ${randomUUID()})`);
+      await tx.execute(sql`
+        insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, description,
+                                    quantity, unit, unit_price, amount, tax_amount,
+                                    quantity_fulfilled, quantity_billed, stock_location_id, custom)
+        values (${randomUUID()}, ${org.orgId}, ${docId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, 'Probe',
+                '1', 'ea', '10', '10', '0', '0', '0', ${org.stockLocationId2}, '{}'::jsonb)`);
+    }
+    const entryId = randomUUID();
+    await tx.execute(sql`
+      insert into journal_entries (id, org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, status, origin)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, 'narrow-probe', ${org.date}::date, ${org.periodId}, ${org.subsidiaryId}, 'draft', 'manual')`);
+    for (const [lineNumber, amount] of [[1, "10"], [2, "-10"]]) {
+      await tx.execute(sql`
+        insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
+        values (${org.orgId}, ${entryId}, ${lineNumber}, ${org.accounts.bank}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, true)`);
+    }
+    await tx.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${randomUUID()}, ${org.orgId}, 'customer', 'Narrow Probe', true, '{}'::jsonb)`);
+    await tx.execute(sql`update accounts set name = 'MUTATED BASELINE' where id = ${org.accounts.invAsset}`);
+    await tx.execute(sql`update orgs set settings = '{"narrowProbe":true}'::jsonb where id = ${org.orgId}`);
+    await tx.execute(sql`delete from stock_locations where id = ${org.stockLocationId}`);
+  }));
+  const userId = await withBypassContext(() => createScratchUser(org.orgId, "Narrow Probe", "viewer"));
+  await withBypassContext(() => db.execute(sql`
+    insert into auth_password_resets (user_id, token_hash, expires_at)
+    values (${userId}, 'probe', now() + interval '1 hour')`));
+
+  const dirtied = await probe(org);
+  assert.deepEqual(
+    [...dirtied.tables].sort(),
+    ["accounts", "app_roles", "document_lines", "documents", "journal_entries", "journal_lines", "orgs", "parties", "role_assignments", "stock_locations", "users"],
+    "the probe must mark exactly the dirtied tables — no more, no fewer",
+  );
+  assert.equal(dirtied.special, true, "the orphan password-reset row must trip the special-evidence probe");
+
+  await dropScratchOrg(org.orgId);
+  const restored = await probe(org);
+  assert.deepEqual(restored.tables, [], "the narrowed reset must leave no table dirty");
+  assert.equal(restored.special, false, "the narrowed reset must clear orphan evidence");
+  const checks = await withBypassContext(async () => {
+    const account = await db.execute(sql`select name from accounts where id = ${org.accounts.invAsset}`);
+    const settings = await db.execute(sql`select settings from orgs where id = ${org.orgId}`);
+    const stock = await db.execute(sql`select code from stock_locations where id = ${org.stockLocationId}`);
+    const docs = await db.execute(sql`select count(*)::int as count from documents where org_id = ${org.orgId} and document_number like 'NARROW-%'`);
+    const resets = await db.execute(sql`select count(*)::int as count from auth_password_resets where user_id = ${userId}`);
+    const roles = await db.execute(sql`select count(*)::int as count from users where org_id = ${org.orgId}`);
+    return {
+      account: account.rows[0].name,
+      settings: settings.rows[0].settings,
+      stock: stock.rows[0]?.code,
+      docs: docs.rows[0].count,
+      resets: resets.rows[0].count,
+      users: roles.rows[0].count,
+    };
+  });
+  assert.equal(checks.account, "Inventory Asset", "mutated baseline account was restored");
+  assert.deepEqual(checks.settings.controlAccounts.ar, org.accounts.ar, "mutated org settings were restored");
+  assert.equal(checks.stock, "MAIN", "deleted baseline stock location was reinserted");
+  assert.equal(checks.docs, 0, "test documents were removed");
+  assert.equal(checks.resets, 0, "orphan password resets were removed");
+  assert.equal(checks.users, 0, "test users were removed");
+});
+
 test("the canonical multi-file node invocation keeps lifecycle counts suite-global", { skip: !behavior }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-probe-"));
   const log = join(dir, "metrics.ndjson");
