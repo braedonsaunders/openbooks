@@ -99,6 +99,7 @@
         "entitlements": "bancos de pago",
         "workerComp": "tasas de compensación laboral",
         "timeTypes": "configuración de tipos de hora",
+        "items": "costo de nómina de los artículos",
         "settings": "configuración de nómina",
         "ytd": "los acumulados anuales de otro ciclo",
         "openingBalances": "saldos iniciales (arrastres)"

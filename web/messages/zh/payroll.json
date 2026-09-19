@@ -99,6 +99,7 @@
         "entitlements": "工资银行",
         "workerComp": "工伤保险费率",
         "timeTypes": "工时类型设置",
+        "items": "项目工资成本",
         "settings": "工资设置",
         "ytd": "另一核算的累计发生额",
         "openingBalances": "期初余额(转入)"

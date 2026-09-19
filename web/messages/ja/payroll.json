@@ -99,6 +99,7 @@
         "entitlements": "バンク",
         "workerComp": "労災保険料率",
         "timeTypes": "勤怠種別の設定",
+        "items": "品目の給与原価",
         "settings": "給与設定",
         "ytd": "他の計算の年累計",
         "openingBalances": "期首残高（繰越）"

@@ -99,6 +99,7 @@
         "entitlements": "bancos da folha",
         "workerComp": "alíquotas do seguro de acidentes de trabalho",
         "timeTypes": "cadastro de tipos de hora",
+        "items": "custo de folha dos itens",
         "settings": "configurações da folha",
         "ytd": "acumulado de outra folha",
         "openingBalances": "saldos iniciais (valores trazidos)"
