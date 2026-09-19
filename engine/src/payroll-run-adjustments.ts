@@ -72,6 +72,46 @@ export type PayRunAdjustmentMutation =
   | { action: "exclude"; employeePartyId: string }
   | { action: "include"; employeePartyId: string };
 
+type ScheduleMember = {
+  display_name: string | null;
+  party_active: boolean;
+  profile_active: boolean | null;
+} | undefined;
+
+/**
+ * Refusal for a move TOWARD paying someone (include, line adjustment) when
+ * they are not an active member of the run's schedule. Names the employee
+ * and the exact failed predicate: no such employee, a deactivated employee,
+ * no profile on this schedule, or an inactive profile — each with the remedy
+ * that fixes it.
+ */
+function inactiveMemberRefusal(member: ScheduleMember, employeeId: string): string {
+  if (!member) {
+    return `employee "${employeeId}" is not an active member of this pay run's schedule — no employee with that id; check the id and try again`;
+  }
+  const name = member.display_name ?? employeeId;
+  if (!member.party_active) {
+    return `employee "${name}" is not an active member of this pay run's schedule — they are deactivated; reactivate them before adding them to a pay run`;
+  }
+  if (member.profile_active === null) {
+    return `employee "${name}" is not an active member of this pay run's schedule — they have no payroll profile on this run's pay schedule; link them to the schedule before adding them`;
+  }
+  return `employee "${name}" is not an active member of this pay run's schedule — their payroll profile on this run's pay schedule is inactive; reactivate it before adding them`;
+}
+
+/**
+ * Refusal for a removal (exclude) of someone who was never on the run's
+ * schedule. Names who was passed — the display name when the id belongs to a
+ * real employee on another schedule, the raw id when it belongs to nobody —
+ * so the operator can tell a mistyped id from a wrong-schedule employee.
+ */
+function excludeStrangerRefusal(displayName: string | null | undefined, employeeId: string): string {
+  if (displayName) {
+    return `employee "${displayName}" is not on this run's pay schedule — nothing to remove; they were never linked to this schedule`;
+  }
+  return `employee "${employeeId}" is not on this run's pay schedule — no employee with that id; check the id and try again`;
+}
+
 /**
  * Mutate the inputs of one pay run under the same row lock used by calculate
  * and commit. Every successful change invalidates the calculated snapshot so
@@ -113,18 +153,39 @@ export async function mutatePayRunAdjustment(input: {
 
     const employeeId = mutation.action === "delete" ? null : mutation.employeePartyId;
     if (employeeId) {
-      const membership = (await tx.execute(sql`
-        select 1
-          from employee_payroll_profiles prof
-          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-         where prof.org_id = ${orgId}
-           and prof.employee_party_id = ${employeeId}
+      // The party row rides along so a refusal can name the employee and the
+      // exact failed predicate — on a roster of up to 2000 an unnamed refusal
+      // is unactionable.
+      const membership = (await tx.execute<{
+        display_name: string | null; party_active: boolean; profile_active: boolean | null;
+      }>(sql`
+        select p.display_name, p.is_active as party_active, prof.is_active as profile_active
+          from parties p
+          left join employee_payroll_profiles prof
+            on prof.org_id = p.org_id
+           and prof.employee_party_id = p.id
            and prof.pay_schedule_id = ${run.pay_schedule_id}
-           and prof.is_active and p.is_active
+         where p.org_id = ${orgId} and p.id = ${employeeId}
          limit 1
       `));
-      if (membership.rows.length === 0) {
-        throw new PayrollError("employee is not an active member of this pay run's schedule");
+      const member = membership.rows[0];
+      // A validity precondition belongs on the state being moved TOWARD, not
+      // the state being moved AWAY FROM. Adding someone (include, or a line
+      // adjustment for them) moves toward paying them, so active membership
+      // is required. Removing someone (exclude) moves away: the inactive
+      // member is exactly who must stay removable — refusing to remove them
+      // bars the only exit from the invalid state the check detects
+      // (deactivating an employee once bricked scope editing on every run
+      // whose roster held them). Exclude still requires a profile on this
+      // run's schedule, so a stranger or a mistyped id is refused, not
+      // recorded. Do NOT "restore symmetry" by re-adding the active check
+      // to exclude.
+      if (mutation.action === "exclude") {
+        if (!member || member.profile_active === null) {
+          throw new PayrollError(excludeStrangerRefusal(member?.display_name, employeeId));
+        }
+      } else if (!member || !member.party_active || member.profile_active !== true) {
+        throw new PayrollError(inactiveMemberRefusal(member, employeeId));
       }
     }
 

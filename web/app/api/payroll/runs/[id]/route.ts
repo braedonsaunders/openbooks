@@ -369,8 +369,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     // Bulk scope: set the run's included employees in one call. Everyone on
     // the roster who is NOT in `employeePartyIds` gets an exclusion row; those
-    // in it have theirs removed. One mutation per employee through the same
-    // audited helper — no second write path — and the whole roster pass is one
+    // in it have theirs removed. Changed members go through the same audited
+    // helper one at a time — no second write path — and the whole diff is one
     // transaction, so a partial scope can never be committed.
     if (body.action === 'set-scope') {
       // Every malformed shape refuses by name. One collapsed 'invalid
@@ -400,16 +400,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       const keep = new Set(included as string[])
       await withOrgTransaction(gate.user.orgId, async () => {
+        // DIFF against the current scope, never replay the roster. Every
+        // mutatePayRunAdjustment call re-validates its member, so looping the
+        // whole roster re-checks people whose scope is not changing — and one
+        // of them (a deactivated employee, an edited profile) rolls back the
+        // entire transaction. A member already in scope and staying, or
+        // already out and staying out, is not being changed and is skipped;
+        // only actual additions and removals are validated. That closes this
+        // trap for every predicate, not just the active-member one.
+        const excludedRows = (await db.execute<{ employee_party_id: string }>(sql`
+          select employee_party_id from pay_run_adjustments
+           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
+             and adjustment_type = 'exclude'
+        `))
+        const excluded = new Set(excludedRows.rows.map((row) => row.employee_party_id))
         for (const employeePartyId of roster as string[]) {
+          const wanted = keep.has(employeePartyId) ? 'include' : 'exclude'
+          const current = excluded.has(employeePartyId) ? 'exclude' : 'include'
+          if (wanted === current) continue
           await mutatePayRunAdjustment({
             orgId: gate.user.orgId,
             documentId: id,
             actorId: gate.user.id,
             allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-            mutation: {
-              action: keep.has(employeePartyId) ? 'include' : 'exclude',
-              employeePartyId,
-            },
+            mutation: { action: wanted, employeePartyId },
           })
         }
       })

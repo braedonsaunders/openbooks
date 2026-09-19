@@ -96,6 +96,8 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
       calculated_at: null,
     });
 
+    // A cross-tenant add is refused with the employee's id echoed, so the
+    // operator can tell whose row failed on a large roster.
     await assert.rejects(
       mutatePayRunAdjustment({
         orgId: a.orgId,
@@ -103,7 +105,7 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
         actorId: a.actorId,
         mutation: { action: "add", employeePartyId: b.employeeId, componentId: a.componentId, amount: "1.00" },
       }),
-      /employee is not an active member/,
+      new RegExp(`employee "${b.employeeId}" is not an active member.*no employee with that id`),
     );
     await assert.rejects(
       mutatePayRunAdjustment({
@@ -137,6 +139,9 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
         (${a.orgId}, ${otherEmployeeId}, ${otherScheduleId}, 'ON', 'salary', 1, 1, true,
          ${a.actorId}, ${a.actorId})
     `);
+    // Excluding someone who was never on this run's schedule is still
+    // refused — and the refusal names them, so a roster of up to 2000 does
+    // not leave the operator guessing which member failed.
     await assert.rejects(
       mutatePayRunAdjustment({
         orgId: a.orgId,
@@ -144,7 +149,7 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
         actorId: a.actorId,
         mutation: { action: "exclude", employeePartyId: otherEmployeeId },
       }),
-      /employee is not an active member/,
+      /employee "Other Schedule Employee" is not on this run's pay schedule/,
     );
 
     await mutatePayRunAdjustment({
