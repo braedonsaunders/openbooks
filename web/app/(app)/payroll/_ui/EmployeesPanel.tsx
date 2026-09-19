@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export interface ScheduleOption {
   id: string
@@ -381,8 +382,9 @@ export function ProfileEditor(props: {
           isActive,
         }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the payroll profile'))
       // Row-backed certificates file through the certificates API — one POST
       // per certificate the operator answered, each superseding the previous
       // filing rather than overwriting it. Certificates with nothing entered
@@ -405,8 +407,8 @@ export function ProfileEditor(props: {
             answers,
           }),
         })
-        const cj = await certRes.json()
-        if (!certRes.ok) throw new Error(cj.error ?? 'failed')
+        // The status is checked before the body is parsed (see above).
+        if (!certRes.ok) throw new Error(await readApiErrorMessage(certRes, 'failed to save the certificate'))
       }
       toast.success(t('saved'))
       props.onSaved()
