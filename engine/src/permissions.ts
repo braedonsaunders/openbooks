@@ -109,6 +109,16 @@ export const PERMISSION_CATALOGUE = [
   "payroll.read",
   "payroll.manage",
   "payroll.run",
+  // HRM employment — the same confidentiality rule as payroll: who works for
+  // whom, reporting lines, and employment terms are never a rider on
+  // time.*, payroll.*, or parties.*. read = see employment records; manage
+  // = author employment changes; approve = hold approval authority. The
+  // approve key alone does NOT establish separation of duties: full approval
+  // authorization additionally requires the identity invariant in
+  // engine/src/hrm/authorization.ts over the service-loaded request.
+  "hrm.employment.read",
+  "hrm.employment.manage",
+  "hrm.employment.approve",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -342,6 +352,15 @@ export const PERMISSION_GROUPS: {
       { key: "payroll.read", labelKey: permissionLabelKey("payroll.read") },
       { key: "payroll.manage", labelKey: permissionLabelKey("payroll.manage") },
       { key: "payroll.run", labelKey: permissionLabelKey("payroll.run") },
+    ],
+  },
+  {
+    key: "hrm",
+    labelKey: "permissions.groups.hrm",
+    permissions: [
+      { key: "hrm.employment.read", labelKey: permissionLabelKey("hrm.employment.read") },
+      { key: "hrm.employment.manage", labelKey: permissionLabelKey("hrm.employment.manage") },
+      { key: "hrm.employment.approve", labelKey: permissionLabelKey("hrm.employment.approve") },
     ],
   },
   {
