@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -54,6 +54,46 @@ test('units, database shards and simulation run independently without omitted te
   assert.match(simulation, /sim -- run/)
   assert.match(simulation, /harness --/)
   assert.match(simulation, /services:/)
+})
+
+test('browser suites fan out and claim every workflow spec exactly once', () => {
+  // The browser tests were one serial ~24-minute job and were the pipeline's
+  // critical path on their own; every other partition finished inside 16
+  // minutes. Pinned so the fan-out stays a decision rather than drift.
+  const app = topLevelJob('e2e-app')
+  assert.match(app, /shard: \[1, 2, 3\]/)
+  assert.match(app, /--project app --shard=\$\{\{ matrix.shard \}\}\/3/)
+  assert.match(app, /fail-fast: false/)
+
+  const workflows = topLevelJob('e2e-workflows')
+  assert.match(workflows, /fail-fast: false/)
+  assert.doesNotMatch(namedStep('Playwright app suite'), /continue-on-error/)
+  assert.doesNotMatch(namedStep('Playwright workflow suites'), /continue-on-error/)
+
+  // The matrix is the only thing deciding which workflow suites run at all, so
+  // a typo here would drop a suite silently and still green the job — the same
+  // failure shape as a database test misfiled into the unit partition.
+  // Compare the declared matrix against what is actually on disk.
+  const declared = [...workflows.matchAll(/^\s+suites: "([^"]+)"$/gm)].flatMap(([, value]) => value.split(' '))
+  const specs = declared.map((pair) => pair.split(':')[0])
+  const databases = declared.map((pair) => pair.split(':')[1])
+  assert.ok(specs.length > 0, 'workflow matrix must declare its suites')
+  assert.equal(new Set(specs).size, specs.length, 'no workflow spec may be claimed twice')
+  assert.equal(
+    new Set(databases).size,
+    databases.length,
+    'every workflow suite needs its own pristine database; the suites are not order-independent',
+  )
+
+  const onDisk = readdirSync(new URL('../e2e/workflows', import.meta.url))
+    .filter((entry) => entry.endsWith('.spec.ts'))
+    .map((entry) => entry.replace(/\.spec\.ts$/, ''))
+    .sort()
+  assert.deepEqual(
+    [...specs].sort(),
+    onDisk,
+    'every e2e/workflows spec must be claimed by exactly one matrix group',
+  )
 })
 
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
