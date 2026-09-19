@@ -193,6 +193,10 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
     "payslip", "remittance", "cra", "ei", "cpp", "t4", "roe", "deduction",
     "deductions", "employee", "employees", "entitlement",
   ],
+  hrm: [
+    "hrm", "headcount", "employment", "employments", "change request",
+    "change requests",
+  ],
   expenses: ["expense", "expenses", "receipt", "per diem", "mileage", "expense report", "reimbursement"],
   fixedAssets: ["asset", "depreciation", "depreciate", "capital", "cca", "tax pool", "disposal"],
   equipment: ["equipment", "maintenance"],

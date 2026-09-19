@@ -97,6 +97,7 @@ const READER_PERMS = [
   "admin.sandboxes.manage",
   "admin.customization.manage",
   "allocations.read",
+  "hrm.employment.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -138,6 +139,7 @@ const FEATURE_OFF = new Set([
   "multi_currency_feature_disabled",
   "budgets_feature_disabled",
   "allocations_feature_disabled",
+  "hrm_feature_disabled",
   "api_access_feature_disabled",
 ]);
 
@@ -290,6 +292,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_subcontract: { id: randomUUID() },
         get_wip_prebill: { id: randomUUID() },
         get_close_run_status: { runId: randomUUID() },
+        hrm_employment_as_of: { employmentId: randomUUID(), asOf: "2026-06-15" },
         get_allocation_rule: { ruleId: randomUUID() },
         preview_driver_vector: { driverId: randomUUID(), period: "this_fiscal_year_to_date" },
         preview_allocation: { ruleId: randomUUID(), period: "this_fiscal_year_to_date" },

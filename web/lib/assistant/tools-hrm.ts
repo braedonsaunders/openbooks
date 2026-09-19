@@ -1,0 +1,315 @@
+import "server-only";
+import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import {
+  EmploymentReadError,
+  findEmploymentsByParty,
+  getEmploymentAsOf,
+  getHeadcountAsOf,
+  loadEmploymentChangeRequests,
+} from "@openbooks/engine/src/hrm/employment-read.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { isFeatureEnabled } from "../features";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
+import type { AssistantToolDef, ToolResult } from "./types";
+import {
+  compactRows,
+  dateInput,
+  orgToday,
+  periodPresetInput,
+  resolveToolRange,
+  uuidInput,
+} from "./tools-shared";
+
+/**
+ * HRM read/search tools for the agentic assistant. Every tool is
+ * feature-gated on the hrm switchboard flag and permission-gated with the
+ * same key the HRM routes and pages use (`hrm.employment.read`).
+ *
+ * Every read reuses the canonical loaders in
+ * engine/src/hrm/employment-read.ts — headcount as-of, episodes, the as-of
+ * assignment resolution, and the 0185 change-request list — so the tools
+ * resolve through the same temporal primitives and the same authorization
+ * gate (requireHrmEmploymentRead / subsidiary scope) as the Employment tab.
+ * Refusals computed by the read service (missing or ambiguous revision,
+ * unknown or out-of-scope employment, disabled feature) surface as tool
+ * refusals with their message intact — never empty results, never a throw.
+ *
+ * The one SQL in this file enumerates stable employment identities for the
+ * org-wide change-request list (org + subsidiary scope, capped). Version and
+ * request rows are never selected here: they come only from the loaders.
+ * Authoring stays human-attested — there are no HRM write tools in this
+ * slice, so nothing here can mutate an employment or a request.
+ */
+
+const HRM_FEATURE_OFF = "hrm_feature_disabled";
+
+/**
+ * Map a read-service refusal to a tool refusal with the message intact.
+ * Unknown failures rethrow so executeAssistantTool reports tool_failed
+ * instead of leaking internals — a computed refusal must reach the caller,
+ * and anything else must stay private.
+ */
+export function hrmRefusal(error: unknown): ToolResult {
+  if (
+    error instanceof EmploymentReadError ||
+    error instanceof HrmAuthorizationError ||
+    error instanceof TemporalError
+  ) {
+    return { ok: false, error: error.message };
+  }
+  throw error;
+}
+
+async function hrmFeatureRefused(orgId: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
+}
+
+const hrmHeadcount: AssistantToolDef = {
+  name: "hrm_headcount",
+  description:
+    "Headcount as of a date (or preset) by employer subsidiary and department: in-service employments resolved through their effective versions, never a row count. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.employment.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    asOf: dateInput.optional().describe("Headcount as of this date; defaults to today"),
+    period: periodPresetInput.optional().describe("Fiscal-calendar preset; the headcount is taken as of the preset's end date"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { asOf?: string; period?: string };
+    // A preset names a range; headcount is a point, so the range end is the
+    // as-of date — resolved server-side with the org's fiscal start month,
+    // exactly like the report tools resolve their presets.
+    let effectiveDate: string;
+    if (a.period) {
+      const range = await resolveToolRange(authz.user.orgId, { period: a.period });
+      if ("error" in range) return { ok: false, error: range.error };
+      effectiveDate = range.to;
+    } else {
+      effectiveDate = a.asOf ?? (await orgToday(authz.user.orgId));
+    }
+    try {
+      const dto = await getHeadcountAsOf({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        effectiveDate,
+        knownAt: new Date().toISOString(),
+      });
+      return {
+        ok: true,
+        data: {
+          asOf: dto.effectiveDate,
+          knownAt: dto.knownAt,
+          total: dto.total,
+          groups: dto.groups.map((group) => ({
+            employerSubsidiaryId: group.employerSubsidiaryId,
+            employerSubsidiaryName: group.employerSubsidiaryName,
+            departmentId: group.departmentId,
+            departmentName: group.departmentName,
+            headcount: group.headcount,
+          })),
+          href: "/hrm",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmEmploymentAsOf: AssistantToolDef = {
+  name: "hrm_employment_as_of",
+  description:
+    "One employment's effective version and assignments as of a date, with recorded-vs-effective stamps; missing or ambiguous revisions refuse with the remedy. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.employment.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Employment to resolve; pass one of employmentId or partyId"),
+    partyId: uuidInput.optional().describe("Worker party; resolves to its employment, refusing when none or several are visible"),
+    asOf: dateInput.optional().describe("Effective date to resolve; defaults to today"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { employmentId?: string; partyId?: string; asOf?: string };
+    const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
+    try {
+      let employmentId = a.employmentId ?? null;
+      if (!employmentId && a.partyId) {
+        // Party resolution is the aggregate half of the read gate (grant +
+        // employer-subsidiary scope): out-of-scope employments are filtered,
+        // never returned. Zero ids is a missing-employment refusal and more
+        // than one is the caller's ambiguity to refuse — identity is per
+        // employment, exactly as the read service documents.
+        const ids = await findEmploymentsByParty({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          workerPartyId: a.partyId,
+        });
+        if (ids.length === 0) {
+          throw new EmploymentReadError(
+            `employment not found: party ${a.partyId} has no employment visible in this organization and legal-entity scope; check the party id or pass employmentId`,
+          );
+        }
+        if (ids.length > 1) {
+          throw new AmbiguousRevisionError(
+            `${ids.length} employments are visible for party ${a.partyId}; employment identity is per employment — pass one employmentId`,
+          );
+        }
+        employmentId = ids[0] ?? null;
+      }
+      if (!employmentId) return { ok: false, error: "employment_or_party_required" };
+      const dto = await getEmploymentAsOf({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId,
+        effectiveDate: asOf,
+        knownAt: new Date().toISOString(),
+      });
+      return {
+        ok: true,
+        data: {
+          employmentId: dto.employmentId,
+          workerPartyId: dto.workerPartyId,
+          employerSubsidiaryId: dto.employerSubsidiaryId,
+          revision: dto.revision,
+          asOf,
+          version: dto.version,
+          assignments: dto.assignments,
+          href: "/hrm",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+/** 0185 lifecycle statuses: the CHECK the change-request table enforces. */
+const changeRequestStatuses = ["draft", "pending_approval", "approved", "rejected", "withdrawn", "applied"] as const;
+
+/** Stable employment identities in the caller's scope for the org-wide list. */
+async function visibleEmploymentIds(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  max: number,
+): Promise<{ ids: string[]; truncated: boolean }> {
+  // Identity enumeration only: a null employer is invisible (authorization
+  // refuses such subjects, so the list twin excludes them rather than
+  // leaking their ids). Versions and requests come from the loader below.
+  const rows = (await db.execute<{ id: string }>(sql`
+    select id::text as id
+      from worker_employments
+     where org_id = ${orgId}
+       and employer_subsidiary_id is not null
+       ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowedSubsidiaryIds)}
+     order by id
+     limit ${max + 1}`)).rows;
+  return { ids: rows.slice(0, max).map((row) => row.id), truncated: rows.length > max };
+}
+
+const hrmChangeRequests: AssistantToolDef = {
+  name: "hrm_change_requests",
+  description:
+    "Employment change requests with status, revision binding, and flow run: one employment's list, or every visible employment newest-first with an optional status filter. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.employment.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's requests; omit for every visible employment"),
+    status: z.enum(changeRequestStatuses).optional().describe("Keep only this lifecycle status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { employmentId?: string; status?: (typeof changeRequestStatuses)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      // A named employment is authorized per record inside the loader, so a
+      // missing, foreign-org, or out-of-scope id refuses uniformly instead
+      // of returning an empty list pretending it does not exist.
+      const scoped = a.employmentId
+        ? { ids: [a.employmentId], truncated: false }
+        : await visibleEmploymentIds(authz.user.orgId, authz.allowedSubsidiaryIds, 200);
+      const collected: {
+        employmentId: string;
+        id: string;
+        status: string;
+        requestRevision: number;
+        expectedEmploymentRevision: number;
+        payloadSchemaVersion: string;
+        reason: string | null;
+        submittedBy: string | null;
+        submittedAt: string | null;
+        flowRunId: string | null;
+        appliedAt: string | null;
+        appliedBy: string | null;
+        appliedEmploymentRevision: number | null;
+        createdAt: string;
+        updatedAt: string;
+      }[] = [];
+      // Sequential, never parallel: one pinned client per loader call, the
+      // same discipline the record boundary keeps inside its transaction.
+      for (const employmentId of scoped.ids) {
+        const requests = await loadEmploymentChangeRequests(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          employmentId,
+        });
+        for (const request of requests) {
+          if (a.status && request.status !== a.status) continue;
+          // Explicit projection: the decision snapshot stays in the record
+          // read, so a future 0185 column cannot ride this list silently.
+          collected.push({
+            employmentId,
+            id: request.id,
+            status: request.status,
+            requestRevision: request.requestRevision,
+            expectedEmploymentRevision: request.expectedEmploymentRevision,
+            payloadSchemaVersion: request.payloadSchemaVersion,
+            reason: request.reason,
+            submittedBy: request.submittedBy,
+            submittedAt: request.submittedAt,
+            flowRunId: request.flowRunId,
+            appliedAt: request.appliedAt,
+            appliedBy: request.appliedBy,
+            appliedEmploymentRevision: request.appliedEmploymentRevision,
+            createdAt: request.createdAt,
+            updatedAt: request.updatedAt,
+          });
+        }
+      }
+      // Newest first across employments (created_at is microsecond UTC text,
+      // so lexicographic order is chronological; id breaks ties deterministically).
+      collected.sort((x, y) => (y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1));
+      const page = compactRows(collected, { limit });
+      return {
+        ok: true,
+        data: {
+          employmentId: a.employmentId ?? null,
+          status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated || scoped.truncated,
+          requests: page.items,
+          href: "/hrm",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests];
