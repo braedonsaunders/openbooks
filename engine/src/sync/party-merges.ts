@@ -94,6 +94,14 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["time_entries", "employee_party_id"],
   ["union_agreements", "remittance_party_id"],
   ["wip_prebill_lines", "employee_party_id"],
+  // 0184: stable employment rows follow the audited merge wholesale (IDs
+  // retained; status/assignment/version/evidence episodes follow via
+  // employment_id, which carries no party column). SIMPLE, not GUARDED:
+  // the employment-number unique is (org, employer, number) and contains
+  // no party column, so re-pointing the worker cannot create that
+  // duplicate. The 0184 deferred identity trigger validates the merge
+  // marker at commit; the employer is never reassigned by a merge.
+  ["worker_employments", "worker_party_id"],
 ];
 
 /**
