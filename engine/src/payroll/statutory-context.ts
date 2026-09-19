@@ -88,6 +88,8 @@ export interface PayrollEmployerLevyContext {
   region: string;
   lines: readonly StubLine[];
   pushStatutory: PushStatutoryFn;
+  /** ISO pay date the tenant-rate resolution is as-of; absent reads current. */
+  payDate?: string;
 }
 
 /** Phase 9 — one re-runnable statutory pass over the current line set. */

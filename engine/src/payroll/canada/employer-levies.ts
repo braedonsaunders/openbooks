@@ -21,7 +21,7 @@ export async function applyCaEmployerLevies(
   const {
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, region, lines, pushStatutory,
   } = ctx;
-  const config = await caPayrollConfig(orgId, taxYear);
+  const config = await caPayrollConfig(orgId, taxYear, ctx.payDate ?? null);
 
   const grossEarnings = () =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));

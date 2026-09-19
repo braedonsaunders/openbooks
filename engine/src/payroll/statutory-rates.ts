@@ -398,24 +398,46 @@ export interface StatutoryRateRow {
   /** Account number, when the row is account-scoped — for labelling. */
   accountNumber?: string | null;
   accountName?: string | null;
+  /** Date the row stopped being current; null while it is current (0183). */
+  supersededOn: string | null;
 }
 
-/** The org's configured rate rows, newest scope first for stable rendering. */
+/**
+ * The org's configured rate rows, newest scope first for stable rendering.
+ *
+ * Current rows only by default: the setup surface and the live resolution
+ * answer what is in force, and a superseded row shown beside its successor
+ * reads as two competing values for one scope point. Pass
+ * `includeSuperseded` (optionally bounded by `asOf`, an ISO date keeping
+ * only rows in force on that date) for history.
+ */
 export async function listStatutoryRates(
   orgId: string,
-  filter: { country?: string; taxYear?: number } = {},
+  filter: { country?: string; taxYear?: number; includeSuperseded?: boolean; asOf?: string } = {},
 ): Promise<StatutoryRateRow[]> {
+  if (filter.asOf !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(filter.asOf)) {
+    throw new PayrollPackError(
+      `a statutory rate history read takes an ISO date — "${filter.asOf}" is not one`,
+    );
+  }
+  // Null disables the current-only clause, following the nullable-filter
+  // pattern of the country and year lines above.
+  const currentOnly = filter.includeSuperseded === true ? null : true;
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.country, r.rate_key, r.region, r.sub_region, r.filing_account_id,
-           r.tax_year, r.rate_values, fa.account_number, fa.name as account_name
+           r.tax_year, r.rate_values, r.superseded_on::text as superseded_on,
+           fa.account_number, fa.name as account_name
       from payroll_statutory_rates r
       left join payroll_filing_accounts fa
         on fa.id = r.filing_account_id and fa.org_id = r.org_id
      where r.org_id = ${orgId}
        and (${filter.country ?? null}::text is null or r.country = ${filter.country ?? null})
        and (${filter.taxYear ?? null}::int is null or r.tax_year = ${filter.taxYear ?? null})
+       and (${currentOnly}::boolean is null or r.superseded_on is null)
+       and (${filter.asOf ?? null}::date is null or r.superseded_on is null or r.superseded_on > ${filter.asOf ?? null}::date)
      order by r.country, r.rate_key, r.tax_year desc,
-              r.region nulls first, r.sub_region nulls first, fa.account_number nulls first
+              r.region nulls first, r.sub_region nulls first, fa.account_number nulls first,
+              r.superseded_on nulls first
   `));
   return rows.rows.map((row) => ({
     id: String(row.id),
@@ -428,6 +450,7 @@ export async function listStatutoryRates(
     values: (row.rate_values ?? {}) as Record<string, string>,
     accountNumber: (row.account_number as string | null) ?? null,
     accountName: (row.account_name as string | null) ?? null,
+    supersededOn: (row.superseded_on as string | null) ?? null,
   }));
 }
 
@@ -488,14 +511,18 @@ export function rateScopePointProblem(
 
 /**
  * Write one rate row, keyed by its scope point (country, slot, region, account,
- * tax year) so a second save of the same point is an UPDATE, never a duplicate
- * that would make the resolution ambiguous. Audited with before/after.
+ * tax year) so a second save of the same point SUPERSEDES the open row and
+ * inserts its successor in one transaction — never an in-place UPDATE, and
+ * never a duplicate current row that would make the resolution ambiguous.
+ * The superseded row stays on record with its prior values, so a prior
+ * period resolved as-of its pay date still answers what it always did.
+ * Audited with before/after on both rows.
  *
- * A save that affects no row is a failure, never a success: the UPDATE below
- * names the locked row it just read, so zero affected rows means the write
- * did not land (a scope the row-level policy hides, a row deleted mid-flight)
- * and returning `{ ok: true }` for it would tell the operator a lawful rate
- * is configured that the engine will never see.
+ * A save that affects no row is a failure, never a success: the supersede
+ * below names the locked row it just read, so zero affected rows means the
+ * write did not land (a scope the row-level policy hides, a row retired
+ * mid-flight) and returning a success for it would tell the operator a
+ * lawful rate is configured that the engine will never see.
  */
 export async function upsertStatutoryRate(input: {
   orgId: string;
@@ -538,34 +565,47 @@ export async function upsertStatutoryRate(input: {
          and region is not distinct from ${region}
          and sub_region is not distinct from ${subRegion}
          and filing_account_id is not distinct from ${filingAccountId}
+         and superseded_on is null
        for update
     `));
     const before = existing.rows[0];
-    const id = before?.id ?? randomUUID();
+    const id = randomUUID();
     if (before) {
-      const updated = await tx.execute(sql`
+      // The open row is stamped, never rewritten: its values stay exactly as
+      // the prior periods that already resolved them saw them. The partial
+      // unique index is the second line of defence — this stamp plus the
+      // advisory lock above is the first, so two concurrent saves chain
+      // instead of forking two current rows.
+      const stamped = await tx.execute(sql`
         update payroll_statutory_rates
-           set rate_values = ${JSON.stringify(values)}::jsonb,
+           set superseded_on = CURRENT_DATE,
                updated_by = ${input.actorId}, updated_at = now()
-         where org_id = ${input.orgId} and id = ${id}`);
-      if ((updated.rowCount ?? 0) !== 1) {
+         where org_id = ${input.orgId} and id = ${before.id} and superseded_on is null`);
+      if ((stamped.rowCount ?? 0) !== 1) {
         throw new PayrollPackError(
           `the ${country} "${input.rateKey}" rate for tax year ${input.taxYear} was not saved — `
           + "the update matched no row, so nothing was written",
         );
       }
-    } else {
       await tx.execute(sql`
-        insert into payroll_statutory_rates
-          (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
-           rate_values, created_by, updated_by)
-        values (${id}, ${input.orgId}, ${country}, ${input.rateKey}, ${region}, ${subRegion},
-                ${filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
-                ${input.actorId}, ${input.actorId})`);
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${input.orgId}, 'payroll_statutory_rates', ${before.id}, 'supersede',
+                ${JSON.stringify({
+                  country: country, rateKey: input.rateKey, region, subRegion,
+                  filingAccountId, taxYear: input.taxYear,
+                  before: before.rate_values, after: values,
+                })}::jsonb, ${input.actorId})`);
     }
     await tx.execute(sql`
+      insert into payroll_statutory_rates
+        (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
+         rate_values, created_by, updated_by)
+      values (${id}, ${input.orgId}, ${country}, ${input.rateKey}, ${region}, ${subRegion},
+              ${filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
+              ${input.actorId}, ${input.actorId})`);
+    await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
+      values (${input.orgId}, 'payroll_statutory_rates', ${id}, 'insert',
               ${JSON.stringify({
                 country: country, rateKey: input.rateKey, region, subRegion,
                 filingAccountId, taxYear: input.taxYear,
@@ -576,29 +616,41 @@ export async function upsertStatutoryRate(input: {
 }
 
 /**
- * Statutory rows are effective-dated inputs for payroll reproduction. They
- * cannot be deleted: supersede a value with a corrected row for the applicable
- * tax year instead, leaving the original row available to prior-period reads.
+ * Removing a statutory rate RETIRES its open row — it stamps `superseded_on`
+ * and writes no successor — rather than deleting anything. Prior periods
+ * resolved as-of their pay date still answer the retired values, while the
+ * current setup reads the scope point as unconfigured. Retiring an already
+ * retired row is a no-op success; a row that does not exist is still false,
+ * so the caller keeps its 404.
  */
 export async function deleteStatutoryRate(
   orgId: string,
   actorId: string,
   id: string,
 ): Promise<boolean> {
-  // Keep the actor parameter in the public contract for callers that already
-  // pass it; deletion is refused before any write, so it cannot leave either a
-  // missing payroll input or an unaudited mutation behind.
-  void actorId;
   return await inDbTransaction(async (tx) => {
-    const row = (await tx.execute<{ id: string }>(sql`
-      select id from payroll_statutory_rates
+    const row = (await tx.execute<{ id: string; superseded_on: string | null }>(sql`
+      select id, superseded_on::text as superseded_on from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
        for update
     `)).rows[0];
     if (!row) return false;
-    throw new PayrollPackError(
-      "statutory rate rows cannot be deleted; save a replacement rate for the tax year instead",
-    );
+    if (row.superseded_on != null) return true;
+    const stamped = await tx.execute(sql`
+      update payroll_statutory_rates
+         set superseded_on = CURRENT_DATE,
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${id} and superseded_on is null`);
+    if ((stamped.rowCount ?? 0) !== 1) {
+      throw new PayrollPackError(
+        "the statutory rate was not removed — the update matched no row, so nothing was written",
+      );
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'payroll_statutory_rates', ${id}, 'supersede',
+              '{"retired": true}'::jsonb, ${actorId})`);
+    return true;
   });
 }
 
@@ -619,6 +671,11 @@ export interface ResolvedStatutoryRate {
   taxYear: number | null;
   values: Record<string, string>;
   source: StatutoryRateSource;
+  /**
+   * When the values came from a superseded row (an as-of read of history),
+   * the date it stopped being current; null for a current row and for legacy.
+   */
+  supersededOn: string | null;
 }
 
 export interface StatutoryRateResolution {
@@ -656,6 +713,11 @@ export interface StatutoryRateResolution {
  *   3. the pack's pre-scoping blob, read-only, so a tenant that never touched
  *      the new surface calculates byte-identically to before.
  *
+ * `asOf` (an ISO date, the run's pay date on the money path) turns the read
+ * into history: the row IN FORCE on that date answers, so recalculating a
+ * committed run reproduces its figures even after the rate has been
+ * re-saved. Without it only current rows are read — the live setup answer.
+ *
  * One resolution per run, passed down — never a query per employee.
  */
 export async function resolveStatutoryRates(
@@ -663,14 +725,21 @@ export async function resolveStatutoryRates(
   /** The pack's rate declaration, resolved by the caller (F-reg-003). */
   pack: PayrollPackRates,
   taxYear: number,
+  /** ISO pay date the resolution is as-of; null reads the current rows. */
+  asOf: string | null = null,
 ): Promise<StatutoryRateResolution> {
   const country = pack.country;
   const [rows, blobRes] = await Promise.all([
-    listStatutoryRates(orgId, { country, taxYear }),
+    listStatutoryRates(
+      orgId,
+      asOf == null
+        ? { country, taxYear }
+        : { country, taxYear, includeSuperseded: true, asOf },
+    ),
     db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
   ]);
   const legacy = pack.legacyRows?.(blobRes.rows[0]?.p ?? {}) ?? [];
-  return buildResolution({ country, taxYear, pack, rows, legacy });
+  return buildResolution({ country, taxYear, pack, rows, legacy, asOf });
 }
 
 /** The pure half, so the specificity ladder is testable without a database. */
@@ -680,8 +749,29 @@ export function buildResolution(input: {
   pack: PayrollPackRates;
   rows: readonly StatutoryRateRow[];
   legacy: readonly LegacyRateRow[];
+  /** ISO date the read is as-of; null picks among current rows only. */
+  asOf?: string | null;
 }): StatutoryRateResolution {
-  const { country, taxYear, pack, rows, legacy } = input;
+  const { country, taxYear, pack, rows, legacy, asOf } = input;
+  // One scope point's history is a linear chain — every save supersedes
+  // exactly the open row — so among the rows in force on the as-of date the
+  // one that stopped being current EARLIEST is the answer (null, still
+  // current, sorts last). Without an as-of date the rows are current-only
+  // and the first match answers, exactly as before.
+  const inForce = (candidates: readonly StatutoryRateRow[]): StatutoryRateRow | undefined => {
+    let picked: StatutoryRateRow | undefined;
+    for (const row of candidates) {
+      if (picked === undefined) {
+        picked = row;
+        continue;
+      }
+      if (asOf == null) break;
+      const rowEnd = row.supersededOn ?? "\uffff";
+      const pickedEnd = picked.supersededOn ?? "\uffff";
+      if (rowEnd < pickedEnd) picked = row;
+    }
+    return picked;
+  };
   const resolve: StatutoryRateResolution["resolve"] = (slotKey, at = {}) => {
     const slot = statutoryRateSlotIn(pack, slotKey);
     const region = slot.scope === "org" ? null : (at.region ?? null);
@@ -690,21 +780,26 @@ export function buildResolution(input: {
     const scoped = rows.filter((row) =>
       row.rateKey === slotKey && row.taxYear === taxYear
       && (row.region ?? null) === region
-      && (row.subRegion ?? null) === subRegion);
+      && (row.subRegion ?? null) === subRegion
+      // The as-of window is enforced here, not only in the SQL: the pure
+      // half answers correctly for any caller-handed row set, so a row
+      // superseded on or before the date never answers for it.
+      && (asOf == null || row.supersededOn == null || row.supersededOn > asOf));
     if (accountId && slot.scope === "filing_account") {
-      const mine = scoped.find((row) => row.filingAccountId === accountId);
+      const mine = inForce(scoped.filter((row) => row.filingAccountId === accountId));
       if (mine) {
         return {
           slotKey, scope: slot.scope, region, subRegion, filingAccountId: accountId,
-          taxYear, values: mine.values, source: "account",
+          taxYear, values: mine.values, source: "account", supersededOn: mine.supersededOn,
         };
       }
     }
-    const wide = scoped.find((row) => row.filingAccountId == null);
+    const wide = inForce(scoped.filter((row) => row.filingAccountId == null));
     if (wide) {
       return {
         slotKey, scope: slot.scope, region, subRegion, filingAccountId: null, taxYear,
         values: wide.values, source: slot.scope === "org" ? "org" : "region",
+        supersededOn: wide.supersededOn,
       };
     }
     const fallback = legacy.find(
@@ -713,7 +808,7 @@ export function buildResolution(input: {
     if (fallback && subRegion == null) {
       return {
         slotKey, scope: slot.scope, region, subRegion: null, filingAccountId: null,
-        taxYear: null, values: fallback.values, source: "legacy",
+        taxYear: null, values: fallback.values, source: "legacy", supersededOn: null,
       };
     }
     return null;

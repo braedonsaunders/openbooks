@@ -231,6 +231,7 @@ test("de_kvz resolves through the generic resolution (pure half)", () => {
     rows: [{
       id: "r1", country: "DE", rateKey: "de_kvz", region: null,
       filingAccountId: null, taxYear: 2026, values: { rate: "2.90" },
+      supersededOn: null,
     }],
   });
   assert.deepEqual(filled.values("de_kvz"), { rate: "2.90" });

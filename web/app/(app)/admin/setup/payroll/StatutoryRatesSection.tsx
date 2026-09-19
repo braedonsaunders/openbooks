@@ -201,8 +201,19 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
     setBusy(true)
     try {
       const res = await fetch(`/api/payroll/settings/rates?id=${id}`, { method: 'DELETE' })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error ?? 'failed')
+      // Status BEFORE parsing: a non-JSON error body (a 500 page, a proxy
+      // refusal) makes res.json() throw a SyntaxError, and the operator reads
+      // a JSON parse error instead of the server's message.
+      if (!res.ok) {
+        let message = 'failed'
+        try {
+          const payload = await res.json()
+          if (payload && typeof payload.error === 'string') message = payload.error
+        } catch {
+          // Non-JSON error body — keep the fallback above.
+        }
+        throw new Error(message)
+      }
       toast.success(label('saved', 'Saved'))
       setDraft(null)
       await load(year)
@@ -458,7 +469,7 @@ function RateDrawer({
         <div className="flex items-center justify-between gap-2">
           {draft.existingId ? (
             <Button variant="ghost" disabled={busy} onClick={() => onRemove(draft.existingId!)}>
-              {label('rates.remove', 'Remove')}
+              {label('rates.remove', 'Supersede')}
             </Button>
           ) : <span />}
           <div className="flex gap-2">

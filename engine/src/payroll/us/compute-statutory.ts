@@ -83,7 +83,7 @@ export async function computeUsStatutory(
   } = ctx;
 
   assertRegionSupported(region);
-  const config = await usPayrollConfig(orgId, taxYear);
+  const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
   const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
   const statutory = calculatePub15T({

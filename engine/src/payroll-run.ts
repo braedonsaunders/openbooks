@@ -2371,10 +2371,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // packRates lookup inside cannot throw here.
     const rateResolutions = new Map<string, Promise<StatutoryRateResolution>>();
     const statutoryRatesFor = (country: string, taxYear: number): Promise<StatutoryRateResolution> => {
-      const key = `${country}:${taxYear}`;
+      // As-of the run's pay date: a rate re-saved after this period paid must
+      // not rewrite what the period answered. The pay date is constant for
+      // the run, so one resolution per (country, year) still holds.
+      const key = `${country}:${taxYear}:${runContext.payDate}`;
       const cached = rateResolutions.get(key);
       if (cached) return cached;
-      const pending = resolveStatutoryRates(orgId, packRates(country), taxYear);
+      const pending = resolveStatutoryRates(orgId, packRates(country), taxYear, runContext.payDate);
       rateResolutions.set(key, pending);
       return pending;
     };
@@ -4103,7 +4106,7 @@ async function calculateStub(
   const employerLevies = await pack.applyEmployerLevies?.({
     tx, orgId, documentId, employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
-    taxYear, region: province, lines, pushStatutory,
+    taxYear, region: province, lines, pushStatutory, payDate: run.pay_date!,
   }) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
 
   // Statutory inputs from the line set. The pack's contributoryBases declaration
@@ -4144,7 +4147,7 @@ async function calculateStub(
   const aggregateFactors = await assessStubAggregateLevies({
     tx, orgId, documentId, employeePartyId, taxYear, country, region: province,
     gross, taxableGross: earning((l) => l.taxable ?? true),
-    lines, pushStatutory,
+    lines, pushStatutory, payDate: run.pay_date!,
   });
 
   const clearIncomeAssessedLines = () => dropIncomeAssessedLines(lines);

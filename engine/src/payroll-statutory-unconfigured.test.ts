@@ -36,6 +36,7 @@ const row = (
   filingAccountId,
   taxYear: 2026,
   values,
+  supersededOn: null,
 });
 
 test("every declared rate slot answers whenUnconfigured explicitly", () => {

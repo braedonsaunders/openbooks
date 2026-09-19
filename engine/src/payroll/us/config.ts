@@ -13,8 +13,13 @@ export interface UsPayrollConfig {
   ): Record<string, string> | undefined;
 }
 
-export async function usPayrollConfig(orgId: string, taxYear: number): Promise<UsPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, US_PACK_RATES, taxYear);
+export async function usPayrollConfig(
+  orgId: string,
+  taxYear: number,
+  /** ISO pay date the resolution is as-of; null reads the current rows. */
+  asOf: string | null = null,
+): Promise<UsPayrollConfig> {
+  const rates = await resolveStatutoryRates(orgId, US_PACK_RATES, taxYear, asOf);
   return {
     futaRate: (state) => rates.values("us_futa", { region: state })?.rate ?? null,
     sui: (state, filingAccountId) => {
