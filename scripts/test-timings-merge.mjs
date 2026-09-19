@@ -9,22 +9,31 @@
 // mutates behind the author: a change in shard membership changes which
 // database a test runs against, and that should show up in a diff.
 
-import { existsSync, globSync, readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { testManifest } from './test-suite.mjs'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
 const OUTPUT = resolve(ROOT, 'scripts/test-timings.json')
 
+/** Walk rather than glob: CI writes the record to `.local/`, and a `**` glob
+ * does not descend into dot directories. */
+function findRecords(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return findRecords(join(directory, entry.name))
+    return entry.name === 'test-timings.json' ? [join(directory, entry.name)] : []
+  })
+}
+
 const [root = 'evidence'] = process.argv.slice(2)
-const records = globSync('**/test-timings.json', { cwd: resolve(ROOT, root), nodir: true })
+const records = findRecords(resolve(ROOT, root))
 if (records.length === 0) throw new Error(`no test-timings.json found under ${root}`)
 
 // Keep the slowest observation for a file seen more than once. A shard that
 // happened to run warm should not talk the packer into underweighting a file.
 const merged = new Map()
 for (const record of records) {
-  const parsed = JSON.parse(readFileSync(resolve(ROOT, root, record), 'utf8'))
+  const parsed = JSON.parse(readFileSync(record, 'utf8'))
   for (const [file, duration] of Object.entries(parsed.files ?? {})) {
     if (typeof duration !== 'number' || !(duration > 0)) continue
     merged.set(file, Math.max(merged.get(file) ?? 0, Math.round(duration)))
