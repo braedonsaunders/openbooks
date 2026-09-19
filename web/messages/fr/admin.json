@@ -766,6 +766,24 @@
     "saveSettings": "Enregistrer les paramètres"
   },
   "users": {
+    "unlinkedPerson": "Non liée",
+    "linkPersonButton": "Lier une personne",
+    "linkChangePerson": "Changer de personne",
+    "linkPersonTitle": "Lier une personne pour {name}",
+    "linkPersonDescription": "Liez cette connexion à une seule personne native. Les personnes externes sont admissibles sans rôle d'employé. Le type de tiers ne prouve pas l'identité humaine : vérifiez le type et les signaux de rôle, puis attestez explicitement. Aucun employé, aucune embauche ni aucun statut n'est créé ou déduit.",
+    "linkPersonLabel": "Personne",
+    "linkPersonPlaceholder": "Sélectionner une personne…",
+    "linkPersonSearchPlaceholder": "Rechercher des personnes…",
+    "linkPersonSignalsNote": "Seules les personnes actives sont proposées. Les signaux indiquent le type et les rôles canoniques (fournisseur, client, employé) à titre de preuve ; à eux seuls, ils ne prouvent jamais l'identité humaine.",
+    "linkReasonLabel": "Motif",
+    "linkReasonPlaceholder": "Pourquoi est-ce la bonne personne pour cette connexion ?",
+    "linkReasonRequired": "Indiquez un motif pour cette modification",
+    "linkAttestationLabel": "J'atteste que ce tiers natif est la bonne identité humaine pour cette connexion.",
+    "linkAttestationRequired": "Une attestation explicite est requise",
+    "linkSave": "Enregistrer le lien",
+    "linkSaved": "Personne liée enregistrée",
+    "linkSelfRefused": "Vous ne pouvez pas modifier votre propre personne liée : un autre administrateur doit le faire.",
+    "linkStale": "La personne liée a changé : fermez, actualisez et réessayez.",
     "metaTitle": "Utilisateurs",
     "title": "Utilisateurs",
     "description": "Qui peut se connecter, et quels rôles chacun détient. L’accès est l’union des rôles explicitement attribués ; les utilisateurs sans rôle ne disposent d’aucun accès accordé par un rôle.",
@@ -776,6 +794,7 @@
     "emptySearchDescription": "Aucun utilisateur ne correspond à votre recherche. Essayez un autre terme ou un autre filtre de statut.",
     "emptyFilterDescription": "Essayez un autre filtre de statut.",
     "table": {
+      "linkedPerson": "Personne liée",
       "roles": "Rôles",
       "lastSignIn": "Dernière connexion"
     },
@@ -813,7 +832,11 @@
     "unassignedRole": "aucun rôle attribué"
   },
   "permissions": {
+    "hrm_employment_read": "Consulter les dossiers d'emploi",
+    "hrm_employment_manage": "Rédiger des changements d'emploi",
+    "hrm_employment_approve": "Décider des changements d'emploi",
     "groups": {
+      "hrm": "Ressources humaines",
       "gl": "Grand livre",
       "close": "Périodes et clôture",
       "ap": "Comptes fournisseurs",

@@ -766,6 +766,24 @@
     "saveSettings": "保存设置"
   },
   "users": {
+    "unlinkedPerson": "未关联",
+    "linkPersonButton": "关联人员",
+    "linkChangePerson": "更改人员",
+    "linkPersonTitle": "为 {name} 关联人员",
+    "linkPersonDescription": "将此登录账号关联到一位原生人员。外部人员无需员工角色即可关联。往来单位类型不能证明人的身份——请核对类型和角色信号，然后明确确认。不会创建或推断任何员工、入职或状态。",
+    "linkPersonLabel": "人员",
+    "linkPersonPlaceholder": "选择人员…",
+    "linkPersonSearchPlaceholder": "搜索人员…",
+    "linkPersonSignalsNote": "仅提供活跃人员。信号显示类型和规范角色（供应商、客户、员工）作为证据——它们本身永远不能证明人的身份。",
+    "linkReasonLabel": "原因",
+    "linkReasonPlaceholder": "为什么此人是该登录账号的正确人员？",
+    "linkReasonRequired": "请输入此次更改的原因",
+    "linkAttestationLabel": "我确认此原生往来单位是该登录账号的正确人员身份。",
+    "linkAttestationRequired": "需要明确确认",
+    "linkSave": "保存关联",
+    "linkSaved": "已保存关联人员",
+    "linkSelfRefused": "您不能更改自己的关联人员——必须由另一位管理员执行。",
+    "linkStale": "关联人员已更改——请关闭、刷新后重试。",
     "metaTitle": "用户",
     "title": "用户",
     "description": "谁可以登录，以及他们持有哪些角色。访问权限是明确分配角色的并集；未分配角色的用户没有任何由角色授予的访问权限。",
@@ -776,6 +794,7 @@
     "emptySearchDescription": "没有用户匹配你的搜索。请尝试其他关键词或状态筛选。",
     "emptyFilterDescription": "请尝试其他状态筛选。",
     "table": {
+      "linkedPerson": "已关联人员",
       "roles": "角色",
       "lastSignIn": "上次登录"
     },
@@ -813,7 +832,11 @@
     "inviteTooManyAttempts": "邀请过于频繁 — 请稍后再试"
   },
   "permissions": {
+    "hrm_employment_read": "查看雇用记录",
+    "hrm_employment_manage": "编写雇用变更",
+    "hrm_employment_approve": "决定雇用变更",
     "groups": {
+      "hrm": "人力资源",
       "gl": "总账",
       "close": "期间与结账",
       "ap": "应付账款",

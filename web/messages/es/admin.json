@@ -766,6 +766,24 @@
     "saveSettings": "Guardar configuración"
   },
   "users": {
+    "unlinkedPerson": "Sin vincular",
+    "linkPersonButton": "Vincular persona",
+    "linkChangePerson": "Cambiar persona",
+    "linkPersonTitle": "Vincular persona para {name}",
+    "linkPersonDescription": "Vincule este inicio de sesión a una única persona nativa. Las personas externas son elegibles sin un rol de empleado. El tipo de tercero no demuestra la identidad humana: revise el tipo y las señales de rol y luego certifique explícitamente. No se crea ni se infiere ningún empleado, contratación o estado.",
+    "linkPersonLabel": "Persona",
+    "linkPersonPlaceholder": "Seleccione una persona…",
+    "linkPersonSearchPlaceholder": "Buscar personas…",
+    "linkPersonSignalsNote": "Solo se ofrecen personas activas. Las señales muestran el tipo y los roles canónicos (proveedor, cliente, empleado) como evidencia; por sí solas nunca demuestran la identidad humana.",
+    "linkReasonLabel": "Motivo",
+    "linkReasonPlaceholder": "¿Por qué es esta la persona correcta para este inicio de sesión?",
+    "linkReasonRequired": "Indique un motivo para este cambio",
+    "linkAttestationLabel": "Certifico que este tercero nativo es la identidad humana correcta para este inicio de sesión.",
+    "linkAttestationRequired": "Se requiere una certificación explícita",
+    "linkSave": "Guardar vínculo",
+    "linkSaved": "Persona vinculada guardada",
+    "linkSelfRefused": "No puede cambiar su propia persona vinculada; debe hacerlo otro administrador.",
+    "linkStale": "La persona vinculada cambió: cierre, actualice y vuelva a intentarlo.",
     "metaTitle": "Usuarios",
     "title": "Usuarios",
     "description": "Quién puede iniciar sesión y qué roles tiene. El acceso es la unión de los roles asignados explícitamente; los usuarios sin ningún rol no tienen acceso concedido por ningún rol.",
@@ -776,6 +794,7 @@
     "emptySearchDescription": "Ningún usuario coincide con su búsqueda. Pruebe con otro término u otro filtro de estado.",
     "emptyFilterDescription": "Pruebe con otro filtro de estado.",
     "table": {
+      "linkedPerson": "Persona vinculada",
       "roles": "Roles",
       "lastSignIn": "Último inicio de sesión"
     },
@@ -813,7 +832,11 @@
     "unassignedRole": "sin rol asignado"
   },
   "permissions": {
+    "hrm_employment_read": "Ver registros de empleo",
+    "hrm_employment_manage": "Redactar cambios de empleo",
+    "hrm_employment_approve": "Decidir cambios de empleo",
     "groups": {
+      "hrm": "Recursos humanos",
       "gl": "Libro mayor",
       "close": "Períodos y cierre",
       "ap": "Cuentas por pagar",
