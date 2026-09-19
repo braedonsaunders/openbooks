@@ -766,6 +766,24 @@
     "saveSettings": "Salvar configurações"
   },
   "users": {
+    "unlinkedPerson": "Não vinculada",
+    "linkPersonButton": "Vincular pessoa",
+    "linkChangePerson": "Alterar pessoa",
+    "linkPersonTitle": "Vincular pessoa para {name}",
+    "linkPersonDescription": "Vincule este login a uma única pessoa nativa. Pessoas externas são elegíveis sem um papel de funcionário. O tipo do terceiro não prova a identidade humana: verifique o tipo e os sinais de papel e depois ateste explicitamente. Nenhum funcionário, contratação ou status é criado ou inferido.",
+    "linkPersonLabel": "Pessoa",
+    "linkPersonPlaceholder": "Selecione uma pessoa…",
+    "linkPersonSearchPlaceholder": "Pesquisar pessoas…",
+    "linkPersonSignalsNote": "Somente pessoas ativas são oferecidas. Os sinais mostram o tipo e os papéis canônicos (fornecedor, cliente, funcionário) como evidência; sozinhos, eles nunca provam a identidade humana.",
+    "linkReasonLabel": "Motivo",
+    "linkReasonPlaceholder": "Por que esta é a pessoa correta para este login?",
+    "linkReasonRequired": "Informe um motivo para esta alteração",
+    "linkAttestationLabel": "Atesto que este terceiro nativo é a identidade humana correta para este login.",
+    "linkAttestationRequired": "É necessária uma atestação explícita",
+    "linkSave": "Salvar vínculo",
+    "linkSaved": "Pessoa vinculada salva",
+    "linkSelfRefused": "Você não pode alterar sua própria pessoa vinculada: outro administrador deve fazê-lo.",
+    "linkStale": "A pessoa vinculada mudou: feche, atualize e tente novamente.",
     "metaTitle": "Usuários",
     "title": "Usuários",
     "description": "Quem pode fazer login e quais funções possui. O acesso é a união das funções atribuídas explicitamente; usuários sem uma função não têm acesso concedido por função alguma.",
@@ -776,6 +794,7 @@
     "emptySearchDescription": "Nenhum usuário corresponde à sua busca. Tente outro termo ou filtro de status.",
     "emptyFilterDescription": "Tente outro filtro de status.",
     "table": {
+      "linkedPerson": "Pessoa vinculada",
       "roles": "Funções",
       "lastSignIn": "Último login"
     },
@@ -813,7 +832,11 @@
     "inviteTooManyAttempts": "Convites demais — tente novamente mais tarde"
   },
   "permissions": {
+    "hrm_employment_read": "Ver registros de emprego",
+    "hrm_employment_manage": "Redigir alterações de emprego",
+    "hrm_employment_approve": "Decidir alterações de emprego",
     "groups": {
+      "hrm": "Recursos humanos",
       "gl": "Livro-razão",
       "close": "Períodos e fechamento",
       "ap": "Contas a pagar",
