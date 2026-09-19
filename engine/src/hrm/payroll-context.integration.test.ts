@@ -357,7 +357,7 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
   const employment = await mkEmployment(ctx, worker);
   await mkVersion(ctx, employment);
   for (const table of TABLES) await seedPersonRow(ctx, table, worker);
-  const dry = await mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: true });
+  const dry = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: true });
   assert.equal(dry.dryRun, true);
   assert.deepEqual(dry.requiresReview, []);
   for (const table of TABLES) {
@@ -370,7 +370,7 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
     }
     assert.equal(await employmentOf(table, ctx.orgId, worker), null, `${table}: dry-run wrote nothing`);
   }
-  const first = await mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false });
+  const first = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
   assert.equal(first.dryRun, false);
   assert.equal(first.unstampable["entitlement_ledger"], 1);
   for (const table of TABLES) {
@@ -379,7 +379,7 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
     assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
   }
   assert.equal(await employmentOf("entitlement_ledger", ctx.orgId, worker), null);
-  const second = await mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false });
+  const second = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
   for (const table of TABLES) {
     if (table === "entitlement_ledger") continue;
     assert.equal(second.stamped[table], 0, `${table}: re-stamp must write nothing`);
@@ -410,7 +410,7 @@ test("stamp refuses the org on ambiguity without allowPartial; allowPartial stam
   const missing = await mkPerson(ctx, "Missing worker");
   await seedPersonRow(ctx, "employee_payroll_profiles", missing);
   await assert.rejects(
-    mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false }),
+    mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false }),
     (error: unknown) => {
       assert.ok(error instanceof mod.StampRefusedError);
       const reasons = [...error.requiresReview].map((entry) => entry.reason).sort();
@@ -424,7 +424,7 @@ test("stamp refuses the org on ambiguity without allowPartial; allowPartial stam
     null,
     "the refused org wrote nothing, including the clean person",
   );
-  const partial = await mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false, allowPartial: true });
+  const partial = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false, allowPartial: true });
   assert.equal(await employmentOf("employee_payroll_profiles", ctx.orgId, clean), cleanEmployment);
   assert.deepEqual(
     [...partial.requiresReview].map((entry) => `${entry.partyId}:${entry.reason}`).sort(),
@@ -443,13 +443,13 @@ test("stamp refuses a stamped row that disagrees with the resolver, even under a
   await mkVersion(ctx, first);
   await seedPersonRow(ctx, "employee_payroll_profiles", worker);
   await seedPersonRow(ctx, "payroll_opening_balances", worker);
-  const stamped = await mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false });
+  const stamped = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
   assert.equal(stamped.stamped["employee_payroll_profiles"], 1);
   // A later rehire leaves the worker with two employments: the stamped row
   // no longer has an unambiguous resolver answer.
   await mkEmployment(ctx, worker);
   await assert.rejects(
-    mod.stampEmploymentContext({ orgId: ctx.orgId, dryRun: false, allowPartial: true }),
+    mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false, allowPartial: true }),
     (error: unknown) => {
       assert.ok(error instanceof mod.StampRefusedError);
       assert.match(error.message, new RegExp(first), "refusal must name the stamped employment");
@@ -458,6 +458,38 @@ test("stamp refuses a stamped row that disagrees with the resolver, even under a
     },
     "contradicting history refuses instead of overwriting",
   );
+});
+
+test("the stamp writer refuses an actor without payroll.run, dry-run included, writing nothing", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const ctx = await setup();
+  t.after(() => teardown(ctx.orgId));
+  const mod = await import("./payroll-context.ts");
+  const { createScratchUser } = await import("../test-fixtures.ts");
+  const worker = await mkPerson(ctx, "Ungranted worker");
+  const employment = await mkEmployment(ctx, worker);
+  await mkVersion(ctx, employment);
+  for (const table of TABLES) await seedPersonRow(ctx, table, worker);
+  // No grant: this actor holds no payroll.run duty (setup grants only ctx.actorId).
+  const outsider = await createScratchUser(ctx.orgId, "Stamp outsider", "stamp_outsider");
+  for (const dryRun of [false, true] as const) {
+    await assert.rejects(
+      mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: outsider, dryRun }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.PayrollContextAuthorizationError);
+        assert.match(error.message, /payroll\.run/);
+        assert.match(error.message, /\/admin\/roles/);
+        return true;
+      },
+      `unpermitted stamp must refuse (dryRun ${dryRun})`,
+    );
+  }
+  // Asserted against row counts, not the error alone: the refused writer
+  // stamped nothing on any of the nine writable tables.
+  for (const table of TABLES) {
+    if (table === "entitlement_ledger") continue;
+    assert.equal(await employmentOf(table, ctx.orgId, worker), null,
+      `${table}: the refused stamp wrote nothing`);
+  }
 });
 
 test("the resolver returns the single employment and refuses the three coded cases", { skip: !DB, timeout: 120_000 }, async (t) => {

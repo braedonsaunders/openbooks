@@ -18,14 +18,15 @@
  * AUTHORIZATION (own boundary, by design). employment-read.ts states that a
  * future payroll resolver must bring its own permission boundary and reuse
  * the pure assembler, never the HRM loader — this module is that resolver.
- * Both resolve functions require the caller's actor and enforce the
- * `payroll.run` duty (the pay-calculation duty they serve) via the existing
- * actorHasPermission primitive; there is deliberately no HRM feature gate
- * here, so payroll stays usable while HRM is off. Unknown/inactive actors
- * fail closed. `stampEmploymentContext` enforces NO permission itself: it is
- * a one-time maintenance backfill that must be invoked from an
- * already-authorized operator/job path by the payroll owner. That gap is
- * reported, not hidden.
+ * Both resolve functions AND the stamp require the caller's actor and enforce
+ * the `payroll.run` duty via the existing actorHasPermission primitive, first
+ * inside the transaction before any tenant read or write; there is
+ * deliberately no HRM feature gate here, so payroll stays usable while HRM is
+ * off. Unknown/inactive actors fail closed. The stamp checks the same duty as
+ * the read (no distinct maintenance permission): it serves pay adoption under
+ * the calculation duty, fills nulls only, and a new catalogue permission for
+ * a one-time backfill would be new surface with no second user. A dry-run
+ * previews nine tables of tenant data, so it is gated exactly like the write.
  *
  * TRANSACTIONS. Each function owns one withOrgTransaction(orgId) unit, which
  * nests safely inside the payroll caller's transaction (same org reuses the
@@ -190,6 +191,8 @@ const WRITABLE_STAMP_TABLES: readonly StampTable[] = STAMP_TABLES.filter(
 
 export interface StampOptions {
   readonly orgId: string;
+  /** Payroll caller's actor: the payroll.run duty is enforced by the writer. */
+  readonly actorId: string;
   readonly dryRun: boolean;
   /**
    * Stamp only the unambiguous people and list the rest. Without it any
@@ -558,10 +561,14 @@ export function pickActiveManager(
  */
 export async function stampEmploymentContext(options: StampOptions): Promise<StampReport> {
   const orgId = requireId("orgId", options.orgId);
+  const actorId = requireId("actorId", options.actorId);
   const allowPartial = options.allowPartial ?? false;
   const dryRun = options.dryRun;
   try {
     return await withOrgTransaction(orgId, async () => {
+      // The writer checks first: no tenant row is read or written before the
+      // duty is proven — a dry-run preview is a read of nine tables too.
+      await requirePayrollRun(orgId, actorId);
     // People with payroll rows, with their party subsidiary for the match.
     const people = (await db.execute<{ partyId: string; subsidiaryId: string | null }>(sql`
       select p.id as "partyId", p.subsidiary_id as "subsidiaryId"
