@@ -21,6 +21,7 @@ import {
 } from "./payroll/certificates.ts";
 import {
   assertContributoryBasesDeclared,
+  ensurePackSlotRoleAccounts,
   jurisdictionKey,
   labourJurisdictionProblem,
   legacyStatutoryLiabilityAccount,
@@ -378,6 +379,10 @@ export async function seedPayrollComponents(
   // a cast) must fail before its flags accumulate an unnamed base.
   assertContributoryBasesDeclared(country);
   await ensureComponents(db, orgId, actorId, [...BASELINE_COMPONENTS, ...statutoryComponents(country)]);
+  // Role-declared slots land on the chart account their role resolves to
+  // (the payroll-deductions account, never a vendor payable) wherever the
+  // operator has not mapped the slot yet. An explicit mapping always wins.
+  await ensurePackSlotRoleAccounts(db, orgId, actorId, country);
   await seedVacationEntitlementPlan(orgId, actorId, country);
 }
 
@@ -2277,6 +2282,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // components first". Generic: it provisions whatever the run's own pack
     // declares and branches on nothing.
     await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
+    // Same role wiring as install: a pack adopted before its slots declared
+    // roles (or a role mapped after install) still lands on the chart account
+    // wherever the operator has not mapped the slot yet.
+    await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
 
     const components = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence

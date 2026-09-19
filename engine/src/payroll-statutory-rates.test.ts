@@ -10,6 +10,7 @@ import {
   canonicalStatutoryRateValues,
   deleteStatutoryRate,
   listStatutoryRates,
+  rateScopePointProblem,
   resolveStatutoryRates,
   statutoryRateProblem,
   unconfiguredStatutoryRates,
@@ -18,6 +19,7 @@ import {
 } from "./payroll/statutory-rates.ts";
 import { packRates, PAYROLL_COUNTRY_PACKS, payrollPack, statutoryRateSlot } from "./payroll/packs.ts";
 import { US_PACK_RATES } from "./payroll/us/rates.ts";
+import { GB_PACK_RATES } from "./payroll/gb/rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 /**
@@ -494,6 +496,179 @@ test(
       );
     } finally {
       await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "an org-wide GB save round-trips: insert, re-save, and resolution agree",
+  { skip: !DB },
+  async () => {
+    // The losing save this guards: a statutory slot saved through setup with
+    // no error and no value afterwards. The Employment Allowance is the GB
+    // pack's only tenant-entered slot, org-wide, so a save here must be
+    // readable through every read the product offers afterwards.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const first = await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
+        region: null, filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
+      });
+      assert.deepEqual(first.values, { amount: "10500.00" });
+      const listed = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0]!.id, first.id);
+      assert.deepEqual(listed[0]!.values, { amount: "10500.00" });
+
+      // A second save of the same scope point is an UPDATE, never a duplicate.
+      const second = await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
+        region: null, filingAccountId: null, taxYear: 2026, values: { amount: "8000" },
+      });
+      assert.equal(second.id, first.id);
+      const relisted = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
+      assert.equal(relisted.length, 1);
+      assert.deepEqual(relisted[0]!.values, { amount: "8000.00" });
+
+      // And the engine prices from what was saved — never from a stale zero.
+      const resolution = await resolveStatutoryRates(org.orgId, GB_PACK_RATES, 2026);
+      assert.deepEqual(resolution.values("gb_employment_allowance"), { amount: "8000.00" });
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "a save outside its slot's scope is refused, never silently stored",
+  { skip: !DB },
+  async () => {
+    // The write boundary enforces the slot's scope structurally, so no caller
+    // can store a row the resolution cannot answer: a region carried on an
+    // org-wide row, a missing region on a regional row, a jurisdiction carried
+    // on a row no read looks at, or an account on a row that applies to every
+    // account. Each of those saved successfully before this guard and then
+    // resolved to nothing — the engine pricing the levy as unconfigured.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const gbSlot = GB_PACK_RATES.slots.find((slot) => slot.key === "gb_employment_allowance")!;
+      assert.match(
+        rateScopePointProblem(gbSlot, { region: "ENG", subRegion: null, filingAccountId: null }) ?? "",
+        /org-wide/,
+      );
+      const futaSlot = US_PACK_RATES.slots.find((slot) => slot.key === "us_futa")!;
+      assert.match(
+        rateScopePointProblem(futaSlot, { region: null, subRegion: null, filingAccountId: null }) ?? "",
+        /name the region/,
+      );
+      const ehtSlot = CA_PACK_RATES.slots.find((slot) => slot.key === "ca_eht")!;
+      assert.match(
+        rateScopePointProblem(ehtSlot, { region: "ON", subRegion: "TORONTO", filingAccountId: null }) ?? "",
+        /sub-jurisdiction/,
+      );
+      const suiSlot = US_PACK_RATES.slots.find((slot) => slot.key === "us_sui")!;
+      assert.equal(
+        rateScopePointProblem(suiSlot, { region: "MI", subRegion: null, filingAccountId: null }),
+        null,
+      );
+
+      const accountId = randomUUID();
+      await assert.rejects(
+        () => upsertStatutoryRate({
+          orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
+          region: "ENG", filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
+        }),
+        /org-wide/,
+      );
+      await assert.rejects(
+        () => upsertStatutoryRate({
+          orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+          region: null, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+        }),
+        /name the region/,
+      );
+      await assert.rejects(
+        () => upsertStatutoryRate({
+          orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
+          region: "ON", subRegion: "TORONTO", filingAccountId: null, taxYear: 2026,
+          values: { rate: "1.95", annualExemption: "1000000" },
+        }),
+        /sub-jurisdiction/,
+      );
+      await assert.rejects(
+        () => upsertStatutoryRate({
+          orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
+          region: "ON", filingAccountId: accountId, taxYear: 2026,
+          values: { rate: "1.95", annualExemption: "1000000" },
+        }),
+        /per filing account/,
+      );
+      // Every refusal above wrote nothing: a refused save leaves no
+      // half-stored row for a later read to trip over.
+      assert.deepEqual(await listStatutoryRates(org.orgId), []);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "an update that matches no row fails instead of reporting success",
+  { skip: !DB },
+  async () => {
+    // The UPDATE names the row the SELECT just locked, so zero affected rows
+    // means the write did not land — a scope the row-level policy hides, a
+    // row deleted mid-flight — and success must not be reported for it.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    let triggerInstalled = false;
+    try {
+      await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+      });
+      try {
+        // A BEFORE UPDATE trigger that returns NULL skips the update while
+        // the row stays visible: the UPDATE matches but affects zero rows.
+        await db.execute(sql`
+          create or replace function skip_statutory_rate_update() returns trigger language plpgsql as $$
+          begin return null; end $$`);
+        await db.execute(sql.raw(
+          `create trigger skip_statutory_rate_update before update on payroll_statutory_rates\n`
+          + `  for each row when (new.org_id = '${org.orgId}'::uuid)\n`
+          + "  execute function skip_statutory_rate_update()",
+        ));
+        triggerInstalled = true;
+        await assert.rejects(
+          () => upsertStatutoryRate({
+            orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+            region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+          }),
+          /matched no row/,
+        );
+        // The failed update changed nothing: the stored value is still the
+        // first save, and the audit carries no update for the lost write.
+        assert.equal(
+          (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
+          "0.0060",
+        );
+      } finally {
+        if (triggerInstalled) await db.execute(sql`drop trigger skip_statutory_rate_update on payroll_statutory_rates`);
+        await db.execute(sql`drop function if exists skip_statutory_rate_update()`);
+      }
+      // With the interference gone the same save lands normally.
+      await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+      });
+      assert.equal(
+        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
+        "0.0090",
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );

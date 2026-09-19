@@ -37,3 +37,21 @@ test('nonprofit preset keeps its project revenue control account valid', () => {
   assert.equal(nonprofit.controlAccounts.projectRevenue, '4100')
   assert.equal(nonprofit.coa.find((account) => account.number === '4100')?.name, 'Grant Revenue')
 })
+
+test('the withheld-payroll-tax role maps to a deductions account, never a payable', () => {
+  // Withheld PAYE/NIC/PRSI/USC must sit in the chart's payroll-deductions
+  // account (2110/2300 family, liability_current_other) — never in a vendor
+  // or subcontractor payable (2130 family, liability_payable), where employee
+  // tax would mingle with accounts payable.
+  for (const industry of INDUSTRY_BY_KEY.values()) {
+    const mapped = industry.controlAccounts.payrollDeductions
+    const deductions = industry.coa.find(
+      (account) => /payroll deductions/i.test(account.name) && account.type === 'liability_current_other',
+    )
+    if (!deductions) {
+      assert.equal(mapped, undefined, `${industry.key} has no deductions account so maps no role`)
+      continue
+    }
+    assert.equal(mapped, deductions.number, `${industry.key} resolves withheld payroll tax to its deductions account`)
+  }
+})

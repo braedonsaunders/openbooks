@@ -79,7 +79,7 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // income tax at all (IRAS assesses annually), so its pack declares no
   // income-tax slot — its absence from this list is that design, asserted.
   assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
-    "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/PAYE", "AU/PAYG",
+    "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/IEPAYE", "AU/PAYG",
     "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
     "NL/LH", "ES/IRPF", "JP/GENSEN", "PL/PIT", "BR/IRRF"]);
 });

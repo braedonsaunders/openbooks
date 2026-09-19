@@ -1,4 +1,10 @@
 import { sql } from "drizzle-orm";
+import {
+  assertValidControlAccountMappings,
+  type ControlAccountRecord,
+  type ControlAccountRole,
+  type OrgControlAccounts,
+} from "../control-accounts.ts";
 import { db } from "../db.ts";
 import { cmp } from "../money.ts";
 import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
@@ -313,6 +319,16 @@ export interface PayrollStatutorySlot {
   components: readonly PayrollStatutoryComponent[];
   /** Pre-pack orgs.settings.payroll key honoured as a read fallback. */
   legacySettingsKey?: string;
+  /**
+   * The chart account role this slot's liability defaults to — a ROLE, never
+   * an account number: the pack names what the money IS (withheld payroll
+   * tax sits in the payroll-deductions account) and the org's own chart
+   * resolves which account that is. Applied only where the operator has not
+   * mapped the slot yet (an explicit mapping always wins), so a pack can
+   * never silently re-point a configured liability. Absent = the slot stays
+   * unmapped until the operator maps it, exactly as today.
+   */
+  liabilityAccountRole?: ControlAccountRole;
   /**
    * WHERE the slot is live — the account-side appliesWhen, the same concept
    * as the rate slot's `regions` (which it mirrors wherever a rate slot
@@ -2505,9 +2521,74 @@ export async function setPackSlotAccount(
   const pack = PAYROLL_COUNTRY_PACKS[country];
   const slot = pack?.statutorySlots.find((s) => s.key === slotKey);
   if (!slot) throw new Error(`unknown payroll pack slot ${country}/${slotKey}`);
-  await db.execute(sql`
+  if (slot.components.length === 0) return;
+  const updated = await db.execute(sql`
     update pay_components
        set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and code = any(${`{${slot.components.map((c) => c.code).join(",")}}`}::text[])
   `);
+  // A mapping that touches no component row is a lost save: the setup surface
+  // would report success while the slot stays unmapped (the pack's components
+  // were never seeded). Refuse rather than report ok.
+  if ((updated.rowCount ?? 0) === 0) {
+    throw new PayrollPackError(
+      `the ${country} "${slotKey}" slot has no seeded payroll components in this organization — `
+      + `install the ${country} payroll pack before mapping its accounts`,
+    );
+  }
+}
+
+/**
+ * Default a pack's role-declared slots onto the chart account their role
+ * resolves to — but only where the operator has not mapped the slot yet.
+ *
+ * A pack names a ROLE (`liabilityAccountRole`), never an account number, and
+ * the org's own chart resolves it, so a withheld-tax slot lands in the
+ * payroll-deductions account of whichever chart the org uses (2110 here,
+ * 2300 there) without the pack knowing either number. An explicit mapping
+ * always wins: this fills `liability_account_id is null` rows only, so it
+ * can complete setup but never re-point a configured liability. A role the
+ * chart does not map leaves the slot unmapped rather than guessing — commit
+ * still refuses an unmapped slot by name. A role mapped to a missing,
+ * inactive, or wrong-typed account fails closed here instead of wiring a
+ * liability nobody can remit from.
+ */
+export async function ensurePackSlotRoleAccounts(
+  executor: Pick<typeof db, "execute">,
+  orgId: string,
+  actorId: string | null,
+  country: string,
+): Promise<void> {
+  const pack = PAYROLL_COUNTRY_PACKS[country];
+  if (!pack) throw new PayrollPackError(`unknown payroll country pack ${country}`);
+  const slots = pack.statutorySlots.filter((slot) => slot.liabilityAccountRole);
+  if (slots.length === 0) return;
+  const settings = (await executor.execute<{ control: unknown }>(sql`
+    select settings->'controlAccounts' as control from orgs where id = ${orgId}`));
+  const control = (settings.rows[0]?.control ?? {}) as Record<string, unknown>;
+  for (const slot of slots) {
+    const role = slot.liabilityAccountRole!;
+    const accountId = control[role];
+    // No role mapping: the operator maps the slot by hand, exactly as a pack
+    // without a role declaration. Never invent an account.
+    if (accountId == null || accountId === "") continue;
+    if (typeof accountId !== "string") {
+      throw new PayrollPackError(
+        `the ${role} control account is not an account id — map it to the payroll-deductions `
+        + "account before installing payroll",
+      );
+    }
+    const records = (await executor.execute<ControlAccountRecord>(sql`
+      select id, type, is_active as "isActive", is_summary as "isSummary"
+        from accounts
+       where org_id = ${orgId} and id = ${accountId}`));
+    assertValidControlAccountMappings({ [role]: accountId } as OrgControlAccounts, records.rows);
+    await executor.execute(sql`
+      update pay_components
+         set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId}
+         and code = any(${`{${slot.components.map((c) => c.code).join(",")}}`}::text[])
+         and liability_account_id is null
+    `);
+  }
 }

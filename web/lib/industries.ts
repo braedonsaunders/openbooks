@@ -81,6 +81,12 @@ const BANK = 'bank'
 const TAX_COLLECTED = 'taxCollected'
 const TAX_PAID = 'taxPaid'
 const EMPLOYEE_PAYABLE = 'employeePayable'
+// Statutory payroll withholdings and the employer shares remitted with them.
+// Maps to the chart's payroll-deductions account (2110/2300) — never to a
+// vendor/subcontractor payable. Charts with no deductions account leave it
+// unmapped: payroll setup then asks the operator, rather than pointing at an
+// account that holds somebody else's money.
+const PAYROLL_DEDUCTIONS = 'payrollDeductions'
 const LABOR_WIP = 'laborWip'
 const LABOR_CLR = 'laborClearing'
 const UNBILLED_AR = 'unbilledReceivable'
@@ -164,6 +170,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
     },
   },
 
@@ -234,6 +241,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2300',
+      [PAYROLL_DEDUCTIONS]: '2110',
       [RETAINAGE]: '1110',
       [RETAINAGE_PAYABLE]: '2140',
       [LABOR_WIP]: '1300',
@@ -292,6 +300,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
       [LABOR_WIP]: '1300',
       [LABOR_CLR]: '2400',
       [UNBILLED_AR]: '1200',
@@ -364,6 +373,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2300',
+      [PAYROLL_DEDUCTIONS]: '2110',
       [RETAINAGE]: '1110',
       [RETAINAGE_PAYABLE]: '2120',
       [LABOR_WIP]: '1300',
@@ -426,6 +436,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
       [UNBILLED_AR]: '1200',
       [PROJECT_REV]: '4100',
     },
@@ -482,6 +493,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
       [LABOR_WIP]: '1300',
       [UNBILLED_AR]: '1200',
       [PROJECT_REV]: '4100',
@@ -537,6 +549,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
     },
   },
 
@@ -650,6 +663,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
       [PROJECT_REV]: '4100',
     },
   },
@@ -706,6 +720,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
     },
   },
 
@@ -756,6 +771,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_COLLECTED]: '2200',
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
+      [PAYROLL_DEDUCTIONS]: '2300',
     },
   },
 ]

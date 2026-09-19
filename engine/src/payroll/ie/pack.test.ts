@@ -30,7 +30,15 @@ describe("IE payroll pack", () => {
     const systems = IE_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
       slot.components.map((component) => component.systemKey),
     );
-    assert.deepEqual(systems, ["paye", "prsi", "prsi", "usc"]);
+    // The PAYE component is Ireland-qualified (ie_paye): pay_components is
+    // unique on (org, code) and (org, system key, kind), so the bare
+    // PAYE/paye identity the GB pack seeds would swallow the IE row in an
+    // org running both packs.
+    assert.deepEqual(systems, ["ie_paye", "prsi", "prsi", "usc"]);
+    const codes = IE_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
+      slot.components.map((component) => component.code),
+    );
+    assert.deepEqual(codes, ["IEPAYE", "PRSI", "PRSI-ER", "USC"]);
     assert.ok(
       IE_PAYROLL_PACK.statutorySlots.every((slot) =>
         slot.components.every((component) => component.remittance === "tax_authority"),
