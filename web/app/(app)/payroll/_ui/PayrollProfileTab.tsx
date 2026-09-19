@@ -13,6 +13,7 @@ import {
   type ScheduleOption,
   type StoredCertificateRow,
 } from './EmployeesPanel'
+import { PackCertificateForms } from './PackCertificateForms'
 
 /**
  * The employee drawer's Payroll tab — the ONE place a payroll profile is
@@ -150,17 +151,23 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
   }
 
   return (
-    <ProfileEditor
-      inline
-      profile={profile}
-      schedules={state.schedules}
-      filingAccounts={state.filingAccounts}
-      labourJurisdictions={state.labourJurisdictions}
-      countries={state.countries}
-      packProfiles={state.packProfiles}
-      storedCertificates={state.storedCertificates}
-      onClose={() => {}}
-      onSaved={() => setVersion((v) => v + 1)}
-    />
+    <>
+      <ProfileEditor
+        inline
+        profile={profile}
+        schedules={state.schedules}
+        filingAccounts={state.filingAccounts}
+        labourJurisdictions={state.labourJurisdictions}
+        countries={state.countries}
+        packProfiles={state.packProfiles}
+        storedCertificates={state.storedCertificates}
+        onClose={() => {}}
+        onSaved={() => setVersion((v) => v + 1)}
+      />
+      {/* Row-backed certificate answers for the profile's pack (the NL opgaaf
+        and SV facts, the DE ELStAM, the FR PAS option): rendered from the
+        pack declarations, never a per-country form in this file. */}
+      <PackCertificateForms partyId={partyId} country={profile.country} />
+    </>
   )
 }

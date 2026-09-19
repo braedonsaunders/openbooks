@@ -13,6 +13,8 @@ import test from "node:test";
 import { PayrollError } from "../../payroll-error.ts";
 import {
   certificateDeclarationProblem,
+  resolveCertificate,
+  type StoredCertificate,
 } from "../certificates.ts";
 import type {
   PayrollStatutoryComputeContext,
@@ -68,18 +70,27 @@ test("loonheffing is national: NL is known and supported, no subnational table d
   assert.deepEqual([...NL_PAYROLL_PACK.regions.supported], ["NL"]);
 });
 
-test("the NL pack declares the real certificate, and it passes generic validation", () => {
+test("the NL pack declares both certificates, and they pass generic validation", () => {
   const declared = NL_PAYROLL_PACK.certificates();
   assert.equal(declared.country, "NL");
-  assert.equal(declared.certificates.length, 1);
-  const [form] = declared.certificates;
-  assert.equal(form!.key, "nl_loonheffingen");
+  assert.deepEqual(declared.certificates.map((certificate) => certificate.key), ["nl_loonheffingen", "nl_premies"]);
+  const [form, premies] = declared.certificates;
   assert.equal(form!.form, "Model opgaaf gegevens voor de loonheffingen");
   assert.equal(form!.storage, "certificate_rows");
   assert.ok(
     form!.fields.some((field) => field.key === "apply_loonheffingskorting" && field.kind === "flag"),
     "the loonheffingskorting question is declared",
   );
+  assert.ok(
+    form!.fields.some((field) => field.key === "age_class" && field.kind === "choice"),
+    "the tabeltoepassing age class is declared",
+  );
+  // The employer's SV facts are declared too — including the Whk beschikking
+  // with no default, because no default is lawful.
+  assert.equal(premies!.storage, "certificate_rows");
+  const whk = premies!.fields.find((field) => field.key === "whk_percent");
+  assert.equal(whk?.kind, "amount");
+  assert.equal(whk?.default, undefined);
   for (const certificate of declared.certificates) {
     assert.equal(certificateDeclarationProblem(certificate), null, certificate.key);
   }
@@ -129,10 +140,30 @@ test("the NL filings declare the loonaangifte programme and a jaaropgaaf that re
 
 // ---------------------------------------------------------------------------
 // computeStatutory wiring through a stub context (no database: the NL pass
-// reads declared emp/run inputs only, never the ledger).
+// reads its declared certificates plus the pipeline money, never the ledger
+// and never profile columns).
 // ---------------------------------------------------------------------------
 
-function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
+/**
+ * Stored rows for the stub, keyed by certificate — the same shape the
+ * certificates table holds, resolved through the pack's own declarations so
+ * these tests prove the declaration → engine chain, not a hand-built
+ * ResolvedCertificate.
+ */
+function stubStored(rows: Record<string, Record<string, string>>): StoredCertificate[] {
+  return Object.entries(rows).map(([certificateKey, answers]) => ({
+    certificateKey,
+    answers,
+    effectiveFrom: "2026-01-01",
+  }));
+}
+
+const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" };
+
+function stubContext(
+  stored: Record<string, Record<string, string>> = { nl_premies: PREMIES },
+  overrides: Partial<PayrollStatutoryComputeContext> = {},
+): {
   ctx: PayrollStatutoryComputeContext;
   pushed: { systemKey: string; kind: string; amount: string; sequence: number }[];
 } {
@@ -140,6 +171,7 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
   const pushStatutory: PushStatutoryFn = (systemKey, kind, _description, amount, sequence) => {
     pushed.push({ systemKey, kind, amount, sequence });
   };
+  const storedCertificates = stubStored(stored);
   const ctx: PayrollStatutoryComputeContext = {
     tx: {} as never,
     orgId: "org",
@@ -150,17 +182,24 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
     country: "NL",
     region: "NL",
     run: { pay_date: "2026-02-13" },
-    emp: { nl_awf_low: "true", nl_aof_high: "false", nl_whk_percent: "1.25" },
+    // No profile column carries an NL fact: emp is empty by construction.
+    emp: {},
     filingAccountId: null,
     periodsPerYear: 12,
-    income: "999.00",
-    nonPeriodic: "0",
-    pensionable: "999.00",
-    insurable: "999.00",
+    // Pipeline money arrives at 4 decimals (the money contract); the engine
+    // must accept that shape, not just 2dp.
+    income: "999.0000",
+    nonPeriodic: "0.0000",
+    pensionable: "999.0000",
+    insurable: "999.0000",
     deduction: () => "0",
     pushStatutory,
-    storedCertificates: [],
-    certificateFor: () => null,
+    storedCertificates,
+    certificateFor: (key) => {
+      const declared = NL_PAYROLL_PACK.certificates().certificates.find((certificate) => certificate.key === key);
+      if (!declared) return null;
+      return resolveCertificate({ certificate: declared, stored: storedCertificates, asOf: "2026-02-13" });
+    },
     bool: (value) => value === "true",
     assertRegionSupported: (region) => {
       if (!(NL_PAYROLL_PACK.regions.supported as readonly string[]).includes(region)) {
@@ -173,15 +212,10 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
   return { ctx, pushed };
 }
 
-test("computeStatutory prices a 2026 maandloon end to end (korting via certificate)", async () => {
+test("computeStatutory prices a 2026 maandloon end to end (korting + premies via certificates)", async () => {
   const { ctx, pushed } = stubContext({
-    certificateFor: () => ({
-      certificate: NL_PAYROLL_PACK.certificates().certificates[0]!,
-      onFile: true,
-      effectiveFrom: "2026-01-01",
-      answers: { apply_loonheffingskorting: "true" },
-      missing: [],
-    }),
+    nl_loonheffingen: { apply_loonheffingskorting: "true" },
+    nl_premies: PREMIES,
   });
   const factors = await NL_PAYROLL_PACK.computeStatutory(ctx);
   // € 999,00 with korting: the witte maandtabel's "met" column reads 13,83.
@@ -210,14 +244,27 @@ test("computeStatutory without the opgaaf prices without korting", async () => {
   assert.equal(factors["ARK"], "0.0000");
 });
 
+test("computeStatutory refuses SV premiums without the declared SV facts", async () => {
+  const { ctx } = stubContext({});
+  await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /AWf/);
+});
+
+test("computeStatutory refuses an undeclared age class by name", async () => {
+  const { ctx } = stubContext({
+    nl_loonheffingen: { age_class: "aow_1970" },
+    nl_premies: PREMIES,
+  });
+  await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /age_class|is not one of/);
+});
+
 test("computeStatutory refuses an untranscribed tax year and an unsupported region", async () => {
-  const { ctx: wrongYear } = stubContext({ taxYear: 2027 });
+  const { ctx: wrongYear } = stubContext({ nl_premies: PREMIES }, { taxYear: 2027 });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(wrongYear), /no transcribed loonheffing tables/);
-  const { ctx: wrongRegion } = stubContext({ region: "DE" });
+  const { ctx: wrongRegion } = stubContext({ nl_premies: PREMIES }, { region: "DE" });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(wrongRegion), /not supported/);
 });
 
 test("computeStatutory refuses a bonus by name", async () => {
-  const { ctx } = stubContext({ nonPeriodic: "500.00" });
+  const { ctx } = stubContext({ nl_premies: PREMIES }, { nonPeriodic: "500.0000" });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /bijzondere beloningen/);
 });

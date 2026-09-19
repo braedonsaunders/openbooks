@@ -94,6 +94,29 @@ export const abs = (a: string) => {
   return fromUnits(units < 0n ? -units : units);
 };
 export const sum = (xs: string[]) => fromUnits(xs.reduce((acc, x) => acc + toUnits(x), 0n));
+
+/**
+ * Ledger money (canonical numeric(19,4)) → integer minor units (cents),
+ * halves away from zero — which is halves up for the non-negative amounts
+ * payroll prices.
+ *
+ * This is the boundary every country pack's statutory engine reads pipeline
+ * money through: `calculateStub` (engine/src/payroll-run.ts) sums earning
+ * lines with `sum`, so `income`, `nonPeriodic`, `pensionable` and `insurable`
+ * always arrive as 4-decimal strings ("0.0000", never "0" or "0.00"). A pack
+ * that parses those with its own 1-or-2-decimal regex refuses the pipeline's
+ * canonical shape; a pack that reads them here accepts every shape the ledger
+ * can emit. Sub-cent fractions (a quantity-times-rate intermediate carried at
+ * 4dp, e.g. "10.0050") round half-up to the cent, the same "rekenkundig"
+ * rule the publications quote for their own per-step rounding.
+ *
+ * Sign and range stay the pack's decision: this accepts negatives (a credit
+ * quantity is ordinary money), so a pack that prices non-negative bases
+ * refuses them itself, by name, after this returns.
+ */
+export function toCents(value: string): bigint {
+  return roundDiv(toUnits(value), 100n);
+}
 export const isZero = (a: string) => toUnits(a) === 0n;
 export const cmp = (a: string, b: string) => {
   const d = toUnits(a) - toUnits(b);

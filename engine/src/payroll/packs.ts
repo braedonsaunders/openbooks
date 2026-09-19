@@ -693,7 +693,10 @@ export interface PayrollCountryPack {
   openingYtdFields?: () => readonly PayrollOpeningYtdField[];
   /**
    * Phase 9 — one re-runnable statutory pass over the current line set.
-   * REQUIRED on every installable pack.
+   * REQUIRED on every installable pack. The money in the context obeys the
+   * contract documented on `PayrollStatutoryComputeContext` (canonical
+   * numeric(19,4), always 4 decimals from the pipeline): parse it with
+   * money.ts, never a pack-local decimal regex.
    */
   computeStatutory: (
     ctx: PayrollStatutoryComputeContext,
