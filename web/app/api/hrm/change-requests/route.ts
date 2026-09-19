@@ -7,7 +7,8 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
-import { changeRequestErrorResponse, createChangeRequestBody } from "./_lib";
+import { changeRequestErrorResponse } from "./_lib";
+import { createChangeRequestBody } from "./bodies";
 
 export const runtime = "nodejs";
 
