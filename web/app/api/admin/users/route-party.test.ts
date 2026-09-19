@@ -88,18 +88,6 @@ function sqlText(query: unknown): string {
 
 const KNOWN_PARTIES = [PARTY_A, PARTY_B, PARTY_INACTIVE, OTHER_ORG_PARTY]
 
-function partyInText(text: string): string | null {
-  const lower = text.toLowerCase()
-  for (const id of KNOWN_PARTIES) {
-    if (lower.includes(id.toLowerCase())) return id
-  }
-  return null
-}
-
-function allPartiesInText(text: string): string[] {
-  const lower = text.toLowerCase()
-  return KNOWN_PARTIES.filter((id) => lower.includes(id.toLowerCase()))
-}
 
 const mockSources = new Map<string, string>([
   [
@@ -385,7 +373,8 @@ test('changing your own link is refused even as superadmin, including unlink', a
 
 test('attestation absent or false is refused without mutation', async () => {
   reset()
-  const { attestation: _omit, ...without } = validLink()
+  const without: Record<string, unknown> = { ...validLink() }
+  delete without.attestation
   const missing = await post(without)
   assert.equal(missing.status, 400)
   assert.match(((await missing.json()) as { error: string }).error, /attestation/i)
