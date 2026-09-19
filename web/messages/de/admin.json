@@ -766,6 +766,24 @@
     "saveSettings": "Einstellungen speichern"
   },
   "users": {
+    "unlinkedPerson": "Nicht verknüpft",
+    "linkPersonButton": "Person verknüpfen",
+    "linkChangePerson": "Person ändern",
+    "linkPersonTitle": "Person für {name} verknüpfen",
+    "linkPersonDescription": "Diese Anmeldung mit genau einer nativen Person verknüpfen. Externe Personen sind auch ohne Mitarbeiterrolle zulässig. Die Partnerart ist kein Nachweis einer menschlichen Identität — prüfen Sie Art und Rollensignale und bestätigen Sie ausdrücklich. Es wird kein Mitarbeiter, keine Einstellung und kein Status angelegt oder abgeleitet.",
+    "linkPersonLabel": "Person",
+    "linkPersonPlaceholder": "Person auswählen…",
+    "linkPersonSearchPlaceholder": "Personen suchen…",
+    "linkPersonSignalsNote": "Es werden nur aktive Personen angeboten. Die Signale zeigen Art und kanonische Rollen (Lieferant, Kunde, Mitarbeiter) als Nachweis — sie belegen für sich allein nie eine menschliche Identität.",
+    "linkReasonLabel": "Begründung",
+    "linkReasonPlaceholder": "Warum ist dies die richtige Person für diese Anmeldung?",
+    "linkReasonRequired": "Geben Sie eine Begründung für diese Änderung an",
+    "linkAttestationLabel": "Ich bestätige, dass dieser native Partner die korrekte menschliche Identität für diese Anmeldung ist.",
+    "linkAttestationRequired": "Eine ausdrückliche Bestätigung ist erforderlich",
+    "linkSave": "Verknüpfung speichern",
+    "linkSaved": "Verknüpfte Person gespeichert",
+    "linkSelfRefused": "Sie können Ihre eigene verknüpfte Person nicht ändern — das muss ein anderer Administrator tun.",
+    "linkStale": "Die verknüpfte Person hat sich geändert — schließen, aktualisieren und erneut versuchen.",
     "metaTitle": "Benutzer",
     "title": "Benutzer",
     "description": "Wer sich anmelden kann und welche Rollen er hat. Der Zugriff ist die Vereinigung der ausdrücklich zugewiesenen Rollen; Benutzer ohne Rolle haben keinen durch Rollen gewährten Zugriff.",
@@ -776,6 +794,7 @@
     "emptySearchDescription": "Keine Benutzer entsprechen Ihrer Suche. Versuchen Sie einen anderen Begriff oder Statusfilter.",
     "emptyFilterDescription": "Versuchen Sie einen anderen Statusfilter.",
     "table": {
+      "linkedPerson": "Verknüpfte Person",
       "roles": "Rollen",
       "lastSignIn": "Letzte Anmeldung"
     },
@@ -813,7 +832,11 @@
     "unassignedRole": "keine Rolle zugeordnet"
   },
   "permissions": {
+    "hrm_employment_read": "Beschäftigungsdaten anzeigen",
+    "hrm_employment_manage": "Beschäftigungsänderungen erfassen",
+    "hrm_employment_approve": "Beschäftigungsänderungen entscheiden",
     "groups": {
+      "hrm": "Personalwesen",
       "gl": "Hauptbuch",
       "close": "Perioden & Abschluss",
       "ap": "Kreditorenbuchhaltung",
