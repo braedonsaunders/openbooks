@@ -559,6 +559,28 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the TPG-211 calculation rules' own — see the
+ * module header.
+ */
+export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CT_EXEMPT: "Exempt from Connecticut withholding (code E)",
+  CT_NO_CERTIFICATE: "No CT-W4 on file (flat-rate method)",
+  CT_TAX: "Connecticut tax this period (flat method)",
+  CT_ANNUAL_WAGES: "Connecticut annualized wages",
+  CT_EXEMPTION: "Connecticut personal exemption",
+  CT_TAXABLE: "Connecticut taxable income",
+  CT_INITIAL_TAX: "Connecticut initial tax from tables",
+  CT_PHASE_OUT: "Connecticut exemption phase-out add-back",
+  CT_RECAPTURE: "Connecticut tax recapture",
+  CT_BEFORE_CREDIT: "Connecticut tax before personal credit",
+  CT_CREDIT: "Connecticut personal credit rate",
+  CT_AFTER_CREDIT: "Connecticut tax after personal credit",
+  CT_PERIOD_TAX: "Connecticut tax this period",
+  CT_WITHHELD: "Connecticut tax withheld this period",
+};
+
 export const CT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CT",
   label: "Connecticut income tax",

@@ -132,6 +132,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the R-1306 computer formula's own — see the module
+ * header.
+ */
+export const LA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  LA_WAGES: "Louisiana wages this period",
+  LA_DEDUCTION: "Louisiana deduction this period",
+  LA_TAXABLE: "Louisiana taxable wages",
+  LA_WITHHELD: "Louisiana tax withheld this period",
+};
+
 export const LA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "LA",
   label: "Louisiana income tax",

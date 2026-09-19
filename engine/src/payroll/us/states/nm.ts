@@ -622,6 +622,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the FYI-104 percentage method's own — see the
+ * module header.
+ */
+export const NM_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  NM_EXEMPT: "Exempt from New Mexico withholding (FYI-104 exempt-income path)",
+  NM_WAGES: "New Mexico wages this period",
+  NM_STATUS: "New Mexico filing status",
+  NM_BRACKET_RATE: "New Mexico bracket rate (printed percent)",
+  NM_TABLE_TAX: "New Mexico table tax",
+  NM_DE_MINIMIS: "New Mexico de minimis (monthly under $1, no withholding)",
+  NM_WITHHELD: "New Mexico tax withheld this period",
+};
+
 export const NM_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NM",
   label: "New Mexico withholding tax",

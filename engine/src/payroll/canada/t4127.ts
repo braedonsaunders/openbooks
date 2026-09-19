@@ -141,6 +141,41 @@ export interface T4127Result {
   factors: Record<string, string>;
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above (including the annualTax parts). Every letter is the CRA T4127
+ * guide's own factor notation — see the module header.
+ */
+export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  A: "Annual taxable income",
+  A_step2: "Annual taxable income excluding this bonus",
+  C: "CPP/QPP contribution",
+  C2: "Second additional CPP/QPP (CPP2)",
+  EI: "EI premium",
+  QPIP: "QPIP premium",
+  F5: "Enhanced-CPP tax deduction",
+  F5A: "Enhanced-CPP deduction on periodic pay",
+  F5B: "Enhanced-CPP deduction on the bonus",
+  TC: "Federal TD1 claim amount",
+  TCP: "Provincial TD1 claim amount",
+  K1: "Federal personal credit",
+  K2: "Federal CPP/EI credit",
+  K4: "Canada employment amount credit",
+  K1P: "Provincial personal credit",
+  K2P: "Provincial CPP/EI credit",
+  K4P: "Provincial employment amount credit",
+  K5P: "Provincial supplemental credit",
+  T3: "Basic federal tax (annual)",
+  T1: "Federal tax (annual)",
+  T4: "Basic provincial tax (annual)",
+  V1: "Ontario surtax",
+  V2: "Ontario Health Premium",
+  S: "Provincial tax reduction",
+  T2: "Provincial tax (annual)",
+  T: "Income tax this period",
+  TB: "Tax on the bonus (payable now)",
+};
+
 const ZERO = 0n;
 
 function opt(value: string | undefined): bigint {

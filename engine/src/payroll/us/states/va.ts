@@ -196,6 +196,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Formula Method's own — see the module header.
+ */
+export const VA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  VA_EXEMPT: "Exempt from Virginia withholding",
+  VA_ANNUAL_WAGES: "Virginia annualized wages",
+  VA_ANNUAL_EXEMPTION: "Virginia annual exemption",
+  VA_TAXABLE: "Virginia taxable income",
+  VA_BAND_OVER: "Virginia band excess",
+  VA_ANNUAL_TAX: "Virginia tax (annual)",
+  VA_TAX: "Virginia tax this period",
+  VA_WITHHELD: "Virginia tax withheld this period",
+};
+
 export const VA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "VA",
   label: "Virginia income tax",

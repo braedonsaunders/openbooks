@@ -94,6 +94,35 @@ function rCent(u: bigint): bigint {
 
 export type FrDomicile = "metropole_hors_france";
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. PAS/TAUX_PAS are the prélèvement's own terms and
+ * the cotisations carry their statutory names — see the pack's PAS grille
+ * basis.
+ */
+export const FR_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  BASE: "Assiette mensuelle PAS",
+  TAUX_PAS: "Taux PAS",
+  PAS: "Prélèvement à la source",
+  BRUT: "Salaire brut",
+  NET_IMPOSABLE: "Net imposable (assiette PAS)",
+  VIEIL_SAL: "Vieillesse (salariale)",
+  CSG: "Contribution sociale généralisée (CSG)",
+  CRDS: "Contribution au remboursement de la dette sociale (CRDS)",
+  MAL_ER: "Maladie (employeur)",
+  VIEIL_ER: "Vieillesse (employeur)",
+  FAM_ER: "Allocations familiales (employeur)",
+  CHOM_ER: "Assurance chômage (employeur)",
+  AGS_ER: "Cotisation AGS (employeur)",
+  CDN_ER: "FNAL, CSA et dialogue social (employeur)",
+  ARRCO_SAL: "Retraite complémentaire (salariale)",
+  ARRCO_ER: "Retraite complémentaire (employeur)",
+  CEG_SAL: "Contribution d'équilibre général (salariale)",
+  CEG_ER: "Contribution d'équilibre général (employeur)",
+  CET_SAL: "Contribution d'équilibre technique (salariale)",
+  CET_ER: "Contribution d'équilibre technique (employeur)",
+};
+
 export interface FrPas2026Input {
   /** Montant net imposable du versement (income + primes), decimal. */
   base: string;

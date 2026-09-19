@@ -179,6 +179,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Percentage Computation Method table's own —
+ * see the module header.
+ */
+export const ID_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  ID_EXEMPT: "Exempt from Idaho withholding",
+  ID_WAGES: "Idaho wages this period",
+  ID_ALLOWANCES: "Idaho allowances (valued at zero per guide)",
+  ID_TAXABLE: "Idaho taxable wages",
+  ID_THRESHOLD: "Idaho withholding threshold",
+  ID_WITHHELD: "Idaho tax withheld this period",
+};
+
 export const ID_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ID",
   label: "Idaho income tax",

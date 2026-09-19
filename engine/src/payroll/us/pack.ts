@@ -4,12 +4,75 @@ import type {
   PayrollJurisdiction,
   PayrollRegionCoverage,
 } from "../packs.ts";
-import { computeUsStatutory } from "./compute-statutory.ts";
+import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS } from "./compute-statutory.ts";
 import { usPackFilings } from "./filings.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./jurisdictions.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { PUB15T_FACTOR_LABELS } from "./pub15t.ts";
 import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
-import { implementedUsStates, supportedUsStates } from "./states/index.ts";
+import { implementedUsStates, supportedUsStates, usStateWithholding } from "./states/index.ts";
+import { AL_FACTOR_LABELS } from "./states/al.ts";
+import { AR_FACTOR_LABELS } from "./states/ar.ts";
+import { AZ_FACTOR_LABELS } from "./states/az.ts";
+import { CA_FACTOR_LABELS } from "./states/ca.ts";
+import { CO_FACTOR_LABELS } from "./states/co.ts";
+import { CT_FACTOR_LABELS } from "./states/ct.ts";
+import { DE_FACTOR_LABELS } from "./states/de.ts";
+import { GA_FACTOR_LABELS } from "./states/ga.ts";
+import { HI_FACTOR_LABELS } from "./states/hi.ts";
+import { IA_FACTOR_LABELS } from "./states/ia.ts";
+import { ID_FACTOR_LABELS } from "./states/id.ts";
+import { IL_FACTOR_LABELS } from "./states/il.ts";
+import { IN_FACTOR_LABELS } from "./states/in.ts";
+import { KS_FACTOR_LABELS } from "./states/ks.ts";
+import { KY_FACTOR_LABELS } from "./states/ky.ts";
+import { LA_FACTOR_LABELS } from "./states/la.ts";
+import { MA_FACTOR_LABELS } from "./states/ma.ts";
+import { MD_FACTOR_LABELS } from "./states/md.ts";
+import { ME_FACTOR_LABELS } from "./states/me.ts";
+import { MI_FACTOR_LABELS } from "./states/mi.ts";
+import { MN_FACTOR_LABELS } from "./states/mn.ts";
+import { MO_FACTOR_LABELS } from "./states/mo.ts";
+import { MS_FACTOR_LABELS } from "./states/ms.ts";
+import { MT_FACTOR_LABELS } from "./states/mt.ts";
+import { NC_FACTOR_LABELS } from "./states/nc.ts";
+import { ND_FACTOR_LABELS } from "./states/nd.ts";
+import { NE_FACTOR_LABELS } from "./states/ne.ts";
+import { NJ_FACTOR_LABELS } from "./states/nj.ts";
+import { NM_FACTOR_LABELS } from "./states/nm.ts";
+import { NY_FACTOR_LABELS } from "./states/ny.ts";
+import { OH_FACTOR_LABELS } from "./states/oh.ts";
+import { OK_FACTOR_LABELS } from "./states/ok.ts";
+import { OR_FACTOR_LABELS } from "./states/or.ts";
+import { PA_FACTOR_LABELS } from "./states/pa.ts";
+import { RI_FACTOR_LABELS } from "./states/ri.ts";
+import { SC_FACTOR_LABELS } from "./states/sc.ts";
+import { UT_FACTOR_LABELS } from "./states/ut.ts";
+import { VA_FACTOR_LABELS } from "./states/va.ts";
+import { VT_FACTOR_LABELS } from "./states/vt.ts";
+import { WI_FACTOR_LABELS } from "./states/wi.ts";
+import { WV_FACTOR_LABELS } from "./states/wv.ts";
+import { US_LOCAL_FACTOR_LABELS } from "./withholding.ts";
+
+/**
+ * Names for the stub-line mirror factors (`SIT_<code>` / `LIT_<code>`) no
+ * static map can enumerate: the codes include operator-entered sub-region
+ * certificates (an Ohio school district, a Michigan city), so the set is
+ * open-ended. A registered engine names its own code; anything else keeps
+ * the code in the label, because the code is the employer-entered
+ * jurisdiction the amount was withheld for.
+ */
+function usDescribeFactor(key: string): string | null {
+  const match = /^(SIT|LIT)_(.+)$/.exec(key);
+  if (!match) return null;
+  const level = match[1];
+  const code = match[2]!;
+  const engine = usStateWithholding(code);
+  if (engine) return `${engine.label} withheld`;
+  return level === "SIT"
+    ? `State income tax withheld (${code})`
+    : `Local income tax withheld (${code})`;
+}
 
 /**
  * The United States payroll country pack — registered and installable.
@@ -233,4 +296,55 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   ],
   computeStatutory: computeUsStatutory,
   statutoryEngineLabel: "Pub 15-T",
+  // Pack-declared trace labels, aggregated from the modules that trace
+  // them: Pub 15-T, one map per state engine, the local-rate dispatch, and
+  // the compute pass's own inputs. Open-ended SIT_/LIT_ mirrors resolve
+  // through describeFactor below.
+  factorLabels: {
+    ...PUB15T_FACTOR_LABELS,
+    ...AL_FACTOR_LABELS,
+    ...AR_FACTOR_LABELS,
+    ...AZ_FACTOR_LABELS,
+    ...CA_FACTOR_LABELS,
+    ...CO_FACTOR_LABELS,
+    ...CT_FACTOR_LABELS,
+    ...DE_FACTOR_LABELS,
+    ...GA_FACTOR_LABELS,
+    ...HI_FACTOR_LABELS,
+    ...IA_FACTOR_LABELS,
+    ...ID_FACTOR_LABELS,
+    ...IL_FACTOR_LABELS,
+    ...IN_FACTOR_LABELS,
+    ...KS_FACTOR_LABELS,
+    ...KY_FACTOR_LABELS,
+    ...LA_FACTOR_LABELS,
+    ...MA_FACTOR_LABELS,
+    ...MD_FACTOR_LABELS,
+    ...ME_FACTOR_LABELS,
+    ...MI_FACTOR_LABELS,
+    ...MN_FACTOR_LABELS,
+    ...MO_FACTOR_LABELS,
+    ...MS_FACTOR_LABELS,
+    ...MT_FACTOR_LABELS,
+    ...NC_FACTOR_LABELS,
+    ...ND_FACTOR_LABELS,
+    ...NE_FACTOR_LABELS,
+    ...NJ_FACTOR_LABELS,
+    ...NM_FACTOR_LABELS,
+    ...NY_FACTOR_LABELS,
+    ...OH_FACTOR_LABELS,
+    ...OK_FACTOR_LABELS,
+    ...OR_FACTOR_LABELS,
+    ...PA_FACTOR_LABELS,
+    ...RI_FACTOR_LABELS,
+    ...SC_FACTOR_LABELS,
+    ...UT_FACTOR_LABELS,
+    ...VA_FACTOR_LABELS,
+    ...VT_FACTOR_LABELS,
+    ...WI_FACTOR_LABELS,
+    ...WV_FACTOR_LABELS,
+    ...US_LOCAL_FACTOR_LABELS,
+    ...US_COMPUTE_FACTOR_LABELS,
+  },
+  describeFactor: usDescribeFactor,
 };

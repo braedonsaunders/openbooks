@@ -205,6 +205,26 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Circular EN percentage method's own, including
+ * the 25-employee special procedure — see the module header.
+ */
+export const NE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  NE_EMPLOYER_EMPLOYEE_COUNT: "Employer headcount (Nebraska special-procedure test)",
+  NE_SPECIAL_PROCEDURE: "Nebraska special procedure applies (25+ employees)",
+  NE_LESSER_WITHHOLDING_DOCUMENTED: "Lesser withholding documented (W-4N)",
+  NE_EXEMPT: "Exempt from Nebraska withholding",
+  NE_ANNUAL_WAGES: "Nebraska annualized wages",
+  NE_ALLOWANCES: "Nebraska allowances",
+  NE_TAXABLE: "Nebraska taxable income",
+  NE_ANNUAL_TAX: "Nebraska tax (annual)",
+  NE_SPECIAL_MINIMUM_BASE: "Nebraska special-minimum base (wages less tax-qualified deductions)",
+  NE_TAX_QUALIFIED_DEDUCTIONS: "Tax-qualified deductions (Nebraska special minimum)",
+  NE_SPECIAL_MINIMUM: "Nebraska special minimum withholding",
+  NE_WITHHELD: "Nebraska tax withheld this period",
+};
+
 export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NE",
   label: "Nebraska income tax",

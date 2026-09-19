@@ -182,6 +182,20 @@ export function paUcEmployeeWithholding(payDate: string, grossWages: string): st
   return D(mulRateCents(U(grossWages), rates.ucEmployeeRate));
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are REV-415's own — see the module header.
+ */
+export const PA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  PA_COMPENSATION: "Pennsylvania compensation",
+  PA_TAX: "Pennsylvania tax",
+  PA_UC_EMPLOYEE: "Pennsylvania unemployment compensation (employee share)",
+  PHILA_BASIS: "Philadelphia basis (resident or nonresident)",
+  PHILA_RATE: "Philadelphia wage tax rate",
+  PHILA_RATE_EFFECTIVE: "Philadelphia rate in force since",
+  PHILA_TAX: "Philadelphia wage tax",
+};
+
 export const PA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "PA",
   label: "Pennsylvania personal income tax",

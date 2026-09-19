@@ -219,6 +219,25 @@ export async function computeBrStatutoryWithRates(
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the CLT computation's own (rendimentos,
+ * INSS, IRRF, FGTS) — see irrf-2026.ts.
+ */
+export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  BR_RENDIMENTOS: "Rendimentos tributáveis",
+  BR_INSS: "INSS (segurado)",
+  BR_BASE_IRRF: "Base de cálculo IRRF",
+  BR_DEDUCAO_VIA: "Deduction path (simplificado/legal)",
+  BR_IMPOSTO_BRUTO: "Imposto bruto",
+  BR_REDUCAO: "Redução",
+  BR_IRRF: "IRRF (imposto de renda retido na fonte)",
+  BR_PATRONAL: "INSS patronal",
+  BR_RAT: "RAT × FAP",
+  BR_TERCEIROS: "Terceiros",
+  BR_FGTS: "FGTS (fundo de garantia do tempo de serviço)",
+};
+
 /** Phase 9 — BR pack statutory pass for 2026. Refuses every other year. */
 export async function computeBrStatutory(
   ctx: PayrollStatutoryComputeContext,

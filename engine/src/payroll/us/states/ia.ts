@@ -228,6 +228,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. T1–T3 are the 2026 four-step formula's own step names — see
+ * the module header.
+ */
+export const IA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  IA_EXEMPT: "Exempt from Iowa withholding",
+  IA_FORM: "Iowa certificate form version",
+  IA_COLUMN: "Iowa table column",
+  IA_PERIOD: "Iowa formula period",
+  IA_DEDUCTION: "Iowa deduction",
+  IA_ALLOWANCE_ANNUAL: "Iowa annual allowance",
+  IA_GROSS: "Iowa gross (formula wages)",
+  IA_T1: "Iowa T1 (wages less deduction)",
+  IA_T2: "Iowa T2 (rate applied)",
+  IA_T3: "Iowa T3 (less allowance)",
+  IA_WITHHELD: "Iowa tax withheld this period",
+};
+
 export const IA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IA",
   label: "Iowa income tax",

@@ -22,7 +22,7 @@ import type {
   PayrollRegionCoverage,
 } from "../packs.ts";
 import { ES_CERTIFICATES } from "./certificates.ts";
-import { computeEsStatutory } from "./compute-statutory.ts";
+import { computeEsStatutory, ES_FACTOR_LABELS } from "./compute-statutory.ts";
 import { esPackFilings } from "./filings.ts";
 import { ES_JURISDICTIONS } from "./jurisdictions.ts";
 import { ES_PACK_RATES, ES_TAX_YEARS } from "./rates.ts";
@@ -154,4 +154,5 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   ],
   computeStatutory: computeEsStatutory,
   statutoryEngineLabel: "AEAT",
+  factorLabels: { ...ES_FACTOR_LABELS },
 };

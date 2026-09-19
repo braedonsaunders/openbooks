@@ -477,6 +477,35 @@ function finishCalculation(args: {
  * The SV-loon (`insurable`) defaults to the loonheffing wage when the
  * pipeline supplies none; stated here, not guessed per employee.
  */
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Single letters are the Belastingdienst
+ * Rekenvoorschriften's own (L tabel-loon, X netto, AHK/ARK/OUK/AOK/JGK the
+ * heffingskortingen) — see the module header.
+ */
+export const NL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  L: "Table wage, annual (Rekenvoorschriften L)",
+  X1: "Gross annual wage",
+  AHK: "Algemene heffingskorting applied",
+  ARK: "Arbeidskorting applied",
+  OUK: "Ouderenkorting applied",
+  AOK: "Alleenstaande-ouderenkorting applied",
+  X: "Net annual (Rekenvoorschriften X)",
+  LH: "Loonheffing this period",
+  ARK_T: "Arbeidskorting this period",
+  AHK_T: "Algemene heffingskorting this period",
+  JGK: "Jonggehandicaptenkorting reduction",
+  SV_BASE: "SV-loon base",
+  WW: "AWf premium (employer)",
+  AOF: "Aof basispremie (employer)",
+  WHK: "Whk premium (employer)",
+  ZW: "ZW premium",
+  ZVW: "Werkgeversheffing Zvw (employer)",
+  I: "Periodic income this period",
+  IE: "Insurable earnings (SV-loon) this period",
+  B: "Bonus / non-periodic pay this period",
+};
+
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

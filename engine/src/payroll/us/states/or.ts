@@ -467,6 +467,36 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (annual computer formula plus the no-form and exempt paths).
+ * Terms are the 150-206-436 formula's own — see the module header.
+ */
+export const OR_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  OR_METHOD: "Oregon method applied",
+  OR_RATE: "Oregon no-form rate",
+  OR_WAGES: "Oregon wages this period (no-form method)",
+  OR_EXEMPT: "Exempt from Oregon withholding",
+  OR_STATUS: "Oregon filing status",
+  OR_PHASE: "Oregon phase table",
+  OR_BRACKETS: "Oregon bracket table",
+  OR_TABLE: "Oregon high/low wage table",
+  OR_ALLOWANCES: "Oregon allowances used",
+  OR_ANNUAL_WAGES: "Oregon annualized wages",
+  OR_FEDERAL_WITHHELD: "Oregon federal tax withheld (annual)",
+  OR_FEDERAL_CAP: "Oregon federal-tax subtraction cap",
+  OR_FEDERAL_USED: "Oregon federal-tax subtraction used",
+  OR_STANDARD_DEDUCTION: "Oregon standard deduction",
+  OR_BASE: "Oregon base (wages less federal subtraction and deduction)",
+  OR_FROM_RATES: "Oregon tax from rate tables",
+  OR_CREDIT: "Oregon exemption credit",
+  OR_ANNUAL_TAX: "Oregon tax (annual)",
+  OR_BAND_ADD: "Oregon band base amount",
+  OR_BAND_RATE: "Oregon band rate",
+  OR_PERIOD_TAX: "Oregon tax this period",
+  OR_WITHHELD: "Oregon tax withheld this period",
+};
+
 export const OR_WITHHOLDING: UsStateWithholdingEngine = {
   state: "OR",
   label: "Oregon income tax",

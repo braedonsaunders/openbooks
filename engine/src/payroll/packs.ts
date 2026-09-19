@@ -724,6 +724,46 @@ export interface PayrollCountryPack {
    * were computed under, and a hardcoded heading names the wrong country.
    */
   statutoryEngineLabel: string;
+  /**
+   * Human names for the statutory trace factors, keyed by the factor keys
+   * the pack's engine actually emits onto the stub (the trace keys, the
+   * compute-statutory extras, the pack's own return-map keys). REQUIRED,
+   * for the same reason `name` is: the trace UI falls back to the raw key,
+   * and it ALSO prints the raw key beside the label — so a pack that stays
+   * silent renders every factor as the code echoed twice ("MD_TAXABLE
+   * MD_TAXABLE"), which reads as deliberate. A factor's name is a fact
+   * about the publishing agency's notation, so the pack states it.
+   *
+   * Each country's entries live beside the code that traces them (the US
+   * state engines, Pub 15-T, T4127, TP-1015, each pack's compute module)
+   * and are aggregated here — never a flat map in the web layer, which
+   * cannot tell California's CA_TAX from Canada's CA or Delaware's
+   * DE_WITHHELD from Germany's DE.
+   */
+  factorLabels: Readonly<Record<string, string>>;
+  /**
+   * Names for factor keys no static map can enumerate: the US pack's
+   * `SIT_<code>` / `LIT_<code>` stub-line mirrors, whose codes include
+   * operator-entered sub-region certificates (an Ohio school district, a
+   * Michigan city). OPTIONAL, and absent exactly when the pack emits no
+   * such open-ended keys. Returns the label, or null to fall back to the
+   * raw key. The generic resolver tries `factorLabels` first.
+   */
+  describeFactor?: (key: string) => string | null;
+}
+
+/**
+ * The trace label for one stub factor under one pack: the pack's declared
+ * `factorLabels` entry, else its `describeFactor` answer, else the raw key.
+ * The UI and the coverage guard both resolve through this — never through
+ * a web-layer map — so a newly traced factor with no declaration renders
+ * raw in exactly one place and fails the guard in exactly one place.
+ */
+export function factorLabelForPack(
+  pack: PayrollCountryPack,
+  key: string,
+): string {
+  return pack.factorLabels[key] ?? pack.describeFactor?.(key) ?? key;
 }
 
 // ---------------------------------------------------------------------------

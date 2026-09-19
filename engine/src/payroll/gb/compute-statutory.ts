@@ -106,6 +106,17 @@ function gbStarterDeclaration(ctx: Pick<
   return answer === "A" || answer === "B" || answer === "C" ? answer : null;
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are HMRC's own (PAYE, taxable pay) — see
+ * the pack's CWG2 conformance basis.
+ */
+export const GB_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  GB_TAXABLE: "Taxable pay this period",
+  GB_ADDPAY: "Added pay this period (bonus / back pay)",
+  GB_TAX: "PAYE income tax this period",
+};
+
 export async function computeGbStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

@@ -168,6 +168,23 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the Employer's Guide annualized method's own
+ * (Section 17 Steps 1–7) — see the module header.
+ */
+export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  DE_EXEMPT: "Exempt from Delaware withholding",
+  DE_ANNUAL_WAGES: "Delaware annualized wages",
+  DE_STANDARD_DEDUCTION: "Delaware standard deduction",
+  DE_TAXABLE: "Delaware taxable income",
+  DE_ANNUAL_TAX: "Delaware tax (annual)",
+  DE_EXEMPTION_CREDIT: "Delaware exemption credit",
+  DE_AFTER_CREDIT: "Delaware tax after exemption credit",
+  DE_PERIOD_TAX: "Delaware tax this period",
+  DE_WITHHELD: "Delaware tax withheld this period",
+};
+
 export const DE_WITHHOLDING: UsStateWithholdingEngine = {
   state: "DE",
   label: "Delaware income tax",

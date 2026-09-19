@@ -410,6 +410,21 @@ function elapsedPeriodsForPayDate(payDate: string, periodsPerYear: number): numb
   );
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys the IE pass returns. Terms are Revenue's own (PAYE, PRSI, USC,
+ * taxable pay) — see the conformance basis.
+ */
+export const IE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  IE_PAYE: "PAYE income tax",
+  IE_PRSI_EE: "PRSI (employee)",
+  IE_PRSI_ER: "PRSI (employer)",
+  IE_USC: "Universal Social Charge",
+  IE_TAXBASE: "Taxable pay (gross less pension)",
+  IE_SUBCLASS: "PRSI subclass",
+  IE_EDITION: "Edition priced (pre/post 1 October)",
+};
+
 /** Phase 9 — IE pack statutory pass (PAYE + Class A PRSI + standard USC). */
 export async function computeIeStatutory(
   ctx: PayrollStatutoryComputeContext,
@@ -530,4 +545,5 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   withholding: () => IE_WITHHOLDING,
   computeStatutory: computeIeStatutory,
   statutoryEngineLabel: "PAYE",
+  factorLabels: { ...IE_FACTOR_LABELS },
 };

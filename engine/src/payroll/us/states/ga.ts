@@ -267,6 +267,22 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the Employer's Withholding Tax Guide percentage
+ * method's own — see the module header.
+ */
+export const GA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  GA_EDITION: "Georgia edition in force",
+  GA_RATE: "Georgia withholding rate",
+  GA_EXEMPT: "Exempt from Georgia withholding",
+  GA_STANDARD_DEDUCTION: "Georgia standard deduction",
+  GA_ALLOWANCES: "Georgia allowances claimed",
+  GA_ALLOWANCE_VALUE: "Georgia allowance amount",
+  GA_TAXABLE: "Georgia taxable wages",
+  GA_TAX: "Georgia tax",
+};
+
 export const GA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "GA",
   label: "Georgia income tax",

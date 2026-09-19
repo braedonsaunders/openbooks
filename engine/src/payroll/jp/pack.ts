@@ -28,7 +28,7 @@ import type {
   PayrollRegionCoverage,
 } from "../packs.ts";
 import { JP_CERTIFICATES } from "./certificates.ts";
-import { computeJpStatutory } from "./compute-statutory.ts";
+import { computeJpStatutory, JP_FACTOR_LABELS } from "./compute-statutory.ts";
 import { jpPackFilings } from "./filings.ts";
 import { JP_JURISDICTIONS } from "./jurisdictions.ts";
 import { JP_PACK_RATES, JP_TAX_YEARS } from "./rates.ts";
@@ -156,6 +156,7 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
     },
   ],
   computeStatutory: computeJpStatutory,
+  factorLabels: { ...JP_FACTOR_LABELS },
   // The withholding computation lives under the 月額表 statute itself:
   // 所得税法第185条 (the table) under the 源泉徴収 duty of 第183条.
   statutoryEngineLabel: "月額表",

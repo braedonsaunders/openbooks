@@ -59,6 +59,22 @@ import { act32LocalEit } from "./states/pa.ts";
 export class UsWithholdingError extends PayrollError {}
 
 /**
+ * Trace-factor labels for the stub calculation trace, keyed by the
+ * tenant-rate sub-region factor keys this module emits (Ohio municipal and
+ * school-district taxes, Michigan city taxes, PA Act 32 EIT). The codes
+ * inside them are employer-entered jurisdictions, so the labels name the
+ * level, not the place.
+ */
+export const US_LOCAL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  OH_MUNICIPAL: "Ohio municipality (code)",
+  OH_MUNICIPAL_RATE: "Ohio municipal tax rate (employer-entered)",
+  OH_MUNICIPAL_TAX: "Ohio municipal tax",
+  PA_EIT_PSD: "PA Act 32 PSD code",
+  PA_EIT_RATE: "PA local EIT rate (employer-entered)",
+  PA_EIT_TAX: "PA local earned income tax",
+};
+
+/**
  * A sub-region levy whose code differs from the engine's own state code.
  *
  * Small, explicit and in one place. The pack's levy codes are the jurisdiction

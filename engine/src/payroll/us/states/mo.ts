@@ -184,6 +184,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the 2026 percentage formula's own — see the
+ * module header.
+ */
+export const MO_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MO_EXEMPT: "Exempt from Missouri withholding",
+  MO_ANNUAL_WAGES: "Missouri annualized wages",
+  MO_STANDARD_DEDUCTION: "Missouri standard deduction (Step 1)",
+  MO_TAXABLE: "Missouri taxable income",
+  MO_ANNUAL_TAX: "Missouri tax (annual)",
+  MO_WITHHELD: "Missouri tax withheld this period",
+};
+
 export const MO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MO",
   label: "Missouri income tax",

@@ -191,6 +191,29 @@ function computeMi(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above (state, city, and Detroit). Terms are the Form 446 and Form
+ * 5469 guides' own — see the module header.
+ */
+export const MI_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MI_EXEMPT: "Exempt from Michigan withholding",
+  MI_EXEMPTION_PER_PERIOD: "Michigan personal exemption this period",
+  MI_ALLOWANCE: "Michigan allowance",
+  MI_TAXABLE: "Michigan taxable income",
+  MI_TAX: "Michigan tax",
+  MI_CITY_EXEMPTION: "Michigan city exemption",
+  MI_CITY_TAXABLE: "Michigan city taxable income",
+  MI_CITY_TAX: "Michigan city tax",
+  MI_CITY: "Michigan city (code)",
+  MI_CITY_RATE: "Michigan city rate (employer-entered)",
+  DETROIT_BASIS: "Detroit basis (resident or nonresident)",
+  DETROIT_RATE: "Detroit rate applied",
+  DETROIT_EXEMPTION_PER_PERIOD: "Detroit exemption this period",
+  DETROIT_TAXABLE: "Detroit taxable income",
+  DETROIT_TAX: "Detroit tax",
+};
+
 export const MI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MI",
   label: "Michigan income tax",

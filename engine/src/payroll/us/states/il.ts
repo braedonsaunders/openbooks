@@ -187,6 +187,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Step names are the IL-700-T automated payroll method's own —
+ * see the module header.
+ */
+export const IL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  IL_EXEMPT: "Exempt from Illinois withholding",
+  IL_ANNUAL_EXEMPTION: "Illinois annual exemption",
+  IL_PERIOD_EXEMPTION: "Illinois exemption this period",
+  IL_TAXABLE: "Illinois taxable amount",
+  IL_TAX: "Illinois tax",
+  IL_WITHHELD: "Illinois tax withheld this period",
+};
+
 export const IL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IL",
   label: "Illinois income tax",

@@ -171,6 +171,22 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the DFA 2026 formula method's own (Steps 1–6) —
+ * see the module header.
+ */
+export const AR_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  AR_EXEMPT: "Exempt from Arkansas withholding",
+  AR_ANNUAL_WAGES: "Arkansas annualized wages",
+  AR_NET_TAXABLE: "Arkansas net taxable income",
+  AR_MIDRANGE: "Arkansas midrange-table amount",
+  AR_ANNUAL_GROSS_TAX: "Arkansas gross tax (annual)",
+  AR_PERSONAL_CREDITS: "Arkansas personal tax credits",
+  AR_ANNUAL_NET_TAX: "Arkansas net tax (annual)",
+  AR_WITHHELD: "Arkansas tax withheld this period",
+};
+
 export const AR_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AR",
   label: "Arkansas income tax",

@@ -224,6 +224,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the 2026 percentage method's own — see the module
+ * header.
+ */
+export const RI_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  RI_EXEMPT: "Exempt from Rhode Island withholding",
+  RI_WAGES: "Rhode Island wages this period",
+  RI_EXEMPTION: "Rhode Island exemption",
+  RI_TAXABLE: "Rhode Island taxable wages",
+  RI_WITHHELD: "Rhode Island tax withheld this period",
+};
+
 export const RI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "RI",
   label: "Rhode Island income tax",

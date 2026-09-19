@@ -80,6 +80,9 @@ function fixturePack(): PayrollCountryPack {
     withholding: () => ({ country: "GB", regions: [] }),
     computeStatutory: async (): Promise<Record<string, string>> => ({}),
     statutoryEngineLabel: "Fixture",
+    // Like `name` and `employeeIdentifier` above, REQUIRED — a new pack
+    // states its trace labels (here: none) instead of inheriting silence.
+    factorLabels: {},
   };
 }
 

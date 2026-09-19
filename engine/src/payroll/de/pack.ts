@@ -13,7 +13,7 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { PayrollPackError } from "../payroll-error.ts";
-import { computeDeStatutory } from "./compute-statutory.ts";
+import { computeDeStatutory, DE_FACTOR_LABELS } from "./compute-statutory.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -470,4 +470,5 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   ],
   computeStatutory: computeDeStatutory,
   statutoryEngineLabel: "Programmablaufplan (EStG §39b)",
+  factorLabels: { ...DE_FACTOR_LABELS },
 };

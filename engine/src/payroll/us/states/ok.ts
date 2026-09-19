@@ -214,6 +214,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the OW-2 percentage formula's own — see the module
+ * header.
+ */
+export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  OK_EXEMPT: "Exempt from Oklahoma withholding",
+  OK_WAGES: "Oklahoma wages this period",
+  OK_ALLOWANCE: "Oklahoma allowance",
+  OK_TAXABLE: "Oklahoma taxable wages",
+  OK_UNROUNDED: "Oklahoma tax before rounding",
+  OK_WITHHELD: "Oklahoma tax withheld this period",
+};
+
 export const OK_WITHHOLDING: UsStateWithholdingEngine = {
   state: "OK",
   label: "Oklahoma income tax",

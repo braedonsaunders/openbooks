@@ -43,6 +43,20 @@ function dec(value: string, what: string): bigint {
   }
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. Terms are the AEAT ALGORITMO's own (tipo,
+ * importe, Seguridad Social shares) — see the module's transcribed basis.
+ */
+export const ES_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  ES_TIPO_IRPF: "Tipo IRPF aplicado",
+  ES_IMPORTE_ANUAL: "Importe anual IRPF",
+  ES_IRPF_MES: "IRPF del mes",
+  ES_SS_EE: "Seguridad Social (trabajador)",
+  ES_SS_ER: "Seguridad Social (empresa)",
+  ES_EDITION: "Edition priced",
+};
+
 export async function computeEsStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {

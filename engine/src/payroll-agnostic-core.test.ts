@@ -150,6 +150,9 @@ const FREEDONIA: PayrollCountryPack = {
     throw new PayrollPackError("Freedonia statutory compute is not implemented");
   },
   statutoryEngineLabel: "PAYG tables",
+  // A new pack cannot forget the trace labels either: they are REQUIRED on
+  // PayrollCountryPack, so this fixture states its (empty) answer.
+  factorLabels: {},
   statutorySlots: [
     {
       key: "payg",

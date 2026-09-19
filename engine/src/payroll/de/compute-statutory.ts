@@ -52,6 +52,27 @@ import { DE_2026_CEILINGS, DE_2026_RATES, DE_PACK_RATES } from "./rates.ts";
 
 export class DePayrollRefusal extends PayrollPackError {}
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys this pass returns. LST/SOLI/KIST/BK are the PAP's own outputs and
+ * KV/RV/AV/PV the four SV branches, employee (_W) and employer (_ER)
+ * halves — see the module header.
+ */
+export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  LST: "Lohnsteuer",
+  SOLI: "Solidaritätszuschlag",
+  KIST: "Kirchenlohnsteuer",
+  BK: "Bemessungsgrundlage Kirchenlohnsteuer (EStG §51a)",
+  KV_W: "Krankenversicherung (Arbeitnehmer)",
+  KV_ER: "Krankenversicherung (Arbeitgeber)",
+  RV_W: "Rentenversicherung (Arbeitnehmer)",
+  RV_ER: "Rentenversicherung (Arbeitgeber)",
+  AV_W: "Arbeitslosenversicherung (Arbeitnehmer)",
+  AV_ER: "Arbeitslosenversicherung (Arbeitgeber)",
+  PV_W: "Pflegeversicherung (Arbeitnehmer)",
+  PV_ER: "Pflegeversicherung (Arbeitgeber)",
+};
+
 const STKL_BY_ROMAN: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
   I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
 };

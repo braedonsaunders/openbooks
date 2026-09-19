@@ -601,6 +601,30 @@ function periodNameFor(periodsPerYear: number): MdPeriod | null {
   }
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the factor
+ * keys above. Terms are the 2026 Employer Withholding Guide percentage
+ * method's own — see the module header.
+ */
+export const MD_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  MD_EXEMPT: "Exempt from Maryland withholding",
+  MD_PA_LOCAL_EXEMPT: "Maryland local-only withholding (PA resident)",
+  MD_SCHEDULE: "Maryland schedule (filing status)",
+  MD_ANNUAL_WAGES: "Maryland annualized wages",
+  MD_BELOW_MINIMUM: "Below Maryland minimum (additional only)",
+  MD_ANNUAL_EXEMPTION: "Maryland annual exemption",
+  MD_TAXABLE: "Maryland taxable income",
+  MD_COUNTY: "Maryland county of employment (code)",
+  MD_PA_STATE_EXEMPT: "Exempt from Maryland state portion (PA line 5)",
+  MD_LOCAL_TABLE: "Maryland local table applied",
+  MD_STATE_TAX: "Maryland state tax (annual)",
+  MD_LOCAL_TAX: "Maryland local tax (annual)",
+  MD_BAND_OVER: "Maryland bracket excess",
+  MD_COMBINED_RATE: "Maryland combined state+local rate",
+  MD_ANNUAL_TAX: "Maryland tax (annual)",
+  MD_WITHHELD: "Maryland tax withheld this period",
+};
+
 export const MD_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MD",
   label: "Maryland income tax",

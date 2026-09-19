@@ -162,6 +162,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+/**
+ * Trace-factor labels for the stub calculation trace, keyed by the trace
+ * keys above. Terms are the Booklet A annualized method's own — see the
+ * module header.
+ */
+export const HI_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  HI_EXEMPT: "Exempt from Hawaii withholding",
+  HI_ANNUAL_WAGES: "Hawaii annualized wages",
+  HI_ALLOWANCES: "Hawaii personal allowances",
+  HI_LUMP_SUM: "Hawaii lump-sum allowance",
+  HI_TAXABLE: "Hawaii taxable income",
+  HI_ANNUAL_TAX: "Hawaii tax (annual)",
+  HI_WITHHELD: "Hawaii tax withheld this period",
+};
+
 export const HI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "HI",
   label: "Hawaii income tax",
