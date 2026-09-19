@@ -44,6 +44,14 @@ test('units, database shards and simulation run independently without omitted te
   // shards rather than been packed badly.
   assert.match(unit, /shard: \[1, 2, 3, 4, 5\]/)
   assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/5/)
+  // THIRD place the shard count lives: the receipt check in the integration
+  // job counts evidence directories. Widening the matrix to 5 without this
+  // left it expecting 4 and the run failed on "Verify every test file ran
+  // exactly once" — after the two assertions above were already green, so
+  // the guard reported the change complete when it was two-thirds done.
+  // Pinned here so all three move together or none do.
+  assert.match(namedStep('Verify every test file ran exactly once'), /\['unit',\s*5,/)
+  assert.match(namedStep('Verify every test file ran exactly once'), /\['integration',\s*16,/)
   assert.match(integration, /npm run test:integration/)
   assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
   assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]/)
