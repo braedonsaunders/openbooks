@@ -73,9 +73,16 @@ test('profile POST refuses money and percent fields wider than their columns', {
   const { org, employeeId, scheduleId } = await fixture()
   try {
     const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
+    // Each refusal names WHICH of the three causes fired and what was
+    // supplied. One message covering all three is what made a pasted
+    // twenty-digit figure undiagnosable, so assert the cause, not the field.
     for (const [label, patch, message] of [
-      ['claim amount', { federalClaimAmount: '99999999999999999999' }, /invalid federalClaimAmount/],
-      ['vacation percent', { vacationPercent: '1234' }, /invalid vacationPercent/],
+      ['claim amount too wide', { federalClaimAmount: '99999999999999999999' }, /federalClaimAmount is limited to 15 digits before the decimal point — got 20/],
+      ['claim amount not a number', { federalClaimAmount: 'abc' }, /federalClaimAmount must be an amount — "abc" is not a number/],
+      ['claim amount negative', { federalClaimAmount: '-1' }, /federalClaimAmount cannot be negative — got -1/],
+      ['vacation percent too wide', { vacationPercent: '1234' }, /vacationPercent is limited to 3 digits before the decimal point — got 4/],
+      ['vacation percent not a number', { vacationPercent: 'abc' }, /vacationPercent must be a percentage — "abc" is not a number/],
+      ['vacation percent negative', { vacationPercent: '-1' }, /vacationPercent cannot be negative — got -1/],
     ] as const) {
       const response = await post({ ...base, ...patch })
       assert.equal(response.status, 422, `${label}: ${await response.clone().text()}`)
