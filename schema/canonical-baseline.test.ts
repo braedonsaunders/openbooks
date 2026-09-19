@@ -369,6 +369,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0181_payroll_holiday_eligibility.sql",
     "0182_pay_run_calculation_errors.sql",
     "0183_payroll_statutory_rate_history.sql",
+    "0184_hrm_employment_foundation.sql",
+    "0185_hrm_employment_change_requests.sql",
     "0187_pay_component_treatment_shape.sql",
   ]);
   assert.deepEqual(
