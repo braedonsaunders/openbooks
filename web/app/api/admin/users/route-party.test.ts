@@ -77,6 +77,9 @@ function sqlText(query: unknown): string {
       const value = (chunk as { value?: unknown[] })?.value
       if (Array.isArray(value)) return value.map(String).join('')
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
+      // A bound null (the unlink case) must render as the literal the fake
+      // database keys on; an empty string silently turned unlink into a 409.
+      if (chunk === null) return 'null'
       return ''
     })
     .join('')
