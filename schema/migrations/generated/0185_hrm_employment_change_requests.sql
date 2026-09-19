@@ -50,10 +50,11 @@
 -- subject_id = this request id. Submitted rows always carry their run
 -- (retained through approved/applied/rejected/withdrawn); drafts never do.
 --
--- Actor UUIDs are evidence, not scope. submitted_by / applied_by reference
--- users(id) ON DELETE SET NULL with NO same-org assertion: the identity
--- subsystem may resolve home-org users, and storage must not assert a
--- cross-org sandbox mechanism it has not checked. applied_by never
+-- Actor UUIDs are frozen evidence, not scope. submitted_by / applied_by /
+-- created_by / updated_by reference users(id) ON DELETE RESTRICT with NO
+-- same-org assertion: the identity subsystem may resolve home-org users,
+-- and storage must not assert a cross-org sandbox mechanism it has not
+-- checked — but it must not null history away either. applied_by never
 -- authenticates — application auth belongs to the service.
 --
 -- Every CHECK below is written null-safe: a comparison involving a nullable
@@ -209,6 +210,43 @@ BEGIN
 END
 $$;
 
+-- Status-dependent presence: a bare flip to pending_approval (or any later
+-- state) with the submission stamps or the run missing is refused. Drafts
+-- and withdrawn rows are unrestricted here — drafts are governed by the
+-- submitted_not_draft CHECK, and withdrawn rows may or may not carry a
+-- submission. Every side below is a non-null boolean: no UNKNOWN loophole.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'hrm_employment_change_requests_submission_presence'
+  ) THEN
+    ALTER TABLE ONLY public.hrm_employment_change_requests
+      ADD CONSTRAINT hrm_employment_change_requests_submission_presence
+      CHECK (
+        status NOT IN ('pending_approval', 'approved', 'rejected', 'applied')
+        OR submitted_at IS NOT NULL
+      );
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'hrm_employment_change_requests_run_presence'
+  ) THEN
+    ALTER TABLE ONLY public.hrm_employment_change_requests
+      ADD CONSTRAINT hrm_employment_change_requests_run_presence
+      CHECK (
+        status NOT IN ('pending_approval', 'approved', 'rejected', 'applied')
+        OR flow_run_id IS NOT NULL
+      );
+  END IF;
+END
+$$;
+
 -- A submission carries a real reason; drafts may not have one yet.
 DO $$
 BEGIN
@@ -239,10 +277,17 @@ BEGIN
 END
 $$;
 
--- Snapshot binding: the snapshot's bound keys MUST equal the row, with an
--- explicit presence conjunct per key — a missing key yields NULL, and a
--- bare `->> = column` comparison would pass on UNKNOWN. flow_run_id is the
--- nullable participant, so it gets its own IS NOT NULL conjunct.
+-- Snapshot binding: the snapshot's bound keys MUST equal the row under an
+-- explicitly TRUE test — never UNKNOWN. Two loopholes are closed here:
+-- (1) a MISSING key yields NULL, so every key gets a `?` presence conjunct
+-- (`?` is two-valued on a non-null snapshot); (2) a PRESENT JSON null also
+-- yields NULL from `->>`, so every extraction is type-pinned with
+-- jsonb_typeof first (a JSON null is typeof 'null', never 'string' /
+-- 'number' / 'array') and the equality then compares two non-null values.
+-- The revision binds as TEXT (no cast: a malformed value must evaluate
+-- FALSE, not abort the statement, and '1'::text equality is exact).
+-- flow_run_id is the nullable row participant, so it gets its own
+-- IS NOT NULL conjunct before the equality.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -258,12 +303,16 @@ BEGIN
           AND (decision_snapshot ? 'gates')
           AND jsonb_typeof(decision_snapshot -> 'gates') = 'array'
           AND (decision_snapshot ? 'payload_digest')
+          AND jsonb_typeof(decision_snapshot -> 'payload_digest') = 'string'
           AND (decision_snapshot ->> 'payload_digest') = payload_digest
           AND (decision_snapshot ? 'payload_schema_version')
+          AND jsonb_typeof(decision_snapshot -> 'payload_schema_version') = 'string'
           AND (decision_snapshot ->> 'payload_schema_version') = payload_schema_version
           AND (decision_snapshot ? 'expected_employment_revision')
-          AND (decision_snapshot ->> 'expected_employment_revision')::integer = expected_employment_revision
+          AND jsonb_typeof(decision_snapshot -> 'expected_employment_revision') = 'number'
+          AND (decision_snapshot ->> 'expected_employment_revision') = expected_employment_revision::text
           AND (decision_snapshot ? 'flow_run_id')
+          AND jsonb_typeof(decision_snapshot -> 'flow_run_id') = 'string'
           AND flow_run_id IS NOT NULL
           AND (decision_snapshot ->> 'flow_run_id') = flow_run_id::text
         )
@@ -340,8 +389,9 @@ END
 $$;
 
 -- Application-evidence link to the immutable canonical change. RESTRICT so
--- an applied request can never lose its canonical counterpart. Org match
--- is verified by the guard trigger.
+-- an applied request can never lose its canonical counterpart. The guard
+-- trigger proves the triple on approved -> applied: same org, same
+-- employment, and the exact canonical revision stamped as applied.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -357,7 +407,11 @@ BEGIN
 END
 $$;
 
--- Actor UUIDs are evidence with no same-org assertion (home-org users).
+-- Actor UUIDs are frozen evidence with no same-org assertion (home-org
+-- users) — and therefore RESTRICT, never SET NULL: nulling a submitter or
+-- applier on user delete would silently rewrite submitted/applied history
+-- and break the submission/application pairing CHECKs. A user with request
+-- history cannot be deleted while the history names them.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -367,7 +421,7 @@ BEGIN
     ALTER TABLE ONLY public.hrm_employment_change_requests
       ADD CONSTRAINT hrm_employment_change_requests_submitted_by_fkey
       FOREIGN KEY (submitted_by) REFERENCES public.users(id)
-      ON DELETE SET NULL DEFERRABLE;
+      ON DELETE RESTRICT DEFERRABLE;
   END IF;
 END
 $$;
@@ -381,7 +435,7 @@ BEGIN
     ALTER TABLE ONLY public.hrm_employment_change_requests
       ADD CONSTRAINT hrm_employment_change_requests_applied_by_fkey
       FOREIGN KEY (applied_by) REFERENCES public.users(id)
-      ON DELETE SET NULL DEFERRABLE;
+      ON DELETE RESTRICT DEFERRABLE;
   END IF;
 END
 $$;
@@ -395,7 +449,7 @@ BEGIN
     ALTER TABLE ONLY public.hrm_employment_change_requests
       ADD CONSTRAINT hrm_employment_change_requests_created_by_fkey
       FOREIGN KEY (created_by) REFERENCES public.users(id)
-      ON DELETE SET NULL DEFERRABLE;
+      ON DELETE RESTRICT DEFERRABLE;
   END IF;
 END
 $$;
@@ -409,7 +463,7 @@ BEGIN
     ALTER TABLE ONLY public.hrm_employment_change_requests
       ADD CONSTRAINT hrm_employment_change_requests_updated_by_fkey
       FOREIGN KEY (updated_by) REFERENCES public.users(id)
-      ON DELETE SET NULL DEFERRABLE;
+      ON DELETE RESTRICT DEFERRABLE;
   END IF;
 END
 $$;
@@ -432,6 +486,8 @@ DECLARE
   run_kind text;
   run_subject uuid;
   change_org uuid;
+  change_employment uuid;
+  change_revision integer;
 BEGIN
   -- Canonical digest over the exact bytes of the jsonb normalized text
   -- form. Storage computes; callers never supply a trusted digest.
@@ -469,12 +525,16 @@ BEGIN
   END IF;
 
   -- Identity and creator are frozen from insert, even in draft: a proposal
-  -- about another employment is a new request, not an edit.
-  IF NEW.org_id IS DISTINCT FROM OLD.org_id
+  -- about another employment is a new request, not an edit. The row id and
+  -- creation timestamp are frozen with them — history must not be re-keyed
+  -- or re-dated.
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.org_id IS DISTINCT FROM OLD.org_id
      OR NEW.employment_id IS DISTINCT FROM OLD.employment_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
      OR NEW.created_by IS DISTINCT FROM OLD.created_by THEN
     RAISE EXCEPTION
-      'HRM change request identity (org, employment, creator) is immutable — file a new request instead.';
+      'HRM change request identity (id, org, employment, created_at, creator) is immutable — file a new request instead.';
   END IF;
 
   -- Payload/digest/schema-version/expected-revision live only in draft.
@@ -534,7 +594,20 @@ BEGIN
     END IF;
   END IF;
 
-  -- Submission stamps are set once, on submit, and never re-pointed.
+  -- Submission stamps are set once, on submit, and never re-pointed. A
+  -- bare flip to pending_approval without them is refused here with a
+  -- named remedy (the presence CHECKs backstop the same rule).
+  IF OLD.status = 'draft' AND NEW.status = 'pending_approval' THEN
+    IF NEW.submitted_at IS NULL OR NEW.submitted_by IS NULL
+       OR NEW.flow_run_id IS NULL THEN
+      RAISE EXCEPTION
+        'HRM change request submit stamps submission actor/time and the native flow run atomically — set submitted_by, submitted_at, and flow_run_id in the same update instead.';
+    END IF;
+    IF NEW.reason IS NULL OR length(btrim(NEW.reason)) = 0 THEN
+      RAISE EXCEPTION
+        'HRM change request submit carries a non-blank reason — record why the change is proposed instead.';
+    END IF;
+  END IF;
   IF OLD.submitted_at IS NULL AND NEW.submitted_at IS NOT NULL THEN
     IF OLD.status <> 'draft' OR NEW.status <> 'pending_approval' THEN
       RAISE EXCEPTION
@@ -605,7 +678,8 @@ BEGIN
     END IF;
   END IF;
   IF NEW.status = 'applied' AND OLD.status = 'approved' THEN
-    SELECT org_id INTO change_org
+    SELECT org_id, employment_id, revision
+      INTO change_org, change_employment, change_revision
       FROM public.employment_changes WHERE id = NEW.applied_employment_change_id;
     IF NOT FOUND THEN
       RAISE EXCEPTION
@@ -614,6 +688,14 @@ BEGIN
     IF change_org IS DISTINCT FROM NEW.org_id THEN
       RAISE EXCEPTION
         'HRM change request applied change % belongs to another organization — apply against a change in this organization instead.', NEW.applied_employment_change_id;
+    END IF;
+    IF change_employment IS DISTINCT FROM NEW.employment_id THEN
+      RAISE EXCEPTION
+        'HRM change request applied change % is recorded against another employment — apply against the canonical change for this employment instead.', NEW.applied_employment_change_id;
+    END IF;
+    IF change_revision IS DISTINCT FROM NEW.applied_employment_revision THEN
+      RAISE EXCEPTION
+        'HRM change request applied change % carries revision %, not the applied revision % — stamp the exact canonical revision the approval produced instead.', NEW.applied_employment_change_id, change_revision, NEW.applied_employment_revision;
     END IF;
   END IF;
   IF (OLD.status = 'applied')
@@ -645,7 +727,7 @@ AS $func$
 BEGIN
   IF OLD.submitted_at IS NOT NULL THEN
     RAISE EXCEPTION
-      'HRM change request % was submitted and is retained as history — withdraw it instead of deleting it.', OLD.id;
+      'HRM change request % was submitted and is retained as history — terminal rows (approved, rejected, applied) cannot be withdrawn; file a new request for a revised proposal instead of deleting it.', OLD.id;
   END IF;
   RETURN OLD;
 END;
