@@ -12,6 +12,7 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../lib/compliance'
 import { loadParty } from '../../../api/parties/_lib'
+import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
@@ -98,6 +99,10 @@ export async function loadEntityRole(
   const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
   const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
   const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
+  // The Employment tab's double gate: the HRM feature switch plus the
+  // employment read grant. The drawer shows the tab only when both hold.
+  const hrmEnabled = await isFeatureEnabled(authz.user.orgId, 'hrm')
+  const canReadHrm = hrmEnabled && can(authz, 'hrm.employment.read')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
   const canReadCrmAccounts = crmEnabled && can(authz, 'crm.accounts.read')
@@ -130,7 +135,7 @@ export async function loadEntityRole(
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
-    || requestedPartyTab === 'payroll' || requestedPartyTab === 'compliance'
+    || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
     || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship'
     || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
     ? requestedPartyTab
@@ -208,6 +213,20 @@ export async function loadEntityRole(
             : null,
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
           canManageActivities: crmEnabled && can(authz, 'crm.activities.manage'),
+          // The party's scoped employments for the Employment tab (null =
+          // gated, so the tab never renders without the read surface behind
+          // it). Employee drawers only: other roles never resolve HRM.
+          hrm: canReadHrm && role === 'employee' && partyId && isUuid(partyId)
+            ? {
+                employmentIds: [
+                  ...(await findEmploymentsByParty({
+                    orgId,
+                    actorId: authz.user.id,
+                    workerPartyId: partyId,
+                  })),
+                ],
+              }
+            : null,
           canReadCrmAccounts,
           canManageCrmAccounts,
           lifecycleStage: openLifecycleStage,

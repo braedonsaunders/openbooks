@@ -107,6 +107,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
     'app/api/banking/sftp',
   ],
   crm: ['app/api/crm', 'app/api/parties/[id]/activities'],
+  hrm: ['app/api/hrm'],
   subcontractorCompliance: ['app/api/compliance'],
   scripts: ['app/api/scripts'],
   onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers', 'app/api/pay'],

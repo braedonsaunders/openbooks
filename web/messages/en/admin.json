@@ -4174,6 +4174,10 @@
       "title": "Payroll",
       "description": "Pay runs, pay schedules, employee profiles, statutory withholding country packs, and remittance liabilities. Canada (CRA T4127) and the United States (49 supported states: 40 taxing engines + 9 no-tax; DC and NM refused pending official goldens)."
     },
+    "hrm": {
+      "title": "Human resources",
+      "description": "Employment records with as-of history, headcount, and change-request tracking. Reads the HRM foundation; it never drives payroll."
+    },
     "projectScheduling": {
       "title": "Project Scheduling",
       "description": "Gantt charts, critical path, and resource leveling for project schedules."

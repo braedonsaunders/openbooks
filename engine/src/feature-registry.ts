@@ -62,6 +62,12 @@ export const FEATURES: FeatureDef[] = [
   // a deliberate adoption decision (TD1/W-4 profiles, control accounts,
   // schedules must be configured).
   { key: 'payroll', defaultEnabled: false, category: 'operations', navModules: ['payroll'], recommends: ['timeTracking'] },
+  // Human resources — the native employment record read surface (as-of
+  // employment, headcount, change-request tracking). Off by default:
+  // enabling HRM is a deliberate adoption decision (employment records must
+  // exist before the cockpit says anything true). Stands alone: it reads
+  // the HRM foundation but never drives payroll.
+  { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,

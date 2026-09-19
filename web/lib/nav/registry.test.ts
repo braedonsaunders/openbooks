@@ -59,6 +59,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'inventory',
     'equipment',
     'employees',
+    'hrm',
   ])
   assert.deepEqual(
     DEFAULT_NAV_ORDER.accounting.slice(2, 5),
