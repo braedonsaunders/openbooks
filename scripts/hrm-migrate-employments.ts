@@ -23,14 +23,15 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { pool } from "../engine/src/db.ts";
+import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
 import {
   EmploymentMigrationError,
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,
   migrationExitCode,
   type EmploymentMigrationReport,
-  type SourcePersonRow,
 } from "../engine/src/hrm/migration-execute.ts";
+import type { SourcePersonRow } from "../engine/src/hrm/migration-preflight.ts";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,13 +70,24 @@ function isSourcePersonRow(value: unknown): value is SourcePersonRow {
   );
 }
 
-async function main(): Promise<number> {
-  const args = process.argv.slice(2);
+export interface HrmMigrationCliOptions {
+  readonly argv: readonly string[];
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Testable entrypoint: the same flow the script runs, with injectable
+ * arguments and environment. Importing this module never runs it and never
+ * closes the shared pool — only the isEntrypoint block below does that.
+ */
+export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promise<number> {
+  const args = options.argv;
+  const env = options.env ?? process.env;
   if (args.includes("--help") || args.includes("-h")) {
     console.log(usage());
     return 0;
   }
-  if (!process.env.OPENBOOKS_DB_URL?.trim()) {
+  if (!env.OPENBOOKS_DB_URL?.trim()) {
     return fail(
       "OPENBOOKS_DB_URL is not set; refusing to run without an explicit database. " +
         "Export OPENBOOKS_DB_URL (and OPENBOOKS_RUNTIME_DB_URL) for the target database first.",
@@ -146,22 +158,14 @@ async function main(): Promise<number> {
     return migrationExitCode(planned);
   }
 
-  if (process.env.NODE_ENV === "production") {
-    if (!allowProduction || dryRunHash === null) {
-      return fail(
-        "refusing production apply without --allow-production AND --dry-run-hash=<sha256>; " +
-          "review the dry-run report first, then re-run with its hash. " +
-          `This run's dry-run report hash is ${planned.reportHash}.`,
-      );
-    }
-    if (dryRunHash !== planned.reportHash) {
-      return fail(
-        "refusing production apply: --dry-run-hash does not match this run's evaluated " +
-          `report (expected ${planned.reportHash}); the inputs changed since review — ` +
-          "re-review the dry run and re-supply its hash. Nothing was written.",
-      );
-    }
-  }
+  const gate = decideProductionApply({
+    nodeEnv: env.NODE_ENV,
+    apply,
+    allowProduction,
+    dryRunHash,
+    computedHash: planned.reportHash,
+  });
+  if (!gate.proceed) return fail(gate.reason);
 
   try {
     const applied = await executeEmploymentMigration({ orgId, rows, allowPartial });
@@ -193,7 +197,7 @@ function isEntrypoint(): boolean {
 if (isEntrypoint()) {
   void (async () => {
     try {
-      process.exitCode = await main();
+      process.exitCode = await runHrmMigrationCli({ argv: process.argv.slice(2) });
     } catch (error) {
       if (error instanceof EmploymentMigrationError) {
         console.error(`hrm-migrate-employments: ${error.message}`);
