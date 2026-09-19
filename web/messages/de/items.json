@@ -22,6 +22,7 @@
     "recoveryAccount": "Kostenverrechnungskonto",
     "incomeAccount": "Ertragskonto",
     "expenseAccount": "Aufwandskonto",
+    "payrollCostingAccount": "Lohnkostenkonto",
     "taxCode": "Steuerschlüssel"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "Std",
     "noIncomeAccount": "Kein Ertragskonto",
     "noExpenseAccount": "Kein Aufwandskonto",
+    "noPayrollCostingAccount": "Kein Lohnkostenkonto",
     "noRecoveryAccount": "Kein Verrechnungskonto",
     "selectAccount": "Konto auswählen…",
     "showOnTimesheet": "Auf Stundenzettel anzeigen"

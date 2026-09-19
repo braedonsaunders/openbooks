@@ -22,6 +22,7 @@
     "recoveryAccount": "Cost recovery account",
     "incomeAccount": "Income account",
     "expenseAccount": "Expense account",
+    "payrollCostingAccount": "Payroll costing account",
     "taxCode": "Tax code"
   },
   "kinds": {
@@ -55,6 +56,7 @@
     "unitPlaceholder": "hr",
     "noIncomeAccount": "No income account",
     "noExpenseAccount": "No expense account",
+    "noPayrollCostingAccount": "No payroll costing account",
     "noRecoveryAccount": "No recovery account",
     "selectAccount": "Select account…",
     "showOnTimesheet": "Show on timesheet"

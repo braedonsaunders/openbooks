@@ -27,6 +27,21 @@ const ITEM_KINDS = [
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
+/**
+ * Account types a service item may point its payroll costing at. Expense and
+ * COGS cover the ordinary cases (including shipped charts that carry direct
+ * labour as cogs); asset_current_other covers capitalised labour — every
+ * shipped inventory/WIP account carries exactly that type. Liability, equity,
+ * income, bank, receivable and fixed-asset accounts are never valid.
+ */
+const PAYROLL_COSTING_ACCOUNT_TYPES = new Set([
+  'expense',
+  'expense_other',
+  'expense_deferred',
+  'cogs',
+  'asset_current_other',
+])
+
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
 }
@@ -68,6 +83,7 @@ const itemPatchSchema = z.looseObject({
   defaultCost: nullableMoney,
   incomeAccountId: nullableText,
   expenseAccountId: nullableText,
+  payrollExpenseAccountId: nullableText,
   costRecoveryAccountId: nullableText,
   taxCodeId: nullableText,
   showOnTimesheet: z.boolean().optional(),
@@ -114,6 +130,7 @@ const ITEM_ACCOUNTING_CONFIGURATION_FIELDS = [
   'default_cost',
   'income_account_id',
   'expense_account_id',
+  'payroll_expense_account_id',
   'cost_recovery_account_id',
   'tax_code_id',
   'show_on_timesheet',
@@ -217,6 +234,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const v = uuidOrNull(body.expenseAccountId)
     if (v === 'invalid') return bad('Invalid expense account')
     expenseAccountId = v
+  }
+
+  let payrollExpenseAccountId: string | null | undefined
+  if (body.payrollExpenseAccountId !== undefined) {
+    const v = uuidOrNull(body.payrollExpenseAccountId)
+    if (v === 'invalid') return bad('Invalid payroll costing account')
+    payrollExpenseAccountId = v
   }
 
   let costRecoveryAccountId: string | null | undefined
@@ -355,8 +379,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         `)
         if (!found.rows[0]) throw new PatchInvalid(error)
       }
+      // Where worked hours may land. Expense and COGS cover the ordinary
+      // cases; asset_current_other covers capitalised labour — every shipped
+      // inventory/WIP account (manufacturing 1210 Work in Process included)
+      // carries exactly that type, and produced inventory must be costed
+      // there, not expensed. Liability, equity, income, bank, receivable and
+      // fixed-asset accounts can never be the debit for worked hours.
+      const assertPayrollCostingAccountType = async (
+        value: string | null | undefined,
+      ): Promise<void> => {
+        if (value === undefined || value === null) return
+        const acct = await db.execute<{ type: string; isActive: boolean; isSummary: boolean }>(sql`
+          select type, is_active as "isActive", is_summary as "isSummary"
+            from accounts where id = ${value} and org_id = ${user.orgId}
+        `)
+        const row = acct.rows[0]
+        if (!row) throw new PatchInvalid('Payroll costing account not found')
+        if (!row.isActive) throw new PatchInvalid('Payroll costing account is inactive')
+        if (row.isSummary) throw new PatchInvalid('Summary accounts cannot receive worked-hours cost')
+        if (!PAYROLL_COSTING_ACCOUNT_TYPES.has(row.type)) {
+          throw new PatchInvalid(`Payroll costing account type ${row.type} cannot receive worked-hours cost`)
+        }
+      }
       await assertReference('accounts', incomeAccountId, 'Income account not found')
       await assertReference('accounts', expenseAccountId, 'Expense account not found')
+      await assertReference('accounts', payrollExpenseAccountId, 'Payroll costing account not found')
+      await assertPayrollCostingAccountType(payrollExpenseAccountId)
       await assertReference('accounts', costRecoveryAccountId, 'Recovery account not found')
       await assertReference('tax_codes', taxCodeId, 'Tax code not found')
       await assertReference('recognition_rules', recognitionRuleId, 'Recognition rule not found')
@@ -374,6 +422,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           default_cost = ${defaultCost !== undefined ? defaultCost : sql`default_cost`},
           income_account_id = ${incomeAccountId !== undefined ? incomeAccountId : sql`income_account_id`},
           expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`expense_account_id`},
+          payroll_expense_account_id = ${payrollExpenseAccountId !== undefined ? payrollExpenseAccountId : sql`payroll_expense_account_id`},
           cost_recovery_account_id = ${costRecoveryAccountId !== undefined ? costRecoveryAccountId : sql`cost_recovery_account_id`},
           tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
           show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},

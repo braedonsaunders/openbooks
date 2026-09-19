@@ -106,8 +106,8 @@ export async function loadItems(
     itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId) : null,
     itemId
       ? Promise.all([
-          db.execute<{ id: string; number: string | null; name: string }>(
-            sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
+          db.execute<{ id: string; number: string | null; name: string; type: string }>(
+            sql`select id, number, name, type from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
           ),
           db.execute<{ id: string; code: string; name: string }>(
             sql`select id, code, name from tax_codes where org_id = ${orgId} and is_active order by code`,

@@ -524,7 +524,19 @@ export const payStubLines = pgTable(
     projectId: uuid("project_id"),
     departmentId: uuid("department_id"),
     timeTypeId: uuid("time_type_id"),
+    /** Service item the hours on this line were worked on, carried from the
+     * time entry like project_id/time_type_id. Null for lines with no
+     * operational item (salary, bonus, per diem). */
+    itemId: uuid("item_id"),
     sequence: integer("sequence").notNull().default(100),
+    /** Snapshot at calculate: the account this earning line was costed to.
+     * Posting debits this, never the component's or item's current setup.
+     * Resolution is item > component > org default; see migration 0180. */
+    expenseAccountId: uuid("expense_account_id"),
+    expenseAccountSource: text("expense_account_source", {
+      enum: ["unknown", "item", "component", "org_default"],
+    }).notNull().default("unknown"),
+    expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
     /** Snapshot at commit: the account this line was credited to. Remittances
      * debit this, never the component's current setup. */
     liabilityAccountId: uuid("liability_account_id"),
@@ -551,6 +563,21 @@ export const payStubLines = pgTable(
         and coalesce(jsonb_typeof(${t.liabilityAccountEvidence}->'reference') = 'string',false)
         and length(trim(${t.liabilityAccountEvidence}->>'reason')) > 0
         and length(trim(${t.liabilityAccountEvidence}->>'reference')) > 0)
+    `),
+    foreignKey({ name: "pay_stub_lines_expense_account_tenant_fkey",
+      columns: [t.orgId, t.expenseAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    index("pay_stub_lines_expense_account").on(t.orgId, t.expenseAccountId),
+    index("pay_stub_lines_item").on(t.orgId, t.itemId),
+    check("pay_stub_lines_expense_account_evidence", sql`
+      (${t.expenseAccountSource} = 'unknown' and ${t.expenseAccountId} is null and ${t.expenseAccountEvidence} is null) or
+      (${t.expenseAccountSource} in ('item', 'component', 'org_default') and ${t.expenseAccountId} is not null and ${t.expenseAccountEvidence} is not null
+        and jsonb_typeof(${t.expenseAccountEvidence}) = 'object'
+        and coalesce(jsonb_typeof(${t.expenseAccountEvidence}->'reason') = 'string',false)
+        and coalesce(jsonb_typeof(${t.expenseAccountEvidence}->'reference') = 'string',false)
+        and length(trim(${t.expenseAccountEvidence}->>'reason')) > 0
+        and length(trim(${t.expenseAccountEvidence}->>'reference')) > 0)
     `),
   ],
 );

@@ -1329,6 +1329,7 @@ export async function payRunCalculationSource(
                   and line.time_type_id is not distinct from te.time_type_id
                   and line.project_id is not distinct from te.project_id
                   and line.department_id is not distinct from te.department_id
+                  and line.item_id is not distinct from te.item_id
              ) as claimable
         from run_scope r
         join stub_employees employee on true
@@ -1500,6 +1501,13 @@ export interface CapturedStubLine {
   projectId: string | null;
   departmentId: string | null;
   timeTypeId: string | null;
+  itemId: string | null;
+  /** Expense stamp resolved at calculate (migration 0180); nulls when the
+   * line carries no stamp and posts through the component-then-default
+   * fallback. This is what the operator saw on screen at calculate. */
+  expenseAccountId: string | null;
+  expenseAccountSource: string;
+  expenseAccountEvidence: { reason: string; reference: string } | null;
   sequence: number;
 }
 
@@ -1545,7 +1553,8 @@ export async function captureCalculatedStubs(
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
            l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount,
-           l.project_id, l.department_id, l.time_type_id, l.sequence
+           l.project_id, l.department_id, l.time_type_id, l.item_id,
+           l.expense_account_id, l.expense_account_source, l.expense_account_evidence, l.sequence
       from pay_stubs s
       left join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
       left join pay_components c on c.id = l.component_id and c.org_id = s.org_id
@@ -1583,6 +1592,11 @@ export async function captureCalculatedStubs(
       projectId: row.project_id == null ? null : String(row.project_id),
       departmentId: row.department_id == null ? null : String(row.department_id),
       timeTypeId: row.time_type_id == null ? null : String(row.time_type_id),
+      itemId: row.item_id == null ? null : String(row.item_id),
+      expenseAccountId: row.expense_account_id == null ? null : String(row.expense_account_id),
+      expenseAccountSource: String(row.expense_account_source ?? "unknown"),
+      expenseAccountEvidence: (row.expense_account_evidence == null ? null : row.expense_account_evidence as unknown as
+        { reason: string; reference: string }),
       sequence: Number(row.sequence ?? 0),
     });
   }
@@ -1861,6 +1875,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
 
     const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
+    // The org wage expense default, read ONCE for the run in this
+    // transaction: it is the last rung of time-driven earning line expense
+    // resolution, and reading it per stub would let a concurrent settings
+    // edit cost two employees on the same run to different defaults.
+    const runWageExpenseAccountId = ((await tx.execute<{ v: string | null }>(sql`
+      select settings->'payroll'->>'wageExpenseAccountId' as v from orgs where id = ${orgId}
+    `)).rows[0]?.v ?? null);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
@@ -1906,6 +1927,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
+          wageExpenseAccountId: runWageExpenseAccountId,
           eftFallbackToCheque,
           statHolidayPay,
           holidayEligibility: input.holidayEligibility,
@@ -1980,11 +2002,26 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
  * level so the jurisdiction and persistence helpers below can name it; it
  * carries no behavior, only shape.
  */
+/** Which rung of the expense-account resolution answered for a stub line. */
+export type ExpenseAccountSource = "item" | "component" | "org_default";
+
 interface Line {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string; hours?: string; rate?: string; amount: string;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
+  /** Service item the hours were worked on; only time-driven earning lines
+   * carry one. Absent everywhere else — never inferred, never defaulted. */
+  itemId?: string | null;
+  /**
+   * Expense account stamped at calculate (migration 0180). GL routing only:
+   * setting these never changes what anyone is paid. Lines without an
+   * item-driven stamp leave all three absent and post through the unchanged
+   * component-then-default fallback.
+   */
+  expenseAccountId?: string | null;
+  expenseAccountSource?: ExpenseAccountSource | null;
+  expenseAccountEvidence?: { reason: string; reference: string } | null;
   sequence: number;
   taxable?: boolean; pensionable?: boolean; insurable?: boolean;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
@@ -2173,14 +2210,23 @@ async function insertPayStubLineRows(
   lines: readonly Line[],
 ): Promise<void> {
   for (const line of lines) {
+    // The expense stamp rides with the line it was resolved for: re-deriving
+    // a draft deletes and reinserts these rows, so the expense immutability
+    // guard (migration 0180) only ever fires on a committed run's history.
+    // Lines without a stamp keep source 'unknown' with null account/evidence
+    // and post through the unchanged component-then-default fallback.
     await tx.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
-                                  amount, project_id, department_id, time_type_id, sequence,
+                                  amount, project_id, department_id, time_type_id, item_id, sequence,
+                                  expense_account_id, expense_account_source, expense_account_evidence,
                                   created_by, updated_by)
       values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
               ${line.hours ?? null}, ${line.rate ?? null}, ${line.amount},
               ${line.projectId ?? null}, ${line.departmentId ?? null}, ${line.timeTypeId ?? null},
-              ${line.sequence}, ${args.actorId}, ${args.actorId})
+              ${line.itemId ?? null}, ${line.sequence},
+              ${line.expenseAccountId ?? null}, ${line.expenseAccountSource ?? "unknown"},
+              ${line.expenseAccountEvidence ? JSON.stringify(line.expenseAccountEvidence) : null}::jsonb,
+              ${args.actorId}, ${args.actorId})
     `);
   }
 }
@@ -2290,6 +2336,65 @@ const earningsAssessedSnapshot = (lines: readonly Line[]): EarningsAssessedLine[
  * priced at the effective wage. An off-cycle one-off run appends nothing —
  * its adjustments or settled retro differences carry the whole cheque.
  */
+/**
+ * Expense-account resolution for a time-driven earning line (migration 0180).
+ * Most specific first: the service item (what work this was) answers before
+ * the pay component (what kind of money it is) before the org wage default.
+ * GL routing only — the returned account never changes any amount.
+ *
+ * Structured as (itemAccount, componentAccount, default) so employer burden
+ * can reuse it later without rework; burden is deliberately NOT wired to it
+ * yet (burden lines keep the component-then-default fallback at posting).
+ * Returns null when no rung names an account, and the line stays unstamped —
+ * posting then refuses with the same setup-incomplete error as today.
+ */
+function resolveEarningExpenseAccount(args: {
+  item: {
+    id: string; name: string;
+    accountId: string | null; accountNumber: string | null; accountName: string | null;
+  } | null;
+  component: { id: string; name: string; expenseAccountId: string | null };
+  wageDefaultAccountId: string | null;
+}): {
+  accountId: string; source: ExpenseAccountSource; evidence: { reason: string; reference: string };
+} | null {
+  if (args.item?.accountId) {
+    const label = [args.item.accountNumber, args.item.accountName].filter(Boolean).join(" · ")
+      || args.item.accountId;
+    return {
+      accountId: args.item.accountId,
+      source: "item",
+      evidence: {
+        reason: `hours on item "${args.item.name}" are costed to ${label}`,
+        reference: `items:${args.item.id}`,
+      },
+    };
+  }
+  if (args.component.expenseAccountId) {
+    return {
+      accountId: args.component.expenseAccountId,
+      source: "component",
+      evidence: {
+        reason: args.item
+          ? `item "${args.item.name}" names no payroll expense account; component "${args.component.name}" expense account answers`
+          : `no item on this line; component "${args.component.name}" expense account answers`,
+        reference: `pay_components:${args.component.id}`,
+      },
+    };
+  }
+  if (args.wageDefaultAccountId) {
+    return {
+      accountId: args.wageDefaultAccountId,
+      source: "org_default",
+      evidence: {
+        reason: "neither the item nor the component names an expense account; org wage expense default answers",
+        reference: "orgs.settings.payroll.wageExpenseAccountId",
+      },
+    };
+  }
+  return null;
+}
+
 async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -2301,12 +2406,14 @@ async function appendPeriodicEarnings(
     baseComponent: Record<string, unknown>;
     oneOffRun: boolean;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
+    /** Org wage expense default: the last rung of line expense resolution. */
+    wageExpenseAccountId: string | null;
     lines: Line[];
   },
 ): Promise<void> {
   const {
     orgId, documentId, run, emp, employeePartyId, payRate,
-    periodsPerYear: P, baseComponent, oneOffRun, need, lines,
+    periodsPerYear: P, baseComponent, oneOffRun, need, wageExpenseAccountId, lines,
   } = args;
   if (oneOffRun) {
     // no periodic earnings — adjustments (bonus) or settled retro differences
@@ -2327,13 +2434,20 @@ async function appendPeriodicEarnings(
       : divideMoney(payRate!.rate, String(payRate!.annualHours), 4);
     const time = (await tx.execute<{
         id: string; hours: string; project_id: string | null; department_id: string | null;
-        time_type_id: string | null; classification: string; multiplier: string; type_name: string;
+        time_type_id: string | null; item_id: string | null;
+        classification: string; multiplier: string; type_name: string;
+        item_name: string | null; item_account_id: string | null;
+        item_account_number: string | null; item_account_name: string | null;
       }>(sql`
-      select te.id, te.hours, te.project_id, te.department_id, te.time_type_id,
+      select te.id, te.hours, te.project_id, te.department_id, te.time_type_id, te.item_id,
              coalesce(tt.classification, 'regular') as classification,
-             coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name
+             coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name,
+             i.name as item_name, i.payroll_expense_account_id as item_account_id,
+             a.number as item_account_number, a.name as item_account_name
         from time_entries te
         left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
+        left join items i on i.id = te.item_id and i.org_id = te.org_id
+        left join accounts a on a.id = i.payroll_expense_account_id and a.org_id = i.org_id
        where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
          and te.status = 'approved'
          and te.worked_on between ${run.period_start} and ${run.period_end}
@@ -2343,7 +2457,10 @@ async function appendPeriodicEarnings(
     const otComponent = need("overtime", "earning");
     const groups = new Map<string, { hours: string; rate: string; row: (typeof time.rows)[0] }>();
     for (const t of time.rows) {
-      const key = [t.time_type_id ?? "", t.project_id ?? "", t.department_id ?? ""].join("|");
+      // Hours on different service items never merge: each item may declare
+      // its own expense account, so one line per (time type, project,
+      // department, item). Entries with no item keep the historical grouping.
+      const key = [t.time_type_id ?? "", t.project_id ?? "", t.department_id ?? "", t.item_id ?? ""].join("|");
       const rate = roundMoney(mulDecimal(hourlyWage, t.multiplier), 4);
       const existing = groups.get(key);
       if (existing) existing.hours = add(existing.hours, t.hours);
@@ -2352,14 +2469,35 @@ async function appendPeriodicEarnings(
     let sequence = 10;
     for (const group of groups.values()) {
       const isOt = group.row.classification === "overtime" || group.row.classification === "double_time";
+      const componentRow = isOt ? otComponent : baseComponent;
+      const stamp = resolveEarningExpenseAccount({
+        item: group.row.item_id == null ? null : {
+          id: group.row.item_id,
+          name: group.row.item_name ?? group.row.item_id,
+          accountId: group.row.item_account_id,
+          accountNumber: group.row.item_account_number,
+          accountName: group.row.item_account_name,
+        },
+        component: {
+          id: String(componentRow.id),
+          name: String(componentRow.name ?? "component"),
+          expenseAccountId: componentRow.expense_account_id == null
+            ? null : String(componentRow.expense_account_id),
+        },
+        wageDefaultAccountId: wageExpenseAccountId,
+      });
       lines.push({
-        componentId: (isOt ? otComponent.id : baseComponent.id) as string,
+        componentId: String(componentRow.id),
         kind: "earning",
         description: group.row.type_name,
         hours: group.hours, rate: group.rate,
         amount: roundMoney(mulDecimal(group.rate, group.hours), 2),
         projectId: group.row.project_id, departmentId: group.row.department_id,
-        timeTypeId: group.row.time_type_id, sequence: sequence++,
+        timeTypeId: group.row.time_type_id, itemId: group.row.item_id,
+        expenseAccountId: stamp?.accountId ?? null,
+        expenseAccountSource: stamp?.source ?? null,
+        expenseAccountEvidence: stamp?.evidence ?? null,
+        sequence: sequence++,
         classification: group.row.classification,
       });
     }
@@ -3117,6 +3255,9 @@ async function calculateStub(
     employerEmployeeCount: number;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
+    /** Org wage expense default, read once per calculate: the last rung of
+     * time-driven earning line expense resolution. */
+    wageExpenseAccountId: string | null;
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
     eftFallbackToCheque: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
@@ -3208,7 +3349,8 @@ async function calculateStub(
 
   await appendPeriodicEarnings(tx, {
     orgId, documentId, run, emp, employeePartyId, payRate,
-    periodsPerYear: P, baseComponent, oneOffRun, need: ctx.need, lines,
+    periodsPerYear: P, baseComponent, oneOffRun, need: ctx.need,
+    wageExpenseAccountId: ctx.wageExpenseAccountId, lines,
   });
 
   // Phase 1b — retroactive pay. A retro run pays the differences that were
