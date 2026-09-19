@@ -8,7 +8,7 @@ import {
 } from "./migration-preflight.ts";
 
 const ORG = "org-test-001";
-const NS = "netsuite-extract";
+const NS = "legacy-extract";
 const SUB_A = "sub-active-001";
 const SUB_B = "sub-active-002";
 
