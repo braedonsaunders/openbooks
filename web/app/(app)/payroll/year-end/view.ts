@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import { orgFilingYearOptions } from '@openbooks/engine/src/payroll-yearend.ts'
 import { notFound } from 'next/navigation'
 import {
   page,
@@ -44,7 +45,7 @@ import type { YearEndView } from './YearEndView'
  * the parallel-run page made: `YearEndView` moves nowhere and is shared by
  * the page and the widget registry. The loader below copies page.tsx verbatim — the
  * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
- * business-day year with its clamped `?year=` override, the scoped filings
+ * pack-derived offered years with their clamped `?year=` override, the scoped filings
  * read (a restricted caller whose scope excludes any row of the year's
  * population gets the route's not-found answer here too), the annual /
  * quarterly / separation cadence split with the `installed || rows > 0`
@@ -65,7 +66,7 @@ export interface YearEndData {
   viewTabs: Awaited<ReturnType<typeof groupTabs>>
   workspace: {
     year: WorkspaceProps['year']
-    currentYear: WorkspaceProps['currentYear']
+    years: WorkspaceProps['years']
     sections: YearEndFilingSection[]
   }
 }
@@ -76,9 +77,15 @@ export async function loadYearEnd(
   const authz = await requirePermission('payroll.read')
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('payroll.yearEnd')
-  const currentYear = Number((await businessToday(authz.user.orgId)).slice(0, 4))
+  // The picker list AND the default come from the installed packs (their
+  // current tax year and declared editions) and the org's own payroll data —
+  // never the calendar year, which hides a fiscal pack's posted year (AU
+  // September posts to the next calendar year). The first offered year is the
+  // default: the pack's current tax year.
+  const today = await businessToday(authz.user.orgId)
+  const years = await orgFilingYearOptions(authz.user.orgId, today)
   const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
+  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!
 
   // Year-end shows ANNUAL and QUARTERLY returns only. Separation documents
   // (the ROE, a P45) are due per interruption of earnings — within days of
@@ -98,7 +105,7 @@ export async function loadYearEnd(
     title: `${t('title')} ${year}`,
     description: t('description'),
     viewTabs: moduleTabs,
-    workspace: { year, currentYear, sections },
+    workspace: { year, years, sections },
   }
 }
 
@@ -125,7 +132,7 @@ export function yearEndSpec(_data: YearEndData): PageSpec {
       // negated conditional pair of blocks.
       widgetBlock('year-end-workspace', {
         year: f('workspace.year'),
-        currentYear: f('workspace.currentYear'),
+        years: f('workspace.years'),
         sections: f('workspace.sections'),
       }),
     ],
