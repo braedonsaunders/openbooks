@@ -37,6 +37,11 @@ import {
   timesheetWeekSubjectProfile,
   timesheetWeeksFlowAdapter,
 } from "./timesheet-weeks-adapter.ts";
+import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
+import {
+  hrmChangeRequestFlowAdapter,
+  hrmChangeRequestSubjectProfile,
+} from "./hrm-change-requests-adapter.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
@@ -57,6 +62,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
+  if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -80,6 +86,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     fieldTicketSubjectProfile,
     payRunSubjectProfile,
     timesheetWeekSubjectProfile,
+    hrmChangeRequestSubjectProfile,
   ];
 }
 
