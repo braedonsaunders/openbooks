@@ -238,8 +238,17 @@ export function staticImports(src) {
     }
     return depth;
   };
-  for (const match of clean.matchAll(/import\s*\(\s*([^)]*?)\)/g)) {
-    const inner = match[1].trim();
+  // The argument scan must respect QUOTES, not stop at the first `)`. It used
+  // to be /import\s*\(\s*([^)]*?)\)/, which truncates any specifier containing
+  // a parenthesis — and Next.js route groups are exactly that:
+  // `import('../app/(app)/ar/view')` captured `'../app/(app` and stopped at the
+  // `)` INSIDE the string. The spec then matched neither the literal nor the
+  // template shape, resolved to nothing, and the entire imported subtree became
+  // invisible to this guard. That is how a loader stub missing an export went
+  // unreported: the file importing it was never walked.
+  const dynamicCall = /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
+  for (const match of clean.matchAll(dynamicCall)) {
+    const inner = match[2] !== undefined ? `${match[1]}${match[2]}${match[1]}` : (match[3] ?? "").trim();
     const literal = inner.match(/^(['"])((?:\\\1|(?!\1).)+)\1$/);
     const template = inner.match(/^`((?:\\\`|(?!\`).)*)`$/);
     let spec = null;
@@ -506,16 +515,28 @@ export function parseWiring(src) {
     const block = consequence(src, end + 1);
     if (!block) continue;
     const mock = block.match(/url:\s*['"`]mock:([^'"`]+)['"`]/);
+    // An inline data-URL stub carries REAL module source with a real export
+    // set, so it is compared like any other mock body rather than cut. Only a
+    // data: URL whose payload is NOT a literal here (built from a variable, or
+    // a helper the factory hides) still cuts — there is nothing to read.
+    const inline = block.match(/url:\s*['"`]data:text\/javascript,((?:\\.|[^'"`\\])*)['"`]/);
+    const comparableInline = inline !== null && /\bexport\b/.test(decodeInlineShim(inline[1]));
     // Data-URL shims ('server-only', 'next/...') cut the edge with no needs.
     // A bare nextResolve() rewrite stays real — only mock/data returns cut.
-    let shim = /url:\s*['"`](data:|https?:)/.test(block);
+    // A TEMPLATE url (url: `data:...${x}`) is dynamically built, so it cuts the
+    // edge exactly like a literal data: shim. It must be recognised from the
+    // blanked projection too: the projection empties template TEXT, so the
+    // `data:` prefix is gone and only the backtick survives. Missing this made
+    // the rule vanish entirely and the walk descend into the REAL module,
+    // producing a false gap against a stub that was in fact serving it.
+    let shim = /url:\s*['"`](data:|https?:)/.test(block) || /url:\s*`/.test(block);
     if (!shim && helpers.size > 0) {
       // `return virtual('export {}')`: the stub factory hides the data: URL.
       const call = block.match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/) ??
         src.slice(end + 1, end + 201).match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/);
       if (call && helpers.has(call[1])) shim = true;
     }
-    if (!mock && !shim) continue;
+    if (!mock && !shim && !comparableInline) continue;
     // One rule per specifier alternative per parent alternative: every
     // disjunct shares the if's consequence, and first-match-wins is
     // unaffected since expanded siblings conclude identically.
@@ -552,7 +573,14 @@ export function parseWiring(src) {
         rules.push({
           spec,
           parent,
-          mock: mock ? mock[1] : null,
+          // An inline stub's key IS its body, so needs land on the same
+          // entry mockBlocks registered. null only where nothing is readable.
+          // Comparable only when the payload is a non-empty LITERAL that
+          // declares exports. A payload built by concatenation
+          // ('data:text/javascript,' + encodeURIComponent(src)) is not
+          // readable here, and bucketing those under one empty body made
+          // every name look missing — 46 false gaps on the first attempt.
+          mock: mock ? mock[1] : (comparableInline ? inlineShimKey(inline[1]) : null),
           shimmed: !mock,
         });
       }
@@ -651,7 +679,40 @@ export function mockBlocks(src, raw) {
   for (const match of src.matchAll(/\.set\(\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
     if (!blocks.has(match[1])) blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
   }
+  // INLINE data-URL stubs are mock bodies too, and used to be invisible here.
+  // A loader hook may answer `url: 'data:text/javascript,export function a(){}'`
+  // — real module source, carrying a real (and possibly incomplete) export set.
+  // The rule scanner treated every data: URL as a trivial shim and cut the edge
+  // with no needs, so a stub that omitted an export the importer needed was
+  // never compared. That is not a hypothetical: a loader stub exporting only
+  // `groupTabs` served a module that had come to import `customerGroupTabs`,
+  // the importing module failed to LINK, and the whole test file registered
+  // ZERO tests instead of failing. Keyed by the literal payload so the rule
+  // scanner can name the same body without threading state between the two.
+  for (const match of source.matchAll(/(['"`])data:text\/javascript,((?:\\.|(?!\1)[^\\])*)\1/g)) {
+    const payload = match[2];
+    if (payload === undefined) continue;
+    const body = decodeInlineShim(payload);
+    if (!/\bexport\b/.test(body)) continue;
+    const key = inlineShimKey(payload);
+    if (!blocks.has(key)) blocks.set(key, body);
+  }
   return blocks;
+}
+
+/** Stable key for an inline data-URL stub body: its own decoded source. */
+export function inlineShimKey(payload) {
+  return `data:${payload.slice(0, 120)}`;
+}
+
+/** The runtime source an inline data-URL stub serves. */
+export function decodeInlineShim(payload) {
+  const unescaped = payload.replace(/\\n/g, "\n").replace(/\\(['"`\\])/g, "$1");
+  try {
+    return decodeURIComponent(unescaped);
+  } catch {
+    return unescaped;
+  }
 }
 
 export function matchRule(rules, spec, parentURL) {
@@ -694,17 +755,46 @@ export function cachedResolve(spec, fromFile, root = ROOT) {
   return resolveCache.get(key);
 }
 
+/**
+ * True when a file stubs with an inline data: module whose source is a literal
+ * and declares exports — the only inline shape whose export set is readable
+ * statically. Payloads assembled at runtime are deliberately out of scope.
+ */
+export function hasComparableInlineStub(src) {
+  for (const match of src.matchAll(/(['"`])data:text\/javascript,((?:\\.|(?!\1)[^\\])*)\1/g)) {
+    if (/\bexport\b/.test(decodeInlineShim(match[2] ?? ""))) return true;
+  }
+  return false;
+}
+
 export function checkFile(path, root = ROOT) {
   const src = readCached(path);
   const empty = { gaps: [], lazy: [], unmodeled: false, deadMocks: [] };
-  if (!src || !src.includes("mock:")) return empty;
+  // The entry gate USED to be `src.includes("mock:")` alone, which skipped an
+  // entire class of stub: a loader hook may answer with an inline
+  // `data:text/javascript,...` module and never write the string "mock:" at
+  // all. Such a file was not merely under-analyzed, it was never opened — so a
+  // stub that omitted an export its importer needed went unreported, the
+  // importing module failed to LINK, and the test file registered ZERO tests
+  // instead of failing. Admit inline data-URL stubs too.
+  if (!src) return empty;
+  // Admit a file with no "mock:" scheme ONLY when it carries an inline stub this
+  // scanner can actually read: a literal data: payload that declares exports.
+  // Admitting every data: URL instead marked 48 files "unmodeled" — they stub
+  // with payloads built by concatenation, which is not readable here, so there
+  // is nothing to model and nothing to report.
+  if (!src.includes("mock:") && !hasComparableInlineStub(src)) return empty;
   if (!src.includes("registerHooks")) return empty;
   // All scanners run on the code-only projection (same length/newlines):
   // inert template text can never forge wiring, blocks, imports, or exports.
   const code = cachedCode(path);
   const rules = parseWiring(code);
   const blocks = mockBlocks(code, src);
-  if (rules.length === 0 && blocks.size > 0) return { ...empty, unmodeled: true };
+  // "unmodeled" means AUTHORED mock: bodies with no wiring to reach them — a
+  // real authoring mistake. Inline data: bodies are discovered, not authored,
+  // so they must not raise it: counting them flagged 48 files that are fine.
+  const authoredBlocks = [...blocks.keys()].filter((key) => !key.startsWith("data:"));
+  if (rules.length === 0 && authoredBlocks.length > 0) return { ...empty, unmodeled: true };
   const needs = new Map(); // mockKey -> Map(name -> via)
   const lazyNeeds = new Map();
   const visitedStatic = new Set();

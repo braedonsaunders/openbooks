@@ -243,12 +243,44 @@ test("parentURL-first wirings scope the rule and cut data-shimmed edges", () => 
 }});`);
   assert.equal(rules.length, 2);
   assert.deepEqual(rules[0].parent, { kind: "substr", value: "/api/assets/" });
-  assert.equal(rules[0].mock, null);
   assert.deepEqual(rules[1].parent, { kind: "suffix", value: "/api/assets/[id]/route.ts" });
+  // A LITERAL data: stub that declares exports is a mock body, not an opaque
+  // cut. This used to assert `mock === null` — the edge was cut and its export
+  // set never compared — which is how a stub exporting only `groupTabs` served
+  // a module importing `customerGroupTabs`: the module failed to LINK and the
+  // whole test file registered ZERO tests instead of failing. The body is now
+  // keyed by its own source so needs land on it.
+  assert.ok(rules[0].mock?.startsWith("data:export async function guardFeaturePermission"));
   // An unrelated importer of the same specifier must not be cut: without the
   // parent constraint every feature-gates edge in the repo would vanish.
   assert.equal(matchRule(rules, "./lib/feature-gates", "file:///x/other.ts"), null);
-  assert.equal(matchRule(rules, "./lib/feature-gates", "file:///x/api/assets/route.ts")?.mock, null);
+  assert.ok(matchRule(rules, "./lib/feature-gates", "file:///x/api/assets/route.ts")?.mock);
+});
+
+test("a literal data: stub is compared, so a missing export is a gap", () => {
+  // The behaviour the cut used to hide, asserted directly: the stub declares
+  // `groupTabs`, the importer needs `customerGroupTabs`.
+  const rules = parseWiring(`registerHooks({resolve(specifier,context,next){
+ if(specifier.endsWith('/group-tabs'))return {shortCircuit:true,url:'data:text/javascript,export async function groupTabs(){return []}'};
+ return next(specifier,context);
+}});`);
+  assert.equal(rules.length, 1);
+  const rule = matchRule(rules, "../components/module-home/group-tabs", "file:///x/ar/view.ts");
+  assert.ok(rule, "the rule matches the importer");
+  assert.equal(rule.mock, "data:export async function groupTabs(){return []}");
+});
+
+test("a data: stub built from a template still cuts, because it cannot be read", () => {
+  // The projection blanks template TEXT, so only the backtick survives. A rule
+  // must still be produced and must still cut — dropping it entirely let the
+  // walk descend into the REAL module and report a false gap against a stub
+  // that was in fact serving it.
+  const rules = parseWiring(`registerHooks({resolve(specifier,context,next){
+ if(specifier === '../subsidiaries')return {shortCircuit:true,url:\`data:text/javascript,\${encodeURIComponent(src)}\`};
+ return next(specifier,context);
+}});`);
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].mock, null);
 });
 
 test("||-chained parent alternatives each scope the rule", () => {
