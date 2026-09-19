@@ -31,30 +31,55 @@ interface HolidayEligibilityFacts {
 
 /**
  * Parse the optional `holidayEligibility` map for calculate/dry-run.
- * Returns the clean map, or null when the input is malformed (a non-object,
- * a non-uuid key, a non-boolean fact, or an unknown fact name). `undefined`
- * input yields an empty clean map — absence of attestations is the engine's
- * fail-closed default, not a request error.
+ * One pass builds the clean map AND names the first malformed shape, so the
+ * accept/refuse set cannot drift between a checker and a builder.
+ * `undefined` input yields an empty clean map — absence of attestations is
+ * the engine's fail-closed default, not a request error. Every refusal names
+ * the offending key or fact, the value received, and a remedy that exists.
  */
 function parseHolidayEligibility(
   value: unknown,
-): Record<string, HolidayEligibilityFacts> | null {
-  if (value === undefined) return {}
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+): { ok: true; map: Record<string, HolidayEligibilityFacts> } | { ok: false; refusal: string } {
+  if (value === undefined) return { ok: true, map: {} }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return {
+      ok: false,
+      refusal: `holidayEligibility must be a map of employee ids to attestation facts — got "${suppliedValue(value)}"; pass an object keyed by employee id, or omit it`,
+    }
+  }
   const clean: Record<string, HolidayEligibilityFacts> = {}
   for (const [employeeId, facts] of Object.entries(value as Record<string, unknown>)) {
-    if (!isUuid(employeeId)) return null
-    if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) return null
+    if (!isUuid(employeeId)) {
+      return {
+        ok: false,
+        refusal: `holidayEligibility key "${suppliedValue(employeeId)}" is not an employee id — fix that key and try again`,
+      }
+    }
+    if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) {
+      return {
+        ok: false,
+        refusal: `holidayEligibility["${employeeId}"] must be a map of attestation facts — got "${suppliedValue(facts)}"; pass paidOnCommission and absentWithoutConsent as true or false, or omit the entry`,
+      }
+    }
     const entry: HolidayEligibilityFacts = {}
     for (const [key, fact] of Object.entries(facts as Record<string, unknown>)) {
-      if ((key !== 'paidOnCommission' && key !== 'absentWithoutConsent') || typeof fact !== 'boolean') {
-        return null
+      if (key !== 'paidOnCommission' && key !== 'absentWithoutConsent') {
+        return {
+          ok: false,
+          refusal: `holidayEligibility["${employeeId}"] has unknown fact "${suppliedValue(key)}" — only paidOnCommission and absentWithoutConsent exist; fix the name and try again`,
+        }
+      }
+      if (typeof fact !== 'boolean') {
+        return {
+          ok: false,
+          refusal: `holidayEligibility["${employeeId}"].${key} must be true or false — got "${suppliedValue(fact)}"; pass a boolean or omit the fact`,
+        }
       }
       entry[key] = fact
     }
     clean[employeeId] = entry
   }
-  return clean
+  return { ok: true, map: clean }
 }
 
 /**
@@ -181,10 +206,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // the wizard nor this route could supply it — so any run spanning a paid
   // holiday in a declaring jurisdiction was incalculable. Keys are employee
   // ids; unknown ids are refused rather than silently unattested.
-  const holidayEligibility = parseHolidayEligibility(body.holidayEligibility)
-  if (holidayEligibility === null && body.holidayEligibility !== undefined) {
-    return NextResponse.json({ error: 'invalid holidayEligibility' }, { status: 422 })
+  const parsedEligibility = parseHolidayEligibility(body.holidayEligibility)
+  if (!parsedEligibility.ok) {
+    return NextResponse.json({ error: parsedEligibility.refusal }, { status: 422 })
   }
+  const holidayEligibility = parsedEligibility.map
   try {
     if (body.action === 'calculate' || body.action === 'dry-run') {
       // Stored attestation facts merge UNDER the per-request map: what the
@@ -194,7 +220,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // — the engine fails closed on it by name.
       const mergedEligibility = await storedHolidayEligibilityForRun(db, {
         orgId: gate.user.orgId, documentId: id,
-        perRequest: holidayEligibility ?? undefined,
+        perRequest: holidayEligibility,
       })
       const result = await calculatePayRun({
         orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
@@ -275,19 +301,46 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Hours persist into numeric(12,2): canonicalize at that scale, never
       // through the 4dp money normalizer (its padding fails the engine gate
       // for every hours value). The engine re-validates before persisting.
+      // Every malformed shape refuses by name below — same accept/refuse set
+      // as the old collapsed 'invalid
+      // adjustment', split causes.
       let hoursRaw: string | null = null
       if (hours != null && hours !== '') {
         hoursRaw = canonicalAdjustmentHours(hours)
-        if (hoursRaw === null) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+        if (hoursRaw === null) {
+          const hoursExact = canonicalDecimal(hours, 2)
+          if (hoursExact !== null && hoursExact.startsWith('-')) {
+            return NextResponse.json({ error: `hours must not be negative — got "${suppliedValue(hours)}"; pass zero or more hours, or omit hours` }, { status: 422 })
+          }
+          if (hoursExact !== null && hoursExact.replace(/^[+]/, '').split('.')[0]!.replace(/^0+/, '').length > 10) {
+            return NextResponse.json({ error: `hours is out of range — at most 10 whole digits fit; got "${suppliedValue(hours)}"; enter fewer hours and try again` }, { status: 422 })
+          }
+          return NextResponse.json({ error: decimalNullRefusal('hours', 'a number of hours', hours, 2) }, { status: 422 })
+        }
       }
-      if (
-        typeof employeePartyId !== 'string' || !isUuid(employeePartyId) ||
-        typeof componentId !== 'string' || !isUuid(componentId) ||
-        amountRaw === null ||
-        (note != null && (typeof note !== 'string' || note.length > 500)) ||
-        (replaceComponent != null && typeof replaceComponent !== 'boolean')
-      ) {
-        return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      if (typeof employeePartyId !== 'string') {
+        return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
+      }
+      if (!isUuid(employeePartyId)) {
+        return NextResponse.json({ error: `employeePartyId "${employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
+      }
+      if (typeof componentId !== 'string') {
+        return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
+      }
+      if (!isUuid(componentId)) {
+        return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
+      }
+      if (amountRaw === null) {
+        return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
+      }
+      if (note != null && typeof note !== 'string') {
+        return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
+      }
+      if (typeof note === 'string' && note.length > 500) {
+        return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
+      }
+      if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
+        return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
       }
       await mutatePayRunAdjustment({
         orgId: gate.user.orgId,
@@ -299,7 +352,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'delete-adjustment') {
-      if (typeof body.adjustmentId !== 'string' || !isUuid(body.adjustmentId)) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      if (typeof body.adjustmentId !== 'string') {
+        return NextResponse.json({ error: `adjustmentId must be a pay adjustment id — got "${suppliedValue(body.adjustmentId)}"; pass the adjustment to delete as an id` }, { status: 422 })
+      }
+      if (!isUuid(body.adjustmentId)) {
+        return NextResponse.json({ error: `adjustmentId "${body.adjustmentId}" is not a pay adjustment id — fix the id and try again` }, { status: 422 })
+      }
       await mutatePayRunAdjustment({
         orgId: gate.user.orgId,
         documentId: id,
@@ -315,12 +373,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // audited helper — no second write path — and the whole roster pass is one
     // transaction, so a partial scope can never be committed.
     if (body.action === 'set-scope') {
-      const included = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : null
-      const roster = Array.isArray(body.rosterPartyIds) ? body.rosterPartyIds : null
-      const uuidish = (v: unknown) => typeof v === 'string' && isUuid(v)
-      if (!included || !roster || roster.length > 2000
-        || !included.every(uuidish) || !roster.every(uuidish)) {
-        return NextResponse.json({ error: 'invalid scope' }, { status: 422 })
+      // Every malformed shape refuses by name. One collapsed 'invalid
+      // scope' over two lists, a limit and two entry checks meant a single bad id on
+      // a 2000-employee roster was undiagnosable — the refusal below names
+      // the offending value AND its index. Same accept/refuse set, split
+      // causes: an empty included list still excludes everyone, and an empty
+      // roster is still a no-op.
+      if (!Array.isArray(body.employeePartyIds)) {
+        return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to include as a list` }, { status: 422 })
+      }
+      if (!Array.isArray(body.rosterPartyIds)) {
+        return NextResponse.json({ error: `rosterPartyIds must be a list of employee ids — got "${suppliedValue(body.rosterPartyIds)}"; pass the run roster as a list` }, { status: 422 })
+      }
+      const included = body.employeePartyIds
+      const roster = body.rosterPartyIds
+      if (roster.length > 2000) {
+        return NextResponse.json({ error: `set-scope accepts at most 2000 roster employees at once — got ${roster.length}; split the roster and try again` }, { status: 422 })
+      }
+      const badIncluded = included.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+      if (badIncluded !== -1) {
+        return NextResponse.json({ error: `employeePartyIds[${badIncluded}] "${suppliedValue(included[badIncluded])}" is not an employee id — fix that entry and try again` }, { status: 422 })
+      }
+      const badRoster = roster.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+      if (badRoster !== -1) {
+        return NextResponse.json({ error: `rosterPartyIds[${badRoster}] "${suppliedValue(roster[badRoster])}" is not an employee id — fix that entry and try again` }, { status: 422 })
       }
       const keep = new Set(included as string[])
       await withOrgTransaction(gate.user.orgId, async () => {
@@ -340,7 +416,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, included: keep.size, excluded: roster.length - keep.size })
     }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {
-      if (typeof body.employeePartyId !== 'string' || !isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+      if (typeof body.employeePartyId !== 'string') {
+        return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(body.employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
+      }
+      if (!isUuid(body.employeePartyId)) {
+        return NextResponse.json({ error: `employeePartyId "${body.employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
+      }
       await mutatePayRunAdjustment({
         orgId: gate.user.orgId,
         documentId: id,
