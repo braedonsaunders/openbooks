@@ -11,19 +11,22 @@
  *   move the digest);
  * - draft edits advance request_revision by exactly one and recompute the
  *   digest; touch-only updates hold the revision;
- * - submit is atomic (stamps + run + reason) and freezes identity,
- *   payload, expected revision, revision, and submission stamps;
+ * - submit is atomic (stamps + run + reason, with a committing positive
+ *   control) and freezes identity, payload, expected revision, revision,
+ *   and submission stamps;
  * - the transition machine (draft -> pending_approval -> approved /
  *   rejected / withdrawn, approved -> applied; draft -> withdrawn without
  *   fabricated submission) with terminal states terminal;
- * - decision snapshots exist exactly on decided rows, bind the row's
- *   digests under null-safe typed checks, and freeze once written;
+ * - decision snapshots bind under two-valued presence-plus-typeof pins
+ *   (revision by integral value: 1.0 approves, 1.5 and "1" refuse) and
+ *   freeze once written;
  * - employment scope is composite (org_id, employment_id) — a valid
  *   employment id from another org is refused;
  * - the flow run anchor is scope-bound (same org, governed subject
  *   kind/id), stamped at submit, retained, never re-pointed;
  * - submitted history cannot be deleted; pure drafts can;
- * - RLS restricts by tenant identity with positive controls each way;
+ * - RLS restricts by tenant identity under a proven-restricted role, with
+ *   positive controls each way;
  * - application evidence is all-or-nothing with approved -> applied and
  *   proves same org + same employment + exact canonical revision.
  *
@@ -36,6 +39,13 @@
  * committed submitted row would make the file-level `after()` hook throw.
  * Shared fixture rows (scratch org, users, two employments) stay committed
  * and leave through the standard teardown path like every other suite.
+ *
+ * SAVEPOINT DISCIPLINE. A refused statement aborts its transaction: every
+ * later command on the same transaction fails with 25P02 until rollback,
+ * which would mask every assertion after the first refusal in a test.
+ * Every expected refusal therefore goes through `refuses()`, which wraps
+ * the single statement in its own savepoint and asserts the genuine guard
+ * message — never the 25P02 echo of an earlier abort.
  *
  * FIXTURES (final 0184 shape, coordinator thr_jhgkkrcm8j): worker_employments
  * inserts (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -58,7 +68,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { after } from "node:test";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 
 /** Drizzle wraps driver errors, hiding the PostgreSQL message in `cause`. */
 function pgMessage(error: unknown): string {
@@ -157,6 +167,27 @@ async function isolated(h: Harness, work: () => Promise<void>): Promise<void> {
     if (error instanceof IsolatedRollback) return;
     throw error;
   }
+}
+
+/**
+ * Assert one statement is refused with the guard's own message. The
+ * statement runs inside its own savepoint: without it the refusal would
+ * abort the test transaction and every later assertion would see only
+ * 25P02 (in_failed_sql_transaction), masking the behavior under test. A
+ * statement that succeeds is itself the failure.
+ */
+async function refuses(h: Harness, stmt: SQL, re: RegExp, msg?: string): Promise<void> {
+  await h.run.execute(sql`savepoint expect_refusal`);
+  try {
+    await h.run.execute(stmt);
+  } catch (error: unknown) {
+    await h.run.execute(sql`rollback to savepoint expect_refusal`);
+    await h.run.execute(sql`release savepoint expect_refusal`);
+    assert.match(pgMessage(error), re, msg);
+    return;
+  }
+  await h.run.execute(sql`release savepoint expect_refusal`);
+  assert.fail(`expected refusal did not fire${msg ? `: ${msg}` : ""}`);
 }
 
 const PAYLOAD = (n: number) => ({ kind: "transfer", department: "ledger", level: n });
@@ -275,39 +306,31 @@ test("draft edit bumps request_revision by exactly one and recomputes digest", {
     const row = await readRequest(h, id);
     assert.equal(row.request_revision, 2);
     assert.equal(row.payload_digest, await canonicalDigest(h, PAYLOAD(2)));
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set payload = ${JSON.stringify(PAYLOAD(3))}::jsonb, request_revision = 4
-         where id = ${id}`),
-      /exactly one/,
-      "skipped revision must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set payload = ${JSON.stringify(PAYLOAD(3))}::jsonb, request_revision = 4
+       where id = ${id}`, /exactly one/, "skipped revision must be refused");
   });
 });
 
 test("forged inserts are refused: no born-submitted, stamped, decided, or applied rows", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
   await isolated(h, async () => {
-    await assert.rejects(
-      h.run.execute(sql`
-        insert into hrm_employment_change_requests
-          (id, org_id, employment_id, expected_employment_revision, payload,
-           payload_digest, payload_schema_version, status)
-        values (${randomUUID()}, ${h.orgId}, ${h.employmentId}, 1,
-          ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1', 'pending_approval')`),
-      /inserted as draft/,
-    );
-    await assert.rejects(
-      h.run.execute(sql`
-        insert into hrm_employment_change_requests
-          (id, org_id, employment_id, expected_employment_revision, payload,
-           payload_digest, payload_schema_version, submitted_by, submitted_at)
-        values (${randomUUID()}, ${h.orgId}, ${h.employmentId}, 1,
-          ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1',
-          ${h.actorId}, now())`),
-      /unsubmitted/,
-    );
+    await refuses(h, sql`
+      insert into hrm_employment_change_requests
+        (id, org_id, employment_id, expected_employment_revision, payload,
+         payload_digest, payload_schema_version, status)
+      values (${randomUUID()}, ${h.orgId}, ${h.employmentId}, 1,
+        ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1', 'pending_approval')`,
+      /inserted as draft/);
+    await refuses(h, sql`
+      insert into hrm_employment_change_requests
+        (id, org_id, employment_id, expected_employment_revision, payload,
+         payload_digest, payload_schema_version, submitted_by, submitted_at)
+      values (${randomUUID()}, ${h.orgId}, ${h.employmentId}, 1,
+        ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1',
+        ${h.actorId}, now())`,
+      /unsubmitted/);
   });
 });
 
@@ -322,28 +345,18 @@ test("submit freezes payload, revision, identity, and submission stamps", { skip
              submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
        where id = ${id}`);
     const digest = (await readRequest(h, id)).payload_digest;
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests set payload = ${JSON.stringify(PAYLOAD(9))}::jsonb where id = ${id}`),
-      /freeze on submit/,
-      "post-submit payload edit must be refused",
-    );
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests set request_revision = 2 where id = ${id}`),
-      /freezes on submit/,
-    );
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests set submitted_by = ${randomUUID()} where id = ${id}`),
-      /immutable once set/,
-    );
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests set employment_id = ${randomUUID()} where id = ${id}`),
-      /immutable/,
-      "identity is frozen from insert",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests set payload = ${JSON.stringify(PAYLOAD(9))}::jsonb where id = ${id}`,
+      /freeze on submit/, "post-submit payload edit must be refused");
+    await refuses(h, sql`
+      update hrm_employment_change_requests set request_revision = 2 where id = ${id}`,
+      /freezes on submit/);
+    await refuses(h, sql`
+      update hrm_employment_change_requests set submitted_by = ${randomUUID()} where id = ${id}`,
+      /immutable once set/);
+    await refuses(h, sql`
+      update hrm_employment_change_requests set employment_id = ${randomUUID()} where id = ${id}`,
+      /immutable/, "identity is frozen from insert");
     const still = await readRequest(h, id);
     assert.equal(still.payload_digest, digest);
   });
@@ -353,22 +366,16 @@ test("illegal transitions are refused; draft may withdraw without fabricated sub
   const h = await ctx(t);
   await isolated(h, async () => {
     const direct = await insertDraft(h);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'approved' where id = ${direct}`),
-      /must submit/,
-      "draft -> approved must be refused",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'approved' where id = ${direct}`,
+      /must submit/, "draft -> approved must be refused");
     const draftWithdrawal = await insertDraft(h);
     await h.run.execute(sql`update hrm_employment_change_requests set status = 'withdrawn' where id = ${draftWithdrawal}`);
     const withdrawn = await readRequest(h, draftWithdrawal);
     assert.equal(withdrawn.status, "withdrawn");
     assert.equal(withdrawn.submitted_at, null);
     assert.equal(withdrawn.flow_run_id, null);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'pending_approval' where id = ${draftWithdrawal}`),
-      /terminal/,
-      "withdrawn must never resurrect",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'pending_approval' where id = ${draftWithdrawal}`,
+      /terminal/, "withdrawn must never resurrect");
     const pending = await insertDraft(h);
     const runId = await makeFlowRun(h, pending);
     await h.run.execute(sql`
@@ -376,11 +383,8 @@ test("illegal transitions are refused; draft may withdraw without fabricated sub
          set status = 'pending_approval', reason = 'r',
              submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
        where id = ${pending}`);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'applied' where id = ${pending}`),
-      /resolves to approved, rejected, or withdrawn/,
-      "pending -> applied must be refused",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'applied' where id = ${pending}`,
+      /resolves to approved, rejected, or withdrawn/, "pending -> applied must be refused");
   });
 });
 
@@ -395,78 +399,60 @@ test("decision snapshot exists exactly on decided rows, binds digests, freezes",
              submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
        where id = ${id}`);
     const digest = (await readRequest(h, id)).payload_digest;
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'approved' where id = ${id}`),
-      /snapshot/i,
-      "approve without snapshot must be refused",
-    );
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'approved',
-               decision_snapshot = ${JSON.stringify({ ...snapshotFor({ digest: "f".repeat(64), runId }), gates: [] })}::jsonb
-         where id = ${id}`),
-      /snapshot_binding/,
-      "snapshot bound to another digest must be refused",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'approved' where id = ${id}`,
+      /snapshot/i, "approve without snapshot must be refused");
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'approved',
+             decision_snapshot = ${JSON.stringify({ ...snapshotFor({ digest: "f".repeat(64), runId }), gates: [] })}::jsonb
+       where id = ${id}`,
+      /snapshot_binding/, "snapshot bound to another digest must be refused");
     await h.run.execute(sql`
       update hrm_employment_change_requests
          set status = 'approved', decision_snapshot = ${JSON.stringify(snapshotFor({ digest, runId }))}::jsonb
        where id = ${id}`);
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set decision_snapshot = ${JSON.stringify(snapshotFor({ digest, runId }))}::jsonb
-         where id = ${id}`),
-      /immutable once written/,
-      "snapshot must freeze once written",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set decision_snapshot = ${JSON.stringify(snapshotFor({ digest, runId }))}::jsonb
+       where id = ${id}`,
+      /immutable once written/, "snapshot must freeze once written");
   });
 });
 
 test("employment scope is composite: a valid employment id from another org is refused", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
+  const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
+  const other = await createScratchOrg();
+  h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
-    const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
-    const other = await createScratchOrg();
-    h.cleanupOrgs.push(other.orgId);
     const foreignEmployment = randomUUID();
     await h.run.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
       values (${foreignEmployment}, ${other.orgId}, ${other.customerId}, ${other.subsidiaryId}, 1)`);
-    let err: string | null = null;
-    try {
-      await h.run.execute(sql`
-        insert into hrm_employment_change_requests
-          (id, org_id, employment_id, expected_employment_revision, payload,
-           payload_digest, payload_schema_version)
-        values (${randomUUID()}, ${h.orgId}, ${foreignEmployment}, 1,
-          ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1')`);
-    } catch (error: unknown) {
-      err = pgMessage(error);
-    }
-    assert.ok(err, "cross-org employment binding must be refused");
-    assert.match(err!, /employment_fkey|foreign key/i);
+    await refuses(h, sql`
+      insert into hrm_employment_change_requests
+        (id, org_id, employment_id, expected_employment_revision, payload,
+         payload_digest, payload_schema_version)
+      values (${randomUUID()}, ${h.orgId}, ${foreignEmployment}, 1,
+        ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1')`,
+      /employment_fkey|foreign key/i, "cross-org employment binding must be refused");
   });
 });
 
 test("flow run anchor is scope-bound, retained, never re-pointed", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
+  const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
+  const other = await createScratchOrg();
+  h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
     const id = await insertDraft(h);
-    const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
-    const other = await createScratchOrg();
-    h.cleanupOrgs.push(other.orgId);
     const foreignRun = await makeFlowRun(h, randomUUID(), other.orgId);
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'pending_approval', reason = 'r',
-               submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${foreignRun}
-         where id = ${id}`),
-      /another organization/,
-      "foreign-org run must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'pending_approval', reason = 'r',
+             submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${foreignRun}
+       where id = ${id}`,
+      /another organization/, "foreign-org run must be refused");
     const wrongKindFlow = randomUUID();
     await h.run.execute(sql`
       insert into flows (id, org_id, subject_kind, graph)
@@ -475,28 +461,21 @@ test("flow run anchor is scope-bound, retained, never re-pointed", { skip: !DB, 
     await h.run.execute(sql`
       insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger)
       values (${wrongKindRun}, ${h.orgId}, ${wrongKindFlow}, 'allocation_run', ${randomUUID()}, 'on_submit')`);
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'pending_approval', reason = 'r',
-               submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${wrongKindRun}
-         where id = ${id}`),
-      /not opened for this request/,
-      "wrong-kind run must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'pending_approval', reason = 'r',
+             submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${wrongKindRun}
+       where id = ${id}`,
+      /not opened for this request/, "wrong-kind run must be refused");
     const runId = await makeFlowRun(h, id);
     await h.run.execute(sql`
       update hrm_employment_change_requests
          set status = 'pending_approval', reason = 'r',
              submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
        where id = ${id}`);
-    const other2 = randomUUID();
-    const otherRun = await makeFlowRun(h, other2);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set flow_run_id = ${otherRun} where id = ${id}`),
-      /never re-pointed|retained/,
-      "run re-pointing must be refused",
-    );
+    const otherRun = await makeFlowRun(h, randomUUID());
+    await refuses(h, sql`update hrm_employment_change_requests set flow_run_id = ${otherRun} where id = ${id}`,
+      /never re-pointed|retained/, "run re-pointing must be refused");
     const row = await readRequest(h, id);
     assert.equal(row.flow_run_id, runId);
   });
@@ -514,10 +493,8 @@ test("submitted history cannot be deleted; pure drafts can", { skip: !DB, timeou
          set status = 'pending_approval', reason = 'r',
              submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
        where id = ${submitted}`);
-    await assert.rejects(
-      h.run.execute(sql`delete from hrm_employment_change_requests where id = ${submitted}`),
-      /retained as history/,
-    );
+    await refuses(h, sql`delete from hrm_employment_change_requests where id = ${submitted}`,
+      /retained as history/);
   });
 });
 
@@ -525,11 +502,8 @@ test("submit demands atomic evidence: bare flip refused, complete submit accepte
   const h = await ctx(t);
   await isolated(h, async () => {
     const id = await insertDraft(h);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'pending_approval' where id = ${id}`),
-      /atomically/,
-      "draft -> pending_approval without submission evidence must be refused",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'pending_approval' where id = ${id}`,
+      /atomically/, "draft -> pending_approval without submission evidence must be refused");
     const refused = await readRequest(h, id);
     assert.equal(refused.status, "draft");
     // Positive control: the same transition with stamps, run, and reason
@@ -551,16 +525,10 @@ test("row id and created_at freeze from insert", { skip: !DB, timeout: 120_000 }
   const h = await ctx(t);
   await isolated(h, async () => {
     const id = await insertDraft(h);
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set id = ${randomUUID()} where id = ${id}`),
-      /immutable/,
-      "row id must freeze",
-    );
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set created_at = now() - interval '1 day' where id = ${id}`),
-      /immutable/,
-      "created_at must freeze",
-    );
+    await refuses(h, sql`update hrm_employment_change_requests set id = ${randomUUID()} where id = ${id}`,
+      /immutable/, "row id must freeze");
+    await refuses(h, sql`update hrm_employment_change_requests set created_at = now() - interval '1 day' where id = ${id}`,
+      /immutable/, "created_at must freeze");
   });
 });
 
@@ -596,14 +564,11 @@ test("snapshot binding is two-valued: presence plus typeof pins refuse null, mis
       ["json-null flow run", { ...good, flow_run_id: null }],
     ];
     for (const [name, snapshot] of variants) {
-      await assert.rejects(
-        h.run.execute(sql`
-          update hrm_employment_change_requests
-             set status = 'approved', decision_snapshot = ${JSON.stringify(snapshot)}::jsonb
-           where id = ${id}`),
-        /snapshot_binding/,
-        `${name} must be refused by the binding CHECK`,
-      );
+      await refuses(h, sql`
+        update hrm_employment_change_requests
+           set status = 'approved', decision_snapshot = ${JSON.stringify(snapshot)}::jsonb
+         where id = ${id}`,
+        /snapshot_binding/, `${name} must be refused by the binding CHECK`);
     }
     const still = await readRequest(h, id);
     assert.equal(still.status, "pending_approval");
@@ -651,12 +616,22 @@ test("history FKs are restrictive except org cascade", { skip: !DB, timeout: 120
   });
 });
 
-test("RLS restricts by identity: each org sees only its own requests", { skip: !DB, timeout: 120_000 }, async (t) => {
+test("RLS restricts by identity under a proven-restricted role", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
   const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
   const other = await createScratchOrg();
   h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
+    // Positive proof the session role is genuinely restricted: a superuser
+    // or BYPASSRLS role skips policies entirely (FORCE included), which
+    // would make the invisibility assertions below vacuous. Fail here with
+    // the role named instead of misreading counts later.
+    const who = (await h.run.execute<{ u: string; s: boolean; b: boolean }>(sql`
+      select current_user as u,
+             (select rolsuper from pg_roles where rolname = current_user) as s,
+             (select rolbypassrls from pg_roles where rolname = current_user) as b`)).rows[0]!;
+    assert.equal(who.s, false, `RLS proof needs a non-superuser role, got ${who.u}`);
+    assert.equal(who.b, false, `RLS proof needs a role without BYPASSRLS, got ${who.u}`);
     const otherEmployment = randomUUID();
     await h.run.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -714,17 +689,11 @@ test("application is all-or-nothing, linked, and single-fire", { skip: !DB, time
          set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
              applied_employment_revision = 2, applied_employment_change_id = ${changeId}
        where id = ${id}`);
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests set applied_employment_revision = 3 where id = ${id}`),
-      /duplicate/,
-      "second application evidence must be refused",
-    );
-    await assert.rejects(
-      h.run.execute(sql`update hrm_employment_change_requests set status = 'approved' where id = ${id}`),
-      /terminal/,
-      "applied must never leave its terminal state",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests set applied_employment_revision = 3 where id = ${id}`,
+      /duplicate/, "second application evidence must be refused");
+    await refuses(h, sql`update hrm_employment_change_requests set status = 'approved' where id = ${id}`,
+      /terminal/, "applied must never leave its terminal state");
     const bogus = await insertDraft(h);
     const bogusRun = await makeFlowRun(h, bogus);
     await h.run.execute(sql`
@@ -738,15 +707,12 @@ test("application is all-or-nothing, linked, and single-fire", { skip: !DB, time
          set status = 'approved',
              decision_snapshot = ${JSON.stringify(snapshotFor({ digest: bogusDigest, runId: bogusRun }))}::jsonb
        where id = ${bogus}`);
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
-               applied_employment_revision = 2, applied_employment_change_id = ${randomUUID()}
-         where id = ${bogus}`),
-      /does not exist/,
-      "application against a nonexistent canonical change must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+             applied_employment_revision = 2, applied_employment_change_id = ${randomUUID()}
+       where id = ${bogus}`,
+      /does not exist/, "application against a nonexistent canonical change must be refused");
   });
 });
 
@@ -772,25 +738,19 @@ test("application proves same org, same employment, and exact revision", { skip:
     const otherEmploymentChange = await insertCanonicalChange(h, h.secondEmploymentId, 2);
     const wrongRevisionChange = await insertCanonicalChange(h, h.employmentId, 99);
     const first = await approvedRequest();
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
-               applied_employment_revision = 2, applied_employment_change_id = ${otherEmploymentChange}
-         where id = ${first.id}`),
-      /another employment/,
-      "application against another employment's change must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+             applied_employment_revision = 2, applied_employment_change_id = ${otherEmploymentChange}
+       where id = ${first.id}`,
+      /another employment/, "application against another employment's change must be refused");
     const second = await approvedRequest();
-    await assert.rejects(
-      h.run.execute(sql`
-        update hrm_employment_change_requests
-           set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
-               applied_employment_revision = 2, applied_employment_change_id = ${wrongRevisionChange}
-         where id = ${second.id}`),
-      /not the applied revision/,
-      "application with a mismatched canonical revision must be refused",
-    );
+    await refuses(h, sql`
+      update hrm_employment_change_requests
+         set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+             applied_employment_revision = 2, applied_employment_change_id = ${wrongRevisionChange}
+       where id = ${second.id}`,
+      /not the applied revision/, "application with a mismatched canonical revision must be refused");
     const rightChange = await insertCanonicalChange(h, h.employmentId, 2);
     const third = await approvedRequest();
     await h.run.execute(sql`
