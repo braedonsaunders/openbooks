@@ -352,7 +352,7 @@ export function PartyDrawer({
    *  gate the employee Employment tab; the ids are the party's scoped
    *  employments (null = gated, so the tab never renders without the read
    *  surface behind it). */
-  hrm?: { employmentIds: string[] } | null
+  hrm?: { employmentIds: string[]; canManageHrm: boolean } | null
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -1591,7 +1591,7 @@ export function PartyDrawer({
 
         {tab === 'employment' && showEmploymentTab && hrm ? (
           hrm.employmentIds.length === 1 ? (
-            <EmploymentTab employmentId={hrm.employmentIds[0] as string} />
+            <EmploymentTab employmentId={hrm.employmentIds[0] as string} canManageHrm={hrm.canManageHrm} departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))} />
           ) : hrm.employmentIds.length === 0 ? (
             <div className="space-y-2 p-1">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
