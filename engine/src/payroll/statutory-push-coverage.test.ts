@@ -39,6 +39,7 @@ const PACK_DIRS: Record<string, string> = {
   ES: "es",
   SG: "sg",
   JP: "jp",
+  PL: "pl",
 };
 
 /** `pushStatutory(<key expr>, "<kind>", ...)` — key expr is one literal or a ternary. */

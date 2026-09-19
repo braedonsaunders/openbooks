@@ -763,21 +763,21 @@
         }
       },
       "AU": {
-        "title": "Australia \u2014 cuentas legales ATO",
-        "description": "Cuentas de pasivo para los montos que el paquete AU retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "title": "Australia — cuentas legales ATO",
+        "description": "Cuentas de pasivo para los montos que el paquete AU retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
         "slots": {
-          "payg": "PAYG por pagar (impuesto sobre la renta, Medicare + amortizaci\u00f3n STSL)",
-          "super": "Superannuation Guarantee por pagar (aportaci\u00f3n del empleador)",
+          "payg": "PAYG por pagar (impuesto sobre la renta, Medicare + amortización STSL)",
+          "super": "Superannuation Guarantee por pagar (aportación del empleador)",
           "wcb": "Workers' compensation por pagar (prima del empleador)"
         }
       },
       "DE": {
-        "title": "Alemania \u2014 cuentas legales",
-        "description": "Cuentas de pasivo para los montos que el paquete DE retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "title": "Alemania — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete DE retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
         "slots": {
           "lohnsteuer": "Lohnsteuer por pagar (impuesto sobre la renta)",
-          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag por pagar (recargo sobre el impuesto sobre la renta)",
-          "kirchenlohnsteuer": "Kirchenlohnsteuer por pagar (impuesto eclesi\u00e1stico elegido por el empleado)",
+          "solidaritaetszuschlag": "Solidaritätszuschlag por pagar (recargo sobre el impuesto sobre la renta)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer por pagar (impuesto eclesiástico elegido por el empleado)",
           "kv": "KV por pagar (Krankenversicherung de empleado y empleador)",
           "rv": "RV por pagar (Rentenversicherung de empleado y empleador)",
           "av": "AV por pagar (Arbeitslosenversicherung de empleado y empleador)",
@@ -787,21 +787,21 @@
         }
       },
       "FR": {
-        "title": "Francia \u2014 cuentas legales",
-        "description": "Cuentas de pasivo para los montos que el paquete FR retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "title": "Francia — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete FR retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
         "slots": {
           "pas": "PAS por pagar (impuesto sobre la renta retenido en la fuente)",
           "salariales": "Cotizaciones sociales por pagar (parte del empleado: vieillesse, CSG + CRDS)",
-          "retraite_comp": "Jubilaci\u00f3n complementaria por pagar (AGIRC-ARRCO, CEG + CET, empleado y empleador)",
-          "patronales": "Cotizaciones patronales por pagar (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+          "retraite_comp": "Jubilación complementaria por pagar (AGIRC-ARRCO, CEG + CET, empleado y empleador)",
+          "patronales": "Cotizaciones patronales por pagar (URSSAF: maladie, vieillesse, chômage, AT/MP, versement mobilité)"
         }
       },
       "ES": {
-        "title": "Espa\u00f1a \u2014 cuentas legales",
-        "description": "Cuentas de pasivo para los montos que el paquete ES retiene y devenga. Cada elecci\u00f3n aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "title": "España — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete ES retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
         "slots": {
-          "irpf": "IRPF por pagar (retenci\u00f3n del impuesto sobre la renta al tipo anual)",
-          "seguridad_social": "Seguridad Social por pagar (cotizaciones de empleado y empleador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+          "irpf": "IRPF por pagar (retención del impuesto sobre la renta al tipo anual)",
+          "seguridad_social": "Seguridad Social por pagar (cotizaciones de empleado y empleador: contingencias comunes, desempleo, FOGASA, formación, MEI)"
         }
       },
       "JP": {
@@ -813,7 +813,18 @@
           "kenko_hoken": "Seguro de salud por pagar (partes de empleado y empleador)"
         }
       },
-      "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
+      "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales.",
+      "PL": {
+        "title": "Polonia — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete PL retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "pit": "PIT por pagar (anticipo mensual del impuesto sobre la renta)",
+          "zus_ee": "Cotizaciones sociales del empleado por pagar (emerytalne, rentowe + chorobowe)",
+          "zus_zdr": "Cotización sanitaria por pagar (NFZ zdrowotna)",
+          "zus_er": "Cotizaciones sociales del empleador por pagar (emerytalne, rentowe + wypadkowe)",
+          "fundusze_er": "Fondos laborales del empleador por pagar (FP, FS + FGŚP)"
+        }
+      }
     },
     "usConfig": {
       "title": "Tasas de desempleo",

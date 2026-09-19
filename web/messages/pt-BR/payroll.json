@@ -763,45 +763,45 @@
         }
       },
       "AU": {
-        "title": "Austr\u00e1lia \u2014 contas oficiais (ATO)",
-        "description": "Contas de passivo para os valores que o pacote da Austr\u00e1lia ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "title": "Austrália — contas oficiais (ATO)",
+        "description": "Contas de passivo para os valores que o pacote da Austrália retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
         "slots": {
-          "payg": "PAYG a recolher (imposto de renda, Medicare + amortiza\u00e7\u00e3o STSL)",
-          "super": "Superannuation Guarantee a recolher (contribui\u00e7\u00e3o do empregador)",
-          "wcb": "Workers' compensation a recolher (pr\u00eamio do empregador)"
+          "payg": "PAYG a recolher (imposto de renda, Medicare + amortização STSL)",
+          "super": "Superannuation Guarantee a recolher (contribuição do empregador)",
+          "wcb": "Workers' compensation a recolher (prêmio do empregador)"
         }
       },
       "DE": {
-        "title": "Alemanha \u2014 contas oficiais",
-        "description": "Contas de passivo para os valores que o pacote da Alemanha ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "title": "Alemanha — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Alemanha retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
         "slots": {
           "lohnsteuer": "Lohnsteuer a recolher (imposto de renda)",
-          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag a recolher (sobretaxa do imposto de renda)",
-          "kirchenlohnsteuer": "Kirchenlohnsteuer a recolher (imposto eclesi\u00e1stico optado pelo funcion\u00e1rio)",
-          "kv": "KV a recolher (Krankenversicherung de funcion\u00e1rio e empregador)",
-          "rv": "RV a recolher (Rentenversicherung de funcion\u00e1rio e empregador)",
-          "av": "AV a recolher (Arbeitslosenversicherung de funcion\u00e1rio e empregador)",
-          "pv": "PV a recolher (Pflegeversicherung de funcion\u00e1rio e empregador)",
+          "solidaritaetszuschlag": "Solidaritätszuschlag a recolher (sobretaxa do imposto de renda)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer a recolher (imposto eclesiástico optado pelo funcionário)",
+          "kv": "KV a recolher (Krankenversicherung de funcionário e empregador)",
+          "rv": "RV a recolher (Rentenversicherung de funcionário e empregador)",
+          "av": "AV a recolher (Arbeitslosenversicherung de funcionário e empregador)",
+          "pv": "PV a recolher (Pflegeversicherung de funcionário e empregador)",
           "umlage": "Umlage a recolher (U1, U2 e Insolvenzgeldumlage do empregador)",
           "unfall": "Berufsgenossenschaft a recolher (seguro de acidentes do empregador)"
         }
       },
       "FR": {
-        "title": "Fran\u00e7a \u2014 contas oficiais",
-        "description": "Contas de passivo para os valores que o pacote da Fran\u00e7a ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "title": "França — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da França retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
         "slots": {
           "pas": "PAS a recolher (imposto de renda retido na fonte)",
-          "salariales": "Contribui\u00e7\u00f5es sociais a recolher (parte do funcion\u00e1rio: vieillesse, CSG + CRDS)",
-          "retraite_comp": "Previd\u00eancia complementar a recolher (AGIRC-ARRCO, CEG + CET, funcion\u00e1rio e empregador)",
-          "patronales": "Contribui\u00e7\u00f5es patronais a recolher (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+          "salariales": "Contribuições sociais a recolher (parte do funcionário: vieillesse, CSG + CRDS)",
+          "retraite_comp": "Previdência complementar a recolher (AGIRC-ARRCO, CEG + CET, funcionário e empregador)",
+          "patronales": "Contribuições patronais a recolher (URSSAF: maladie, vieillesse, chômage, AT/MP, versement mobilité)"
         }
       },
       "ES": {
-        "title": "Espanha \u2014 contas oficiais",
-        "description": "Contas de passivo para os valores que o pacote da Espanha ret\u00e9m e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcion\u00e1rio e do empregador juntas).",
+        "title": "Espanha — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote da Espanha retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
         "slots": {
-          "irpf": "IRPF a recolher (imposto de renda retido \u00e0 al\u00edquota anual)",
-          "seguridad_social": "Seguridad Social a recolher (contribui\u00e7\u00f5es de funcion\u00e1rio e empregador: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+          "irpf": "IRPF a recolher (imposto de renda retido à alíquota anual)",
+          "seguridad_social": "Seguridad Social a recolher (contribuições de funcionário e empregador: contingencias comunes, desempleo, FOGASA, formación, MEI)"
         }
       },
       "JP": {
@@ -813,7 +813,18 @@
           "kenko_hoken": "Seguro de saúde a recolher (partes do funcionário e do empregador)"
         }
       },
-      "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais."
+      "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais.",
+      "PL": {
+        "title": "Polônia — contas oficiais",
+        "description": "Contas de passivo para os valores que o pacote PL retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
+        "slots": {
+          "pit": "PIT a recolher (adiantamento mensal do imposto de renda)",
+          "zus_ee": "Contribuições sociais do funcionário a recolher (emerytalne, rentowe + chorobowe)",
+          "zus_zdr": "Contribuição à saúde a recolher (NFZ zdrowotna)",
+          "zus_er": "Contribuições sociais do empregador a recolher (emerytalne, rentowe + wypadkowe)",
+          "fundusze_er": "Fundos trabalhistas do empregador a recolher (FP, FS + FGŚP)"
+        }
+      }
     },
     "usConfig": {
       "title": "Alíquotas de desemprego",

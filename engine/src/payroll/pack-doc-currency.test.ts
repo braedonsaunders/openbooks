@@ -48,6 +48,7 @@ const PACK_FILES: Record<string, string> = {
   ES: "es/pack.ts",
   SG: "sg/pack.ts",
   JP: "jp/pack.ts",
+  PL: "pl/pack.ts",
 };
 
 /**

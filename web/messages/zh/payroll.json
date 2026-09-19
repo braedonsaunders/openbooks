@@ -763,45 +763,45 @@
         }
       },
       "AU": {
-        "title": "\u6fb3\u5927\u5229\u4e9a \u2014 ATO\u6cd5\u5b9a\u79d1\u76ee",
-        "description": "\u6fb3\u5927\u5229\u4e9a\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "title": "澳大利亚 — ATO法定科目",
+        "description": "澳大利亚包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
         "slots": {
-          "payg": "PAYG\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\u3001Medicare\uff0bSTSL\u8fd8\u6b3e\uff09",
-          "super": "Superannuation Guarantee\u5e94\u4ed8\uff08\u96c7\u4e3b\u7f34\u6b3e\uff09",
-          "wcb": "Workers' compensation\u5e94\u4ed8\uff08\u96c7\u4e3b\u4fdd\u8d39\uff09"
+          "payg": "PAYG应付（所得税、Medicare＋STSL还款）",
+          "super": "Superannuation Guarantee应付（雇主缴款）",
+          "wcb": "Workers' compensation应付（雇主保费）"
         }
       },
       "DE": {
-        "title": "\u5fb7\u56fd \u2014 \u6cd5\u5b9a\u79d1\u76ee",
-        "description": "\u5fb7\u56fd\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "title": "德国 — 法定科目",
+        "description": "德国包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
         "slots": {
-          "lohnsteuer": "Lohnsteuer\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\uff09",
-          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag\u5e94\u4ed8\uff08\u6240\u5f97\u7a0e\u9644\u52a0\u8d39\uff09",
-          "kirchenlohnsteuer": "Kirchenlohnsteuer\u5e94\u4ed8\uff08\u96c7\u5458\u9009\u5b9a\u7684\u6559\u4f1a\u7a0e\uff09",
-          "kv": "KV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bKrankenversicherung\uff09",
-          "rv": "RV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bRentenversicherung\uff09",
-          "av": "AV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bArbeitslosenversicherung\uff09",
-          "pv": "PV\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bPflegeversicherung\uff09",
-          "umlage": "Umlage\u5e94\u4ed8\uff08\u96c7\u4e3bU1\u3001U2\u3001Insolvenzgeldumlage\uff09",
-          "unfall": "Berufsgenossenschaft\u5e94\u4ed8\uff08\u96c7\u4e3b\u4e8b\u6545\u4fdd\u9669\uff09"
+          "lohnsteuer": "Lohnsteuer应付（所得税）",
+          "solidaritaetszuschlag": "Solidaritätszuschlag应付（所得税附加费）",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer应付（雇员选定的教会税）",
+          "kv": "KV应付（雇员和雇主Krankenversicherung）",
+          "rv": "RV应付（雇员和雇主Rentenversicherung）",
+          "av": "AV应付（雇员和雇主Arbeitslosenversicherung）",
+          "pv": "PV应付（雇员和雇主Pflegeversicherung）",
+          "umlage": "Umlage应付（雇主U1、U2、Insolvenzgeldumlage）",
+          "unfall": "Berufsgenossenschaft应付（雇主事故保险）"
         }
       },
       "FR": {
-        "title": "\u6cd5\u56fd \u2014 \u6cd5\u5b9a\u79d1\u76ee",
-        "description": "\u6cd5\u56fd\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "title": "法国 — 法定科目",
+        "description": "法国包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
         "slots": {
-          "pas": "PAS\u5e94\u4ed8\uff08\u6e90\u6cc9\u6263\u7f34\u6240\u5f97\u7a0e\uff09",
-          "salariales": "Cotisations salariales\u5e94\u4ed8\uff08\u96c7\u5458\u7f34\u7eb3vieillesse\u3001CSG\u3001CRDS\uff09",
-          "retraite_comp": "Retraite compl\u00e9mentaire\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3bAGIRC-ARRCO\u3001CEG\u3001CET\uff09",
-          "patronales": "Cotisations patronales\u5e94\u4ed8\uff08\u96c7\u4e3bURSSAF\uff1amaladie\u3001vieillesse\u3001ch\u00f4mage\u3001AT/MP\u3001versement mobilit\u00e9\uff09"
+          "pas": "PAS应付（源泉扣缴所得税）",
+          "salariales": "Cotisations salariales应付（雇员缴纳vieillesse、CSG、CRDS）",
+          "retraite_comp": "Retraite complémentaire应付（雇员和雇主AGIRC-ARRCO、CEG、CET）",
+          "patronales": "Cotisations patronales应付（雇主URSSAF：maladie、vieillesse、chômage、AT/MP、versement mobilité）"
         }
       },
       "ES": {
-        "title": "\u897f\u73ed\u7259 \u2014 \u6cd5\u5b9a\u79d1\u76ee",
-        "description": "\u897f\u73ed\u7259\u5305\u4ee3\u6263\u548c\u7d2f\u79ef\u91d1\u989d\u7684\u8d1f\u503a\u79d1\u76ee\u3002\u6bcf\u9879\u9009\u62e9\u9002\u7528\u4e8e\u8be5\u69fd\u4f4d\u8986\u76d6\u7684\u5168\u90e8\u7ec4\u6210(\u96c7\u5458\u548c\u96c7\u4e3b\u4e24\u4fa7\u5408\u8ba1)\u3002",
+        "title": "西班牙 — 法定科目",
+        "description": "西班牙包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
         "slots": {
-          "irpf": "IRPF\u5e94\u4ed8\uff08\u6309\u5e74\u7387\u6e90\u6cc9\u6263\u7f34\u6240\u5f97\u7a0e\uff09",
-          "seguridad_social": "Seguridad Social\u5e94\u4ed8\uff08\u96c7\u5458\u548c\u96c7\u4e3b\u7f34\u6b3e\uff1acontingencias comunes\u3001desempleo\u3001FOGASA\u3001formaci\u00f3n\u3001MEI\uff09"
+          "irpf": "IRPF应付（按年率源泉扣缴所得税）",
+          "seguridad_social": "Seguridad Social应付（雇员和雇主缴款：contingencias comunes、desempleo、FOGASA、formación、MEI）"
         }
       },
       "JP": {
@@ -813,7 +813,18 @@
           "kenko_hoken": "健康保险应付（雇员和雇主份额）"
         }
       },
-      "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
+      "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。",
+      "PL": {
+        "title": "波兰 — 法定科目",
+        "description": "PL包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "pit": "PIT应付（月度所得税预缴）",
+          "zus_ee": "雇员社会缴款应付（emerytalne、rentowe＋chorobowe）",
+          "zus_zdr": "健康缴款应付（NFZ zdrowotna）",
+          "zus_er": "雇主社会缴款应付（emerytalne、rentowe＋wypadkowe）",
+          "fundusze_er": "雇主劳动基金应付（FP、FS＋FGŚP）"
+        }
+      }
     },
     "usConfig": {
       "title": "失业税率",
