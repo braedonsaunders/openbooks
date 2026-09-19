@@ -119,6 +119,7 @@ FOREIGN KEYS (added by migration 0185 to public.hrm_employment_change_requests):
   applied_employment_change_id → employment_changes(id) (on delete restrict;
                                 org match verified by the guard trigger)
   submitted_by / applied_by /
-  created_by / updated_by      → users(id) (on delete set null; NO same-org
+  created_by / updated_by      → users(id) (on delete restrict — frozen
+                                evidence is never nulled; NO same-org
                                 assertion — home-org users)
 */

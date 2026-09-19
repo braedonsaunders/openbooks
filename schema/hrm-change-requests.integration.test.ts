@@ -26,20 +26,27 @@
  * - application evidence is all-or-nothing with approved -> applied and
  *   links a live canonical change in the same org.
  *
- * FIXTURE ASSUMPTION (0184, coordinator-owned, uncommitted at authoring):
- * worker_employments exposes (id, org_id, worker_party_id,
- * employer_subsidiary_id, revision) and employment_changes exposes (at
- * least) (id, org_id); this suite inserts only those columns. Reconcile
- * with schema/src/hrm.ts at DB handoff if 0184 requires more. Canonical
- * mutation, approval execution, and application auth are other slices —
- * this suite asserts storage refuses, never that services allow.
+ * FIXTURES (final 0184 shape, coordinator thr_jhgkkrcm8j): worker_employments
+ * inserts (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+ * — every other column is nullable or defaulted, and UNIQUE(org_id, id)
+ * backs the composite FK. employment_changes inserts (id, org_id,
+ * employment_id, revision, change_kind 'created', prior_snapshot '{}',
+ * reason, recorded_by): recorded_source defaults to 'user',
+ * recorded_source_ref stays NULL, closed_versions defaults to '[]', and
+ * change_txid is trigger-stamped so it is OMITTED, never supplied.
+ * Party/subsidiary legs reuse real scratch-org rows (customerId,
+ * subsidiaryId) so the fixtures hold whether or not 0184 declares those
+ * FKs. Canonical mutation, approval execution, and application auth are
+ * other slices — this suite asserts storage refuses, never that services
+ * allow or authenticate.
  *
- * Like every DB-backed suite it self-skips without OPENBOOKS_DB_URL. The
- * 0184 worker holds the exclusive dedicated DB right now: run at handoff.
+ * Like every DB-backed suite it self-skips without OPENBOOKS_DB_URL. Run
+ * on the coordinated dedicated DB at handoff — never the schema-worker
+ * DB concurrently, never production.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { after } from "node:test";
 import { sql } from "drizzle-orm";
 
 /** Drizzle wraps driver errors, hiding the PostgreSQL message in `cause`. */
@@ -58,41 +65,53 @@ type Harness = {
   orgId: string;
   actorId: string;
   employmentId: string;
+  secondEmploymentId: string;
   cleanupOrgs: string[];
 };
 
 let harness: Harness | null = null;
-let teardownRegistered = false;
 
-async function ctx(t: { after: (fn: () => Promise<void>) => void }): Promise<Harness> {
+// Suite-level teardown: every scratch org leased by any test in this file
+// is released exactly once, no matter which test built the harness first.
+after(async () => {
+  if (!harness) return;
+  const [{ dropScratchOrgReporting }] = await import("../engine/src/test-fixtures.ts");
+  for (const id of harness.cleanupOrgs) await dropScratchOrgReporting(id);
+  harness = null;
+});
+
+async function ctx(_t?: unknown): Promise<Harness> {
   if (!harness) {
     const [{ db }, { createScratchOrg }] = await Promise.all([
       import("../engine/src/db.ts"),
       import("../engine/src/test-fixtures.ts"),
     ]);
     const org = await createScratchOrg();
+    // Inspect (never assume) every seed this suite joins to: the submission
+    // actor must be a real user row, and the party/subsidiary legs must be
+    // real seeded rows — random UUIDs would trip 0184 FKs before any guard
+    // under test is reached, turning every refusal into a fixture error.
+    assert.ok(org.customerId, "scratch org must seed a party for the worker leg");
+    assert.ok(org.vendorId, "scratch org must seed a second party for the worker leg");
+    assert.ok(org.subsidiaryId, "scratch org must seed a subsidiary for the employer leg");
     const users = (await db.execute<{ id: string }>(sql`
       select id from users where org_id = ${org.orgId} order by created_at limit 1`)).rows;
     assert.ok(users[0], "scratch org must seed at least one user for submission actors");
     const employmentId = randomUUID();
-    await db.execute(sql`
-      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-      values (${employmentId}, ${org.orgId}, ${randomUUID()}, ${randomUUID()}, 1)`);
+    const secondEmploymentId = randomUUID();
+    for (const [id, party] of [[employmentId, org.customerId], [secondEmploymentId, org.vendorId]] as const) {
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${id}, ${org.orgId}, ${party}, ${org.subsidiaryId}, 1)`);
+    }
     harness = {
       db,
       orgId: org.orgId,
       actorId: users[0]!.id,
       employmentId,
+      secondEmploymentId,
       cleanupOrgs: [org.orgId],
     };
-    if (!teardownRegistered) {
-      teardownRegistered = true;
-      t.after(async () => {
-        const [{ dropScratchOrgReporting }] = await import("../engine/src/test-fixtures.ts");
-        for (const id of harness!.cleanupOrgs) await dropScratchOrgReporting(id);
-        harness = null;
-      });
-    }
   }
   return harness;
 }
@@ -342,7 +361,7 @@ test("employment scope is composite: a valid employment id from another org is r
   const foreignEmployment = randomUUID();
   await h.db.execute(sql`
     insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${foreignEmployment}, ${other.orgId}, ${randomUUID()}, ${randomUUID()}, 1)`);
+    values (${foreignEmployment}, ${other.orgId}, ${other.customerId}, ${other.subsidiaryId}, 1)`);
   let err: string | null = null;
   try {
     await h.db.execute(sql`
@@ -425,6 +444,107 @@ test("submitted history cannot be deleted; pure drafts can", { skip: !DB, timeou
   );
 });
 
+test("bare submit flip without stamps, run, and reason is refused", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  const id = await insertDraft(h);
+  await assert.rejects(
+    h.db.execute(sql`update hrm_employment_change_requests set status = 'pending_approval' where id = ${id}`),
+    /atomically/,
+    "draft -> pending_approval without submission evidence must be refused",
+  );
+  const row = await readRequest(h, id);
+  assert.equal(row.status, "draft");
+});
+
+test("row id and created_at freeze from insert", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  const id = await insertDraft(h);
+  await assert.rejects(
+    h.db.execute(sql`update hrm_employment_change_requests set id = ${randomUUID()} where id = ${id}`),
+    /immutable/,
+    "row id must freeze",
+  );
+  await assert.rejects(
+    h.db.execute(sql`update hrm_employment_change_requests set created_at = now() - interval '1 day' where id = ${id}`),
+    /immutable/,
+    "created_at must freeze",
+  );
+});
+
+test("snapshot binding is null-safe and typed: null, missing, wrong-type, and mismatch all refused", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  const id = await insertDraft(h);
+  const runId = await makeFlowRun(h, id);
+  await h.db.execute(sql`
+    update hrm_employment_change_requests
+       set status = 'pending_approval', reason = 'r',
+           submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
+     where id = ${id}`);
+  const digest = (await readRequest(h, id)).payload_digest;
+  const good = snapshotFor({ digest, runId });
+  const variants: Array<[string, Record<string, unknown>]> = [
+    ["json-null digest", { ...good, payload_digest: null }],
+    ["missing digest key", (({ payload_digest, ...rest }) => rest)(good as Record<string, string>) as Record<string, unknown>],
+    ["missing gates key", (({ gates, ...rest }) => rest)(good as Record<string, unknown>)],
+    ["gates not array", { ...good, gates: { gate_id: randomUUID() } }],
+    ["string revision", { ...good, expected_employment_revision: "1" }],
+    ["wrong revision", { ...good, expected_employment_revision: 2 }],
+    ["wrong flow run", { ...good, flow_run_id: randomUUID() }],
+    ["json-null flow run", { ...good, flow_run_id: null }],
+  ];
+  for (const [name, snapshot] of variants) {
+    await assert.rejects(
+      h.db.execute(sql`
+        update hrm_employment_change_requests
+           set status = 'approved', decision_snapshot = ${JSON.stringify(snapshot)}::jsonb
+         where id = ${id}`),
+      /snapshot_binding/,
+      `${name} must be refused by the binding CHECK`,
+    );
+  }
+  const still = await readRequest(h, id);
+  assert.equal(still.status, "pending_approval");
+  assert.equal(still.decision_snapshot, null);
+});
+
+test("history FKs are restrictive except org cascade: deleting a named actor is refused", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  const rows = (await h.db.execute<{ conname: string; confdeltype: string }>(sql`
+    select c.conname, c.confdeltype
+      from pg_constraint c join pg_class t on t.oid = c.conrelid
+     where t.relname = 'hrm_employment_change_requests' and c.contype = 'f'`)).rows;
+  const byName = new Map(rows.map((r) => [r.conname, r.confdeltype]));
+  assert.equal(byName.get("hrm_employment_change_requests_org_id_fkey"), "c");
+  for (const name of [
+    "hrm_employment_change_requests_employment_fkey",
+    "hrm_employment_change_requests_flow_run_fkey",
+    "hrm_employment_change_requests_applied_change_fkey",
+    "hrm_employment_change_requests_submitted_by_fkey",
+    "hrm_employment_change_requests_applied_by_fkey",
+    "hrm_employment_change_requests_created_by_fkey",
+    "hrm_employment_change_requests_updated_by_fkey",
+  ]) {
+    assert.ok(
+      byName.get(name) === "r" || byName.get(name) === "a",
+      `${name} must be restrictive (RESTRICT/NO ACTION), got ${byName.get(name)}`,
+    );
+  }
+});
+
+async function insertCanonicalChange(
+  h: Harness,
+  employmentId: string,
+  revision: number,
+): Promise<string> {
+  const id = randomUUID();
+  await h.db.execute(sql`
+    insert into employment_changes
+      (id, org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_by)
+    values (${id}, ${h.orgId}, ${employmentId}, ${revision}, 'created', '{}'::jsonb,
+      'governed application evidence', ${h.actorId})`);
+  return id;
+}
+
 test("application is all-or-nothing, linked, and single-fire", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
   const id = await insertDraft(h);
@@ -439,9 +559,7 @@ test("application is all-or-nothing, linked, and single-fire", { skip: !DB, time
     update hrm_employment_change_requests
        set status = 'approved', decision_snapshot = ${JSON.stringify(snapshotFor({ digest, runId }))}::jsonb
      where id = ${id}`);
-  const changeId = randomUUID();
-  await h.db.execute(sql`
-    insert into employment_changes (id, org_id) values (${changeId}, ${h.orgId})`);
+  const changeId = await insertCanonicalChange(h, h.employmentId, 2);
   await h.db.execute(sql`
     update hrm_employment_change_requests
        set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
@@ -480,4 +598,95 @@ test("application is all-or-nothing, linked, and single-fire", { skip: !DB, time
     /does not exist/,
     "application against a nonexistent canonical change must be refused",
   );
+});
+
+test("RLS restricts by identity: each org sees only its own requests", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  const [{ createScratchOrg }] = await import("../engine/src/test-fixtures.ts");
+  const other = await createScratchOrg();
+  h.cleanupOrgs.push(other.orgId);
+  const otherEmployment = randomUUID();
+  await h.db.execute(sql`
+    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+    values (${otherEmployment}, ${other.orgId}, ${other.customerId}, ${other.subsidiaryId}, 1)`);
+  const otherUsers = (await h.db.execute<{ id: string }>(sql`
+    select id from users where org_id = ${other.orgId} order by created_at limit 1`)).rows;
+  assert.ok(otherUsers[0], "second scratch org must seed a user");
+  const ownId = await insertDraft(h);
+  const otherId = randomUUID();
+  await h.db.execute(sql`
+    insert into hrm_employment_change_requests
+      (id, org_id, employment_id, expected_employment_revision, payload,
+       payload_digest, payload_schema_version, created_by)
+    values (${otherId}, ${other.orgId}, ${otherEmployment}, 1,
+      ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1', ${otherUsers[0]!.id})`);
+  // Intentional owner bypass for fixture setup ends here: the assertions
+  // below run with bypass OFF under an explicit tenant, inside one
+  // transaction with transaction-local GUCs so no scope leaks to siblings.
+  // Each side carries a positive control — invisibility is proved to be
+  // identity-based, never an empty table.
+  await h.db.transaction(async (tx) => {
+    const scopedCount = async (orgId: string, id: string): Promise<number> => {
+      await tx.execute(sql`select set_config('app.bypass_rls', 'off', true)`);
+      await tx.execute(sql`select set_config('app.current_org', ${orgId}, true)`);
+      const rows = (await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows;
+      return rows[0]!.n;
+    };
+    assert.equal(await scopedCount(h.orgId, ownId), 1, "own request visible in own scope");
+    assert.equal(await scopedCount(h.orgId, otherId), 0, "foreign request hidden in own scope");
+    assert.equal(await scopedCount(other.orgId, otherId), 1, "foreign request visible in its own scope");
+    assert.equal(await scopedCount(other.orgId, ownId), 0, "own request hidden in foreign scope");
+  });
+});
+
+test("application proves same org, same employment, and exact revision", { skip: !DB, timeout: 120_000 }, async (t) => {
+  const h = await ctx(t);
+  async function approvedRequest(): Promise<{ id: string; runId: string; digest: string }> {
+    const id = await insertDraft(h);
+    const runId = await makeFlowRun(h, id);
+    await h.db.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'pending_approval', reason = 'r',
+             submitted_by = ${h.actorId}, submitted_at = now(), flow_run_id = ${runId}
+       where id = ${id}`);
+    const digest = (await readRequest(h, id)).payload_digest;
+    await h.db.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'approved',
+             decision_snapshot = ${JSON.stringify(snapshotFor({ digest, runId }))}::jsonb
+       where id = ${id}`);
+    return { id, runId, digest };
+  }
+  const otherEmploymentChange = await insertCanonicalChange(h, h.secondEmploymentId, 2);
+  const wrongRevisionChange = await insertCanonicalChange(h, h.employmentId, 99);
+  const first = await approvedRequest();
+  await assert.rejects(
+    h.db.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+             applied_employment_revision = 2, applied_employment_change_id = ${otherEmploymentChange}
+       where id = ${first.id}`),
+    /another employment/,
+    "application against another employment's change must be refused",
+  );
+  const second = await approvedRequest();
+  await assert.rejects(
+    h.db.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+             applied_employment_revision = 2, applied_employment_change_id = ${wrongRevisionChange}
+       where id = ${second.id}`),
+    /not the applied revision/,
+    "application with a mismatched canonical revision must be refused",
+  );
+  const rightChange = await insertCanonicalChange(h, h.employmentId, 2);
+  const third = await approvedRequest();
+  await h.db.execute(sql`
+    update hrm_employment_change_requests
+       set status = 'applied', applied_at = now(), applied_by = ${h.actorId},
+           applied_employment_revision = 2, applied_employment_change_id = ${rightChange}
+     where id = ${third.id}`);
+  const applied = await readRequest(h, third.id);
+  assert.equal(applied.status, "applied");
 });
