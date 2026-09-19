@@ -622,16 +622,9 @@ test("RLS restricts by identity under a proven-restricted role", { skip: !DB, ti
   const other = await createScratchOrg();
   h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
-    // Positive proof the session role is genuinely restricted: a superuser
-    // or BYPASSRLS role skips policies entirely (FORCE included), which
-    // would make the invisibility assertions below vacuous. Fail here with
-    // the role named instead of misreading counts later.
-    const who = (await h.run.execute<{ u: string; s: boolean; b: boolean }>(sql`
-      select current_user as u,
-             (select rolsuper from pg_roles where rolname = current_user) as s,
-             (select rolbypassrls from pg_roles where rolname = current_user) as b`)).rows[0]!;
-    assert.equal(who.s, false, `RLS proof needs a non-superuser role, got ${who.u}`);
-    assert.equal(who.b, false, `RLS proof needs a role without BYPASSRLS, got ${who.u}`);
+    // Fixture rows are seeded as the owner (the harness login): the
+    // restricted role below receives only a test-local SELECT grant, so it
+    // can prove isolation without ever writing.
     const otherEmployment = randomUUID();
     await h.run.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -647,23 +640,58 @@ test("RLS restricts by identity under a proven-restricted role", { skip: !DB, ti
          payload_digest, payload_schema_version, created_by)
       values (${otherId}, ${other.orgId}, ${otherEmployment}, 1,
         ${JSON.stringify(PAYLOAD(1))}::jsonb, ${"0".repeat(64)}, 'v1', ${otherUsers[0]!.id})`);
-    // Fixture setup under the intentional owner bypass ends here: the
-    // assertions below run with bypass OFF under an explicit tenant, in a
+    // Owner-side precondition: the bootstrap-provided restricted role must
+    // exist and be genuinely constrained. Fail here with the role named
+    // instead of misreading counts later. Never CREATE ROLE here — global
+    // role creation is outside this slice.
+    const role = (await h.run.execute<{ r: string; s: boolean; b: boolean }>(sql`
+      select rolname as r, rolsuper as s, rolbypassrls as b from pg_roles
+       where rolname = 'openbooks_app'`)).rows[0];
+    assert.ok(role, "bootstrap must provide the restricted openbooks_app role");
+    assert.equal(role.s, false, "openbooks_app must not be a superuser");
+    assert.equal(role.b, false, "openbooks_app must not have BYPASSRLS");
+    // Test-local read grant as owner: the new table carries no standing
+    // grant to the restricted role, so without this every count below would
+    // be 0 from missing privilege — a vacuous pass. Rolls back with the
+    // isolated transaction.
+    await h.run.execute(sql`grant select on hrm_employment_change_requests to openbooks_app`);
+    // Fixture setup as owner ends here: the assertions below run AS the
+    // restricted role with bypass OFF under an explicit tenant, in a
     // savepoint with transaction-local GUCs so no scope leaks to siblings.
     // Each side carries a positive control — invisibility is proved to be
-    // identity-based, never an empty table.
+    // identity-based, never an empty table or a missing grant.
     await h.run.transaction(async (tx) => {
-      const scopedCount = async (orgId: string, id: string): Promise<number> => {
-        await tx.execute(sql`select set_config('app.bypass_rls', 'off', true)`);
-        await tx.execute(sql`select set_config('app.current_org', ${orgId}, true)`);
-        const rows = (await tx.execute<{ n: number }>(sql`
-          select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows;
-        return rows[0]!.n;
-      };
-      assert.equal(await scopedCount(h.orgId, ownId), 1, "own request visible in own scope");
-      assert.equal(await scopedCount(h.orgId, otherId), 0, "foreign request hidden in own scope");
-      assert.equal(await scopedCount(other.orgId, otherId), 1, "foreign request visible in its own scope");
-      assert.equal(await scopedCount(other.orgId, ownId), 0, "own request hidden in foreign scope");
+      await tx.execute(sql`set local role openbooks_app`);
+      try {
+        // Load-bearing proof AFTER the switch: a superuser or BYPASSRLS
+        // role skips policies entirely (FORCE included), which would make
+        // the invisibility assertions below vacuous. Asserting before the
+        // switch proved only the owner login, never the asserting role.
+        const who = (await tx.execute<{ u: string; s: boolean; b: boolean }>(sql`
+          select current_user as u,
+                 (select rolsuper from pg_roles where rolname = current_user) as s,
+                 (select rolbypassrls from pg_roles where rolname = current_user) as b`)).rows[0]!;
+        assert.equal(who.u, "openbooks_app", "RLS proof must run as the restricted role");
+        assert.equal(who.s, false, `RLS proof needs a non-superuser role, got ${who.u}`);
+        assert.equal(who.b, false, `RLS proof needs a role without BYPASSRLS, got ${who.u}`);
+        const scopedCount = async (orgId: string, id: string): Promise<number> => {
+          await tx.execute(sql`select set_config('app.bypass_rls', 'off', true)`);
+          await tx.execute(sql`select set_config('app.current_org', ${orgId}, true)`);
+          const rows = (await tx.execute<{ n: number }>(sql`
+            select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows;
+          return rows[0]!.n;
+        };
+        assert.equal(await scopedCount(h.orgId, ownId), 1, "own request visible in own scope");
+        assert.equal(await scopedCount(h.orgId, otherId), 0, "foreign request hidden in own scope");
+        assert.equal(await scopedCount(other.orgId, otherId), 1, "foreign request visible in its own scope");
+        assert.equal(await scopedCount(other.orgId, ownId), 0, "own request hidden in foreign scope");
+      } finally {
+        // Restore the owner session role before the savepoint releases, so
+        // outer owner cleanup never runs as the restricted role — even when
+        // an assertion above throws. The outer isolated() rollback is the
+        // final backstop.
+        await tx.execute(sql`reset role`);
+      }
     });
   });
 });
