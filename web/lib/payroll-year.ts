@@ -55,7 +55,7 @@ export function payrollYearRefusal(raw: unknown): string | null {
   const { min, max } = PAYROLL_TAX_YEAR_SANITY_WINDOW
   switch (cause.cause) {
     case 'absent':
-      return `year is required — got "${suppliedValue(raw)}"; pass a year between ${min} and ${max}`
+      return `year is required — pass a year between ${min} and ${max}`
     case 'not-a-number':
       return `year must be a whole number — "${suppliedValue(raw)}" is not a number; pass a year between ${min} and ${max}`
     case 'non-integer':
