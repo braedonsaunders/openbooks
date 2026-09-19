@@ -9,7 +9,7 @@
  */
 
 import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money.ts'
-import { SETUP_ENTITY_BY_KEY, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
+import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
 
@@ -227,7 +227,11 @@ export function buildRow(
     const raw = opts.forCreate && body[field.key] === undefined
       ? field.defaultValue
       : body[field.key]
-    const res = coerceField(field, raw, setupFieldVisible(field, body))
+    // Scoped selects (pay-component treatments scoped by the component's
+    // country) validate against the options that apply to THIS row — the
+    // same list the drawer offered for it via setupFieldOptions.
+    const scoped = field.scopedOptions ? { ...field, options: setupFieldOptions(field, body) } : field
+    const res = coerceField(scoped, raw, setupFieldVisible(field, body))
     if ('error' in res) return { error: res.error }
     if (res.value === undefined) continue // required select left unset on edit → skip
     // Never write null to a NOT-NULL-with-default column: on create, omit it so

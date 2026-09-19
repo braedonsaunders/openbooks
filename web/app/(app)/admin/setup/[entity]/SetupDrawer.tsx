@@ -17,7 +17,7 @@ import {
   cn,
   type SelectOption,
 } from '@openbooks/ui'
-import { setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
@@ -344,6 +344,7 @@ export function SetupDrawer({
               creating={creating}
               forceLocked={Object.hasOwn(fixedValues ?? {}, field.key)}
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
+              formValues={form}
               t={t}
             />
           </Fragment>
@@ -422,6 +423,7 @@ function FieldControl({
   creating,
   forceLocked,
   refOptions,
+  formValues,
   t,
 }: {
   field: SetupField
@@ -430,6 +432,8 @@ function FieldControl({
   creating: boolean
   forceLocked: boolean
   refOptions: RefOption[]
+  /** Live drawer values, so a scoped select follows its scope field. */
+  formValues: Record<string, unknown>
   t: ReturnType<typeof useTranslations>
 }) {
   const locale = useLocale()
@@ -577,12 +581,16 @@ function FieldControl({
   }
 
   if (field.kind === 'select') {
+    // Scoped selects (pay-component treatments scoped by the component's
+    // country) follow the live scope value — the same setupFieldOptions the
+    // write path validates against, so the drawer offers exactly what saves.
+    const options = setupFieldOptions(field, formValues)
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>
         <Select aria-label={label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           {!field.required ? <option value="">—</option> : null}
-          {field.options?.map((o) => (
+          {options.map((o) => (
             <option key={o.value} value={o.value}>
               {setupOptionLabel(o, t)}
             </option>

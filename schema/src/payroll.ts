@@ -119,8 +119,13 @@ export const payComponents = pgTable(
     /** Earnings: taxed with the T4127 bonus (non-periodic) method. */
     nonPeriodic: boolean("non_periodic").notNull().default(false),
     /**
-     * Deductions: pre-tax treatment per T4127 factor. 'pension_f' = RPP/RRSP
-     * (factor F), 'union_dues' = U1, 'alimony' = F2, 'none' = after-tax.
+     * Deductions: pre-tax treatment from the employee pack's declared
+     * vocabulary (`PayrollCountryPack.deductionTreatments`) — 'pension_f',
+     * 'union_dues' and 'alimony' are the T4127 factors F, U1 and F2,
+     * 'none' = after-tax. The compute layer keys off the pack's
+     * declaration, so a key the pack does not declare is inert on its runs.
+     * Values are closed by a CHECK constraint: a new treatment (e.g. AU
+     * 'salary_sacrifice') ships with a forward migration.
      */
     taxTreatment: text("tax_treatment", {
       enum: ["none", "pension_f", "union_dues", "alimony"],

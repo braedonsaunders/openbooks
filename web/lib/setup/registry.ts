@@ -84,10 +84,17 @@ export const setupOptionLabel = (
  *
  * - `payroll-filing-countries`     — countries with a declared payroll pack
  * - `payroll-filing-program-types` — the packs' declared filing program types
+ * - `payroll-component-countries`  — installable payroll packs, for the
+ *   pay-component country picker (a component applies to a pack's employees)
+ * - `payroll-deduction-treatments` — the packs' declared pre-tax treatments,
+ *   resolved per country into `scopedOptions` (plus the cross-pack union as
+ *   the flat `options` fallback)
  */
 export type SetupDynamicOptionsSource =
   | 'payroll-filing-countries'
   | 'payroll-filing-program-types'
+  | 'payroll-component-countries'
+  | 'payroll-deduction-treatments'
 
 export interface SetupField {
   key: string
@@ -100,6 +107,16 @@ export interface SetupField {
   options?: SetupOption[]
   /** Replace `options` from a runtime registry on server surfaces. */
   optionsSource?: SetupDynamicOptionsSource
+  /**
+   * Per-value option lists for a select whose choices depend on another
+   * field in the same drawer (pay-component treatments depend on the
+   * component's country: the dialog renders the treatments THAT pack
+   * declares, not a fixed list). Server surfaces fill `byValue` from the
+   * runtime registry; `setupFieldOptions` picks the list for the live scope
+   * value. The generic layer never names the scope field — it reads
+   * `scopeField` from this declaration.
+   */
+  scopedOptions?: { scopeField: string; byValue: Record<string, SetupOption[]> }
   /** ref / multiref option source. */
   ref?: SetupRefSource
   /** Natural keys / immutable columns: editable on create, read-only on edit. */
@@ -131,6 +148,35 @@ export function setupFieldVisible(field: SetupField, values: Record<string, unkn
   if (field.hidden) return false
   if (!field.showWhen) return true
   return field.showWhen.in.includes(String(values[field.showWhen.field] ?? ''))
+}
+
+/**
+ * The select options that apply to the values currently in the form. A
+ * field without `scopedOptions` offers its static `options`; a scoped field
+ * offers the list for the live scope value (the component's country), the
+ * cross-pack union when the scope is empty (a shared component applies to
+ * every pack's employees, and the compute layer keys off the employee's
+ * pack — so a foreign key is inert there rather than wrong), and the static
+ * fallback when the scope names nothing declared. Render and write paths
+ * both resolve through this, so the picker can never offer what the server
+ * refuses.
+ */
+export function setupFieldOptions(field: SetupField, values: Record<string, unknown>): SetupOption[] {
+  const scoped = field.scopedOptions
+  if (!scoped) return field.options ?? []
+  const scope = String(values[scoped.scopeField] ?? '')
+  if (scope !== '') return scoped.byValue[scope] ?? field.options ?? []
+  const seen = new Set<string>()
+  const union: SetupOption[] = []
+  for (const list of Object.values(scoped.byValue)) {
+    for (const option of list) {
+      if (!seen.has(option.value)) {
+        seen.add(option.value)
+        union.push(option)
+      }
+    }
+  }
+  return union.length > 0 ? union : (field.options ?? [])
 }
 
 export interface SetupColumn {
@@ -428,7 +474,11 @@ const PAY_COMPONENT_BASES = [
   { value: 'percent_of_gross', labelKey: 'options.payComponentBasis.percentOfGross' },
 ]
 
-// Pre-tax treatment per the T4127 factors (F, U1, F2); 'none' = after-tax.
+// STATIC FALLBACK ONLY for the pay-component treatment picker — server
+// surfaces replace these with the component's pack-declared treatments
+// (`optionsSource: 'payroll-deduction-treatments'`, resolved by
+// resolveDynamicSetupOptions), so an AU component offers salary sacrifice
+// and a CA one the T4127 factors (F, U1, F2) with no edit here.
 const PAY_TAX_TREATMENTS = [
   { value: 'none', labelKey: 'options.payTaxTreatment.none' },
   { value: 'pension_f', labelKey: 'options.payTaxTreatment.pensionF' },
@@ -1690,7 +1740,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'kind', kind: 'badge', options: PAY_COMPONENT_KINDS },
-      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES },
+      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-component-countries' },
       { key: 'basis', kind: 'badge', options: PAY_COMPONENT_BASES },
       { key: 'sequence', kind: 'number' },
       { key: 'isActive', kind: 'badge-active' },
@@ -1698,14 +1748,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Country pack filter: a chosen country also shows shared (country-less)
     // components, since those apply to every pack's employees.
     filters: [
-      { key: 'country', options: PAY_COMPONENT_COUNTRIES, nullMatchesAll: true },
+      { key: 'country', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-component-countries', nullMatchesAll: true },
       { key: 'kind', options: PAY_COMPONENT_KINDS },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
       { key: 'kind', kind: 'select', required: true, options: PAY_COMPONENT_KINDS },
-      { key: 'country', kind: 'select', options: PAY_COMPONENT_COUNTRIES },
+      // Every installable pack, resolved at render time — the static pair
+      // is the fallback for surfaces that render without resolving.
+      { key: 'country', kind: 'select', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-component-countries' },
       { key: 'basis', kind: 'select', keepDefault: true, defaultValue: 'fixed_amount', options: PAY_COMPONENT_BASES },
       { key: 'value', kind: 'decimal' },
       { key: 'taxable', kind: 'boolean', defaultValue: true },
@@ -1713,7 +1765,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'insurable', kind: 'boolean', defaultValue: true },
       { key: 'vacationable', kind: 'boolean', defaultValue: true },
       { key: 'nonPeriodic', kind: 'boolean' },
-      { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS },
+      // Pre-tax treatments THE COMPONENT'S PACK declares, resolved per
+      // country at render time (`scopedOptions`): an AU component offers
+      // salary sacrifice, a CA one the T4127 factors, and a pack with no
+      // transcribed treatment offers after-tax only. The static list is the
+      // fallback for surfaces that render without resolving.
+      { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS, optionsSource: 'payroll-deduction-treatments' },
       // Deduction protection. Only money leaving the employee can be protected,
       // so the group hides on an earning or an employer contribution (the
       // pay_components CHECK constraint enforces the same rule).

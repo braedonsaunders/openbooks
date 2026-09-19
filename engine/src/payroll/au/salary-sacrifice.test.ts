@@ -75,7 +75,7 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
     insurable: GROSS,
     reducedBases,
     deduction: () => "0.0000",
-    pushStatutory: (systemKey, _kind, _description, amount, _sequence) => {
+    pushStatutory: (systemKey, _kind, _description, amount) => {
       pushed.push({ systemKey, amount });
     },
     storedCertificates: [],

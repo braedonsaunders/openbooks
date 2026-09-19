@@ -1,4 +1,5 @@
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './registry'
 
 /**
@@ -29,6 +30,22 @@ const regionName = (() => {
   }
 })()
 
+/** After-tax: the generic member of every pack's treatment list. */
+const AFTER_TAX_OPTION: SetupOption = { value: 'none', labelKey: 'options.payTaxTreatment.none' }
+
+function treatmentOption(key: string, labelKey: string | undefined, label: string): SetupOption {
+  return labelKey ? { value: key, labelKey, label } : { value: key, label }
+}
+
+/** This pack's treatment picker list: after-tax plus its declared vocabulary. */
+function packTreatmentOptions(country: string): SetupOption[] {
+  const treatments = payrollPack(country).deductionTreatments
+  return [
+    AFTER_TAX_OPTION,
+    ...treatments.map((treatment) => treatmentOption(treatment.key, treatment.labelKey, treatment.label)),
+  ]
+}
+
 function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
   switch (source) {
     case 'payroll-filing-countries':
@@ -47,11 +64,56 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       }
       return [...options.values()]
     }
+    case 'payroll-component-countries':
+      return installablePayrollPacks().map((pack) => ({
+        value: pack.country,
+        label: pack.name,
+      }))
+    case 'payroll-deduction-treatments': {
+      // Flat fallback: the cross-pack union (after-tax first). The per-pack
+      // lists ride `scopedOptions` (see resolveField below); the drawer and
+      // the write path both scope through `setupFieldOptions`, so the union
+      // only renders where no country is in scope.
+      const seen = new Set<string>()
+      const union: SetupOption[] = []
+      for (const pack of installablePayrollPacks()) {
+        for (const option of packTreatmentOptions(pack.country)) {
+          if (!seen.has(option.value)) {
+            seen.add(option.value)
+            union.push(option)
+          }
+        }
+      }
+      return union
+    }
   }
+}
+
+/** Per-country treatment lists for a scoped treatment field, keyed by pack country. */
+function deductionTreatmentsByCountry(): Record<string, SetupOption[]> {
+  return Object.fromEntries(
+    installablePayrollPacks().map((pack) => [pack.country, packTreatmentOptions(pack.country)]),
+  )
 }
 
 const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T): T =>
   item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource) } : item
+
+/**
+ * A treatment field resolves twice: the flat cross-pack union replaces
+ * `options` (the fallback where no country is in scope), and the per-pack
+ * lists ride `scopedOptions` so the drawer and the write path scope through
+ * `setupFieldOptions`. The scope field comes from the descriptor contract —
+ * this module only fills the pack side of it.
+ */
+const resolveField = (field: SetupField): SetupField => {
+  const resolved = resolve(field)
+  if (field.optionsSource !== 'payroll-deduction-treatments') return resolved
+  return {
+    ...resolved,
+    scopedOptions: { scopeField: 'country', byValue: deductionTreatmentsByCountry() },
+  }
+}
 
 /** The entity with every `optionsSource` materialized. Identity when none. */
 export function resolveDynamicSetupOptions(entity: SetupEntity): SetupEntity {
@@ -64,7 +126,7 @@ export function resolveDynamicSetupOptions(entity: SetupEntity): SetupEntity {
   return {
     ...entity,
     columns: entity.columns.map(resolve),
-    fields: entity.fields.map(resolve),
+    fields: entity.fields.map(resolveField),
     filters: entity.filters?.map(resolve),
   }
 }
