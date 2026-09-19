@@ -119,7 +119,7 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?payroll-amendments-cancellation-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(): void {
@@ -134,6 +134,10 @@ function post(body: Record<string, unknown>): Promise<Response> {
       country: 'CA', filing: 't4', year: 2026, rowIds: ['row-1'], ...body,
     }),
   }))
+}
+
+function get(query: string): Promise<Response> {
+  return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments${query}`))
 }
 
 test('the API rejects a cancellation that lacks explicit confirmation', async () => {
@@ -152,6 +156,56 @@ test('the API rejects a blank cancellation reason before the engine is reached',
   assert.equal(response.status, 422)
   assert.match((await response.json()).error, /nonblank cancellation reason/)
   assert.deepEqual(state.issues, [])
+})
+
+test('POST refuses each year cause by name, with the value and the range', async () => {
+  reset()
+  const cases: Array<{ year: unknown; match: RegExp[] }> = [
+    { year: null, match: [/year is required/, /2020/, /2100/] },
+    { year: 'abc', match: [/not a number/, /abc/, /2020/, /2100/] },
+    { year: 2026.5, match: [/whole year/, /2026\.5/, /2020/, /2100/] },
+    { year: 2019, match: [/2019/, /2020/, /2100/] },
+    { year: 2101, match: [/2101/, /2020/, /2100/] },
+  ]
+  for (const { year, match } of cases) {
+    const response = await post({ year, revision: 'original' })
+    assert.equal(response.status, 422, `year ${String(year)} was not refused`)
+    const error = (await response.json() as { error: string }).error
+    for (const pattern of match) assert.match(error, pattern)
+    assert.deepEqual(state.issues, [])
+  }
+})
+
+test('POST accepts the boundary years 2020 and 2100', async () => {
+  for (const year of [2020, 2100]) {
+    reset()
+    const response = await post({ year, revision: 'original' })
+    assert.equal(response.status, 200, `year ${year} was not accepted`)
+  }
+})
+
+test('GET refuses each year cause by name, with the value and the range', async () => {
+  const cases: Array<{ query: string; match: RegExp[] }> = [
+    // No year parameter at all: absent, not a range error over zero.
+    { query: '?country=CA&filing=t4', match: [/year is required/, /2020/, /2100/] },
+    { query: '?country=CA&filing=t4&year=abc', match: [/not a number/, /abc/, /2020/, /2100/] },
+    { query: '?country=CA&filing=t4&year=2026.5', match: [/whole year/, /2026\.5/, /2020/, /2100/] },
+    { query: '?country=CA&filing=t4&year=2019', match: [/2019/, /2020/, /2100/] },
+    { query: '?country=CA&filing=t4&year=2101', match: [/2101/, /2020/, /2100/] },
+  ]
+  for (const { query, match } of cases) {
+    const response = await get(query)
+    assert.equal(response.status, 422, `${query} was not refused`)
+    const error = (await response.json() as { error: string }).error
+    for (const pattern of match) assert.match(error, pattern)
+  }
+})
+
+test('GET accepts the boundary years 2020 and 2100', async () => {
+  for (const year of [2020, 2100]) {
+    const response = await get(`?country=CA&filing=t4&year=${year}`)
+    assert.equal(response.status, 200, `year ${year} was not accepted`)
+  }
 })
 
 test('a confirmed cancellation passes its trimmed reason into the filing note', async () => {

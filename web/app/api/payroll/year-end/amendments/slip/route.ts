@@ -4,6 +4,7 @@ import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import { filingCorrectionSlip } from '@openbooks/engine/src/payroll-yearend-amendments.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { payrollYearRefusal } from '../../../../../../lib/payroll-year'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { payrollSlipFacsimile } from '../../../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsimile'
@@ -26,10 +27,12 @@ export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
-  const year = Number(url.searchParams.get('year'))
-  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
-    return NextResponse.json({ error: 'invalid year' }, { status: 422 })
+  const yearRaw = url.searchParams.get('year')
+  const yearRefusal = payrollYearRefusal(yearRaw)
+  if (yearRefusal !== null) {
+    return NextResponse.json({ error: yearRefusal }, { status: 422 })
   }
+  const year = Number(yearRaw)
   const row = url.searchParams.get('row') ?? ''
   if (!row) return NextResponse.json({ error: 'row is required' }, { status: 422 })
   const revision = url.searchParams.get('revision') ?? 'amended'

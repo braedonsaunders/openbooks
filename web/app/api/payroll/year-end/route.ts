@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { payrollYearRefusal } from '../../../../lib/payroll-year'
 import { guardPayrollYearEndFilings } from '../subsidiary-scope'
 
 export const dynamic = 'force-dynamic'
@@ -15,10 +16,12 @@ export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
-  const year = Number(url.searchParams.get('year'))
-  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
-    return NextResponse.json({ error: 'invalid year' }, { status: 422 })
+  const yearRaw = url.searchParams.get('year')
+  const yearRefusal = payrollYearRefusal(yearRaw)
+  if (yearRefusal !== null) {
+    return NextResponse.json({ error: yearRefusal }, { status: 422 })
   }
+  const year = Number(yearRaw)
   const filings = await orgYearEndFilings(gate.user.orgId, year)
   const denied = await guardPayrollYearEndFilings(gate, filings, year)
   if (denied) return denied

@@ -5,6 +5,7 @@ import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
@@ -17,14 +18,10 @@ type FileInput = {
   params: Record<string, string>
 }
 
-function parseYear(value: unknown): number | null {
-  const year = Number(value)
-  return Number.isInteger(year) && year >= 2020 && year <= 2100 ? year : null
-}
-
 function parseBody(body: Record<string, unknown>): FileInput | NextResponse {
-  const year = parseYear(body.year)
-  if (year == null) return NextResponse.json({ error: 'invalid year' }, { status: 422 })
+  const yearRefusal = payrollYearRefusal(body.year)
+  if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
+  const year = Number(body.year)
   if (typeof body.country !== 'string' || typeof body.filing !== 'string') {
     return NextResponse.json({ error: 'country and filing are required' }, { status: 422 })
   }
@@ -120,8 +117,9 @@ export async function GET(req: Request) {
       { status: 405 },
     )
   }
-  const year = parseYear(params.year)
-  if (year == null) return NextResponse.json({ error: 'invalid year' }, { status: 422 })
+  const yearRefusal = payrollYearRefusal(params.year)
+  if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
+  const year = Number(params.year)
   return serveFile(gate, {
     country: params.country ?? '',
     filing: params.filing ?? '',
