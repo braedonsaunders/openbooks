@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { BASELINE_EXPOSED, noInterp, scanFile, scanTree, stripped } from "./check-test-bypass-scope.mjs";
+import { BASELINE_EXPOSED, noInterp, ownLoadPoints, scanFile, scanTree, stripped } from "./check-test-bypass-scope.mjs";
 import { codeOnly } from "./check-test-mock-surface.mjs";
 
 function fixtureTree(files) {
@@ -359,4 +359,20 @@ test("a repo-relative path is scanned from the repo, not the process cwd", () =>
   } finally {
     process.chdir(cwd);
   }
+});
+
+test("a dynamic import of a Next.js route group is a load point, parens and all", () => {
+  // The argument scan used to be /import\s*\(\s*([^)]*?)\)/, which stops at the
+  // first ")" — and a route group puts one INSIDE the specifier. It captured
+  // `'../app/(app` , matched no literal shape, and the load point vanished, so a
+  // module reached through a route group was invisible to reachability and the
+  // writes behind it were never attributed to a bypass scope. Route groups are
+  // used throughout this app, so this asserts the specifier survives whole.
+  const points = ownLoadPoints(`const { loadArCockpit } = await import('../app/(app)/ar/view');\n`);
+  assert.deepEqual(points.map((point) => point.spec), ["../app/(app)/ar/view"]);
+});
+
+test("a route-group specifier with a query tag still survives the scan", () => {
+  const points = ownLoadPoints(`const mod = await import('../app/(app)/ap/view?tag');\n`);
+  assert.deepEqual(points.map((point) => point.spec), ["../app/(app)/ap/view?tag"]);
 });

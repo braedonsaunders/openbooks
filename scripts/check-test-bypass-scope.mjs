@@ -140,6 +140,34 @@ const unescapeSpec = (text) => text.replace(/\\(['"`\\])/g, "$1");
 // (pos -1: they evaluate before any module body) and top-level dynamic
 // imports (pos = offset: module evaluation runs them in source order, so a
 // top-level write before one still sees the test bypass).
+/**
+ * Dynamic `import(...)` calls, with the argument text and its offset.
+ *
+ * The argument scan MUST respect quotes. It used to be
+ * /import\s*\(\s*([^)]*?)\)/ at both call sites below, which stops at the first
+ * ")" — and a Next.js route group puts one INSIDE the specifier:
+ * `import('../app/(app)/ar/view')` captured `'../app/(app`, matched no literal
+ * shape, and the load point was silently dropped. For this guard that means a
+ * module reached through a route group was invisible to reachability, so writes
+ * behind it were never attributed to a bypass scope. Route groups are used
+ * throughout this app, so the blind spot was large and quiet.
+ *
+ * One helper, two call sites: the idiom was copied once already (it is also how
+ * the mock-surface guard lost whole import subtrees), so it lives in exactly one
+ * place here.
+ */
+function dynamicImportCalls(code) {
+  const calls = [];
+  const pattern = /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
+  for (const match of code.matchAll(pattern)) {
+    const inner = match[2] !== undefined
+      ? `${match[1]}${match[2]}${match[1]}`
+      : (match[3] ?? "");
+    calls.push({ inner, index: match.index });
+  }
+  return calls;
+}
+
 export function ownLoadPoints(code) {
   const points = [];
   const statik = /import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g;
@@ -153,16 +181,16 @@ export function ownLoadPoints(code) {
     points.push({ spec: unescapeSpec(match[2]), pos: -1 });
   }
   const bindings = stringBindings(code);
-  for (const match of code.matchAll(/import\s*\(\s*([^)]*?)\)/g)) {
-    if (braceDepthAt(code, match.index) !== 0) continue;
-    const inner = match[1].trim();
+  for (const call of dynamicImportCalls(code)) {
+    if (braceDepthAt(code, call.index) !== 0) continue;
+    const inner = call.inner.trim();
     const literal = inner.match(/^(['"])((?:\\\1|(?!\1).)+)\1$/);
     if (literal) {
-      points.push({ spec: unescapeSpec(literal[2]), pos: match.index });
+      points.push({ spec: unescapeSpec(literal[2]), pos: call.index });
       continue;
     }
     if (/^[A-Za-z_$][\w$]*$/.test(inner) && bindings.has(inner)) {
-      points.push({ spec: bindings.get(inner), pos: match.index });
+      points.push({ spec: bindings.get(inner), pos: call.index });
     }
   }
   return points;
@@ -780,9 +808,9 @@ export function reinstallPos(code, text, path, root) {
     if (point.pos > pos && reaches(point.spec, path)) return -1;
   }
   const bindings = stringBindings(code);
-  for (const match of code.matchAll(/import\s*\(\s*([^)]*?)\)/g)) {
-    if (braceDepthAt(code, match.index) === 0) continue;
-    const inner = match[1].trim();
+  for (const call of dynamicImportCalls(code)) {
+    if (braceDepthAt(code, call.index) === 0) continue;
+    const inner = call.inner.trim();
     const literal = inner.match(/^(['"])((?:\\\1|(?!\1).)+)\1$/);
     let spec = null;
     if (literal) spec = unescapeSpec(literal[2]);
