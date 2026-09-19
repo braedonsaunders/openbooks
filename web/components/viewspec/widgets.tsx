@@ -1335,7 +1335,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'year-end-workspace': (props) => (
     <YearEndView
       year={num(props, 'year') ?? new Date().getFullYear()}
-      currentYear={num(props, 'currentYear') ?? new Date().getFullYear()}
+      years={(props.years as number[]) ?? []}
       sections={(props.sections as ComponentProps<typeof YearEndView>['sections']) ?? []}
     />
   ),
@@ -1698,7 +1698,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'separations-workspace': (props) => (
     <SeparationsView
       year={num(props, 'year') ?? 0}
-      currentYear={num(props, 'currentYear') ?? 0}
+      years={(props.years as number[]) ?? []}
       sections={(props.sections as ComponentProps<typeof SeparationsView>['sections']) ?? []}
     />
   ),

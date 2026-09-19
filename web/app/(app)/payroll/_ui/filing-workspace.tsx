@@ -165,15 +165,20 @@ export interface FilingGroup {
  */
 export function FilingWorkspace({
   year,
-  currentYear,
+  years,
   path,
   groups,
   emptyTitle,
   amendments = false,
 }: {
   year: number
-  /** Organization business year — not the UTC calendar year. */
-  currentYear: number
+  /**
+   * Tax years the picker may offer, newest first, computed server-side from
+   * the installed packs (their current tax year and declared editions) and
+   * the org's own payroll data — never a calendar-year window, which hides a
+   * fiscal pack's posted year (AU September posts to the next calendar year).
+   */
+  years: number[]
   /** The surface's own route, for the year picker ("/payroll/year-end"). */
   path: string
   groups: FilingGroup[]
@@ -192,7 +197,9 @@ export function FilingWorkspace({
   const t = useTranslations('payroll.filings')
   const router = useRouter()
   const { money } = useMoney()
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i)
+  // The selected year stays selectable even when the offered list moved on
+  // (a bookmarked ?year=): the list itself is derived once, server-side.
+  const options = years.includes(year) ? years : [...years, year].sort((a, b) => b - a)
   const sections = groups.flatMap((group) => group.sections)
 
   const defaultSection = sections.find((s) => s.data.rows.length > 0) ?? sections[0] ?? null
@@ -248,7 +255,7 @@ export function FilingWorkspace({
             onChange={(e) => router.push(`${path}?year=${e.target.value}` as never)}
             className="w-32"
           >
-            {years.map((y) => (
+            {options.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </Select>

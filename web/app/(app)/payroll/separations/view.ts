@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import { orgFilingYearOptions } from '@openbooks/engine/src/payroll-yearend.ts'
 import { notFound } from 'next/navigation'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
@@ -36,7 +37,7 @@ import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
  *
  * Everything below the spec is loader work copied verbatim from page.tsx:
  * the `payroll.read` gate, the `payroll` feature gate (404 when disabled),
- * the org business year, the clamped `?year=` param, the scoped filings
+ * the pack-derived offered years, the clamped `?year=` param, the scoped filings
  * read (null when the caller's subsidiary scope excludes any row of the
  * year's population — a count is a disclosure, so the loader reproduces
  * the guard exactly and answers not-found here too), the
@@ -56,7 +57,7 @@ export interface SeparationsData {
   description: string
   viewTabs: Awaited<ReturnType<typeof groupTabs>>
   year: number
-  currentYear: number
+  years: number[]
   sections: YearEndFilingSection[]
 }
 
@@ -66,9 +67,14 @@ export async function loadSeparations(
   const authz = await requirePermission('payroll.read')
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('payroll.separations')
-  const currentYear = Number((await businessToday(authz.user.orgId)).slice(0, 4))
+  // Same pack-derived offered years as the year-end cockpit (one shared
+  // workspace, one derivation): the current tax year and declared editions of
+  // the installed packs plus the org's own payroll data — never the calendar
+  // year. The first offered year is the default.
+  const today = await businessToday(authz.user.orgId)
+  const years = await orgFilingYearOptions(authz.user.orgId, today)
   const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
+  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!
 
   const filings = await scopedYearEndFilings(authz, year)
   if (!filings) notFound()
@@ -83,7 +89,7 @@ export async function loadSeparations(
     description: t('description'),
     viewTabs,
     year,
-    currentYear,
+    years,
     sections,
   }
 }
@@ -107,10 +113,10 @@ export function separationsSpec(data: SeparationsData): PageSpec {
       // drawer — placed through one widget. The component owns selection
       // state, fetch mutations and every conditional pair; the spec only
       // names where it lives. Props are flat and exactly the component's
-      // destructured signature `{ year, currentYear, sections }`.
+      // destructured signature `{ year, years, sections }`.
       widgetBlock('separations-workspace', {
         year: f('year'),
-        currentYear: f('currentYear'),
+        years: f('years'),
         sections: f('sections'),
       }),
     ],
