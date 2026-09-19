@@ -371,6 +371,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0183_payroll_statutory_rate_history.sql",
     "0184_hrm_employment_foundation.sql",
     "0185_hrm_employment_change_requests.sql",
+    "0186_payroll_employment_context.sql",
     "0187_pay_component_treatment_shape.sql",
     "0188_hrm_change_request_wipe_allowance.sql",
   ]);

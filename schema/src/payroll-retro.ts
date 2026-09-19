@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
+import { workerEmployments } from "./hrm";
 
 /**
  * Retroactive pay: paying, in the current period, the difference a backdated
@@ -78,6 +80,8 @@ export const payrollRetroSettlements = pgTable(
     /** The retro pay run that pays this difference (documents.kind 'pay_run'). */
     retroPayRunDocumentId: uuid("retro_pay_run_document_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     /** The already-committed run being made good. */
     sourcePayRunDocumentId: uuid("source_pay_run_document_id").notNull(),
     sourcePeriodStart: date("source_period_start").notNull(),
@@ -112,6 +116,12 @@ export const payrollRetroSettlements = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "payroll_retro_settlements_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("payroll_retro_settlements_employment").on(t.orgId, t.employmentId),
     // One cell per retro run. Repeating it would pay the same difference twice
     // inside a single run, which no later reconciliation could unpick.
     uniqueIndex("payroll_retro_settlements_cell").on(

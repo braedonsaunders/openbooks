@@ -15,6 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
+import { workerEmployments } from "./hrm";
 import { payrollFilingAccounts } from "./payroll-filing";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -215,6 +216,13 @@ export const employeePayrollProfiles = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /**
+     * HRM employment link (0186): null = not yet stamped by
+     * `stampEmploymentContext`, never "no employment". Composite tenant FK
+     * to worker_employments below; cross-person writes are refused by the
+     * payroll_employment_coherence_guard trigger in the migration.
+     */
+    employmentId: uuid("employment_id"),
     payScheduleId: uuid("pay_schedule_id").notNull(),
     /** Statutory country pack this employee runs under. */
     country: text("country", { enum: ["CA", "US"] }).notNull().default("CA"),
@@ -333,6 +341,16 @@ export const employeePayrollProfiles = pgTable(
   },
   (t) => [
     uniqueIndex("employee_payroll_profiles_employee").on(t.orgId, t.employeePartyId),
+    foreignKey({
+      name: "employee_payroll_profiles_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("employee_payroll_profiles_employment").on(t.orgId, t.employmentId),
+    // One profile per employment once stamped; mirrors
+    // employee_payroll_profiles_employment_unique (0186).
+    uniqueIndex("employee_payroll_profiles_employment_unique").on(t.orgId, t.employmentId)
+      .where(sql`employment_id is not null`),
     index("employee_payroll_profiles_schedule").on(t.orgId, t.payScheduleId),
     check("employee_payroll_profiles_fed_code",
       sql`${t.federalClaimCode} is null or (${t.federalClaimCode} >= 0 and ${t.federalClaimCode} <= 10)`),
@@ -352,6 +370,8 @@ export const employeePayComponents = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     componentId: uuid("component_id").notNull(),
     /** Overrides the component default (amount, hourly rate, or percent). */
     value: money("value"),
@@ -361,6 +381,12 @@ export const employeePayComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "employee_pay_components_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("employee_pay_components_employment").on(t.orgId, t.employmentId),
     index("employee_pay_components_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
     check("employee_pay_components_range",
       sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
@@ -458,6 +484,12 @@ export const payStubs = pgTable(
     orgId: orgRef(),
     payRunDocumentId: uuid("pay_run_document_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /**
+     * HRM employment snapshot (0186): written once at calculate from
+     * `resolveEmploymentForPayroll`, never re-resolved — the stub is the
+     * historical record. Null = calculated before stamping existed.
+     */
+    employmentId: uuid("employment_id"),
     /** Statutory pack identity captured at calculation, not the live profile. */
     country: text("country"),
     countrySource: text("country_source", {
@@ -501,6 +533,12 @@ export const payStubs = pgTable(
       columns: [t.orgId, t.filingAccountId],
       foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
     }),
+    foreignKey({
+      name: "pay_stubs_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("pay_stubs_employment").on(t.orgId, t.employmentId),
     index("pay_stubs_filing_account").on(t.orgId, t.filingAccountId),
     check("pay_stubs_filing_account_evidence", sql`
       (${t.filingAccountSource} = 'unknown' and ${t.filingAccountId} is null and ${t.filingAccountEvidence} is null) or
@@ -620,6 +658,8 @@ export const payrollOpeningBalances = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     taxYear: integer("tax_year").notNull(),
     pensionableYtd: money("pensionable_ytd").notNull().default("0"),
     insurableYtd: money("insurable_ytd").notNull().default("0"),
@@ -670,6 +710,12 @@ export const payrollOpeningBalances = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "payroll_opening_balances_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("payroll_opening_balances_employment").on(t.orgId, t.employmentId),
     uniqueIndex("payroll_opening_balances_employee_year").on(
       t.orgId, t.employeePartyId, t.taxYear,
     ),
@@ -858,6 +904,8 @@ export const payRunAdjustments = pgTable(
     orgId: orgRef(),
     payRunDocumentId: uuid("pay_run_document_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     adjustmentType: text("adjustment_type", { enum: ["line", "exclude"] }).notNull(),
     componentId: uuid("component_id"),
     amount: money("amount"),
@@ -868,6 +916,12 @@ export const payRunAdjustments = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_run_adjustments_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("pay_run_adjustments_employment").on(t.orgId, t.employmentId),
     index("pay_run_adjustments_run").on(t.orgId, t.payRunDocumentId, t.employeePartyId),
     check("pay_run_adjustments_line_shape",
       sql`${t.adjustmentType} <> 'line' or (${t.componentId} is not null and ${t.amount} is not null)`),
@@ -892,12 +946,20 @@ export const payRunHolidayAssertions = pgTable(
     orgId: orgRef(),
     payRunDocumentId: uuid("pay_run_document_id").notNull(),
     employeePartyId: uuid("employee_party_id").notNull(),
+    /** HRM employment link (0186): null = not yet stamped, never "no employment". */
+    employmentId: uuid("employment_id"),
     holidayKey: text("holiday_key").notNull(),
     holidayDate: date("holiday_date").notNull(),
     absentWithoutConsent: boolean("absent_without_consent").notNull(),
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_run_holiday_assertions_employment_tenant_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    index("pay_run_holiday_assertions_employment").on(t.orgId, t.employmentId),
     uniqueIndex("pay_run_holiday_assertions_once_per_holiday").on(
       t.orgId, t.payRunDocumentId, t.employeePartyId, t.holidayKey, t.holidayDate,
     ),
