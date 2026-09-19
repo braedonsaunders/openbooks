@@ -282,4 +282,4 @@ const CA_WITHHOLDING_JURISDICTIONS: PayrollPackWithholding = {
  * no `reciprocity` member at all.
  */
 
-export { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS };
+export { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS, PROVINCE_NAMES };

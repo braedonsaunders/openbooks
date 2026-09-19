@@ -55,6 +55,7 @@ export const GB_NATION_NAMES: Readonly<Record<string, string>> = {
 export const GB_REGIONS: PayrollRegionCoverage = {
   label: "nation",
   known: [...GB_NATIONS],
+  regionNames: GB_NATION_NAMES,
   supported: ["ENG", "WLS", "NIR", "SCT"],
   unsupportedReason:
     "PAYE income tax withholding for {region} is not implemented by the GB payroll pack.",

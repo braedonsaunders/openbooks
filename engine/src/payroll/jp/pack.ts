@@ -32,7 +32,7 @@ import { computeJpStatutory, JP_FACTOR_LABELS } from "./compute-statutory.ts";
 import { jpPackFilings } from "./filings.ts";
 import { JP_JURISDICTIONS } from "./jurisdictions.ts";
 import { JP_PACK_RATES, JP_TAX_YEARS } from "./rates.ts";
-import { JP_PREFECTURE_CODES } from "./regions.ts";
+import { JP_PREFECTURE_CODES, JP_PREFECTURES } from "./regions.ts";
 import { JP_WITHHOLDING } from "./withholding.ts";
 
 /** Structural conformance for the registry entry. */
@@ -65,6 +65,7 @@ export type JpPayrollPack = PayrollCountryPack & {
 const JP_REGIONS: PayrollRegionCoverage = {
   label: "prefecture",
   known: JP_PREFECTURE_CODES,
+  regionNames: Object.fromEntries(JP_PREFECTURES.map((prefecture) => [prefecture.code, prefecture.name])),
   supported: JP_PREFECTURE_CODES,
   unsupportedReason:
     "income tax withholding for prefecture {region} is not implemented: the JP payroll pack "

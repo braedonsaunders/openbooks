@@ -287,7 +287,7 @@
       "remittanceHint": "Gutschriften je Konto: die in diesem Lauf erfassten Verbindlichkeiten.",
       "netPay": "Nettolohn an Mitarbeiter",
       "nextTitle": "Nächste Schritte",
-      "nextRemit": "Führen Sie die einbehaltenen Beträge mit einer Eingangsrechnung an die jeweiligen Stellen ab (CRA, Gewerkschaftskassen, Versicherungsträger).",
+      "nextRemit": "Führen Sie die einbehaltenen Beträge mit einer Eingangsrechnung an die jeweiligen Stellen ab.",
       "nextPay": "Zahlen Sie die Mitarbeiter über das Nettolohn-Verbindlichkeitskonto. Die Zahlung löst die in diesem Lauf erfasste Verbindlichkeit ab.",
       "amount": "Betrag",
       "paid": "Bezahlt",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {# gesetzlicher Bestandteil installiert} other {# gesetzliche Bestandteile installiert}}",
       "hint": "Das Installieren eines Pakets legt die gesetzlichen Lohnbestandteile an und schaltet die Einbehalts-Engine dieser Jurisdiktion ein. Bestehende Bestandteile werden niemals überschrieben.",
       "canada": {
-        "title": "Kanada",
-        "description": "Gesetzlicher Einbehalt für kanadische Lohnläufe, Abführungen und Jahresende.",
         "edition": "{edition, selectordinal, one {#.} two {#.} few {#.} other {#.}} Ausgabe (gültig {effective})",
         "engine": "Gesetzliche CRA-T4127-Engine —",
         "coverage": "Alle Provinzen & Territorien. Quebec: QPP, QPIP sowie Bundes- und Provinzeinkommensteuereinbehalt enthalten; die Provinzeinkommensteuer verwaltet Revenu Québec.",
@@ -702,8 +700,6 @@
         "verified": "Centgenau gegen CRA PDOC verifiziert."
       },
       "us": {
-        "title": "Vereinigte Staaten",
-        "description": "Gesetzlicher Bundeseinbehalt für US-Lohnläufe: Einkommensteuer, Social Security, Medicare und Arbeitslosigkeit.",
         "engine": "IRS-Pub-15-T-Prozentmethode-Engine (2026) mit W-4-Schritten 2–4 und Freibeträgen vor 2020.",
         "coverage": "49 unterstützte Staaten: 40 Steuer-Engines plus die neun steuerfreien Staaten (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC und NM werden bis zu offiziellen Referenzdateien abgewiesen.",
         "components": "Gesetzliche Lohnbestandteile: Bundeseinkommensteuer, Social Security, Medicare (inkl. Zusatz-Medicare), FUTA und SUI.",

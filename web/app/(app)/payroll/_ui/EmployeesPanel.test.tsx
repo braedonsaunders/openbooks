@@ -76,8 +76,10 @@ test('profile editor binds every column the packs declare', () => {
 // Exercise the real editor against a country that does not exist: subdivisions,
 // bands, forms and flags must all come from the served declaration.
 const xxPack: PackProfileDeclaration = {
+  countryName: 'Exemplia',
   subdivisionLabel: 'canton',
   subdivisions: ['ZH', 'AG'],
+  subdivisionNames: { ZH: 'Zurich', AG: 'Aargau' },
   supportedSubdivisions: ['ZH'],
   unsupportedReason: 'withholding for {region} is not implemented by the XX pack',
   unsupportedReasons: {},
@@ -186,16 +188,17 @@ function render(
 
 test('profile editor renders a pack it has never heard of', () => {
   const html = render({})
-  // The country picker offers the served pack under its own code — no locale
-  // key exists for XX, so the code reads as written.
-  assert.match(html, /<option value="XX"[^>]*>XX<\/option>/)
+  // The country picker offers the served pack under its SERVED NAME — no
+  // locale key exists for XX, so the pack's own name reads as written,
+  // never the bare code.
+  assert.match(html, /<option value="XX"[^>]*>Exemplia<\/option>/)
   assert.doesNotMatch(html, /value="CA"/)
   assert.doesNotMatch(html, /value="US"/)
   // Subdivisions and their label come from the declaration, unsupported codes
   // disabled with the pack's own reason.
   assert.match(html, /canton/)
-  assert.match(html, /<option value="ZH"[^>]*>ZH<\/option>/)
-  assert.match(html, /<option value="AG"[^>]*disabled[^>]*>AG<\/option>/)
+  assert.match(html, /<option value="ZH"[^>]*>Zurich<\/option>/)
+  assert.match(html, /<option value="AG"[^>]*disabled[^>]*>Aargau<\/option>/)
   assert.match(html, /withholding for AG is not implemented by the XX pack/)
   // The count band is declared 0–5, not the TD1's 0–10: the dropdown proves
   // the band is read, and the form heading proves the certificate is.
@@ -215,8 +218,10 @@ test('profile editor renders a pack it has never heard of', () => {
 // citation and required-ness — and a region-scoped form stays hidden until
 // the employee works in its region.
 const yyPack: PackProfileDeclaration = {
+  countryName: 'Whyland',
   subdivisionLabel: 'region',
   subdivisions: ['AA', 'ZZ'],
+  subdivisionNames: { AA: 'Aland', ZZ: 'Zanzibar' },
   supportedSubdivisions: ['AA', 'ZZ'],
   unsupportedReason: 'withholding for {region} is not implemented by the YY pack',
   unsupportedReasons: {},

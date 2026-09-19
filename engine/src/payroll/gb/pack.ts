@@ -175,10 +175,12 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
     // (period pay prices income plus bonuses less pension) but NOT
     // NIC-able earnings — so only `income` is named, and the engine keeps
     // subtracting via `deduction()` exactly as before.
+    // The label names the pack's own instrument: the shared catalog key
+    // (options.payTaxTreatment.pensionF) carries the Canadian factor name,
+    // so the GB treatment states its own English label and no labelKey.
     {
       key: "pension_f",
-      label: "Pension (RPP/RRSP, factor F)",
-      labelKey: "options.payTaxTreatment.pensionF",
+      label: "Pension (net-pay arrangement)",
       help: "Workplace pension (net-pay arrangement): reduces PAYE taxable pay, not National Insurance earnings.",
       reduces: ["income"],
     },

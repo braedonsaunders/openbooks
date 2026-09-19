@@ -12,6 +12,7 @@ import {
   declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,
   installablePayrollCountries,
+  installablePayrollPacks,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
   remittanceFrequencyBand,
   remittanceScheduleForFrequencyKey,
@@ -116,6 +117,14 @@ export interface PayrollSettingsWarning {
  * list. (Kept as a local name so the call sites below read unchanged.)
  */
 const installableCountries = installablePayrollCountries
+
+/**
+ * Installable packs as the PERSON sees them: (country, name) pairs from the
+ * same registry declaration. Served alongside the codes-only list because a
+ * surface handed only codes has nothing to show but codes — which is how the
+ * onboarding wizard rendered every pack past CA/US as a bare "GB"/"DE"/"FR".
+ */
+const installablePackPairs = installablePayrollPacks
 
 async function validatePayrollAccounts(
   orgId: string,
@@ -291,6 +300,7 @@ export async function GET() {
     settings, packs, stubPassword, encryptionAvailable, paymentMethods, setup,
     statutoryHolidayPay,
     installable: installableCountries(),
+    installablePacks: installablePackPairs(),
     ...options,
   })
 }

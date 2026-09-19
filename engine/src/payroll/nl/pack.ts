@@ -199,6 +199,9 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   regions: {
     label: "country",
     known: ["NL"],
+    // The single national region IS the country: its display name is the
+    // pack's own name, stated explicitly so the coverage test holds it.
+    regionNames: { NL: "Netherlands" },
     // Loonheffing is national: the engine computes the one Dutch withholding
     // end to end for 2026, so the country itself is supported and no
     // subnational region is declared.

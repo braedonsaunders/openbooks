@@ -161,8 +161,10 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
     const body = (await response.json()) as {
       countries: string[]
       packProfiles: Record<string, {
+        countryName: string
         subdivisionLabel: string
         subdivisions: string[]
+        subdivisionNames: Record<string, string>
         supportedSubdivisions: string[]
         certificates: { key: string; form: string; scope: { level: string; region?: string } }[]
         exemptionFlags: { column: string }[]
@@ -177,6 +179,16 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
     assert.deepEqual(body.countries, EXPECTED_COUNTRIES)
     assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES)
     for (const [country, profile] of Object.entries(body.packProfiles)) {
+      // The pickers show names, never bare codes: the pack's own name for
+      // the country, its regionNames for every known subdivision.
+      assert.equal(profile.countryName, PAYROLL_COUNTRY_PACKS[country]!.name, `${country} serves its pack name`)
+      for (const code of profile.subdivisions) {
+        assert.equal(
+          profile.subdivisionNames[code],
+          PAYROLL_COUNTRY_PACKS[country]!.regions.regionNames[code],
+          `${country}/${code} serves its declared region name`,
+        )
+      }
       assert.equal(typeof profile.subdivisionLabel, 'string', `${country} declares a subdivision label`)
       assert.ok(profile.subdivisionLabel.length > 0, `${country} subdivision label is non-empty`)
       assert.ok(Array.isArray(profile.subdivisions), `${country} declares subdivisions`)

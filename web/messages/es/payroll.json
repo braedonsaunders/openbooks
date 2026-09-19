@@ -287,7 +287,7 @@
       "remittanceHint": "Créditos por cuenta: los pasivos registrados en este ciclo.",
       "netPay": "Salario neto a empleados",
       "nextTitle": "Qué sigue",
-      "nextRemit": "Remita los importes retenidos a sus organismos con una factura de compra (CRA, fondos sindicales, aseguradoras).",
+      "nextRemit": "Recoja los importes retenidos a los organismos correspondientes con una factura de proveedor.",
       "nextPay": "Pague a los empleados desde la cuenta de salarios netos por pagar. El pago cancela el pasivo registrado en este ciclo.",
       "amount": "Importe",
       "paid": "Pagado",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {# componente legal instalado} other {# componentes legales instalados}}",
       "hint": "Instalar un paquete siembra los componentes de nómina legales y enciende el motor de retenciones de esa jurisdicción. Los componentes existentes nunca se sobrescriben.",
       "canada": {
-        "title": "Canadá",
-        "description": "Retenciones legales para ciclos canadienses, remesas y cierre anual.",
         "edition": "edición {edition, selectordinal, one {#º} two {#º} few {#º} other {#º}} (vigente {effective})",
         "engine": "Motor legal CRA T4127 —",
         "coverage": "Todas las provincias y territorios. Quebec: QPP, QPIP y retenciones de impuesto federal y provincial incluidas; el impuesto provincial lo administra Revenu Québec.",
@@ -702,8 +700,6 @@
         "verified": "Verificado al centavo contra PDOC de CRA."
       },
       "us": {
-        "title": "Estados Unidos",
-        "description": "Retenciones legales federales para ciclos de EE. UU.: impuesto sobre la renta, Seguro Social, Medicare y desempleo.",
         "engine": "Motor IRS Pub 15-T por método de porcentaje (2026) con W-4 pasos 2–4 y asignaciones previas a 2020.",
         "coverage": "49 estados admitidos: 40 motores fiscales más los nueve estados sin impuestos (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC y NM se rechazan a la espera de los archivos de referencia oficiales.",
         "components": "Componentes de nómina legales: impuesto federal sobre la renta, Seguro Social, Medicare (incl. Medicare adicional), FUTA y SUI.",

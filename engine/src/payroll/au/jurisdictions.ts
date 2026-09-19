@@ -22,7 +22,7 @@ export const AU_KNOWN_REGIONS: readonly string[] = [
   "NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT",
 ];
 
-const AU_STATE_NAMES: Readonly<Record<string, string>> = {
+export const AU_STATE_NAMES: Readonly<Record<string, string>> = {
   NSW: "New South Wales",
   VIC: "Victoria",
   QLD: "Queensland",

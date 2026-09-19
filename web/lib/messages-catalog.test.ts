@@ -1137,12 +1137,12 @@ test('api keys copy ships translated in every locale', () => {
 test('setup wizard copy ships translated in fr and es', () => {
   // The setup wizard (F-t01-014) rendered fully English under lang=fr+es:
   // the whole setup.wizard block (176 keys) existed only in en. fr
-  // payroll.packs.canada.title reads 'Canada' in both languages — the
+  // payroll.packs.ca.title reads 'Canada' in both languages — the
   // country name is spelled identically, documented like Status.
   const source = flattenCatalog('en')
   const english = new Map([...source].filter(([key]) => key.startsWith('admin.setup.wizard.')))
   assert.ok(english.size > 150, `expected the en wizard block, got ${english.size} keys`)
-  const identicalExemptions = new Set(['fr:admin.setup.wizard.payroll.packs.canada.title'])
+  const identicalExemptions = new Set(['fr:admin.setup.wizard.payroll.packs.ca.title'])
   for (const locale of ['fr', 'es']) {
     const catalog = flattenCatalog(locale)
     for (const [key, sourceValue] of english) {
@@ -1757,7 +1757,7 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.wizard.finish.emailStubs': '02844d5b3414d36ef7ef68ff215c26a7ce07f8d72ea50aee6faf5d6d58216938',
   'payroll.wizard.finish.netPay': '393e8a24f9d51fec40d56c0cb6d39ff847e20927df2961e7cef48d2b14f928a6',
   'payroll.wizard.finish.nextPay': '09f40b28ecc014524beb70575a581bfc4362fb2ec986c713e84d77d5079176a1',
-  'payroll.wizard.finish.nextRemit': 'a8381ac809f026ee0457a172aa23b12c3d64bfa3959e3142a1f235a1929f422b',
+  'payroll.wizard.finish.nextRemit': '93c73642ab30ac3a4cdded16882ba431ce3a62748457fc2a899c788ed6cc8e82',
   'payroll.wizard.finish.nextTitle': 'eaf380e7f60489b7d687971d73fa8687ed68ef0aa7cc9a38310c146b06538067',
   'payroll.wizard.finish.notCommitted': '0307e4d4766e10c40406eb6c00cf7b7c836740ee86a6ca1c2a81f528e61f846c',
   'payroll.wizard.finish.paid': 'fb81b961af456e5e748db7e1b1bff9a5e621b62718234c1937738d1adc317a17',
@@ -2969,7 +2969,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3392, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3390, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3306,8 +3306,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3392
-  const ADMIN_I2_SOURCE_HASH = '8441265c2b239668ca967dbae955c64fa7d7422dc2166c380951b10df6ccb78e'
+  const ADMIN_I2_SOURCE_COUNT = 3390
+  const ADMIN_I2_SOURCE_HASH = 'f7e8c224091d51d11fa71976c3d31878f90a619b50db0bbd8f4335d6b5d69b6b'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -3424,7 +3424,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1163, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1159, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3475,7 +3475,6 @@ const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
   'fr:payroll.settingsPage.derivedPreview.total|Total',
   'fr:payroll.settingsPage.holidayCalendar.citation|Source',
   'fr:payroll.settingsPage.holidayCalendar.source|Source',
-  'fr:payroll.settingsPage.packs.canada.title|Canada',
   'fr:payroll.wizard.gl.description|Description',
   'fr:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
   'fr:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
@@ -3525,7 +3524,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1163, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1159, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

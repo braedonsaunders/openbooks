@@ -38,6 +38,9 @@ import { PL_WITHHOLDING } from "./withholding.ts";
 const PL_REGIONS: PayrollCountryPack["regions"] = {
   label: "country",
   known: ["PL"],
+  // The single national region IS the country: its display name is the
+  // pack's own name, stated explicitly so the coverage test holds it.
+  regionNames: { PL: "Poland" },
   supported: ["PL"],
   unsupportedReason:
     "income tax withholding for {region} is not implemented: the monthly PIT advance does not compute end to end. "

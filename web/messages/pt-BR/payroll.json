@@ -287,7 +287,7 @@
       "remittanceHint": "Créditos por conta: os passivos registrados nesta execução.",
       "netPay": "Salário líquido aos funcionários",
       "nextTitle": "Próximas etapas",
-      "nextRemit": "Recolha os valores retidos aos respectivos órgãos com uma conta a pagar (CRA, fundos sindicais, seguradoras).",
+      "nextRemit": "Recolha os valores retidos aos respectivos órgãos com uma conta a pagar.",
       "nextPay": "Pague os funcionários pela conta de salários líquidos a pagar. O pagamento liquida o passivo registrado nesta execução.",
       "amount": "Valor",
       "paid": "Pago",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {# componente obrigatório instalado} other {# componentes obrigatórios instalados}}",
       "hint": "Instalar um pacote cria os componentes obrigatórios de remuneração e ativa o motor de retenção da jurisdição. Componentes existentes nunca são sobrescritos.",
       "canada": {
-        "title": "Canadá",
-        "description": "Retenção obrigatória para folhas canadenses, recolhimentos e fechamento anual.",
         "edition": "{edition, selectordinal, one {#ª} two {#ª} few {#ª} other {#ª}} edição (em vigor desde {effective})",
         "engine": "Motor oficial CRA T4127 —",
         "coverage": "Todas as províncias e territórios. Quebec: retenção de QPP, QPIP e imposto de renda federal e provincial incluída; o imposto provincial é administrado pela Revenu Québec.",
@@ -702,8 +700,6 @@
         "verified": "Conferido centavo a centavo com o PDOC da CRA."
       },
       "us": {
-        "title": "Estados Unidos",
-        "description": "Retenção federal obrigatória para folhas dos EUA: imposto de renda, Seguridade Social, Medicare e seguro-desemprego.",
         "engine": "Motor do método percentual IRS Pub 15-T (2026) com W-4, etapas 2–4, e cotas pré-2020.",
         "coverage": "49 estados atendidos: 40 motores de tributação mais os nove estados sem imposto (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC e NM recusados até saírem os gabaritos oficiais.",
         "components": "Componentes obrigatórios: imposto de renda federal, Seguridade Social, Medicare (incl. Medicare adicional), FUTA e SUI.",

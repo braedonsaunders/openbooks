@@ -287,7 +287,7 @@
       "remittanceHint": "Crédits par compte : les passifs comptabilisés pour ce cycle.",
       "netPay": "Salaire net des employés",
       "nextTitle": "Prochaines étapes",
-      "nextRemit": "Reversez les montants retenus à leurs organismes avec une facture fournisseur (ARC, fonds syndicaux, assureurs).",
+      "nextRemit": "Reversez les montants retenus à leurs organismes au moyen d'une facture fournisseur.",
       "nextPay": "Payez les employés à partir du compte de salaire net à payer. Le paiement solde le passif comptabilisé pour ce cycle.",
       "amount": "Montant",
       "paid": "Payé",
@@ -693,8 +693,6 @@
       "componentCount": "{count, plural, one {# composante légale installée} other {# composantes légales installées}}",
       "hint": "Installer un pack ensemence les composantes de paie légales et active le moteur de retenues de cette juridiction. Les composantes existantes ne sont jamais écrasées.",
       "canada": {
-        "title": "Canada",
-        "description": "Retenues légales pour les paies canadiennes, les versements et la fin d’année.",
         "edition": "{edition, selectordinal, one {#er} two {#e} few {#e} other {#e}} édition (en vigueur {effective})",
         "engine": "Moteur légal ARC T4127 —",
         "coverage": "Toutes les provinces et territoires. Québec : QPP, QPIP et retenues d’impôt sur le revenu fédéral et provincial inclus; l’impôt provincial est administré par Revenu Québec.",
@@ -702,8 +700,6 @@
         "verified": "Vérifié au cent près contre le PDOC de l’ARC."
       },
       "us": {
-        "title": "États-Unis",
-        "description": "Retenues légales fédérales pour les paies américaines : impôt sur le revenu, Sécurité sociale, Medicare et chômage.",
         "engine": "Moteur IRS Pub 15-T par méthode du pourcentage (2026) avec W-4 étapes 2 à 4 et exemptions d’avant 2020.",
         "coverage": "49 États pris en charge : 40 moteurs fiscaux plus les neuf États sans impôt (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC et NM sont refusés en attendant les fichiers de référence officiels.",
         "components": "Composantes de paie légales : impôt fédéral sur le revenu, Sécurité sociale, Medicare (incluant le Medicare supplémentaire), FUTA et SUI.",

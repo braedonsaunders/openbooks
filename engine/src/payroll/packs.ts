@@ -867,6 +867,17 @@ export interface PayrollRegionCoverage {
   label: string;
   /** Every code an employee may legitimately carry. */
   known: readonly string[];
+  /**
+   * Display name per known code ("NSW" → "New South Wales"), for every
+   * picker and label that shows a region to a person. REQUIRED, like
+   * `known` itself: `regions.known` is codes-only because refusals and
+   * storage key on codes, but a surface handed only codes has nothing to
+   * show but codes — which is how AU state pickers rendered NSW/VIC/QLD
+   * while the AU pack already knew the full names in another field. A new
+   * pack (or a new region on an existing pack) without a name for every
+   * known code fails the region-labels coverage test, never a review.
+   */
+  regionNames: Readonly<Record<string, string>>;
   /** Those whose income tax the pack's engine computes end to end. */
   supported: readonly string[];
   /** Why a known-but-unsupported region is refused; `{region}` is substituted. */
@@ -1386,6 +1397,20 @@ export function installablePayrollPacks(): { country: string; name: string }[] {
   return Object.values(PAYROLL_COUNTRY_PACKS)
     .filter((pack) => pack.installable)
     .map((pack) => ({ country: pack.country, name: pack.name }));
+}
+
+/**
+ * Display name for one region code under one pack — what pickers and labels
+ * show a person. Reads the pack's own `regions.regionNames` declaration and
+ * nothing else: no per-country branch, no locale lookup. The `?? region` is
+ * a render-time last resort only — coverage is enforced by the
+ * region-labels test, so it is unreachable for declared packs, and an
+ * undeclared name fails there rather than rendering as a bare code that
+ * reads as deliberate.
+ */
+export function payrollRegionLabel(country: string, region: string): string {
+  const names = payrollPack(country).regions.regionNames;
+  return names[region] ?? region;
 }
 
 /** The pack for a country, or a refusal naming the packs that do exist. */
@@ -2592,6 +2617,12 @@ export function assertContributoryBasesDeclared(country: string): void {
 
 export interface PackSlotState {
   country: string;
+  /**
+   * The pack's own display name, served alongside the code so surfaces that
+   * list packs to a person never fall back to a bare country code. A
+   * surface handed only codes has nothing to show but codes.
+   */
+  name: string;
   slots: { key: string; accountId: string | null }[];
 }
 
@@ -2639,6 +2670,7 @@ export async function packSlotState(
   const byCode = new Map(components.rows.map((c) => [c.code, c.liability_account_id]));
   return packs.map((pack) => ({
     country: pack.country,
+    name: pack.name,
     slots: pack.statutorySlots
       .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
       .map((slot) => {

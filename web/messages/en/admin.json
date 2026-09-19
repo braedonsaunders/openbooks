@@ -2367,7 +2367,7 @@
       },
       "payroll-filing-accounts": {
         "title": "Filing Accounts",
-        "description": "Payroll program, EIN, and state unemployment accounts the employer remits and files under. Employees are assigned one on their payroll profile."
+        "description": "Tax accounts the employer remits and files under — one per filing program its country pack declares. Employees are assigned one on their payroll profile."
       },
       "entitlement-plans": {
         "title": "Entitlement Plans",
@@ -2497,7 +2497,7 @@
       "categoryId": "Asset category",
       "convention": "Convention",
       "lifeMonths": "Life (months)",
-      "depreciationMethodId": "Custom formula",
+      "depreciationMethodId": "Depreciation method",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultDepreciationMethodId": "Default formula",
@@ -2666,8 +2666,7 @@
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
       "network": "Network",
-      "lastFour": "Last four",
-      "depreciationMethodId": "Depreciation method"
+      "lastFour": "Last four"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3719,7 +3718,6 @@
         "note": "This creates your accounting foundation and starting workspace. The readiness guide will show anything still needed before your first live posting. Every optional capability remains adjustable from Company Settings → Features.",
         "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features.",
         "payrollPack": "Payroll country pack",
-        "payrollPackCanada": "Canada (CRA T4127)",
         "payrollPackNone": "None — install later from Payroll setup"
       },
       "applying": {
@@ -3781,13 +3779,12 @@
         "description": "Payroll runs on installable country packs — each pack brings that jurisdiction's statutory withholding engine and components.",
         "packQuestion": "Which country pack should be installed?",
         "packs": {
-          "canada": {
+          "ca": {
             "title": "Canada",
             "description": "CRA T4127 statutory engine, all provinces & territories, verified against CRA PDOC."
           },
           "us": {
-            "title": "United States",
-            "description": "Planned — not yet available."
+            "title": "United States"
           }
         },
         "checklist": {

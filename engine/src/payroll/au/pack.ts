@@ -20,7 +20,7 @@ import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
 } from "../packs.ts";
-import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_WITHHOLDING } from "./jurisdictions.ts";
+import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_STATE_NAMES, AU_WITHHOLDING } from "./jurisdictions.ts";
 import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
 import { applyAuEmployerLevies } from "./employer-levies.ts";
 import { auPackFilings } from "./filings.ts";
@@ -29,6 +29,7 @@ import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
 const AU_REGIONS: PayrollRegionCoverage = {
   label: "state",
   known: AU_KNOWN_REGIONS,
+  regionNames: AU_STATE_NAMES,
   // PAYG withholding is federal and uniform: the transcribed Schedule 1
   // scales apply identically in every state and territory, so every known
   // region is supported. No state publishes its own tables

@@ -88,8 +88,12 @@ export interface StoredCertificateRow {
  * certificate declarations plus its profile exemption flags.
  */
 export interface PackProfileDeclaration {
+  /** The pack's own display name, served by GET /api/payroll/profiles. */
+  countryName: string
   subdivisionLabel: string
   subdivisions: string[]
+  /** Display name per subdivision code, served by GET /api/payroll/profiles. */
+  subdivisionNames: Record<string, string>
   supportedSubdivisions: string[]
   unsupportedReason: string
   unsupportedReasons: Record<string, string>
@@ -330,7 +334,14 @@ export function ProfileEditor(props: {
   }
   const textOf = (key: string, fallback: string): string =>
     hasKey(key) ? t(key as never) : fallback
-  const countryLabel = (code: string): string => textOf(`country.${code}`, code)
+  // Country names: the locale wins where a key exists for the code (CA/US),
+  // otherwise the PACK'S OWN NAME served with the declarations — never the
+  // bare code. A surface handed only codes has nothing to show but codes,
+  // which is how this picker rendered "GB"/"DE"/"FR".
+  const countryLabel = (code: string): string => {
+    if (hasKey(`country.${code}`)) return t(`country.${code}` as never)
+    return props.packProfiles?.[code]?.countryName ?? code
+  }
   const fieldLabel = (column: string | null, fallback: string): string =>
     column ? textOf(`fields.${columnLocaleBase(column)}`, fallback) : fallback
   const choiceLabel = (column: string, value: string, fallback: string): string =>
@@ -654,7 +665,7 @@ export function ProfileEditor(props: {
                   .replace(/\{region\}/g, code)
                 return (
                   <option key={code} value={code} disabled={!supported} title={supported ? undefined : reason}>
-                    {code}
+                    {pack.subdivisionNames[code] ?? code}
                   </option>
                 )
               })}

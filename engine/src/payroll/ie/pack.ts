@@ -517,6 +517,9 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   regions: {
     label: "region",
     known: ["IE"],
+    // The single national region IS the country: its display name is the
+    // pack's own name, stated explicitly so the coverage test holds it.
+    regionNames: { IE: "Ireland" },
     supported: ["IE"],
     unsupportedReason: "PAYE/PRSI/USC withholding for {region} is not implemented by the IE payroll "
       + "pack — Ireland has a single national payroll region (IE)",
@@ -544,10 +547,12 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
     // NOT reckonable pay for PRSI or USC — so only `income` is named. The
     // engine prices the reduced income leg plus the untouched non-periodic
     // leg, which keeps combined-base arithmetic exact.
+    // The label names the pack's own instrument: the shared catalog key
+    // (options.payTaxTreatment.pensionF) carries the Canadian factor name,
+    // so the IE treatment states its own English label and no labelKey.
     {
       key: "pension_f",
-      label: "Pension (RPP/RRSP, factor F)",
-      labelKey: "options.payTaxTreatment.pensionF",
+      label: "Pension (employee contributions)",
       help: "Ordinary employee pension contributions: reduce PAYE taxable pay, not PRSI or USC reckonable pay.",
       reduces: ["income"],
     },

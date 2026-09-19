@@ -463,9 +463,32 @@ const PAY_COMPONENT_KINDS = [
   { value: 'employer_contribution', labelKey: 'options.payComponentKind.employerContribution' },
 ]
 
+/**
+ * STATIC FALLBACK ONLY for every pay-component / filing-account country
+ * picker — server surfaces replace these with the pack registry's
+ * installable packs (`optionsSource`, resolved by
+ * resolveDynamicSetupOptions). The fallback must still name every
+ * installable pack: an unresolved surface showing only CA/US is the defect
+ * this file once shipped, and the write path validates against the fallback
+ * where it never resolved. Labels are the packs' own names (CA/US keep
+ * their translated keys); the parity test below pins the value set to the
+ * registry, so a fifteenth pack fails until this snapshot grows.
+ */
 const PAY_COMPONENT_COUNTRIES = [
   { value: 'CA', labelKey: 'options.payComponentCountry.CA' },
   { value: 'US', labelKey: 'options.payComponentCountry.US' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'DE', label: 'Germany' },
+  { value: 'FR', label: 'France' },
+  { value: 'IE', label: 'Ireland' },
+  { value: 'AU', label: 'Australia' },
+  { value: 'IT', label: 'Italy' },
+  { value: 'NL', label: 'Netherlands' },
+  { value: 'ES', label: 'Spain' },
+  { value: 'SG', label: 'Singapore' },
+  { value: 'JP', label: 'Japan' },
+  { value: 'PL', label: 'Poland' },
+  { value: 'BR', label: 'Brazil' },
 ]
 
 const PAY_COMPONENT_BASES = [
@@ -484,6 +507,11 @@ const PAY_TAX_TREATMENTS = [
   { value: 'pension_f', labelKey: 'options.payTaxTreatment.pensionF' },
   { value: 'union_dues', labelKey: 'options.payTaxTreatment.unionDues' },
   { value: 'alimony', labelKey: 'options.payTaxTreatment.alimony' },
+  // Every pack-declared treatment key must appear here too: the write path
+  // validates against this fallback where it never resolved, so a missing
+  // key is a refusal of a treatment the picker offers. The parity test pins
+  // the value set to the derived cross-pack union.
+  { value: 'salary_sacrifice', label: 'Salary sacrifice (PAYG)' },
 ]
 
 // Protected-earnings base a garnishment/support order is measured against
@@ -509,6 +537,23 @@ const PAYROLL_PROGRAM_TYPES = [
   { value: 'ca_rp', labelKey: 'options.payrollProgramType.caRp' },
   { value: 'us_ein', labelKey: 'options.payrollProgramType.usEin' },
   { value: 'us_state_sui', labelKey: 'options.payrollProgramType.usStateSui' },
+  // Every pack-declared filing program type, in registry order: the write
+  // path validates against this fallback where it never resolved, so a
+  // missing type refuses an account the picker offers. Labels are the
+  // declarations' own words (their statutory proper nouns); the parity test
+  // pins the value set to the filing registry.
+  { value: 'gb_paye', label: 'Employer PAYE reference' },
+  { value: 'de_finanzamt', label: 'Betriebsstättenfinanzamt (ELSTER)' },
+  { value: 'fr_siret', label: 'SIRET — établissement employeur (DSN)' },
+  { value: 'ie_paye', label: 'PAYE/PRSI/USC employer registration (Revenue Commissioners)' },
+  { value: 'ato_stp', label: 'Single Touch Payroll (STP)' },
+  { value: 'it_sostituto', label: "Codice fiscale del sostituto d'imposta" },
+  { value: 'nl_loonheffingen', label: 'Loonheffingen (payroll tax number)' },
+  { value: 'es_tgss_ccc', label: 'TGSS código de cuenta de cotización (CCC)' },
+  { value: 'sg_cpf', label: 'CPF Submission Number' },
+  { value: 'jp_shaho_jigyosho', label: '社会保険適用事業所 (JPS-registered establishment)' },
+  { value: 'pl_zus_platnik', label: 'ZUS konto płatnika składek (DRA)' },
+  { value: 'br_cnpj_esocial', label: 'eSocial — CNPJ do estabelecimento' },
 ]
 
 // CRA remittance frequency the account is registered under.

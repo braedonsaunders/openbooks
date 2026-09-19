@@ -60,6 +60,7 @@ const DE_LAENDER: readonly { code: string; name: string }[] = [
 const DE_REGION_COVERAGE: PayrollRegionCoverage = {
   label: "Land",
   known: DE_LAENDER.map((land) => land.code),
+  regionNames: Object.fromEntries(DE_LAENDER.map((land) => [land.code, land.name])),
   // Lohnsteuer follows the federal PAP (no Land publishes its own tables),
   // and the engine implements the per-Land rules (KiSt 8/9 split, Sachsen PV)
   // — so every Land is supported end to end.
