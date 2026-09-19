@@ -112,6 +112,11 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     // because filing a report sends generalized text OUT of the installation
     // to the operator, which no other permission implies.
     "feedback.use",
+    // 0184/0185 HRM employment foundation: employment records are a
+    // distinct authority from payroll, so they carry their own keys.
+    "hrm.employment.read",
+    "hrm.employment.manage",
+    "hrm.employment.approve",
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
