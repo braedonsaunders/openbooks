@@ -23,6 +23,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
+import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { calculateForecast, type ForecastRow } from '../../../../lib/crm'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '../../../../lib/money-server'
@@ -109,6 +110,7 @@ export interface SnapshotRowView {
 export interface ForecastsData {
   title: string
   description: string
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
   canConfigureQuotas: boolean
   canManageForecasts: boolean
   manageQuotasHref: string
@@ -248,6 +250,7 @@ export async function loadForecasts(
   return {
     title: t('forecasts.title'),
     description: t('forecasts.description'),
+    tabs: await customerGroupTabs(authz, '/crm/forecasts'),
     canConfigureQuotas,
     canManageForecasts,
     manageQuotasHref: '/admin/setup/crm?tab=quotas',
@@ -384,6 +387,7 @@ export function forecastsSpec(data: ForecastsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
+        actionsClassName: 'flex items-center gap-3',
         actions: [
           widget(
             'manage-quotas-button',
@@ -404,6 +408,7 @@ export function forecastsSpec(data: ForecastsData): PageSpec {
             },
             f('canManageForecasts'),
           ),
+          widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
       grid('flex flex-wrap items-center gap-2', [

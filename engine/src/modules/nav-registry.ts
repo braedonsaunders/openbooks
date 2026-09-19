@@ -119,33 +119,11 @@ export const NAV_MODULES: NavModule[] = [
   },
 
   // Customers — relationship lifecycle, pipeline, sales, and collection.
-  {
-    key: 'crm-customer-360',
-    href: '/crm/customer-360',
-    label: 'Customer 360',
-    iconKey: 'users',
-    group: 'customers',
-    subgroup: 'relationships',
-    requiredPermission: 'crm.accounts.read',
-  },
-  {
-    key: 'crm-leads',
-    href: '/crm/leads',
-    label: 'Leads',
-    iconKey: 'users',
-    group: 'customers',
-    subgroup: 'relationships',
-    requiredPermission: 'crm.accounts.read',
-  },
-  {
-    key: 'crm-prospects',
-    href: '/crm/prospects',
-    label: 'Prospects',
-    iconKey: 'target',
-    group: 'customers',
-    subgroup: 'relationships',
-    requiredPermission: 'crm.accounts.read',
-  },
+  //
+  // There is ONE account destination (`customers`, below): leads, prospects
+  // and customers are lifecycle stages of the same record, segmented on that
+  // one list, not three nav entries pointing at three copies of the same
+  // page. Pulse is a tab of the account record and has no nav entry at all.
   {
     key: 'crm-opportunities',
     href: '/crm/opportunities',
@@ -881,9 +859,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   'my-work': ['dashboard', 'approvals', 'notifications', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
-    'crm-customer-360',
-    'crm-leads',
-    'crm-prospects',
     'crm-activities',
     'crm-opportunities',
     'crm-forecasts',

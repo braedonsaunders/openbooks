@@ -43,7 +43,9 @@
       "wages": "Lohnsätze",
       "invoicing": "Fakturierung",
       "pricing": "Preise",
-      "payroll": "Lohnabrechnung"
+      "payroll": "Lohnabrechnung",
+      "pulse": "Puls",
+      "relationship": "Beziehung"
     },
     "wages": {
       "title": "Lohnsätze",
@@ -199,7 +201,8 @@
     },
     "workerCompGroup": "BG-Gruppe",
     "customForm": "Datensatzformular",
-    "manageForms": "Datensatzformular anpassen"
+    "manageForms": "Datensatzformular anpassen",
+    "addActivity": "Aktivität hinzufügen"
   },
   "rateBookAssignments": {
     "title": "Satzbuchzuordnungen",

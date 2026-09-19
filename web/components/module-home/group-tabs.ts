@@ -1,5 +1,6 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
+import { can, type Authz } from '../../lib/authz'
 import { featureEnabled, orgFeatureState } from '../../lib/features'
 import type { ModuleHomeTab } from './ui'
 
@@ -13,11 +14,23 @@ import type { ModuleHomeTab } from './ui'
 
 export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll'
 
-// DASHBOARDS ONLY — record lists (bills, invoices, expense reports, …) are
-// menu destinations, never strip tabs. A tab must land on a cockpit/dashboard.
+// DASHBOARDS AND WORKING SURFACES — a tab lands on a cockpit, or on the ONE
+// canonical list for a thing the group works on daily (accounts, pay runs,
+// employees). It never lands on a document list a menu already owns (bills,
+// invoices, expense reports), and never on a second copy of a list another
+// tab already shows.
 const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> = {
   customers: [
-    { href: '/customers', ns: 'customers', key: 'home.title' },
+    // `home.tabs.overview`, not `home.title`: the cockpit and the account
+    // list are both called "Customers", and two identically labelled tabs on
+    // one strip name nothing. Payroll settles the same clash the same way.
+    { href: '/customers', ns: 'customers', key: 'home.tabs.overview' },
+    // The NATIVE account list — every lifecycle stage on one surface, which
+    // is why there is no Leads tab and no Prospects tab beside it.
+    { href: '/entities/customers', ns: 'nav', key: 'modules.customers' },
+    { href: '/crm/opportunities', ns: 'nav', key: 'modules.crm-opportunities' },
+    { href: '/crm/activities', ns: 'nav', key: 'modules.crm-activities' },
+    { href: '/crm/forecasts', ns: 'nav', key: 'modules.crm-forecasts' },
     { href: '/ar', ns: 'nav', key: 'modules.ar' },
   ],
   purchasing: [
@@ -53,6 +66,9 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
  * leak even though every target keeps its own authoritative page/API gate.
  */
 const TAB_FEATURE: Record<string, string> = {
+  '/crm/opportunities': 'crm',
+  '/crm/activities': 'crm',
+  '/crm/forecasts': 'crm',
   '/expenses': 'expenses',
   '/banking': 'banking',
   '/banking/cash': 'banking',
@@ -97,4 +113,32 @@ export async function groupTabs(
     label: (ts.get(d.ns) as (key: string) => string)(d.key),
     active: d.href === activeHref,
   }))
+}
+
+/** The permission each Customers-group tab's destination enforces. */
+const CUSTOMER_TAB_PERMISSION: Record<string, string> = {
+  '/entities/customers': 'parties.read',
+  '/crm/opportunities': 'crm.opportunities.read',
+  '/crm/activities': 'crm.activities.read',
+  '/crm/forecasts': 'crm.forecasts.read',
+  '/ar': 'ar.read',
+}
+
+/**
+ * The Customers strip with permission exclusions already applied.
+ *
+ * This group's tabs sit behind FIVE different permissions, so leaving the
+ * exclusion list to each of the six call sites guarantees they drift: one
+ * page would offer a Forecasts tab that 403s while its neighbour hides it.
+ * Every page in the group calls this instead of `groupTabs` directly.
+ */
+export async function customerGroupTabs(
+  authz: Authz,
+  activeHref: string,
+  opts: { subQs?: string } = {},
+): Promise<ModuleHomeTab[]> {
+  const exclude = Object.entries(CUSTOMER_TAB_PERMISSION)
+    .filter(([, permission]) => !can(authz, permission))
+    .map(([href]) => href)
+  return groupTabs('customers', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }

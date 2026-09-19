@@ -55,7 +55,8 @@
     "projectedAmount": "预测金额",
     "periodStart": "期间开始",
     "periodEnd": "期间结束",
-    "weightedAmount": "加权金额"
+    "weightedAmount": "加权金额",
+    "stage": "阶段"
   },
   "accounts": {
     "newFallback": "新建客户",
@@ -88,7 +89,15 @@
       "closedLost": "已输单",
       "active": "活跃",
       "inactive": "非活跃"
-    }
+    },
+    "allTitle": "全部客户",
+    "allDescription": "所有生命周期阶段的客户关系集中在一张列表中。",
+    "relationshipHeading": "关系档案",
+    "untrackedTitle": "尚未建立关系档案",
+    "untrackedDescription": "该客户尚未记录阶段、负责人或区域。开始跟踪后即可按关系进行管理。",
+    "startTracking": "开始跟踪",
+    "stageReason": "回退原因",
+    "stageReasonHint": "将客户回退到较早阶段时会连同原因一并记录。"
   },
   "activities": {
     "title": "活动",
@@ -148,12 +157,6 @@
       "closedWon": "已赢单",
       "closedLost": "已输单"
     }
-  },
-  "customer360": {
-    "title": "客户360",
-    "description": "统一的商机管道、应收账款账龄、信用额度、DSO和互动记录。",
-    "emptyTitle": "未找到客户",
-    "emptyDescription": "添加客户以查看其客户360数据。"
   },
   "forecastCategories": {
     "omitted": "已排除",
@@ -323,5 +326,47 @@
   },
   "feedback": {
     "createFailed": "无法创建草稿。"
+  },
+  "pulse": {
+    "creditHold": "信用冻结",
+    "terms": "付款条件：{terms}",
+    "holdReason": "冻结原因：",
+    "openReceivables": "未结应收账款合计",
+    "overdue": "逾期 {amount}",
+    "allCurrent": "全部未逾期",
+    "dso": "应收账款周转天数（DSO）",
+    "days": "天",
+    "customerAvg": "客户平均：{customer} 天（组织：{org} 天）",
+    "orgBenchmark": "组织基准：{org} 天",
+    "creditHeadroom": "可用信用额度",
+    "noLimit": "未设置额度",
+    "limitUsed": "额度：{limit}（已用 {percent}%）",
+    "unrestricted": "商业信用不设上限",
+    "pipelineValue": "在途商机金额",
+    "winRate": "赢单率 {percent}%（赢单 {won} 个）",
+    "openDeals": "进行中商机 {count} 个",
+    "agingTitle": "应收账款账龄表",
+    "agingDescription": "截至今日的未结应收账款，按账龄区间划分。",
+    "bucketCurrent": "未逾期",
+    "bucket1To30": "1–30 天",
+    "bucket31To60": "31–60 天",
+    "bucket61To90": "61–90 天",
+    "bucket90Plus": "90 天以上",
+    "creditTitle": "信用占用",
+    "creditDescription": "应收账款加上尚未开票的销售订单。",
+    "creditLimit": "信用额度",
+    "openInvoices": "未结发票（应收）",
+    "unbilledOrders": "未开票销售订单",
+    "headroom": "可用余量",
+    "uncapped": "不设上限",
+    "projectsTitle": "在建项目汇总",
+    "projectsCount": "进行中 {active} 个 / 合计 {total} 个",
+    "contractBudget": "合同预算",
+    "billedToDate": "累计已开票",
+    "billedProgress": "开票进度",
+    "timelineTitle": "互动时间线",
+    "timelineDescription": "活动、报价、销售订单、发票与收款的时间顺序记录。",
+    "timelineEmpty": "该客户暂无活动或交易记录。",
+    "loadFailed": "无法加载该客户的动态。"
   }
 }

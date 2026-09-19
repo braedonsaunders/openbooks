@@ -55,8 +55,6 @@
     "admin-pdf-templates": "PDF 模板",
     "admin-setup": "公司配置",
     "analytics": "分析",
-    "crm-leads": "线索",
-    "crm-prospects": "潜在客户",
     "crm-opportunities": "商机",
     "crm-activities": "活动",
     "crm-forecasts": "预测与配额",
@@ -73,8 +71,7 @@
     "compliance": "合规",
     "compliance-vendors": "分包商",
     "lien-waivers": "留置权弃权书",
-    "information-returns": "信息申报表",
-    "crm-customer-360": "客户360"
+    "information-returns": "信息申报表"
   },
   "groups": {
     "my-work": "我的工作",

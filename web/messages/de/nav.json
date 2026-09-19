@@ -55,8 +55,6 @@
     "admin-pdf-templates": "PDF-Vorlagen",
     "admin-setup": "Unternehmenseinrichtung",
     "analytics": "Analysen",
-    "crm-leads": "Leads",
-    "crm-prospects": "Interessenten",
     "crm-opportunities": "Verkaufschancen",
     "crm-activities": "Aktivitäten",
     "crm-forecasts": "Prognosen & Ziele",
@@ -73,8 +71,7 @@
     "compliance": "Compliance",
     "compliance-vendors": "Nachunternehmer",
     "lien-waivers": "Verzichtserklärungen",
-    "information-returns": "Informationsmeldungen",
-    "crm-customer-360": "Kunden-360"
+    "information-returns": "Informationsmeldungen"
   },
   "groups": {
     "my-work": "Meine Arbeit",

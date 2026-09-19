@@ -46,7 +46,22 @@ test('remembering an already kept tab returns the same set', () => {
 
 test('the drawer routes tab switches through the visit-recording helper', () => {
   assert.match(drawerSource, /rememberDrawerTab\(/)
-  assert.match(drawerSource, /onClick=\{\(\) => showTab\(item\.key\)\}/)
+  // The rail is the shared flyout shell's, driven as a CONTROLLED tab, so the
+  // party owns one strip instead of nesting its own under the shell's
+  // Details / Attachments / Audit trail. Every switch still lands on showTab.
+  assert.match(drawerSource, /onActiveTabChange=\{\(key\) => showTab\(fromShellTab\(key\)\)\}/)
+  assert.match(drawerSource, /activeTab=\{toShellTab\(tab\)\}/)
+  assert.doesNotMatch(drawerSource, /aria-label=\{t\('tabs\.ariaLabel'\)\}/)
+})
+
+test('the flyout rail is one level: attachments and audit are peers, not a parent', () => {
+  // The shell appends its own Attachments / Audit trail buttons, so listing
+  // them in `tabs` would duplicate them; the party supplies everything else
+  // as detailTabs and renames the leading Details slot to Overview.
+  assert.match(drawerSource, /detailsLabel=\{t\('tabs\.overview'\)\}/)
+  assert.match(drawerSource, /detailTabs=\{tabs\n\s*\.filter\(\(item\) => item\.key !== 'overview'\)/)
+  assert.doesNotMatch(drawerSource, /\{ key: 'attachments', label:/)
+  assert.doesNotMatch(drawerSource, /\{ key: 'audit', label:/)
 })
 
 test('the wage and payroll panels stay mounted once visited instead of unmounting', () => {

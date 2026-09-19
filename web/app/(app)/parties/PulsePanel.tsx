@@ -11,27 +11,39 @@ import {
   Briefcase,
   ShieldAlert,
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import {
   Badge,
   Card,
   cn,
 } from '@openbooks/ui'
-import type { Customer360Data } from '../../../lib/customer-360'
+import { useMoney } from '@/components/money-provider'
+import type { CustomerPulseData } from '../../../lib/customer-pulse'
 
-function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-export function Customer360Cockpit({ data }: { data: Customer360Data }) {
+/**
+ * Pulse — the live state of one commercial relationship on its own record.
+ *
+ * Everything here is READ-ONLY and computed by lib/customer-pulse from the
+ * canonical subsystems (open-items for aging, cash/core for DSO, the project
+ * financial reader for delivery), so no figure on this panel is a second
+ * opinion about a number the rest of the product already owns.
+ *
+ * Money runs through the org/record money formatter, never a hardcoded
+ * locale: the same amount must read identically here and on the invoice it
+ * came from.
+ */
+export function PulsePanel({ data }: { data: CustomerPulseData }) {
   const { party, aging, credit, paymentMetrics, pipeline, projects, timeline } = data
+  const t = useTranslations('crm.pulse')
+  const tc = useTranslations('common')
+  const { money } = useMoney(party.currency)
+  // Document statuses have their own catalog; anything it does not name keeps
+  // the stored value rather than rendering a raw message key.
+  const statusLabel = (value: string) =>
+    tc.has(`status.${value}` as never) ? tc(`status.${value}` as never) : value.replace(/_/g, ' ')
 
   return (
     <div className="space-y-6">
-      {/* Top Hero Banner */}
       <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
@@ -41,7 +53,7 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
             {party.isOnHold && (
               <Badge variant="destructive" className="flex items-center gap-1">
                 <ShieldAlert className="h-3.5 w-3.5" />
-                Credit Hold
+                {t('creditHold')}
               </Badge>
             )}
             <Badge variant="outline">{party.currency}</Badge>
@@ -62,7 +74,7 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
             {party.paymentTermsName && (
               <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
-                Terms: {party.paymentTermsName}
+                {t('terms', { terms: party.paymentTermsName })}
               </span>
             )}
             {party.subsidiaryName && (
@@ -76,159 +88,142 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
 
         {party.holdReason && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
-            <span className="font-semibold">Hold reason:</span> {party.holdReason}
+            <span className="font-semibold">{t('holdReason')}</span> {party.holdReason}
           </div>
         )}
       </div>
 
-      {/* Top 4 KPI Stat Tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Open AR */}
         <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">Total Open Receivables</div>
+          <div className="text-xs font-medium text-slate-500">{t('openReceivables')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {formatCurrency(aging.totalOpen, party.currency)}
+            {money(aging.totalOpen)}
           </div>
           <div className="mt-2 text-xs">
             {aging.totalOverdue > 0 ? (
               <span className="font-semibold text-rose-600 dark:text-rose-400">
-                {formatCurrency(aging.totalOverdue, party.currency)} overdue
+                {t('overdue', { amount: money(aging.totalOverdue) })}
               </span>
             ) : (
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                All accounts current
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                {t('allCurrent')}
               </span>
             )}
           </div>
         </Card>
 
-        {/* Days Sales Outstanding */}
         <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">Days Sales Outstanding (DSO)</div>
+          <div className="text-xs font-medium text-slate-500">{t('dso')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {paymentMetrics.dso} <span className="text-sm font-normal text-slate-500">days</span>
+            {paymentMetrics.dso} <span className="text-sm font-normal text-slate-500">{t('days')}</span>
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            {paymentMetrics.partyAvgDaysToPay !== null ? (
-              <span>Customer avg: {paymentMetrics.partyAvgDaysToPay}d (Org: {paymentMetrics.orgAvgDaysToPay}d)</span>
-            ) : (
-              <span>Org benchmark: {paymentMetrics.orgAvgDaysToPay}d</span>
-            )}
+            {paymentMetrics.partyAvgDaysToPay !== null
+              ? t('customerAvg', { customer: paymentMetrics.partyAvgDaysToPay, org: paymentMetrics.orgAvgDaysToPay })
+              : t('orgBenchmark', { org: paymentMetrics.orgAvgDaysToPay })}
           </div>
         </Card>
 
-        {/* Credit Headroom */}
         <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">Credit Headroom</div>
+          <div className="text-xs font-medium text-slate-500">{t('creditHeadroom')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
             {credit.remainingCredit !== null ? (
-              formatCurrency(credit.remainingCredit, party.currency)
+              money(credit.remainingCredit)
             ) : (
-              <span className="text-slate-500 font-normal">No limit set</span>
+              <span className="font-normal text-slate-500">{t('noLimit')}</span>
             )}
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            {credit.creditLimit !== null ? (
-              <span>Limit: {formatCurrency(credit.creditLimit, party.currency)} ({Math.round(credit.creditUtilizationPercent || 0)}% used)</span>
-            ) : (
-              <span>Unrestricted commercial credit</span>
-            )}
+            {credit.creditLimit !== null
+              ? t('limitUsed', {
+                  limit: money(credit.creditLimit),
+                  percent: Math.round(credit.creditUtilizationPercent || 0),
+                })
+              : t('unrestricted')}
           </div>
         </Card>
 
-        {/* Pipeline & Win Rate */}
         <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">Active Pipeline Value</div>
+          <div className="text-xs font-medium text-slate-500">{t('pipelineValue')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {formatCurrency(pipeline.projectedPipeline, party.currency)}
+            {money(pipeline.projectedPipeline)}
           </div>
           <div className="mt-2 text-xs text-slate-500">
             {pipeline.winRatePercent !== null ? (
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {pipeline.winRatePercent}% win rate ({pipeline.wonOpportunities} won)
+                {t('winRate', { percent: pipeline.winRatePercent, won: pipeline.wonOpportunities })}
               </span>
             ) : (
-              <span>{pipeline.openOpportunities} open deals</span>
+              t('openDeals', { count: pipeline.openOpportunities })
             )}
           </div>
         </Card>
       </div>
 
-      {/* Grid: AR Aging Breakdown & Credit Telemetry */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* AR Aging Buckets */}
         <Card className="p-5 lg:col-span-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            A/R Aging Schedule
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Open receivables as-of today classified into aging intervals.
-          </p>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('agingTitle')}</h3>
+          <p className="mt-0.5 text-xs text-slate-500">{t('agingDescription')}</p>
 
           <div className="mt-4 grid grid-cols-5 gap-2 border-t border-slate-100 pt-3 text-center dark:border-slate-800">
             <div className="rounded-lg bg-emerald-50/60 p-2.5 dark:bg-emerald-950/20">
-              <div className="text-[11px] font-medium text-slate-500">Current</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('bucketCurrent')}</div>
               <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                {formatCurrency(aging.current, party.currency)}
+                {money(aging.current)}
               </div>
             </div>
             <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-900">
-              <div className="text-[11px] font-medium text-slate-500">1–30d</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('bucket1To30')}</div>
               <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-200">
-                {formatCurrency(aging.days1To30, party.currency)}
+                {money(aging.days1To30)}
               </div>
             </div>
             <div className="rounded-lg bg-amber-50/60 p-2.5 dark:bg-amber-950/20">
-              <div className="text-[11px] font-medium text-slate-500">31–60d</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('bucket31To60')}</div>
               <div className="mt-1 text-sm font-bold text-amber-700 dark:text-amber-300">
-                {formatCurrency(aging.days31To60, party.currency)}
+                {money(aging.days31To60)}
               </div>
             </div>
             <div className="rounded-lg bg-orange-50/60 p-2.5 dark:bg-orange-950/20">
-              <div className="text-[11px] font-medium text-slate-500">61–90d</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('bucket61To90')}</div>
               <div className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                {formatCurrency(aging.days61To90, party.currency)}
+                {money(aging.days61To90)}
               </div>
             </div>
             <div className="rounded-lg bg-rose-50/60 p-2.5 dark:bg-rose-950/20">
-              <div className="text-[11px] font-medium text-slate-500">90+ days</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('bucket90Plus')}</div>
               <div className="mt-1 text-sm font-bold text-rose-700 dark:text-rose-300">
-                {formatCurrency(aging.days90Plus, party.currency)}
+                {money(aging.days90Plus)}
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Credit Breakdown */}
         <Card className="p-5">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Credit Commitment
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Receivables plus unbilled sales order commitments.
-          </p>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('creditTitle')}</h3>
+          <p className="mt-0.5 text-xs text-slate-500">{t('creditDescription')}</p>
 
-          <div className="mt-4 space-y-2.5 text-xs border-t border-slate-100 pt-3 dark:border-slate-800">
+          <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
             <div className="flex justify-between">
-              <span className="text-slate-500">Credit Limit:</span>
+              <span className="text-slate-500">{t('creditLimit')}</span>
               <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {credit.creditLimit !== null ? formatCurrency(credit.creditLimit, party.currency) : 'None'}
+                {credit.creditLimit !== null ? money(credit.creditLimit) : tc('labels.none')}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Open Invoices (AR):</span>
+              <span className="text-slate-500">{t('openInvoices')}</span>
               <span className="font-medium text-slate-800 dark:text-slate-200">
-                {formatCurrency(credit.openArBalance, party.currency)}
+                {money(credit.openArBalance)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Unbilled Sales Orders:</span>
+              <span className="text-slate-500">{t('unbilledOrders')}</span>
               <span className="font-medium text-slate-800 dark:text-slate-200">
-                {formatCurrency(credit.unbilledOrdersBalance, party.currency)}
+                {money(credit.unbilledOrdersBalance)}
               </span>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-2 font-bold dark:border-slate-800">
-              <span>Available Headroom:</span>
+              <span>{t('headroom')}</span>
               <span
                 className={cn(
                   credit.remainingCredit !== null && credit.remainingCredit <= 0
@@ -236,37 +231,36 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
                     : 'text-emerald-600 dark:text-emerald-400',
                 )}
               >
-                {credit.remainingCredit !== null ? formatCurrency(credit.remainingCredit, party.currency) : 'Uncapped'}
+                {credit.remainingCredit !== null ? money(credit.remainingCredit) : t('uncapped')}
               </span>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* Grid: Projects (if enabled) & Commercial Stats */}
       {projects.enabled && (
         <Card className="p-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Active Projects Rollup
-            </h3>
-            <Badge variant="outline">{projects.activeCount} active / {projects.totalCount} total</Badge>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('projectsTitle')}</h3>
+            <Badge variant="outline">
+              {t('projectsCount', { active: projects.activeCount, total: projects.totalCount })}
+            </Badge>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-100 pt-3 text-center dark:border-slate-800">
             <div>
-              <div className="text-xs text-slate-500">Contract Budget</div>
+              <div className="text-xs text-slate-500">{t('contractBudget')}</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
-                {formatCurrency(projects.totalContractValue, party.currency)}
+                {money(projects.totalContractValue)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Billed to Date</div>
+              <div className="text-xs text-slate-500">{t('billedToDate')}</div>
               <div className="mt-1 text-base font-bold text-emerald-600 dark:text-emerald-400">
-                {formatCurrency(projects.totalBilled, party.currency)}
+                {money(projects.totalBilled)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Billed Progress</div>
+              <div className="text-xs text-slate-500">{t('billedProgress')}</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
                 {projects.totalContractValue > 0
                   ? `${Math.round((projects.totalBilled / projects.totalContractValue) * 100)}%`
@@ -277,14 +271,9 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
         </Card>
       )}
 
-      {/* Unified Activity & Document Feed */}
       <Card className="p-5">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-          Customer 360 Interaction Timeline
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Chronological history of CRM activities, quotes, sales orders, invoices, and payments.
-        </p>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('timelineTitle')}</h3>
+        <p className="mt-0.5 text-xs text-slate-500">{t('timelineDescription')}</p>
 
         <div className="mt-4 divide-y divide-slate-100 border-t border-slate-100 dark:divide-slate-800 dark:border-slate-800">
           {timeline.map((item) => {
@@ -316,12 +305,12 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
                 <div className="flex items-center gap-3 text-right">
                   {item.amount !== undefined && (
                     <span className="font-bold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(item.amount, item.currency || party.currency)}
+                      {money(item.amount, { currency: item.currency || party.currency })}
                     </span>
                   )}
                   {item.status && (
                     <Badge variant="secondary" className="text-[10px] uppercase">
-                      {item.status.replace('_', ' ')}
+                      {statusLabel(item.status)}
                     </Badge>
                   )}
                   <span className="w-20 text-slate-400">
@@ -334,7 +323,7 @@ export function Customer360Cockpit({ data }: { data: Customer360Data }) {
 
           {timeline.length === 0 && (
             <div className="py-8 text-center text-xs text-slate-400">
-              No recorded activities or transactions for this customer.
+              {t('timelineEmpty')}
             </div>
           )}
         </div>

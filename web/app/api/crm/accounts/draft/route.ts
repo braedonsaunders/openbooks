@@ -15,8 +15,9 @@ export async function POST(req: Request) {
   const { user } = gate
   if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // The factory stays bodyless-tolerant ({} or no body means a lead) and reads
-  // only an optional stage: /crm/prospects creates prospects through this
-  // same endpoint. Anything else fails closed instead of silently minting a lead.
+  // only an optional stage: the unified account list's New button passes the
+  // lifecycle segment it is on, so prospects come through this same endpoint.
+  // Anything else fails closed instead of silently minting a lead.
   const rawBody: unknown = await req.json().catch(() => ({}))
   const rawStage = typeof rawBody === 'object' && rawBody !== null && !Array.isArray(rawBody)
     ? (rawBody as Record<string, unknown>).lifecycleStage

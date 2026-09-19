@@ -105,7 +105,6 @@ import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
 import { AssistantApp } from '../assistant/assistant-app'
 import { ChatMarkdown } from '../assistant/markdown'
-import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { DashboardGridSlot } from './dashboard-grid-slot'
 import { DashboardEditSlot } from './dashboard-edit-slot'
@@ -300,7 +299,6 @@ import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryAction
 import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
 import { OpportunityKanbanBoard, OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
-import { Customer360Cockpit } from '../../app/(app)/crm/Customer360Cockpit'
 import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
 import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
 import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
@@ -1818,18 +1816,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  reachable from a spec. */
   'dashboard-edit': () => <DashboardEditSlot />,
 
-  /* --- CRM accounts ----------------------------------------------------------------- */
-  /** The account flyout shared by /crm/leads and /crm/prospects. Named
-   *  `crm-account-drawer` because the registry already owns an unrelated
-   *  `account-drawer` — the chart-of-accounts flyout. No `key`: the native
-   *  drawer carries none, so switching accounts reuses the mounted flyout on
-   *  both paths. */
-  'crm-account-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof CrmAccountDrawer> | null
-    if (!drawer) return null
-    return <CrmAccountDrawer {...drawer} />
-  },
-
   /* --- assistant -------------------------------------------------------------------- */
   /** Whole: sidebar, streaming thread, composer and every fetch. Serves both
    *  /assistant and /assistant/[id]: `activeId` and `initialMessages` default
@@ -1899,9 +1885,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       profitability={props.profitability as ComponentProps<typeof CustomerView>['profitability']}
       projectsEnabled={props.projectsEnabled === true}
     />
-  ),
-  'customer-360-cockpit': (props) => (
-    <Customer360Cockpit data={props.data as ComponentProps<typeof Customer360Cockpit>['data']} />
   ),
   'true-cost-view': (props) => (
     <TrueCostView data={props.data as ComponentProps<typeof TrueCostView>['data']} />

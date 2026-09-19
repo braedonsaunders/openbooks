@@ -43,7 +43,9 @@
       "wages": "工资费率",
       "invoicing": "开票",
       "pricing": "定价",
-      "payroll": "工资"
+      "payroll": "工资",
+      "pulse": "动态",
+      "relationship": "关系"
     },
     "wages": {
       "title": "工资费率",
@@ -199,7 +201,8 @@
     },
     "workerCompGroup": "工伤组",
     "customForm": "记录表单",
-    "manageForms": "自定义记录表单"
+    "manageForms": "自定义记录表单",
+    "addActivity": "添加活动"
   },
   "rateBookAssignments": {
     "title": "费率表分配",

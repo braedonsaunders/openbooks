@@ -737,7 +737,7 @@ checked-in suite and release workflow are authoritative.
 
 `v0.1.0-alpha.17` is the current community preview. It keeps the
 version-tag release path. This release widens payroll to ten installable
-countries, adds a notifications inbox and a CRM customer-360 cockpit,
+countries, adds a notifications inbox and a per-customer Pulse cockpit,
 enforces tenant isolation across the integration suite, and takes lint
 warnings and explicit `any` to zero. See the changelog for the areas
 touched.

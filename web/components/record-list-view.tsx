@@ -126,15 +126,15 @@ export async function RecordListView({
 
   const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
   const viewSortKey = view.sort ? listColumnMeta(recordType, view.sort.column)?.sortKey : undefined
-  const defaultSort =
-    viewSortKey && allowedSorts.includes(viewSortKey)
-      ? viewSortKey
-      : allowedSorts.includes('date')
-        ? 'date'
-        : (allowedSorts[0] ?? 'date')
+  // Column AND direction move together: a saved view whose stored column has
+  // left the registry surrenders its direction with it, rather than pairing
+  // the fallback column with a direction chosen for a different one.
+  const viewSort = viewSortKey && allowedSorts.includes(viewSortKey)
+    ? { sortKey: viewSortKey, dir: view.sort!.dir }
+    : undefined
   const params = parseListParams(sp, {
-    sort: defaultSort,
-    dir: view.sort?.dir ?? 'desc',
+    sort: viewSort?.sortKey ?? (allowedSorts.includes('date') ? 'date' : (allowedSorts[0] ?? 'date')),
+    dir: viewSort?.dir ?? 'desc',
     perPage: view.perPage ?? 25,
     allowedSorts,
   })

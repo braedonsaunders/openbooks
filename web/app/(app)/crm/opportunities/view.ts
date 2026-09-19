@@ -7,6 +7,7 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { crmSharedScope, crmOpportunityScope } from '../../../../lib/crm-scope'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 import { loadOpportunity } from '../../../../lib/crm'
@@ -41,6 +42,7 @@ export interface OpportunitiesData {
   canManage: boolean
   viewMode: 'board' | 'list'
   currentParams: Record<string, string | string[] | undefined>
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
   drawer: OpportunityDrawerProps | null
   board: {
     statuses: KanbanStatus[]
@@ -232,6 +234,7 @@ export async function loadOpportunities(
     canManage: manage,
     viewMode,
     currentParams: sp,
+    tabs: await customerGroupTabs(authz, '/crm/opportunities'),
     drawer,
     board,
   }
@@ -268,9 +271,11 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
+        actionsClassName: 'flex items-center gap-3',
         actions: [
           widget(viewSwitcher.widget, viewSwitcher.props),
           widget(newOpportunity.widget, newOpportunity.props, f('canManage')),
+          widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
     ],

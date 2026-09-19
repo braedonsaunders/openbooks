@@ -1962,9 +1962,10 @@ begin
   end;
 
 -- ---- crm prospects -------------------------------------------------------
--- The simulator never creates CRM account profiles, so /crm/prospects would
--- compare two identical empty states. Two prospect accounts on the sim org's
--- real prospect statuses (Open, Nurturing) with different owners.
+-- The simulator never creates CRM account profiles, so the prospect segment
+-- of /entities/customers would compare two identical empty states. Two
+-- prospect accounts on the sim org's real prospect statuses (Open,
+-- Nurturing) with different owners.
 -- Block …1301–1304 claimed by the prospects conversion; verified free.
   declare
   v_status_open uuid;

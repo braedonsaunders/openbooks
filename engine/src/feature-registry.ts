@@ -33,7 +33,10 @@ export interface FeatureDef {
  * new optional modules (field tickets) default OFF. */
 export const FEATURES: FeatureDef[] = [
   // Sales & customers
-  { key: 'crm', defaultEnabled: true, category: 'sales', navModules: ['crm-leads', 'crm-prospects', 'crm-opportunities', 'crm-activities', 'crm-forecasts'] },
+  // The account list is NOT here: leads, prospects and customers share one
+  // list gated by parties.read, and turning CRM off narrows that list to
+  // customers rather than removing a nav entry.
+  { key: 'crm', defaultEnabled: true, category: 'sales', navModules: ['crm-opportunities', 'crm-activities', 'crm-forecasts'] },
   { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
   // Subscription billing: plans + subscriptions that auto-generate recurring

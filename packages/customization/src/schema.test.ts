@@ -130,19 +130,33 @@ test('party role forms expose the complete native record without leaking related
   assert.equal(employeeKeys.includes('trade_id'), true)
 })
 
-test('customer list customization exposes lifecycle status choices', () => {
+test('customer list customization spans the whole relationship lifecycle', () => {
+  // One account list, three stages. `lead` belongs here because the retired
+  // /crm/leads page's rows now arrive on this list — see customerBaseJoins.
   const customer = getRecordType('customer')!
   const status = customer.listFilters.find((filter) => filter.key === 'status')
 
-  assert.deepEqual(status?.options?.map((option) => option.value), ['customer', 'prospect'])
+  assert.deepEqual(status?.options?.map((option) => option.value), ['customer', 'prospect', 'lead'])
+  assert.equal(status?.labelKey, 'crm.fields.lifecycleStage')
   assert.equal(customer.listColumns.find((column) => column.key === 'status')?.sortable, true)
-  assert.deepEqual(defaultListView('customer').columns.map((column) => column.key), [
+  assert.equal(customer.listColumns.find((column) => column.key === 'status')?.labelKey, 'crm.fields.stage')
+  assert.deepEqual(customer.listColumns.map((column) => column.key), [
     'display_name',
     'short_code',
     'email',
     'phone',
     'status',
+    'crm_status',
+    'owner_name',
+    'territory_name',
+    'qualification_score',
+    'last_activity',
   ])
+  // A→Z by name, declared rather than inferred: the inferred fallback pairs a
+  // seeded view's stale direction with whatever column survives (F: customers
+  // listed Z→A).
+  assert.deepEqual(customer.defaultSort, { sortKey: 'name', dir: 'asc' })
+  assert.deepEqual(defaultListView('customer').sort, { column: 'display_name', dir: 'asc' })
 })
 
 test('opportunity list customization exposes pipeline columns and filters without a form designer', () => {
@@ -315,8 +329,6 @@ test('optional-module record types declare a Features switch', () => {
     labor_rate_card: 'projects',
     field_ticket: 'fieldTickets',
     opportunity: 'crm',
-    lead: 'crm',
-    prospect: 'crm',
     activity: 'crm',
     inventory_onhand: 'inventory',
     inventory_movement: 'inventory',
@@ -349,15 +361,34 @@ test('item list-filter options drop inventory kinds when Inventory is off', () =
   assert.ok(shown.includes('inventory') && shown.includes('assembly') && shown.includes('kit'))
 })
 
-test('customer list-filter options drop prospect when CRM is off', () => {
+test('the customer list collapses to customers when CRM is off', () => {
+  // Off, this is the AR customer roll and nothing else: no other lifecycle
+  // option, and no column or filter reading the crm_account_profiles joins
+  // that customerBaseJoins(false) never makes.
   const customer = getRecordType('customer')
   assert.ok(customer)
-  const hidden = recordTypeForFeatureState(customer, { inventory: true, crm: false })
-    .listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value) ?? []
-  assert.deepEqual(hidden, ['customer'])
-  const shown = recordTypeForFeatureState(customer, { inventory: true, crm: true })
-    .listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value) ?? []
-  assert.deepEqual(shown, ['customer', 'prospect'])
+  const off = recordTypeForFeatureState(customer, { inventory: true, crm: false })
+  assert.deepEqual(
+    off.listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value),
+    ['customer'],
+  )
+  assert.equal(off.listFilters.find((filter) => filter.key === 'status')?.labelKey, 'common.labels.status')
+  assert.equal(off.listColumns.find((column) => column.key === 'status')?.labelKey, 'common.labels.status')
+  assert.deepEqual(off.listColumns.map((column) => column.key), [
+    'display_name',
+    'short_code',
+    'email',
+    'phone',
+    'status',
+  ])
+  assert.deepEqual(off.listFilters.map((filter) => filter.key), ['status'])
+
+  const on = recordTypeForFeatureState(customer, { inventory: true, crm: true })
+  assert.deepEqual(
+    on.listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value),
+    ['customer', 'prospect', 'lead'],
+  )
+  assert.deepEqual(on.listFilters.map((filter) => filter.key), ['status', 'status_id', 'owner_user_id', 'territory_id'])
 })
 
 test('journal origin filter offers migration alongside the posting origins (F-t12-014)', () => {

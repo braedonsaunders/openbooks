@@ -43,7 +43,9 @@
       "wages": "賃金レート",
       "invoicing": "請求",
       "pricing": "価格",
-      "payroll": "給与"
+      "payroll": "給与",
+      "pulse": "パルス",
+      "relationship": "関係"
     },
     "wages": {
       "title": "賃金レート",
@@ -199,7 +201,8 @@
     },
     "workerCompGroup": "労災グループ",
     "customForm": "レコードフォーム",
-    "manageForms": "レコードフォームをカスタマイズ"
+    "manageForms": "レコードフォームをカスタマイズ",
+    "addActivity": "アクティビティを追加"
   },
   "rateBookAssignments": {
     "title": "レートブック割当",

@@ -130,6 +130,11 @@ export async function EntityListSlot({
       orgId={productionConfig ? authz.user.productionOrgId : authz.user.orgId}
       userId={authz.user.id}
       canManage={productionConfig || can(authz, 'admin.customization.manage')}
+      // Decided here for the same reason the org id is: the customer list
+      // spans the relationship lifecycle only for a viewer holding
+      // crm.accounts.read, and a capability that travelled through the spec
+      // is a capability a spec could assert for someone who lacks it.
+      crmAccountsVisible={can(authz, 'crm.accounts.read')}
       sp={sp}
       drawer={drawer}
       emptyAction={emptyAction}

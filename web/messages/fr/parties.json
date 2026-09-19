@@ -40,7 +40,9 @@
       "wages": "Taux de rémunération",
       "invoicing": "Facturation",
       "pricing": "Tarification",
-      "payroll": "Paie"
+      "payroll": "Paie",
+      "pulse": "Pouls",
+      "relationship": "Relation"
     },
     "wages": {
       "title": "Taux de rémunération",
@@ -199,7 +201,8 @@
       "saved": "Classe de conformité enregistrée.",
       "saveFailed": "Échec de l’enregistrement de la classe de conformité.",
       "viewMatrix": "Ouvrir la matrice de conformité"
-    }
+    },
+    "addActivity": "Ajouter une activité"
   },
   "rateBookAssignments": {
     "title": "Tarification de la main-d’œuvre",

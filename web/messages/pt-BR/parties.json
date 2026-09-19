@@ -43,7 +43,9 @@
       "wages": "Taxas salariais",
       "invoicing": "Faturamento",
       "pricing": "Preços",
-      "payroll": "Folha de pagamento"
+      "payroll": "Folha de pagamento",
+      "pulse": "Pulso",
+      "relationship": "Relacionamento"
     },
     "wages": {
       "title": "Taxas salariais",
@@ -199,7 +201,8 @@
     },
     "workerCompGroup": "Grupo de acidente de trabalho",
     "customForm": "Formulário de registro",
-    "manageForms": "Personalizar formulário de registro"
+    "manageForms": "Personalizar formulário de registro",
+    "addActivity": "Adicionar atividade"
   },
   "rateBookAssignments": {
     "title": "Atribuições de tabela de tarifas",

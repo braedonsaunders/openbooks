@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
+import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -57,6 +58,25 @@ export interface EntityRoleData {
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
   newParty: { basePath: string; role: 'customer' | 'vendor' | 'employee'; label: string }
+  /**
+   * The Customers-group route strip. Only the customers slug belongs to that
+   * group — vendors and employees are Purchasing and Operations records that
+   * happen to share this renderer, so they get no strip.
+   */
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
+  /**
+   * On a lead or prospect segment, New mints a relationship draft at that
+   * stage instead of a customer with an AR role. Null when the segment is
+   * customers or All, CRM is off, or the viewer cannot create accounts.
+   */
+  newAccount: { label: string; failed: string; lifecycleStage: 'lead' | 'prospect' } | null
+  /**
+   * Whether the party factory belongs on this segment at all. On a lead or
+   * prospect segment it does not: it would mint a customer with an AR role,
+   * so a viewer who may see leads but not create them gets no button rather
+   * than a "New lead" button that makes a customer.
+   */
+  showNewParty: boolean
   showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
   txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null
@@ -71,7 +91,7 @@ export async function loadEntityRole(
   const role = meta.role
   const basePath = `/entities/${slug}`
   const t = await getTranslations('entities')
-  const newLabel = t(`roles.${slug}.newLabel`)
+  const tCrm = await getTranslations('crm')
 
   const authz = await requirePermission('parties.read')
   const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
@@ -80,6 +100,29 @@ export async function loadEntityRole(
   const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
+  const canReadCrmAccounts = crmEnabled && can(authz, 'crm.accounts.read')
+  const canManageCrmAccounts = crmEnabled && can(authz, 'crm.accounts.manage')
+
+  // The lifecycle segment the customer list is on. It is the SAME `status`
+  // param the list's own chips write, so the header follows the chips: the
+  // title names the segment and New mints the right kind of record. The
+  // list's own default is `customer`, so an absent param means customers.
+  const stageParam = pickString(sp.status)
+  const segment = slug === 'customers' && canReadCrmAccounts
+    && (stageParam === 'lead' || stageParam === 'prospect' || stageParam === 'all')
+    ? stageParam
+    : 'customer'
+  const segmentTitle = segment === 'customer'
+    ? t(`roles.${slug}.title`)
+    : segment === 'all'
+      ? tCrm('accounts.allTitle')
+      : tCrm(`accounts.${segment}.title`)
+  const segmentDescription = segment === 'customer'
+    ? t(`roles.${slug}.description`)
+    : segment === 'all'
+      ? tCrm('accounts.allDescription')
+      : tCrm(`accounts.${segment}.description`)
+  const newLabel = t(`roles.${slug}.newLabel`)
 
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
   const partyTransactionId = pickString(sp.partyTxn)
@@ -88,6 +131,8 @@ export async function loadEntityRole(
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'compliance'
+    || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship'
+    || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
@@ -109,6 +154,19 @@ export async function loadEntityRole(
         ])
       : null,
   ])
+  // The open account's lifecycle stage. The flyout needs it before its first
+  // save: on a lead or prospect it must NOT force the AR customer role on.
+  // Deliberately NOT filtered on `is_active`: a relationship draft's profile
+  // is inactive until the draft is named, and that is exactly the save that
+  // must not mint an AR role. The stage is a property of the record, not of
+  // whether it is live yet.
+  const openLifecycleStage = crmEnabled && openParty
+    ? ((await db.execute<{ lifecycle_stage: string }>(sql`
+        select lifecycle_stage from crm_account_profiles
+         where org_id = ${orgId} and party_id = ${String(openParty.party.id)} limit 1`))
+        .rows[0]?.lifecycle_stage ?? null)
+    : null
+
   const resolvedPartyForm = openParty && pickers
     ? await resolveFormLayout({
         orgId,
@@ -123,11 +181,16 @@ export async function loadEntityRole(
 
   return {
     recordType: role,
-    title: t(`roles.${slug}.title`),
-    description: t(`roles.${slug}.description`),
+    title: segmentTitle,
+    description: segmentDescription,
     canManage,
     currentParams: sp,
     newParty: { basePath, role, label: newLabel },
+    tabs: slug === 'customers' ? await customerGroupTabs(authz, '/entities/customers') : [],
+    newAccount: (segment === 'lead' || segment === 'prospect') && can(authz, 'crm.accounts.create')
+      ? { label: tCrm(`accounts.${segment}.new`), failed: tCrm('feedback.createFailed'), lifecycleStage: segment }
+      : null,
+    showNewParty: segment !== 'lead' && segment !== 'prospect',
     showNewRedirect: partyId === 'new' && canManage,
     drawer: openParty && pickers
       ? {
@@ -144,6 +207,10 @@ export async function loadEntityRole(
               }
             : null,
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
+          canManageActivities: crmEnabled && can(authz, 'crm.activities.manage'),
+          canReadCrmAccounts,
+          canManageCrmAccounts,
+          lifecycleStage: openLifecycleStage,
           canManageWages: can(authz, 'admin.setup.manage'),
           canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
           payrollEnabled,
@@ -182,7 +249,28 @@ export async function loadEntityRole(
 const f = ref<EntityRoleData>()
 
 export function entityRoleSpec(data: EntityRoleData): PageSpec {
-  const newParty = { widget: 'new-role-party', props: { ...data.newParty } }
+  // On a lead/prospect segment the create action mints a relationship draft
+  // (no AR role) through the CRM factory; on the customer segment it is the
+  // party create it has always been. One button, segment-shaped.
+  const newParty = data.newAccount
+    ? {
+        widget: 'crm-new-button',
+        props: {
+          apiPath: '/api/crm/accounts/draft',
+          basePath: data.newParty.basePath,
+          param: 'party',
+          label: data.newAccount.label,
+          failed: data.newAccount.failed,
+          body: { lifecycleStage: data.newAccount.lifecycleStage },
+        },
+      }
+    : data.showNewParty
+      ? { widget: 'new-role-party', props: { ...data.newParty } }
+      : null
+  // The relationship factory has its own permission (crm.accounts.create,
+  // already resolved into `newAccount`), so that button is unconditional
+  // once present; the party factory keeps its parties.manage ref.
+  const canCreate = newParty != null && (data.newAccount != null || data.canManage)
   return page({
     route: '/entities/[role]',
     layout: 'list',
@@ -190,14 +278,18 @@ export function entityRoleSpec(data: EntityRoleData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newParty.widget, newParty.props, f('canManage'))],
+        actionsClassName: 'flex items-center gap-3',
+        actions: [
+          ...(newParty ? [widget(newParty.widget, newParty.props, data.newAccount ? undefined : f('canManage'))] : []),
+          ...(data.tabs.length ? [widget('module-home-tabs', { tabs: data.tabs })] : []),
+        ],
       }),
     ],
     body: [
       widgetBlock('entity-list-view', {
         recordType: data.recordType,
         sp: data.currentParams,
-        emptyAction: data.canManage ? newParty : null,
+        emptyAction: canCreate ? newParty : null,
         // Rendered in the native page's order: the create-redirect first, then
         // the record flyout, then the transaction flyout stacked over it.
         drawer: [

@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { crmSharedScope, crmOpportunityScope } from '../../../../lib/crm-scope'
 import { can, requirePermission } from '../../../../lib/authz'
+import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadActivity } from '../../../../lib/crm'
 import type { ActivityDrawer } from '../ActivityDrawer'
@@ -37,6 +38,7 @@ export interface ActivitiesData {
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
   drawer: ActivityDrawerProps | null
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
 }
 
 export async function loadActivities(
@@ -76,6 +78,7 @@ export async function loadActivities(
     createFailed: t('feedback.createFailed'),
     canManage: manage,
     currentParams: sp,
+    tabs: await customerGroupTabs(authz, '/crm/activities'),
     drawer,
   }
 }
@@ -102,7 +105,11 @@ export function activitiesSpec(data: ActivitiesData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newActivity.widget, newActivity.props, f('canManage'))],
+        actionsClassName: 'flex items-center gap-3',
+        actions: [
+          widget(newActivity.widget, newActivity.props, f('canManage')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [

@@ -55,8 +55,6 @@
     "admin-pdf-templates": "PDF テンプレート",
     "admin-setup": "会社セットアップ",
     "analytics": "分析",
-    "crm-leads": "リード",
-    "crm-prospects": "見込み客",
     "crm-opportunities": "商談",
     "crm-activities": "活動",
     "crm-forecasts": "予測とノルマ",
@@ -73,8 +71,7 @@
     "compliance": "コンプライアンス",
     "compliance-vendors": "下請業者",
     "lien-waivers": "留置権放棄証書",
-    "information-returns": "支払調書",
-    "crm-customer-360": "顧客360"
+    "information-returns": "支払調書"
   },
   "groups": {
     "my-work": "マイワーク",

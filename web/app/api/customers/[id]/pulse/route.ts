@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { loadCustomer360 } from '../../../../../lib/customer-360'
+import { loadCustomerPulse } from '../../../../../lib/customer-pulse'
 
 export const runtime = 'nodejs'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  // Reading Customer 360 requires either CRM accounts read or AR read
+  // Pulse mixes CRM and receivables telemetry, so either read opens it.
   const crmGate = await guardPermission('crm.accounts.read')
   const gate = crmGate instanceof NextResponse ? await guardPermission('ar.read') : crmGate
   if (gate instanceof NextResponse) return gate
@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const data = await loadCustomer360(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+  const data = await loadCustomerPulse(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!data) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   return NextResponse.json(data)

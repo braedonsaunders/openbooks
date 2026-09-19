@@ -55,8 +55,6 @@
     "admin-pdf-templates": "Plantillas PDF",
     "admin-setup": "Configuración empresarial",
     "analytics": "Analítica",
-    "crm-leads": "Clientes potenciales",
-    "crm-prospects": "Prospectos",
     "crm-opportunities": "Oportunidades",
     "crm-activities": "Actividades",
     "crm-forecasts": "Previsiones y cuotas",
@@ -73,8 +71,7 @@
     "property-management": "Gestión inmobiliaria",
     "subcontracts": "Subcontratos",
     "admin-page-layouts": "Diseños de página",
-    "admin-extensions": "Aplicaciones",
-    "crm-customer-360": "Cliente 360"
+    "admin-extensions": "Aplicaciones"
   },
   "modulesShort": {
     "ap": "Por pagar",
