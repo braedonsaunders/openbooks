@@ -48,20 +48,27 @@ const ALICE = {
   cost: "288.3400",
   lines: { TAX: "698.7500", CPP: "206.1900", EI: "58.6800" },
 };
+// Jean is the Quebec employee, so the employer also owes the health services
+// fund on his remuneration: 3040.0000 x 1.65% = 50.1600. That lands in
+// employer_cost (256.6700 + 50.1600) and in the CA employer-cost total, and
+// nowhere else — HSF is an employer contribution, so gross and net are
+// untouched. The rate is configured in the provisioning step; an unconfigured
+// ca_hsf slot refuses this employee by name rather than accruing 0.00.
 const JEAN = {
   base: "Jean Coutu",
   gross: "3040.0000",
   net: "2121.9800",
-  cost: "256.6700",
+  cost: "306.8300",
   lines: {
     TAX: "290.0200",
     QCTAX: "392.3700",
     CPP: "183.0400",
     EI: "39.5200",
     QPIP: "13.0700",
+    HSF: "50.1600",
   },
 };
-const CA_TOTALS = { gross: "6640.0000", net: "4758.3600", cost: "545.0100" };
+const CA_TOTALS = { gross: "6640.0000", net: "4758.3600", cost: "595.1700" };
 const SAM = {
   base: "Sam Rivera",
   gross: "3000.0000",
@@ -70,8 +77,9 @@ const SAM = {
   lines: { FIT: "320.3800", SS: "186.0000", MED: "43.5000", SIT: "134.0600" },
 };
 // Per-component remittance goldens for the seeded inputs: every agency
-// total is the sum of its components' rows (CRA 1636.83, RQ 789.82,
-// IRS 931.44 on a fresh tenant). Asserted as deltas off the pre-commit
+// total is the sum of its components' rows (CRA 1636.83, RQ 839.98,
+// IRS 931.44 on a fresh tenant). RQ carries the health services fund
+// (50.1600) on top of QC tax and QPIP. Asserted as deltas off the pre-commit
 // baseline so shared-tenant history cannot leak in.
 const RETRO = { gross: "100.0000", net: "70.3500", fit: "22.0000" };
 const RETRO_IRS_RANGE = "37.9000";
@@ -1214,6 +1222,9 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ["QCTAX", "392.3700"],
         ["QPIP", "13.0700"],
         ["QPIP-ER", "18.3000"],
+        // Quebec's health services fund remits to Revenu Quebec alongside the
+        // QC tax and QPIP rows: 3040.0000 x 1.65% on the one QC employee.
+        ["HSF", "50.1600"],
         ["FIT", "320.3800"],
         ["SS", "186.0000"],
         ["MED", "43.5000"],
