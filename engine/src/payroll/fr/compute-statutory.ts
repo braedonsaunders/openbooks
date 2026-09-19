@@ -39,9 +39,11 @@
  * What this pass does NOT do (stated): APEC (cadres only, no channel),
  * a conventionally modified 60/40 split, AT/MP and versement mobilité
  * (tenant-declared, no context channel), the Alsace-Moselle salary
- * supplement, the AGS interim variant, reduced-rate modulation, and the
- * brut/net-imposable bridge (see FR_COTISATION_REFUSALS_2026 in
- * ./cotisations-2026.ts).
+ * supplement, the AGS interim variant, and PAS reduced-rate modulation.
+ * The brut/net-imposable bridge IS modelled: the stub's earnings figure
+ * is the brut, and the PAS assiette is derived by
+ * calculateFrNetImposable2026 (see ./cotisations.ts) — the rate never
+ * hits the brut (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10).
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves away
  * from zero (roundDiv) — the same discipline as canada/decimal.ts. The
@@ -57,7 +59,7 @@ import {
   frPasDefaultRateUnits,
   frPasEditionForVersement,
 } from "./tables-2026.ts";
-import { calculateFrCotisations2026 } from "./cotisations.ts";
+import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -234,20 +236,25 @@ export async function computeFrStatutory(
   }
   const transmitted = answers["taux_transmis"] ?? null;
   const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
+  // The stub's earnings figure is the brut. PAS prices on the net imposable
+  // derived from it (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10) —
+  // never on the brut. Cotisations price on the brut below.
+  const net = calculateFrNetImposable2026({
+    brut: base,
+    payDate,
+    periodsPerYear,
+  });
   const result = calculateFrPas2026({
-    base,
+    base: net.netImposable,
     payDate,
     periodsPerYear,
     transmittedRatePct: transmitted === "" ? null : transmitted,
     domicile: "metropole_hors_france",
   });
   pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
-  // Cotisations: the stub supplies one earnings figure. It is used as the
-  // brut for the URSSAF lines while PAS above uses it as net imposable —
-  // the brut/net-imposable bridge (déductible CSG and friends) is refused
-  // by name (FR_COTISATION_REFUSALS_2026), not modelled. AT/MP and
-  // versement mobilité have no context channel for their tenant-declared
-  // rates, so those lines are not pushed; AGIRC-ARRCO has no rates at all.
+  // Cotisations price on the brut. AT/MP and versement mobilité have no
+  // context channel for their tenant-declared rates, so those lines are
+  // not pushed.
   const cots = calculateFrCotisations2026({
     brut: base,
     payDate,
@@ -276,6 +283,7 @@ export async function computeFrStatutory(
     TAUX_PAS: result.ratePct,
     PAS: result.pas,
     BRUT: base,
+    NET_IMPOSABLE: net.netImposable,
     VIEIL_SAL: cots.vieillesseSal,
     CSG: cots.csg,
     CRDS: cots.crds,
