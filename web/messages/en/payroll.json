@@ -977,7 +977,7 @@
       "year": "Tax year",
       "yearHelp": "Statutory rates are assigned for a tax year — a state rate notice, a credit-reduction determination, a provincial exemption. Rates entered for one year never reinterpret another year's payroll.",
       "add": "Add a rate",
-      "remove": "Remove",
+      "remove": "Supersede",
       "empty": "No statutory rates are entered for this year.",
       "gapsTitle": "Not configured for this year",
       "allAccounts": "All accounts",

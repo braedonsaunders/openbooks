@@ -58,6 +58,7 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'engine/src/payroll-roexml.test.ts',
   'engine/src/payroll-run.test.ts',
   'engine/src/payroll-statutory-rates.test.ts',
+  'engine/src/payroll-statutory-rate-history.test.ts',
   'engine/src/payroll-tax-years.test.ts',
   'engine/src/payroll-yearend-amendments.test.ts',
   'engine/src/posting-subsidiary-restrictions.test.ts',

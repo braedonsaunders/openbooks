@@ -977,7 +977,7 @@
       "year": "Año fiscal",
       "yearHelp": "Las tasas legales se asignan para un año fiscal — un aviso de tasa estatal, una determinación de reducción de crédito, una exención provincial. Las tasas ingresadas para un año nunca reinterpretan la nómina de otro año.",
       "add": "Añadir una tasa",
-      "remove": "Quitar",
+      "remove": "Reemplazar",
       "empty": "No hay tasas legales ingresadas para este año.",
       "gapsTitle": "No configurado para este año",
       "allAccounts": "Todas las cuentas",

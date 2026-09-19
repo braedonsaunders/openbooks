@@ -548,15 +548,26 @@ test(
       assert.equal(listed[0]!.id, first.id);
       assert.deepEqual(listed[0]!.values, { amount: "10500.00" });
 
-      // A second save of the same scope point is an UPDATE, never a duplicate.
+      // A second save of the same scope point SUPERSEDES the open row and
+      // inserts its successor — a new id, never a rewritten row, and never a
+      // duplicate current row.
       const second = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
         region: null, filingAccountId: null, taxYear: 2026, values: { amount: "8000" },
       });
-      assert.equal(second.id, first.id);
+      assert.notEqual(second.id, first.id);
       const relisted = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
       assert.equal(relisted.length, 1);
+      assert.equal(relisted[0]!.id, second.id);
       assert.deepEqual(relisted[0]!.values, { amount: "8000.00" });
+      const fullHistory = await listStatutoryRates(
+        org.orgId, { country: "GB", taxYear: 2026, includeSuperseded: true },
+      );
+      assert.equal(fullHistory.length, 2);
+      assert.deepEqual(
+        fullHistory.find((r) => r.id === first.id)!.values,
+        { amount: "10500.00" },
+      );
 
       // And the engine prices from what was saved — never from a stale zero.
       const resolution = await resolveStatutoryRates(org.orgId, GB_PACK_RATES, 2026);
