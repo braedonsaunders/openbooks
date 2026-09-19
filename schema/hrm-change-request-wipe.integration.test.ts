@@ -111,7 +111,7 @@ test("fixture teardown clears an organisation that holds a committed submitted r
   // released, so the proof is that the org's HRM rows are gone — the exact
   // state that pinned scratch orgs before 0188 — not that the org row vanished.
   const after = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId}`)).rows[0]!.n;
+    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId} or id = ${id}`)).rows[0]!.n;
   assert.equal(after, 0, "teardown must remove the submitted request with the rest of the org");
   const runs = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_runs where org_id = ${s.orgId}`)).rows[0]!.n;
