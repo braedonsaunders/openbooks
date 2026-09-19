@@ -88,11 +88,13 @@ test('certificates GET serves every pack\'s row-backed forms and no column-backe
     const nl = body.declarations['NL']!.certificates.map((certificate) => certificate.key).sort()
     assert.deepEqual(nl, ['nl_loonheffingen', 'nl_premies'])
     // Column-backed certificates stay on the profile editor: serving them
-    // here would offer two writable sources for one answer.
-    for (const declaration of Object.values(body.declarations)) {
-      for (const certificate of declaration.certificates) {
-        assert.equal(certificate.storage, 'certificate_rows', certificate.key)
-      }
+    // here would offer two writable sources for one answer. Anchor the sweep
+    // on a count first — a response that served NO certificates at all would
+    // satisfy the loop below while proving nothing.
+    const served = Object.values(body.declarations).flatMap((declaration) => declaration.certificates)
+    assert.ok(served.length > 0, 'the GET served no certificates at all')
+    for (const certificate of served) {
+      assert.equal(certificate.storage, 'certificate_rows', certificate.key)
     }
     assert.deepEqual(body.stored, [])
   } finally {
