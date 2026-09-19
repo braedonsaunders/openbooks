@@ -14,6 +14,7 @@ import { NL_PAYROLL_PACK } from "./nl/pack.ts";
 import { ES_PAYROLL_PACK } from "./es/pack.ts";
 import { SG_PAYROLL_PACK } from "./sg/pack.ts";
 import { JP_PAYROLL_PACK } from "./jp/pack.ts";
+import { PL_PAYROLL_PACK } from "./pl/pack.ts";
 import {
   type PayrollPackCertificates,
   registerPayrollCertificateSource,
@@ -1020,6 +1021,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   ES: ES_PAYROLL_PACK,
   SG: SG_PAYROLL_PACK,
   JP: JP_PAYROLL_PACK,
+  PL: PL_PAYROLL_PACK,
 };
 
 // This is a country-key dictionary: inherited Object names must not pass a

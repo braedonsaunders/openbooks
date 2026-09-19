@@ -821,7 +821,18 @@
           "kenko_hoken": "Health insurance payable (employee + employer half-shares)"
         }
       },
-      "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
+      "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab.",
+      "PL": {
+        "title": "Poland — statutory accounts",
+        "description": "Liability accounts for the amounts the Poland pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "pit": "PIT payable (monthly income tax advance)",
+          "zus_ee": "Employee social contributions payable (emerytalne, rentowe + chorobowe)",
+          "zus_zdr": "Health contribution payable (NFZ zdrowotna)",
+          "zus_er": "Employer social contributions payable (emerytalne, rentowe + wypadkowe)",
+          "fundusze_er": "Employer labour funds payable (FP, FS + FGŚP)"
+        }
+      }
     },
     "usConfig": {
       "title": "Unemployment rates",

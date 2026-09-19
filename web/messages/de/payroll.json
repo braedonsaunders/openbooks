@@ -763,21 +763,21 @@
         }
       },
       "AU": {
-        "title": "Australien \u2014 gesetzliche ATO-Konten",
-        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das AU-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "title": "Australien — gesetzliche ATO-Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das AU-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
-          "payg": "Verbindlichkeiten aus PAYG-Einbehalt (Einkommensteuer, Medicare + STSL-R\u00fcckzahlung)",
+          "payg": "Verbindlichkeiten aus PAYG-Einbehalt (Einkommensteuer, Medicare + STSL-Rückzahlung)",
           "super": "Verbindlichkeiten aus Superannuation Guarantee (Arbeitgeberbeitrag)",
-          "wcb": "Verbindlichkeiten aus Workers' compensation (Arbeitgeberpr\u00e4mie)"
+          "wcb": "Verbindlichkeiten aus Workers' compensation (Arbeitgeberprämie)"
         }
       },
       "DE": {
-        "title": "Deutschland \u2014 gesetzliche Konten",
-        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das DE-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "title": "Deutschland — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das DE-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
           "lohnsteuer": "Verbindlichkeiten aus Lohnsteuer (Einkommensteuer nach PAP)",
-          "solidaritaetszuschlag": "Verbindlichkeiten aus Solidarit\u00e4tszuschlag (Zuschlag zur Einkommensteuer)",
-          "kirchenlohnsteuer": "Verbindlichkeiten aus Kirchenlohnsteuer (Kirchensteuer, vom Arbeitnehmer gew\u00e4hlt)",
+          "solidaritaetszuschlag": "Verbindlichkeiten aus Solidaritätszuschlag (Zuschlag zur Einkommensteuer)",
+          "kirchenlohnsteuer": "Verbindlichkeiten aus Kirchenlohnsteuer (Kirchensteuer, vom Arbeitnehmer gewählt)",
           "kv": "Verbindlichkeiten aus KV (Krankenversicherung von Arbeitnehmer und Arbeitgeber)",
           "rv": "Verbindlichkeiten aus RV (Rentenversicherung von Arbeitnehmer und Arbeitgeber)",
           "av": "Verbindlichkeiten aus AV (Arbeitslosenversicherung von Arbeitnehmer und Arbeitgeber)",
@@ -787,21 +787,21 @@
         }
       },
       "FR": {
-        "title": "Frankreich \u2014 gesetzliche Konten",
-        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das FR-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "title": "Frankreich — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das FR-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
           "pas": "Verbindlichkeiten aus PAS (an der Quelle einbehaltene Einkommensteuer)",
-          "salariales": "Verbindlichkeiten aus Arbeitnehmerbeitr\u00e4gen (vieillesse, CSG + CRDS)",
-          "retraite_comp": "Verbindlichkeiten aus Retraite compl\u00e9mentaire (AGIRC-ARRCO, CEG + CET, Arbeitnehmer + Arbeitgeber)",
-          "patronales": "Verbindlichkeiten aus Arbeitgeberbeitr\u00e4gen (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+          "salariales": "Verbindlichkeiten aus Arbeitnehmerbeiträgen (vieillesse, CSG + CRDS)",
+          "retraite_comp": "Verbindlichkeiten aus Retraite complémentaire (AGIRC-ARRCO, CEG + CET, Arbeitnehmer + Arbeitgeber)",
+          "patronales": "Verbindlichkeiten aus Arbeitgeberbeiträgen (URSSAF: maladie, vieillesse, chômage, AT/MP, versement mobilité)"
         }
       },
       "ES": {
-        "title": "Spanien \u2014 gesetzliche Konten",
-        "description": "Verbindlichkeitskonten f\u00fcr die Betr\u00e4ge, die das ES-Paket einbeh\u00e4lt und auflaufen l\u00e4sst. Jede Wahl gilt f\u00fcr jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "title": "Spanien — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das ES-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
           "irpf": "Verbindlichkeiten aus IRPF (Einkommensteuer zum Jahrestarif)",
-          "seguridad_social": "Verbindlichkeiten aus Seguridad Social (Arbeitnehmer- und Arbeitgeberbeitr\u00e4ge: contingencias comunes, desempleo, FOGASA, formaci\u00f3n, MEI)"
+          "seguridad_social": "Verbindlichkeiten aus Seguridad Social (Arbeitnehmer- und Arbeitgeberbeiträge: contingencias comunes, desempleo, FOGASA, formación, MEI)"
         }
       },
       "JP": {
@@ -813,7 +813,18 @@
           "kenko_hoken": "Verbindlichkeiten aus Krankenversicherung (Arbeitnehmer- und Arbeitgeberanteile)"
         }
       },
-      "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
+      "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze.",
+      "PL": {
+        "title": "Polen — gesetzliche Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das PL-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "pit": "Verbindlichkeiten aus PIT (monatliche Einkommensteuervorauszahlung)",
+          "zus_ee": "Verbindlichkeiten aus Sozialbeiträgen der Arbeitnehmer (emerytalne, rentowe + chorobowe)",
+          "zus_zdr": "Verbindlichkeiten aus Gesundheitsbeiträgen (NFZ zdrowotna)",
+          "zus_er": "Verbindlichkeiten aus Sozialbeiträgen der Arbeitgeber (emerytalne, rentowe + wypadkowe)",
+          "fundusze_er": "Verbindlichkeiten aus Arbeitsfonds der Arbeitgeber (FP, FS + FGŚP)"
+        }
+      }
     },
     "usConfig": {
       "title": "Arbeitslosensätze",

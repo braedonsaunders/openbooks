@@ -763,45 +763,45 @@
         }
       },
       "AU": {
-        "title": "Australie \u2014 comptes l\u00e9gaux ATO",
-        "description": "Comptes de passif pour les montants que le pack australien retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "title": "Australie — comptes légaux ATO",
+        "description": "Comptes de passif pour les montants que le pack australien retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
         "slots": {
-          "payg": "PAYG \u00e0 payer (imp\u00f4t sur le revenu, Medicare + remboursement STSL)",
-          "super": "Superannuation Guarantee \u00e0 payer (cotisation employeur)",
-          "wcb": "Workers' compensation \u00e0 payer (prime employeur)"
+          "payg": "PAYG à payer (impôt sur le revenu, Medicare + remboursement STSL)",
+          "super": "Superannuation Guarantee à payer (cotisation employeur)",
+          "wcb": "Workers' compensation à payer (prime employeur)"
         }
       },
       "DE": {
-        "title": "Allemagne \u2014 comptes l\u00e9gaux",
-        "description": "Comptes de passif pour les montants que le pack allemand retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "title": "Allemagne — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack allemand retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
         "slots": {
-          "lohnsteuer": "Lohnsteuer \u00e0 payer (imp\u00f4t sur le revenu)",
-          "solidaritaetszuschlag": "Solidarit\u00e4tszuschlag \u00e0 payer (surtaxe sur l\u2019imp\u00f4t sur le revenu)",
-          "kirchenlohnsteuer": "Kirchenlohnsteuer \u00e0 payer (imp\u00f4t eccl\u00e9siastique choisi par l\u2019employ\u00e9)",
-          "kv": "KV \u00e0 payer (Krankenversicherung employ\u00e9 et employeur)",
-          "rv": "RV \u00e0 payer (Rentenversicherung employ\u00e9 et employeur)",
-          "av": "AV \u00e0 payer (Arbeitslosenversicherung employ\u00e9 et employeur)",
-          "pv": "PV \u00e0 payer (Pflegeversicherung employ\u00e9 et employeur)",
-          "umlage": "Umlage \u00e0 payer (U1, U2 et Insolvenzgeldumlage employeur)",
-          "unfall": "Berufsgenossenschaft \u00e0 payer (assurance accidents employeur)"
+          "lohnsteuer": "Lohnsteuer à payer (impôt sur le revenu)",
+          "solidaritaetszuschlag": "Solidaritätszuschlag à payer (surtaxe sur l’impôt sur le revenu)",
+          "kirchenlohnsteuer": "Kirchenlohnsteuer à payer (impôt ecclésiastique choisi par l’employé)",
+          "kv": "KV à payer (Krankenversicherung employé et employeur)",
+          "rv": "RV à payer (Rentenversicherung employé et employeur)",
+          "av": "AV à payer (Arbeitslosenversicherung employé et employeur)",
+          "pv": "PV à payer (Pflegeversicherung employé et employeur)",
+          "umlage": "Umlage à payer (U1, U2 et Insolvenzgeldumlage employeur)",
+          "unfall": "Berufsgenossenschaft à payer (assurance accidents employeur)"
         }
       },
       "FR": {
-        "title": "France \u2014 comptes l\u00e9gaux",
-        "description": "Comptes de passif pour les montants que le pack fran\u00e7ais retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "title": "France — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack français retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
         "slots": {
-          "pas": "PAS \u00e0 payer (imp\u00f4t sur le revenu pr\u00e9lev\u00e9 \u00e0 la source)",
-          "salariales": "Cotisations salariales \u00e0 payer (assurance vieillesse, CSG + CRDS)",
-          "retraite_comp": "Retraite compl\u00e9mentaire \u00e0 payer (AGIRC-ARRCO, CEG + CET, parts employ\u00e9 et employeur)",
-          "patronales": "Cotisations patronales \u00e0 payer (URSSAF: maladie, vieillesse, ch\u00f4mage, AT/MP, versement mobilit\u00e9)"
+          "pas": "PAS à payer (impôt sur le revenu prélevé à la source)",
+          "salariales": "Cotisations salariales à payer (assurance vieillesse, CSG + CRDS)",
+          "retraite_comp": "Retraite complémentaire à payer (AGIRC-ARRCO, CEG + CET, parts employé et employeur)",
+          "patronales": "Cotisations patronales à payer (URSSAF: maladie, vieillesse, chômage, AT/MP, versement mobilité)"
         }
       },
       "ES": {
-        "title": "Espagne \u2014 comptes l\u00e9gaux",
-        "description": "Comptes de passif pour les montants que le pack espagnol retient et accumule. Chaque choix s\u2019applique \u00e0 toutes les composantes que la case couvre (parts employ\u00e9 et employeur ensemble).",
+        "title": "Espagne — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack espagnol retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
         "slots": {
-          "irpf": "IRPF \u00e0 payer (imp\u00f4t sur le revenu pr\u00e9lev\u00e9 au taux annuel)",
-          "seguridad_social": "Seguridad Social \u00e0 payer (cotisations employ\u00e9 et employeur : contingencias comunes, ch\u00f4mage, FOGASA, formation, MEI)"
+          "irpf": "IRPF à payer (impôt sur le revenu prélevé au taux annuel)",
+          "seguridad_social": "Seguridad Social à payer (cotisations employé et employeur : contingencias comunes, chômage, FOGASA, formation, MEI)"
         }
       },
       "JP": {
@@ -813,7 +813,18 @@
           "kenko_hoken": "Assurance maladie à payer (parts employé et employeur)"
         }
       },
-      "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
+      "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux.",
+      "PL": {
+        "title": "Pologne — comptes légaux",
+        "description": "Comptes de passif pour les montants que le pack PL retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "pit": "PIT à payer (acompte mensuel d’impôt sur le revenu)",
+          "zus_ee": "Cotisations sociales employé à payer (emerytalne, rentowe + chorobowe)",
+          "zus_zdr": "Cotisation santé à payer (NFZ zdrowotna)",
+          "zus_er": "Cotisations sociales employeur à payer (emerytalne, rentowe + wypadkowe)",
+          "fundusze_er": "Fonds pour l’emploi employeur à payer (FP, FS + FGŚP)"
+        }
+      }
     },
     "usConfig": {
       "title": "Taux de chômage",

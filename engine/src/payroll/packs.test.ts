@@ -79,6 +79,9 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
     "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/PAYE", "AU/PAYG",
     "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
     "NL/LH", "ES/IRPF", "JP/GENSEN"]);
+  // PL PIT (dochód net of KUP and employee social contributions, pl/pack.ts pit slot).
+    "NL/LH", "ES/IRPF",
+    "PL/PIT"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {
