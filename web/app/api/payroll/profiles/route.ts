@@ -69,6 +69,9 @@ const profileBodySchema = z.looseObject({
   cppExempt: z.boolean().optional(),
   eiExempt: z.boolean().optional(),
   taxExempt: z.boolean().optional(),
+  // Standing commission-pay status for statutory-holiday rules that read it.
+  // Nullable three-state: true/false answers, null un-answers. Omit to keep.
+  paidOnCommission: z.boolean().nullable().optional(),
   isActive: z.boolean().optional(),
   sin: z.string().nullable().optional(),
 })
@@ -86,7 +89,7 @@ const PROFILE_AUDIT_COLUMNS = sql`
   filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
   w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
   (sin_encrypted is not null) as sin_present, sin_last3,
-  filing_account_id, stub_delivery, payment_method,
+  filing_account_id, stub_delivery, payment_method, paid_on_commission,
   created_at, created_by, updated_at, updated_by`
 
 const MONEY_KEYS = [
@@ -274,7 +277,7 @@ export async function GET(req: Request) {
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
-               prof.stub_delivery, prof.payment_method
+               prof.stub_delivery, prof.payment_method, prof.paid_on_commission
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
@@ -332,7 +335,7 @@ export async function GET(req: Request) {
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
-           prof.stub_delivery, prof.payment_method
+           prof.stub_delivery, prof.payment_method, prof.paid_on_commission
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
@@ -545,6 +548,14 @@ export async function POST(req: Request) {
       }
     }
 
+    // Standing commission-pay status: send true/false to answer, null to
+    // un-answer, omit to keep. A full-profile save that is silent on the
+    // fact must never reset it — null is "nobody has answered" and the
+    // engine fails closed on it, so only an explicit key in the body moves
+    // the column either way.
+    const answersCommission = 'paidOnCommission' in body
+    const paidOnCommission = body.paidOnCommission ?? null
+
     // Sealed national identifier: write-only from the client (send `sin` to
     // set/replace; omit to keep). Never echoed back — GET exposes sin_last3
     // only. The value is judged AS GIVEN against the country pack's own
@@ -584,6 +595,7 @@ export async function POST(req: Request) {
          w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
          cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
          sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
+         paid_on_commission,
          created_by, updated_by)
       values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
               ${labourJurisdiction}, ${payBasis},
@@ -598,6 +610,7 @@ export async function POST(req: Request) {
               ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
               ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
               ${paymentMethod},
+              ${paidOnCommission},
               ${userId}, ${userId})
       on conflict (org_id, employee_party_id)
       do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
@@ -625,6 +638,8 @@ export async function POST(req: Request) {
                     filing_account_id = excluded.filing_account_id,
                     stub_delivery = excluded.stub_delivery,
                     payment_method = excluded.payment_method,
+                    paid_on_commission = case when ${answersCommission} then excluded.paid_on_commission
+                                             else employee_payroll_profiles.paid_on_commission end,
                     sin_encrypted = case when ${sinEncrypted !== undefined} then excluded.sin_encrypted
                                          else employee_payroll_profiles.sin_encrypted end,
                     sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3

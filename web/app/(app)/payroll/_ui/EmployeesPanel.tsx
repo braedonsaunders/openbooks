@@ -155,6 +155,12 @@ export type ProfileRow = {
   stub_delivery: 'email' | 'print' | 'both'
   /** Payroll override of the pay rail; null inherits the party preference. */
   payment_method: 'eft' | 'cheque' | null
+  /**
+   * Standing commission-pay status for statutory-holiday rules that read it.
+   * Three-state: null is UNANSWERED and the engine fails closed on it — never
+   * defaulted, never inferred (migration 0181).
+   */
+  paid_on_commission: boolean | null
   is_active: boolean
 };
 
@@ -226,6 +232,11 @@ export function ProfileEditor(props: {
   const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? '')
   const [stubDelivery, setStubDelivery] = useState<ProfileRow['stub_delivery']>(p.stub_delivery ?? 'email')
   const [paymentMethod, setPaymentMethod] = useState<string>(p.payment_method ?? '')
+  // Three-state: '' is UNANSWERED (null on the row), the only state that
+  // refuses the affected calculation rather than answering it.
+  const [paidOnCommission, setPaidOnCommission] = useState<string>(
+    p.paid_on_commission == null ? '' : String(p.paid_on_commission),
+  )
   // Accounts file under one country pack, so only the employee's own apply.
   const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
   // Same rule for the labour jurisdictions: one pack's declarations, and none
@@ -364,6 +375,9 @@ export function ProfileEditor(props: {
           filingAccountId: filingAccountId || null,
           stubDelivery,
           paymentMethod: paymentMethod || null,
+          // Always sent: the state round-trips the stored answer, so an
+          // untouched control keeps whatever the row holds (including null).
+          paidOnCommission: paidOnCommission === '' ? null : paidOnCommission === 'true',
           isActive,
         }),
       })
@@ -727,6 +741,28 @@ export function ProfileEditor(props: {
                   {t(`paymentMethod.${option}`)}
                 </option>
               ))}
+            </Select>
+          </div>
+          {/* Standing commission-pay status. Unanswered until a person answers
+              it: statutory-holiday rules that read it refuse the calculation
+              rather than guess, so this control defaults to nothing. Labels
+              resolve through the locale where keys exist, exactly like the
+              pack-driven fields above. */}
+          <div>
+            <Label
+              htmlFor="pp-paid-on-commission"
+              help={textOf('paidOnCommission.help', 'Whether the employee is paid in whole or in part on commission. Some statutory-holiday rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.')}
+            >
+              {textOf('fields.paidOnCommission', 'Paid on commission')}
+            </Label>
+            <Select
+              id="pp-paid-on-commission"
+              value={paidOnCommission}
+              onChange={(e) => setPaidOnCommission(e.target.value)}
+            >
+              <option value="">{textOf('paidOnCommission.unanswered', 'Not answered')}</option>
+              <option value="false">{textOf('paidOnCommission.no', 'No')}</option>
+              <option value="true">{textOf('paidOnCommission.yes', 'Yes, in whole or in part')}</option>
             </Select>
           </div>
         </div>

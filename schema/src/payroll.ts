@@ -316,6 +316,13 @@ export const employeePayrollProfiles = pgTable(
      * payroll decision — `payroll.manage`, not `parties.write`.
      */
     paymentMethod: text("payment_method", { enum: ["eft", "cheque"] }),
+    /**
+     * Whether the employee is paid in whole or in part on commission, for
+     * statutory-holiday rules that read it. Three-state by design: null is
+     * UNANSWERED and the engine fails closed exactly as a missing per-request
+     * entry does — never default this to false (see migration 0181).
+     */
+    paidOnCommission: boolean("paid_on_commission"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -859,6 +866,39 @@ export const payRunAdjustments = pgTable(
     index("pay_run_adjustments_run").on(t.orgId, t.payRunDocumentId, t.employeePartyId),
     check("pay_run_adjustments_line_shape",
       sql`${t.adjustmentType} <> 'line' or (${t.componentId} is not null and ${t.amount} is not null)`),
+  ],
+);
+
+/**
+ * Per-(run, employee, holiday) statutory-holiday absence assertions: whether
+ * the employee was absent WITHOUT the employer's consent on the last
+ * scheduled shift before or the first after the holiday (migration 0181).
+ *
+ * Scoped to the run so a later period never inherits an earlier assertion;
+ * re-asserting the same holiday upserts on the once-per-holiday key. The
+ * asserted value is stored either way — only true disqualifies, but an
+ * explicit false is what stops the next recalculate from re-asking. Keys are
+ * the pack's own holiday declarations, never country literals.
+ */
+export const payRunHolidayAssertions = pgTable(
+  "pay_run_holiday_assertions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    payRunDocumentId: uuid("pay_run_document_id").notNull(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    holidayKey: text("holiday_key").notNull(),
+    holidayDate: date("holiday_date").notNull(),
+    absentWithoutConsent: boolean("absent_without_consent").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("pay_run_holiday_assertions_once_per_holiday").on(
+      t.orgId, t.payRunDocumentId, t.employeePartyId, t.holidayKey, t.holidayDate,
+    ),
+    index("pay_run_holiday_assertions_run").on(t.orgId, t.payRunDocumentId, t.employeePartyId),
+    check("pay_run_holiday_assertions_key_not_blank",
+      sql`length(btrim(${t.holidayKey})) > 0`),
   ],
 );
 

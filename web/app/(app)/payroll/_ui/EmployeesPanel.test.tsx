@@ -167,6 +167,7 @@ function render(
           filing_account_id: null,
           stub_delivery: 'email',
           payment_method: null,
+          paid_on_commission: null,
           is_active: true,
           ...overrides,
         }}
