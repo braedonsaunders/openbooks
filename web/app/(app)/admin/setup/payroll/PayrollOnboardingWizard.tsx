@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn, Input, Label, Select } from '@openbooks/ui'
 import { WizardShell } from '../wizard/WizardShell'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * Payroll onboarding wizard — the module's first-run flow, composed on the
@@ -116,8 +117,10 @@ export function PayrollOnboardingWizard(props: {
   // ─── Data loading — everything comes from the settings API ─────────────
   async function reload(): Promise<SettingsPayload> {
     const res = await fetch('/api/payroll/settings')
-    const payload = (await res.json()) as SettingsPayload & { error?: string }
-    if (!res.ok) throw new Error(payload.error ?? 'failed')
+    // The status is checked before the body is parsed: a non-JSON error body
+    // must surface the failure, never a SyntaxError from res.json().
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load payroll settings'))
+    const payload = (await res.json()) as SettingsPayload
     setData(payload)
     return payload
   }
@@ -191,8 +194,9 @@ export function PayrollOnboardingWizard(props: {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'install-pack', country }),
         })
-        const j = await res.json()
-        if (!res.ok) throw new Error(j.error ?? 'failed')
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json().
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to install the ${country} payroll pack`))
       }
       const payload = await reload()
       // A just-installed pack's slots become editable on the next step.

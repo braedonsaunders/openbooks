@@ -14,6 +14,7 @@ import {
   type StoredCertificateRow,
 } from './EmployeesPanel'
 import { PackCertificateForms } from './PackCertificateForms'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * The employee drawer's Payroll tab — the ONE place a payroll profile is
@@ -45,8 +46,10 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     ;(async () => {
       try {
         const res = await fetch(`/api/payroll/profiles?employee=${partyId}`)
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json().
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load the payroll profile'))
         const j = await res.json()
-        if (!res.ok) throw new Error(j.error ?? 'failed')
         if (!cancelled) {
           // The country the API derived, accepted only when it names a pack
           // the API itself declares — never a closed union in this file.
