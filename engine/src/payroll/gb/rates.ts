@@ -237,6 +237,10 @@ const GB_EMPLOYMENT_ALLOWANCE_SLOT: PayrollStatutoryRateSlot = {
   key: "gb_employment_allowance",
   label: "Employment Allowance",
   scope: "org",
+  // Decided silence: no consumer reads this slot back yet, so an unconfigured
+  // allowance claims nothing and refuses nothing — refusing would stop every
+  // GB run for a figure nothing prices.
+  whenUnconfigured: "zero",
   // No consumer yet: no employer-aggregate levy is declared, so nothing reads
   // this back. Declared so the allowance is tenant-entered (the amount the
   // employer claims, once eligible) rather than silently absent or, worse,

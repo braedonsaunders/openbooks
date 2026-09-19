@@ -113,6 +113,38 @@ type ScopeRow = {
    */
   filing_account_id: string | null;
 };
+/**
+ * The regions a payroll population occupies, per pack country — the demand
+ * side of the account slots' appliesWhen. Callers pass it to packSlotState so
+ * a run scoped to Ontario never demands Québec accounts. A country with no
+ * rows, or rows with a null region, demands everything: today's behaviour.
+ */
+function regionsByCountry(
+  rows: readonly { country: string; province: string | null }[],
+): Map<string, Set<string | null>> {
+  const map = new Map<string, Set<string | null>>();
+  for (const row of rows) {
+    const set = map.get(row.country) ?? new Set<string | null>();
+    set.add(row.province ?? null);
+    map.set(row.country, set);
+  }
+  return map;
+}
+
+/**
+ * The regions the org's ACTIVE payroll population occupies, per pack country
+ * — the account slots' appliesWhen scoped to a roster instead of a run. The
+ * /payroll overview banner walks the same packSlotState demand as the run
+ * pre-flight, so it scopes by the same fact: an Ontario-only employer is
+ * never told to map Québec accounts there either. No population (a new org)
+ * demands everything — today's behaviour.
+ */
+export async function payrollPopulationRegions(
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<Map<string, Set<string | null>>> {
+  return regionsByCountry(await activePayrollPopulation(orgId, allowedSubsidiaryIds));
+}
 type RunRow = {
   pay_schedule_id: string;
   period_start: string;
@@ -306,8 +338,14 @@ export async function payrollSetupState(
 
   // Every statutory slot of every installed pack must resolve to a liability
   // account — the same packSlotState walk the run pre-flight performs, minus
-  // its runs-population filter (setup has no run to scope by).
-  for (const pack of await packSlotState(orgId, installed, blob)) {
+  // its runs-population filter (setup has no run to scope by). Slots that do
+  // not apply where the org's ACTIVE payroll population works are absent, not
+  // demanded: an Ontario-only employer is never told to map Québec accounts.
+  // No population at all (a new org) demands everything — today's behaviour.
+  // One roster for the whole setup state: the slot walk above scopes it to
+  // regions, and the rate gaps reuse the same rows below.
+  const setupPopulation = await activePayrollPopulation(orgId, allowedSubsidiaryIds);
+  for (const pack of await packSlotState(orgId, installed, blob, regionsByCountry(setupPopulation))) {
     const missing = pack.slots.filter((slot) => !slot.accountId);
     if (missing.length === 0) {
       checks.push({ severity: "blocker", code: "setup.slot", ok: true, detail: pack.country });
@@ -411,11 +449,11 @@ export async function payrollSetupState(
   // each one varies by — checked against the regions and filing accounts the
   // org's ACTIVE payroll population actually occupies, so an employer with no
   // Ontario payroll is never nagged about Ontario's health tax. Advisory for
-  // the same reason as in the run pre-flight.
-  const population = await activePayrollPopulation(orgId, allowedSubsidiaryIds);
+  // the same reason as in the run pre-flight. (Same query as the slot walk
+  // above — one population for the whole setup state.)
   for (const country of installed) {
     const missing = await unconfiguredRatesForRun(
-      orgId, country, await currentTaxYear(orgId, country), population,
+      orgId, country, await currentTaxYear(orgId, country), setupPopulation,
     );
     if (missing.length === 0) {
       checks.push({
@@ -505,7 +543,10 @@ export async function payRunReadiness(
     legacy = blob.rows[0]?.p ?? {};
     installed = await installedPayrollCountries(orgId, legacy, allowedSubsidiaryIds);
     const countriesInRun = new Set(people.map((p) => p.country));
-    for (const pack of await packSlotState(orgId, installed, legacy)) {
+    // Slots that do not apply where this run's people work are absent, not
+    // demanded — an Ontario-only run is never blocked on Québec accounts.
+    const runRegions = regionsByCountry(people);
+    for (const pack of await packSlotState(orgId, installed, legacy, runRegions)) {
       if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
       for (const slot of pack.slots) {
         if (!slot.accountId) {

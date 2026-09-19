@@ -48,6 +48,7 @@ test(
       const craPayable = await account("2310", "CRA remittances payable", "liability_current");
       const qcPayable = await account("2315", "Revenu Québec payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      const hsfPayable = await account("2360", "HSF payable", "liability_current");
 
       // A second vendor party: Revenu Québec. org.vendorId plays the CRA.
       const rqVendorId = randomUUID();
@@ -84,6 +85,16 @@ test(
       // The QC slot gets its own liability account so the projection credits
       // the Québec withholding separately from the CRA payable.
       await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
+      // A QC employer always owes the HSF at its own payroll-determined rate:
+      // a live-but-unconfigured slot refuses by name at calculate, so the
+      // fixture carries the 2026 other-sector rate (1.65%, as publication-
+      // pasted in the HSF test) and its own payable.
+      await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                             rate_values, created_by, updated_by)
+        values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+                ${actorId}, ${actorId})`);
       // Québec income tax is declared `external`: the org names its Revenu
       // Québec vendor on the component itself.
       await db.execute(sql`
@@ -196,9 +207,13 @@ test(
           [210, "cpp", "employer_contribution"],
           [220, "ei", "employer_contribution"],
           [230, "qpip", "employer_contribution"],
+          [280, "hsf", "employer_contribution"],
         ],
       );
       assert.equal(line("cpp", "employer_contribution")!.description, "QPP (employer)");
+      // The employer's own HSF rate times the full gross, no exemption, no
+      // cap: 2400.00 × 1.65% = 39.60, on its own slot account.
+      assert.equal(line("hsf", "employer_contribution")!.amount, "39.6000");
 
       const deductions = sum([
         federal.totalTax, quebec.totalTax, federal.cpp, federal.cpp2, federal.ei, federal.qpip,
@@ -228,12 +243,13 @@ test(
       assert.ok(craGroup, "a CRA remittance group exists");
       const keys = (group: typeof rqGroup) =>
         [...new Set(group!.components.map((component) => component.systemKey))].sort();
-      assert.deepEqual(keys(rqGroup), ["cpp", "qc_income_tax", "qpip"],
-        "QPP, QPIP and Québec tax remit to Revenu Québec");
+      assert.deepEqual(keys(rqGroup), ["cpp", "hsf", "qc_income_tax", "qpip"],
+        "QPP, QPIP, HSF and Québec tax remit to Revenu Québec");
       assert.deepEqual(keys(craGroup), ["ei", "income_tax"],
         "the CRA keeps federal income tax and EI — never a QC employee's QPP/QPIP");
       assert.equal(rqGroup!.total, sum([
         federal.cpp, federal.cppEmployer, federal.qpip, federal.qpipEmployer, quebec.totalTax,
+        "39.6000",
       ]));
 
       // T4's on-screen reconciliation amount is the CRA remittance only. A

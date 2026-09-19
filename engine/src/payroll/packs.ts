@@ -313,6 +313,18 @@ export interface PayrollStatutorySlot {
   components: readonly PayrollStatutoryComponent[];
   /** Pre-pack orgs.settings.payroll key honoured as a read fallback. */
   legacySettingsKey?: string;
+  /**
+   * WHERE the slot is live — the account-side appliesWhen, the same concept
+   * as the rate slot's `regions` (which it mirrors wherever a rate slot
+   * exists for the levy). Absent = every region the pack knows. A slot that
+   * does not apply is INERT for a run there: no line and no account demand,
+   * so an Ontario-only employer is never asked to map the Québec HSF or
+   * Revenu Québec accounts.
+   *
+   * The demand side fail-closes: a null or unknown region still demands,
+   * because demanding an account mapping is safe and skipping money is not.
+   */
+  regions?: readonly string[];
 }
 
 /**
@@ -2353,13 +2365,37 @@ export interface PackSlotState {
 }
 
 /**
+ * A slot with a `regions` declaration applies to a payroll population only
+ * where they intersect. Absent population (a caller with no run or roster to
+ * scope by) demands everything — today's behaviour — and a null or unknown
+ * region still demands: demanding an account mapping is safe, skipping money
+ * is not.
+ */
+export function packSlotAppliesToPopulation(
+  slot: PayrollStatutorySlot,
+  country: string,
+  regionsByCountry?: ReadonlyMap<string, ReadonlySet<string | null>>,
+): boolean {
+  if (!slot.regions || slot.regions.length === 0) return true;
+  const regions = regionsByCountry?.get(country);
+  if (!regions || regions.size === 0) return true;
+  for (const region of regions) {
+    if (region == null || slot.regions.includes(region)) return true;
+  }
+  return false;
+}
+
+/**
  * Installed packs with each slot's current account: the mapped components'
- * liability account when set, else the legacy settings fallback.
+ * liability account when set, else the legacy settings fallback. Slots that
+ * do not apply to the given population are absent, not unmapped — an
+ * Ontario-only run never sees the Québec slots at all.
  */
 export async function packSlotState(
   orgId: string,
   installedCountries: string[],
   legacySettings: Record<string, unknown>,
+  regionsByCountry?: ReadonlyMap<string, ReadonlySet<string | null>>,
 ): Promise<PackSlotState[]> {
   const packs = installedCountries
     .map((country) => PAYROLL_COUNTRY_PACKS[country])
@@ -2372,15 +2408,17 @@ export async function packSlotState(
   const byCode = new Map(components.rows.map((c) => [c.code, c.liability_account_id]));
   return packs.map((pack) => ({
     country: pack.country,
-    slots: pack.statutorySlots.map((slot) => {
-      const fromComponents = slot.components
-        .map((component) => byCode.get(component.code))
-        .find((accountId) => accountId != null);
-      const legacy = slot.legacySettingsKey
-        ? ((legacySettings[slot.legacySettingsKey] as string | null | undefined) ?? null)
-        : null;
-      return { key: slot.key, accountId: fromComponents ?? legacy };
-    }),
+    slots: pack.statutorySlots
+      .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
+      .map((slot) => {
+        const fromComponents = slot.components
+          .map((component) => byCode.get(component.code))
+          .find((accountId) => accountId != null);
+        const legacy = slot.legacySettingsKey
+          ? ((legacySettings[slot.legacySettingsKey] as string | null | undefined) ?? null)
+          : null;
+        return { key: slot.key, accountId: fromComponents ?? legacy };
+      }),
   }));
 }
 

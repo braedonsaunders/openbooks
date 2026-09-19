@@ -29,6 +29,10 @@ export const AU_PACK_RATES: PayrollPackRates = {
       label: "Workers' compensation premium",
       scope: "region",
       regions: AU_KNOWN_REGIONS,
+      // Not yet reviewed: no consumer reads this slot back yet (the state
+      // payroll-tax aggregate channel is pending), so it keeps today's
+      // behaviour — inert when unconfigured — until explicitly migrated.
+      whenUnconfigured: "legacy",
       systemKeys: ["wcb"],
       fields: [
         {

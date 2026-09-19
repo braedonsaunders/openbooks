@@ -500,7 +500,15 @@ test(
             netPayAccountId: netPayable,
             wagesTo: "expense",
             countries: ["US"],
-            us: { sui: { TX: { rate: "0.027", wageBase: "9000" } } },
+            // Both states on the run carry their SUI rate: a live-but-
+            // unconfigured SUI refuses by name at calculate rather than
+            // accruing 0.00, so the second employee needs theirs too.
+            us: {
+              sui: {
+                TX: { rate: "0.027", wageBase: "9000" },
+                CA: { rate: "0.034", wageBase: "7000" },
+              },
+            },
           },
         })}::jsonb where id = ${org.orgId}`);
 
@@ -633,9 +641,11 @@ test(
          where org_id = ${org.orgId} and document_id = ${run.documentId}
       `));
       assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
-      const sutaLeg = lines.rows.find((l) => l.account_id === sutaPayable);
-      assert.ok(sutaLeg, "SUI liability posts to its slot account");
-      assert.equal(sutaLeg!.amount, neg(expected.suta));
+      const sutaLegs = lines.rows.filter((l) => l.account_id === sutaPayable);
+      assert.ok(sutaLegs.length > 0, "SUI liability posts to its slot account");
+      // Both employees accrue to the one SUI payable: the Texan's 108.00 plus
+      // the Californian's 8.16 (8h × $30 = 240 at 3.4%, under the base).
+      assert.equal(sum(sutaLegs.map((l) => l.amount)), neg(add(expected.suta, "8.1600")));
 
       // Second run: YTD wage bases carry — FUTA has 3,000 of room left.
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
@@ -805,11 +815,17 @@ test(
       assert.equal(noStubs.n, 0, "nothing wrong was written");
 
       // Configure the employee honestly — a US employee, in a state the US
-      // pack covers — and the same run calculates.
+      // pack covers, with that state's SUI rate on file (a live-but-
+      // unconfigured SUI refuses by name at calculate rather than accruing
+      // 0.00) — and the same run calculates.
       await db.execute(sql`
         update employee_payroll_profiles
            set country = 'US', province = 'TX', filing_status = 'single'
          where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: { us: { sui: { TX: { rate: "0.027", wageBase: "9000" } } } },
+        })}::jsonb where id = ${org.orgId}`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);

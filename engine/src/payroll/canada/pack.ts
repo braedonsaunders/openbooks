@@ -118,6 +118,9 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "qc_income_tax",
+      // Québec employment only: outside QC the slot is inert — no line, no
+      // account demand — so an Ontario employer is never asked to map it.
+      regions: ["QC"],
       components: [
         // TP-1015 variable A: annual taxable income I is income LESS the
         // factor-F / H / CSA deductions, so a pre-tax protected order moves
@@ -163,6 +166,8 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     {
       key: "qpip",
       legacySettingsKey: "eiPayableAccountId",
+      // Québec employment only — inert elsewhere, like qc_income_tax above.
+      regions: ["QC"],
       components: [
         // QPIP exists only for QC employment, and it is remitted to Revenu
         // Québec on TPZ-1015.R — declared per region for the same reason as
@@ -191,6 +196,9 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "eht",
+      // The four levying provinces, mirroring the ca_eht rate slot: an
+      // employer with payroll nowhere near them is never asked to map it.
+      regions: ["BC", "MB", "NL", "ON"],
       components: [
         // Ontario remuneration past the annual exemption — remuneration is
         // an earnings measure.
@@ -199,6 +207,9 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "hsf",
+      // Québec employment only, mirroring the ca_hsf rate slot: inert
+      // elsewhere — no line, no account demand.
+      regions: ["QC"],
       components: [
         // TP-1015.F-V s. 5: the tenant-entered HSF rate times the
         // remuneration subject (employment income is generally subject —

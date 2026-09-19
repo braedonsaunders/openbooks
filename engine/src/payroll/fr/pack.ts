@@ -220,6 +220,10 @@ const FR_RATES: PayrollPackRates = {
       programType: "fr_siret",
       systemKeys: ["atmp"],
       regions: ["FR"],
+      // Not yet reviewed: the compute pass pushes no AT/MP line (no context
+      // channel for the tenant-declared rate yet), so the slot keeps today's
+      // behaviour — collected but unread — until explicitly migrated.
+      whenUnconfigured: "legacy",
       citation: "Code de la sécurité sociale, art. L242-5 (taux notifié par la caisse)",
       variesBecause:
         "The caisse notifies each establishment its own AT/MP rate from its activity risk class and sinistrality — a figure no published table can supply.",
@@ -241,6 +245,10 @@ const FR_RATES: PayrollPackRates = {
       programType: "fr_siret",
       systemKeys: ["cdn_er"],
       regions: ["FR"],
+      // Not yet reviewed: like AT/MP above, the compute pass pushes no
+      // versement-mobilité line yet, so the slot keeps today's behaviour
+      // until explicitly migrated.
+      whenUnconfigured: "legacy",
       citation: "urssaf.fr, taux et barèmes — Versement mobilité (effectif de 11 salariés et plus)",
       variesBecause:
         "The rate is set per autorité organisatrice de la mobilité from the establishment's commune — a figure no published table can supply.",

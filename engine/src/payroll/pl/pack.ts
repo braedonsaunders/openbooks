@@ -121,6 +121,10 @@ const PL_RATES: PayrollPackRates = {
       scope: "org",
       systemKeys: ["wypadkowe_er"],
       regions: ["PL"],
+      // Not yet reviewed: the engine prices wypadkowe when declared and zero
+      // otherwise, so the slot keeps today's behaviour until explicitly
+      // migrated to refuse or zero.
+      whenUnconfigured: "legacy",
       citation:
         "Ustawa o systemie ubezpieczeń społecznych, art. 22 ust. 2 (różnicowanie stopy wypadkowej); "
         + "ZUS, Ustalanie stopy procentowej składki na ubezpieczenie wypadkowe (stan prawny 1 stycznia 2026)",

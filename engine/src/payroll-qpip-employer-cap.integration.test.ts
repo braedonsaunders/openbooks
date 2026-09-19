@@ -66,6 +66,16 @@ test(
       await db.execute(sql`
         update pay_components set remittance_party_id = ${rqVendorId}
          where org_id = ${org.orgId} and system_key = 'qc_income_tax'`);
+      // A QC employer always owes the HSF at its own rate: a live-but-
+      // unconfigured slot refuses by name at calculate, so the fixture
+      // carries the employer's rate (this test asserts QPIP, never HSF).
+      const hsfPayable = await account("2360", "HSF payable", "liability_current");
+      await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                             rate_values, created_by, updated_by)
+        values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+                ${actorId}, ${actorId})`);
 
       const employeeId = randomUUID();
       await db.execute(sql`

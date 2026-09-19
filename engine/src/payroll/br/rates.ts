@@ -56,6 +56,9 @@ export const BR_PACK_RATES: PayrollPackRates = {
     {
       key: "br_rat",
       label: "RAT (riscos ambientais do trabalho)",
+      // The engine already refuses an undeclared establishment rate by name;
+      // the declaration records that refusal here.
+      whenUnconfigured: "refuse",
       // Per establishment: the rate rides the eSocial CNPJ filing account —
       // the CNAE risk class (leve/médio/grave → 1%/2%/3%) belongs to the
       // establishment, never to the org as a whole.
@@ -77,6 +80,9 @@ export const BR_PACK_RATES: PayrollPackRates = {
     {
       key: "br_fap",
       label: "FAP (fator acidentário de prevenção)",
+      // The engine already refuses an undeclared establishment factor by
+      // name; the declaration records that refusal here.
+      whenUnconfigured: "refuse",
       // Per establishment, same account as RAT: it multiplies the RAT rate
       // from that establishment's own accident history.
       scope: "filing_account",
@@ -99,6 +105,9 @@ export const BR_PACK_RATES: PayrollPackRates = {
     {
       key: "br_terceiros",
       label: "Terceiros (Sistema S / salário-educação / INCRA)",
+      // The engine already refuses an undeclared establishment percent by
+      // name; the declaration records that refusal here.
+      whenUnconfigured: "refuse",
       // Per establishment FPAS code, same account: the aggregate percent
       // depends on which third parties the activity contributes to.
       scope: "filing_account",

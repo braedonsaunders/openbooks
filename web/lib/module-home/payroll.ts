@@ -9,7 +9,7 @@ import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from '@openbooks/engine/src/payroll-run.ts'
-import { installedPayrollCountries } from '@openbooks/engine/src/payroll-readiness.ts'
+import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll-readiness.ts'
 import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import {
   missingPayrollControlAccounts,
@@ -294,12 +294,15 @@ export async function payrollHome(
   // pre-flight performs — every statutory slot of every installed pack must
   // resolve to a liability account — plus the two country-free accounts.
   // Legacy CA keys must never drive this banner: a US-only tenant has no
-  // CPP/EI slots anywhere in its setup.
+  // CPP/EI slots anywhere in its setup. Slots that do not apply where the
+  // org's active payroll works are absent, not demanded: an Ontario-only
+  // employer is never told to map Québec accounts here either.
   let missingSettings: MissingPayrollControlAccount[] = []
   if (settings) {
     const blob = blobRes.rows[0]?.p ?? {}
     const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds)
-    const states = await packSlotState(orgId, installed, settings as unknown as Record<string, unknown>)
+    const regions = await payrollPopulationRegions(orgId, allowedSubsidiaryIds)
+    const states = await packSlotState(orgId, installed, settings as unknown as Record<string, unknown>, regions)
     missingSettings = missingPayrollControlAccounts({
       wageExpenseAccountId: settings.wageExpenseAccountId,
       netPayAccountId: settings.netPayAccountId,

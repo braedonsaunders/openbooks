@@ -685,6 +685,11 @@ async function payrollOrg(
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
+        // Presence-only TX SUI: a live-but-unconfigured SUI refuses by name
+        // at calculate, and these tests assert bank rails, never SUI amounts.
+        ...(country === "US"
+          ? { us: { sui: { TX: { rate: "0.03", wageBase: "7000" } } } }
+          : {}),
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedComponentsTolerantly(org.orgId, actorId, country);
