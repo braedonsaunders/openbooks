@@ -130,10 +130,12 @@ function labourJurisdictionOptions(): Record<string, { key: string; name: string
  *
  * Subdivisions come from the pack's `regions` coverage (label, known codes,
  * supported subset with refusal reasons); the withholding section comes from
- * the pack's column-mapped certificate declarations plus its
- * `profileExemptionFlags`. Row-backed certificates (state DE 4, IT-2104…)
- * arrive with the row-backed answers API, a separate pass — the served type
- * stays `PayrollCertificate[]` so that pass widens the set, not the shape.
+ * the pack's DECLARED certificates — every one of them, whichever storage
+ * they use — plus its `profileExemptionFlags`. Row-backed certificates (state
+ * DE 4, IT-2104, the P6/P9 notice…) render from the same declaration; their
+ * answers file through POST /api/payroll/certificates and arrive here as
+ * `storedCertificates` for prefill, so the editor renders fields the page can
+ * actually populate.
  */
 export interface PackProfileDeclaration {
   subdivisionLabel: string
@@ -155,9 +157,7 @@ function packProfileDeclarations(): Record<string, PackProfileDeclaration> {
       supportedSubdivisions: [...pack.regions.supported],
       unsupportedReason: pack.regions.unsupportedReason,
       unsupportedReasons: { ...(pack.regions.unsupportedReasons ?? {}) },
-      certificates: packCertificates(country).certificates.filter(
-        (certificate) => certificate.storage === 'profile_columns',
-      ),
+      certificates: [...packCertificates(country).certificates],
       exemptionFlags: pack.profileExemptionFlags ?? [],
     }
   }
@@ -268,8 +268,24 @@ export async function GET(req: Request) {
       [((profileRes.rows[0] as { filing_account_id?: string | null } | undefined)?.filing_account_id) ?? null],
     )
     if (profileAccountDenied) return profileAccountDenied
+    // The employee's current (unsuperseded) row-backed certificate filings,
+    // for prefilling the editor's row-backed fields. Superseded rows stay on
+    // file for prior-period re-runs but never prefill: the editor files a new
+    // current row, it does not edit history.
+    const storedRes = await db.execute<{
+      certificateKey: string; country: string; region: string | null; subRegion: string | null;
+      answers: Record<string, string>; effectiveFrom: string | null;
+    }>(sql`
+      select certificate_key as "certificateKey", country, region,
+             sub_region as "subRegion", answers,
+             effective_from::text as "effectiveFrom"
+        from employee_tax_certificates
+       where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
+         and superseded_on is null
+       order by certificate_key`)
     return NextResponse.json({
       profile: profileRes.rows[0] ?? null,
+      storedCertificates: storedRes.rows,
       schedules: schedulesRes.rows,
       filingAccounts: await visibleFilingAccounts(gate),
       labourJurisdictions: labourJurisdictionOptions(),

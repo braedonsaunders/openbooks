@@ -56,8 +56,28 @@ export interface DeclaredProfileCertificate {
   key: string
   form: string
   label: string
+  /** The publication or statute the form and its fields come from — pack data,
+   *  shown under the form heading exactly as declared, never translated here. */
+  citation: string
+  /** Which storage the pack declared: column fields persist on the profile,
+   *  row-backed fields file through the certificates API. Read, never assumed:
+   *  the renderer binds each field by its own storage, so a pack moves a
+   *  certificate between storages with no edit here. */
+  storage: 'profile_columns' | 'certificate_rows'
   scope: { level: string; region?: string; subRegion?: string }
   fields: readonly DeclaredProfileField[]
+}
+
+/**
+ * One current (unsuperseded) row-backed filing on the employee, as served
+ * with the profile for prefill. Superseded rows stay on file for prior-period
+ * re-runs but never prefill — the editor files a new row, it does not edit
+ * history.
+ */
+export interface StoredCertificateRow {
+  certificateKey: string
+  answers: Record<string, string>
+  effectiveFrom: string | null
 }
 
 /**
@@ -145,6 +165,10 @@ export function ProfileEditor(props: {
   /** country pack → what the editor renders for it: subdivisions, withholding
    *  certificates, exemption flags. From the API, declared by the packs. */
   packProfiles?: Record<string, PackProfileDeclaration>
+  /** The employee's current row-backed filings, for prefilling row-backed
+   *  fields. Served with the profile; absent on the list variant, which does
+   *  not edit. */
+  storedCertificates?: StoredCertificateRow[]
   onClose: () => void
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
@@ -200,10 +224,11 @@ export function ProfileEditor(props: {
   // flags. No pack means no withholding section: the honest empty state, not
   // another country's shape.
   const pack = country ? props.packProfiles?.[country] : undefined
+  // The certificate's declared scope is the authority: a country-level form
+  // files for every employee of the pack, a region- or sub-region-level form
+  // only for an employee of its own region. Never inferred from the key.
   const applicableCertificates = (pack?.certificates ?? []).filter(
-    (certificate) =>
-      certificate.scope.level === 'country'
-      || (certificate.scope.level === 'region' && certificate.scope.region === province),
+    (certificate) => !certificate.scope.region || certificate.scope.region === province,
   )
   // Every profile column the selected pack answers through — certificate
   // fields plus exemption flags. Answers held in state for any other column
@@ -249,6 +274,22 @@ export function ProfileEditor(props: {
     ei_exempt: [eiExempt, setEiExempt],
     tax_exempt: [taxExempt, setTaxExempt],
   }
+  // Answers on row-backed certificates, keyed by certificate then field —
+  // prefilled from the employee's current filings. Column-backed answers live
+  // in the column state above; the two never share a field, so neither path
+  // can clobber the other.
+  const [rowAnswers, setRowAnswers] = useState<Record<string, Record<string, string>>>(() => {
+    const initial: Record<string, Record<string, string>> = {}
+    for (const stored of props.storedCertificates ?? []) {
+      initial[stored.certificateKey] = { ...stored.answers }
+    }
+    return initial
+  })
+  const setRowAnswer = (certificateKey: string, fieldKey: string, value: string) =>
+    setRowAnswers((prev) => ({
+      ...prev,
+      [certificateKey]: { ...(prev[certificateKey] ?? {}), [fieldKey]: value },
+    }))
 
   // Display strings: the locale wins where a key exists for the data concept
   // (keyed by column, never by country), otherwise the pack's declared
@@ -315,6 +356,31 @@ export function ProfileEditor(props: {
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
+      // Row-backed certificates file through the certificates API — one POST
+      // per certificate the operator answered, each superseding the previous
+      // filing rather than overwriting it. Certificates with nothing entered
+      // file nothing: an empty filing would read as "on file" downstream.
+      for (const certificate of applicableCertificates) {
+        if (certificate.storage !== 'certificate_rows') continue
+        const answers: Record<string, string> = {}
+        for (const field of certificate.fields) {
+          const value = (rowAnswers[certificate.key]?.[field.key] ?? '').trim()
+          if (value !== '') answers[field.key] = value
+        }
+        if (Object.keys(answers).length === 0) continue
+        const certRes = await fetch('/api/payroll/certificates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeePartyId: p.employee_party_id,
+            country,
+            certificateKey: certificate.key,
+            answers,
+          }),
+        })
+        const cj = await certRes.json()
+        if (!certRes.ok) throw new Error(cj.error ?? 'failed')
+      }
       toast.success(t('saved'))
       props.onSaved()
     } catch (e) {
@@ -341,32 +407,42 @@ export function ProfileEditor(props: {
     field.storage?.kind === 'column' ? field.storage.column : null
 
   /**
-   * One non-flag certificate field, bound to its profile column by the
-   * binding maps above. Flags render in the checkbox grid below; a field
-   * whose column has no binding renders nothing — the architecture test
-   * pins that every column the packs declare is bound, so an unbound
-   * column fails the build rather than dropping an answer silently.
+   * One non-flag certificate field, whichever storage it uses. The input
+   * reads the pack's kind, choices, bands and defaults — the storage only
+   * decides which state it binds to. Column fields keep the binding maps
+   * above (the architecture test pins that every column the packs declare is
+   * bound, so an unbound column fails the build rather than dropping an
+   * answer silently); row-backed fields bind the row answers filed through
+   * the certificates API.
    */
-  const renderBodyField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
+  const renderFieldInput = (
+    certificate: DeclaredProfileCertificate,
+    field: DeclaredProfileField,
+    column: string | null,
+    value: string,
+    set: (value: string) => void,
+  ) => {
     const id = `pp-${certificate.key}-${field.key}`
-    const column = columnOf(field)
-    if (field.kind === 'flag' || !column) return null
+    // Display strings: the locale wins where a key exists for the data
+    // concept (keyed by column, never by country); a row-backed field has no
+    // column, so the pack's declared English reads as written — legible on
+    // day one, localizable later without touching this file.
+    const label = fieldLabel(column, field.label)
+    const optionLabel = (choice: { value: string; label: string }): string =>
+      column ? choiceLabel(column, choice.value, choice.label) : choice.label
     if (field.kind === 'choice') {
-      const binding = columnText[column]
-      if (!binding) return null
-      const [value, set] = binding
       // The pack's declared default is the statutory no-answer position
       // ("no W-4 on file is withheld as single"), read — never a literal here.
       const current = value || field.default || ''
       const showEmpty = !field.required || current === ''
       return (
         <div key={field.key}>
-          <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
           <Select id={id} value={current} onChange={(e) => set(e.target.value)}>
             {showEmpty && <option value="">—</option>}
             {(field.choices ?? []).map((choice) => (
               <option key={choice.value} value={choice.value}>
-                {choiceLabel(column, choice.value, choice.label)}
+                {optionLabel(choice)}
               </option>
             ))}
           </Select>
@@ -374,9 +450,6 @@ export function ProfileEditor(props: {
       )
     }
     if (field.kind === 'count') {
-      const binding = columnText[column]
-      if (!binding) return null
-      const [value, set] = binding
       // A narrow band is a codeset the operator picks from (TD1 0–10); a
       // wide one is typed (W-4 allowances 0–99). The cutoff is presentation,
       // the band itself is declared.
@@ -388,7 +461,7 @@ export function ProfileEditor(props: {
       if (codes) {
         return (
           <div key={field.key}>
-            <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+            <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
             <Select id={id} value={value} onChange={(e) => set(e.target.value)}>
               <option value="">—</option>
               {codes.map((code) => (
@@ -402,17 +475,14 @@ export function ProfileEditor(props: {
       }
       return (
         <div key={field.key}>
-          <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
           <Input id={id} inputMode="numeric" value={value} onChange={(e) => set(e.target.value)} placeholder="0" />
         </div>
       )
     }
-    const binding = columnText[column]
-    if (!binding) return null
-    const [value, set] = binding
     return (
       <div key={field.key}>
-        <Label htmlFor={id} help={field.help}>{fieldLabel(column, field.label)}</Label>
+        <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
         <Input
           id={id}
           inputMode={field.kind === 'amount' ? 'decimal' : 'text'}
@@ -424,21 +494,56 @@ export function ProfileEditor(props: {
     )
   }
 
+  const renderBodyField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
+    const column = columnOf(field)
+    if (field.kind === 'flag' || !column) return null
+    const binding = columnText[column]
+    if (!binding) return null
+    const [value, set] = binding
+    return renderFieldInput(certificate, field, column, value, set)
+  }
+
+  /**
+   * One non-flag field on a row-backed certificate, bound to the row answers
+   * filed through the certificates API. Column-backed fields return null here
+   * — they render on the column path above, unchanged.
+   */
+  const renderRowField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
+    if (field.kind === 'flag' || columnOf(field)) return null
+    const value = rowAnswers[certificate.key]?.[field.key] ?? ''
+    return renderFieldInput(
+      certificate, field, null, value,
+      (next) => setRowAnswer(certificate.key, field.key, next),
+    )
+  }
+
   // Every checkbox in declaration order: the applicable certificates' flag
   // fields, then the pack's exemption flags, then the generic active toggle.
+  // Column-backed flags bind the profile columns; row-backed flags bind the
+  // row answers filed through the certificates API.
   const flagEntries: { id: string; label: string; help: string; checked: boolean; set: (value: boolean) => void }[] = []
   for (const certificate of applicableCertificates) {
     for (const field of certificate.fields) {
       if (field.kind !== 'flag') continue
       const column = columnOf(field)
-      const binding = column ? columnFlag[column] : undefined
-      if (!column || !binding) continue
+      if (column) {
+        const binding = columnFlag[column]
+        if (!binding) continue
+        flagEntries.push({
+          id: `pp-${certificate.key}-${field.key}`,
+          label: fieldLabel(column, field.label),
+          help: field.help,
+          checked: binding[0],
+          set: binding[1],
+        })
+        continue
+      }
       flagEntries.push({
         id: `pp-${certificate.key}-${field.key}`,
-        label: fieldLabel(column, field.label),
+        label: field.label,
         help: field.help,
-        checked: binding[0],
-        set: binding[1],
+        checked: rowAnswers[certificate.key]?.[field.key] === 'true',
+        set: (value: boolean) => setRowAnswer(certificate.key, field.key, value ? 'true' : 'false'),
       })
     }
   }
@@ -622,8 +727,15 @@ export function ProfileEditor(props: {
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               {certificate.form} · {certificate.label}
             </p>
+            {certificate.citation && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {certificate.citation}
+              </p>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
-              {certificate.fields.map((field) => renderBodyField(certificate, field))}
+              {certificate.fields.map((field) => (
+                renderBodyField(certificate, field) ?? renderRowField(certificate, field)
+              ))}
             </div>
           </div>
         ))}
