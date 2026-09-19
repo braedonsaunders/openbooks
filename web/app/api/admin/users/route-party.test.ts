@@ -283,6 +283,11 @@ const hooks = registerHooks({
     }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
+    // Mock modules live at synthetic `mock:` URLs; bare imports from inside
+    // them (next/server) must resolve from this test file, not from `mock:`.
+    if (context.parentURL?.startsWith('mock:')) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
