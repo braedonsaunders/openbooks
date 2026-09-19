@@ -128,6 +128,11 @@ export type ResultColumn = {
   /** Fixed value vocabulary the renderer localizes — set when the source field
    *  emits a boolean, printed as the locale's yes/no. */
   valueKind?: 'boolean'
+  /** The temporal bucket this dimension was binned into, when it was. The
+   *  renderer needs it to label a bucket as the PERIOD it represents ("Sep
+   *  2026") rather than the instant it starts on ("2026-09-01"), and to know
+   *  the column is chronological rather than nominal. */
+  dateBin?: DateBin
 }
 
 /** The executed result set. */
