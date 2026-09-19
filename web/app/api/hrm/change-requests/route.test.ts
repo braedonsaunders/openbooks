@@ -33,8 +33,18 @@ const mockSources = new Map<string, string>([
     "mock:json",
     `
       export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
+      // Mirrors the real boundary: the schema decides, a refusal is a 400.
+      export async function parseJsonBody(request, schema) {
+        const raw = await request.json().catch(() => undefined)
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+          return { ok: false, response: Response.json({ error: 'body must be a JSON object' }, { status: 400 }) }
+        }
+        if (schema && typeof schema.safeParse === 'function') {
+          const parsed = schema.safeParse(raw)
+          if (!parsed.success) return { ok: false, response: Response.json({ error: 'invalid body' }, { status: 400 }) }
+          return { ok: true, data: parsed.data }
+        }
+        return { ok: true, data: raw }
       }
     `,
   ],
