@@ -471,7 +471,7 @@ export async function computeItStatutory(
       municipalExemption: null,
     });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, IT_PACK_RATES, ctx.taxYear);
+  const resolution = await resolveStatutoryRates(ctx.orgId, IT_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const region = ctx.region;
   const cert = ctx.certificateFor("it_detrazioni");
   const comune = cert?.answers["domicilio_comune"] ?? null;

@@ -226,6 +226,7 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
 const row = (over: Partial<StatutoryRateRow>): StatutoryRateRow => ({
   id: randomUUID(), country: "US", rateKey: "us_sui", region: "MI",
   filingAccountId: null, taxYear: 2026, values: { rate: "0.0270", wageBase: "9500.00" },
+  supersededOn: null,
   ...over,
 });
 
@@ -410,7 +411,9 @@ test(
       assert.equal(resolution.values("us_futa", { region: "MI" })!.rate, "0.0090");
       assert.equal(resolution.values("us_futa", { region: "TX" })!.rate, "0.0060");
 
-      // Re-saving one account's rate updates it in place: two rows for one
+      // Re-saving one account's rate SUPERSEDES the open row and inserts its
+      // successor: the prior values stay on record for prior-period reads,
+      // while the live read answers the replacement. Two CURRENT rows for one
       // scope point would make the resolution ambiguous.
       await upsertStatutoryRate({
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
@@ -419,6 +422,20 @@ test(
       });
       const rows = await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 });
       assert.equal(rows.filter((r) => r.rateKey === "us_sui").length, 2);
+      assert.ok(rows.every((r) => r.supersededOn === null));
+      const history = await listStatutoryRates(
+        fixture.orgId, { country: "US", taxYear: 2026, includeSuperseded: true },
+      );
+      const ein1History = history.filter(
+        (r) => r.rateKey === "us_sui" && r.filingAccountId === fixture.ein1,
+      );
+      assert.equal(ein1History.length, 2);
+      assert.equal(ein1History.filter((r) => r.supersededOn !== null).length, 1);
+      assert.equal(
+        ein1History.find((r) => r.supersededOn !== null)!.values.rate,
+        "0.0106",
+        "the superseded row keeps the prior values it already paid under",
+      );
       const again = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026);
       assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 })!.rate, "0.0115");
       assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein2 })!.rate, "0.0630");
@@ -429,15 +446,17 @@ test(
       assert.equal(nextYear.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 }), null);
 
       // Every write is audited with before/after — a statutory rate change is
-      // material configuration.
+      // material configuration. The re-save is two entries: the stamp on the
+      // old row and the insert of its successor, never a rewrite.
       const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'payroll_statutory_rates'
          order by at`));
-      assert.equal(audit.rows.filter((r) => r.action === "insert").length, 4);
-      const update = audit.rows.find((r) => r.action === "update")!;
-      assert.equal((update.changes.before as Record<string, string>).rate, "0.0106");
-      assert.equal((update.changes.after as Record<string, string>).rate, "0.0115");
+      assert.equal(audit.rows.filter((r) => r.action === "insert").length, 5);
+      assert.equal(audit.rows.filter((r) => r.action === "update").length, 0);
+      const supersede = audit.rows.find((r) => r.action === "supersede")!;
+      assert.equal((supersede.changes.before as Record<string, string>).rate, "0.0106");
+      assert.equal((supersede.changes.after as Record<string, string>).rate, "0.0115");
     } finally {
       await dropScratchOrgReporting(fixture.orgId);
     }
@@ -445,7 +464,7 @@ test(
 );
 
 test(
-  "rate writes roll back with an audit failure, and configured rows cannot be deleted",
+  "rate writes roll back with an audit failure, and removing a rate retires it instead of deleting it",
   { skip: !DB },
   async () => {
     const fixture = await seedTwoAccountEmployer();
@@ -484,16 +503,24 @@ test(
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
       });
-      await assert.rejects(
-        () => deleteStatutoryRate(fixture.orgId, fixture.actorId, saved.id),
-        /cannot be deleted.*replacement rate/,
-      );
-      // A Remove request cannot erase the effective-dated input used to replay a
-      // prior payroll period; the row and its resolution remain available.
+      // A Remove request retires the open row — it stamps superseded_on and
+      // writes no successor — rather than deleting anything. The row and its
+      // prior-period resolution remain available; only the live read goes
+      // unconfigured.
+      assert.equal(await deleteStatutoryRate(fixture.orgId, fixture.actorId, saved.id), true);
       assert.equal(
-        (await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
-        "0.0090",
+        (await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" }),
+        null,
       );
+      const retired = (await listStatutoryRates(
+        fixture.orgId, { country: "US", taxYear: 2026, includeSuperseded: true },
+      )).find((r) => r.id === saved.id)!;
+      assert.ok(retired.supersededOn !== null);
+      assert.equal(retired.values.rate, "0.0090");
+      // Retiring twice is a no-op success; an unknown id is still false, so
+      // the route keeps its 404.
+      assert.equal(await deleteStatutoryRate(fixture.orgId, fixture.actorId, saved.id), true);
+      assert.equal(await deleteStatutoryRate(fixture.orgId, fixture.actorId, randomUUID()), false);
     } finally {
       await dropScratchOrgReporting(fixture.orgId);
     }

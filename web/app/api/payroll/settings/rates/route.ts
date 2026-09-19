@@ -301,12 +301,14 @@ export async function DELETE(req: Request) {
     if (!removed) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (error) {
-    // `deleteStatutoryRate` REFUSES every row that exists: statutory rows are
-    // effective-dated payroll inputs, superseded rather than deleted. That
-    // refusal is deliberate and carries the remedy in its message, so it must
-    // reach the operator as a 422 like every other payroll refusal — uncaught
-    // it became a 500, and the UI's `res.json()` then failed on the non-JSON
-    // error body, so the toast showed a parse error instead of the remedy.
+    // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
+    // no successor) rather than deleting it: statutory rows are
+    // effective-dated payroll inputs, so prior periods keep resolving while
+    // the current setup reads unconfigured. A refusal here is a genuine
+    // failure, and like every other payroll refusal it must reach the
+    // operator as a 422 — uncaught it became a 500, and the UI's `res.json()`
+    // then failed on the non-JSON error body, so the toast showed a parse
+    // error instead of the message.
     if (error instanceof PayrollError) {
       return NextResponse.json({ error: error.message }, { status: 422 })
     }

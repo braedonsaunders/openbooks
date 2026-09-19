@@ -245,7 +245,7 @@ export async function computeBrStatutory(
   if (ctx.taxYear !== 2026) {
     return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear);
+  const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const at = { filingAccountId: ctx.filingAccountId };
   return computeBrStatutoryWithRates(ctx, {
     ratPct: resolution.values("br_rat", at)?.["aliquota"] ?? null,

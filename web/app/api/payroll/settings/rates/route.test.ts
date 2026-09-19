@@ -3,16 +3,20 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 /**
- * Statutory rate rows are effective-dated payroll inputs: the engine REFUSES to
- * delete one, and the refusal carries its own remedy ("save a replacement rate
- * for the tax year instead"). The setup surface renders a Remove button for
- * every stored row, so that refusal is on the operator's main path — and it was
- * reaching them as a 500, because the DELETE handler had no catch while the PUT
- * handler one function above did. The UI then called `res.json()` on a non-JSON
- * error body, so the toast showed a JSON parse error rather than the remedy.
+ * Statutory rate rows are effective-dated payroll inputs: the engine no longer
+ * deletes one — DELETE retires the open row (stamps superseded_on, writes no
+ * successor), so prior periods keep resolving while the current setup reads
+ * unconfigured. The setup surface renders a Supersede button for every stored
+ * row, so that path is on the operator's main flow.
  *
- * These tests pin the status and the message, not the prose: a payroll refusal
- * is a 422 carrying `error`, the same contract as every other payroll route.
+ * History: the engine used to REFUSE every delete ("save a replacement rate
+ * for the tax year instead"), and the refusal reached the operator as a 500
+ * because the DELETE handler had no catch while the PUT handler one function
+ * above did. The UI then called `res.json()` on a non-JSON error body, so the
+ * toast showed a JSON parse error rather than the remedy. Both halves are
+ * fixed — the handler catches PayrollError as a 422 like every other payroll
+ * route, and the client checks status before parsing — and these tests pin
+ * the status contract, not the prose.
  *
  * The mock error classes mirror the PRODUCTION hierarchy
  * (PayrollJurisdictionError -> PayrollPackError -> PayrollError). If they were
@@ -22,11 +26,11 @@ import test from 'node:test'
 
 interface RouteState {
   deleteAttempts: string[]
-  deleteResult: 'refuse' | 'missing'
+  deleteResult: 'retired' | 'missing'
 }
 
 const stateKey = Symbol.for('openbooks.payroll-rates-route-test')
-const state: RouteState = { deleteAttempts: [], deleteResult: 'refuse' }
+const state: RouteState = { deleteAttempts: [], deleteResult: 'retired' }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -103,9 +107,7 @@ const mockSources = new Map<string, string>([
       export async function deleteStatutoryRate(orgId, actorId, id) {
         state.deleteAttempts.push(id)
         if (state.deleteResult === 'missing') return false
-        throw new PayrollPackError(
-          'statutory rate rows cannot be deleted; save a replacement rate for the tax year instead',
-        )
+        return true
       }
       export async function listStatutoryRates() { return [] }
       export function statutoryRateProblem() { return null }
@@ -194,38 +196,36 @@ function del(id: string): Promise<Response> {
   }))
 }
 
-test('the engine refusal to delete a statutory rate row reaches the operator as a 422', async () => {
+test('retiring a statutory rate row succeeds with a 200, not the old refusal', async () => {
   state.deleteAttempts.length = 0
-  state.deleteResult = 'refuse'
+  state.deleteResult = 'retired'
 
   const response = await del(ROW_ID)
 
-  // Not a 500: the refusal is a deliberate business rule, not a crash.
-  assert.equal(response.status, 422)
-  const body = await response.json()
-  // The remedy has to travel with it — a bare "failed" leaves the operator
-  // with a Remove button that does nothing and no idea what to do instead.
-  assert.match(body.error, /cannot be deleted/)
-  assert.match(body.error, /replacement rate/)
-  // And the engine was genuinely reached, so this is the real refusal path
+  // The old contract refused every existing row with a 422; Remove is now a
+  // supersession, so the engine retires the row and the route reports success.
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true })
+  // And the engine was genuinely reached, so this is the real retire path
   // rather than an early validation return that happens to share the status.
   assert.deepEqual(state.deleteAttempts, [ROW_ID])
 })
 
-test('the response body is JSON, because the client parses it before reading status', async () => {
+test('the response body is JSON, because the client reads the error out of it', async () => {
   state.deleteAttempts.length = 0
-  state.deleteResult = 'refuse'
+  state.deleteResult = 'missing'
 
   const response = await del(ROW_ID)
 
-  // StatutoryRatesSection.remove() does `await res.json()` BEFORE checking
-  // res.ok, so a non-JSON error body throws a SyntaxError and the toast shows
-  // a parse error instead of the refusal. Parsing must not throw.
+  // StatutoryRatesSection.remove() used to do `await res.json()` BEFORE
+  // checking res.ok, so a non-JSON error body threw a SyntaxError and the
+  // toast showed a parse error instead of the message. Parsing must not
+  // throw, on success or on failure.
   assert.equal(response.headers.get('content-type')?.includes('application/json'), true)
   await assert.doesNotReject(async () => { await response.json() })
 })
 
-test('a row that does not exist is still a 404, not the refusal', async () => {
+test('a row that does not exist is still a 404, not a success', async () => {
   state.deleteAttempts.length = 0
   state.deleteResult = 'missing'
 
@@ -237,7 +237,7 @@ test('a row that does not exist is still a 404, not the refusal', async () => {
 
 test('a malformed id is refused before the engine is reached', async () => {
   state.deleteAttempts.length = 0
-  state.deleteResult = 'refuse'
+  state.deleteResult = 'retired'
 
   const response = await del('not-a-uuid')
 

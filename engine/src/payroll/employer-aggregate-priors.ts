@@ -83,6 +83,8 @@ export async function assessStubAggregateLevies(input: {
   taxableGross: string;
   lines: readonly StubLine[];
   pushStatutory: PushStatutoryFn;
+  /** ISO pay date the tenant-rate resolution is as-of; absent reads current. */
+  payDate?: string;
 }): Promise<Record<string, string>> {
   const levies = payrollPack(input.country).employerAggregateLevies?.(input.taxYear) ?? [];
   if (levies.length === 0) return {};
@@ -108,6 +110,7 @@ export async function assessStubAggregateLevies(input: {
     input.orgId,
     payrollPack(input.country).statutoryRates,
     input.taxYear,
+    input.payDate ?? null,
   );
   const wanted = new Set<string>();
   for (const levy of leviesToAssess) {

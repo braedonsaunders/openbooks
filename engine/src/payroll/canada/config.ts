@@ -12,8 +12,13 @@ export interface CaPayrollConfig {
   hsf(region: string): { rate: string } | null;
 }
 
-export async function caPayrollConfig(orgId: string, taxYear: number): Promise<CaPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, CA_PACK_RATES, taxYear);
+export async function caPayrollConfig(
+  orgId: string,
+  taxYear: number,
+  /** ISO pay date the resolution is as-of; null reads the current rows. */
+  asOf: string | null = null,
+): Promise<CaPayrollConfig> {
+  const rates = await resolveStatutoryRates(orgId, CA_PACK_RATES, taxYear, asOf);
   return {
     eht: (region) => {
       const values = rates.values("ca_eht", { region });

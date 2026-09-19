@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -142,18 +142,26 @@ export const payrollStatutoryRates = pgTable(
     taxYear: integer("tax_year").notNull(),
     /** { [fieldKey]: canonical decimal string } per the slot's declaration. */
     rateValues: jsonb("rate_values").notNull(),
+    /**
+     * The date this row stopped being the current rate for its scope point;
+     * null while current. A re-save stamps the open row and inserts its
+     * successor (0183) — history the as-of resolver reads, never rewritten.
+     */
+    supersededOn: date("superseded_on"),
     ...auditColumns,
   },
   (t) => [
-    // One row per scope point. Two rows for the same point would make the
-    // resolution ambiguous, and an ambiguous statutory rate is wrong money that
-    // changes answer between queries.
+    // One CURRENT row per scope point. The partial predicate is what makes
+    // history possible: a superseded row and its successor share the point,
+    // so an unconditional index would forbid the second insert. The COALESCEs
+    // stay because NULLs do not collide — a naive index over the nullable
+    // scope columns would permit two current rows for one point.
     uniqueIndex("payroll_statutory_rates_org_point").on(
       t.orgId, t.country, t.rateKey, t.taxYear,
       sql`coalesce(region, '')`,
       sql`coalesce(sub_region, '')`,
       sql`coalesce(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
-    ),
+    ).where(sql`${t.supersededOn} is null`),
     check("payroll_statutory_rates_sub_region",
       sql`${t.subRegion} is null or ${t.region} is not null`),
     index("payroll_statutory_rates_org_year").on(t.orgId, t.country, t.taxYear),

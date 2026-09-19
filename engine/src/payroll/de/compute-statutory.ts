@@ -108,7 +108,7 @@ export async function computeDeStatutory(
       + "plus SVRV 2026 — see engine/src/payroll/de/rates.ts).",
     );
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, DE_PACK_RATES, ctx.taxYear);
+  const resolution = await resolveStatutoryRates(ctx.orgId, DE_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const kvzRaw = resolution.values("de_kvz")?.rate ?? null;
   const kvz = kvzRaw == null ? null : Number(kvzRaw);
   return computeDeStatutoryWithRates(ctx, {

@@ -178,7 +178,7 @@ export async function computeJpStatutory(
   if (ctx.taxYear !== 2026) {
     return computeJpStatutoryWithRates(ctx, { healthRate: null });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, JP_PACK_RATES, ctx.taxYear);
+  const resolution = await resolveStatutoryRates(ctx.orgId, JP_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const health = resolution.values("jp_health_rate", { region: ctx.region });
   return computeJpStatutoryWithRates(ctx, { healthRate: health?.rate ?? null });
 }
