@@ -12,26 +12,33 @@ import {
   type FlowActors,
 } from "../test-fixtures.ts";
 import { submitForApproval } from "./submit.ts";
-import { decideGate, GateError } from "./gates.ts";
+import { decideGate, GateError, ReleaseError } from "./gates.ts";
 import { FIELD_TICKET_SUBJECT_KIND } from "./field-tickets-adapter.ts";
 import { registerFlowApprovalReleaseHandler } from "./approval-release-hook.ts";
 
 /**
- * Refusal propagation + release atomicity for decideGate — the native Flows
- * defects where a failed release/execute resolved to { ok:true, runStatus:
- * 'failed' } and a write-before-throw adapter left partial effects committed.
+ * Release atomicity + refusal propagation for decideGate. A failed release
+ * used to resolve to { ok:true, runStatus:'failed' } while committing the
+ * ambient transaction — leaving write-before-throw adapter partials in the
+ * database and stranding the subject (retrying the run is wrong: the gate
+ * checkpoint is already stamped, so a re-drive skips release and completes
+ * vacuously). The contract is now atomic rollback of the whole decide unit:
  *
- * The field-ticket release delegates to the registered product handler
- * (approval-release-hook), so a test handler that performs a REAL material
- * write and then throws exercises the actual engine transaction behavior
- * against a disposable database — no mocks, no source-text assertions:
+ *   • a write-before-throw release throws ReleaseError stating the decision
+ *     was NOT recorded;
+ *   • the gate stays pending, the subject stays pending_approval, the run is
+ *     NOT marked failed, and no audit evidence for the decision exists —
+ *     this attempt recorded nothing, so it cannot be conflated with an
+ *     earlier separate (successful) decision;
+ *   • the same decision retried after repairing the cause completes
+ *     normally (the recovery property — no run.ts changes needed).
  *
- *   • the refusal reaches the caller (ok:false with the recorded decision,
- *     the resumed branch, the failed run id, and an actionable error);
- *   • the decision and its audit evidence stay committed;
- *   • the partial release write rolls back (the ticket never leaves
- *     pending_approval);
- *   • the run is marked failed with the raw cause.
+ * The field-ticket release delegates to the registered product handler, so a
+ * test handler that performs a REAL material write and then throws exercises
+ * the actual engine transaction behavior against a disposable database — no
+ * mocks, no source-text assertions. Branch-execution failures (as opposed to
+ * release failures) still record the decision and return ok:false with the
+ * failed run and its retry path.
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -96,7 +103,7 @@ function restoreBenignReleaseHandler(): void {
   registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async () => {});
 }
 
-test("a write-before-throw release rolls back its partial write and refuses truthfully", { skip: !DB }, async () => {
+test("a write-before-throw release rolls back the whole decision and the same decision recovers", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
       // A material partial effect: move the ticket toward released, then crash.
@@ -114,24 +121,35 @@ test("a write-before-throw release rolls back its partial write and refuses trut
       assert.equal(submit.gated, true, "submit created a gate");
       const [gate] = await gateRows(ticketId);
 
-      const res = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
-      if (res.ok) throw new Error(`expected a refusal, got success: ${JSON.stringify(res)}`);
-      assert.equal(res.decision, "approved", "the refusal carries the recorded decision");
-      assert.equal(res.resumed, "approve", "the refusal carries the resumed branch");
-      assert.equal(res.runStatus, "failed");
-      assert.equal(res.decisionRecorded, true);
-      assert.match(res.error, /simulated release failure after partial write/);
-      assert.match(res.error, /retry the failed run/, "the refusal names the retry remedy");
+      await assert.rejects(
+        decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+        (e: unknown) => {
+          assert.ok(e instanceof ReleaseError, `expected ReleaseError, got ${String(e)}`);
+          assert.match(e.message, /simulated release failure after partial write/);
+          assert.match(e.message, /was not recorded/, "the refusal states the decision was not recorded");
+          assert.match(e.message, /retry your decision/, "the refusal names the truthful remedy");
+          return true;
+        },
+        "a release failure must throw ReleaseError, not resolve to success",
+      );
 
-      // The decision itself remains recorded with its audit evidence.
-      assert.equal((await gateRows(ticketId))[0]!.status, "approved");
-      assert.equal(await decisionAuditCount(gate!.id), 1, "decision evidence commits with the flip");
-      // The partial release write rolled back: the ticket never left pending_approval.
+      // This attempt recorded nothing: gate still pending, subject untouched,
+      // run NOT failed, no decision evidence — not conflated with any earlier
+      // separate decision.
+      assert.equal((await gateRows(ticketId))[0]!.status, "pending");
       assert.equal(await docStatus(ticketId), "pending_approval");
-      // The run is marked failed with the raw cause, under the returned run id.
-      const run = await runRow(res.runId);
-      assert.equal(run.status, "failed");
-      assert.match(run.error ?? "", /simulated release failure after partial write/);
+      const run = await runRow(gate!.runId);
+      assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
+      assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
+
+      // Repair the cause and retry the SAME decision: it completes normally.
+      restoreBenignReleaseHandler();
+      const retry = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+      if (!retry.ok) throw new Error(`expected success after repair, got refusal: ${JSON.stringify(retry)}`);
+      assert.equal(retry.resumed, "approve");
+      assert.equal(retry.runStatus, "completed");
+      assert.equal((await gateRows(ticketId))[0]!.status, "approved");
+      assert.equal(await decisionAuditCount(gate!.id), 1, "exactly one decision evidence row exists");
     } finally {
       restoreBenignReleaseHandler();
     }

@@ -28,6 +28,7 @@ export {
   worklistGates,
   gateDecisionCapability,
   GateError,
+  ReleaseError,
   type DecideGateResult,
   type DecideGateSuccess,
   type DecideGateFailure,
