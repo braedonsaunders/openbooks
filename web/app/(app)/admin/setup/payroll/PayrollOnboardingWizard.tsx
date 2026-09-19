@@ -76,6 +76,8 @@ export function PayrollOnboardingWizard(props: {
   canManageEntities: boolean
   /** Existing active pay schedules, for the keep-or-create step. */
   schedules: { id: string; name: string }[]
+  /** Active legal entities, for the schedule's paying-entity step. */
+  subsidiaries: { id: string; name: string }[]
   bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
 }) {
   const t = useTranslations('payroll.setupWizard')
@@ -98,6 +100,12 @@ export function PayrollOnboardingWizard(props: {
   const [slotAccounts, setSlotAccounts] = useState<Record<string, Record<string, string>>>({})
   const [scheduleMode, setScheduleMode] = useState<'keep' | 'create'>('keep')
   const [scheduleName, setScheduleName] = useState('')
+  const [scheduleSubsidiaryId, setScheduleSubsidiaryId] = useState('')
+  // A schedule with no subsidiary pays from the root entity. With more than
+  // one legal entity that silence mints runs frozen to the wrong paying
+  // entity and currency — so a multi-entity tenant must choose here. A
+  // single-entity tenant keeps the root default without being asked.
+  const multiEntity = props.subsidiaries.length > 1
   const [frequency, setFrequency] = useState('biweekly')
   const [periodsPerYear, setPeriodsPerYear] = useState(String(FREQUENCY_PERIODS.biweekly))
   const [anchorPeriodEnd, setAnchorPeriodEnd] = useState('')
@@ -217,6 +225,9 @@ export function PayrollOnboardingWizard(props: {
     }
     if (current === 'schedule') {
       if (scheduleMode === 'keep' || createdSchedule) return
+      if (multiEntity && !scheduleSubsidiaryId) {
+        throw new Error(t('schedule.subsidiaryRequired'))
+      }
       const res = await fetch('/api/admin/setup/pay-schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -225,6 +236,14 @@ export function PayrollOnboardingWizard(props: {
           frequency,
           periodsPerYear: Number(periodsPerYear),
           anchorPeriodEnd,
+          // A multi-entity tenant chose above (and is stopped earlier when
+          // it did not — sending the first subsidiary here would repeat the
+          // silent wrong-entity defect). A single entity defaults to its
+          // only subsidiary without being asked. The API refuses a missing
+          // subsidiary in a multi-entity tenant either way.
+          subsidiaryId: multiEntity
+            ? (scheduleSubsidiaryId || null)
+            : (props.subsidiaries[0]?.id || null),
           isDefault: props.schedules.length === 0,
           isActive: true,
         }),
@@ -313,7 +332,8 @@ export function PayrollOnboardingWizard(props: {
         ? scheduleMode === 'keep'
           ? hasSchedule
           : Boolean(createdSchedule)
-            || Boolean(scheduleName.trim() && frequency && Number(periodsPerYear) > 0 && anchorPeriodEnd)
+            || Boolean(scheduleName.trim() && frequency && Number(periodsPerYear) > 0 && anchorPeriodEnd
+              && (!multiEntity || scheduleSubsidiaryId))
         : true
 
   const progressSteps = steps.slice(0, steps.indexOf('applying'))
@@ -602,6 +622,23 @@ export function PayrollOnboardingWizard(props: {
                     onChange={(e) => setAnchorPeriodEnd(e.target.value)}
                   />
                 </div>
+                {multiEntity && (
+                  <div>
+                    <Label htmlFor="pw-schedule-subsidiary" help={t('schedule.subsidiaryHelp')}>
+                      {t('schedule.subsidiary')}
+                    </Label>
+                    <Select
+                      id="pw-schedule-subsidiary"
+                      value={scheduleSubsidiaryId}
+                      onChange={(e) => setScheduleSubsidiaryId(e.target.value)}
+                    >
+                      <option value="">{t('schedule.subsidiaryRequired')}</option>
+                      {props.subsidiaries.map((subsidiary) => (
+                        <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">

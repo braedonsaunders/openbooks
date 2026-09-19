@@ -20,6 +20,7 @@ export function PayrollSetupLauncher(props: {
   frequencies: { value: string; labelKey: string }[]
   canManageEntities: boolean
   schedules: { id: string; name: string }[]
+  subsidiaries: { id: string; name: string }[]
   bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
 }) {
   const t = useTranslations('payroll.setupWizard')
@@ -32,6 +33,7 @@ export function PayrollSetupLauncher(props: {
       frequencies={props.frequencies}
       canManageEntities={props.canManageEntities}
       schedules={props.schedules}
+      subsidiaries={props.subsidiaries}
       bankProfiles={props.bankProfiles}
     />
   ) : null

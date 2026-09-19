@@ -807,7 +807,11 @@ test(
       // them is American, they are refused BY NAME rather than paid CPP/EI.
       assert.match(
         refused.errors[0]!.message,
-        /on the CA country pack, but this run pays from US Entity, a US legal entity/,
+        /on the CA country pack, but this run pays from US Entity \(US legal entity\)/,
+      );
+      assert.ok(
+        !refused.errors[0]!.message.includes("Scoped Sam"),
+        "the name rides errors[].employee — repeating it in the message prints it twice",
       );
       const noStubs = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}

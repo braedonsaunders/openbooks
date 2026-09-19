@@ -7,7 +7,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
-import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll-run.ts'
+import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll-run.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
   buildRow,
@@ -485,11 +485,24 @@ export async function validateEntityIntegrity(
     // with, and the period-overlap guard.
     const current = rowId
       ? (((await executor.execute(sql`
-          select frequency, periods_per_year, anchor_period_end::text as anchor_period_end
+          select frequency, periods_per_year, anchor_period_end::text as anchor_period_end,
+                 subsidiary_id::text as subsidiary_id
             from pay_schedules
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
+    // A schedule with no subsidiary pays from the root entity. In a tenant
+    // running more than one legal entity that silence mints runs frozen to
+    // the wrong paying entity and currency — so the engine refuses it here,
+    // on create and on re-scoping back to none alike, before anything is
+    // written. Single-entity tenants keep the root default without asking.
+    const effectiveScheduleSubsidiary = body.subsidiaryId !== undefined
+      ? (body.subsidiaryId ? String(body.subsidiaryId) : null)
+      : ((current?.subsidiary_id as string | null) ?? null)
+    const scheduleSubsidiaryProblem = await payScheduleSubsidiaryProblem(
+      orgId, effectiveScheduleSubsidiary, executor,
+    )
+    if (scheduleSubsidiaryProblem) return scheduleSubsidiaryProblem
     const frequency = String(body.frequency ?? current?.frequency ?? '')
     const anchor = body.anchorPeriodEnd === undefined
       ? String(current?.anchor_period_end ?? '')
@@ -1268,6 +1281,10 @@ export async function updateSetupRecord(
   if (setParts.length === 0) return { status: 400, body: { error: 'nothing to update' } }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
+  // A pay-schedule re-scope re-resolves the schedule's uncommitted runs in
+  // the same transaction. The outcome (and any warning) travels out through
+  // this binding because the transaction callback's boolean cannot carry it.
+  let scheduleRescope: { reresolved: number; untouched: number; warning?: string } | null = null
   try {
     const found = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
@@ -1290,10 +1307,32 @@ export async function updateSetupRecord(
         changes: { before, after },
         actorId,
       }, tx)
+      if (entity.key === 'pay-schedules') {
+        // Entity and currency re-resolve together on every uncommitted run;
+        // committed history stays frozen. A re-scope the runs cannot follow
+        // (a subsidiary whose currency disagrees with its payroll pack) keeps
+        // the saved schedule and reports the remedy as a warning — the next
+        // calculation re-attempts the move, so this never strands a run in
+        // silence.
+        const beforeSubsidiary = before.subsidiary_id == null ? null : String(before.subsidiary_id)
+        const afterSubsidiary = after?.subsidiary_id == null ? null : String(after.subsidiary_id)
+        if (beforeSubsidiary !== afterSubsidiary && afterSubsidiary) {
+          try {
+            const scope = await rescopePayScheduleRuns(tx, { orgId, payScheduleId: id, actorId })
+            scheduleRescope = scope
+          } catch (e) {
+            scheduleRescope = {
+              reresolved: 0,
+              untouched: 0,
+              warning: e instanceof Error ? e.message : String(e),
+            }
+          }
+        }
+      }
       return true
     })
     if (!found) return { status: 404, body: { error: 'not found' } }
-    return { status: 200, body: { id } }
+    return { status: 200, body: { id, ...(scheduleRescope ? { rescope: scheduleRescope } : {}) } }
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }

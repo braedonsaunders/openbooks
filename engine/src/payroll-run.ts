@@ -983,6 +983,251 @@ export async function createPayRun(input: {
   });
 }
 
+/**
+ * The subsidiary a pay schedule pays for, as a refusal or null.
+ *
+ * A schedule with no subsidiary pays from the root entity (the historical
+ * behaviour `createPayRun` keeps for single-entity tenants). In a tenant
+ * running more than one legal entity that silence is the start of the
+ * frozen-wrong-entity chain — a run created before the schedule is scoped
+ * freezes the wrong paying entity and currency — so creation (and
+ * re-scoping back to none) is refused there, naming what to choose.
+ */
+export async function payScheduleSubsidiaryProblem(
+  orgId: string,
+  subsidiaryId: string | null,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<string | null> {
+  if (subsidiaryId) {
+    const sub = (await runner.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and id = ${subsidiaryId}
+         and is_active and not is_elimination`));
+    if (!sub.rows[0]) return "Choose an active subsidiary from this organization";
+    return null;
+  }
+  const count = (await runner.execute<{ n: number }>(sql`
+    select count(*)::int as n from subsidiaries
+     where org_id = ${orgId} and is_active and not is_elimination`));
+  if ((count.rows[0]?.n ?? 0) > 1) {
+    return "Choose the subsidiary this schedule pays for — this organization runs more than "
+      + "one legal entity, and a pay run freezes its paying entity and currency when it is "
+      + "created, so a schedule with no subsidiary pays from the wrong entity";
+  }
+  return null;
+}
+
+/**
+ * Discard a draft pay run.
+ *
+ * The boundary is accounting consequence, enforced here rather than in the
+ * UI: only an UNCOMMITTED run on a draft document with no GL lines and no
+ * payment may be discarded. A committed run is refused with the remedy (void
+ * it to reverse the posted payroll); anything the document lifecycle has
+ * moved past draft is refused too. Discarding deletes the run and its
+ * calculation traces outright, so duplicate protection — which only ever
+ * sees live runs — no longer blocks a correct replacement for the period.
+ */
+export async function discardPayRun(input: {
+  orgId: string; documentId: string; actorId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+}): Promise<{ documentNumber: string }> {
+  const { orgId, documentId, actorId } = input;
+  return await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
+    const runRows = (await tx.execute<{
+      run_status: string; paid_at: string | null; paid_entry_id: string | null;
+      document_number: string; doc_status: string; doc_subsidiary_id: string | null;
+      has_lines: boolean; has_links: boolean;
+    }>(sql`
+      select r.run_status, r.paid_at::text as paid_at, r.paid_entry_id::text as paid_entry_id,
+             d.document_number, d.status as doc_status, d.subsidiary_id as doc_subsidiary_id,
+             exists (select 1 from document_lines l
+                      where l.org_id = ${orgId} and l.document_id = ${documentId}) as has_lines,
+             exists (select 1 from document_links k
+                      where k.org_id = ${orgId}
+                        and (k.from_document_id = ${documentId} or k.to_document_id = ${documentId})) as has_links
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+       for update of r, d
+    `));
+    const run = runRows.rows[0];
+    if (!run) throw new PayrollError("pay run not found");
+    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
+      throw new PayrollError("pay run not found");
+    }
+    const number = run.document_number;
+    if (run.run_status === "committed") {
+      throw new PayrollError(
+        `pay run ${number} is committed and cannot be discarded — void it to reverse the posted payroll`,
+      );
+    }
+    if (run.doc_status !== "draft") {
+      throw new PayrollError(
+        `pay run ${number} is ${run.doc_status} and cannot be discarded — only a draft run can be discarded`,
+      );
+    }
+    if (run.has_lines) {
+      throw new PayrollError(
+        `pay run ${number} already has general-ledger lines — void it to reverse them`,
+      );
+    }
+    if (run.paid_at || run.paid_entry_id) {
+      throw new PayrollError(
+        `pay run ${number} is already paid and cannot be discarded — void it to reverse the payment`,
+      );
+    }
+    if (run.has_links) {
+      throw new PayrollError(
+        `pay run ${number} is linked to other documents and cannot be discarded`,
+      );
+    }
+    // Explicit deletes first: the ledger nulls its run link when the document
+    // goes (ON DELETE SET NULL) and bank files restrict it — neither may
+    // survive a discarded run. Deleting the document then cascades to the run,
+    // its stubs and lines, its adjustments, and any retro/parallel traces.
+    // The ledger guard permits these deletes while the run is uncommitted.
+    await tx.execute(sql`
+      delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    await tx.execute(sql`
+      delete from pay_run_bank_files where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId}`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'documents', ${documentId}, 'delete',
+              ${JSON.stringify({ operation: "discard_pay_run", documentNumber: number })}::jsonb,
+              ${actorId})`);
+    return { documentNumber: number };
+  });
+}
+
+/**
+ * Move one uncommitted run onto its schedule's current subsidiary.
+ *
+ * Entity and currency move TOGETHER — they froze together at creation, and
+ * moving one without the other fixes the error message while leaving the
+ * wrong-money half behind. The stale calculation is dropped (stubs, ledger
+ * movements, totals, evidence digest) so the next test calculates against
+ * the new entity from scratch; operator adjustments are kept. The caller
+ * decides the run is uncommitted — this helper asserts nothing about
+ * lifecycle, it only re-stamps.
+ */
+async function reresolveRunToSubsidiary(
+  tx: Pick<typeof db, "execute">,
+  input: { orgId: string; actorId: string; documentId: string; subsidiaryId: string },
+): Promise<{ currency: string; taxYear: number }> {
+  const { orgId, actorId, documentId, subsidiaryId } = input;
+  const sub = (await tx.execute<{
+    id: string; name: string; country: string | null; currency_code: string | null;
+  }>(sql`
+    select id, name, country, base_currency as currency_code from subsidiaries
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`));
+  const subsidiary = sub.rows[0];
+  if (!subsidiary) {
+    throw new PayrollError(
+      "the pay schedule is scoped to a subsidiary that is missing or inactive — choose an "
+      + "active subsidiary on the pay schedule, or discard this run and open a new one",
+    );
+  }
+  const runRow = (await tx.execute<{ pay_date: string; document_number: string }>(sql`
+    select r.pay_date::text as pay_date, d.document_number
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${orgId} and r.document_id = ${documentId}`));
+  const run = runRow.rows[0];
+  if (!run) throw new PayrollError("pay run not found");
+  let runContext;
+  try {
+    runContext = resolvePayrollRunContext({
+      payDate: run.pay_date,
+      subsidiary: {
+        id: subsidiary.id, name: subsidiary.name,
+        country: subsidiary.country, baseCurrency: subsidiary.currency_code,
+      },
+    });
+  } catch (error) {
+    throw new PayrollError(
+      `pay run ${run.document_number} cannot follow its schedule to ${subsidiary.name}: `
+      + `${error instanceof Error ? error.message : String(error)} — fix the subsidiary, `
+      + "then re-save the schedule",
+    );
+  }
+  await tx.execute(sql`
+    delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await tx.execute(sql`
+    delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await tx.execute(sql`
+    update documents set subsidiary_id = ${subsidiary.id}, currency = ${runContext.currency},
+           updated_by = ${actorId}, updated_at = now()
+     where org_id = ${orgId} and id = ${documentId}`);
+  await tx.execute(sql`
+    update pay_runs set tax_year = ${runContext.taxYear}, run_status = 'draft',
+           gross_total = '0', net_total = '0', employer_cost_total = '0', employee_count = 0,
+           calculated_at = null, calculation_source_snapshot = null,
+           calculation_source_digest = null, updated_by = ${actorId}, updated_at = now()
+     where org_id = ${orgId} and document_id = ${documentId}`);
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'pay_runs', ${documentId}, 'update',
+            ${JSON.stringify({
+              operation: "rescope_pay_run",
+              subsidiaryId: subsidiary.id, currency: runContext.currency, taxYear: runContext.taxYear,
+            })}::jsonb, ${actorId})`);
+  return { currency: runContext.currency, taxYear: runContext.taxYear };
+}
+
+/**
+ * Re-resolve every uncommitted run on a re-scoped pay schedule.
+ *
+ * Freezing the paying entity at creation is correct — a posted run must be
+ * reproducible — but the freeze must follow the schedule while the run is
+ * still uncommitted. Committed, posted, paid and voided runs are history and
+ * stay frozen; they are counted as untouched, not refused. An unscoped
+ * schedule (subsidiary null) resolves nothing and returns zeros.
+ */
+export async function rescopePayScheduleRuns(
+  runner: Pick<typeof db, "execute">,
+  input: { orgId: string; payScheduleId: string; actorId: string },
+): Promise<{ reresolved: number; untouched: number }> {
+  const { orgId, payScheduleId, actorId } = input;
+  const s = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`));
+  const schedule = s.rows[0];
+  if (!schedule) throw new PayrollError("pay schedule not found");
+  if (!schedule.subsidiary_id) return { reresolved: 0, untouched: 0 };
+  const runs = (await runner.execute<{
+    document_id: string; run_status: string; doc_status: string;
+    paid_at: string | null; paid_entry_id: string | null; has_lines: boolean;
+  }>(sql`
+    select r.document_id::text as document_id, r.run_status,
+           d.status as doc_status, r.paid_at::text as paid_at,
+           r.paid_entry_id::text as paid_entry_id,
+           exists (select 1 from document_lines l
+                    where l.org_id = ${orgId} and l.document_id = r.document_id) as has_lines
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${orgId} and r.pay_schedule_id = ${payScheduleId}`));
+  let reresolved = 0;
+  let untouched = 0;
+  for (const run of runs.rows) {
+    const discardable =
+      (run.run_status === "draft" || run.run_status === "calculated")
+      && run.doc_status === "draft"
+      && !run.has_lines && !run.paid_at && !run.paid_entry_id;
+    if (!discardable) {
+      untouched += 1;
+      continue;
+    }
+    await reresolveRunToSubsidiary(runner, {
+      orgId, actorId, documentId: run.document_id, subsidiaryId: schedule.subsidiary_id,
+    });
+    reresolved += 1;
+  }
+  return { reresolved, untouched };
+}
+
 interface StubComputation {
   employeePartyId: string;
   province: string;
@@ -1896,6 +2141,39 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       );
     }
 
+    // A subsidiary-scoped schedule pays only that entity's employees; an
+    // org-wide schedule keeps everyone (the historical behaviour).
+    const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id} for share
+    `));
+    const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
+    // The run froze its paying entity at creation; the schedule may have been
+    // scoped (or re-scoped) since. An UNCOMMITTED run follows its schedule —
+    // entity and currency move together inside the helper, and the stale
+    // calculation is dropped so this pass computes against the new entity
+    // from scratch. This MUST precede the jurisdiction resolution below, so
+    // the run is calculated as what its schedule now says — not as what it
+    // froze. Committed runs stay frozen (a posted run must be reproducible)
+    // and simulations re-derive a committed run, so both skip this: the
+    // guards above already refused a non-draft or committed run unless this
+    // is a simulation.
+    if (!input.simulate && scopedSubsidiaryId && scopedSubsidiaryId !== run.doc_subsidiary_id) {
+      await reresolveRunToSubsidiary(tx, {
+        orgId, actorId, documentId, subsidiaryId: scopedSubsidiaryId,
+      });
+      const refreshed = (await tx.execute<Record<string, string>>(sql`
+        select d.subsidiary_id as doc_subsidiary_id, d.currency as doc_currency,
+               sub.name as subsidiary_name, sub.country as subsidiary_country,
+               sub.base_currency as subsidiary_currency, r.tax_year::text as tax_year,
+               r.run_status
+          from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+          left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+         where r.org_id = ${orgId} and r.document_id = ${documentId}
+      `));
+      Object.assign(run, refreshed.rows[0]);
+    }
+
     // ---- The run's jurisdiction, resolved ONCE -----------------------------
     //
     // Everything downstream — which statutory engine runs, which currency the
@@ -1918,20 +2196,15 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     });
     // The run was stamped with its tax year at creation; if the pack's year
     // definition has since changed under it, every YTD accumulator on this run
-    // reads a different year from the one the stubs are filed in.
+    // reads a different year from the one the stubs are filed in. A run the
+    // re-scope above just re-stamped carries the new entity's year by
+    // construction, so this check only fires on genuine pack drift.
     if (Number(run.tax_year) !== runContext.taxYear) {
       throw new PayrollError(
         `this pay run is stamped tax year ${run.tax_year} but a ${runContext.country} pay date of `
         + `${runContext.payDate} falls in ${runContext.taxYear}`,
       );
     }
-
-    // A subsidiary-scoped schedule pays only that entity's employees; an
-    // org-wide schedule keeps everyone (the historical behaviour).
-    const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id} for share
-    `));
-    const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
     const runType = (run.run_type as string) ?? "regular";
     // `distinct on (p.id)` is load-bearing, not tidiness: employee_roles is
     // joined per party and a second role row would run calculateStub twice for

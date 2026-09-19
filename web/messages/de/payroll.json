@@ -432,6 +432,10 @@
     "calculateDone": "Lohnlauf berechnet.",
     "commitDone": "Lohnlauf festgeschrieben.",
     "postDone": "Lohnlauf gebucht.",
+    "discardDraft": "Entwurf verwerfen",
+    "discardTitle": "Diesen Entwurf verwerfen?",
+    "discardBody": "Der Lauf und seine Berechnung werden gelöscht. Das hat keine buchhalterische Wirkung, und der Zeitraum kann mit einem neuen Lauf erneut abgerechnet werden.",
+    "discardDone": "Entwurf verworfen.",
     "empty": "Keine Abrechnungen. Berechnen Sie den Lauf, um sie zu erzeugen.",
     "lineKind": {
       "earning": "Bezug",
@@ -581,6 +585,9 @@
       "periodsHelp": "Die gesetzliche Periodenzahl, mit der die Einbehalts-Engine annualisiert — 52 wöchentlich, 26 zweiwöchentlich, 24 halbmonatlich, 12 monatlich.",
       "anchor": "Anker-Periodenende",
       "anchorHelp": "Ein beliebiges echtes Periodenende in diesem Kalender; jede andere Periode wird von ihm aus vorwärts und rückwärts fortgeschrieben.",
+      "subsidiary": "Zahlende Tochtergesellschaft",
+      "subsidiaryHelp": "Der Rechtsträger, für den dieser Kalender zahlt. Ein Lohnlauf friert seine zahlende Einheit und Währung bei der Erstellung ein.",
+      "subsidiaryRequired": "Tochtergesellschaft wählen …",
       "noPermission": "Das Erstellen von Lohnplänen braucht die Einrichtungsberechtigung. Bitten Sie einen Administrator, einen auf der Registerkarte Lohnpläne hinzuzufügen, und fahren Sie dann fort."
     },
     "vendors": {

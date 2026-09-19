@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { acknowledgePayRunRefusals, calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
+import { acknowledgePayRunRefusals, calculatePayRun, commitPayRun, discardPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
@@ -382,4 +382,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     throw e
   }
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+}
+
+/**
+ * Discard a draft pay run.
+ *
+ * The boundary lives in the engine (`discardPayRun`): only an uncommitted
+ * run on a draft document with no GL lines and no payment goes. A committed
+ * or posted run is refused there with the void remedy — discarding is not a
+ * quiet void. Missing and out-of-scope runs answer the same 404.
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardFeaturePermission('payroll.run', 'payroll')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select d.subsidiary_id as "subsidiaryId"
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+  if (denied) return denied
+  try {
+    const result = await discardPayRun({
+      orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
+    return NextResponse.json({ ok: true, ...result })
+  } catch (e) {
+    if (e instanceof PayrollError) {
+      const status = e.message === 'pay run not found' ? 404 : 422
+      return NextResponse.json({ error: e.message }, { status })
+    }
+    throw e
+  }
 }

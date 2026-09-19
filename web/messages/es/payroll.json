@@ -432,6 +432,10 @@
     "calculateDone": "Nómina calculada.",
     "commitDone": "Nómina confirmada.",
     "postDone": "Nómina contabilizada.",
+    "discardDraft": "Descartar borrador",
+    "discardTitle": "¿Descartar este borrador?",
+    "discardBody": "El ciclo y su cálculo se eliminan. No tiene efecto contable, y el período puede pagarse de nuevo con un ciclo nuevo.",
+    "discardDone": "Borrador descartado.",
     "empty": "Sin recibos. Calcule el ciclo para generarlos.",
     "lineKind": {
       "earning": "Percepción",
@@ -581,6 +585,9 @@
       "periodsHelp": "El conteo legal de períodos con el que el motor de retenciones anualiza — 52 semanales, 26 bisemanales, 24 quincenales, 12 mensuales.",
       "anchor": "Fin del período de anclaje",
       "anchorHelp": "Cualquier fecha real de fin de período en este calendario; todos los demás períodos se proyectan hacia adelante y hacia atrás desde ella.",
+      "subsidiary": "Subsidiaria pagadora",
+      "subsidiaryHelp": "La entidad jurídica a la que paga este calendario. Un ciclo congela su entidad pagadora y su moneda al crearse.",
+      "subsidiaryRequired": "Elegir la subsidiaria …",
       "noPermission": "Crear calendarios de nómina requiere el permiso de Configuración. Pida a un administrador que añada uno en la pestaña Calendarios de nómina, luego continúe."
     },
     "vendors": {
