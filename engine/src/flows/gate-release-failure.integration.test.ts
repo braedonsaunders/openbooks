@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withOrgTransaction } from "../db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -150,6 +150,52 @@ test("a write-before-throw release rolls back the whole decision and the same de
       assert.equal(retry.runStatus, "completed");
       assert.equal((await gateRows(ticketId))[0]!.status, "approved");
       assert.equal(await decisionAuditCount(gate!.id), 1, "exactly one decision evidence row exists");
+    } finally {
+      restoreBenignReleaseHandler();
+    }
+  });
+});
+
+test("an outer caller that swallows ReleaseError and commits still records nothing", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
+      await db.execute(sql`update documents set status = 'approved' where id = ${subjectId} and org_id = ${ctx.orgId}`);
+      throw new Error("simulated release failure after partial write");
+    });
+    try {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: FIELD_TICKET_SUBJECT_KIND,
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      const ticketId = await seedDraftFieldTicket(org.orgId, actors.submitterId);
+      await submitForApproval("field_ticket", ticketId);
+      const [gate] = await gateRows(ticketId);
+
+      // The exact swallowed-error topology this slice must handle: withOrg
+      // joins the outer ambient transaction, the outer scope catches the
+      // refusal, and the outer transaction commits anyway.
+      await withOrgTransaction(org.orgId, async () => {
+        await assert.rejects(
+          decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+          (e: unknown) => e instanceof ReleaseError,
+          "a release failure must throw ReleaseError",
+        );
+      });
+
+      // The whole-decision savepoint already removed the attempt's writes, so
+      // the outer commit preserved nothing from it.
+      assert.equal((await gateRows(ticketId))[0]!.status, "pending");
+      assert.equal(await docStatus(ticketId), "pending_approval");
+      assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
+      const run = await runRow(gate!.runId);
+      assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
+
+      restoreBenignReleaseHandler();
+      const retry = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+      if (!retry.ok) throw new Error(`expected success after repair, got refusal: ${JSON.stringify(retry)}`);
+      assert.equal(retry.runStatus, "completed");
+      assert.equal((await gateRows(ticketId))[0]!.status, "approved");
     } finally {
       restoreBenignReleaseHandler();
     }
