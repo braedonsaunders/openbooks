@@ -203,6 +203,22 @@ function isWageOverlapConflict(error: unknown): boolean {
   return false
 }
 
+/**
+ * Which subsidiary predicate failed, diagnosed on the failure path only: a
+ * missing row, an inactive subsidiary, and an elimination entity refuse
+ * separately, each naming the id (and the name when the row exists) — never
+ * one sentence for all three.
+ */
+async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<string> {
+  const row = (await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(sql`
+    select name, is_active as "isActive", is_elimination as "isElimination"
+      from subsidiaries
+     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0]
+  if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
+  if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
+  return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
+}
+
 /** Storage refusals past validation must never leak driver text — the raw
  * failure embeds the full statement with bound org/actor ids (F-t05-001's
  * 422 did exactly that). Overlap refusals carry a stable code the UI pins
@@ -418,8 +434,22 @@ export async function POST(req: Request) {
         : null,
       subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`) : null,
     ])
-    if ([employeeRef, tradeRef, departmentRef, subsidiaryRef].some((result) => result && result.rows.length !== 1)) {
-      return NextResponse.json({ error: 'wage scope is not available' }, { status: 422 })
+    // One scope tuple, four different failed lookups: the refusal names which
+    // scope failed and the id it was given — never one sentence for all four.
+    // The four reads above stay a single round trip on the success path; only
+    // this failure path resolves which predicate failed.
+    const missingScope =
+      employeePartyId !== null && employeeRef?.rows.length !== 1
+        ? `employee wage scope "${employeePartyId}" is not available — no active employee with an active role in this organization`
+        : tradeId !== null && tradeRef?.rows.length !== 1
+          ? `trade wage scope "${tradeId}" is not available — no active trade in this organization`
+          : departmentId !== null && departmentRef?.rows.length !== 1
+            ? `department wage scope "${departmentId}" is not available — no active department in this organization`
+            : subsidiaryId !== null && subsidiaryRef?.rows.length !== 1
+              ? `subsidiary wage scope "${subsidiaryId}" is not available — no active, non-elimination subsidiary in this organization`
+              : null
+    if (missingScope) {
+      return NextResponse.json({ error: missingScope }, { status: 422 })
     }
     // Wages are confidential per subsidiary: an employee/department/subsidiary
     // outside the caller's scope is indistinguishable from a missing one.
@@ -682,7 +712,9 @@ export async function POST(req: Request) {
     }
     if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
     const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
-    if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
+    if (subsidiary.rows.length !== 1) {
+      return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
+    }
     if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
     try {
       const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
@@ -705,7 +737,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'missing permission: gl.post' }, { status: 403 })
     }
     const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
-    if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
+    if (subsidiary.rows.length !== 1) {
+      return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
+    }
     if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
     try {
       const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd, subsidiaryId: body.subsidiaryId })
