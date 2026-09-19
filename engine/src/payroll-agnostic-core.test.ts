@@ -76,6 +76,8 @@ const FREEDONIA: PayrollCountryPack = {
     insurable: "Freedonia employment-fund wages",
   },
   employeeUnionDuesTaxTreatment: null,
+  // Freedonia transcribes no pre-tax treatment: empty vocabulary, stated.
+  deductionTreatments: [],
   // The pack's filing declaration is lazy like the built-ins'; Freedonia
   // files nothing, and says so rather than inheriting anyone's forms.
   filings: () => ({

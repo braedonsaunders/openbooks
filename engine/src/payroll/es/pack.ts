@@ -103,6 +103,9 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   // CRA's factor-U1 key on them would wire foreign semantics, so null until
   // the ES engine transcribes the deduction. Claims nothing.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices IRPF off gross, so
+  // the pack declares an empty vocabulary rather than an unhonored one.
+  deductionTreatments: [],
   filings: esPackFilings,
   statutoryRates: ES_PACK_RATES,
   taxYears: ES_TAX_YEARS,

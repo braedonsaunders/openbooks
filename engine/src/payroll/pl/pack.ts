@@ -185,6 +185,9 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   // reduction of the monthly advance (art. 32 ust. 4 lists only KUP and
   // social contributions) — the statutory engine gives dues no treatment.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the engine prices PIT off gross, so
+  // the pack declares an empty vocabulary rather than an unhonored one.
+  deductionTreatments: [],
   filings: () => plPackFilings(),
   statutoryRates: PL_RATES,
   taxYears: PL_TAX_YEARS,

@@ -13,6 +13,7 @@ import test from "node:test";
 import { add, cmp } from "../../money.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
 import {
   ItPayrollRefusal,
@@ -178,6 +179,16 @@ function fakeCtx(overrides: {
     nonPeriodic: "0",
     pensionable: overrides.pensionable ?? "2500.00",
     insurable: "0",
+    reducedBases: reduceTaxBases(
+      [],
+      {
+        income: overrides.income ?? "2500.00",
+        nonPeriodic: "0",
+        pensionable: overrides.pensionable ?? "2500.00",
+        insurable: "0",
+      },
+      IT_PAYROLL_PACK.deductionTreatments,
+    ),
     periodsPerYear: 12,
     region: overrides.region ?? "03",
     country: "IT",

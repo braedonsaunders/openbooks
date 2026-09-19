@@ -25,6 +25,7 @@ import {
   registerPayrollWithholding,
   unregisterPayrollWithholding,
 } from "../withholding-jurisdictions.ts";
+import { reduceTaxBases } from "../treatment-bases.ts";
 import { SG_PAYROLL_PACK, SG_TAX_YEARS, SG_WITHHOLDING } from "./pack.ts";
 
 test("the SG pack exists and is an installable SGD calendar-year pack", () => {
@@ -190,6 +191,18 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
     },
     employerLevies: EMPTY_EMPLOYER_LEVY_FACTORS,
     ...overrides,
+    // SG declares no pre-tax treatments: derived from the final legs (an
+    // explicit override wins), so a leg override cannot drift from its base.
+    reducedBases: overrides.reducedBases ?? reduceTaxBases(
+      [],
+      {
+        income: overrides.income ?? "4500.00",
+        nonPeriodic: overrides.nonPeriodic ?? "0",
+        pensionable: overrides.pensionable ?? "4500.00",
+        insurable: overrides.insurable ?? "4500.00",
+      },
+      SG_PAYROLL_PACK.deductionTreatments,
+    ),
   };
   return { ctx, pushed };
 }

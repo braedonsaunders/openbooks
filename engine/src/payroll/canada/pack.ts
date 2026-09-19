@@ -96,6 +96,33 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   },
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
+  deductionTreatments: [
+    // T4127 factors F (RPP/RRSP pension), U1 (union dues) and F2 (alimony):
+    // each reduces the periodic income leg — annual taxable income A prices
+    // (income − F − F2 − U1) × P, while bonuses carry their own F3/F4
+    // factors. None reduces CPP/QPP, EI or QPIP, so only `income` is named.
+    {
+      key: "pension_f",
+      label: "Pension (RPP/RRSP, factor F)",
+      labelKey: "options.payTaxTreatment.pensionF",
+      help: "RPP/RRSP contributions (T4127 factor F): reduce income-taxable income, not CPP/QPP or EI.",
+      reduces: ["income"],
+    },
+    {
+      key: "union_dues",
+      label: "Union dues (U1)",
+      labelKey: "options.payTaxTreatment.unionDues",
+      help: "Union dues (T4127 factor U1): reduce income-taxable income, not CPP/QPP or EI.",
+      reduces: ["income"],
+    },
+    {
+      key: "alimony",
+      label: "Alimony (F2)",
+      labelKey: "options.payTaxTreatment.alimony",
+      help: "Support payments (T4127 factor F2): reduce income-taxable income, not CPP/QPP or EI.",
+      reduces: ["income"],
+    },
+  ],
   filings: caPackFilings,
   statutoryRates: CA_PACK_RATES,
   taxYears: CA_TAX_YEARS,

@@ -1,6 +1,6 @@
 import type { db } from "../db.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
-import type { PayrollAssessedOn } from "./packs.ts";
+import type { PayrollAssessedOn, PayrollTaxBaseKey } from "./packs.ts";
 
 /** One line in the stub set `calculateStub` builds before the statutory pass. */
 export interface StubLine {
@@ -126,6 +126,17 @@ export interface PayrollStatutoryComputeContext {
   nonPeriodic: string;
   pensionable: string;
   insurable: string;
+  /**
+   * Each base above less the deduction lines carrying a treatment the pack
+   * declares as reducing that base (`reduceTaxBases` over the pack's
+   * `deductionTreatments`). An engine whose levy is assessed on income after
+   * pre-tax deductions prices off the reduced leg and leaves the others
+   * alone — salary sacrifice moves PAYG but not superannuation guarantee.
+   * Keys the pack does not declare are inert here, so a foreign factor can
+   * never leak across packs. Engines that predate the channel keep reading
+   * the raw legs plus `deduction()` and are untouched by it.
+   */
+  reducedBases: Record<PayrollTaxBaseKey, string>;
   deduction: (treatment: string) => string;
   pushStatutory: PushStatutoryFn;
   storedCertificates: readonly StoredCertificate[];

@@ -201,6 +201,37 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // Post-tax under the IRC: union dues stopped being deductible for
   // employees with the TCJA (2018). No treatment.
   employeeUnionDuesTaxTreatment: null,
+  deductionTreatments: [
+    // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
+    // NOT Social Security or Medicare wages — so only `income` is named.
+    // Engine coverage, stated exactly: the state path honors these today via
+    // `deduction()` (tax-qualified deductions, e.g. the Nebraska minimum
+    // measured on gross wages after qualified deductions); FIT prices the
+    // reported wages and FICA/FUTA price their own legs, so wiring FIT to
+    // the reduced leg is a separate, untranscribed change — the declaration
+    // states the law, it does not claim the FIT engine models it.
+    {
+      key: "pension_f",
+      label: "Pension (RPP/RRSP, factor F)",
+      labelKey: "options.payTaxTreatment.pensionF",
+      help: "401(k) elective deferrals: reduce FIT-able wages, not Social Security or Medicare wages.",
+      reduces: ["income"],
+    },
+    {
+      key: "union_dues",
+      label: "Union dues (U1)",
+      labelKey: "options.payTaxTreatment.unionDues",
+      help: "Pre-tax union dues: reduce FIT-able wages where the state honors them, not Social Security or Medicare wages.",
+      reduces: ["income"],
+    },
+    {
+      key: "alimony",
+      label: "Alimony (F2)",
+      labelKey: "options.payTaxTreatment.alimony",
+      help: "Pre-2019 alimony: reduce FIT-able wages where the state honors them, not Social Security or Medicare wages.",
+      reduces: ["income"],
+    },
+  ],
   filings: usPackFilings,
   statutoryRates: US_PACK_RATES,
   taxYears: US_TAX_YEARS,

@@ -379,6 +379,9 @@ export const FR_PAYROLL_PACK = {
   // Union dues open a crédit d'impôt on the annual return, not a deduction at
   // source — the statutory engine gives dues no treatment.
   employeeUnionDuesTaxTreatment: null,
+  // No pre-tax treatment transcribed: the PAS engine prices off gross, so
+  // the pack declares an empty vocabulary rather than an unhonored one.
+  deductionTreatments: [],
   filings: () => FR_FILINGS,
   statutoryRates: FR_RATES,
   taxYears: FR_TAX_YEARS,

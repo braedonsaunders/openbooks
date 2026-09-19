@@ -538,6 +538,20 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   // Tax relief on trade-union subscriptions was withdrawn from 2011: dues are
   // post-tax and the engine gives them no treatment.
   employeeUnionDuesTaxTreatment: null,
+  deductionTreatments: [
+    // Ordinary employee pension contributions reduce taxable pay for PAYE
+    // (Revenue: taxable pay is gross pay less ordinary contributions) but
+    // NOT reckonable pay for PRSI or USC — so only `income` is named. The
+    // engine prices the reduced income leg plus the untouched non-periodic
+    // leg, which keeps combined-base arithmetic exact.
+    {
+      key: "pension_f",
+      label: "Pension (RPP/RRSP, factor F)",
+      labelKey: "options.payTaxTreatment.pensionF",
+      help: "Ordinary employee pension contributions: reduce PAYE taxable pay, not PRSI or USC reckonable pay.",
+      reduces: ["income"],
+    },
+  ],
   filings: iePackFilings,
   statutoryRates: IE_PACK_RATES,
   taxYears: IE_TAX_YEARS,
