@@ -116,6 +116,11 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   const scheduleFilter = input.payScheduleId
     ? sql`and r.pay_schedule_id = ${input.payScheduleId}`
     : sql``;
+  // The omitted arm below starts from the roster rather than from stubs, so
+  // its filters name the roster's own aliases.
+  const omittedEmployeeFilter = input.employeePartyIds && input.employeePartyIds.length > 0
+    ? sql`and p.id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
+    : sql``;
 
   const rows = (await executor.execute<{
       employee_party_id: string; employee_name: string;
@@ -171,9 +176,83 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
      order by p.display_name, r.period_end
   `));
 
+  // Omitted employees: the main query above starts FROM pay_stubs, so an
+  // employee who was never paid for a period at all is invisible to it —
+  // exactly the hire-after-posting case. This arm starts from the other end:
+  // every employee the period's own roster would pay today, minus everyone
+  // who already has a stub on it.
+  //
+  // REGULAR runs only. Bonus, termination and retro runs pay a NAMED subset
+  // by design, so "no stub" on one of those is the operator's choice, not an
+  // omission — nominating the whole schedule for every bonus would be noise
+  // that quantifies to zero.
+  //
+  // The employment window mirrors the run's own eligibility predicate
+  // (`er.terminated_on is null or er.terminated_on >= run.period_start` in
+  // calculatePayRun) and extends it with the hire date that predicate never
+  // needed: the simulation keys eligibility off the LIVE roster and knows no
+  // hire date, so without `hired_on <= period_end` an employee hired AFTER
+  // the period would quantify to a full period they never worked. A missing
+  // role row (or a null date) reads as employed, exactly as the roster does.
+  //
+  // Cells a committed retro run already settled are deliberately NOT
+  // excluded here: quantification subtracts previouslySettled, so a settled
+  // cell differences to zero (the honest "nothing left" row) while a cell a
+  // later correction made underpaid again still surfaces its increment.
+  // Nothing is ever marked "done"; the arithmetic simply has nothing to give.
+  const omitted = (await executor.execute<{
+      employee_party_id: string; employee_name: string;
+      source_document_id: string; source_document_number: string;
+      pay_schedule_id: string; pay_schedule_name: string;
+      period_start: string; period_end: string; pay_date: string; tax_year: number;
+      wage_detail: string | null; component_detail: string | null;
+      unclaimed_hours: string | null; omitted_detail: string;
+    }>(sql`
+    select distinct s2.employee_party_id, s2.employee_name,
+           s2.source_document_id, s2.source_document_number,
+           s2.pay_schedule_id, s2.pay_schedule_name,
+           s2.period_start, s2.period_end, s2.pay_date, s2.tax_year,
+           null::text as wage_detail, null::text as component_detail,
+           null::text as unclaimed_hours,
+           ('employed during ' || s2.period_start || ' to ' || s2.period_end
+            || ' but never paid for it on ' || s2.source_document_number) as omitted_detail
+      from (
+        select p.id as employee_party_id, p.display_name as employee_name,
+               r.document_id as source_document_id, d.document_number as source_document_number,
+               r.pay_schedule_id, sch.name as pay_schedule_name,
+               r.period_start::text as period_start, r.period_end::text as period_end,
+               r.pay_date::text as pay_date, r.tax_year
+          from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+          join pay_schedules sch on sch.id = r.pay_schedule_id and sch.org_id = r.org_id
+          join employee_payroll_profiles prof
+            on prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+           and prof.is_active
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+         where r.org_id = ${input.orgId}
+           and r.run_status = 'committed'
+           and r.run_type = 'regular'
+           and r.tax_year = ${input.taxYear}
+           and (sch.subsidiary_id is null or p.subsidiary_id = sch.subsidiary_id)
+           and (er.hired_on is null or er.hired_on <= r.period_end)
+           and (er.terminated_on is null or er.terminated_on >= r.period_start)
+           and not exists (
+             select 1 from pay_stubs s
+              where s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+                and s.employee_party_id = p.id)
+           ${scheduleFilter}
+           ${omittedEmployeeFilter}
+           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
+      ) s2
+  `));
+
   const candidates: RetroCandidate[] = [];
-  for (const row of rows.rows) {
+  for (const row of [...rows.rows.map((row) => ({ ...row, omitted_detail: null as string | null })), ...omitted.rows]) {
     const reasons: RetroReason[] = [];
+    if (row.omitted_detail) {
+      reasons.push({ source: "omitted_from_run", detail: row.omitted_detail });
+    }
     if (row.wage_detail) {
       reasons.push({ source: "wage_rate", detail: row.wage_detail });
     }
@@ -201,6 +280,10 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
       reasons,
     });
   }
+  // The stub-anchored rows arrive ordered and the omitted rows are appended
+  // after them; restore the one ordering the review relies on.
+  candidates.sort((a, b) =>
+    a.employeeName.localeCompare(b.employeeName) || (a.periodEnd < b.periodEnd ? -1 : a.periodEnd > b.periodEnd ? 1 : 0));
   return candidates;
 }
 

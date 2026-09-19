@@ -53,7 +53,14 @@ export type RetroTriggerSource =
   /** employee_pay_components — a backdated allowance/deduction assignment. */
   | "pay_component"
   /** Approved hours inside a paid period that no pay run ever claimed. */
-  | "unclaimed_time";
+  | "unclaimed_time"
+  /**
+   * No stub at all on a committed REGULAR run the employee was employed
+   * during — hired after it posted, or missed from it. The operator asks "is
+   * anyone owed for this period?", and only this trigger answers it: every
+   * other trigger starts from a stub that exists.
+   */
+  | "omitted_from_run";
 
 export interface RetroReason {
   source: RetroTriggerSource;

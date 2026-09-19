@@ -15,7 +15,7 @@ import { useMoney } from '../../../../components/money-provider'
 /* ------------------------------------------------------------------ */
 
 interface RetroReason {
-  source: 'wage_rate' | 'pay_component' | 'unclaimed_time'
+  source: 'wage_rate' | 'pay_component' | 'unclaimed_time' | 'omitted_from_run'
   detail: string
 }
 
@@ -167,6 +167,7 @@ export function RetroWorkspace({
       wage_rate: 'Backdated wage',
       pay_component: 'Backdated pay component',
       unclaimed_time: 'Hours never paid',
+      omitted_from_run: 'Never paid for this period',
     }[source])
 
   const columns: PagedColumn<RetroPeriod>[] = [
