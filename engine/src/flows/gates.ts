@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../db.ts";
+import { db, schema, withOrg, withBypassContext, withOrgContext } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -50,6 +50,25 @@ export function gateSubsidiaryScopeAllows(
 }
 
 export class GateError extends Error {}
+
+/**
+ * A release failure: the adapter threw while releasing the subject, so the
+ * WHOLE decide transaction (gate flip, audit evidence, notifications, branch
+ * effects, run status) rolls back and the decision is NOT recorded — the gate
+ * stays pending and the same decision can be retried. Thrown (not returned)
+ * precisely so the ambient withOrg transaction cannot commit partials; the
+ * message carries the cause and the remedy for every caller.
+ */
+export class ReleaseError extends GateError {
+  constructor(decision: "approved" | "rejected", cause: string) {
+    super(
+      `approval release failed: ${cause}. ` +
+        `The decision to ${decision === "approved" ? "approve" : "reject"} was not recorded ` +
+        `and the approval is still pending — retry your decision.`,
+    );
+    this.name = "ReleaseError";
+  }
+}
 
 /** Roles that may act on any gate in the org (matches web admin semantics). */
 const GATE_ADMIN_ROLE = "admin";
@@ -197,8 +216,10 @@ function decidedBranchError(args: {
 /**
  * Record a decided-but-incomplete branch: mark the run failed with the raw
  * cause (operator-visible on the run row) and return the refusal the caller
- * must surface. The gate decision and its audit evidence stay committed;
- * release partials were already rolled back to their savepoint by the caller.
+ * must surface. The gate decision and its audit evidence stay committed.
+ * Only for failures where recording is correct (missing flow/adapter/graph,
+ * missing subject, branch-execution failure) — never for release failures,
+ * which throw ReleaseError and roll the decision back.
  */
 async function refuseDecidedBranch(args: {
   runId: string;
@@ -234,10 +255,15 @@ export interface DecideGateSuccess {
 /**
  * A RECORDED decision whose branch did not complete — the refusal propagated
  * to the caller instead of resolving to success. The gate flip and its audit
- * evidence are committed (decisionRecorded), the run is marked failed, and
- * any partial release effects were rolled back to their savepoint. Callers
- * must treat this as a failure and surface `error` (it names the failed run
- * and its retry path) — never render it as an approval.
+ * evidence are committed (decisionRecorded), and the run is marked failed
+ * with the raw cause. This covers branch-execution failures only; a release
+ * failure instead throws ReleaseError and rolls the whole decision back
+ * (see above). Partial guarantee, stated precisely: branch actions that
+ * completed before the failure stay committed (their effect checkpoints
+ * stand, so a retry resumes from the failed node instead of double-firing);
+ * only the failed effect's own partials rolled back via its savepoint.
+ * Callers must treat this as a failure and surface `error` (it names the
+ * failed run and its retry path) — never render it as an approval.
  */
 export interface DecideGateFailure {
   ok: false;
@@ -462,10 +488,14 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     // This makes an authored post_document action consume an APPROVED record;
     // the action can never use its flow context to bypass lifecycle controls.
     //
-    // The release runs in its own savepoint: an adapter that writes and then
-    // throws rolls its partial effects back while the recorded gate decision,
-    // its audit evidence, and the failed run persist — the refusal below names
-    // the failed run and its retry path instead of resolving to success.
+    // A release throw propagates out of the ambient withOrg transaction: the
+    // gate flip, audit evidence, notifications, and any partial adapter
+    // writes roll back together (a write-before-throw adapter leaves nothing
+    // committed), the gate stays pending, and the caller gets a ReleaseError
+    // stating the decision was NOT recorded. Retrying the failed RUN would be
+    // wrong here — its gate checkpoint is already stamped, so a re-drive
+    // would skip release and complete vacuously — the truthful remedy is
+    // retrying the DECISION.
     const release = adapter.releaseApproval;
     let releasedBeforeActions = false;
     if (
@@ -475,21 +505,12 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
       (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
     ) {
       try {
-        await withTransactionSavepoint(db, () =>
-          release(gate.subjectId, "approved", ctx, {
-            comment: args.comment?.trim() || null,
-          }),
-        );
+        await release(gate.subjectId, "approved", ctx, {
+          comment: args.comment?.trim() || null,
+        });
         releasedBeforeActions = true;
       } catch (e) {
-        return refuseDecidedBranch({
-          runId: gate.runId,
-          orgId: gate.orgId,
-          decision,
-          resumed: outcome.resume,
-          stage: "release",
-          cause: e instanceof Error ? e.message : String(e),
-        });
+        throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
       }
     }
 
@@ -521,31 +542,31 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     // a change_status node. Reject returns to draft and cancels every other
     // open gate for the subject; approve releases only once no gate remains
     // open across ALL runs (multi-step and multi-flow safe).
-    // The release unit (sibling cancels + the adapter release) runs in its own
-    // savepoint for the same reason as the pre-action release above: a
-    // write-before-throw adapter rolls its partial effects back while the
-    // recorded decision and its audit evidence persist. A failure here marks
-    // the run failed and returns the refusal — never a success.
+    // --- Engine-enforced release (deterministic, not author-dependent) -----
+    // (see the block comment above for the lifecycle rules). Like the
+    // pre-action release, a throw here propagates: the whole decision —
+    // including already-executed branch effects, whose checkpoints roll back
+    // so a retried decision re-fires them exactly once — is undone, the gate
+    // stays pending, and the caller gets a ReleaseError. It is deliberately
+    // NOT converted to hadFailure: committing a failed release is what
+    // stranded subjects with a success result.
     if (!hadFailure && release) {
       try {
-        await withTransactionSavepoint(db, async () => {
-          if (outcome.resume === "reject") {
-            await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
-            await release(gate.subjectId, "rejected", ctx, {
-              comment: args.comment?.trim() || null,
-            });
-          } else if (
-            !releasedBeforeActions &&
-            (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
-          ) {
-            await release(gate.subjectId, "approved", ctx, {
-              comment: args.comment?.trim() || null,
-            });
-          }
-        });
+        if (outcome.resume === "reject") {
+          await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
+          await release(gate.subjectId, "rejected", ctx, {
+            comment: args.comment?.trim() || null,
+          });
+        } else if (
+          !releasedBeforeActions &&
+          (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+        ) {
+          await release(gate.subjectId, "approved", ctx, {
+            comment: args.comment?.trim() || null,
+          });
+        }
       } catch (e) {
-        hadFailure = true;
-        error = e instanceof Error ? e.message : String(e);
+        throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
       }
     }
 
@@ -657,23 +678,30 @@ async function notifySubmitterOfDecision(args: {
   });
 
   try {
-    const [{ enqueueEmail }, { flowNotificationEmail }] = await Promise.all([
-      import("@openbooks/jobs"),
-      import("@openbooks/emails"),
-    ]);
+    const { enqueueFlowEmail } = await import("../scheduler-outbox.ts");
+    const { flowNotificationEmail } = await import("@openbooks/emails");
     const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, gate.orgId));
     const mail = flowNotificationEmail({
       orgName: org?.name ?? "OpenBooks",
       subject: title,
       body: reasonLine ? `${title}\n\n${reasonLine}` : title,
     });
-    await enqueueEmail({
+    // Deferred through the durable outbox, NOT direct-to-Redis: the row rides
+    // this decide transaction, so a rolled-back decision (release failure)
+    // sends nothing — the submitter can never receive an "approved" email for
+    // a decision that was never recorded. The occurrence key is bound to the
+    // gate row, so a retried decision collapses onto one send.
+    await enqueueFlowEmail({
       orgId: gate.orgId,
-      to: submitter.email,
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      meta: { category: "approvals" },
+      runId: gate.runId,
+      occurrenceKey: `${gate.runId}:decision-notify:${gate.id}`,
+      payload: {
+        to: [submitter.email],
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        meta: { category: "approvals" },
+      },
     });
   } catch (e) {
     // In-app row already landed; a down queue only costs the email copy.

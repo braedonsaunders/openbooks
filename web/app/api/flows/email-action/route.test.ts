@@ -23,6 +23,7 @@ interface EmailActionState {
   decideResult:
     | { ok: true; resumed: string; runStatus: string }
     | { ok: false; decision: string; resumed: string; runId: string; runStatus: string; decisionRecorded: true; error: string };
+  decideThrow: string | null;
   decideCalls: Array<Record<string, unknown>>;
 }
 
@@ -45,6 +46,7 @@ const routeState: EmailActionState = {
     party_name: "Acme",
   },
   decideResult: { ok: true, resumed: "approve", runStatus: "completed" },
+  decideThrow: null,
   decideCalls: [],
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
@@ -72,6 +74,7 @@ const mockSources = new Map<string, string>([
       }
       export async function decideGate(args) {
         state.decideCalls.push(args)
+        if (state.decideThrow) throw new GateError(state.decideThrow)
         return state.decideResult
       }
     `,
@@ -118,6 +121,7 @@ function reset(): void {
   };
   routeState.summary.status = "pending";
   routeState.decideResult = { ok: true, resumed: "approve", runStatus: "completed" };
+  routeState.decideThrow = null;
   routeState.decideCalls.length = 0;
 }
 
@@ -166,6 +170,24 @@ test("a recorded-but-incomplete one-click decision never renders as Approved", a
   assert.ok(html.includes("was recorded"), "the page admits the decision was recorded");
   assert.ok(html.includes("boom"), "the refusal cause reaches the approver");
   assert.ok(html.includes("Approvals"), "the page points at the retry path");
+  assert.ok(
+    !html.includes("Your decision was recorded. You can close this page."),
+    "success copy must not render for a refusal",
+  );
+});
+
+test("a thrown release failure renders as not-recorded, never as Approved", async () => {
+  reset();
+  routeState.decideThrow =
+    "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
+
+  const res = await POST(postForm(routeState.token));
+
+  assert.equal(res.status, 409);
+  const html = await res.text();
+  assert.ok(html.includes("Could not record your decision"), "not-recorded page, not Approved");
+  assert.ok(html.includes("boom"), "the refusal cause reaches the approver");
+  assert.ok(html.includes("was not recorded"), "the page states nothing was recorded");
   assert.ok(
     !html.includes("Your decision was recorded. You can close this page."),
     "success copy must not render for a refusal",
