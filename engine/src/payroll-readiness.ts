@@ -1043,7 +1043,7 @@ export async function payRunStaleness(
   const rows = (await executor.execute<{
       calculated_at: Date | string | null; never_calculated: boolean;
       calculation_source_snapshot: unknown; calculation_source_digest: string | null;
-      adjustments_changed: boolean; time_changed: boolean;
+      adjustments_changed: boolean; assertions_changed: boolean; time_changed: boolean;
       wages_changed: boolean; schedule_changed: boolean; statutory_rates_changed: boolean;
       union_fringes_changed: boolean;
       roster_changed: boolean; employment_changed: boolean;
@@ -1058,6 +1058,15 @@ export async function payRunStaleness(
              select 1 from pay_run_adjustments a
               where a.org_id = r.org_id and a.pay_run_document_id = r.document_id
                 and a.updated_at > r.calculated_at) as adjustments_changed,
+           -- Holiday assertions are the same kind of fact: per-run inputs
+           -- filed after Calculate that the next pass reads fresh. Reported
+           -- under "adjustments" deliberately — a dedicated reason string
+           -- would touch all seven locales owned by the live hsf-translations
+           -- shard, and the banner's remedy is identical (recalculate).
+           exists (
+             select 1 from pay_run_holiday_assertions ha
+              where ha.org_id = r.org_id and ha.pay_run_document_id = r.document_id
+                and ha.updated_at > r.calculated_at) as assertions_changed,
            exists (
              select 1 from time_entries t
               where t.org_id = r.org_id and t.status = 'approved'
@@ -1309,7 +1318,7 @@ export async function payRunStaleness(
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed ? "adjustments" : null,
+    row.adjustments_changed || row.assertions_changed ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,

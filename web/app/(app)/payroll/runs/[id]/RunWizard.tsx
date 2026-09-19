@@ -37,6 +37,7 @@ import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
+import { HolidayAttestations } from './HolidayAttestations'
 import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
 import { decimalAbs, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
@@ -836,6 +837,8 @@ export function RunWizard(props: {
       )}
       {step === 'readiness' && (
         <ReadinessStep
+          runId={run.document_id}
+          roster={props.roster}
           readiness={props.readiness}
           canCalculate={canCalculate}
           calculated={calculated}
@@ -843,16 +846,20 @@ export function RunWizard(props: {
           dry={dry}
           onDryRun={dryRun}
           onCalculate={() => act('calculate')}
+          onAnswered={dryRun}
           fmt={fmt}
         />
       )}
       {step === 'review' && (
         <ReviewStep
+          runId={run.document_id}
+          roster={props.roster}
           stubs={props.stubs}
           adjustments={props.adjustments}
           components={props.adjustableComponents}
           canAdjust={props.canRun && docDraft && run.run_status !== 'committed'}
           onAdjust={adjust}
+          onAnswered={() => act('calculate')}
           previousNet={props.previousNet}
           changes={props.changes}
           calcErrors={calcErrors}
@@ -1237,6 +1244,8 @@ function PeriodStep({
  * can be checked before anything is written.
  */
 function ReadinessStep({
+  runId,
+  roster,
   readiness,
   canCalculate,
   calculated,
@@ -1244,8 +1253,11 @@ function ReadinessStep({
   dry,
   onDryRun,
   onCalculate,
+  onAnswered,
   fmt,
 }: {
+  runId: string
+  roster: RosterRow[]
   readiness: Readiness
   canCalculate: boolean
   calculated: boolean
@@ -1259,6 +1271,7 @@ function ReadinessStep({
   } | null
   onDryRun: () => void
   onCalculate: () => void
+  onAnswered: () => void
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
@@ -1377,6 +1390,15 @@ function ReadinessStep({
               ))}
             </ul>
           )}
+          {dry.errors.length > 0 && (
+            <HolidayAttestations
+              runId={runId}
+              errors={dry.errors}
+              roster={roster}
+              canAnswer={canCalculate}
+              onAnswered={onAnswered}
+            />
+          )}
           <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">{t('wizard.readiness.dryRunHint')}</p>
         </div>
       )}
@@ -1424,6 +1446,8 @@ function ReadinessStep({
 /* ------------------------------------------------------------------ */
 
 function ReviewStep({
+  runId,
+  roster,
   stubs,
   previousNet,
   changes,
@@ -1438,7 +1462,10 @@ function ReviewStep({
   components,
   canAdjust,
   onAdjust,
+  onAnswered,
 }: {
+  runId: string
+  roster: RosterRow[]
   stubs: StubRow[]
   previousNet: Record<string, string>
   changes: StubChange[]
@@ -1453,6 +1480,7 @@ function ReviewStep({
   components: ComponentOption[]
   canAdjust: boolean
   onAdjust: (body: Record<string, unknown>) => Promise<void>
+  onAnswered: () => void
 }) {
   const t = useTranslations('payroll')
   const [openStub, setOpenStub] = useState<StubRow | null>(null)
@@ -1544,6 +1572,13 @@ function ReviewStep({
               </li>
             ))}
           </ul>
+          <HolidayAttestations
+            runId={runId}
+            errors={calcErrors}
+            roster={roster}
+            canAnswer={canAdjust}
+            onAnswered={onAnswered}
+          />
         </div>
       )}
       {protectionShortfalls.length > 0 && (

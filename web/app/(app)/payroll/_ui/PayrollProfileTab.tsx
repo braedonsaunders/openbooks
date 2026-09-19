@@ -144,6 +144,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     filing_account_id: null,
     stub_delivery: 'email',
     payment_method: null,
+    // A new employment answers nothing until somebody does.
+    paid_on_commission: null,
     is_active: true,
   }
 

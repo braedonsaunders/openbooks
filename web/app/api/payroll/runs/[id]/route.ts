@@ -13,6 +13,7 @@ import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { canonicalAdjustmentHours, mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
+import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll-holiday-attestations.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -185,10 +186,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   try {
     if (body.action === 'calculate' || body.action === 'dry-run') {
+      // Stored attestation facts merge UNDER the per-request map: what the
+      // operator filed on the run (absence assertions) and on the employee
+      // (commission status) fills what this request omits. The request wins
+      // everywhere it answers, and an answer missing from both stays missing
+      // — the engine fails closed on it by name.
+      const mergedEligibility = await storedHolidayEligibilityForRun(db, {
+        orgId: gate.user.orgId, documentId: id,
+        perRequest: holidayEligibility ?? undefined,
+      })
       const result = await calculatePayRun({
         orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
         dryRun: body.action === 'dry-run',
-        holidayEligibility: holidayEligibility ?? undefined,
+        holidayEligibility: mergedEligibility,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, ...result })
