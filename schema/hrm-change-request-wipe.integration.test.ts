@@ -107,10 +107,16 @@ test("fixture teardown clears an organisation that holds a committed submitted r
     select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId}`)).rows[0]!.n;
   assert.equal(before, 1);
   await dropScratchOrgReporting(s.orgId);
+  // Under the pooled lifecycle the org row is a reusable slot that is reset and
+  // released, so the proof is that the org's HRM rows are gone — the exact
+  // state that pinned scratch orgs before 0188 — not that the org row vanished.
   const after = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows[0]!.n;
+    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId}`)).rows[0]!.n;
   assert.equal(after, 0, "teardown must remove the submitted request with the rest of the org");
-  const orgLeft = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from orgs where id = ${s.orgId}`)).rows[0]!.n;
-  assert.equal(orgLeft, 0, "the organisation itself is gone");
+  const runs = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_runs where org_id = ${s.orgId}`)).rows[0]!.n;
+  assert.equal(runs, 0, "the bound flow run is gone with it");
+  const employments = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from worker_employments where org_id = ${s.orgId}`)).rows[0]!.n;
+  assert.equal(employments, 0, "the 0184 rows are gone with it");
 });
