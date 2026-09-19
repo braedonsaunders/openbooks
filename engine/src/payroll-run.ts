@@ -340,6 +340,21 @@ async function ensureComponents(
   orgId: string, actorId: string | null, rows: readonly SeedComponent[],
 ): Promise<void> {
   for (const c of rows) {
+    // Conflict target is the component IDENTITY (org, country, system_key,
+    // kind), not the code. A conflict here is expected and benign: every pack
+    // install re-seeds the shared baseline (same NULL-country identity rows)
+    // and reinstalling a pack re-seeds its own set, so the second write must
+    // be absorbed, never fail. The old `on conflict (org_id, code)` target
+    // was idempotent on CODE while the constraint that fires is the SYSTEM
+    // KEY one — installing Japan after Canada 500d on
+    // pay_components_org_system (CA TAX vs JP GENSEN, both income_tax)
+    // instead of being absorbed. The WHERE predicate matches the partial
+    // index (0189, WHERE system_key IS NOT NULL): every seeded row carries a
+    // system key by type, so the arbiter covers exactly what this seeder can
+    // write. A caller that ever seeds a NULL-key row will fail LOUD here
+    // (no matching arbiter) rather than silently skipping — that is
+    // deliberate, per the on-conflict justification rule: silent skips are
+    // how one country's component absorbed another's.
     await executor.execute(sql`
       insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
                                   pensionable, insurable, vacationable, non_periodic, sequence,
@@ -348,7 +363,7 @@ async function ensureComponents(
               ${c.basis ?? "fixed_amount"},
               ${c.taxable ?? true}, ${c.pensionable ?? true}, ${c.insurable ?? true},
               ${c.vacationable ?? true}, ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
-      on conflict (org_id, code) do nothing
+      on conflict (org_id, country, system_key, kind) where system_key is not null do nothing
     `);
   }
 }
@@ -2292,8 +2307,15 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const components = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
     `));
+    // Country-scoped resolution (0189): two packs may each own one
+    // `system_key` (CA and JP both declare income_tax), so the run resolves
+    // only its own pack's rows plus the shared NULL-country baseline. Without
+    // this the map below is last-wins across packs and a run can price
+    // against another country's component. A key this run's pack does not
+    // declare fails closed in `need` ("seed payroll components first").
     const byKey = new Map<string, Record<string, unknown>>();
     for (const c of components.rows) {
+      if (c.country != null && c.country !== runContext.country) continue;
       if (c.system_key) byKey.set(`${c.system_key}:${c.kind}`, c);
     }
     const need = (systemKey: string, kind: string) => {
