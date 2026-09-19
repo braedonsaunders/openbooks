@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { cn, Input, Label, Select } from '@openbooks/ui'
 import { WizardShell } from '../wizard/WizardShell'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
  * Payroll onboarding wizard — the module's first-run flow, composed on the
