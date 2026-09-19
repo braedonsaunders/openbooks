@@ -108,7 +108,7 @@ interface RemitGroup {
 
 interface Ctx {
   baseURL: string;
-  rootSub: string;
+  parentSub: string;
   subUS: string;
   caSub: string;
   schedCA: string;
@@ -507,30 +507,51 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           ),
           "id",
         );
-      // Root discovery first: no list API exposes the root subsidiary id,
-      // which parents both legal entities. Mint one run from a throwaway
-      // org-wide schedule and read it back. The empty draft is abandoned —
+      // A subsidiary to parent this attempt's legal entities under. A new
+      // subsidiary always needs a parent id — no list API exposes one — so
+      // on a fresh tenant mint one run from a throwaway org-wide schedule
+      // and read the root back off it. The empty draft is abandoned —
       // numbering is never pinned exactly, only /^PAY-/.
-      const schedDiscovery = field(
-        ok(
-          await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
-            name: `${TAG} Biweekly Discovery`,
-            frequency: "biweekly",
-            periodsPerYear: 26,
-            anchorPeriodEnd: "2026-01-02",
-            payDateOffsetDays: 3,
-            isActive: true,
-          }),
-          "discovery schedule",
-        ),
-        "id",
-      );
-      const discoveryId = field(
-        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: schedDiscovery }), "mint discovery run"),
-        "documentId",
-      );
-      const discovery = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${discoveryId}`), "read discovery run");
-      ctx.rootSub = String((discovery["run"] as Record<string, unknown>)["subsidiaryId"]);
+      // On a shared tenant (a Playwright retry lands where the previous
+      // attempt left extra entities) the org-wide schedule is rightly
+      // refused — a schedule with no subsidiary must name its payer there —
+      // so parent under a previous attempt's entity instead, read off the
+      // already-fetched filing accounts. Either way the suite scopes to an
+      // entity it owns rather than depending on what the shared tenant
+      // accumulated.
+      const discoveryAttempt = await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
+        name: `${TAG} Biweekly Discovery`,
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-01-02",
+        payDateOffsetDays: 3,
+        isActive: true,
+      });
+      if (discoveryAttempt.status === 400) {
+        const problem = String((discoveryAttempt.json as Record<string, unknown> | null)?.error ?? "");
+        if (!/subsidiary/i.test(problem)) {
+          throw new Error(`discovery schedule → HTTP 400: ${problem.slice(0, 300)}`);
+        }
+        const inherited = existingFilings
+          .map((candidate) => candidate.subsidiaryId)
+          .find((id): id is string => typeof id === "string" && id !== "");
+        if (!inherited) {
+          throw new Error(
+            "payroll e2e needs a parent subsidiary: the shared tenant has more than one legal entity "
+            + "(so the org-wide discovery schedule is refused) and no filing account names an existing one. "
+            + "Re-run against a fresh tenant.",
+          );
+        }
+        ctx.parentSub = inherited;
+      } else {
+        const schedDiscovery = field(ok(discoveryAttempt, "discovery schedule"), "id");
+        const discoveryId = field(
+          ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: schedDiscovery }), "mint discovery run"),
+          "documentId",
+        );
+        const discovery = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${discoveryId}`), "read discovery run");
+        ctx.parentSub = String((discovery["run"] as Record<string, unknown>)["subsidiaryId"]);
+      }
       // US legal entity + schedule under it.
       ctx.subUS = field(
         ok(
@@ -538,7 +559,7 @@ test.describe.serial("payroll run to remittance to year-end", () => {
             name: `${TAG} US Employer`,
             baseCurrency: "USD",
             country: "US",
-            parentId: ctx.rootSub,
+            parentId: ctx.parentSub,
             isActive: true,
           }),
           "US subsidiary",
@@ -555,7 +576,7 @@ test.describe.serial("payroll run to remittance to year-end", () => {
             name: `${TAG} CA Employer`,
             baseCurrency: "CAD",
             country: "CA",
-            parentId: ctx.rootSub,
+            parentId: ctx.parentSub,
             isActive: true,
           }),
           "CA subsidiary",
