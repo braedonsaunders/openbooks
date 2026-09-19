@@ -21,6 +21,7 @@ interface StubRow {
 
 const state = {
   ytdQuery: '',
+  ytdValues: [] as unknown[],
   stub: {
     id: 'stub-us-1',
     employee_party_id: 'employee-1',
@@ -39,9 +40,17 @@ const state = {
   } satisfies StubRow,
 }
 
+const flattenValues = (values: unknown[]): unknown[] =>
+  values.flatMap((v) =>
+    v !== null && typeof v === 'object' && 'values' in (v as Record<string, unknown>)
+      ? flattenValues((v as { values: unknown[] }).values ?? [])
+      : [v],
+  )
+
 const harness = {
-  async execute(query: { text?: string }) {
+  async execute(query: { text?: string; values?: unknown[] }) {
     const text = String(query.text ?? '')
+    state.ytdValues = flattenValues(query.values ?? [])
     if (text.includes('select s.*, r.period_start')) {
       return { rows: [state.stub] }
     }
@@ -77,6 +86,21 @@ const mockSources = new Map<string, string>([
     `
       export function sql(strings, ...values) {
         return { text: strings.join('?'), values }
+      }
+      sql.join = (parts, sep) => ({
+        text: parts.map((p) => (p && p.text) ?? '?').join((sep && sep.text) ?? ','),
+        values: parts.flatMap((p) => (p && p.values) ?? [p]),
+      })
+    `,
+  ],
+  [
+    'mock:packs',
+    `
+      // The registry derivation, stood in: the old five keys plus one novel
+      // pack key. The assertions below prove values.ts interpolates THIS
+      // list — a literal in values.ts could never produce payg_withholding.
+      export function incomeTaxWithholdingSystemKeys() {
+        return ['fit', 'income_tax', 'local_income_tax', 'payg_withholding', 'qc_income_tax', 'state_income_tax']
       }
     `,
   ],
@@ -150,6 +174,7 @@ registerHooks({
       'server-only': 'mock:server-only',
       'drizzle-orm': 'mock:drizzle-orm',
       '@openbooks/engine/src/db.ts': 'mock:db',
+      '@openbooks/engine/src/payroll/packs.ts': 'mock:packs',
       '@openbooks/engine/src/business-date.ts': 'mock:business-date',
       '@openbooks/engine/src/money.ts': 'mock:money',
       '@openbooks/engine/src/payroll-cheques.ts': 'mock:payroll-cheques',
@@ -176,12 +201,16 @@ test('US pay-stub YTD income tax aggregates persisted income-tax lines and prese
   const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id)
 
   assert.ok(record)
-  // The closed, schema-enumerated income-tax system keys — no factor names.
+  // The YTD subquery joins the persisted lines and binds the registry-derived
+  // component set — never a literal key list, never factor names.
   assert.match(state.ytdQuery, /pay_stub_lines/)
-  assert.match(state.ytdQuery, /income_tax/)
-  assert.match(state.ytdQuery, /qc_income_tax/)
-  assert.match(state.ytdQuery, /state_income_tax/)
-  assert.match(state.ytdQuery, /local_income_tax/)
+  assert.match(state.ytdQuery, /system_key/)
+  for (const key of ['fit', 'income_tax', 'qc_income_tax', 'state_income_tax', 'local_income_tax']) {
+    assert.ok(state.ytdValues.includes(key), `YTD tax counts ${key}`)
+  }
+  // payg_withholding comes from the derivation mock, not from any literal in
+  // values.ts: its presence proves the query interpolates the helper's list.
+  assert.ok(state.ytdValues.includes('payg_withholding'), 'YTD tax counts the derived pack key')
   assert.doesNotMatch(state.ytdQuery, /factors->>/)
   assert.equal(record.values.ytd_tax, '$312.31')
   assert.equal(record.values.ytd_gross, '$4,000.00')

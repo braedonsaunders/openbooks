@@ -1233,6 +1233,54 @@ export function packStatutoryComponents(country: string): readonly PayrollStatut
   return payrollPack(country).statutorySlots.flatMap((slot) => slot.components);
 }
 
+/**
+ * System keys of every statutory component that is an INCOME-TAX withholding,
+ * derived from the pack declarations — never a hand-maintained key list.
+ *
+ * The predicate is `kind === "deduction"` and `assessedOn === "taxable_income"`,
+ * and each half is load-bearing:
+ *
+ * - `deduction` (not `employer_contribution`, not `credit`) keeps the figure
+ *   to amounts withheld from the employee's pay. The Italian refundable
+ *   credits (`ti_payout`, `somma_payout`) ride `remittance: "tax_authority"`
+ *   but they INCREASE net — counting them as tax withheld would understate it.
+ * - `taxable_income` (not `earnings`) keeps employee social contributions OUT.
+ *   CPP/EI/QPIP, PRSI, USC, NIC, ZUS, INPS, the French cotisations — every one
+ *   is a deduction remitted to an authority, but none is income tax, and a
+ *   payslip's "YTD tax" conventionally means income tax withheld. Counting
+ *   them would overstate the figure, the mirror image of the defect below.
+ * - `remittance` is DELIBERATELY not part of the predicate. Québec income tax
+ *   and US state/local income tax remit to a per-component destination
+ *   (`external`: Revenu Québec, the state agency) rather than the pack's
+ *   statutory vendor — filtering on `tax_authority` would silently drop them
+ *   and reintroduce this defect for Québec and every US state.
+ *
+ * What this INCLUDES is then a judgement the declarations already made: the
+ * Dutch loonheffing counts whole (wage tax and national-insurance premiums
+ * arrive on one line and cannot be split downstream — excluding it prints a
+ * false 0.00, which is the defect), and both Italian addizionali count (they
+ * are income taxes on the same base; the old list counted IRPEF alone and
+ * understated every Italian payslip).
+ *
+ * A new pack is covered on the day it registers: its income-tax components
+ * are `taxable_income`-assessed deductions by construction (the fixpoint
+ * needs that declaration to re-derive them), so they land in this set with
+ * no generic-layer edit. The payslip YTD subquery
+ * (web/lib/pdf-templates/values.ts) is the consumer; it once carried a
+ * five-key CA/US literal here and printed YTD tax 0.00 for nine packs.
+ */
+export function incomeTaxWithholdingSystemKeys(): readonly string[] {
+  const keys = new Set<string>();
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    for (const component of packStatutoryComponents(pack.country)) {
+      if (component.kind === "deduction" && component.assessedOn === "taxable_income") {
+        keys.add(component.systemKey);
+      }
+    }
+  }
+  return [...keys].sort();
+}
+
 // ---------------------------------------------------------------------------
 // The jurisdiction chain, resolved ONCE
 // ---------------------------------------------------------------------------

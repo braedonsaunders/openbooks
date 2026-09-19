@@ -14,7 +14,7 @@ const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } = await import('@openbooks/engine/src/payroll-run.ts')
-const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
+const { setPackSlotAccount, incomeTaxWithholdingSystemKeys } = await import('@openbooks/engine/src/payroll/packs.ts')
 const { completeRequestedDocumentVoid, requestDocumentVoid } = await import('@openbooks/engine/src/document-void.ts')
 const { loadPdfRecordValues } = await import('./values')
 
@@ -34,8 +34,20 @@ async function account(orgId: string, number: string, name: string, type: string
   return id
 }
 
-/** Committed-scope YTD oracle straight from the persisted stubs + lines. */
+/**
+ * Committed-scope YTD oracle straight from the persisted stubs + lines. Its
+ * component set is the same registry derivation the product query binds, so
+ * the two cannot drift: a pack the derivation counts, the oracle counts.
+ */
+function incomeTaxKeyList() {
+  return sql.join(
+    incomeTaxWithholdingSystemKeys().map((key) => sql`${key}`),
+    sql`, `,
+  )
+}
+
 async function ytdOracle(orgId: string, employeeId: string, taxYear: number, payDate: string, currency: string) {
+  const keys = incomeTaxKeyList()
   const r = (await withOrgContext(orgId, () => db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0)::text as gross, coalesce(sum(s.net_pay), 0)::text as net,
            coalesce(sum(income_tax_lines.tax), 0)::text as tax
@@ -47,7 +59,7 @@ async function ytdOracle(orgId: string, employeeId: string, taxYear: number, pay
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id and c.org_id = l.org_id
          where l.org_id = s.org_id and l.stub_id = s.id
-           and c.system_key in ('income_tax', 'qc_income_tax', 'fit', 'state_income_tax', 'local_income_tax')
+           and c.system_key in (${keys})
       ) income_tax_lines on true
      where s.org_id = ${orgId} and s.employee_party_id = ${employeeId}
        and s.tax_year = ${taxYear} and s.pay_date <= ${payDate}
@@ -57,11 +69,12 @@ async function ytdOracle(orgId: string, employeeId: string, taxYear: number, pay
 }
 
 async function incomeTaxLines(orgId: string, stubId: string) {
+  const keys = incomeTaxKeyList()
   const r = (await withOrgContext(orgId, () => db.execute<{ system_key: string; amount: string }>(sql`
     select c.system_key, l.amount::text as amount
       from pay_stub_lines l join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id = ${stubId}
-       and c.system_key in ('income_tax', 'qc_income_tax', 'fit', 'state_income_tax', 'local_income_tax')
+       and c.system_key in (${keys})
   `)))
   return r.rows
 }

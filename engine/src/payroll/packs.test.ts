@@ -8,6 +8,7 @@ import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
   employmentJurisdictionsOf,
+  incomeTaxWithholdingSystemKeys,
   jurisdictionKey,
   labourJurisdictionProblem,
   packStatutoryComponents,
@@ -119,6 +120,51 @@ test("an undeclared levy stops the run rather than defaulting to a class", () =>
   );
   // GB is a registered pack now, so the undeclared-country probe uses "XX".
   assert.throws(() => packStatutoryComponents("XX"), PayrollPackError);
+});
+
+test("the YTD income-tax key set derives from the pack declarations", () => {
+  // The payslip YTD subquery counts exactly this set. It once carried a
+  // five-key CA/US literal and printed YTD tax 0.00 for nine packs, so this
+  // pins the derivation's CONTENT: every pack's income-tax withholding is
+  // present, and nothing that merely looks like a payroll tax is.
+  assert.deepEqual(incomeTaxWithholdingSystemKeys(), [
+    "fit", "ie_paye", "income_tax", "irpf", "irrf", "kirchenlohnsteuer",
+    "local_income_tax", "lohnsteuer", "loonheffing", "municipal_surtax",
+    "pas", "paye", "payg_withholding", "pit", "qc_income_tax",
+    "regional_surtax", "solidaritaetszuschlag", "state_income_tax",
+  ]);
+  // Employee social contributions are deductions remitted to an authority but
+  // they are not income tax: CPP/EI/QPIP, NIC, PRSI, USC, ZUS, INPS, the
+  // French cotisations, the German Sozialversicherung, Japan's pension and
+  // health, Spain's Seguridad Social, Brazil's INSS, Singapore's CPF, and US
+  // Social Security / Medicare. Counting any of them overstates YTD tax.
+  for (const key of [
+    "cpp", "cpp2", "ei", "qpip", "nic", "prsi", "usc",
+    "zus_emeryt", "zus_rent", "zus_chor", "zus_zdr", "inps",
+    "vieillesse", "csg", "crds", "arrco", "ceg", "cet",
+    "kv", "rv", "av", "pv", "pension", "health",
+    "ss_cc", "ss_des", "ss_for", "ss_mei", "inss", "cpf_ee",
+    "ss", "medicare", "medicare_addl",
+  ]) {
+    assert.ok(!incomeTaxWithholdingSystemKeys().includes(key), `${key} is not income tax`);
+  }
+  // Refundable credits increase net rather than withholding it, and employer
+  // shares never leave the employee's pay — neither counts as tax withheld.
+  for (const key of ["ti_payout", "somma_payout", "wcb", "suta", "futa", "hsf", "sdl"]) {
+    assert.ok(!incomeTaxWithholdingSystemKeys().includes(key), `${key} is not withheld income tax`);
+  }
+  // Round trip: every returned key resolves to a deduction assessed on
+  // taxable income in at least one registered pack — the set carries no
+  // stray key no pack declares.
+  for (const key of incomeTaxWithholdingSystemKeys()) {
+    const owners = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
+      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+    assert.ok(owners.length > 0, `${key} is declared by no pack`);
+    for (const owner of owners) {
+      assert.equal(owner.kind, "deduction", key);
+      assert.equal(owner.assessedOn, "taxable_income", key);
+    }
+  }
 });
 
 test("a pack's component codes are unique, so a slot account cannot be ambiguous", () => {
