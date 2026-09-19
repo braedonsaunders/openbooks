@@ -217,6 +217,7 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
     );
     assert.equal(report.totals.migrated, 2);
     assert.equal(report.totals.refused, 0);
+    assert.equal(report.persons.length, 2);
     assert.deepEqual(await tableCounts(org.orgId), {
       employments: 2,
       versions: 2,
