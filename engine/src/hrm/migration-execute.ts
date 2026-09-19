@@ -336,7 +336,7 @@ type EvidenceRow = {
 };
 
 function bindingKey(sourceNamespace: string, sourceId: string): string {
-  return `${sourceNamespace} ${sourceId}`;
+  return JSON.stringify([sourceNamespace, sourceId]);
 }
 
 /** Digest lookup keyed by the full person identity the classifier reports. */
@@ -346,7 +346,7 @@ function personKey(
   sourceId: string,
   nativePartyId: string,
 ): string {
-  return `${orgId} ${sourceNamespace} ${sourceId} ${nativePartyId}`;
+  return JSON.stringify([orgId, sourceNamespace, sourceId, nativePartyId]);
 }
 
 /**
@@ -736,14 +736,14 @@ export async function executeEmploymentMigration(
                       'system', ${ref})
               returning id::text as id`,
         );
-        written.set(`${person.sourceNamespace} ${person.sourceId}`, employment.id);
+        written.set(bindingKey(person.sourceNamespace, person.sourceId), employment.id);
       }
       const completed: PersonMigrationResult[] = persons.map((person) =>
         person.outcome === "migrated"
           ? {
               ...person,
               employmentId:
-                written.get(`${person.sourceNamespace} ${person.sourceId}`) ?? null,
+                written.get(bindingKey(person.sourceNamespace, person.sourceId)) ?? null,
             }
           : person,
       );
