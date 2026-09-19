@@ -1,0 +1,211 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+import type { Authz } from "../authz";
+import type { SessionUser } from "../auth";
+
+// Same module-graph shim as tool-schema-lint: the tool module is
+// server-only and transitively imports the `@/` alias; the engine imports
+// resolve through tsx with TSX_TSCONFIG_PATH=web/tsconfig.json (as the
+// suite runner sets it).
+const root = pathToFileURL(process.cwd() + "/").href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export {}",
+      };
+    }
+    if (specifier.startsWith("@/")) {
+      const path = root + "web/" + specifier.slice(2);
+      for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+        if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context);
+      }
+      return nextResolve(path, context);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
+const { canRunTool } = await import("./gate.ts");
+const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
+const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
+
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const tools = read("./tools-hrm.ts");
+
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests"];
+
+const UUID = "11111111-1111-4111-8111-111111111111";
+
+test("the module exports exactly the three HRM read tools", () => {
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
+});
+
+for (const name of TOOL_NAMES) {
+  test(`${name} carries the slice gate: hrm.employment.read, hrm feature, module tier`, () => {
+    const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["hrm.employment.read"] });
+    assert.equal(tool.feature, "hrm");
+    assert.equal(tool.tier, "module");
+    assert.ok(
+      tool.category === "read" || tool.category === "search",
+      `${name} must be read-only in the authoring sense (authoring stays human-attested, no write tools)`,
+    );
+    assert.ok(
+      tool.description.length > 0 && tool.description.length <= 220,
+      `${name} description is ${tool.description.length} chars (slice ceiling is 220)`,
+    );
+    assert.match(tool.description, /Read-only\.$/);
+  });
+}
+
+test("minimal valid inputs parse; addressing is runtime-enforced with stable codes", () => {
+  // Schemas stay all-optional on purpose: a half-addressed call returns a
+  // stable tool error (employment_or_party_required, invalid_period, …)
+  // instead of a provider-level validation failure. The runtime refusals are
+  // pinned by the integration test; here only genuinely invalid values throw.
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  byName.get("hrm_headcount")!.inputSchema.parse({});
+  byName.get("hrm_headcount")!.inputSchema.parse({ asOf: "2026-06-15" });
+  byName.get("hrm_headcount")!.inputSchema.parse({ period: "this_fiscal_year_to_date" });
+  assert.throws(() => byName.get("hrm_headcount")!.inputSchema.parse({ period: "last Tuesday" }));
+  assert.throws(() => byName.get("hrm_headcount")!.inputSchema.parse({ asOf: "tomorrow" }));
+  byName.get("hrm_employment_as_of")!.inputSchema.parse({});
+  byName.get("hrm_employment_as_of")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("hrm_employment_as_of")!.inputSchema.parse({ partyId: UUID, asOf: "2026-06-15" });
+  assert.throws(() => byName.get("hrm_employment_as_of")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() => byName.get("hrm_employment_as_of")!.inputSchema.parse({ asOf: "2026-6-5" }));
+  byName.get("hrm_change_requests")!.inputSchema.parse({});
+  byName.get("hrm_change_requests")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("hrm_change_requests")!.inputSchema.parse({ status: "approved", limit: 10 });
+  assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ status: "posted_draft" }));
+  assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ limit: 0 }));
+});
+
+// Every tool reuses the canonical read loaders the Employment tab reads
+// through — never a parallel SQL path to versions or requests.
+test("HRM reads reuse the employment read service", () => {
+  for (const service of [
+    "getHeadcountAsOf(",
+    "getEmploymentAsOf(",
+    "findEmploymentsByParty(",
+    "loadEmploymentChangeRequests(",
+    "resolveToolRange(",
+    "AmbiguousRevisionError(",
+    "hrmRefusal(",
+  ]) {
+    assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
+  }
+});
+
+test("no parallel SQL path to versions or requests and no writes", () => {
+  assert.doesNotMatch(tools, /from worker_employment_versions/);
+  assert.doesNotMatch(tools, /from employment_assignment_versions/);
+  assert.doesNotMatch(tools, /from hrm_employment_change_requests/);
+  assert.doesNotMatch(tools, /into worker_/);
+  assert.doesNotMatch(tools, /update worker_/);
+  assert.doesNotMatch(tools, /into hrm_/);
+  assert.doesNotMatch(tools, /update hrm_/);
+  assert.doesNotMatch(tools, /delete from/);
+  // The one SQL here enumerates stable employment identities for the
+  // org-wide request list — scoped, capped, versions never selected.
+  assert.match(tools, /from worker_employments/);
+  assert.match(tools, /employer_subsidiary_id is not null/);
+  assert.match(tools, /subsidiaryVisibleFilter\(sql`employer_subsidiary_id`, allowedSubsidiaryIds\)/);
+  assert.match(tools, /visibleEmploymentIds\(authz\.user\.orgId, authz\.allowedSubsidiaryIds/);
+});
+
+test("feature gate and refusal mapping", () => {
+  assert.match(tools, /isFeatureEnabled\(orgId, "hrm"\)/);
+  assert.match(tools, /hrm_feature_disabled/);
+  assert.match(tools, /employment_or_party_required/);
+});
+
+// A computed refusal must reach the caller with its message intact; anything
+// else stays private by rethrowing into executeAssistantTool's tool_failed.
+test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
+  assert.deepEqual(hrmRefusal(new EmploymentReadError("gate is off: enable it first")), {
+    ok: false,
+    error: "gate is off: enable it first",
+  });
+  assert.deepEqual(
+    hrmRefusal(new HrmAuthorizationError("Employment is not visible in this organization and legal-entity scope.")),
+    { ok: false, error: "Employment is not visible in this organization and legal-entity scope." },
+  );
+  const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
+  const mapped = hrmRefusal(missing);
+  assert.equal(mapped.ok, false);
+  assert.equal(mapped.ok === false && mapped.error, missing.message);
+  const ambiguous = new AmbiguousRevisionError("2 employments are visible");
+  const mappedAmbiguous = hrmRefusal(ambiguous);
+  assert.equal(mappedAmbiguous.ok, false);
+  assert.equal(mappedAmbiguous.ok === false && mappedAmbiguous.error, ambiguous.message);
+  assert.throws(() => hrmRefusal(new Error("SELECT * FROM secrets")), /SELECT/);
+});
+
+function fakeAuthz(permissions: string[]): Authz {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const user: SessionUser = {
+    id: userId,
+    orgId: "00000000-0000-4000-8000-000000000002",
+    name: "HRM gate prober",
+    email: "hrm-gate@scratch.test",
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: "00000000-0000-4000-8000-000000000002",
+    homeOrgId: "00000000-0000-4000-8000-000000000002",
+    homeUserId: userId,
+  };
+  return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
+}
+
+test("the registry gate admits only hrm.employment.read holders while hrm is on", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  const reader = fakeAuthz(["assistant.use", "hrm.employment.read"]);
+  for (const name of TOOL_NAMES) {
+    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
+    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
+    assert.equal(
+      canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, { hrm: true }),
+      false,
+      `${name} must refuse without hrm.employment.read`,
+    );
+    assert.equal(
+      canRunTool(fakeAuthz(["hrm.employment.read"]), byName.get(name)!, { hrm: true }),
+      false,
+      `${name} still requires assistant.use`,
+    );
+  }
+});
+
+test("registrations: registry spread, scrape lists, matrix entry, playbook, contract harness", () => {
+  const registry = read("./registry.ts");
+  assert.match(registry, /import \{ HRM_TOOLS \} from "\.\/tools-hrm"/);
+  assert.match(registry, /\.\.\.HRM_TOOLS,/);
+  const skillsTest = read("../mcp/skills.test.ts");
+  assert.match(skillsTest, /tools-hrm\.ts/);
+  const matrix = read("./coverage-matrix.test.ts");
+  assert.match(matrix, /"\.\/tools-hrm\.ts",/);
+  const entry = matrix.split("\n").find((line) => line.includes('prefix: "hrm"'));
+  assert.ok(entry, "coverage matrix needs an hrm entry");
+  for (const name of TOOL_NAMES) {
+    assert.ok(entry.includes(`"${name}"`), `matrix hrm entry must cover ${name}`);
+  }
+  assert.ok(!entry.includes("uncovered"), "the hrm entry must map tools, never an uncovered gap");
+  const skills = read("../mcp/skills.ts");
+  for (const name of TOOL_NAMES) {
+    assert.ok(skills.includes(name), `playbook must mention ${name}`);
+  }
+  const contract = read("./tool-contract.integration.test.ts");
+  assert.match(contract, /"hrm\.employment\.read",/);
+  assert.match(contract, /"hrm_feature_disabled",/);
+  assert.match(contract, /hrm_employment_as_of: \{ employmentId: randomUUID\(\), asOf: "2026-06-15" \}/);
+});
