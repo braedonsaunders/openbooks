@@ -18,7 +18,7 @@ import {
   type PayrollFilingIssue,
 } from "./payroll-filing-registry.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
-import { payrollTaxYearProblem } from "./payroll/packs.ts";
+import { payrollFilingYearOptions, payrollTaxYearProblem } from "./payroll/packs.ts";
 import { PayrollError } from "./payroll-error.ts";
 
 /**
@@ -1378,4 +1378,38 @@ export async function orgYearEndFilings(
     }
   }
   return sections;
+}
+
+/**
+ * Tax years actually present in the org's payroll data: posted pay stubs plus
+ * opening-balance carry-ins, which the year-end populations read as inputs
+ * alongside the stubs. The filing-year picker unions these with the packs'
+ * declared editions, so the tax year of any posted run is offered even when
+ * it falls outside the picker's window — a September pay date in a 1-July
+ * fiscal pack posts to a tax year ahead of the calendar year.
+ */
+export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
+  const rows = await db.execute<{ tax_year: number }>(sql`
+    select distinct tax_year from pay_stubs where org_id = ${orgId}
+    union
+    select distinct tax_year from payroll_opening_balances where org_id = ${orgId}
+    order by 1 desc
+  `);
+  return rows.rows.map((row) => row.tax_year);
+}
+
+/**
+ * The tax years the org's filing surfaces (year-end, separations) may offer,
+ * and the default (the first element): the packs' current tax year for the
+ * org's business day, never the calendar year. Installed countries are read
+ * from the same settings blob the year-end enumeration reads, so the picker
+ * and the page can never disagree about which packs are in scope.
+ */
+export async function orgFilingYearOptions(orgId: string, today: string): Promise<number[]> {
+  const installedRow = await db.execute<{ countries: unknown }>(sql`
+    select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
+  `);
+  const raw = installedRow.rows[0]?.countries;
+  const countries = Array.isArray(raw) ? raw.map(String) : [];
+  return payrollFilingYearOptions({ today, countries, dataYears: await orgPayrollDataYears(orgId) });
 }
