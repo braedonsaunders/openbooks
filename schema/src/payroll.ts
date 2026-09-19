@@ -87,8 +87,11 @@ export const payComponents = pgTable(
     }).notNull(),
     /** Country pack the component belongs to; null = shared across packs.
      * Statutory rows get it from their seeder; user components may scope
-     * themselves so they only apply to that country's employees. */
-    country: text("country", { enum: ["CA", "US"] }),
+     * themselves so they only apply to that country's employees.
+     * Deliberately NOT an enum (0189): 0175 widened the storage CHECK to any
+     * two-letter code, and fourteen packs are installable — a closed
+     * two-country type rejects at compile time what the database accepts. */
+    country: text("country"),
     /**
      * Engine-computed statutory components; null for user components.
      * The country pack declares which keys exist (cpp/cpp2/ei/qpip for CA,
@@ -176,7 +179,15 @@ export const payComponents = pgTable(
   },
   (t) => [
     uniqueIndex("pay_components_org_code").on(t.orgId, t.code),
-    uniqueIndex("pay_components_org_system").on(t.orgId, t.systemKey, t.kind),
+    // Component identity is (org, country, system_key, kind) — two packs may
+    // each own e.g. income_tax (0189). The live DDL is a PARTIAL unique index
+    // with NULLS NOT DISTINCT (WHERE system_key IS NOT NULL): the NULLS NOT
+    // DISTINCT keeps the org-level (NULL country) guarantee, and the
+    // predicate keeps NULL-key user rows unconstrained, as before.
+    // uniqueIndex() cannot express either clause, so the declaration below
+    // names the columns while 0189 owns the full definition — do not
+    // regenerate this index from the declaration alone.
+    uniqueIndex("pay_components_org_system").on(t.orgId, t.country, t.systemKey, t.kind),
     index("pay_components_org_kind").on(t.orgId, t.kind),
     // Statutory keys are pack-declared (0176): the database enforces that a
     // system key LOOKS like a stable machine identifier — lowercase
@@ -224,8 +235,14 @@ export const employeePayrollProfiles = pgTable(
      */
     employmentId: uuid("employment_id"),
     payScheduleId: uuid("pay_schedule_id").notNull(),
-    /** Statutory country pack this employee runs under. */
-    country: text("country", { enum: ["CA", "US"] }).notNull().default("CA"),
+    /** Statutory country pack this employee runs under.
+     * Deliberately NOT an enum (0189): 0175 widened the storage CHECK to any
+     * two-letter code — a closed two-country type rejects at compile time
+     * what the database accepts. The NOT NULL and 'CA' default are
+     * untouched: removing a default is a behaviour change with its own
+     * callers and its own historical-rows problem (queue item 40), not a
+     * type fix. */
+    country: text("country").notNull().default("CA"),
     /** Jurisdiction of employment within the country: T4127 province ('ON',
      * 'QC', 'ZZ') for Canada, state postal code ('TX', 'WA', …) for the US. */
     province: text("province").notNull(),
