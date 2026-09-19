@@ -1,6 +1,6 @@
 import { Badge } from '@openbooks/ui'
 import { SortTh } from '../../../../components/sortable-th'
-import { RoleAssignmentButton, ActiveToggle, ResendInviteButton } from './UserActions'
+import { RoleAssignmentButton, ActiveToggle, ResendInviteButton, LinkPersonButton } from './UserActions'
 
 export interface AdminUserRow {
   id: string
@@ -14,6 +14,10 @@ export interface AdminUserRow {
   statusVariant: 'success' | 'destructive' | 'warning'
   lastSignIn: string
   assigned: { id: string; name: string }[]
+  /** Native linked person (users.party_id) with display evidence, if any. */
+  partyId: string | null
+  partyName: string | null
+  partyKind: string | null
 }
 
 /**
@@ -54,6 +58,8 @@ export function AdminUsersTable({
     actions: string
     you: string
     unassignedRole: string
+    linkedPerson: string
+    unlinkedPerson: string
   }
 }) {
   const sortProps = { basePath, currentParams, sort, dir }
@@ -69,6 +75,7 @@ export function AdminUsersTable({
               {labels.email}
             </SortTh>
             <th className="px-3 py-2">{labels.roles}</th>
+            <th className="px-3 py-2">{labels.linkedPerson}</th>
             <th className="px-3 py-2">{labels.status}</th>
             <SortTh column="last_login" {...sortProps}>
               {labels.lastSignIn}
@@ -109,12 +116,31 @@ export function AdminUsersTable({
                   />
                 </div>
               </td>
+              <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                {u.partyId && u.partyName ? (
+                  <span>
+                    {u.partyName}
+                    {u.partyKind ? (
+                      <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{u.partyKind}</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="text-slate-400 dark:text-slate-500">{labels.unlinkedPerson}</span>
+                )}
+              </td>
               <td className="px-3 py-2">
                 <Badge variant={u.statusVariant}>{u.statusLabel}</Badge>
               </td>
               <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{u.lastSignIn}</td>
               <td className="px-3 py-2 text-right">
                 <div className="flex items-center justify-end gap-2">
+                  <LinkPersonButton
+                    userId={u.id}
+                    userName={u.name}
+                    partyId={u.partyId}
+                    partyName={u.partyName}
+                    isSelf={u.isSelf}
+                  />
                   <ResendInviteButton
                     userId={u.id}
                     userEmail={u.email}
