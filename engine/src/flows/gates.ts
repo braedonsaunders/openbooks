@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg, withBypassContext, withOrgContext } from "../db.ts";
+import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -180,12 +180,80 @@ async function finalizeRunStatus(runId: string, orgId: string, hadFailure: boole
     .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
 }
 
-export interface DecideGateResult {
+/** Actionable refusal text: the recorded decision, what failed, the failed run, and its retry path. */
+function decidedBranchError(args: {
+  decision: "approved" | "rejected";
+  resumed: "approve" | "reject";
+  runId: string;
+  stage: string;
+  cause: string;
+}): string {
+  return (
+    `decision ${args.decision} recorded but ${args.stage} failed: ${args.cause}. ` +
+    `Run ${args.runId} is marked failed; fix the cause, then retry the failed run via retryFlowRun.`
+  );
+}
+
+/**
+ * Record a decided-but-incomplete branch: mark the run failed with the raw
+ * cause (operator-visible on the run row) and return the refusal the caller
+ * must surface. The gate decision and its audit evidence stay committed;
+ * release partials were already rolled back to their savepoint by the caller.
+ */
+async function refuseDecidedBranch(args: {
+  runId: string;
+  orgId: string;
+  decision: "approved" | "rejected";
+  resumed: "approve" | "reject";
+  stage: string;
+  cause: string;
+}): Promise<DecideGateFailure> {
+  await finalizeRunStatus(args.runId, args.orgId, true, args.cause);
+  return {
+    ok: false,
+    decision: args.decision,
+    resumed: args.resumed,
+    runId: args.runId,
+    runStatus: "failed",
+    decisionRecorded: true,
+    error: decidedBranchError(args),
+  };
+}
+
+/**
+ * A recorded decision whose branch completed: the gate flipped, the branch
+ * (if any) ran, and the engine release landed.
+ */
+export interface DecideGateSuccess {
   ok: true;
   /** Which branch resumed; null = quorum 'all' still waiting on siblings. */
   resumed: "approve" | "reject" | null;
-  runStatus: "waiting" | "completed" | "failed";
+  runStatus: "waiting" | "completed";
 }
+
+/**
+ * A RECORDED decision whose branch did not complete — the refusal propagated
+ * to the caller instead of resolving to success. The gate flip and its audit
+ * evidence are committed (decisionRecorded), the run is marked failed, and
+ * any partial release effects were rolled back to their savepoint. Callers
+ * must treat this as a failure and surface `error` (it names the failed run
+ * and its retry path) — never render it as an approval.
+ */
+export interface DecideGateFailure {
+  ok: false;
+  /** The decision that was recorded before the branch failed. */
+  decision: "approved" | "rejected";
+  /** The branch that was being resumed when it failed. */
+  resumed: "approve" | "reject";
+  /** The failed run — re-drive it via retryFlowRun once the cause is fixed. */
+  runId: string;
+  runStatus: "failed";
+  decisionRecorded: true;
+  /** Actionable cause: what failed, what was rolled back, how to recover. */
+  error: string;
+}
+
+export type DecideGateResult = DecideGateSuccess | DecideGateFailure;
 
 /**
  * Approve/reject one gate row. Authorization: the row's assignee, a holder of
@@ -351,13 +419,25 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
     const adapter = getFlowAdapter(gate.subjectKind);
     if (!flow || !adapter) {
-      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow definition or subject adapter is unavailable");
-      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+      return refuseDecidedBranch({
+        runId: gate.runId,
+        orgId: gate.orgId,
+        decision,
+        resumed: outcome.resume,
+        stage: `the ${outcome.resume} branch`,
+        cause: "flow definition or subject adapter is unavailable",
+      });
     }
     const graph = parseFlowGraph(flow.id, flow.graph);
     if (!graph) {
-      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow graph failed validation");
-      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+      return refuseDecidedBranch({
+        runId: gate.runId,
+        orgId: gate.orgId,
+        decision,
+        resumed: outcome.resume,
+        stage: `the ${outcome.resume} branch`,
+        cause: "flow graph failed validation",
+      });
     }
 
     const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
@@ -381,26 +461,35 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     // Release a fully-approved aggregate before executing its approve branch.
     // This makes an authored post_document action consume an APPROVED record;
     // the action can never use its flow context to bypass lifecycle controls.
+    //
+    // The release runs in its own savepoint: an adapter that writes and then
+    // throws rolls its partial effects back while the recorded gate decision,
+    // its audit evidence, and the failed run persist — the refusal below names
+    // the failed run and its retry path instead of resolving to success.
+    const release = adapter.releaseApproval;
     let releasedBeforeActions = false;
     if (
       subject &&
       outcome.resume === "approve" &&
-      adapter.releaseApproval &&
+      release &&
       (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
     ) {
       try {
-        await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
-          comment: args.comment?.trim() || null,
-        });
+        await withTransactionSavepoint(db, () =>
+          release(gate.subjectId, "approved", ctx, {
+            comment: args.comment?.trim() || null,
+          }),
+        );
         releasedBeforeActions = true;
       } catch (e) {
-        await finalizeRunStatus(
-          gate.runId,
-          gate.orgId,
-          true,
-          e instanceof Error ? e.message : String(e),
-        );
-        return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+        return refuseDecidedBranch({
+          runId: gate.runId,
+          orgId: gate.orgId,
+          decision,
+          resumed: outcome.resume,
+          stage: "release",
+          cause: e instanceof Error ? e.message : String(e),
+        });
       }
     }
 
@@ -432,21 +521,28 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     // a change_status node. Reject returns to draft and cancels every other
     // open gate for the subject; approve releases only once no gate remains
     // open across ALL runs (multi-step and multi-flow safe).
-    if (!hadFailure && adapter.releaseApproval) {
+    // The release unit (sibling cancels + the adapter release) runs in its own
+    // savepoint for the same reason as the pre-action release above: a
+    // write-before-throw adapter rolls its partial effects back while the
+    // recorded decision and its audit evidence persist. A failure here marks
+    // the run failed and returns the refusal — never a success.
+    if (!hadFailure && release) {
       try {
-        if (outcome.resume === "reject") {
-          await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
-          await adapter.releaseApproval(gate.subjectId, "rejected", ctx, {
-            comment: args.comment?.trim() || null,
-          });
-        } else if (
-          !releasedBeforeActions &&
-          (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
-        ) {
-          await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
-            comment: args.comment?.trim() || null,
-          });
-        }
+        await withTransactionSavepoint(db, async () => {
+          if (outcome.resume === "reject") {
+            await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
+            await release(gate.subjectId, "rejected", ctx, {
+              comment: args.comment?.trim() || null,
+            });
+          } else if (
+            !releasedBeforeActions &&
+            (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+          ) {
+            await release(gate.subjectId, "approved", ctx, {
+              comment: args.comment?.trim() || null,
+            });
+          }
+        });
       } catch (e) {
         hadFailure = true;
         error = e instanceof Error ? e.message : String(e);
@@ -454,10 +550,26 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
     }
 
     await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
-    const runStatus = hadFailure
-      ? "failed"
-      : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
-          ?.status as "waiting" | "completed" | "failed") ?? "completed";
+    if (hadFailure) {
+      return {
+        ok: false,
+        decision,
+        resumed: outcome.resume,
+        runId: gate.runId,
+        runStatus: "failed",
+        decisionRecorded: true,
+        error: decidedBranchError({
+          decision,
+          resumed: outcome.resume,
+          runId: gate.runId,
+          stage: `the ${outcome.resume} branch`,
+          cause: error ?? "gate branch failed",
+        }),
+      };
+    }
+    const runStatus =
+      ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
+        ?.status as "waiting" | "completed") ?? "completed";
     return { ok: true, resumed: outcome.resume, runStatus };
   });
 }

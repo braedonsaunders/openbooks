@@ -7,6 +7,7 @@ interface RouteState {
   gates: Map<string, { status: string; subsidiary_id: string | null }>
   loadCalls: Array<{ gateId: string; orgId: string }>
   decideCalls: Array<Record<string, unknown>>
+  decideResults: Map<string, { ok: boolean; error?: string }>
 }
 
 const stateKey = Symbol.for('openbooks.bulk-gates-route-test')
@@ -15,6 +16,7 @@ const routeState: RouteState = {
   gates: new Map(),
   loadCalls: [],
   decideCalls: [],
+  decideResults: new Map(),
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -38,6 +40,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.bulk-gates-route-test')]
       export async function decideGate(args) {
         state.decideCalls.push(args)
+        if (state.decideResults.has(args.gateId)) return state.decideResults.get(args.gateId)
         return { ok: true, resumed: null, runStatus: 'waiting' }
       }
     `,
@@ -109,6 +112,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.gates.clear()
   routeState.loadCalls.length = 0
   routeState.decideCalls.length = 0
+  routeState.decideResults.clear()
 }
 
 function gateId(n: number): string {
@@ -195,6 +199,34 @@ test('an in-scope bulk decision carries the subsidiary scope into the engine', a
       comment: undefined,
     },
   ])
+})
+
+test('a recorded-but-incomplete decision is reported per item, never as ok:true', async () => {
+  reset()
+  const failedId = gateId(1)
+  const okId = gateId(2)
+  routeState.gates.set(failedId, { status: 'pending', subsidiary_id: null })
+  routeState.gates.set(okId, { status: 'pending', subsidiary_id: null })
+  routeState.decideResults.set(failedId, {
+    ok: false,
+    decision: 'approved',
+    resumed: 'approve',
+    runId: '00000000-0000-4000-8000-000000000031',
+    runStatus: 'failed',
+    decisionRecorded: true,
+    error: 'decision approved recorded but release failed: boom. Run 00000000-0000-4000-8000-000000000031 is marked failed; fix the cause, then retry the failed run via retryFlowRun.',
+  })
+
+  const response = await post({ items: [{ gateId: failedId }, { gateId: okId }], decision: 'approved' })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    results: [
+      { ok: false, error: 'decision approved recorded but release failed: boom. Run 00000000-0000-4000-8000-000000000031 is marked failed; fix the cause, then retry the failed run via retryFlowRun.' },
+      { ok: true },
+    ],
+  })
+  assert.equal(routeState.decideCalls.length, 2, 'one failure never aborts the rest')
 })
 
 test('invalid gate IDs fail individually without reaching the database', async () => {

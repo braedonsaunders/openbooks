@@ -70,15 +70,21 @@ export async function POST(req: Request) {
       if (gate.status !== 'pending') throw new Error('this approval was already resolved')
       // decideGate is the single authority (assignee / admin / delegate).
       // The caller's scope rides along so the engine re-checks the boundary
-      // at its own write authority.
-      await decideGate({
+      // at its own write authority. A recorded decision whose branch did not
+      // complete comes back ok:false — one failure never aborts the rest, but
+      // it must never be reported as an approval either.
+      const res = await decideGate({
         gateId: item.gateId,
         decision,
         userId: authz.user.id,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         comment,
       })
-      results.push({ ok: true })
+      if (res.ok) {
+        results.push({ ok: true })
+      } else {
+        results.push({ ok: false, error: res.error })
+      }
     } catch (e) {
       results.push({ ok: false, error: e instanceof Error ? e.message : 'failed' })
     }

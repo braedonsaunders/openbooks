@@ -180,7 +180,7 @@ export async function POST(req: Request) {
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
   try {
-    await withOrgContext(gate.orgId, () =>
+    const res = await withOrgContext(gate.orgId, () =>
       decideGate({
         gateId: claims.gateId,
         decision: claims.decision,
@@ -188,6 +188,18 @@ export async function POST(req: Request) {
         comment: reason || null,
       }),
     )
+    // A recorded decision whose branch did not complete must never render as
+    // "Approved": the refusal names the failed run and its retry path, and
+    // the one-click link cannot retry — point at Approvals instead.
+    if (!res.ok) {
+      const verb = claims.decision === 'approved' ? 'approve' : 'reject'
+      return page(
+        'Approval needs attention',
+        `<p style="color:#52525b">Your decision to ${verb} was recorded, but the approval could not be completed: ${esc(res.error)}</p>` +
+          `<p style="color:#52525b">Open <strong>OpenBooks → Approvals</strong> to retry the failed run once the cause is fixed.</p>`,
+        500,
+      )
+    }
   } catch (e) {
     if (e instanceof GateError) {
       // Race: someone decided between the check and the update — idempotent.

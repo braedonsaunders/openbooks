@@ -19,6 +19,7 @@ interface RouteState {
   } | null;
   scopeChecks: Array<string | null>;
   decisions: Array<Record<string, unknown>>;
+  decideResult: { ok: true; resumed: string; runStatus: string } | { ok: false; decision: string; resumed: string; runId: string; runStatus: string; decisionRecorded: true; error: string };
 }
 
 const stateKey = Symbol.for("openbooks.flow-decide-route-test");
@@ -46,6 +47,7 @@ const routeState: RouteState = {
   },
   scopeChecks: [],
   decisions: [],
+  decideResult: { ok: true, resumed: 'approve', runStatus: 'completed' },
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -90,7 +92,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.flow-decide-route-test')]
       export async function decideGate(args) {
         state.decisions.push(args)
-        return { ok: true, resumed: 'approve', runStatus: 'completed' }
+        return state.decideResult
       }
     `,
   ],
@@ -143,6 +145,7 @@ const GATE_ID = "00000000-0000-4000-8000-000000000012";
 const SUBJECT_SUBSIDIARY = "00000000-0000-4000-8000-000000000013";
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
+  routeState.decideResult = { ok: true, resumed: 'approve', runStatus: 'completed' };
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.gate = {
     id: GATE_ID,
@@ -201,5 +204,23 @@ if (isVitest) {
         signature: undefined,
       },
     ]);
+  });
+
+  test("a recorded-but-incomplete decision leaves as a 500 with the refusal intact", async () => {
+    reset(new Set([SUBJECT_SUBSIDIARY]));
+    routeState.decideResult = {
+      ok: false,
+      decision: "approved",
+      resumed: "approve",
+      runId: "00000000-0000-4000-8000-000000000021",
+      runStatus: "failed",
+      decisionRecorded: true,
+      error: "decision approved recorded but release failed: boom. Run 00000000-0000-4000-8000-000000000021 is marked failed; fix the cause, then retry the failed run via retryFlowRun.",
+    };
+
+    const response = await postRoute!(request());
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), routeState.decideResult);
   });
 }

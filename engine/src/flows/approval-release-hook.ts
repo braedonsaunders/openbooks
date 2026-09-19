@@ -9,9 +9,11 @@ import type { FlowExecCtx } from "./types.ts";
  * engine cannot import web, so the node server registers those handlers at
  * boot, exactly like the existing flow PDF renderer.
  *
- * The handler executes inside decideGate's withOrg transaction. Throwing
- * therefore rolls back the gate decision, every financial side effect, and
- * the record status together.
+ * The handler executes inside a savepoint of decideGate's withOrg
+ * transaction. Throwing rolls back the handler's own partial writes while the
+ * recorded gate decision, its audit evidence, and the failed run persist;
+ * decideGate reports the refusal (ok:false with the failed run and its retry
+ * path) so every caller surfaces it instead of rendering an approval.
  */
 export interface FlowApprovalReleaseArgs {
   subjectKind: string;

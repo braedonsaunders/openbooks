@@ -50,6 +50,10 @@ export async function POST(req: Request) {
       comment: body.comment,
       signature: body.signature,
     })
+    // A recorded decision whose branch did not complete is a server-side
+    // failure, not a success: the refusal carries the failed run and its
+    // retry path, so it must leave as a 500 with that body intact.
+    if (!res.ok) return NextResponse.json(res, { status: 500 })
     return NextResponse.json(res)
   } catch (e) {
     return gateErrorResponse(e)
