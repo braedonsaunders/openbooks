@@ -613,6 +613,16 @@ export const NAV_MODULES: NavModule[] = [
     featureKey: 'payroll',
     recordTarget: { kind: 'nested', segment: 'runs' },
   },
+  {
+    key: 'hrm',
+    href: '/hrm',
+    label: 'Human Resources',
+    iconKey: 'users',
+    group: 'operations',
+    subgroup: 'people',
+    requiredPermission: 'hrm.employment.read',
+    featureKey: 'hrm',
+  },
 
   // Insights — reports, native analytics, custom dashboards, and saved views.
   {
@@ -881,6 +891,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'inventory',
     'equipment',
     'employees',
+    'hrm',
   ],
   banking: [
     'banking',
