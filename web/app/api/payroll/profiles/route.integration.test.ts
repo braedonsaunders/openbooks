@@ -80,8 +80,27 @@ test('profile POST refuses money and percent fields wider than their columns', {
       ['claim amount too wide', { federalClaimAmount: '99999999999999999999' }, /federalClaimAmount is limited to 15 digits before the decimal point — got 20/],
       ['claim amount not a number', { federalClaimAmount: 'abc' }, /federalClaimAmount must be an amount — "abc" is not a number/],
       ['claim amount negative', { federalClaimAmount: '-1' }, /federalClaimAmount cannot be negative — got -1/],
+      // The unreadable-value branch is itself split: an over-scale figure, a
+      // spreadsheet thousands separator, a currency symbol, and scientific
+      // notation are all refused as "not a number" by the strict gate but need
+      // four different remedies, so each names its cause.
+      ['claim amount scale', { federalClaimAmount: '1234.56789' }, /federalClaimAmount allows at most 4 decimal places — got 5 in "1234.56789"/],
+      ['claim amount separator', { federalClaimAmount: '1,234.56' }, /federalClaimAmount must not contain a thousands separator — remove , from "1,234.56"/],
+      // A decimal comma is not a thousands separator: "remove the comma"
+      // would bank 1234 for 12.34. Name the decimal point, and the rewrite.
+      ['claim amount decimal comma', { federalClaimAmount: '12,34' }, /federalClaimAmount must use "\." as the decimal point — write "12,34" as "12\.34"/],
+      // A decimal comma with its own grouping ("1 234,56") reads the same
+      // way: without this the grouping message composes into wrong money in
+      // two steps (drop the comma, then the space banks 123456).
+      ['claim amount grouped decimal comma', { federalClaimAmount: '1 234,56' }, /write "1 234,56" as "1234\.56"/],
+      // A single comma with any other tail is genuinely ambiguous: name both
+      // readings rather than picking one.
+      ['claim amount ambiguous comma', { federalClaimAmount: '1,234' }, /federalClaimAmount is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/],
+      ['claim amount currency', { federalClaimAmount: '$1200' }, /federalClaimAmount must not contain a currency symbol — remove \$ from "\$1200"/],
+      ['claim amount scientific', { federalClaimAmount: '1.5E+05' }, /federalClaimAmount must be written out in full, not in scientific notation/],
       ['vacation percent too wide', { vacationPercent: '1234' }, /vacationPercent is limited to 3 digits before the decimal point — got 4/],
       ['vacation percent not a number', { vacationPercent: 'abc' }, /vacationPercent must be a percentage — "abc" is not a number/],
+      ['vacation percent scale', { vacationPercent: '12.34567' }, /vacationPercent allows at most 4 decimal places — got 5 in "12.34567"/],
       ['vacation percent negative', { vacationPercent: '-1' }, /vacationPercent cannot be negative — got -1/],
       // The echo is bounded: the body is arbitrary JSON, so an object must not
       // come back as "[object Object]" and a long paste must not come back
@@ -103,8 +122,17 @@ test('profile POST refuses money and percent fields wider than their columns', {
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
     assert.equal(rows.rows[0]!.count, '0')
-    // In-range values, including the column maximums at the route's own 2dp
-    // contract (4dp money was already refused before this change), still save.
+    // The widened scale, both sides: the money columns are numeric(19,4), so a
+    // three-decimal figure the old 2dp gate refused as malformed must SAVE
+    // exactly, while five decimals still refuse naming the four-place limit.
+    const threeDp = await post({ ...base, federalClaimAmount: '1234.567', vacationPercent: '999.9999' })
+    assert.equal(threeDp.status, 200, await threeDp.clone().text())
+    const threeDpSaved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
+      select federal_claim_amount::text from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.deepEqual(threeDpSaved.rows[0], { federal_claim_amount: '1234.5670' })
+    // In-range values, including the column maximums at the route's 4dp
+    // contract, still save.
     const ok = await post({ ...base, federalClaimAmount: '999999999999999.99', vacationPercent: '999.9999' })
     assert.equal(ok.status, 200, await ok.clone().text())
     const saved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string; vacation_percent: string }>(sql`
