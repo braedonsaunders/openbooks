@@ -4,6 +4,7 @@ import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engin
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'
 import {
   guardPayrollFilingAccounts,
   guardPayrollVendor,
@@ -53,15 +54,29 @@ export async function POST(req: Request) {
   const { partyId, from, to } = body
   const filingAccountId = body.filingAccountId ?? null
   const subsidiaryId = body.subsidiaryId ?? null
-  if (
-    typeof partyId !== 'string' || !isUuid(partyId)
-    || typeof from !== 'string' || typeof to !== 'string'
-    || !DATE.test(from) || !DATE.test(to)
-    || from > to
-    || (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId)))
-    || (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId)))
-  ) {
-    return NextResponse.json({ error: 'invalid request' }, { status: 422 })
+  // Every malformed shape refuses by name: one collapsed 'invalid request'
+  // over eight predicates across five fields. Same accept/refuse sets, split
+  // causes — every input refused above is still refused below with status 422.
+  if (typeof partyId !== 'string') {
+    return NextResponse.json({ error: `partyId must be a vendor id — got "${suppliedValue(partyId)}"; choose the payee from the remittance summary` }, { status: 422 })
+  }
+  if (!isUuid(partyId)) {
+    return NextResponse.json({ error: `partyId "${partyId}" is not a vendor id — choose the payee from the remittance summary` }, { status: 422 })
+  }
+  if (typeof from !== 'string' || !DATE.test(from)) {
+    return NextResponse.json({ error: `from must be a date "YYYY-MM-DD" — got "${suppliedValue(from)}"; pass the period start as a date` }, { status: 422 })
+  }
+  if (typeof to !== 'string' || !DATE.test(to)) {
+    return NextResponse.json({ error: `to must be a date "YYYY-MM-DD" — got "${suppliedValue(to)}"; pass the period end as a date` }, { status: 422 })
+  }
+  if (from > to) {
+    return NextResponse.json({ error: `from "${from}" is after to "${to}" — the period must start on or before it ends` }, { status: 422 })
+  }
+  if (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId))) {
+    return NextResponse.json({ error: `filingAccountId "${suppliedValue(filingAccountId)}" is not a filing account id — choose one from the payroll filing accounts, or omit it` }, { status: 422 })
+  }
+  if (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) {
+    return NextResponse.json({ error: `subsidiaryId "${suppliedValue(subsidiaryId)}" is not a subsidiary id — pass the subsidiary whose share to bill, or omit it` }, { status: 422 })
   }
   const vendorDenied = await guardPayrollVendor(gate, partyId)
   if (vendorDenied) return vendorDenied

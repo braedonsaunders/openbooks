@@ -19,6 +19,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 
 export const dynamic = 'force-dynamic'
 
@@ -210,16 +211,42 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // adjustment instead of committing a partial set.
     if (body.action === 'bulk-adjustment') {
       const { componentId, amount, note, replaceComponent } = body
-      const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
+      // Every malformed shape refuses by name. One collapsed 'invalid
+      // adjustment' over nine predicates meant a single bad id among two
+      // thousand employees was undiagnosable — the refusal below names the
+      // offending value AND its index. Same accept/refuse sets, split causes.
+      if (typeof componentId !== 'string') {
+        return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
+      }
+      if (!isUuid(componentId)) {
+        return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
+      }
+      if (!Array.isArray(body.employeePartyIds)) {
+        return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to adjust as a list` }, { status: 422 })
+      }
+      const employees = body.employeePartyIds
+      if (employees.length === 0) {
+        return NextResponse.json({ error: 'bulk-adjustment needs at least one employee — employeePartyIds is empty; pass the employees to adjust as a list' }, { status: 422 })
+      }
+      if (employees.length > 2000) {
+        return NextResponse.json({ error: `bulk-adjustment accepts at most 2000 employees at once — got ${employees.length}; split the batch and try again` }, { status: 422 })
+      }
+      const badIndex = employees.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+      if (badIndex !== -1) {
+        return NextResponse.json({ error: `employeePartyIds[${badIndex}] "${suppliedValue(employees[badIndex])}" is not an employee id — fix that entry and try again` }, { status: 422 })
+      }
       const amountRaw = canonicalDecimal(amount, 4)
-      if (
-        typeof componentId !== 'string' || !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
-        !employees.every((v: unknown) => typeof v === 'string' && isUuid(v)) ||
-        amountRaw === null ||
-        (note != null && (typeof note !== 'string' || note.length > 500)) ||
-        (replaceComponent != null && typeof replaceComponent !== 'boolean')
-      ) {
-        return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      if (amountRaw === null) {
+        return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
+      }
+      if (note != null && typeof note !== 'string') {
+        return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
+      }
+      if (typeof note === 'string' && note.length > 500) {
+        return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
+      }
+      if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
+        return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
       }
       const canonicalAmount = normalizeMoney(amountRaw)
       await withOrgTransaction(gate.user.orgId, async () => {
