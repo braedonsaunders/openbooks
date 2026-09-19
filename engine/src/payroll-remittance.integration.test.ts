@@ -674,8 +674,11 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await createRemittanceFixture();
+    // The fence is per (destination, filing account, entity): the fixture's
+    // accruals post on the root subsidiary, so the holder takes the root's key.
     const key = remittanceFenceLockKey(fixture.org.orgId, {
       partyId: fixture.org.vendorId, filingAccountId: null,
+      subsidiaryId: fixture.org.subsidiaryId,
     });
     let release!: () => void;
     const holderReady = new Promise<void>((resolve) => {
