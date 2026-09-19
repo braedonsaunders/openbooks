@@ -19,7 +19,10 @@ registerHooks({ resolve(specifier, context, next) {
   if (context.parentURL?.endsWith('/page.tsx') || context.parentURL?.endsWith('/view.ts')) {
     if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export class MissingRatesError extends Error {}\nexport async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}' };
     if (specifier.endsWith('/lib/page-layout')) return { shortCircuit: true, url: 'data:text/javascript,export async function userPageLayout(){return null}' };
-    if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}' };
+    // Every export the cockpits import, not just the one this test first needed:
+    // a double missing an export makes the importing module fail to LINK, so the
+    // file registers zero tests instead of failing loudly.
+    if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}\nexport async function customerGroupTabs(){return []}' };
   }
   const app = resolveAppModule(specifier, context, next, root);
   if (app) return app;

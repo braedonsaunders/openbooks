@@ -180,6 +180,16 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.pay_run_document_id = d.pay_run_document_id and s.adjustment_type = 'exclude' and d.adjustment_type = 'exclude'",
   },
   {
+    table: "pay_run_holiday_assertions",
+    column: "employee_party_id",
+    // One assertion per (run, employee, holiday occurrence) — the table's own
+    // unique key minus the party being merged. Two rows collide only when both
+    // parties answered the SAME occurrence on the SAME run.
+    conflict:
+      "s.pay_run_document_id = d.pay_run_document_id and s.holiday_key = d.holiday_key" +
+      " and s.holiday_date = d.holiday_date",
+  },
+  {
     table: "pay_stubs",
     column: "employee_party_id",
     conflict: "s.pay_run_document_id = d.pay_run_document_id",

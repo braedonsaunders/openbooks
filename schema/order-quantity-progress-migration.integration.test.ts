@@ -154,7 +154,12 @@ async function readViewMetadata(client: pg.Client): Promise<ViewMetadata> {
   );
   return {
     owner: row.owner,
-    acl: row.acl,
+    // pg_class.relacl is an array whose ORDER reflects the sequence grants
+    // happened in, which PostgreSQL does not promise to preserve across a
+    // rewrite. What must survive the repair is the SET of grants, so compare
+    // it as one: an order-sensitive compare fails on a database whose roles
+    // were granted in a different order and proves nothing either way.
+    acl: row.acl === null ? null : [...row.acl].sort(),
     options: row.options,
     objectComment: row.objectComment,
     columnComments: columns.rows,

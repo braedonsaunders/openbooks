@@ -419,11 +419,13 @@ test(
           result.errors[0]!.message,
           /collides with the CA pack's statutory factors/,
         );
-        // The errored stub never materializes, so the commit finds no
-        // calculated stubs and refuses: the colliding figures move nowhere.
+        // The commit refuses and the colliding figures move nowhere. It now
+        // refuses on the refusal itself — naming the employee and the reason,
+        // and demanding either a fix or an explicit acknowledgement — rather
+        // than on the downstream symptom that no stub materialized.
         await assert.rejects(
           commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
-          /pay run has no calculated stubs/,
+          /1 in-scope employee was refused at calculation.*collides with the CA pack's statutory factors/s,
         );
       });
 
