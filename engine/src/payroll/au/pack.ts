@@ -22,6 +22,7 @@ import type {
 } from "../packs.ts";
 import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_WITHHOLDING } from "./jurisdictions.ts";
 import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
+import { applyAuEmployerLevies } from "./employer-levies.ts";
 import { auPackFilings } from "./filings.ts";
 import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
 
@@ -115,11 +116,14 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
       components: [
         // Workers' compensation premium: assessable wages × the employer's
         // state-insurer rate (a tenant-entered regional slot — see
-        // AU_PACK_RATES), remitted to the state insurer.
+        // AU_PACK_RATES), remitted to the state insurer. Consumed by
+        // applyAuEmployerLevies (./employer-levies.ts), which prices the
+        // stub's gross at the resolving regional fraction.
         { code: "WCB", name: "Workers' compensation", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],
+  applyEmployerLevies: applyAuEmployerLevies,
   computeStatutory: computeAuStatutory,
   statutoryEngineLabel: "PAYG withholding",
   factorLabels: { ...AU_FACTOR_LABELS },

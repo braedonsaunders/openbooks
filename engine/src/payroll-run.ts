@@ -4079,7 +4079,8 @@ async function calculateStub(
   });
 
   // ---- Phase 8: pack-declared earnings-assessed employer levies ----------
-  // WCB/WSIB and provincial EHT for the CA pack; other packs omit this hook.
+  // WCB/WSIB and provincial EHT for the CA pack, workers' compensation for
+  // the AU pack; other packs omit this hook.
   // The per-employee WCB cap consumes COMMITTED stubs only (a draft may be
   // abandoned; same-employee races are caught by the ytd staleness arm), while
   // the employer-level EHT exemption also sees calculated drafts (disjoint

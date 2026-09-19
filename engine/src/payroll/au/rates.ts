@@ -29,9 +29,12 @@ export const AU_PACK_RATES: PayrollPackRates = {
       label: "Workers' compensation premium",
       scope: "region",
       regions: AU_KNOWN_REGIONS,
-      // Not yet reviewed: no consumer reads this slot back yet (the state
-      // payroll-tax aggregate channel is pending), so it keeps today's
-      // behaviour — inert when unconfigured — until explicitly migrated.
+      // Consumed by applyAuEmployerLevies (./employer-levies.ts), which
+      // prices each stub's gross at the resolving regional fraction. A
+      // region with no row stays inert — readiness warns by name until one
+      // resolves — so the slot keeps `legacy`, never a refusal. (State
+      // payroll-tax thresholds and rates remain undeclared: that aggregate
+      // channel is still in review — see the ledger.)
       whenUnconfigured: "legacy",
       systemKeys: ["wcb"],
       fields: [
