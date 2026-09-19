@@ -121,6 +121,31 @@ test(
 );
 
 test(
+  "a single-entity org may name its only subsidiary explicitly",
+  { skip: !DB },
+  async () => {
+    // The payroll onboarding wizard always sends the org's sole subsidiary
+    // id on a single-entity tenant ("defaults to its only subsidiary
+    // without being asked"). The generic subsidiary feature fence must not
+    // refuse that: naming a real, active subsidiary of the org is always
+    // safe, and the engine's own pay-schedule rule validates it.
+    const f = await seedOrg();
+    try {
+      const created = await createSetupRecord(
+        f.actor, "pay-schedules", scheduleBody({ subsidiaryId: f.rootSubsidiaryId }),
+      );
+      assert.equal(created.status, 200);
+      const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from pay_schedules
+         where id = ${String(created.body.id)} and org_id = ${f.orgId}`)).rows[0]!;
+      assert.equal(row.subsidiary_id, f.rootSubsidiaryId);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
   "re-scoping a schedule re-resolves its draft run in the same transaction",
   { skip: !DB },
   async () => {
