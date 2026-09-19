@@ -298,6 +298,7 @@ export function compileInsightQuery(
         type: r.field.semanticType,
         role: 'dimension',
         valueKind: dim.bin && r.field.canBin ? undefined : r.field.valueKind,
+        dateBin: dim.bin && r.field.canBin ? dim.bin : undefined,
       })
     }
     for (const m of measures) {
@@ -375,6 +376,16 @@ function compileOrderBy(
   // Sensible defaults: measure queries sort by the first measure desc; detail
   // queries follow the source default sort when that column is present.
   if (isAggregate) {
+    // A TIME SERIES IS CHRONOLOGICAL, NOT A RANKING. Ranking by the measure is
+    // the right default for "top customers by revenue"; applied to a
+    // month-binned dimension it draws a twelve-month line in descending
+    // revenue order, which always slopes down and says nothing about time.
+    // A binned temporal dimension therefore orders by that dimension ascending
+    // regardless of the measures present. An explicit sort still wins — this
+    // block only runs when the plan named none, which is the case for every
+    // card authored in the studio without touching the sort control.
+    const firstTemporal = columns.find((c) => c.role === 'dimension' && c.dateBin)
+    if (firstTemporal) return `\norder by ${byKey.get(firstTemporal.key)} asc nulls last`
     const firstMeasure = columns.find((c) => c.role === 'measure')
     if (firstMeasure) return `\norder by ${byKey.get(firstMeasure.key)} desc nulls last`
     const firstDim = columns.find((c) => c.role === 'dimension')

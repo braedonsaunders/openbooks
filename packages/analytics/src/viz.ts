@@ -74,7 +74,7 @@ export function buildVizSpec(
   }
 
   const categories = result.rows.map(
-    (r) => formatValue?.(category, r[category.key]) ?? formatCategory(r[category.key]),
+    (r) => formatValue?.(category, r[category.key]) ?? formatCategory(category, r[category.key]),
   )
 
   if (vizType === 'pie') {
@@ -160,10 +160,50 @@ export function buildVizSpec(
   }
 }
 
-function formatCategory(v: unknown): string {
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * Label a chart category.
+ *
+ * Two traps live here, and both shipped.
+ *
+ * FIRST: a date only arrives as a `Date` when the caller ran the query
+ * in-process. Every card on a dashboard fetches over HTTP and parses with
+ * `res.json()`, which turns it into a STRING — so an `instanceof Date` test is
+ * false exactly where users look, and the axis printed a raw
+ * `2026-09-01T00:00:00.000Z`. Parse the ISO prefix instead of testing the
+ * runtime type.
+ *
+ * SECOND: a binned bucket is a PERIOD, not the instant it begins on. A month
+ * bucket labelled `2026-09-01` reads as a single day. Label it as what it
+ * represents.
+ */
+function formatCategory(col: ResultColumn, v: unknown): string {
   if (v == null) return '—'
-  if (v instanceof Date) return v.toISOString().slice(0, 10)
-  return String(v)
+  const iso =
+    v instanceof Date
+      ? v.toISOString().slice(0, 10)
+      : typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)
+        ? v.slice(0, 10)
+        : null
+  if (iso === null) return String(v)
+
+  const [y, m, d] = iso.split('-')
+  const month = MONTHS[Number(m) - 1] ?? m
+  switch (col.dateBin) {
+    case 'year':
+      return y!
+    case 'quarter':
+      return `Q${Math.floor((Number(m) - 1) / 3) + 1} ${y}`
+    case 'month':
+      return `${month} ${y}`
+    case 'week':
+    case 'day':
+      return `${month} ${Number(d)}, ${y}`
+    default:
+      // Unbinned date dimension: the day itself is the value.
+      return col.type === 'date' ? `${month} ${Number(d)}, ${y}` : iso
+  }
 }
 
 // Serializable formatter reference — ECharts calls it at render time. A named

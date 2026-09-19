@@ -93,3 +93,47 @@ test('Insights source discovery enforces permissions and authoritative feature g
   assert.ok(sources.some((source) => source.key === 'documents'))
   assert.ok(!sources.some((source) => ['projects', 'timesheets', 'pay_stubs'].includes(source.key)))
 })
+
+test('a binned temporal dimension defaults to chronological order, not measure rank', () => {
+  // The REAL "Revenue by month" card in production stores `sort: []`. With no
+  // ref to resolve, the default took over — measure desc — so a twelve-month
+  // revenue line rendered in descending revenue order and always sloped down.
+  // A time series is chronological; ranking is for "top N by measure".
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'sum', field: 'credit' }],
+      dimensions: [{ field: 'posting_date', bin: 'month' }],
+      filters: [
+        { field: 'account_type', op: 'in', value: ['income', 'income_other'] },
+        { field: 'posting_date', op: 'last_n_days', value: 365 },
+      ],
+      sort: [],
+      limit: null,
+    },
+    { orgId: '00000000-0000-0000-0000-000000000001', asOf: '2026-09-18' },
+  )
+  const order = /order by ([^\n]*)/.exec(compiled.sql)?.[1] ?? ''
+  assert.match(order, /^1 asc/, `expected the month dimension first ascending, got: ${order}`)
+  assert.doesNotMatch(order, /desc/, `a time series must not be ranked by measure: ${order}`)
+
+  const month = compiled.columns.find((c) => c.role === 'dimension')
+  assert.equal(month?.dateBin, 'month', 'the bin must reach the renderer to label the period')
+})
+
+test('an unbinned dimension still ranks by the measure', () => {
+  // The chronological default must not swallow the ranking default: "top
+  // accounts by amount" is a ranking and stays measure-desc.
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'sum', field: 'credit' }],
+      dimensions: [{ field: 'account_type' }],
+      filters: [],
+      sort: [],
+      limit: null,
+    },
+    { orgId: '00000000-0000-0000-0000-000000000001', asOf: '2026-09-18' },
+  )
+  assert.match(/order by ([^\n]*)/.exec(compiled.sql)?.[1] ?? '', /desc/)
+})
