@@ -622,7 +622,13 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       ok(
         await api(rq, ctx.baseURL, "PUT", "/api/payroll/settings", {
           slotAccounts: {
-            CA: { qc_income_tax: aid("rq") },
+            // The health services fund is an employer contribution a Quebec
+            // employer ALWAYS owes, so a live-but-unconfigured ca_hsf slot
+            // refuses the QC employee by name at calculate rather than
+            // accruing 0.00 in silence. Map its liability account here and
+            // set its rate below, or no Quebec figure in this suite is
+            // reachable at all.
+            CA: { qc_income_tax: aid("rq"), hsf: aid("rq") },
             US: {
               fit: aid("irs"),
               fica: aid("irs"),
@@ -634,6 +640,20 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           },
         }),
         "slot accounts",
+      );
+      // The rate itself is tenant-entered by design: TP-1015.F-V s. 5 makes it
+      // a function of the employer's own total payroll and sector class, which
+      // no pack can know, so the slot refuses rather than guessing. 1.65 is the
+      // 2026 other-sector floor.
+      ok(
+        await api(rq, ctx.baseURL, "PUT", "/api/payroll/settings/rates", {
+          country: "CA",
+          rateKey: "ca_hsf",
+          region: "QC",
+          taxYear: 2026,
+          values: { rate: "1.65" },
+        }),
+        "QC health services fund rate",
       );
       // Per-component remittance destinations are mapped after the runs
       // commit, when the remittance summary exposes each component's id
