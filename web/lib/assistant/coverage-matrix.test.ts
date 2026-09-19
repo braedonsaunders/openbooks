@@ -155,6 +155,7 @@ const MATRIX: Entry[] = [
   { prefix: "customization", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "admin/flows", tools: ["list_approvals"], note: "flow authoring writes have no application service" },
   { prefix: "flows", tools: ["list_approvals", "decide_approval"], note: "flow authoring and manual/record-state triggers have no application service" },
+  { prefix: "hrm/change-requests", tools: ["list_approvals", "decide_approval"], note: "decisions run through native Flows gates; authoring, submit and withdraw are human-attested HR actions with no assistant write surface by design" },
   { prefix: "admin/fx-provider", tools: ["list_currencies", "list_fx_rates"] },
   { prefix: "admin/navigation", uncovered: "no application service: nav config persists inline" },
   { prefix: "admin/payment-operations", uncovered: "no application service: bank-profile/format/schedule config persists inline" },

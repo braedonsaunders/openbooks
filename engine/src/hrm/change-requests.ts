@@ -667,6 +667,9 @@ export interface WithdrawChangeRequestQuery {
   readonly orgId: string;
   readonly actorId: string;
   readonly requestId: string;
+  /** Why the proposal is being withdrawn — required; withdrawal of a pending
+   * request revokes an in-flight approval other people are party to. */
+  readonly reason: unknown;
 }
 
 /**
@@ -681,6 +684,7 @@ export async function withdrawChangeRequest(
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireRequestId(query.requestId);
+  const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireHrmEmploymentManage(db, orgId, actorId, current.employment_id);
@@ -715,6 +719,21 @@ export async function withdrawChangeRequest(
         "the request changed while withdrawal was being recorded — reload it and try again",
       );
     }
+    // Audit evidence for the withdrawal itself: actor, before/after state,
+    // the reason, and the run it revoked. The request row keeps its
+    // submission stamps; this is the record of who took them out of play.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'hrm_employment_change_requests', ${requestId}, 'update', ${JSON.stringify({
+        event: "withdrawn",
+        actor: { kind: "user", userId: actorId },
+        before: { status: current.status },
+        after: { status: "withdrawn" },
+        reason,
+        employmentId: current.employment_id,
+        cancelledFlowRunId: current.status === "pending_approval" ? current.flow_run_id : null,
+      })}::jsonb, ${actorId})
+    `);
     return toDTO(withdrawn);
   });
 }

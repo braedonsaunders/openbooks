@@ -573,7 +573,7 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
     });
-    const withdrawnDraft = await withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draftOnly.id });
+    const withdrawnDraft = await withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draftOnly.id, reason: "superseded" });
     assert.equal(withdrawnDraft.status, "withdrawn");
     assert.equal(withdrawnDraft.submittedBy, null, "a draft withdrawn before submission fabricates no stamps");
 
@@ -583,7 +583,20 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
     });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: pending.id, reason: "hire" });
     const pendingGate = await gateOf(pending.id);
-    const withdrawnPending = await withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: pending.id });
+    await assert.rejects(
+      withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: pending.id, reason: "   " }),
+      (e: unknown) => e instanceof HrmChangeRequestError,
+      "a blank withdrawal reason is refused",
+    );
+    const withdrawnPending = await withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: pending.id, reason: "hiring freeze" });
+    const withdrawalAudit = (await db.execute<{ changes: { event: string; reason: string; cancelledFlowRunId: string | null; before: { status: string } } }>(sql`
+      select changes from audit_log
+       where org_id = ${h.org.orgId} and table_name = 'hrm_employment_change_requests'
+         and row_id = ${pending.id} and changes->>'event' = 'withdrawn'`)).rows;
+    assert.equal(withdrawalAudit.length, 1, "withdrawal leaves exactly one audit row");
+    assert.equal(withdrawalAudit[0]!.changes.reason, "hiring freeze");
+    assert.equal(withdrawalAudit[0]!.changes.before.status, "pending_approval");
+    assert.equal(withdrawalAudit[0]!.changes.cancelledFlowRunId, withdrawnPending.flowRunId, "the revoked run is named");
     assert.equal(withdrawnPending.status, "withdrawn");
     assert.ok(withdrawnPending.flowRunId, "the run is retained as evidence");
     const cancelledGate = (await db.execute<{ status: string }>(sql`
@@ -600,7 +613,7 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: toApprove.id, reason: "suspend" });
     await decideGate({ gateId: (await gateOf(toApprove.id)).id, decision: "approved", userId: h.approver1Id });
     await assert.rejects(
-      withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: toApprove.id }),
+      withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: toApprove.id, reason: "test" }),
       (e: unknown) => e instanceof HrmChangeRequestError && /terminal/.test(e.message),
     );
 
@@ -612,7 +625,7 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
     await decideGate({ gateId: (await gateOf(toReject.id)).id, decision: "rejected", userId: h.approver1Id, comment: "no cover" });
     assert.equal(await requestStatus(toReject.id), "rejected");
     await assert.rejects(
-      withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: toReject.id }),
+      withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: toReject.id, reason: "test" }),
       (e: unknown) => e instanceof HrmChangeRequestError && /terminal/.test(e.message),
     );
   });

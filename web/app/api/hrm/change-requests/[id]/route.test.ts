@@ -222,7 +222,7 @@ if (isVitest) {
     assert.deepEqual(routeState.mapped, [refusal]);
   });
 
-  test("submit forwards the reason; withdraw needs no body", async () => {
+  test("submit and withdraw forward their reasons; a withdrawal without one is refused", async () => {
     reset();
     const submitted = await submitRoute!.POST(
       new Request("http://openbooks.test/x", {
@@ -237,8 +237,15 @@ if (isVitest) {
     assert.deepEqual(routeState.calls, [
       { fn: "submit", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "go" } },
     ]);
-    const withdrawn = await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST" }), ctx);
+    const noReason = await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), ctx);
+    assert.equal(noReason.status, 400, "withdrawal without a reason is refused at the boundary");
+    assert.equal(routeState.calls.length, 1, "the refused withdrawal never reached the service");
+    const withdrawn = await withdrawRoute!.POST(
+      new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "hiring freeze" }) }),
+      ctx,
+    );
     assert.equal(withdrawn.status, 200);
     assert.deepEqual(await withdrawn.json(), { request: { id: REQUEST_ID, status: "withdrawn" } });
+    assert.deepEqual(routeState.calls[1], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
   });
 }

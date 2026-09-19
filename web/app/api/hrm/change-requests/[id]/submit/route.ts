@@ -1,10 +1,10 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { submitChangeRequest } from "@openbooks/engine/src/hrm/change-requests.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
-import { changeRequestErrorResponse } from "../../_lib";
+import { changeRequestErrorResponse, submitChangeRequestBody } from "../../_lib";
 
 export const runtime = "nodejs";
 
@@ -17,9 +17,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, submitChangeRequestBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { reason?: unknown };
+  const body = parsedBody.data;
   try {
     const request = await submitChangeRequest({
       orgId: gate.user.orgId,
