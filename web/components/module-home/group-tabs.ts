@@ -12,7 +12,7 @@ import type { ModuleHomeTab } from './ui'
  * (nav-module names for cockpits — never a context-dependent "Overview").
  */
 
-export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll'
+export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm'
 
 // DASHBOARDS AND WORKING SURFACES — a tab lands on a cockpit, or on the ONE
 // canonical list for a thing the group works on daily (accounts, pay runs,
@@ -58,6 +58,12 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // The NATIVE employee entity list — payroll deliberately has no second one.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
   ],
+  hrm: [
+    { href: '/hrm', ns: 'hrm', key: 'home.tabs.overview' },
+    // The NATIVE employee entity list — HRM deliberately has no second
+    // roster; the employment record is a tab on the employee drawer.
+    { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
+  ],
 }
 
 /**
@@ -77,6 +83,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/payroll/remittances': 'payroll',
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',
+  '/hrm': 'hrm',
   '/close': 'continuousClose',
 }
 
@@ -141,4 +148,26 @@ export async function customerGroupTabs(
     .filter(([, permission]) => !can(authz, permission))
     .map(([href]) => href)
   return groupTabs('customers', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
+}
+
+/** The permission behind the HRM strip's native-list tab. The cockpit tab
+ * needs nothing beyond the page's own hrm.employment.read gate. */
+const HRM_TAB_PERMISSION: Record<string, string> = {
+  '/entities/employees': 'parties.read',
+}
+
+/**
+ * The HRM strip with the permission exclusion applied, so a viewer who can
+ * read employment but not parties is never offered an Employees tab that
+ * access-denies.
+ */
+export async function hrmGroupTabs(
+  authz: Authz,
+  activeHref: string,
+  opts: { subQs?: string } = {},
+): Promise<ModuleHomeTab[]> {
+  const exclude = Object.entries(HRM_TAB_PERMISSION)
+    .filter(([, permission]) => !can(authz, permission))
+    .map(([href]) => href)
+  return groupTabs('hrm', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }

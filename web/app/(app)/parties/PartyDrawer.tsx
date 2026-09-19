@@ -46,6 +46,7 @@ import { SendButton } from '../../../components/send-button'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
 import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
+import { EmploymentTab } from '../hrm/EmploymentTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -234,7 +235,7 @@ import { PartyRelationshipSection } from './PartyRelationshipSection'
  * that named nothing. Here the party owns the whole strip and hands the shell
  * a controlled tab; `overview` is the shell's `details` slot, renamed.
  */
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'pulse' | 'relationship' | 'attachments' | 'audit'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'employment' | 'pulse' | 'relationship' | 'attachments' | 'audit'
 
 /** The rail key the shared shell knows the leading tab by. */
 const SHELL_DETAILS_TAB = 'details'
@@ -291,6 +292,7 @@ export function PartyDrawer({
   complianceEnabled = false,
   canManageCompliance = false,
   compliance = null,
+  hrm = null,
   role,
   initialTab = 'overview',
   initialMode = 'view',
@@ -346,6 +348,11 @@ export function PartyDrawer({
   canManageCompliance?: boolean
   /** The vendor's assigned class + the active classes, for the Compliance tab. */
   compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
+  /** Company Settings → Features. The HRM switch plus hrm.employment.read
+   *  gate the employee Employment tab; the ids are the party's scoped
+   *  employments (null = gated, so the tab never renders without the read
+   *  surface behind it). */
+  hrm?: { employmentIds: string[] } | null
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -362,6 +369,7 @@ export function PartyDrawer({
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
+  const th = useTranslations('hrm')
   const tInv = useTranslations('projects.invoicingPref')
   const locale = useLocale()
   const router = useRouter()
@@ -371,6 +379,10 @@ export function PartyDrawer({
   // predicate gates the tab button and the deep-link, so a stale
   // ?partyTab=compliance can never strand the drawer on a missing panel.
   const showComplianceTab = complianceEnabled && (role === 'vendor' || (!role && payload.vendor != null))
+  // The Employment tab needs an employee in an HRM-enabled org whose viewer
+  // holds the read grant — the loader passes null unless both hold, so the
+  // same predicate gates the tab button and the deep-link like Compliance.
+  const showEmploymentTab = hrm !== null && (role === 'employee' || (!role && payload.employee != null))
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
   const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
@@ -390,7 +402,8 @@ export function PartyDrawer({
     (initialTab === 'activities' && !canReadActivities) ||
     (initialTab === 'relationship' && !showRelationshipTab) ||
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
-    (initialTab === 'compliance' && !showComplianceTab)
+    (initialTab === 'compliance' && !showComplianceTab) ||
+    (initialTab === 'employment' && !showEmploymentTab)
       ? 'overview'
       : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
@@ -905,6 +918,7 @@ export function PartyDrawer({
     ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
     ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
     ...(role === 'employee' && canManagePayroll ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
+    ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
     // Attachments and Audit trail close the rail. They are the shared shell's
     // own panels, so the shell appends them itself — listing them here would
     // duplicate the buttons.
@@ -1573,6 +1587,28 @@ export function PartyDrawer({
             classes={compliance.classes}
             canManage={canManageCompliance}
           />
+        ) : null}
+
+        {tab === 'employment' && showEmploymentTab && hrm ? (
+          hrm.employmentIds.length === 1 ? (
+            <EmploymentTab employmentId={hrm.employmentIds[0] as string} />
+          ) : hrm.employmentIds.length === 0 ? (
+            <div className="space-y-2 p-1">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {th('employment.noRecord.title')}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{th('employment.noRecord.description')}</p>
+            </div>
+          ) : (
+            <div className="space-y-2 p-1">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {th('employment.multiple.title')}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {th('employment.multiple.description', { count: hrm.employmentIds.length })}
+              </p>
+            </div>
+          )
         ) : null}
 
       </div>

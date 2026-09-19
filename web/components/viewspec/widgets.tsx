@@ -74,6 +74,7 @@ import {
 } from '../../app/(app)/notifications/NotificationsInbox'
 import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
+import { HrmHeadcountTable } from '../../app/(app)/hrm/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1027,6 +1028,21 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       ratios={props.ratios as ComponentProps<typeof HealthHero>['ratios']}
       ratioLabels={props.ratioLabels as ComponentProps<typeof HealthHero>['ratioLabels']}
       fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
+    />
+  ),
+  /** A widget, not a slot: the loader already resolved headcount through the
+   *  canonical read service and passes rows plus loader-resolved strings as
+   *  data, so no org id, user id or Authz crosses the spec. */
+  'hrm-headcount-table': (props) => (
+    <HrmHeadcountTable
+      groups={(props.groups as ComponentProps<typeof HrmHeadcountTable>['groups']) ?? []}
+      total={num(props, 'total') ?? 0}
+      employerColumn={str(props, 'employerColumn') ?? ''}
+      departmentColumn={str(props, 'departmentColumn') ?? ''}
+      headcountColumn={str(props, 'headcountColumn') ?? ''}
+      unassigned={str(props, 'unassigned') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+      totalLabel={str(props, 'totalLabel') ?? ''}
     />
   ),
 

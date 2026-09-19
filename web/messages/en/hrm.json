@@ -1,0 +1,88 @@
+{
+  "home": {
+    "title": "Human Resources",
+    "description": "Employment records with as-of history, headcount, and change-request tracking.",
+    "tabs": {
+      "overview": "Overview"
+    },
+    "vitals": {
+      "headcount": "Headcount",
+      "headcountSub": "As of {date}",
+      "employers": "Employers",
+      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
+      "departments": "Departments",
+      "departmentsSub": "{count, plural, one {# department} other {# departments}}"
+    },
+    "groups": {
+      "title": "Headcount by employer and department",
+      "employer": "Employer",
+      "department": "Department",
+      "headcount": "Headcount",
+      "unassigned": "Unassigned",
+      "empty": "No employments are in service as of {date}.",
+      "total": "Total"
+    },
+    "directory": {
+      "title": "Directory"
+    }
+  },
+  "employment": {
+    "episodes": {
+      "title": "Employment episodes",
+      "status": "Status",
+      "effective": "Effective",
+      "recorded": "Recorded",
+      "present": "Present",
+      "empty": "No employment versions are recorded."
+    },
+    "status": {
+      "offered": "Offered",
+      "active": "Active",
+      "on_leave": "On leave",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "asOf": {
+      "title": "Effective assignment",
+      "dateLabel": "Effective date",
+      "refusalTitle": "Resolve refused"
+    },
+    "assignments": {
+      "title": "Assignments",
+      "jobTitle": "Job title",
+      "department": "Department",
+      "fte": "FTE",
+      "primary": "Primary",
+      "primaryYes": "Primary",
+      "effective": "Effective",
+      "recorded": "Recorded",
+      "empty": "No assignments cover this date."
+    },
+    "noRecord": {
+      "title": "No employment record",
+      "description": "This person has no employment record yet. Employment records are created by the HRM authoring flow."
+    },
+    "multiple": {
+      "title": "More than one employment record",
+      "description": "{count} employment records name this person. The record cannot be chosen automatically — resolve the duplicates before reading as-of state."
+    },
+    "changeRequests": {
+      "title": "Change requests",
+      "status": "Status",
+      "binding": "Binding",
+      "bindingValue": "Request revision {request} against employment revision {expected}",
+      "submitted": "Submitted",
+      "viewInApprovals": "View in approvals",
+      "noRun": "Draft — no approval run yet.",
+      "empty": "No change requests yet.",
+      "statusNames": {
+        "draft": "Draft",
+        "pending_approval": "Pending approval",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "withdrawn": "Withdrawn",
+        "applied": "Applied"
+      }
+    }
+  }
+}

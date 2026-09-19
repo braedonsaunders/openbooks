@@ -173,6 +173,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'grant-acting-cell',
   'grant-control-cell',
   'health-hero',
+  'hrm-headcount-table',
   'identity-cell',
   'identity-record-card',
   'import-statement',

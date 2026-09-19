@@ -35,14 +35,17 @@
  */
 
 import { sql } from "drizzle-orm";
+import { actorHasPermission } from "../actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../db.ts";
 import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
-import { requireHrmEmploymentRead } from "./authorization.ts";
+import { HrmAuthorizationError, requireHrmEmploymentRead } from "./authorization.ts";
 import {
   NoRevisionError,
   parseCivilDate,
   resolveAsOf,
   AmbiguousRevisionError,
+  TemporalError,
   type RecordedRevision,
 } from "./temporal.ts";
 
@@ -381,33 +384,18 @@ function groupAssignmentVersions(
 }
 
 /**
- * Load and assemble inside the caller's transaction (RLS applies), with
- * authorization hardwired: requireHrmEmploymentRead is the only gate and no
- * parameter can replace it. Missing/wrong-org/out-of-scope subjects are
- * refused inside the gate (HrmAuthorizationError).
- *
- * Gate-free of the feature key by design, but NOT reusable with foreign
- * authority: a future internal payroll canonical resolver must bring its own
- * permission boundary and reuse the pure assembler below, never this loader.
- * Only the HRM user entry (getEmploymentAsOf) carries the HRM feature gate,
- * so payroll stays independently usable while HRM is off, and no payroll
- * dependency is read into the shared pure resolution.
+ * The locked single-statement snapshot shared by every per-employment
+ * loader: the aggregate lock plus stable revision, every employment
+ * version, and every assignment version (joined to its slot key). Factored
+ * out of loadEmploymentAsOf verbatim — the SQL text is unchanged — so the
+ * episodes list and the combined record read observe the same snapshot
+ * shape the as-of read assembles from.
  */
-export async function loadEmploymentAsOf(
+async function loadEmploymentSnapshot(
   exec: SqlExecutor,
-  query: EmploymentAsOfQuery,
-): Promise<EmploymentDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
-  validateAsOf(query.effectiveDate, query.knownAt);
-
-  // Authority first: denial (including unknown id) reports uniformly, so a
-  // later presence check cannot leak existence to an unauthorized actor.
-  // The trusted subject supplies identity; the displayed revision comes from
-  // the snapshot below so it can never mix with another snapshot's versions.
-  const subject = await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
-
+  orgId: string,
+  employmentId: string,
+): Promise<{ revision: number; employmentVersions: EmploymentVersionRow[]; slots: { slot: AssignmentSlotRow; versions: AssignmentVersionRow[] }[] }> {
   // Aggregate lock: serializes against corrections that honor the writer
   // protocol (update or lock the stable row on every version write).
   const locked = (await exec.execute<{ one: number }>(sql`
@@ -458,6 +446,43 @@ export async function loadEmploymentAsOf(
     );
   }
 
+  return {
+    revision: snapshot.revision,
+    employmentVersions: mapEmploymentVersions(snapshot.employment_versions ?? []),
+    slots: groupAssignmentVersions(snapshot.assignment_versions ?? []),
+  };
+}
+
+/**
+ * Load and assemble inside the caller's transaction (RLS applies), with
+ * authorization hardwired: requireHrmEmploymentRead is the only gate and no
+ * parameter can replace it. Missing/wrong-org/out-of-scope subjects are
+ * refused inside the gate (HrmAuthorizationError).
+ *
+ * Gate-free of the feature key by design, but NOT reusable with foreign
+ * authority: a future internal payroll canonical resolver must bring its own
+ * permission boundary and reuse the pure assembler below, never this loader.
+ * Only the HRM user entries (getEmploymentAsOf, getEmploymentRecord,
+ * getHeadcountAsOf, findEmploymentsByParty) carry the HRM feature gate,
+ * so payroll stays independently usable while HRM is off, and no payroll
+ * dependency is read into the shared pure resolution.
+ */
+export async function loadEmploymentAsOf(
+  exec: SqlExecutor,
+  query: EmploymentAsOfQuery,
+): Promise<EmploymentDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const employmentId = requireId("employmentId", query.employmentId);
+  validateAsOf(query.effectiveDate, query.knownAt);
+
+  // Authority first: denial (including unknown id) reports uniformly, so a
+  // later presence check cannot leak existence to an unauthorized actor.
+  // The trusted subject supplies identity; the displayed revision comes from
+  // the snapshot below so it can never mix with another snapshot's versions.
+  const subject = await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  const snapshot = await loadEmploymentSnapshot(exec, orgId, employmentId);
+
   const assembled = assembleEmploymentAsOf(
     {
       id: subject.id,
@@ -466,8 +491,8 @@ export async function loadEmploymentAsOf(
       employerSubsidiaryId: subject.employerSubsidiaryId,
       revision: snapshot.revision,
     },
-    mapEmploymentVersions(snapshot.employment_versions ?? []),
-    groupAssignmentVersions(snapshot.assignment_versions ?? []),
+    snapshot.employmentVersions,
+    snapshot.slots,
     { effectiveDate: query.effectiveDate, knownAt: query.knownAt },
   );
   if (assembled.employmentId !== employmentId || assembled.orgId !== orgId) {
@@ -486,11 +511,592 @@ export async function loadEmploymentAsOf(
 export async function getEmploymentAsOf(query: EmploymentAsOfQuery): Promise<EmploymentDTO> {
   const orgId = requireId("orgId", query.orgId);
   return withOrgTransaction(orgId, async () => {
-    if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
+    await assertHrmFeatureOn(db, orgId);
+    return loadEmploymentAsOf(db, query);
+  });
+}
+
+/** The HRM feature gate rechecked inside the caller's transaction. Every
+ * public read entry carries it; loaders stay gate-free so one transaction
+ * pays for one check. */
+async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+    throw new EmploymentReadError(
+      `hrm feature is disabled: enable it on Company Settings → Features before reading employment`,
+    );
+  }
+}
+
+/**
+ * The aggregate half of HRM read authority: the same two checks
+ * requireHrmEmploymentRead applies per employment — the hrm.employment.read
+ * grant, then the employer-subsidiary scope — lifted to list-shaped reads
+ * that name no single employment. Denial throws HrmAuthorizationError with
+ * the same remedy; scope returns the allowed employer set (null =
+ * unrestricted) for the caller to filter by, never a boolean to trust.
+ */
+async function requireAggregateEmploymentRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.employment.read"))) {
+    throw new HrmAuthorizationError(
+      `Employment access requires the hrm.employment.read permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/** One employment version row: an episode of the employment's history. */
+export interface EmploymentEpisodeDTO {
+  /** Version row id for historical source snapshots (not just the number). */
+  readonly versionId: string;
+  readonly versionNo: number;
+  readonly status: string;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+  readonly recordedAt: string;
+  readonly recordedUntil: string | null;
+}
+
+export interface EmploymentEpisodesDTO {
+  readonly employmentId: string;
+  readonly revision: number;
+  readonly episodes: readonly EmploymentEpisodeDTO[];
+}
+
+/**
+ * List every recorded version (episode) of one employment, oldest first.
+ * Authorized through requireHrmEmploymentRead, so a missing, foreign-org,
+ * or out-of-scope employment is refused uniformly (HrmAuthorizationError),
+ * never an empty list pretending the employment does not exist. An
+ * employment with no versions lists none — the as-of read then refuses
+ * with NO_REVISION, which names the remedy.
+ */
+export async function loadEmploymentEpisodes(
+  exec: SqlExecutor,
+  query: Pick<EmploymentAsOfQuery, "orgId" | "actorId" | "employmentId">,
+): Promise<EmploymentEpisodesDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const employmentId = requireId("employmentId", query.employmentId);
+  const subject = await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  const snapshot = await loadEmploymentSnapshot(exec, orgId, employmentId);
+  const episodes = snapshot.employmentVersions
+    .map((row) => ({
+      versionId: row.id,
+      versionNo: row.versionNo,
+      status: row.status,
+      effectiveFrom: row.effectiveFrom,
+      effectiveTo: row.effectiveTo,
+      recordedAt: row.recordedAt,
+      recordedUntil: row.recordedUntil,
+    }))
+    .sort((a, b) => a.versionNo - b.versionNo);
+  return { employmentId: subject.id, revision: snapshot.revision, episodes };
+}
+
+/** One 0185 change-request row: status, revision binding, and the native
+ * approval-run anchor. Read-only projection of the request table — Slice A
+ * owns authoring; this loader never writes. */
+export interface EmploymentChangeRequestDTO {
+  readonly id: string;
+  readonly status: string;
+  readonly requestRevision: number;
+  readonly expectedEmploymentRevision: number;
+  readonly payloadSchemaVersion: string;
+  readonly reason: string | null;
+  readonly submittedBy: string | null;
+  readonly submittedAt: string | null;
+  /** Native approval run anchor; null in draft (drafts never carry a run). */
+  readonly flowRunId: string | null;
+  readonly decisionSnapshot: unknown;
+  readonly appliedAt: string | null;
+  readonly appliedBy: string | null;
+  readonly appliedEmploymentRevision: number | null;
+  readonly appliedEmploymentChangeId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+type ChangeRequestJson = {
+  id: string;
+  status: string;
+  request_revision: number;
+  expected_employment_revision: number;
+  payload_schema_version: string;
+  reason: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  flow_run_id: string | null;
+  decision_snapshot: unknown;
+  applied_at: string | null;
+  applied_by: string | null;
+  applied_employment_revision: number | null;
+  applied_employment_change_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * List the employment's change requests, newest first. Authorized through
+ * requireHrmEmploymentRead, so a missing, foreign-org, or out-of-scope
+ * employment is refused uniformly (HrmAuthorizationError). An employment
+ * with no requests lists none — a truthful empty, not a refusal.
+ */
+export async function loadEmploymentChangeRequests(
+  exec: SqlExecutor,
+  query: Pick<EmploymentAsOfQuery, "orgId" | "actorId" | "employmentId">,
+): Promise<readonly EmploymentChangeRequestDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const employmentId = requireId("employmentId", query.employmentId);
+  await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  // No arbitrary SQL identifiers: every value is a bound parameter, every
+  // column list is explicit, stamps are microsecond UTC text, uuids are text.
+  const rows = (await exec.execute<ChangeRequestJson>(sql`
+    select r.id::text as id, r.status,
+           r.request_revision, r.expected_employment_revision,
+           r.payload_schema_version, r.reason,
+           r.submitted_by::text as submitted_by,
+           to_char(r.submitted_at at time zone 'UTC', ${RECORDED_TEXT}) as submitted_at,
+           r.flow_run_id::text as flow_run_id,
+           r.decision_snapshot,
+           to_char(r.applied_at at time zone 'UTC', ${RECORDED_TEXT}) as applied_at,
+           r.applied_by::text as applied_by,
+           r.applied_employment_revision,
+           r.applied_employment_change_id::text as applied_employment_change_id,
+           to_char(r.created_at at time zone 'UTC', ${RECORDED_TEXT}) as created_at,
+           to_char(r.updated_at at time zone 'UTC', ${RECORDED_TEXT}) as updated_at
+      from hrm_employment_change_requests r
+     where r.org_id = ${orgId}::uuid and r.employment_id = ${employmentId}::uuid
+     order by r.created_at desc, r.id desc`)).rows;
+  return rows.map((row) => ({
+    id: requireText("hrm_employment_change_requests.id", row.id),
+    status: requireText("hrm_employment_change_requests.status", row.status),
+    requestRevision: row.request_revision,
+    expectedEmploymentRevision: row.expected_employment_revision,
+    payloadSchemaVersion: row.payload_schema_version,
+    reason: row.reason,
+    submittedBy: row.submitted_by,
+    submittedAt: row.submitted_at,
+    flowRunId: row.flow_run_id,
+    decisionSnapshot: row.decision_snapshot,
+    appliedAt: row.applied_at,
+    appliedBy: row.applied_by,
+    appliedEmploymentRevision: row.applied_employment_revision,
+    appliedEmploymentChangeId: row.applied_employment_change_id,
+    createdAt: requireText("hrm_employment_change_requests.created_at", row.created_at),
+    updatedAt: requireText("hrm_employment_change_requests.updated_at", row.updated_at),
+  }));
+}
+
+export interface EmploymentsByPartyQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly workerPartyId: string;
+}
+
+/**
+ * Resolve a worker party to its employment ids, in stable order. Authority
+ * is the aggregate half (grant + employer-subsidiary scope): employments
+ * outside the actor's scope are filtered, never returned. An empty list is
+ * truthful — most parties hold no 0184 employment row (no backfill) — and
+ * the caller renders the explicit no-record state, never data. More than
+ * one id is the caller's ambiguity to refuse: identity is per employment.
+ */
+export async function loadEmploymentsByParty(
+  exec: SqlExecutor,
+  query: EmploymentsByPartyQuery,
+): Promise<readonly string[]> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const workerPartyId = requireId("workerPartyId", query.workerPartyId);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const rows = (await exec.execute<{ id: string; employerSubsidiaryId: string | null }>(sql`
+    select id::text as id, employer_subsidiary_id::text as "employerSubsidiaryId"
+      from worker_employments
+     where org_id = ${orgId}::uuid and worker_party_id = ${workerPartyId}::uuid
+     order by id`)).rows;
+  // A null employer is invisible — authorization refuses such subjects, so
+  // the list twin excludes them rather than leaking their ids.
+  return rows
+    .filter((row) => row.employerSubsidiaryId !== null && (allowed === null || allowed.has(row.employerSubsidiaryId)))
+    .map((row) => requireText("worker_employments.id", row.id));
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the scoped party→employment
+ * resolution. Read only.
+ */
+export async function findEmploymentsByParty(query: EmploymentsByPartyQuery): Promise<readonly string[]> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadEmploymentsByParty(db, query);
+  });
+}
+
+/** A computed as-of refusal carried as data, so the record read can refuse
+ * one section while still returning the others. Exactly one of `asOf` /
+ * `asOfRefusal` is set; `code` is the error name (NoRevisionError,
+ * AmbiguousRevisionError, EmploymentReadError). */
+export interface EmploymentAsOfRefusal {
+  readonly code: string;
+  readonly message: string;
+}
+
+export interface EmploymentRecordDTO {
+  readonly employmentId: string;
+  readonly orgId: string;
+  readonly workerPartyId: string;
+  readonly employerSubsidiaryId: string;
+  readonly revision: number;
+  readonly episodes: readonly EmploymentEpisodeDTO[];
+  readonly asOf: EmploymentDTO | null;
+  readonly asOfRefusal: EmploymentAsOfRefusal | null;
+  readonly changeRequests: readonly EmploymentChangeRequestDTO[];
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then episodes, the as-of resolution,
+ * and the change-request list from one snapshot point. Read only.
+ *
+ * The as-of leg may refuse (ambiguity, missing version) while the
+ * employment itself is authorized: that refusal is returned as data in
+ * `asOfRefusal` so the caller renders it as a refusal beside the episodes
+ * and requests — never an empty state pretending to be data. Authorization
+ * denial refuses the whole call (HrmAuthorizationError): nothing about an
+ * employment the actor cannot see is returned piecemeal.
+ */
+export async function getEmploymentRecord(query: EmploymentAsOfQuery): Promise<EmploymentRecordDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const employmentId = requireId("employmentId", query.employmentId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    // One pinned client inside the transaction: sequential, never parallel.
+    const subject = await requireHrmEmploymentRead(db, orgId, actorId, employmentId);
+    const episodes = await loadEmploymentEpisodes(db, { orgId, actorId, employmentId });
+    let asOf: EmploymentDTO | null = null;
+    let asOfRefusal: EmploymentAsOfRefusal | null = null;
+    try {
+      asOf = await loadEmploymentAsOf(db, query);
+    } catch (error) {
+      if (error instanceof TemporalError || error instanceof EmploymentReadError) {
+        asOfRefusal = { code: (error as Error).name, message: (error as Error).message };
+      } else {
+        throw error;
+      }
+    }
+    if ((asOf === null) === (asOfRefusal === null)) {
       throw new EmploymentReadError(
-        `hrm feature is disabled: enable it on Company Settings → Features before reading employment`,
+        `employment record resolved neither to data nor to a refusal; refusing an envelope that asserts nothing`,
       );
     }
-    return loadEmploymentAsOf(db, query);
+    const changeRequests = await loadEmploymentChangeRequests(db, { orgId, actorId, employmentId });
+    return {
+      employmentId: subject.id,
+      orgId: subject.orgId,
+      workerPartyId: subject.workerPartyId,
+      employerSubsidiaryId: subject.employerSubsidiaryId,
+      revision: episodes.revision,
+      episodes: episodes.episodes,
+      asOf,
+      asOfRefusal,
+      changeRequests,
+    };
+  });
+}
+
+export interface HeadcountQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Civil effective date (YYYY-MM-DD). */
+  readonly effectiveDate: string;
+  /** As-known UTC instant (YYYY-MM-DDTHH:mm:ss[.fraction]Z). */
+  readonly knownAt: string;
+}
+
+export interface HeadcountGroupDTO {
+  readonly employerSubsidiaryId: string;
+  readonly employerSubsidiaryName: string;
+  readonly departmentId: string | null;
+  readonly departmentName: string | null;
+  readonly headcount: number;
+}
+
+export interface HeadcountDTO {
+  readonly orgId: string;
+  readonly effectiveDate: string;
+  readonly knownAt: string;
+  readonly total: number;
+  readonly groups: readonly HeadcountGroupDTO[];
+}
+
+/**
+ * Employment statuses counted toward headcount: in service, or retained
+ * while on leave (leave is presence-neutral for headcount). Offered has not
+ * commenced, suspended is interrupted, terminated has ended — resolved but
+ * not counted. The rule is explicit and pinned by tests; changing it is a
+ * product decision, not a bug fix.
+ */
+export const HEADCOUNT_STATUSES: readonly string[] = ["active", "on_leave"];
+
+type HeadcountEmploymentRow = {
+  id: string;
+  workerPartyId: string;
+  employerSubsidiaryId: string | null;
+  revision: number;
+};
+
+/**
+ * Headcount as-of (effectiveDate, knownAt) by employer subsidiary and
+ * primary-assignment department, resolved through the temporal primitives —
+ * never a row count. Every in-scope employment resolves through
+ * assembleEmploymentAsOf: no applicable revision is legitimately absent
+ * (not employed at the as-of point), more than one is a refusal that fails
+ * the whole read (AmbiguousRevisionError names the employment) rather than
+ * a silently undercounted cockpit. Authority is the aggregate half (grant
+ * + employer-subsidiary scope). A referenced subsidiary or department with
+ * no name row is a refusal: headcount must never be misattributed.
+ */
+export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery): Promise<HeadcountDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  validateAsOf(query.effectiveDate, query.knownAt);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+
+  const employments = (await exec.execute<HeadcountEmploymentRow>(sql`
+    select id::text as id,
+           worker_party_id::text as "workerPartyId",
+           employer_subsidiary_id::text as "employerSubsidiaryId",
+           revision
+      from worker_employments
+     where org_id = ${orgId}::uuid
+     order by id`)).rows.filter(
+    (row) => row.employerSubsidiaryId !== null && (allowed === null || allowed.has(row.employerSubsidiaryId)),
+  );
+  if (employments.length === 0) {
+    return { orgId, effectiveDate: query.effectiveDate, knownAt: query.knownAt, total: 0, groups: [] };
+  }
+
+  // Batched version reads. Bare JS arrays must never be interpolated into
+  // ANY() (they bind as row constructors); each id is its own parameter.
+  const ids = employments.map((row) => sql`${row.id}::uuid`);
+  // Standalone type aliases (not interfaces): drizzle's execute row generic
+  // requires Record<string, unknown>, which only object-literal type aliases
+  // satisfy through the implicit index signature.
+  type BatchedEmploymentVersionJson = {
+    id: string;
+    employment_id: string;
+    version_no: number;
+    status: string;
+    effective_from: string;
+    effective_to: string | null;
+    recorded_at: string;
+    recorded_until: string | null;
+  };
+  type BatchedAssignmentVersionJson = {
+    id: string;
+    employment_id: string;
+    assignment_id: string;
+    assignment_key: string;
+    version_no: number;
+    job_title: string | null;
+    department_id: string | null;
+    location_id: string | null;
+    fte: string;
+    is_primary: boolean;
+    effective_from: string;
+    effective_to: string | null;
+    recorded_at: string;
+    recorded_until: string | null;
+  };
+  const versionRows = (await exec.execute<BatchedEmploymentVersionJson>(sql`
+    select ev.id::text as id, ev.employment_id::text as employment_id, ev.version_no,
+           ev.status,
+           ev.effective_from::text as effective_from,
+           ev.effective_to::text as effective_to,
+           to_char(ev.recorded_at at time zone 'UTC', ${RECORDED_TEXT}) as recorded_at,
+           to_char(ev.recorded_until at time zone 'UTC', ${RECORDED_TEXT}) as recorded_until
+      from worker_employment_versions ev
+     where ev.org_id = ${orgId}::uuid and ev.employment_id in (${sql.join(ids, sql`, `)})
+     order by ev.employment_id, ev.version_no`)).rows;
+  const assignmentRows = (await exec.execute<BatchedAssignmentVersionJson>(sql`
+    select av.id::text as id,
+           av.employment_id::text as employment_id,
+           av.assignment_id::text as assignment_id, a.assignment_key,
+           av.version_no, av.job_title,
+           av.department_id::text as department_id,
+           av.location_id::text as location_id,
+           av.fte::text as fte, av.is_primary,
+           av.effective_from::text as effective_from,
+           av.effective_to::text as effective_to,
+           to_char(av.recorded_at at time zone 'UTC', ${RECORDED_TEXT}) as recorded_at,
+           to_char(av.recorded_until at time zone 'UTC', ${RECORDED_TEXT}) as recorded_until
+      from employment_assignment_versions av
+      join employment_assignments a
+        on a.id = av.assignment_id and a.org_id = av.org_id
+     where av.org_id = ${orgId}::uuid and av.employment_id in (${sql.join(ids, sql`, `)})
+     order by av.employment_id, av.assignment_id, av.version_no`)).rows;
+
+  const versionsByEmployment = new Map<string, EmploymentVersionRow[]>();
+  for (const row of versionRows) {
+    const list = versionsByEmployment.get(row.employment_id) ?? [];
+    list.push({
+      id: requireText("worker_employment_versions.id", row.id),
+      versionNo: row.version_no,
+      status: requireText("worker_employment_versions.status", row.status),
+      effectiveFrom: row.effective_from,
+      effectiveTo: row.effective_to,
+      recordedAt: row.recorded_at,
+      recordedUntil: row.recorded_until,
+    });
+    versionsByEmployment.set(row.employment_id, list);
+  }
+  const assignmentsByEmployment = new Map<string, AssignmentVersionJson[]>();
+  for (const row of assignmentRows) {
+    const list = assignmentsByEmployment.get(row.employment_id) ?? [];
+    list.push(row);
+    assignmentsByEmployment.set(row.employment_id, list);
+  }
+
+  const counted: { subsidiaryId: string; departmentId: string | null }[] = [];
+  for (const employment of employments) {
+    const stable: EmploymentStableRow = {
+      id: employment.id,
+      orgId,
+      workerPartyId: employment.workerPartyId,
+      employerSubsidiaryId: employment.employerSubsidiaryId ?? "",
+      revision: employment.revision,
+    };
+    let dto: EmploymentDTO;
+    try {
+      dto = assembleEmploymentAsOf(
+        stable,
+        versionsByEmployment.get(employment.id) ?? [],
+        groupAssignmentVersions(
+          (assignmentsByEmployment.get(employment.id) ?? []).map((row) => ({
+            id: row.id,
+            assignment_id: row.assignment_id,
+            assignment_key: row.assignment_key,
+            version_no: row.version_no,
+            job_title: row.job_title,
+            department_id: row.department_id,
+            location_id: row.location_id,
+            fte: row.fte,
+            is_primary: row.is_primary,
+            effective_from: row.effective_from,
+            effective_to: row.effective_to,
+            recorded_at: row.recorded_at,
+            recorded_until: row.recorded_until,
+          })),
+        ),
+        { effectiveDate: query.effectiveDate, knownAt: query.knownAt },
+      );
+    } catch (error) {
+      // Not employed at the as-of point (not yet effective, already ended):
+      // legitimately absent from headcount, never a gap failure. Ambiguity
+      // (or any other refusal) propagates and fails the read.
+      if (error instanceof NoRevisionError) continue;
+      throw error;
+    }
+    if (!HEADCOUNT_STATUSES.includes(dto.version.status)) continue;
+    counted.push({
+      subsidiaryId: dto.employerSubsidiaryId,
+      departmentId: dto.assignments.find((assignment) => assignment.isPrimary)?.departmentId ?? null,
+    });
+  }
+  if (counted.length === 0) {
+    // Nothing in service at the as-of point: a resolved zero, and never an
+    // empty IN list (which PostgreSQL rejects) on the name lookups below.
+    return { orgId, effectiveDate: query.effectiveDate, knownAt: query.knownAt, total: 0, groups: [] };
+  }
+
+  const subsidiaryIds = [...new Set(counted.map((row) => row.subsidiaryId))];
+  const departmentIds = [...new Set(counted.map((row) => row.departmentId).filter((id): id is string => id !== null))];
+  const subsidiaryNames = new Map(
+    (await exec.execute<{ id: string; name: string }>(sql`
+      select id::text as id, name from subsidiaries
+       where org_id = ${orgId}::uuid and id in (${sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows.map(
+      (row) => [row.id, row.name] as const,
+    ),
+  );
+  const departmentNames = departmentIds.length === 0
+    ? new Map<string, string>()
+    : new Map(
+        (await exec.execute<{ id: string; name: string }>(sql`
+          select id::text as id, name from departments
+           where org_id = ${orgId}::uuid and id in (${sql.join(departmentIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows.map(
+          (row) => [row.id, row.name] as const,
+        ),
+      );
+  const grouped = new Map<string, HeadcountGroupDTO>();
+  for (const row of counted) {
+    const subsidiaryName = subsidiaryNames.get(row.subsidiaryId);
+    if (subsidiaryName === undefined) {
+      throw new EmploymentReadError(
+        `headcount references subsidiary ${row.subsidiaryId} with no subsidiaries row; refusing a misattributed count`,
+      );
+    }
+    let departmentName: string | null = null;
+    if (row.departmentId !== null) {
+      const resolved = departmentNames.get(row.departmentId);
+      if (resolved === undefined) {
+        throw new EmploymentReadError(
+          `headcount references department ${row.departmentId} with no departments row; refusing a misattributed count`,
+        );
+      }
+      departmentName = resolved;
+    }
+    const key = `${row.subsidiaryId} ${row.departmentId ?? ""}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      grouped.set(key, { ...existing, headcount: existing.headcount + 1 });
+    } else {
+      grouped.set(key, {
+        employerSubsidiaryId: row.subsidiaryId,
+        employerSubsidiaryName: subsidiaryName,
+        departmentId: row.departmentId,
+        departmentName,
+        headcount: 1,
+      });
+    }
+  }
+  // Deterministic order: subsidiary name, then department name with
+  // unattributed rows last. Key comparison is total: names are unique per
+  // group key by construction (one name row per id).
+  const groups = [...grouped.values()].sort((a, b) => {
+    if (a.employerSubsidiaryName !== b.employerSubsidiaryName) {
+      return a.employerSubsidiaryName < b.employerSubsidiaryName ? -1 : 1;
+    }
+    if (a.departmentName === b.departmentName) return 0;
+    if (a.departmentName === null) return 1;
+    if (b.departmentName === null) return -1;
+    return a.departmentName < b.departmentName ? -1 : 1;
+  });
+  return {
+    orgId,
+    effectiveDate: query.effectiveDate,
+    knownAt: query.knownAt,
+    total: counted.length,
+    groups,
+  };
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the authorized headcount. Read
+ * only: no mutations, no payroll fanout, no party/role fallback.
+ */
+export async function getHeadcountAsOf(query: HeadcountQuery): Promise<HeadcountDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadHeadcountAsOf(db, query);
   });
 }
