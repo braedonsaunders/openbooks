@@ -1055,3 +1055,80 @@ test("a storage refusal past validation never leaks driver text to the client", 
     await dropScratchOrgReporting(f.orgId);
   }
 });
+
+test("save-rate names WHICH wage scope is unavailable, with the supplied id", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // One message covered four distinct failed lookups (employee, trade,
+  // department, subsidiary) as 'wage scope is not available'. Each refusal
+  // must name the scope kind and the id it was given.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const cases = [
+      { field: "employeePartyId", kind: "employee" },
+      { field: "tradeId", kind: "trade" },
+      { field: "departmentId", kind: "department" },
+      { field: "subsidiaryId", kind: "subsidiary" },
+    ] as const;
+    for (const { field, kind } of cases) {
+      const missing = randomUUID();
+      const refused = await POST(postRequest(saveRateBody({ [field]: missing })));
+      assert.equal(refused.status, 422, field);
+      const body = await refused.json() as { error: string };
+      assert.match(body.error, new RegExp(`${kind} wage scope "${missing}" is not available`), field);
+    }
+    // No wage row from any refused save.
+    assert.equal((await storedRates(f.orgId)).length, 0);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("reconcile and post-variance name a subsidiary that is missing, inactive, or elimination", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Both actions refused every subsidiary failure as 'subsidiary is not
+  // available'. Each refusal must name the id and which predicate failed.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage", "gl.post"]),
+      allowedSubsidiaryIds: null,
+    };
+    const period = { periodStart: "2026-01-01", periodEnd: "2026-01-31" };
+    const missing = randomUUID();
+    for (const action of ["reconcile", "post-variance"] as const) {
+      const refused = await POST(postRequest({ action, ...period, subsidiaryId: missing }));
+      assert.equal(refused.status, 422, action);
+      assert.match(
+        (await refused.json() as { error: string }).error,
+        new RegExp(`no subsidiary "${missing}" in this organization`),
+        action,
+      );
+    }
+    const dormant = await seedSubsidiary(f.orgId, f.subsidiaryId, "Dormant Co");
+    await db.execute(sql`update subsidiaries set is_active = false where id = ${dormant}`);
+    const inactive = await POST(postRequest({ action: "reconcile", ...period, subsidiaryId: dormant }));
+    assert.equal(inactive.status, 422);
+    assert.match(
+      (await inactive.json() as { error: string }).error,
+      new RegExp(`subsidiary "Dormant Co" is inactive`),
+    );
+    const wash = await seedSubsidiary(f.orgId, f.subsidiaryId, "Wash Co");
+    await db.execute(sql`update subsidiaries set is_elimination = true where id = ${wash}`);
+    const elimination = await POST(postRequest({ action: "reconcile", ...period, subsidiaryId: wash }));
+    assert.equal(elimination.status, 422);
+    assert.match(
+      (await elimination.json() as { error: string }).error,
+      new RegExp(`subsidiary "Wash Co" is an elimination entity`),
+    );
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
