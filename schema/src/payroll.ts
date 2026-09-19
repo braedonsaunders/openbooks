@@ -238,10 +238,12 @@ export const employeePayrollProfiles = pgTable(
     /** Statutory country pack this employee runs under.
      * Deliberately NOT an enum (0189): 0175 widened the storage CHECK to any
      * two-letter code — a closed two-country type rejects at compile time
-     * what the database accepts. The NOT NULL and 'CA' default are
-     * untouched: removing a default is a behaviour change with its own
-     * callers and its own historical-rows problem (queue item 40), not a
-     * type fix. */
+     * what the database accepts. The database-side 'CA' default is gone
+     * (0190) while NOT NULL stays: an unset country is refused, never
+     * silently Canadian. The `.default("CA")` below is type-level only —
+     * no Drizzle-query-builder insert on this table exists for it to
+     * reach — and historical rows carrying 'CA' are left untouched by
+     * design (a defaulted row is indistinguishable from a chosen one). */
     country: text("country").notNull().default("CA"),
     /** Jurisdiction of employment within the country: T4127 province ('ON',
      * 'QC', 'ZZ') for Canada, state postal code ('TX', 'WA', …) for the US. */
