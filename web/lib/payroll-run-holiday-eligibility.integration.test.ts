@@ -311,6 +311,16 @@ test("commission status answered once clears later periods without re-answering"
   try {
     state.gate = runGate(fx);
     const quebecId = await addEmployee(fx, "Quinn Quebec", "QC");
+    // A QC employer always owes the health services fund, so a live-but-
+    // unconfigured ca_hsf slot refuses that employee by name before any
+    // commission question is reached. That refusal is correct and belongs to
+    // its own suite; configure the rate here so this test observes the thing
+    // it is actually about.
+    await withBypassContext(() => db.execute(sql`
+      insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                           rate_values, created_by, updated_by)
+      values (${fx.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+              ${fx.actorId}, ${fx.actorId})`));
     const { documentId } = await christmasRun(fx);
     const commissionRefusals = async (id: string) => {
       const res = await calculate(id, { action: "calculate" });
