@@ -1719,6 +1719,7 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.run.approvalSubmitted': 'a0e42da94f35822594798d592ff9c2340469227370f9d8ec1b9af7f1a76e6f6f',
   'payroll.run.calculate': '2121cc15afb6ba5350deb90e1a292faa7d932537a19ddddadff4aeb796a8d595',
   'payroll.run.calculateDone': 'ab4d17df1be5e14501d827733d62e0c092b6122f48f95892cb125628339db90c',
+  'payroll.run.calculateRefusedAll': '7ee2d76d302fcd93f386d5d8310521b8582cfa6e7976340c1d4df8f88ad18c8c',
   'payroll.run.commit': '82a9c46ffa4789945d9f2359d75891558ef6faa8dee09e4b25e4e0597704f5bd',
   'payroll.run.commitDone': 'c658f4ed443d30ae20af749910d66fa1791cab0edd50e4eabd63e71667a2cc31',
   'payroll.run.discardBody': '46819196134b1b7432643ca63d242ff13469f69a49230a507a90f0124b3240bf',
@@ -1760,6 +1761,9 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.wizard.finish.nextTitle': 'eaf380e7f60489b7d687971d73fa8687ed68ef0aa7cc9a38310c146b06538067',
   'payroll.wizard.finish.notCommitted': '0307e4d4766e10c40406eb6c00cf7b7c836740ee86a6ca1c2a81f528e61f846c',
   'payroll.wizard.finish.paid': 'fb81b961af456e5e748db7e1b1bff9a5e621b62718234c1937738d1adc317a17',
+  'payroll.wizard.finish.partialRecorded': 'bbf18df953db9075fad4dbbee37d492aea918478c64a862f3471ec1406e24e0d',
+  'payroll.wizard.finish.partialRecovery': 'f89064121028c1437b7d78fd57a50a9010cf33d34732487418625ad0ddc9dfc5',
+  'payroll.wizard.finish.partialTitle': '9e59a82118315e8644491110282bfa36b8be9bfd25e2f6dce0bffaae4147e319',
   'payroll.wizard.finish.paymentRecorded': '3299b321d69b6f4de419d5822b6d8555d19c43ddc69c2ee308ed3e89630aa59c',
   'payroll.wizard.finish.postHint': '89f097de992b8dc0faafa67a1cc59b06f8f65f1f624055c828cdd80d45a571a8',
   'payroll.wizard.finish.postTitle': '68a637fd4332d4e96805dbfac918dff67993f7129c2c1dc5e6f7c7532f4574be',
@@ -3419,7 +3423,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1149, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1163, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3520,7 +3524,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1149, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1163, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []
