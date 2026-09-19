@@ -249,6 +249,7 @@ export function LinkPersonButton({
   userName,
   partyId,
   partyName,
+  isSelf,
 }: {
   userId: string
   userName: string
