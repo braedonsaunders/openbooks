@@ -99,6 +99,9 @@ async function caPayrollOrg(): Promise<CaFixture> {
   // Quebec source deductions remit to Revenu Quebec, not the CRA vendor, so
   // the qc slot carries its own account rather than the legacy tax mapping.
   await setPackSlotAccount(org.orgId, actorId, 'CA', 'qc_income_tax', craPayable)
+  // The health services fund is an employer contribution the QC employer always
+  // owes, so it needs a liability account before any QC employee can calculate.
+  await setPackSlotAccount(org.orgId, actorId, 'CA', 'hsf', craPayable)
   const scheduleId = randomUUID()
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -154,6 +157,14 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
   try {
     const ontario = await caEmployee(fx, 'Ontario Hourly', 'ON')
     const quebec = await caEmployee(fx, 'Quebec Hourly', 'QC')
+    // A QC employer always owes the health services fund, so a live-but-
+    // unconfigured ca_hsf slot refuses that employee by name at calculate.
+    // This test is about what a printed stub counts, not about the levy.
+    await withBypassContext(() => db.execute(sql`
+      insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                           rate_values, created_by, updated_by)
+      values (${fx.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+              ${fx.actorId}, ${fx.actorId})`))
     const run = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-05', periodEnd: '2026-07-18',
@@ -304,6 +315,16 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
                                                is_active, created_by, updated_by)
         values (${org.orgId}, ${employee}, ${scheduleId}, 'US', 'CA',
                 'salary', 'single', true, ${actorId}, ${actorId})`)
+      // SUI is experience-rated, so a live-but-unconfigured us_sui slot refuses
+      // this employee by name at calculate. This test is about what a printed
+      // stub counts as income tax, not about the employer levy — give the
+      // employer a rate so the run reaches the assertion. The employee carries
+      // no filing account, so the rate resolves on the state alone.
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, filing_account_id,
+                                             tax_year, rate_values, created_by, updated_by)
+        values (${org.orgId}, 'US', 'us_sui', 'CA', null, 2026,
+                '{"rate": "0.034", "wageBase": "7000.00"}'::jsonb, ${actorId}, ${actorId})`)
     })
 
     const run = await withOrgContext(org.orgId, () => createPayRun({
