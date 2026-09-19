@@ -383,11 +383,21 @@ export async function POST(req: Request) {
   }
   // The pack declares its own KNOWN regions (ZZ included for CA). A known but
   // unimplemented region is saveable — the run refuses it with the pack's own
-  // reason — but a region that does not exist is a typo, refused here.
+  // reason — but a region that does not exist is a typo, refused here. The
+  // refusal names the pack's own label, the received value (or its absence),
+  // the valid codes, and a valid example: a bare "invalid state" names none
+  // of those, so a missing region and a mistyped one refuse separately.
+  const { label: regionLabel, known: knownRegions } = payrollPack(country).regions
   const province = String(body.province ?? '')
-  if (!payrollPack(country).regions.known.includes(province)) {
+  if (!knownRegions.includes(province)) {
+    const choices = knownRegions.join(', ')
+    const example = knownRegions[0]!
     return NextResponse.json(
-      { error: `invalid ${payrollPack(country).regions.label}` },
+      {
+        error: province.trim() === ''
+          ? `No ${regionLabel} on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`
+          : `Unknown ${regionLabel} "${province}" on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`,
+      },
       { status: 422 },
     )
   }
