@@ -137,8 +137,20 @@ const DE_ELSTAM: PayrollCertificate = {
       // Free key, not a closed choice: the confession keys vary by Land
       // church (rk, ev, …) and inventing the closed list would be a guess.
       kind: "code",
-      help: "Confession key from ELStAM (for example rk, ev); empty when the "
-        + "employee pays no Kirchenlohnsteuer, which this pack does not withhold.",
+      // This help text used to end "...which this pack does not withhold",
+      // which was false and actively harmful: compute-statutory.ts:241-246
+      // computes Kirchenlohnsteuer at 8% in BY/BW and 9% elsewhere and pushes
+      // it as a statutory line, exactly as this pack's header says. An admin
+      // reading the old sentence would conclude the field did not matter and
+      // leave it blank, and a blank Konfession means KIST 0.00 for an employee
+      // who owes it — roughly 55 EUR a month under-withheld for a Bavarian
+      // Catholic on 6,200 EUR, which is an employer liability rather than a
+      // rounding difference. The prose was the defect.
+      help: "Confession key from ELStAM (for example rk, ev). REQUIRED for any "
+        + "employee liable to Kirchenlohnsteuer: this pack withholds it at 8% "
+        + "of the Lohnsteuer in Bayern and Baden-Württemberg and 9% elsewhere. "
+        + "Leave empty ONLY for an employee who owes no church tax — an empty "
+        + "key withholds nothing.",
     },
     {
       key: "freibetrag",
