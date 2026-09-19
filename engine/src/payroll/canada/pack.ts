@@ -49,6 +49,7 @@ const CA_REGIONS: PayrollRegionCoverage = {
 
 export const CA_PAYROLL_PACK: PayrollCountryPack = {
   country: "CA",
+  name: "Canada",
   installable: true,
   // T4127 produces CAD; the CRA's tax year is the calendar year.
   statutoryCurrency: "CAD",

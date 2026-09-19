@@ -32,6 +32,7 @@ import { declaredPayrollFilings } from "./payroll-filing-registry.ts";
 function fixturePack(): PayrollCountryPack {
   return {
     country: "GB",
+    name: "United Kingdom",
     installable: true,
     statutorySlots: [],
     remittanceVendorSettingsKey: null,

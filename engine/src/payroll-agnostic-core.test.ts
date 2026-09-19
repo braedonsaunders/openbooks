@@ -36,6 +36,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 /** A minimal third country pack no real jurisdiction resembles. */
 const FREEDONIA: PayrollCountryPack = {
   country: "ZZ" as PayrollCountryPack["country"],
+  name: "Freedonia",
   installable: false,
   statutoryCurrency: "ZZD",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },

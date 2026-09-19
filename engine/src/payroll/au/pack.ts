@@ -39,6 +39,7 @@ const AU_REGIONS: PayrollRegionCoverage = {
 
 export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {
   country: "AU",
+  name: "Australia",
   installable: true,
   statutoryCurrency: "AUD",
   // The ATO financial year opens 1 July and is named for the year it closes

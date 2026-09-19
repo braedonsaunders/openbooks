@@ -137,6 +137,7 @@ function nlPackFilings(): PayrollPackFilings {
  */
 export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "NL" } = {
   country: "NL",
+  name: "Netherlands",
   installable: true,
   statutorySlots: [
     {

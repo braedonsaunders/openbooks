@@ -22,9 +22,10 @@ test('setup wizard names no payroll pack in code', () => {
 
 // Preselect only what is derived: a sole installable pack, else nothing.
 test('wizard preselects no pack unless exactly one is installable', () => {
+  const pack = (country: string) => ({ country, name: `${country} name` })
   assert.equal(initialPayrollPack([]), null)
-  assert.equal(initialPayrollPack(['CA', 'US']), null)
-  assert.equal(initialPayrollPack(['XX', 'YY', 'ZZ']), null)
-  assert.equal(initialPayrollPack(['CA']), 'CA')
-  assert.equal(initialPayrollPack(['XX']), 'XX')
+  assert.equal(initialPayrollPack([pack('CA'), pack('US')]), null)
+  assert.equal(initialPayrollPack([pack('XX'), pack('YY'), pack('ZZ')]), null)
+  assert.equal(initialPayrollPack([pack('CA')]), 'CA')
+  assert.equal(initialPayrollPack([pack('XX')]), 'XX')
 })

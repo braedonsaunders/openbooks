@@ -14,7 +14,7 @@ import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-paym
 import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { payrollBankProfiles } from '@openbooks/engine/src/payroll-bank-file.ts'
 import {
-  installablePayrollCountries,
+  installablePayrollPacks,
   packRemittanceVendorSettingsKeys,
   packSlotState,
   PAYROLL_COUNTRY_PACKS,
@@ -217,7 +217,7 @@ export async function PacksTabSlot() {
   return (
     <PayrollCountryPacks
       installedCountries={installedCountries}
-      installable={installablePayrollCountries()}
+      installable={installablePayrollPacks()}
       componentCount={componentCount}
       /* The packs' OWN tax-year declarations — every installed pack's loaded
          years and editions, not one country's constants imported by name. */

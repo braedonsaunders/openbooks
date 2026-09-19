@@ -394,6 +394,24 @@ export interface PayrollProfileExemptionFlag {
 
 export interface PayrollCountryPack {
   country: PayrollCountry;
+  /**
+   * The country's name, in English, for any surface that shows a pack to a
+   * person. REQUIRED, and deliberately data rather than copy.
+   *
+   * The setup UI used to read its card title from an i18n key per pack
+   * (`payroll.settingsPage.packs.<key>.title`) and fall back to the bare
+   * country code, on the reasoning that "a new pack is a translation edit".
+   * Only CA and US ever got that key written, so eight countries shipped
+   * rendering as "GB", "DE", "FR" beside "Canada" and "United States" —
+   * the fallback was silent and looked deliberate. A country's name is a
+   * fact about the country, so the pack states it and no surface can show a
+   * raw code by omission. `CountryTaxPackDefinition.name` already works this
+   * way; this makes the two pack families symmetric.
+   *
+   * Localized names remain an i18n OVERRIDE where a locale wants one — the
+   * UI prefers the message and falls back to this, never to the code.
+   */
+  name: string;
   installable: boolean;
   statutorySlots: readonly PayrollStatutorySlot[];
   /**
@@ -1072,6 +1090,18 @@ export function installablePayrollCountries(): string[] {
   return Object.values(PAYROLL_COUNTRY_PACKS)
     .filter((pack) => pack.installable)
     .map((pack) => pack.country);
+}
+
+/**
+ * Installable packs as (country, name) pairs, for any surface that LISTS packs
+ * to a person. Prefer this over `installablePayrollCountries()` there: a
+ * surface handed only codes has nothing to show but codes, which is how eight
+ * countries came to render as "GB"/"DE"/"FR" beside "Canada".
+ */
+export function installablePayrollPacks(): { country: string; name: string }[] {
+  return Object.values(PAYROLL_COUNTRY_PACKS)
+    .filter((pack) => pack.installable)
+    .map((pack) => ({ country: pack.country, name: pack.name }));
 }
 
 /** The pack for a country, or a refusal naming the packs that do exist. */

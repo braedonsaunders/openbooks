@@ -294,6 +294,7 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   country: "DE";
 } = {
   country: "DE",
+  name: "Germany",
   installable: true,
   statutoryCurrency: "EUR",
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { BadgeCheck, Check, Download, Globe2, Trash2 } from 'lucide-react'
+import { BadgeCheck, Check, Download, Globe2, Search, Trash2 } from 'lucide-react'
 import { confirmDialog } from '../../../../../lib/confirm'
 import {
   Badge,
@@ -45,8 +45,9 @@ export function PayrollCountryPacks({
 }: {
   installedCountries: string[]
   /** Every pack the registry declares installable — the grid renders one card
-   * per entry, so a new pack appears with no component edit. */
-  installable: string[]
+   * per entry, so a new pack appears with no component edit. Carries each
+   * pack's own name so a card never has to fall back to a bare country code. */
+  installable: { country: string; name: string }[]
   componentCount: number
   coverage: PackCoverage[]
 }) {
@@ -57,6 +58,7 @@ export function PayrollCountryPacks({
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [installed, setInstalled] = useState<Set<string>>(() => new Set(installedCountries))
 
   // Edition names are the agencies' own proper nouns, taken from the pack
@@ -167,6 +169,8 @@ export function PayrollCountryPacks({
    */
   const packI18nKey = (country: string) =>
     ({ CA: 'canada', US: 'us' })[country] ?? country.toLowerCase()
+  const packName = (country: string) =>
+    installable.find((entry) => entry.country === country)?.name ?? country
   const packCopy = (country: string, key: string, fallback: string) => {
     const namespaced = `${packI18nKey(country)}.${key}`
     return t.has(namespaced as never) ? t(namespaced as never) : fallback
@@ -199,7 +203,7 @@ export function PayrollCountryPacks({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Globe2 size={18} className="text-slate-400" aria-hidden />
-                {packCopy(country, 'title', country)}
+                {packCopy(country, 'title', packName(country))}
               </CardTitle>
               <CardDescription className="mt-1">{packCopy(country, 'description', '')}</CardDescription>
             </div>
@@ -248,11 +252,40 @@ export function PayrollCountryPacks({
     )
   }
 
+  // Match on the name AND the code, because an operator who knows the country
+  // by either should find it: "United Kingdom", "uk" and "GB" all reach GB.
+  const needle = query.trim().toLowerCase()
+  const shown = needle
+    ? installable.filter((entry) =>
+        entry.name.toLowerCase().includes(needle)
+        || entry.country.toLowerCase().includes(needle))
+    : installable
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        {installable.map((country) => packCard(country))}
+      <div className="relative max-w-sm">
+        <Search
+          size={16}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          aria-hidden
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={label('searchPlaceholder', 'Search countries')}
+          aria-label={label('searchLabel', 'Search payroll country packs')}
+          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        />
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {shown.map((entry) => packCard(entry.country))}
+      </div>
+      {shown.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {label('searchEmpty', 'No payroll country pack matches that search.')}
+        </p>
+      ) : null}
       <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
     </div>
   )
