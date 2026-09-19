@@ -27,6 +27,20 @@ import { BR_WITHHOLDING } from "./withholding.ts";
 export const BR_PAYROLL_PACK: PayrollCountryPack = {
   country: "BR",
   name: "Brazil",
+  // Receita Federal (Cadastro de Pessoas Físicas): the CPF is an 11-digit
+  // number, presented as 000.000.000-00. Both the bare digits and the dotted
+  // presentation validate as given. The two mod-11 check digits are NOT
+  // enforced (unsourced here). Needed for eSocial.
+  employeeIdentifier: {
+    label: "CPF",
+    pattern: "(?:\\d{11}|\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2})",
+    formatHelp: "11 digits, usually written 000.000.000-00",
+    example: "123.456.789-09",
+    requiredForPayroll: true,
+    neededFor: "eSocial",
+    citation: "Receita Federal (CPF): an 11-digit Cadastro de Pessoas Físicas number, presented 000.000.000-00",
+    numericEntry: false,
+  },
   installable: true,
   // The BR pack computes in reais; IRRF, INSS and FGTS settle in reais.
   statutoryCurrency: "BRL",

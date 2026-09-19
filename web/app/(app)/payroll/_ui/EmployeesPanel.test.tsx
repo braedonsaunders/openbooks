@@ -110,6 +110,14 @@ const xxPack: PackProfileDeclaration = {
     },
   ],
   exemptionFlags: [],
+  identifier: {
+    label: 'Fixture payroll number',
+    formatHelp: '6 digits',
+    example: '123456',
+    required: true,
+    neededFor: null,
+    numericEntry: true,
+  },
 }
 
 function render(
@@ -278,6 +286,14 @@ const yyPack: PackProfileDeclaration = {
     },
   ],
   exemptionFlags: [],
+  identifier: {
+    label: 'Fixture payroll number',
+    formatHelp: '6 digits',
+    example: '123456',
+    required: true,
+    neededFor: null,
+    numericEntry: true,
+  },
 }
 
 test('profile editor renders row-backed certificate fields generically', () => {
@@ -323,4 +339,21 @@ test('row-backed answers prefill from the current filing', () => {
   ])
   assert.match(html, /value="1257L"/)
   assert.match(html, /id="pp-yy_notice-marker"[^>]*checked/)
+})
+
+test('the sealed identifier field renders the pack declaration', () => {
+  // Label, placeholder and keyboard come from the served pack declaration —
+  // never a hardcoded "SIN / SSN" with a numeric keypad.
+  const html = render({}, { XX: xxPack }, ['XX'])
+  assert.match(html, /Fixture payroll number/)
+  assert.match(html, /placeholder="123456"/)
+  assert.match(html, /id="pp-sin"[^>]*inputmode="numeric"/i)
+  const alpha = {
+    ...xxPack,
+    identifier: { ...xxPack.identifier, label: 'NINO-like', example: 'QQ 12 34 56 C', numericEntry: false },
+  }
+  const alphaHtml = render({}, { XX: alpha }, ['XX'])
+  assert.match(alphaHtml, /NINO-like/)
+  assert.match(alphaHtml, /placeholder="QQ 12 34 56 C"/)
+  assert.match(alphaHtml, /id="pp-sin"[^>]*inputmode="text"/i)
 })

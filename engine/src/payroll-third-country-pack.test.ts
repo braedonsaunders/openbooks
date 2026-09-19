@@ -33,6 +33,18 @@ function fixturePack(): PayrollCountryPack {
   return {
     country: "GB",
     name: "United Kingdom",
+    // A new pack cannot forget the identifier: it is REQUIRED on
+    // PayrollCountryPack, so this fixture states its (illustrative) answer.
+    employeeIdentifier: {
+      label: "Fixture identifier",
+      pattern: "\\d{6}",
+      formatHelp: "6 digits",
+      example: "123456",
+      requiredForPayroll: true,
+      neededFor: null,
+      citation: "test fixture — no authority",
+      numericEntry: true,
+    },
     installable: true,
     statutorySlots: [],
     remittanceVendorSettingsKey: null,

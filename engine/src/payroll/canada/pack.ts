@@ -50,6 +50,20 @@ const CA_REGIONS: PayrollRegionCoverage = {
 export const CA_PAYROLL_PACK: PayrollCountryPack = {
   country: "CA",
   name: "Canada",
+  // CRA (canada.ca, payroll: "Get the social insurance number (SIN) from
+  // the individual"): "Employees must obtain and provide to their employer
+  // the 9-digit number known as a social insurance number (SIN) when
+  // starting employment in Canada." Needed for the T4 (and RL-1) slips.
+  employeeIdentifier: {
+    label: "SIN",
+    pattern: "\\d{9}",
+    formatHelp: "9 digits",
+    example: "046454286",
+    requiredForPayroll: true,
+    neededFor: "T4/RL-1",
+    citation: "CRA: the SIN is 'the 9-digit number known as a social insurance number (SIN)' (Service Canada issues it)",
+    numericEntry: true,
+  },
   installable: true,
   // T4127 produces CAD; the CRA's tax year is the calendar year.
   statutoryCurrency: "CAD",

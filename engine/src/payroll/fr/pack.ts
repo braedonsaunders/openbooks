@@ -322,6 +322,23 @@ const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
 export const FR_PAYROLL_PACK = {
   country: "FR",
   name: "France",
+  // INSEE (via service-public.fr): the NIR is 13 digits plus a 2-digit
+  // control key — 15 characters: sex, birth year/month, birthplace code,
+  // serial, key. The birthplace field is alphanumeric because Corsica is
+  // 2A (Corse-du-Sud) / 2B (Haute-Corse) per the INSEE COG — a pattern of
+  // digits alone CORRUPTS a Corsican NIR into a different number, which is
+  // why the generic layer never strips. The mod-97 key is NOT enforced
+  // (unsourced here). Needed for the DSN.
+  employeeIdentifier: {
+    label: "numéro de sécurité sociale (NIR)",
+    pattern: "[12]\\d{4}[0-9A-Z]{5}\\d{5}",
+    formatHelp: "15 characters: sex, birth year/month, birthplace code (2A/2B for Corsica), serial, key",
+    example: "254022A03300522",
+    requiredForPayroll: true,
+    neededFor: "DSN",
+    citation: "INSEE: the NIR is 13 digits plus a 2-digit control key; birthplace 2A Corse-du-Sud / 2B Haute-Corse (COG)",
+    numericEntry: false,
+  },
   // installable flips to true once packAccounts.FR.slots.* statutory-account
   // labels land in web/messages (labels shard owns all seven locales) — the
   // messages-catalog gate fires on those four keys until then, so the flip

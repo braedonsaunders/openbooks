@@ -94,6 +94,19 @@ export interface PackProfileDeclaration {
   unsupportedReasons: Record<string, string>
   certificates: DeclaredProfileCertificate[]
   exemptionFlags: { column: string; label: string; help: string }[]
+  /**
+   * The pack's employee identifier, served by GET /api/payroll/profiles.
+   * The sealed field renders the pack's own label, example and keyboard —
+   * never a hardcoded "SIN / SSN" with a numeric keypad.
+   */
+  identifier: {
+    label: string
+    formatHelp: string
+    example: string
+    required: boolean
+    neededFor: string | null
+    numericEntry: boolean
+  }
 }
 
 export type ProfileRow = {
@@ -564,15 +577,15 @@ export function ProfileEditor(props: {
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="pp-sin">{t('fields.sin')}</Label>
+            <Label htmlFor="pp-sin">{pack?.identifier.label ?? t('fields.sin')}</Label>
             <Input
               id="pp-sin"
               value={sin}
               onChange={(e) => setSin(e.target.value)}
               placeholder={(p as { sin_last3?: string | null }).sin_last3
                 ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
-                : t('fields.sinPlaceholder')}
-              inputMode="numeric"
+                : (pack?.identifier.example ?? t('fields.sinPlaceholder'))}
+              inputMode={pack?.identifier.numericEntry === false ? 'text' : 'numeric'}
               autoComplete="off"
             />
           </div>

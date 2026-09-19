@@ -75,6 +75,20 @@ const JP_REGIONS: PayrollRegionCoverage = {
 export const JP_PAYROLL_PACK: JpPayrollPack = {
   country: "JP",
   name: "Japan",
+  // Digital Agency / Cabinet Office (My Number system): every resident holds
+  // a 12-digit Individual Number ("My Number") for social security and tax.
+  // Length and digit shape only — the check digit is NOT enforced (unsourced
+  // here). Needed for the statutory withholding records (法定調書).
+  employeeIdentifier: {
+    label: "My Number",
+    pattern: "\\d{12}",
+    formatHelp: "12 digits",
+    example: "123456789012",
+    requiredForPayroll: true,
+    neededFor: "statutory withholding records",
+    citation: "Digital Agency: every resident holds a 12-digit Individual Number (My Number) for social security and tax",
+    numericEntry: true,
+  },
   installable: true,
   // The pack computes in yen; gensen, pension and health all settle in yen.
   statutoryCurrency: "JPY",

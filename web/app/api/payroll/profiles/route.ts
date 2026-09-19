@@ -10,6 +10,7 @@ import {
   labourJurisdictionProblem,
   PAYROLL_COUNTRY_PACKS,
   payrollPack,
+  validatePackEmployeeIdentifier,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import {
   packCertificates,
@@ -145,6 +146,20 @@ export interface PackProfileDeclaration {
   unsupportedReasons: Record<string, string>
   certificates: PayrollCertificate[]
   exemptionFlags: readonly PayrollProfileExemptionFlag[]
+  /**
+   * The pack's employee identifier, served so the editor labels the sealed
+   * field with the pack's own local name and shape — never a hardcoded
+   * "SIN / SSN". Labels, examples and purposes are pack data shown exactly
+   * as declared, like certificate labels and citations.
+   */
+  identifier: {
+    label: string
+    formatHelp: string
+    example: string
+    required: boolean
+    neededFor: string | null
+    numericEntry: boolean
+  }
 }
 
 function packProfileDeclarations(): Record<string, PackProfileDeclaration> {
@@ -159,6 +174,14 @@ function packProfileDeclarations(): Record<string, PackProfileDeclaration> {
       unsupportedReasons: { ...(pack.regions.unsupportedReasons ?? {}) },
       certificates: [...packCertificates(country).certificates],
       exemptionFlags: pack.profileExemptionFlags ?? [],
+      identifier: {
+        label: pack.employeeIdentifier.label,
+        formatHelp: pack.employeeIdentifier.formatHelp,
+        example: pack.employeeIdentifier.example,
+        required: pack.employeeIdentifier.requiredForPayroll,
+        neededFor: pack.employeeIdentifier.neededFor,
+        numericEntry: pack.employeeIdentifier.numericEntry,
+      },
     }
   }
   return byCountry
@@ -522,20 +545,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // Sealed SIN/SSN: write-only from the client (send `sin` to set/replace;
-    // omit to keep). Never echoed back — GET exposes sin_last3 only.
+    // Sealed national identifier: write-only from the client (send `sin` to
+    // set/replace; omit to keep). Never echoed back — GET exposes sin_last3
+    // only. The value is judged AS GIVEN against the country pack's own
+    // `employeeIdentifier` declaration — never stripped, never counted to
+    // nine, never named by country here. A pack whose identifier is not
+    // required for payroll clears on empty.
     let sinEncrypted: string | null | undefined
     let sinLast3: string | null | undefined
     if ('sin' in body) {
-      const sin = String(body.sin ?? '').replace(/\D/g, '')
-      if (sin === '') {
+      const verdict = validatePackEmployeeIdentifier(country, body.sin)
+      if (!verdict.valid) {
+        return NextResponse.json({ error: verdict.message }, { status: 422 })
+      }
+      if (verdict.saved === null) {
         sinEncrypted = null
         sinLast3 = null
-      } else if (!/^\d{9}$/.test(sin)) {
-        return NextResponse.json({ error: 'SIN/SSN must be 9 digits' }, { status: 422 })
       } else {
-        sinEncrypted = sealSecret(sin)
-        sinLast3 = sin.slice(-3)
+        sinEncrypted = sealSecret(verdict.saved)
+        sinLast3 = verdict.saved.slice(-3)
       }
     }
 

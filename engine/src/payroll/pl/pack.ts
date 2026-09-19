@@ -140,6 +140,20 @@ const PL_RATES: PayrollPackRates = {
 export const PL_PAYROLL_PACK: PayrollCountryPack = {
   country: "PL",
   name: "Poland",
+  // gov.pl (ustawa o ewidencji ludności): "Numer PESEL to jedenastocyfrowy
+  // symbol numeryczny" — an 11-digit number carrying birth date, serial,
+  // sex and a check digit. Length and digit shape only; the check digit is
+  // NOT enforced (unsourced here). Needed for the PIT-11.
+  employeeIdentifier: {
+    label: "PESEL",
+    pattern: "\\d{11}",
+    formatHelp: "11 digits",
+    example: "44051401359",
+    requiredForPayroll: true,
+    neededFor: "PIT-11",
+    citation: "gov.pl: 'Numer PESEL to jedenastocyfrowy symbol numeryczny' (11-digit number)",
+    numericEntry: true,
+  },
   installable: true,
   statutorySlots: PL_SLOTS,
   statutoryCurrency: "PLN",

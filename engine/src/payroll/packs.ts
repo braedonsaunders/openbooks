@@ -395,6 +395,97 @@ export interface PayrollProfileExemptionFlag {
   help: string;
 }
 
+/**
+ * The employee identifier a country pack's payroll runs on: the SIN, SSN,
+ * NINO, PPSN, Steuer-IdNr, NIR, DNI/NIE, codice fiscale, NRIC/FIN, My Number,
+ * PESEL, CPF, TFN or BSN.
+ *
+ * The profile API used to strip every non-digit and then demand exactly nine
+ * of them (`String(body.sin ?? '').replace(/\D/g, '')` against `/^\d{9}$/`),
+ * which mangled every alphanumeric identifier before judging it and refused
+ * every non-9-digit one — ten of fourteen countries. Worse, digit-stripping
+ * does not merely reject a valid French NIR, it CORRUPTS it: a Corsican
+ * department (`2A`/`2B`) stripped of its letter is a different number. A
+ * validator that silently transforms input before judging it is worse than
+ * one that rejects, so the generic layer tests the value AS GIVEN against
+ * the pack's own pattern and never a stripped derivative.
+ *
+ * Each pack declares its own LENGTH and CHARACTER SHAPE, and only what its
+ * authority states: no pack invents a checksum. A validator that rejects a
+ * valid identifier is the defect being fixed, so patterns err toward
+ * accepting and the agency rejects.
+ */
+export interface PayrollEmployeeIdentifier {
+  /**
+   * The real local name — NINO, PPSN, Steuer-IdNr, NIR, DNI/NIE, codice
+   * fiscale, NRIC/FIN, My Number, PESEL, CPF, TFN, SIN, SSN, BSN. Shown on
+   * the profile editor and named in refusal messages, so an operator is
+   * never asked for a "SIN/SSN" in a country that has neither.
+   */
+  label: string;
+  /**
+   * The format as a regex source for a FULL match (the generic layer anchors
+   * it: `^(?:pattern)$`). Case-insensitive; the value is uppercased before
+   * testing so `2a` and `2A` are the same Corsican department. Interior
+   * separators appear here only where the authority's own presentation uses
+   * them (HMRC's `QQ 12 34 56 A`, the `000.000.000-00` CPF) — never by
+   * stripping the input first.
+   */
+  pattern: string;
+  /**
+   * The shape in words, for refusal messages and the editor placeholder:
+   * "2 letters, 6 digits, 1 letter". No checksum is ever described here
+   * unless the pattern enforces it.
+   */
+  formatHelp: string;
+  /**
+   * A real-format example, locale-neutral, shown as the editor placeholder:
+   * `QQ 12 34 56 C`, `1234567T`, `RSSMRA85T10A562S`. Every pack's example
+   * must satisfy its own pattern (asserted in
+   * engine/src/payroll/employee-identifier.test.ts).
+   */
+  example: string;
+  /**
+   * Whether payroll requires one at all. A pack whose employees may
+   * lawfully be paid without one declares false. This never refuses a save
+   * — it feeds the missing-identifier warnings with `neededFor`, so a save
+   * without one still lands and the warnings demand it where a filing needs
+   * it.
+   */
+  requiredForPayroll: boolean;
+  /**
+   * What it is needed FOR, where that matters — the RTI submission, the
+   * W-2, the DSN — or null when no filing needs it. This is the GATE for
+   * the year-end and run-readiness identifier warnings: they fire only when
+   * the pack both requires the identifier AND names a filing that needs it,
+   * so a pack with no filing to feed warns about nothing while one that
+   * names one still warns. Country is never the question.
+   */
+  neededFor: string | null;
+  /**
+   * The authority's own statement of the format, quoted — never a blog, and
+   * never another vendor's documentation.
+   */
+  citation: string;
+  /**
+   * True when the value is digits only (mobile numeric keyboard hint). A
+   * pack whose authority presents the value with separators declares false.
+   */
+  numericEntry: boolean;
+}
+
+/**
+ * The result of judging one raw identifier against one pack's declaration.
+ * `saved` is the value to seal (trimmed, uppercased) when valid; null means
+ * the operator sent empty and the stored value should be cleared. `message`
+ * is the refusal worth showing when invalid.
+ */
+export interface EmployeeIdentifierVerdict {
+  readonly valid: boolean;
+  readonly saved: string | null;
+  readonly message: string | null;
+}
+
 export interface PayrollCountryPack {
   country: PayrollCountry;
   /**
@@ -415,6 +506,16 @@ export interface PayrollCountryPack {
    * UI prefers the message and falls back to this, never to the code.
    */
   name: string;
+  /**
+   * The employee identifier the pack's payroll runs on (see
+   * `PayrollEmployeeIdentifier`). REQUIRED, for the same reason `name` is —
+   * a pack that does not answer is a pack whose answer somebody guessed,
+   * and the guess was a hardcoded Canadian nine digits. The generic profile
+   * layer, the sealed-storage writer, and the readiness warnings branch on
+   * this declaration and nothing else: no country code, no digit count, no
+   * country name anywhere outside the pack files.
+   */
+  employeeIdentifier: PayrollEmployeeIdentifier;
   installable: boolean;
   statutorySlots: readonly PayrollStatutorySlot[];
   /**
@@ -1125,6 +1226,70 @@ export function payrollPack(country: string): PayrollCountryPack {
 /** Narrow a stored country string to a pack, refusing anything else. */
 export function payrollCountry(value: string | null | undefined): PayrollCountry {
   return payrollPack(value ?? "").country;
+}
+
+/**
+ * Judge one raw identifier value against one country's pack declaration.
+ *
+ * The value is validated AS GIVEN: outer whitespace is trimmed and Latin
+ * letters uppercased (presentation, not identity — `2a` and `2A` are the
+ * same Corsican department), then tested whole against the pack's pattern.
+ * Nothing is ever stripped first: an input that would become valid only
+ * after stripping (a dashed NINO for the US, a de-lettered NIR for France)
+ * is refused, not silently transformed.
+ *
+ * Empty (absent, null, or blank) always clears — or keeps, when the key is
+ * omitted — and never refuses: whether the pack REQUIRES one is enforced by
+ * the year-end and run-readiness warnings (`packWarnsOnMissingIdentifier`),
+ * not by refusing the save, so onboarding is never blocked behind an
+ * identifier the operator does not have yet. The refusal message names the
+ * pack's own label and shape, so a format 422 is worth showing wherever it
+ * surfaces.
+ */
+export function validatePackEmployeeIdentifier(
+  country: string,
+  raw: unknown,
+): EmployeeIdentifierVerdict {
+  const pack = payrollPack(country);
+  const declaration = pack.employeeIdentifier;
+  const canonical = raw === null || raw === undefined ? "" : String(raw).trim().toUpperCase();
+  if (canonical === "") {
+    return { valid: true, saved: null, message: null };
+  }
+  let expression: RegExp;
+  try {
+    expression = new RegExp(`^(?:${declaration.pattern})$`);
+  } catch {
+    return {
+      valid: false,
+      saved: null,
+      message: `${pack.country} payroll pack declares an invalid identifier pattern`,
+    };
+  }
+  if (!expression.test(canonical)) {
+    return {
+      valid: false,
+      saved: null,
+      message: `Invalid ${declaration.label}: expected ${declaration.formatHelp} (e.g. ${declaration.example})`,
+    };
+  }
+  return { valid: true, saved: canonical, message: null };
+}
+
+/**
+ * Whether the missing-identifier warnings (the year-end agent finding and
+ * the run-readiness `employee.noSin`) fire for a country's employees: only
+ * when the pack declares the identifier REQUIRED and names a filing that
+ * needs it. A pack with no filing to feed, or with a voluntary identifier,
+ * warns about nothing — including for a filing the pack otherwise refuses,
+ * where the identifier is still needed. Unknown countries warn about
+ * nothing: an undeclared pack cannot need an identifier.
+ */
+export function packWarnsOnMissingIdentifier(country: string): boolean {
+  const pack = PAYROLL_COUNTRY_PACKS[country];
+  if (!pack) return false;
+  const declaration = pack.employeeIdentifier;
+  return declaration.requiredForPayroll && declaration.neededFor !== null;
 }
 
 /**

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
@@ -158,6 +159,55 @@ test(
       );
     } finally {
       await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
+  "missing identifiers warn only where a pack filing needs one",
+  { skip: !DB },
+  async () => {
+    // The gate is the pack's own declaration, never a country list. Ireland
+    // declares no year-end filing (neededFor null): an identifier-less Irish
+    // employee warns about nothing, even though the profile holds no sealed
+    // value. Great Britain needs the NINO for RTI: an identifier-less
+    // British employee still warns. Seeded by SQL so the profile API's own
+    // required-identifier refusal cannot stand in for the warning.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`
+          update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
+            payroll: { countries: ["IE", "GB"] },
+          })}::jsonb where id = ${org.orgId}`);
+        const scheduleId = randomUUID();
+        await db.execute(sql`
+          insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, is_active)
+          values (${scheduleId}, ${org.orgId}, 'Monthly', 'monthly', 12, '2026-07-31', true)`);
+        for (const [name, country, province] of [
+          ["Aoi Byrne", "IE", "IE"],
+          ["Ben Clarke", "GB", "ENG"],
+        ] as const) {
+          const employeeId = randomUUID();
+          await db.execute(sql`
+            insert into parties (id, org_id, kind, display_name, is_active, custom)
+            values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+          await db.execute(sql`
+            insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
+            values (${org.orgId}, ${employeeId}, ${scheduleId}, ${country}, ${province})`);
+        }
+      });
+      const findings = await scan(org.orgId);
+      assert.ok(
+        fingerprints(findings).includes("payroll-yearend-no-sin:GB"),
+        `the pack that names a filing still warns, got ${fingerprints(findings)}`,
+      );
+      assert.ok(
+        !fingerprints(findings).some((fingerprint) => fingerprint === "payroll-yearend-no-sin:IE"),
+        `the pack with no filing to feed warns about nothing, got ${fingerprints(findings)}`,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
   },
 );

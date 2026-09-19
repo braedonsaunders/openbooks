@@ -181,6 +181,21 @@ function sgPackFilings(): PayrollPackFilings {
 export const SG_PAYROLL_PACK: PayrollCountryPack = {
   country: "SG",
   name: "Singapore",
+  // Immigration and Checkpoints Authority (ICA): NRIC numbers start with S
+  // or T (citizens/PR), FINs with F, G or M (M series from 1 Jan 2022) —
+  // each "the prefix, followed by seven digits and a checksum letter". The
+  // checksum is NOT enforced (unsourced here). Needed for the IR8A under
+  // the Auto-Inclusion Scheme.
+  employeeIdentifier: {
+    label: "NRIC/FIN",
+    pattern: "[STFMG]\\d{7}[A-Z]",
+    formatHelp: "a prefix letter (S/T/F/G/M), 7 digits, a letter",
+    example: "S1234567D",
+    requiredForPayroll: true,
+    neededFor: "IR8A (AIS)",
+    citation: "ICA: NRIC/FIN is the prefix letter 'followed by seven digits and a checksum letter'",
+    numericEntry: false,
+  },
   installable: true,
   statutorySlots: [
     {

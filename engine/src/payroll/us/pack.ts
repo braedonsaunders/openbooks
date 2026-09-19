@@ -103,6 +103,21 @@ const US_REGIONS: PayrollRegionCoverage = {
 export const US_PAYROLL_PACK: PayrollCountryPack = {
   country: "US",
   name: "United States",
+  // SSA Handbook §101: "A Social Security Number (SSN) is a nine digit
+  // number SSA assigns" — "a three-digit number followed by a two-digit
+  // number and ending with a four-digit number" (XXX-XX-XXXX). Both the bare
+  // nine digits and the hyphenated card presentation validate as given;
+  // anything else (letters, partial strips) is refused. Needed for the W-2.
+  employeeIdentifier: {
+    label: "SSN",
+    pattern: "(?:\\d{3}-\\d{2}-\\d{4}|\\d{9})",
+    formatHelp: "9 digits, commonly written XXX-XX-XXXX",
+    example: "123-45-6789",
+    requiredForPayroll: true,
+    neededFor: "W-2",
+    citation: "SSA Handbook §101: 'A Social Security Number (SSN) is a nine digit number SSA assigns'",
+    numericEntry: false,
+  },
   installable: true,
   // Pub 15-T produces USD; the IRS tax year is the calendar year.
   statutoryCurrency: "USD",
