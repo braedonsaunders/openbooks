@@ -337,6 +337,38 @@ test("re-run with the same inputs is a no-op reporting already_migrated", { skip
   }
 });
 
+test("dry run after migration previews already_migrated, never would_migrate", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const seed = await seedPerson(org, "preview-001");
+    const preview = await withOrg(org.orgId, () =>
+      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
+    );
+    assert.equal(onlyPerson(preview).outcome, "would_migrate");
+    await withOrg(org.orgId, () =>
+      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row] }),
+    );
+    const before = await tableCounts(org.orgId);
+    const again = await withOrg(org.orgId, () =>
+      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
+    );
+    const person = onlyPerson(again);
+    assert.equal(person.classification, "already_migrated");
+    assert.equal(person.outcome, "already_migrated");
+    assert.equal(again.totals.wouldMigrate, 0);
+    assert.equal(again.totals.refused, 0);
+    assert.notEqual(
+      again.reportHash,
+      preview.reportHash,
+      "the post-migration preview must not reproduce the pre-migration hash",
+    );
+    assert.deepEqual(await tableCounts(org.orgId), before);
+    assert.equal(migrationExitCode(again), 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("changed inputs refuse with the diff and write nothing", { skip }, async () => {
   const org = await createScratchOrg();
   try {

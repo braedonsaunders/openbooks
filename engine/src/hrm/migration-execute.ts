@@ -472,7 +472,12 @@ export async function executeEmploymentMigration(
         sql`select pg_advisory_xact_lock(hashtext(${`hrm-employment-migration:${orgId}`}))`,
       );
     }
-    const stored = dryRun ? [] : await loadStoredBindings(orgId);
+    // A dry run is a faithful preview of the apply — same classifications,
+    // same outcomes, only no writes — so it reads the same stored bindings
+    // (read-only; the advisory lock stays apply-only). Otherwise the
+    // dry-run-hash production interlock would certify a report the apply
+    // does not reproduce.
+    const stored = await loadStoredBindings(orgId);
     const storedByKey = new Map<string, StoredBinding>();
     for (const entry of stored) {
       const key = bindingKey(entry.sourceNamespace, entry.sourceId);
