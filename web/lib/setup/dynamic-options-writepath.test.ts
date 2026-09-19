@@ -60,3 +60,48 @@ test('Canada still saves, so the fix did not widen validation into acceptance of
   const bad = buildRow(entity, { ...GERMAN_ACCOUNT, country: 'ZZ' }, { forCreate: true })
   assert.ok('error' in bad, 'an undeclared country must still be refused')
 })
+
+const AU_SACRIFICE_COMPONENT = {
+  code: 'SAL-SAC',
+  name: 'Salary sacrifice',
+  kind: 'deduction',
+  country: 'AU',
+  taxTreatment: 'salary_sacrifice',
+}
+
+test('an AU salary-sacrifice component is accepted once options are resolved', () => {
+  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'))
+  const built = buildRow(entity, AU_SACRIFICE_COMPONENT, { forCreate: true })
+  assert.ok(
+    !('error' in built),
+    `the write path rejected a treatment its own picker offers: ${'error' in built ? built.error : ''}`,
+  )
+})
+
+test('a Canadian factor on an AU component is refused — strict when scoped', () => {
+  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'))
+  const built = buildRow(entity, { ...AU_SACRIFICE_COMPONENT, taxTreatment: 'pension_f' }, { forCreate: true })
+  assert.ok('error' in built, 'a treatment the component pack does not declare must be refused')
+  assert.match((built as { error: string }).error, /taxTreatment has an invalid value/)
+})
+
+test('a shared (country-less) component accepts any declared treatment', () => {
+  // No country in scope: the union applies, and the compute layer keys off
+  // the employee's pack — so a foreign key is inert rather than wrong.
+  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'))
+  const built = buildRow(entity, {
+    code: 'SAL-SAC',
+    name: 'Salary sacrifice',
+    kind: 'deduction',
+    taxTreatment: 'salary_sacrifice',
+  }, { forCreate: true })
+  assert.ok(!('error' in built))
+})
+
+test('the unresolved entity is what rejected it — the defect, pinned', () => {
+  // Kept deliberately: it documents WHY the component dialog must resolve,
+  // so the resolution cannot be removed as a redundant-looking call.
+  const built = buildRow(SETUP_ENTITY_BY_KEY.get('pay-components'), AU_SACRIFICE_COMPONENT, { forCreate: true })
+  assert.ok('error' in built, 'the static CA/US fallback is expected to reject AU')
+  assert.match((built as { error: string }).error, /country has an invalid value/)
+})
