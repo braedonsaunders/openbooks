@@ -812,16 +812,29 @@ export interface PayrollCountryPack {
 
 /**
  * The trace label for one stub factor under one pack: the pack's declared
- * `factorLabels` entry, else its `describeFactor` answer, else the raw key.
- * The UI and the coverage guard both resolve through this — never through
- * a web-layer map — so a newly traced factor with no declaration renders
- * raw in exactly one place and fails the guard in exactly one place.
+ * `factorLabels` entry, else its `describeFactor` answer, else the region
+ * name the pack already declares when the key IS a region code, else the raw
+ * key. The UI and the coverage guard both resolve through this — never
+ * through a web-layer map — so a newly traced factor with no declaration
+ * renders raw in exactly one place and fails the guard in exactly one place.
+ *
+ * The `regionNames` step is not a fallback in the apologetic sense: a bare
+ * region code is a factor whose name the pack has ALREADY stated, so reading
+ * it here is the same declaration the region pickers read through
+ * `payrollRegionLabel`. Without it a pack that names all fifty states still
+ * traced "AL", because the name lived in a field this resolver did not
+ * consult — one declaration, two readers, only one of them looking.
  */
 export function factorLabelForPack(
   pack: PayrollCountryPack,
   key: string,
 ): string {
-  return pack.factorLabels[key] ?? pack.describeFactor?.(key) ?? key;
+  return (
+    pack.factorLabels[key] ??
+    pack.describeFactor?.(key) ??
+    pack.regions.regionNames[key] ??
+    key
+  );
 }
 
 // ---------------------------------------------------------------------------

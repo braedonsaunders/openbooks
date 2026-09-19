@@ -45,12 +45,21 @@ test('a German filing account is accepted once options are resolved', () => {
   )
 })
 
-test('the unresolved entity is what rejected it — the defect, pinned', () => {
-  // Kept deliberately: it documents WHY resolveEntity must resolve, so the
-  // resolution cannot be removed as a redundant-looking call.
+test('even unresolved, the fallback no longer rejects a non-CA/US pack', () => {
+  // This test used to PIN THE DEFECT: it asserted the unresolved entity
+  // rejects DE, to document why resolveEntity must resolve. The fallback in
+  // registry.ts now names every installable pack, so the defect it pinned
+  // cannot recur and the assertion is inverted to guard the fix instead — a
+  // regression to a CA/US-only fallback reddens here. Resolution is still
+  // required, and is now guarded on its own terms by
+  // dynamic-options-agreement.test.ts ('resolving an entity replaces the
+  // static fallback with the dynamic list'), rather than by this test
+  // keeping a bug alive to justify it.
   const built = buildRow(SETUP_ENTITY_BY_KEY.get('payroll-filing-accounts'), GERMAN_ACCOUNT, { forCreate: true })
-  assert.ok('error' in built, 'the static CA/US fallback is expected to reject DE')
-  assert.match((built as { error: string }).error, /country has an invalid value/)
+  assert.ok(
+    !('error' in built),
+    `the unresolved fallback rejected DE, an installable pack: ${'error' in built ? built.error : ''}`,
+  )
 })
 
 test('Canada still saves, so the fix did not widen validation into acceptance of anything', () => {
@@ -98,10 +107,14 @@ test('a shared (country-less) component accepts any declared treatment', () => {
   assert.ok(!('error' in built))
 })
 
-test('the unresolved entity is what rejected it — the defect, pinned', () => {
-  // Kept deliberately: it documents WHY the component dialog must resolve,
-  // so the resolution cannot be removed as a redundant-looking call.
+test('even unresolved, the component fallback no longer rejects a non-CA/US pack', () => {
+  // Inverted for the same reason as the filing-account case above: the
+  // fallback now names every installable pack AND every pack-declared
+  // treatment, so AU's salary-sacrifice component is writable without
+  // resolution. A regression to a CA/US-only fallback reddens here.
   const built = buildRow(SETUP_ENTITY_BY_KEY.get('pay-components'), AU_SACRIFICE_COMPONENT, { forCreate: true })
-  assert.ok('error' in built, 'the static CA/US fallback is expected to reject AU')
-  assert.match((built as { error: string }).error, /country has an invalid value/)
+  assert.ok(
+    !('error' in built),
+    `the unresolved fallback rejected AU, an installable pack: ${'error' in built ? built.error : ''}`,
+  )
 })
