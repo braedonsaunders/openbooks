@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, div, formatMoney, neg, sum } from "./money.ts";
+import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "./money.ts";
 import {
   filingAccountRef,
   type FilingAccountRef,
@@ -102,7 +102,10 @@ export interface RemittanceGroup {
   components: RemittanceComponentLine[];
   total: string;
   /** PD7A worksheet context: gross pay and employee count in the period,
-   *  counted within this filing account (the PD7A is filed per account). */
+   *  counted within this filing account (the PD7A is filed per account).
+   *  Stated in the organization's base currency: a multi-currency scope is
+   *  translated slice-by-slice through derived consolidated rates (or the
+   *  summary refuses), never summed as raw units. */
   grossPayroll: string;
   employeeCount: number;
   /** Remittance bills already raised for this destination and period. */
@@ -181,6 +184,204 @@ async function filingAccountsByIdIn(
  * statute banks a different accrual declares its own, and this module never
  * learns the words.
  */
+/**
+ * Resolve the derived consolidated average rate for every (currency, period)
+ * a mixed-currency summary must translate, keyed `currency → periodId`.
+ * Amounts translate ONLY through a stored consolidated row (derived at period
+ * close or set by a controller override) — a missing row throws with the
+ * trial balance's own message instead of being defaulted to 1.
+ */
+async function derivedAverageRates(
+  orgId: string,
+  presentation: string,
+  needs: readonly { currency: string; periodId: string; periodEnd: string }[],
+  executor: RemittanceExecutor,
+): Promise<Map<string, string>> {
+  const foreign = needs.filter((need) => need.currency !== presentation);
+  if (foreign.length === 0) return new Map();
+  const periodIds = [...new Set(foreign.map((need) => need.periodId))];
+  const currencies = [...new Set(foreign.map((need) => need.currency))];
+  const stored = (await executor.execute<{
+    period_id: string; currency: string; average_rate: string;
+  }>(sql`
+    select period_id::text as period_id, from_currency as currency, average_rate::text as average_rate
+      from consolidated_fx_rates
+     where org_id = ${orgId} and to_currency = ${presentation}
+       and period_id = any(${`{${periodIds.join(",")}}`}::uuid[])
+       and from_currency = any(${`{${currencies.join(",")}}`}::text[])`));
+  const byKey = new Map(stored.rows.map((row) => [`${row.currency}→${row.period_id}`, row.average_rate]));
+  for (const need of foreign) {
+    if (!byKey.has(`${need.currency}→${need.periodId}`)) {
+      throw new PayrollError(
+        `No consolidated exchange rates for ${need.currency} → ${presentation} in the period ending ${need.periodEnd}. Derive rates from period close first.`,
+      );
+    }
+  }
+  return byKey;
+}
+
+/**
+ * The mixed-currency half of the remittance summary. When the period's
+ * committed stubs span more than one currency, raw units must never be added:
+ * every accrual and gross slice is translated to the organization's base
+ * currency through the derived consolidated average rate of its own period,
+ * or the summary refuses naming the missing pair. Single-currency scopes
+ * never reach here, so their figures stay byte-identical.
+ */
+async function mixedCurrencyAccruals(
+  orgId: string,
+  range: { from: string; to: string },
+  allowedSubsidiaryIds: PayrollSubsidiaryScope | undefined,
+  executor: RemittanceExecutor,
+  presentation: string,
+  declarationFor: (country: string | null) => StatutoryRemittanceDeclaration | null,
+): Promise<{
+  rows: RemittanceRow[];
+  contextByAccount: Map<string, { gross: string; employees: number }>;
+}> {
+  const filingAccount = sql`s.filing_account_id`;
+  // Stubs whose pay date falls in no regular accounting period can be
+  // neither translated nor summed: refusing names the date and why, instead
+  // of silently dropping their money from the accruals below.
+  const dateless = (await executor.execute<{ pay_date: string; currency: string }>(sql`
+    select s.pay_date::text as pay_date, s.currency_code as currency
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
+     where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
+       and not exists (
+         select 1 from accounting_periods p
+          where p.org_id = ${orgId} and not p.is_adjustment
+            and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
+       )
+     limit 1`));
+  if (dateless.rows[0]) {
+    throw new PayrollError(
+      `cannot translate ${dateless.rows[0].currency} payroll dated ${dateless.rows[0].pay_date}: ` +
+        `no regular accounting period covers that date, so no derived consolidated rate can exist for it`,
+    );
+  }
+  const slices = (await executor.execute<{
+      component_id: string; code: string; name: string;
+      kind: "deduction" | "employer_contribution" | "credit";
+      system_key: string | null; country: string | null; remittance_party_id: string | null;
+      liability_account_id: string | null; filing_account_id: string | null;
+      filingUnknown: boolean; province: string;
+      currency: string; period_id: string; period_end: string; amount: string;
+    }>(sql`
+    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+           l.liability_account_id,
+           ${filingAccount} as filing_account_id,
+           bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
+           s.province,
+           s.currency_code as currency,
+           period.id as period_id, period.ends_on::text as period_end,
+           sum(l.amount) as amount
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+      join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
+      join lateral (
+        select p.id, p.ends_on from accounting_periods p
+         where p.org_id = ${orgId} and not p.is_adjustment
+           and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
+         order by p.starts_on, p.ends_on, p.id limit 1
+      ) period on true
+     where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+       and l.kind in ('deduction', 'employer_contribution', 'credit')
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
+     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+              l.liability_account_id, ${filingAccount}, s.province,
+              s.currency_code, period.id, period.ends_on
+     order by c.sequence, c.code
+  `));
+  const grossSlices = (await executor.execute<{
+      filing_account_id: string | null; currency: string;
+      period_id: string; period_end: string; gross: string;
+    }>(sql`
+    select ${filingAccount} as filing_account_id, s.currency_code as currency,
+           period.id as period_id, period.ends_on::text as period_end,
+           sum(s.gross) as gross
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
+      join lateral (
+        select p.id, p.ends_on from accounting_periods p
+         where p.org_id = ${orgId} and not p.is_adjustment
+           and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
+         order by p.starts_on, p.ends_on, p.id limit 1
+      ) period on true
+     where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
+     group by ${filingAccount}, s.currency_code, period.id, period.ends_on
+  `));
+  const rates = await derivedAverageRates(
+    orgId,
+    presentation,
+    [
+      ...slices.rows.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
+      ...grossSlices.rows.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
+    ],
+    executor,
+  );
+  const translate = (amount: string, currency: string, periodId: string): string => {
+    if (currency === presentation) return amount;
+    const rate = rates.get(`${currency}→${periodId}`);
+    if (!rate) {
+      throw new PayrollError(
+        `No consolidated exchange rates for ${currency} → ${presentation}. Derive rates from period close first.`,
+      );
+    }
+    return roundMoney(mulRate(amount, rate), 2);
+  };
+  const rows: RemittanceRow[] = slices.rows
+    .filter((row) =>
+      row.system_key == null
+      || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
+    )
+    .map((row) => ({
+      component_id: row.component_id,
+      code: row.code,
+      name: row.name,
+      kind: row.kind,
+      system_key: row.system_key,
+      country: row.country,
+      remittance_party_id: row.remittance_party_id,
+      liability_account_id: row.liability_account_id,
+      filing_account_id: row.filing_account_id,
+      filingUnknown: row.filingUnknown,
+      province: row.province,
+      amount: translate(row.amount, row.currency, row.period_id),
+    }))
+    .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
+  const headcounts = (await executor.execute<{
+      filing_account_id: string | null; employees: number;
+    }>(sql`
+    select ${filingAccount} as filing_account_id,
+           count(distinct s.employee_party_id)::int as employees
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
+     where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+       ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
+     group by ${filingAccount}
+  `));
+  const grossByAccount = new Map<string, string>();
+  for (const slice of grossSlices.rows) {
+    const key = slice.filing_account_id ?? "";
+    grossByAccount.set(key, add(grossByAccount.get(key) ?? "0", translate(slice.gross, slice.currency, slice.period_id)));
+  }
+  const contextByAccount = new Map<string, { gross: string; employees: number }>(
+    headcounts.rows.map((row) => [
+      row.filing_account_id ?? "",
+      { gross: grossByAccount.get(row.filing_account_id ?? "") ?? "0", employees: row.employees },
+    ]),
+  );
+  return { rows, contextByAccount };
+}
+
 export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
@@ -208,6 +409,31 @@ export async function payrollRemittanceSummary(
     declarations.set(country, found);
     return found;
   };
+  // Amounts are stated in the organization's base currency — the currency the
+  // page formats every group total in. A scope whose committed stubs span more
+  // than one currency takes the mixed-currency path (translate each slice
+  // through its own period's derived consolidated rate, or refuse naming the
+  // missing pair). A single-currency scope keeps the historical queries below
+  // verbatim, so its figures stay byte-identical.
+  const presentation = (await executor.execute<{ base_currency: string }>(sql`
+    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? null;
+  const scopeCurrencies = presentation
+    ? (await executor.execute<{ currency: string }>(sql`
+      select distinct s.currency_code as currency
+        from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+        join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
+       where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
+         ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}`))
+        .rows.map((row) => row.currency)
+    : [];
+  let rows: RemittanceRow[];
+  let contextByAccount: Map<string, { gross: string; employees: number }>;
+  if (scopeCurrencies.length > 1 && presentation) {
+    ({ rows, contextByAccount } = await mixedCurrencyAccruals(
+      orgId, range, allowedSubsidiaryIds, executor, presentation, declarationFor,
+    ));
+  } else {
   // Grouped by the STUB's snapshot province as well as by component: a
   // component whose pack declares a region-scoped remittance vendor (QPP and
   // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
@@ -246,16 +472,12 @@ export async function payrollRemittanceSummary(
   // A `credit` row is money the employer reclaims from the destination, so it
   // nets AGAINST the group's withholdings (F24 compensation): the summary's
   // group total is what the employer actually sends, never the gross levy.
-  const rows = queried.rows
+  rows = queried.rows
     .filter((row) =>
       row.system_key == null
       || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
     )
     .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
-  if (rows.length === 0) return [];
-  if (rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
-    throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
-  }
 
   const context = (await executor.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
     select ${filingAccount} as filing_account_id,
@@ -268,9 +490,14 @@ export async function payrollRemittanceSummary(
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
   `));
-  const contextByAccount = new Map(
+  contextByAccount = new Map(
     context.rows.map((row) => [row.filing_account_id ?? "", row]),
   );
+  }
+  if (rows.length === 0) return [];
+  if (rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
+    throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
+  }
   const filingAccounts = await filingAccountsByIdIn(orgId, executor);
 
   // Destination and account both resolve through the pack declarations. A
