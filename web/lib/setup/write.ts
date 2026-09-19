@@ -8,6 +8,7 @@ import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll-run.ts'
+import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
   buildRow,
@@ -487,6 +488,32 @@ export async function validateEntityIntegrity(
       : (body.stateCode ? String(body.stateCode) : null)
     const problem = filingAccountProblem({ country, programType, stateCode })
     if (problem) return problem
+  }
+  if (entity.key === 'pay-components') {
+    // The pack's declared pre-tax treatments are the constraint that used
+    // to be the pay_components_tax_treatment DB CHECK. A CHECK cannot
+    // enumerate an open pack vocabulary (every permitted value was
+    // Canadian), so the declaration (engine/src/payroll/treatment-bases.ts,
+    // over each pack's deductionTreatments) is asked here, at the API
+    // boundary, for creates and edits alike — and the refusal names the
+    // treatments the scope declares rather than surfacing a constraint name.
+    const currentComponent = rowId
+      ? (((await executor.execute(sql`
+          select country, tax_treatment from pay_components
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      : null
+    if (rowId && !currentComponent) return 'not found'
+    const componentCountry = body.country !== undefined
+      ? (body.country ? String(body.country) : null)
+      : ((currentComponent?.country as string | null) ?? null)
+    const componentTreatment = body.taxTreatment !== undefined
+      ? (body.taxTreatment ? String(body.taxTreatment) : null)
+      : ((currentComponent?.tax_treatment as string | null) ?? null)
+    const treatmentProblem = payComponentTreatmentProblem({
+      country: componentCountry,
+      taxTreatment: componentTreatment,
+    })
+    if (treatmentProblem) return treatmentProblem
   }
   if (entity.key === 'pay-schedules') {
     // `anchor_period_end` is a REQUIRED field the engine derives every period

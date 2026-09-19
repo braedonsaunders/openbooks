@@ -16,6 +16,7 @@ import { GB_PACK } from "./gb/pack.ts";
 import { IE_PAYROLL_PACK } from "./ie/pack.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import {
+  payComponentTreatmentProblem,
   protectionTreatmentIterates,
   reduceTaxBases,
 } from "./treatment-bases.ts";
@@ -86,6 +87,27 @@ test("every declared treatment reduces income and never a social-insurance leg",
       );
     }
   }
+});
+
+test("the pack declaration is the authority on which treatments exist", () => {
+  assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: "salary_sacrifice" }), null);
+  assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: "none" }), null);
+  assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: null }), null);
+  assert.equal(payComponentTreatmentProblem({ country: null, taxTreatment: "salary_sacrifice" }), null);
+  assert.equal(payComponentTreatmentProblem({ country: "CA", taxTreatment: "pension_f" }), null);
+
+  const refusal = payComponentTreatmentProblem({ country: "AU", taxTreatment: "pension_f" });
+  assert.match(refusal ?? "", /not declared by the Australia payroll pack/);
+  assert.match(refusal ?? "", /"salary_sacrifice" \(Salary sacrifice \(PAYG\)\)/);
+
+  const emptyPack = payComponentTreatmentProblem({ country: "BR", taxTreatment: "pension_f" });
+  assert.match(emptyPack ?? "", /transcribes no pre-tax treatment/);
+
+  const shared = payComponentTreatmentProblem({ country: null, taxTreatment: "bogus_key" });
+  assert.match(shared ?? "", /not declared by any payroll pack/);
+
+  const unknownCountry = payComponentTreatmentProblem({ country: "ZZ", taxTreatment: "pension_f" });
+  assert.match(unknownCountry ?? "", /no payroll pack exists for country "ZZ"/);
 });
 
 test("protection iterates for a declared reducing treatment and unknown tags, never for after-tax", () => {

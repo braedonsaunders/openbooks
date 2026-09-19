@@ -45,7 +45,12 @@ const { SETUP_ENTITIES } = (await import('./registry')) as {
 }
 const { resolveDynamicSetupOptions } = (await import('./dynamic-options')) as {
   resolveDynamicSetupOptions: (entity: unknown) => {
-    fields?: { key: string; options?: { value: string }[]; optionsSource?: string }[]
+    fields?: {
+      key: string
+      options?: { value: string }[]
+      optionsSource?: string
+      scopedOptions?: { scopeField: string; byValue: Record<string, { value: string }[]> }
+    }[]
   }
 }
 
@@ -125,15 +130,14 @@ test('every installable pack scopes its own treatment list, starting with after-
   // pack's employees must see the treatments THAT pack declares — salary
   // sacrifice for AU, the T4127 factors for CA, after-tax only where the
   // pack transcribes no pre-tax treatment.
-  const { installablePayrollPacks, payrollPack } = (await import('@openbooks/engine/src/payroll/packs.ts')) as unknown as {
-    installablePayrollPacks: () => { country: string }[]
-    payrollPack: (country: string) => { deductionTreatments: readonly { key: string }[] }
-  }
+  const packRegistry: typeof import('@openbooks/engine/src/payroll/packs.ts') =
+    await import('@openbooks/engine/src/payroll/packs.ts')
+  const { installablePayrollPacks, payrollPack } = packRegistry
   const entity = SETUP_ENTITIES.find((candidate) => candidate.key === 'pay-components')
   const resolved = resolveDynamicSetupOptions(entity)
   const treatment = resolved.fields?.find((field) => field.key === 'taxTreatment')
   assert.ok(treatment, 'it has a taxTreatment field')
-  const scoped = (treatment as unknown as { scopedOptions?: { scopeField: string; byValue: Record<string, { value: string }[]> } }).scopedOptions
+  const scoped = treatment.scopedOptions
   assert.ok(scoped, 'the treatment field resolves per-country treatment lists')
   assert.equal(scoped.scopeField, 'country')
   for (const pack of installablePayrollPacks()) {
