@@ -5,7 +5,6 @@ import {
   assembleEmploymentAsOf,
   EmploymentReadError,
   loadEmploymentAsOf,
-  type AssignmentVersionRow,
   type EmploymentAsOfQuery,
   type EmploymentVersionRow,
 } from "./employment-read.ts";

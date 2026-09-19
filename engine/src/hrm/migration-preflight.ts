@@ -103,13 +103,6 @@ export type CanonicalEmploymentStatus =
   | "terminated"
   | "unknown";
 
-const KNOWN_STATUSES: readonly CanonicalEmploymentStatus[] = [
-  "offered",
-  "active",
-  "on_leave",
-  "suspended",
-  "terminated",
-];
 
 export interface SubsidiaryFact {
   readonly id: string;
