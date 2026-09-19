@@ -18,8 +18,10 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
  * Payroll remittances — accrued withholding by destination AND payroll filing
  * account for a period (GET), and one-click materialization of a group's
  * vendor bill (POST { action: 'create-bill', partyId, filingAccountId, from,
- * to }). The bill is a normal draft vendor_bill debiting the liability
- * accounts; AP review/post/pay finishes the job.
+ * to, subsidiaryId? }). A group spanning several legal entities splits into
+ * one bill per entity; pass the slice's subsidiaryId to bill exactly that
+ * entity's share. The bill is a normal draft vendor_bill debiting the
+ * liability accounts; AP review/post/pay finishes the job.
  */
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
@@ -50,12 +52,14 @@ export async function POST(req: Request) {
   if (body.action !== 'create-bill') return NextResponse.json({ error: 'unknown action' }, { status: 400 })
   const { partyId, from, to } = body
   const filingAccountId = body.filingAccountId ?? null
+  const subsidiaryId = body.subsidiaryId ?? null
   if (
     typeof partyId !== 'string' || !isUuid(partyId)
     || typeof from !== 'string' || typeof to !== 'string'
     || !DATE.test(from) || !DATE.test(to)
     || from > to
     || (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId)))
+    || (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId)))
   ) {
     return NextResponse.json({ error: 'invalid request' }, { status: 422 })
   }
@@ -67,7 +71,7 @@ export async function POST(req: Request) {
   if (periodDenied) return periodDenied
   try {
     const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, {
-      partyId, from, to, filingAccountId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      partyId, from, to, filingAccountId, subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json({ ok: true, ...bill })
   } catch (e) {

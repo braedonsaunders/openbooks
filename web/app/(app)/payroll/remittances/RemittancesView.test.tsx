@@ -61,6 +61,7 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
     partyName: 'Revenu Québec',
     filingAccount: { id: 'acct-1', accountNumber: '123456789RP0009', name: 'Quebec division', remitterType: 'accelerated_2' },
     hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: false,
     vendorKeys: ['rqRemittancePartyId'],
     schedule: {
       vendorSettingsKey: 'rqRemittancePartyId',
@@ -79,6 +80,7 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
       },
     ],
     total: '400.0000',
+    slices: [],
     grossPayroll: '2000.0000',
     employeeCount: 1,
     existingBills: [],

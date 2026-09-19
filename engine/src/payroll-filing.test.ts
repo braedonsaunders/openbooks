@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { filingAccountRef, type PayrollFilingAccount } from "./payroll-filing.ts";
+import { cmp } from "./money.ts";
 import {
   duplicateRemittanceMessage,
   groupRemittanceRows,
   pickRemittanceSequence,
+  pickRemittanceSlice,
   remittanceBillLockKey,
   remittanceGroupUsesQuebecCalendar,
   type RemittanceRow,
@@ -31,12 +33,14 @@ const RP2: PayrollFilingAccount = {
 const ACCOUNTS = new Map([[RP1.id, RP1], [RP2.id, RP2]]);
 
 function row(overrides: Partial<RemittanceRow>): RemittanceRow {
-  return {
+  const base: Omit<RemittanceRow, "sliceAmount"> = {
     component_id: "c1", code: "TAX", name: "Income tax", kind: "deduction",
     system_key: "income_tax", country: "CA", remittance_party_id: "cra", liability_account_id: "gl-tax",
     filing_account_id: RP1.id, filingUnknown: false, province: "ON", amount: "100.00",
+    subsidiary_id: "sub-a" as string | null, currency: "CAD",
     ...overrides,
   };
+  return { ...base, sliceAmount: overrides.sliceAmount ?? base.amount };
 }
 
 const CONTEXT = new Map([
@@ -102,6 +106,90 @@ test("remittance groups carry their stub provinces for the due-date calendar", (
   const byAccount = new Map([...groups.values()].map((g) => [g.filingAccount.accountNumber, g]));
   assert.deepEqual(byAccount.get("123456789RP0001")!.provinces, ["QC"]);
   assert.deepEqual(byAccount.get("123456789RP0002")!.provinces, ["ON"]);
+});
+
+test("one group carries one native-currency slice per legal entity", () => {
+  const SUBS = new Map([
+    ["sub-a", { name: "Alpha Co", currency: "CAD" }],
+    ["sub-b", { name: "Beta Co", currency: "CAD" }],
+  ]);
+  const groups = groupRemittanceRows({
+    rows: [
+      row({ amount: "100.00", subsidiary_id: "sub-a" }),
+      row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: "sub-b" }),
+    ],
+    contextByAccount: CONTEXT,
+    filingAccounts: ACCOUNTS,
+    resolveParty: (r) => r.remittance_party_id,
+    resolveAccount: (r) => r.liability_account_id,
+    subsidiaries: SUBS,
+  });
+  assert.equal(groups.size, 1, "one destination and account stays one group");
+  const [only] = [...groups.values()];
+  // The READ path is unchanged: consolidated total plus the account's own
+  // worksheet context, exactly as a de-consolidated GROUP BY would break.
+  assert.equal(only!.total, "140.0000");
+  assert.equal(only!.grossPayroll, "10000.00");
+  assert.equal(only!.employeeCount, 4);
+  assert.equal(only!.hasEntitylessAccruals, false);
+  // The WRITE path splits: one slice per entity, native units, labelled.
+  assert.equal(only!.slices.length, 2);
+  const bySub = new Map(only!.slices.map((s) => [s.subsidiaryId, s]));
+  assert.equal(bySub.get("sub-a")!.total, "100.0000");
+  assert.equal(bySub.get("sub-a")!.currency, "CAD");
+  assert.equal(bySub.get("sub-a")!.subsidiaryName, "Alpha Co");
+  assert.equal(bySub.get("sub-b")!.total, "40.0000");
+  assert.equal(bySub.get("sub-b")!.subsidiaryName, "Beta Co");
+  assert.equal(
+    cmp(bySub.get("sub-a")!.total, "0") !== 0 && cmp(bySub.get("sub-b")!.total, "0") !== 0,
+    true,
+  );
+});
+
+test("entityless accruals stay consolidated and flag the group", () => {
+  const groups = group([
+    row({ amount: "100.00", subsidiary_id: "sub-a" }),
+    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: null }),
+  ]);
+  const [only] = [...groups.values()];
+  assert.equal(only!.total, "140.0000", "the money stays visible in the consolidated group");
+  assert.equal(only!.hasEntitylessAccruals, true);
+  assert.equal(only!.slices.length, 1, "only the attributed entity slices");
+  assert.equal(only!.slices[0]!.subsidiaryId, "sub-a");
+});
+
+test("pickRemittanceSlice passes one slice through and refuses ambiguity", () => {
+  const groups = group([
+    row({ amount: "100.00", subsidiary_id: "sub-a" }),
+  ]);
+  const [sole] = [...groups.values()];
+  assert.equal(pickRemittanceSlice(sole!, null).subsidiaryId, "sub-a");
+  assert.equal(pickRemittanceSlice(sole!, "sub-a").subsidiaryId, "sub-a");
+  assert.throws(
+    () => pickRemittanceSlice(sole!, "sub-b"),
+    /nothing to remit/,
+    "naming an entity with no accruals bills nothing",
+  );
+
+  const multi = group([
+    row({ amount: "100.00", subsidiary_id: "sub-a" }),
+    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: "sub-b" }),
+  ]);
+  const [both] = [...multi.values()];
+  assert.equal(pickRemittanceSlice(both!, "sub-b").total, "40.0000");
+  assert.throws(
+    () => pickRemittanceSlice(both!, null),
+    /spans 2 legal entities.*raise one bill per entity/,
+    "an unnamed multi-entity group splits rather than billing as one",
+  );
+
+  const empty = group([row({ amount: "100.00", subsidiary_id: null })]);
+  const [flagged] = [...empty.values()];
+  assert.throws(
+    () => pickRemittanceSlice(flagged!, null),
+    /no legal entity/,
+    "entityless money never becomes a bill",
+  );
 });
 
 test("the CRA Quebec calendar governs exactly the all-Quebec payrolls", () => {
@@ -270,12 +358,12 @@ test("a second remittance bill for the same key is refused, naming the first", (
   assert.equal(duplicateRemittanceMessage(undefined), null);
 });
 
-test("the bill lock key scopes one destination, window and filing account", () => {
+test("the bill lock key scopes one destination, window, filing account and entity", () => {
   assert.equal(
     remittanceBillLockKey("org-1", {
       partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
     }),
-    "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31:",
+    "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31::",
   );
   assert.notEqual(
     remittanceBillLockKey("org-1", {
@@ -285,6 +373,26 @@ test("the bill lock key scopes one destination, window and filing account", () =
       partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
     }),
     "two program accounts remit independently",
+  );
+  // Two slices of one multi-entity group fence independently: concurrent
+  // creators for different entities proceed, while the same slice serializes.
+  assert.notEqual(
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      subsidiaryId: "sub-a",
+    }),
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      subsidiaryId: "sub-b",
+    }),
+    "two entities remit independently",
+  );
+  assert.equal(
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      subsidiaryId: "sub-a",
+    }),
+    "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31::sub-a",
   );
 });
 

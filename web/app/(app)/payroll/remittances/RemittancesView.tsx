@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
-import type { RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
+import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
 import { useMoney } from '../../../../components/money-provider'
 
 /**
@@ -40,8 +40,8 @@ export function RemittancesView({
   const [busyParty, setBusyParty] = useState<string | null>(null)
   const [range, setRange] = useState({ from, to })
 
-  async function createBill(partyId: string, filingAccountId: string | null) {
-    setBusyParty(groupKey(partyId, filingAccountId))
+  async function createBill(partyId: string, filingAccountId: string | null, subsidiaryId: string | null) {
+    setBusyParty(`${groupKey(partyId, filingAccountId)}::${subsidiaryId ?? ''}`)
     try {
       const res = await fetch('/api/payroll/remittances', {
         method: 'POST',
@@ -50,6 +50,7 @@ export function RemittancesView({
           action: 'create-bill',
           partyId,
           filingAccountId,
+          subsidiaryId,
           from: range.from,
           to: range.to,
         }),
@@ -139,13 +140,30 @@ export function RemittancesView({
                 ))}
                 {group.partyId ? (
                   canCreate && (
-                    <Button
-                      size="sm"
-                      disabled={busyParty !== null}
-                      onClick={() => void createBill(group.partyId!, group.filingAccount.id)}
-                    >
-                      {group.existingBills.length > 0 ? t('createAnother') : t('createBill')}
-                    </Button>
+                    group.slices.length > 1 ? (
+                      <span className="flex flex-wrap items-center gap-2">
+                        {group.slices.map((slice) => (
+                          <SliceBillButton
+                            key={slice.subsidiaryId}
+                            slice={slice}
+                            busy={busyParty !== null}
+                            onCreate={() => void createBill(group.partyId!, group.filingAccount.id, slice.subsidiaryId)}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={busyParty !== null}
+                        onClick={() => void createBill(
+                          group.partyId!,
+                          group.filingAccount.id,
+                          group.slices.length === 1 ? group.slices[0]!.subsidiaryId : null,
+                        )}
+                      >
+                        {group.existingBills.length > 0 ? t('createAnother') : t('createBill')}
+                      </Button>
+                    )
                   )
                 ) : (
                   <Link
@@ -179,5 +197,38 @@ export function RemittancesView({
         ))
       )}
     </div>
+  )
+}
+
+/**
+ * One bill button per legal entity. A multi-entity group's card shows the
+ * consolidated total above, so each button names its own entity and native
+ * share — formatted in the entity's currency, never the org's — or the
+ * operator cannot tell the two drafts apart. Single-entity groups keep the
+ * historical single button in the card body above.
+ */
+function SliceBillButton({
+  slice,
+  busy,
+  onCreate,
+}: {
+  slice: RemittanceEntitySlice
+  busy: boolean
+  onCreate: () => void
+}) {
+  const t = useTranslations('payroll.remittances')
+  const { money } = useMoney(slice.currency)
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      onClick={onCreate}
+      title={`${slice.subsidiaryName ?? slice.subsidiaryId} · ${money(slice.total)}`}
+    >
+      {slice.existingBills.length > 0 ? t('createAnother') : t('createBill')}
+      {' · '}
+      {slice.subsidiaryName ?? slice.subsidiaryId}
+    </Button>
   )
 }
