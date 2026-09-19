@@ -284,8 +284,15 @@ $$;
 -- yields NULL from `->>`, so every extraction is type-pinned with
 -- jsonb_typeof first (a JSON null is typeof 'null', never 'string' /
 -- 'number' / 'array') and the equality then compares two non-null values.
--- The revision binds as TEXT (no cast: a malformed value must evaluate
--- FALSE, not abort the statement, and '1'::text equality is exact).
+-- The revision binds by INTEGRAL VALUE, not representation: a revision is
+-- a mathematical integer counter, so JSON 1.0 denotes the same revision as
+-- JSON 1 and must bind, while 1.5 or "1" must not. Concretely the snapshot
+-- value must be typeof 'number' (which rules out JSON null, strings, and
+-- missing keys alongside the `?` guard) and its ::numeric value must equal
+-- the row revision. The cast cannot fail and no branch can be UNKNOWN: a
+-- jsonb number always renders as a parseable numeric literal, and every
+-- other shape is already FALSE before the cast is reached. Representation
+-- strictness lives where it belongs — payload_digest covers exact bytes.
 -- flow_run_id is the nullable row participant, so it gets its own
 -- IS NOT NULL conjunct before the equality.
 DO $$
@@ -310,7 +317,7 @@ BEGIN
           AND (decision_snapshot ->> 'payload_schema_version') = payload_schema_version
           AND (decision_snapshot ? 'expected_employment_revision')
           AND jsonb_typeof(decision_snapshot -> 'expected_employment_revision') = 'number'
-          AND (decision_snapshot ->> 'expected_employment_revision') = expected_employment_revision::text
+          AND (decision_snapshot ->> 'expected_employment_revision')::numeric = expected_employment_revision
           AND (decision_snapshot ? 'flow_run_id')
           AND jsonb_typeof(decision_snapshot -> 'flow_run_id') = 'string'
           AND flow_run_id IS NOT NULL
