@@ -1230,6 +1230,18 @@ export interface PayRunCalculationSourceSnapshot {
       updatedAt: string;
     } | null;
   }[];
+  /**
+   * The payroll-costing account of every service item the run's locked time
+   * entries point at. A routing input like time types and rates: it changes
+   * the run's output (which account a cost lands in), so an edit after
+   * Calculate must read stale — a misstated cost of sales is a wrong number
+   * even when net pay is identical.
+   */
+  itemAccounts: {
+    id: string;
+    payrollExpenseAccountId: string | null;
+    updatedAt: string;
+  }[];
   claimEntryIds: string[];
 }
 
@@ -1238,6 +1250,7 @@ type CalculationSourceRow = {
   time_entries: PayRunCalculationSourceSnapshot["timeEntries"];
   time_types: PayRunCalculationSourceSnapshot["timeTypes"];
   pay_rates: PayRunCalculationSourceSnapshot["payRates"];
+  item_accounts: PayRunCalculationSourceSnapshot["itemAccounts"];
   claim_entry_ids: string[];
 };
 
@@ -1266,7 +1279,13 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.timeTypes)
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)) return null;
-  return snapshot as PayRunCalculationSourceSnapshot;
+  // Snapshots stored before item routing existed carry no itemAccounts; they
+  // read as "no mapped items", so the first post-upgrade commit compares
+  // honestly and refuses with the items reason instead of a bare selection.
+  return {
+    ...snapshot,
+    itemAccounts: Array.isArray(snapshot.itemAccounts) ? snapshot.itemAccounts : [],
+  } as PayRunCalculationSourceSnapshot;
 }
 
 /**
@@ -1312,7 +1331,7 @@ export async function payRunCalculationSource(
     ),
     locked_entries as materialized (
       select te.id, te.employee_party_id, te.worked_on, te.hours, te.time_type_id,
-             te.project_id, te.department_id, te.is_billable,
+             te.project_id, te.department_id, te.item_id, te.is_billable,
              te.created_at, te.updated_at,
              exists (
                select 1
@@ -1351,6 +1370,16 @@ export async function payRunCalculationSource(
            select 1 from locked_entries entry where entry.time_type_id = tt.id
          )
        order by tt.id
+       ${rowLock}
+    ),
+    locked_items as materialized (
+      select i.id, i.payroll_expense_account_id, i.updated_at
+        from items i
+       where i.org_id = ${orgId}
+         and exists (
+           select 1 from locked_entries entry where entry.item_id = i.id
+         )
+       order by i.id
        ${rowLock}
     ),
     locked_rates as materialized (
@@ -1435,6 +1464,14 @@ export async function payRunCalculationSource(
            ), '[]'::jsonb) as time_types,
            coalesce((
              select jsonb_agg(jsonb_build_object(
+               'id', item.id::text,
+               'payrollExpenseAccountId', item.payroll_expense_account_id::text,
+               'updatedAt', to_char(item.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+             ) order by item.id)
+               from locked_items item
+           ), '[]'::jsonb) as item_accounts,
+           coalesce((
+             select jsonb_agg(jsonb_build_object(
                'employeePartyId', rate.employee_party_id::text,
                'payBasis', rate.pay_basis,
                'runCurrency', rate.run_currency,
@@ -1473,6 +1510,7 @@ export async function payRunCalculationSource(
     timeEntries: row.time_entries ?? [],
     timeTypes: row.time_types ?? [],
     payRates: row.pay_rates ?? [],
+    itemAccounts: row.item_accounts ?? [],
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -1480,12 +1518,13 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean } {
   return {
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
+    items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
   };
 }
 
@@ -3705,7 +3744,9 @@ async function payRunGlLegs(
 
     const stubLines = (await tx.execute<Record<string, string | null>>(sql`
       select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
-             c.system_key, c.country, c.expense_account_id, c.liability_account_id, s.net_pay
+             c.system_key, c.country, l.expense_account_id as line_expense_account_id,
+             c.expense_account_id as component_expense_account_id,
+             c.liability_account_id, s.net_pay
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
@@ -3753,9 +3794,16 @@ async function payRunGlLegs(
           // Standard cost already posted to the job at approval; wash clearing.
           accumulate(laborClearing!, amount, "Wages (labor clearing)");
         } else {
-          accumulate(line.expense_account_id ?? wageExpense, amount, line.description ?? "Wages", {
-            projectId: line.project_id, departmentId: line.department_id,
-          });
+          // The line's own stamp (migration 0180) wins: it froze the
+          // item > component > org-default resolution at calculate, so a
+          // mapping edited after Calculate cannot restate this run — the
+          // staleness digest refuses the commit instead. Unstamped history
+          // keeps the exact fallback it always had.
+          accumulate(
+            line.line_expense_account_id ?? line.component_expense_account_id ?? wageExpense,
+            amount, line.description ?? "Wages", {
+              projectId: line.project_id, departmentId: line.department_id,
+            });
         }
       } else if (line.kind === "deduction") {
         const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
@@ -3791,7 +3839,9 @@ async function payRunGlLegs(
         // Each component keeps its own debit: the shares ride one expense
         // account, so without the split the whole aggregate wears the first
         // share's name.
-        accumulate(line.expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
+        // Burden is deliberately NOT item-routed (owner decision pending):
+        // the component-then-default fallback stands exactly as before.
+        accumulate(line.component_expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
           projectId: line.project_id, departmentId: line.department_id,
           split: line.description ?? "Employer burden",
         });
@@ -3956,6 +4006,7 @@ export async function commitPayRun(input: {
       changes.time ? "time" : null,
       changes.timeTypes ? "timeTypes" : null,
       changes.wages ? "wages" : null,
+      changes.items ? "items" : null,
     ].filter((reason): reason is string => reason !== null);
     if (payRunCalculationSourceDigest(currentSource) !== storedDigest) {
       throw new PayrollError(staleCalculationMessage(

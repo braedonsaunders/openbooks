@@ -99,6 +99,7 @@
         "entitlements": "banques de paie",
         "workerComp": "taux d’indemnisation des accidents du travail",
         "timeTypes": "paramétrage des types d’heures",
+        "items": "coût de paie des articles",
         "settings": "paramètres de paie",
         "ytd": "les cumuls annuels d’une autre paie",
         "openingBalances": "soldes d’ouverture (reports)"

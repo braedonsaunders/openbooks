@@ -99,6 +99,7 @@
         "entitlements": "pay banks",
         "workerComp": "workers' compensation rates",
         "timeTypes": "time type setup",
+        "items": "item payroll costing",
         "settings": "payroll settings",
         "ytd": "another run's year-to-date",
         "openingBalances": "opening balances (carry-ins)"

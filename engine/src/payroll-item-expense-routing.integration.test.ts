@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { seedAdoption } from "./payroll-filing-test-fixtures.ts";
 import { calculatePayRun, commitPayRun, createPayRun } from "./payroll-run.ts";
+import { payRunStaleness } from "./payroll-readiness.ts";
 import { dropScratchOrgReporting } from "./test-fixtures.ts";
 
 const SKIP = !process.env.OPENBOOKS_DB_URL;
@@ -61,6 +62,14 @@ async function earningLines(orgId: string, documentId: string) {
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId} and l.kind = 'earning'
      order by l.sequence`)).rows;
+}
+
+async function journalDebits(orgId: string, documentId: string) {
+  return (await db.execute<{ number: string | null; name: string; amount: string }>(sql`
+    select a.number, a.name, d.amount from document_lines d
+      join accounts a on a.id = d.account_id and a.org_id = d.org_id
+     where d.org_id = ${orgId} and d.document_id = ${documentId} and d.amount > 0
+     order by a.number, d.amount`)).rows;
 }
 
 async function moneySnapshot(orgId: string, documentId: string) {
@@ -164,6 +173,79 @@ test("unmapped items and item-less hours fall through to the component account",
       assert.equal(line.expense_account_id, componentAccount);
       assert.equal(line.expense_account_source, "component");
     }
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test("one employee on two items posts two journal debits with the right amounts", { skip: SKIP }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const cogs = await makeAccount(fx.orgId, "5300", "Production Labour", "cogs");
+    const support = await makeAccount(fx.orgId, "6020", "Support Labour", "expense");
+    const production = await makeItem(fx.orgId, fx.actorId, "Production work", cogs);
+    const supportItem = await makeItem(fx.orgId, fx.actorId, "Support work", support);
+    await addEntry(fx.orgId, fx.employeeId, fx.actorId, "2026-07-14", "8", production);
+    await addEntry(fx.orgId, fx.employeeId, fx.actorId, "2026-07-15", "8", supportItem);
+    const run = await createPayRun({
+      orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    });
+    const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId };
+    const calculated = await calculatePayRun(input);
+    assert.deepEqual(calculated.errors, []);
+
+    // No edit between calculate and commit: the journal must match the
+    // calculate screen exactly — the freeze half of the protection.
+    assert.ok((await commitPayRun(input)).lines > 0);
+    const debits = await journalDebits(fx.orgId, run.documentId);
+    const wages = (number: string) => debits
+      .filter((d) => d.number === number)
+      .reduce((sum, d) => sum + Number(d.amount), 0);
+    assert.equal(wages("5300"), 240);
+    assert.equal(wages("6020"), 240);
+    // The journal balances: every debit has its credit (exact numerics —
+    // binary floats must never judge money).
+    const balance = (await db.execute<{ total: string }>(sql`
+      select coalesce(sum(d.amount), 0)::text as total from document_lines d
+       where d.org_id = ${fx.orgId} and d.document_id = ${run.documentId}`)).rows[0]!;
+    assert.equal(balance.total, "0.0000");
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test("editing an item account after calculate refuses the commit as stale, then posts the new account", { skip: SKIP }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const first = await makeAccount(fx.orgId, "5300", "Production Labour", "cogs");
+    const second = await makeAccount(fx.orgId, "6020", "Support Labour", "expense");
+    const item = await makeItem(fx.orgId, fx.actorId, "Production work", first);
+    await addEntry(fx.orgId, fx.employeeId, fx.actorId, "2026-07-14", "8", item);
+    const run = await createPayRun({
+      orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    });
+    const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId };
+    assert.deepEqual((await calculatePayRun(input)).errors, []);
+
+    // The admin fixes the mapping after reviewing the register: the draft
+    // must not silently post the old account — the digest half refuses,
+    // naming items, in both the wizard overlay and the commit boundary.
+    await db.execute(sql`update items set payroll_expense_account_id = ${second}
+      where id = ${item} and org_id = ${fx.orgId}`);
+    assert.ok((await payRunStaleness(fx.orgId, run.documentId)).reasons.includes("items"));
+    await assert.rejects(
+      commitPayRun(input),
+      (err: unknown) => {
+        assert.match(String((err as Error)?.message ?? err), /inputs changed after it was last calculated/);
+        assert.match(String((err as Error)?.message ?? err), /items/);
+        return true;
+      },
+    );
+
+    // Recalculate and the new account is what posts — no silent stale debit.
+    assert.deepEqual((await calculatePayRun(input)).errors, []);
+    assert.ok((await commitPayRun(input)).lines > 0);
+    const debits = await journalDebits(fx.orgId, run.documentId);
+    assert.ok(debits.some((d) => d.number === "6020" && Number(d.amount) === 240));
+    assert.ok(!debits.some((d) => d.number === "5300" && Number(d.amount) === 240));
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 

@@ -1011,6 +1011,7 @@ export const STALENESS_INPUT_CLASSES = [
   "entitlements",
   "workerComp",
   "timeTypes",
+  "items",
   "settings",
   "ytd",
   "openingBalances",
@@ -1275,6 +1276,7 @@ export async function payRunStaleness(
   let exactTimeChanged = false;
   let exactTimeTypesChanged = false;
   let exactWagesChanged = false;
+  let exactItemsChanged = false;
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1296,7 +1298,8 @@ export async function payRunStaleness(
       exactTimeChanged = changes.time;
       exactTimeTypesChanged = changes.timeTypes;
       exactWagesChanged = changes.wages;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages;
+      exactItemsChanged = changes.items;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items;
     }
   }
   const reasons = [
@@ -1314,6 +1317,7 @@ export async function payRunStaleness(
     row.entitlements_changed ? "entitlements" : null,
     row.worker_comp_changed ? "workerComp" : null,
     row.time_types_changed || exactTimeTypesChanged ? "timeTypes" : null,
+    exactItemsChanged ? "items" : null,
     row.settings_changed ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
     row.opening_balances_changed ? "openingBalances" : null,
