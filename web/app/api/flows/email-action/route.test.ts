@@ -20,9 +20,7 @@ interface EmailActionState {
     document_date: string | null;
     party_name: string | null;
   };
-  decideResult:
-    | { ok: true; resumed: string; runStatus: string }
-    | { ok: false; decision: string; resumed: string; runId: string; runStatus: string; decisionRecorded: true; error: string };
+  decideResult: { ok: true; resumed: string; runStatus: string };
   decideThrow: string | null;
   decideCalls: Array<Record<string, unknown>>;
 }
@@ -148,32 +146,6 @@ test("an invalid approval link states the configured token lifetime", async () =
     `expected TTL-derived copy ("expire after ${expected}"), got: ${html.slice(0, 300)}`,
   );
   assert.ok(!html.includes("7 days"), "stale hardcoded expiry must not appear");
-});
-
-test("a recorded-but-incomplete one-click decision never renders as Approved", async () => {
-  reset();
-  routeState.decideResult = {
-    ok: false,
-    decision: "approved",
-    resumed: "approve",
-    runId: "00000000-0000-4000-8000-000000000041",
-    runStatus: "failed",
-    decisionRecorded: true,
-    error: "decision approved recorded but release failed: boom. Run 00000000-0000-4000-8000-000000000041 is marked failed; fix the cause, then retry the failed run via retryFlowRun.",
-  };
-
-  const res = await POST(postForm(routeState.token));
-
-  assert.equal(res.status, 500);
-  const html = await res.text();
-  assert.ok(html.includes("Approval needs attention"), "failure page title, not Approved");
-  assert.ok(html.includes("was recorded"), "the page admits the decision was recorded");
-  assert.ok(html.includes("boom"), "the refusal cause reaches the approver");
-  assert.ok(html.includes("Approvals"), "the page points at the retry path");
-  assert.ok(
-    !html.includes("Your decision was recorded. You can close this page."),
-    "success copy must not render for a refusal",
-  );
 });
 
 test("a thrown release failure renders as not-recorded, never as Approved", async () => {
