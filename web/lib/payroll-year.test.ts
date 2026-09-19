@@ -15,9 +15,7 @@ test('an absent year is its own cause, not a range error over zero', () => {
   assert.deepEqual(payrollYearNullCause(''), { cause: 'absent' })
   assert.deepEqual(payrollYearNullCause('   '), { cause: 'absent' })
   const refusal = payrollYearRefusal(null)
-  assert.match(refusal ?? '', /year is required/)
-  assert.match(refusal ?? '', /2020/)
-  assert.match(refusal ?? '', /2100/)
+  assert.equal(refusal, 'year is required — pass a year between 2020 and 2100')
 })
 
 test('a numeric zero is below the range, naming the zero', () => {
