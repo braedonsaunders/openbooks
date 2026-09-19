@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "Actividades de CRM",
         "description": "Actividades comerciales y de relación como tareas, llamadas, reuniones, correos y notas."
+      },
+      "hrm_headcount": {
+        "label": "Plantilla",
+        "description": "Una fila por filial empleadora y departamento: empleos en vigor a la fecha del informe, con totales de equivalentes a tiempo completo de la asignación principal vigente. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_employment_history": {
+        "label": "Historial de empleo",
+        "description": "Una fila por versión de empleo: persona, empleador, estado, sellos de vigencia y registro, y el motivo de la evidencia de cierre. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_change_requests": {
+        "label": "Solicitudes de cambio",
+        "description": "Una fila por solicitud de cambio de empleo: estado, tipo, empleo, solicitante, sellos de envío y decisión, ejecución de aprobación vinculada y vinculación de revisión. Requiere el permiso de empleo de RR. HH."
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "Privado",
         "created_at": "Creado el",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "Filial",
+        "department": "Departamento",
+        "headcount": "Plantilla",
+        "fte_total": "Total ETC",
+        "subsidiary_id": "Filial (id)",
+        "department_id": "Departamento (id)"
+      },
+      "hrm_employment_history": {
+        "person": "Persona",
+        "employer": "Empleador",
+        "status": "Estado",
+        "effective_from": "Vigente desde",
+        "effective_to": "Vigente hasta",
+        "recorded_at": "Registrado el",
+        "recorded_until": "Registrado hasta",
+        "version_no": "Versión",
+        "change_reason": "Motivo del cambio",
+        "employment_id": "Empleo (id)",
+        "worker_id": "Persona (id)"
+      },
+      "hrm_change_requests": {
+        "status": "Estado",
+        "kind": "Tipo",
+        "employment": "Empleo",
+        "employer": "Empleador",
+        "requested_by": "Solicitado por",
+        "submitted_at": "Enviado el",
+        "decided_at": "Decidido el",
+        "flow_run_id": "Ejecución de aprobación (id)",
+        "request_revision": "Revisión de la solicitud",
+        "expected_employment_revision": "Revisión de empleo esperada",
+        "applied_at": "Aplicado el",
+        "reason": "Motivo",
+        "created_at": "Creado el",
+        "id": "Solicitud (id)",
+        "employment_id": "Empleo (id)"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "Conciliado exacto",
       "clean_within_tolerance": "Conciliado dentro de la tolerancia",
       "differences": "Diferencias por resolver",
-      "no_comparable_data": "No se comparó nada"
+      "no_comparable_data": "No se comparó nada",
+      "offered": "Ofrecido",
+      "on_leave": "De permiso",
+      "suspended": "Suspendido",
+      "terminated": "Finalizado",
+      "withdrawn": "Retirada",
+      "applied": "Aplicada",
+      "hire": "Contratación",
+      "status_change": "Cambio de estado",
+      "assignment_change": "Cambio de asignación",
+      "termination": "Finalización"
     }
   },
   "operators": {
@@ -1348,6 +1408,10 @@
     "crm-lead-conversion-funnel": {
       "name": "Ciclo de vida y fuentes de leads",
       "description": "Perfiles de CRM categorizados por etapa de ciclo de vida, estado y fuente de captación."
+    },
+    "headcount-statement": {
+      "name": "Estado de plantilla",
+      "description": "Plantilla y equivalentes a tiempo completo a la fecha del informe, una fila por filial empleadora y departamento con un total de la organización. Requiere el permiso de empleo de RR. HH."
     }
   },
   "generalLedger": {
