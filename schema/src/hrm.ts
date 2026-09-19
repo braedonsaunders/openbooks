@@ -123,6 +123,14 @@ export const workerEmployments = pgTable(
           or (${t.serviceStart} is not null and ${t.serviceStartProvenance} is not null
               and char_length(btrim(${t.serviceStartProvenance})) > 0)`,
     ),
+    // Finite civil time (storage contract 0184): PostgreSQL dates also admit
+    // infinity/BC/year > 9999, which the reader refuses — so they must not be
+    // savable. NULL alone means unbounded; every non-null bound is pinned.
+    check(
+      "worker_employments_finite_time",
+      sql`${t.serviceStart} is null
+          or ${t.serviceStart} between date '0001-01-01' and date '9999-12-31'`,
+    ),
   ],
 );
 
@@ -179,6 +187,20 @@ export const workerEmploymentVersions = pgTable(
       "worker_employment_versions_closure",
       sql`(${t.supersededBy} is null) = (${t.recordedUntil} is null)
           and (${t.supersededBy} is null) = (${t.closedByChangeId} is null)`,
+    ),
+    // Finite civil time: effective_from/recorded_at always known, so always
+    // pinned; null ends stay unbounded. Mirrors
+    // worker_employment_versions_finite_time (0184).
+    check(
+      "worker_employment_versions_finite_time",
+      sql`${t.effectiveFrom} between date '0001-01-01' and date '9999-12-31'
+          and (${t.effectiveTo} is null
+               or ${t.effectiveTo} between date '0001-01-01' and date '9999-12-31')
+          and ${t.recordedAt} >= timestamptz '0001-01-01 00:00:00+00'
+          and ${t.recordedAt} < timestamptz '10000-01-01 00:00:00+00'
+          and (${t.recordedUntil} is null
+               or (${t.recordedUntil} >= timestamptz '0001-01-01 00:00:00+00'
+                   and ${t.recordedUntil} < timestamptz '10000-01-01 00:00:00+00'))`,
     ),
   ],
 );
@@ -282,6 +304,19 @@ export const employmentAssignmentVersions = pgTable(
           and (${t.supersededBy} is null) = (${t.closedByChangeId} is null)`,
     ),
     check("employment_assignment_versions_fte", sql`${t.fte} > 0 and ${t.fte} != 'NaN'`),
+    // Finite civil time, same shape as the employment versions. Mirrors
+    // employment_assignment_versions_finite_time (0184).
+    check(
+      "employment_assignment_versions_finite_time",
+      sql`${t.effectiveFrom} between date '0001-01-01' and date '9999-12-31'
+          and (${t.effectiveTo} is null
+               or ${t.effectiveTo} between date '0001-01-01' and date '9999-12-31')
+          and ${t.recordedAt} >= timestamptz '0001-01-01 00:00:00+00'
+          and ${t.recordedAt} < timestamptz '10000-01-01 00:00:00+00'
+          and (${t.recordedUntil} is null
+               or (${t.recordedUntil} >= timestamptz '0001-01-01 00:00:00+00'
+                   and ${t.recordedUntil} < timestamptz '10000-01-01 00:00:00+00'))`,
+    ),
   ],
 );
 
@@ -372,6 +407,13 @@ export const employmentChanges = pgTable(
       "employment_changes_closed_versions",
       sql`jsonb_typeof(${t.closedVersions}) = 'array'`,
     ),
+    // Finite civil time: evidence is always recorded at a known instant.
+    // Mirrors employment_changes_finite_time (0184).
+    check(
+      "employment_changes_finite_time",
+      sql`${t.recordedAt} >= timestamptz '0001-01-01 00:00:00+00'
+          and ${t.recordedAt} < timestamptz '10000-01-01 00:00:00+00'`,
+    ),
   ],
 );
 
@@ -439,6 +481,19 @@ export const reportingRelationships = pgTable(
       "reporting_relationships_closure",
       sql`(${t.supersededBy} is null) = (${t.recordedUntil} is null)
           and (${t.supersededBy} is null) = (${t.closedByChangeId} is null)`,
+    ),
+    // Finite civil time, same shape as the version tables. Mirrors
+    // reporting_relationships_finite_time (0184).
+    check(
+      "reporting_relationships_finite_time",
+      sql`${t.effectiveFrom} between date '0001-01-01' and date '9999-12-31'
+          and (${t.effectiveTo} is null
+               or ${t.effectiveTo} between date '0001-01-01' and date '9999-12-31')
+          and ${t.recordedAt} >= timestamptz '0001-01-01 00:00:00+00'
+          and ${t.recordedAt} < timestamptz '10000-01-01 00:00:00+00'
+          and (${t.recordedUntil} is null
+               or (${t.recordedUntil} >= timestamptz '0001-01-01 00:00:00+00'
+                   and ${t.recordedUntil} < timestamptz '10000-01-01 00:00:00+00'))`,
     ),
   ],
 );

@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS public.worker_employment_versions (
     recorded_until timestamp with time zone,
     -- Version closing this one (null = live). Always names a real
     -- version_no of the same employment (closure guards verify).
+    superseded_by integer,
     -- Link to the ONE aggregate employment_changes event evidencing this
     -- closure (null = live). Several versions closed in one operation share
     -- one event; composite FK to employment_changes(org_id, id) below.
@@ -187,6 +188,9 @@ CREATE TABLE IF NOT EXISTS public.employment_assignment_versions (
     effective_to date,
     recorded_at timestamp with time zone DEFAULT now() NOT NULL,
     recorded_until timestamp with time zone,
+    -- Version closing this one (null = live). Always names a real
+    -- version_no of the same assignment (closure guards verify).
+    superseded_by integer,
     -- Link to the ONE aggregate employment_changes event evidencing this
     -- closure (null = live). Several versions closed in one operation share
     -- one event; composite FK to employment_changes(org_id, id) below.
@@ -293,6 +297,9 @@ CREATE TABLE IF NOT EXISTS public.reporting_relationships (
     effective_to date,
     recorded_at timestamp with time zone DEFAULT now() NOT NULL,
     recorded_until timestamp with time zone,
+    -- Version closing this one (null = live). Always names a real
+    -- version_no of the same relationship (closure guards verify).
+    superseded_by integer,
     -- Link to the ONE aggregate employment_changes event evidencing this
     -- closure (null = live). Several versions closed in one operation share
     -- one event; composite FK to employment_changes(org_id, id) below.
@@ -615,9 +622,10 @@ CREATE TRIGGER employment_assignments_identity
   FOR EACH ROW EXECUTE FUNCTION public.employment_assignments_identity_guard();
 
 -- Controlled version closure: closed rows are immutable; the ONLY allowed
--- UPDATE on a live row is the closing transition (sets recorded_until +
--- superseded_by, touches nothing else); the new version_no must already
--- exist for the same identity (no dangling superseded_by pointers).
+-- UPDATEs on a live row are the closing transition (sets recorded_until +
+-- superseded_by, touches nothing else) and a pure audit touch
+-- (updated_at/updated_by only, never content); the new version_no must
+-- already exist for the same identity (no dangling superseded_by pointers).
 -- Deletes are rejected: retire via closure, never DELETE.
 CREATE OR REPLACE FUNCTION public.worker_employment_versions_closure_guard()
 RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
@@ -638,8 +646,18 @@ BEGIN
     RAISE EXCEPTION 'worker_employment_versions: closed versions are immutable'
       USING ERRCODE = '23514';
   END IF;
+  -- Pure audit touch on a live row (updated_at/updated_by only): housekeeping
+  -- attribution, never content. Compared as full images so anything beyond
+  -- the volatile audit columns falls through to the append-only refusal; the
+  -- closing transition below allowlists its own columns separately.
+  IF NEW.superseded_by IS NULL AND NEW.recorded_until IS NULL
+     AND NEW.closed_by_change_id IS NULL
+     AND to_jsonb(NEW) - ARRAY['updated_at','updated_by']
+       = to_jsonb(OLD) - ARRAY['updated_at','updated_by'] THEN
+    RETURN NEW;
+  END IF;
   IF NEW.superseded_by IS NULL OR NEW.recorded_until IS NULL THEN
-    RAISE EXCEPTION 'worker_employment_versions: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by)'
+    RAISE EXCEPTION 'worker_employment_versions: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by) or a pure audit touch'
       USING ERRCODE = '23514';
   END IF;
   -- Explicit allowlist: ONLY recorded_until, superseded_by, closed_by_change_id, and the audit
@@ -666,7 +684,7 @@ BEGIN
 END $$;
 
 COMMENT ON FUNCTION public.worker_employment_versions_closure_guard() IS
-  'openbooks:worker_employment_versions_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition; successor + evidence proven deferred by hrm_closure_evidence_guard';
+  'openbooks:worker_employment_versions_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition or a pure audit touch; successor + evidence proven deferred by hrm_closure_evidence_guard';
 
 DROP TRIGGER IF EXISTS worker_employment_versions_closure ON public.worker_employment_versions;
 CREATE TRIGGER worker_employment_versions_closure
@@ -692,8 +710,16 @@ BEGIN
     RAISE EXCEPTION 'employment_assignment_versions: closed versions are immutable'
       USING ERRCODE = '23514';
   END IF;
+  -- Pure audit touch on a live row (updated_at/updated_by only): housekeeping
+  -- attribution, never content (same shape as worker_employment_versions).
+  IF NEW.superseded_by IS NULL AND NEW.recorded_until IS NULL
+     AND NEW.closed_by_change_id IS NULL
+     AND to_jsonb(NEW) - ARRAY['updated_at','updated_by']
+       = to_jsonb(OLD) - ARRAY['updated_at','updated_by'] THEN
+    RETURN NEW;
+  END IF;
   IF NEW.superseded_by IS NULL OR NEW.recorded_until IS NULL THEN
-    RAISE EXCEPTION 'employment_assignment_versions: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by)'
+    RAISE EXCEPTION 'employment_assignment_versions: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by) or a pure audit touch'
       USING ERRCODE = '23514';
   END IF;
   IF NEW.id IS DISTINCT FROM OLD.id
@@ -718,7 +744,7 @@ BEGIN
 END $$;
 
 COMMENT ON FUNCTION public.employment_assignment_versions_closure_guard() IS
-  'openbooks:employment_assignment_versions_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition; successor + evidence proven deferred by hrm_closure_evidence_guard';
+  'openbooks:employment_assignment_versions_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition or a pure audit touch; successor + evidence proven deferred by hrm_closure_evidence_guard';
 
 DROP TRIGGER IF EXISTS employment_assignment_versions_closure ON public.employment_assignment_versions;
 CREATE TRIGGER employment_assignment_versions_closure
@@ -744,8 +770,16 @@ BEGIN
     RAISE EXCEPTION 'reporting_relationships: closed rows are immutable'
       USING ERRCODE = '23514';
   END IF;
+  -- Pure audit touch on a live row (updated_at/updated_by only): housekeeping
+  -- attribution, never content (same shape as worker_employment_versions).
+  IF NEW.superseded_by IS NULL AND NEW.recorded_until IS NULL
+     AND NEW.closed_by_change_id IS NULL
+     AND to_jsonb(NEW) - ARRAY['updated_at','updated_by']
+       = to_jsonb(OLD) - ARRAY['updated_at','updated_by'] THEN
+    RETURN NEW;
+  END IF;
   IF NEW.superseded_by IS NULL OR NEW.recorded_until IS NULL THEN
-    RAISE EXCEPTION 'reporting_relationships: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by)'
+    RAISE EXCEPTION 'reporting_relationships: live rows are append-only; the only allowed UPDATE is the closing transition (recorded_until + superseded_by) or a pure audit touch'
       USING ERRCODE = '23514';
   END IF;
   IF NEW.id IS DISTINCT FROM OLD.id
@@ -767,7 +801,7 @@ BEGIN
 END $$;
 
 COMMENT ON FUNCTION public.reporting_relationships_closure_guard() IS
-  'openbooks:reporting_relationships_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition; successor + evidence proven deferred by hrm_closure_evidence_guard';
+  'openbooks:reporting_relationships_closure_guard:v1 - closed rows immutable; live rows accept only the closing transition or a pure audit touch; successor + evidence proven deferred by hrm_closure_evidence_guard';
 
 DROP TRIGGER IF EXISTS reporting_relationships_closure ON public.reporting_relationships;
 CREATE TRIGGER reporting_relationships_closure
@@ -778,7 +812,9 @@ CREATE TRIGGER reporting_relationships_closure
 -- (closed_by_change_id) an employment_changes event of the SAME employment
 -- that (a) was written in THIS transaction (change_txid = txid_current(),
 -- stamped immutable at insert, never supplied by the service), and (b)
--- names this exact closure in its closed_versions array. The successor must
+-- names this exact closure in its closed_versions array WITH the exact
+-- before-image (UPDATE: OLD; INSERT of an already-closed row: NEW as
+-- written). The successor must
 -- be strictly newer (rejects self and backwards: no recursive walker
 -- needed, version_no increase plus adjacency is the whole proof) and start
 -- exactly where the closed row ends (seamless handoff). Deferred because
@@ -795,6 +831,10 @@ DECLARE
   ev_txid bigint;
   ev_array jsonb;
   succ_at timestamptz;
+  succ_n integer;
+  elem jsonb;
+  elem_n integer;
+  expected_before jsonb;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.superseded_by IS NULL THEN
@@ -815,12 +855,16 @@ BEGIN
     idcol_val := NEW.relationship_id;
   END IF;
   -- Real adjacent successor: exists, strictly newer, starts exactly here.
+  -- PL/pgSQL EXECUTE never sets FOUND (docs 41.5.5 basic-statements), so the
+  -- presence check reads ROW_COUNT: recorded_at is NOT NULL, but a NULL
+  -- succ_at test would still be wrong (it confuses "no row" with data).
   EXECUTE format(
     'SELECT recorded_at FROM public.%I WHERE org_id = $1 AND %I = $2 AND version_no = $3',
     TG_TABLE_NAME, identity_col)
     INTO succ_at
     USING NEW.org_id, idcol_val, NEW.superseded_by;
-  IF NOT FOUND THEN
+  GET DIAGNOSTICS succ_n = ROW_COUNT;
+  IF succ_n = 0 THEN
     RAISE EXCEPTION '%: superseded_by must name a real version_no of the same identity (no dangling pointers)', TG_TABLE_NAME
       USING ERRCODE = '23514';
   END IF;
@@ -832,7 +876,9 @@ BEGIN
     RAISE EXCEPTION '%: successor recorded_at must equal the closed recorded_until (seamless handoff, no gap or overlap)', TG_TABLE_NAME
       USING ERRCODE = '23514';
   END IF;
-  -- Same-transaction aggregate event naming this exact closure.
+  -- Same-transaction aggregate event naming this exact closure. Plain
+  -- SELECT ... INTO sets FOUND (unlike EXECUTE above), so IF NOT FOUND is
+  -- correct here.
   SELECT c.change_txid, c.closed_versions INTO ev_txid, ev_array
     FROM public.employment_changes c
    WHERE c.id = NEW.closed_by_change_id AND c.org_id = NEW.org_id
@@ -845,17 +891,48 @@ BEGIN
     RAISE EXCEPTION '%: closure evidence must be written in the same transaction (change_txid must equal txid_current())', TG_TABLE_NAME
       USING ERRCODE = '23514';
   END IF;
-  IF NOT (ev_array @> jsonb_build_array(jsonb_build_object(
+  -- Exactly one element must name this closure: zero means the event does
+  -- not evidence this close; two or more means the array double-counts one
+  -- row and no single before-image can be authoritative. SELECT ... INTO
+  -- would silently take the first of several, so count first.
+  SELECT count(*) INTO elem_n FROM jsonb_array_elements(ev_array) AS e
+   WHERE e @> jsonb_build_object(
       'table', TG_TABLE_NAME::text, 'identity', idcol_val::text,
-      'version_no', NEW.version_no, 'row_id', NEW.id::text))) THEN
+      'version_no', NEW.version_no, 'row_id', NEW.id::text);
+  IF elem_n = 0 THEN
     RAISE EXCEPTION '%: evidence event must name this exact closure (table, identity, version_no, row_id) in closed_versions', TG_TABLE_NAME
+      USING ERRCODE = '23514';
+  ELSIF elem_n > 1 THEN
+    RAISE EXCEPTION '%: evidence event names this closure more than once (duplicate closed_versions entries)', TG_TABLE_NAME
+      USING ERRCODE = '23514';
+  END IF;
+  SELECT e INTO elem FROM jsonb_array_elements(ev_array) AS e
+   WHERE e @> jsonb_build_object(
+      'table', TG_TABLE_NAME::text, 'identity', idcol_val::text,
+      'version_no', NEW.version_no, 'row_id', NEW.id::text)
+   LIMIT 1;
+  -- Exact prior image, full row, no column subtracted: on UPDATE the element
+  -- must carry OLD as it stood before this close. The closing transition
+  -- only ever fires from a live row, so OLD's closing columns are NULL on
+  -- both sides, and the volatile audit columns are OLD's own prior touch —
+  -- nothing needs excluding and the comment cannot overclaim. On INSERT of
+  -- an already-closed row there is no OLD: the element must carry NEW as
+  -- written (imported-image semantics, clearly separated from UPDATE).
+  -- Key-only matching would admit forged history with the right identifiers.
+  IF TG_OP = 'INSERT' THEN
+    expected_before := to_jsonb(NEW);
+  ELSE
+    expected_before := to_jsonb(OLD);
+  END IF;
+  IF NOT (elem ? 'before') OR (elem->'before' IS DISTINCT FROM expected_before) THEN
+    RAISE EXCEPTION '%: evidence event must carry the exact before-image of this closure in closed_versions[].before', TG_TABLE_NAME
       USING ERRCODE = '23514';
   END IF;
   RETURN NULL;
 END $$;
 
 COMMENT ON FUNCTION public.hrm_closure_evidence_guard() IS
-  'openbooks:hrm_closure_evidence_guard:v1 - deferred proof per closure: adjacent strictly-newer successor plus same-transaction aggregate event (txid-stamped) naming the exact row';
+  'openbooks:hrm_closure_evidence_guard:v1 - deferred proof per closure: adjacent strictly-newer successor (ROW_COUNT presence) plus same-transaction aggregate event (txid-stamped) naming the exact row with its exact before-image';
 
 DROP TRIGGER IF EXISTS worker_employment_versions_closure_evidence ON public.worker_employment_versions;
 CREATE CONSTRAINT TRIGGER worker_employment_versions_closure_evidence
@@ -874,6 +951,70 @@ CREATE CONSTRAINT TRIGGER reporting_relationships_closure_evidence
   AFTER INSERT OR UPDATE ON public.reporting_relationships
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION public.hrm_closure_evidence_guard('relationship_id');
+
+-- Deferred REVERSE proof: the forward guard proves every closed row names an
+-- event; this proves every named element closes a row. Without it an event
+-- could claim nonexistent closures, live rows it never closed, or rows of
+-- another employment, and no check would fire. One bounded pass over the
+-- array (no recursive walker): each element must name an allowed table with
+-- a well-formed before object, and exactly one row in that table must carry
+-- the named id/identity/version in this org and employment, actually closed,
+-- linked back to THIS event. Empty arrays (non-closure events) pass vacuously.
+CREATE OR REPLACE FUNCTION public.hrm_evidence_closure_reverse_guard()
+RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  elem jsonb;
+  tbl text;
+  idcol text;
+  row_n integer;
+BEGIN
+  -- Governed amend path (fixture teardown, historical replay): the existing
+  -- house mechanism, never a production bypass.
+  IF coalesce(current_setting('openbooks.amend', true), 'off') = 'on' THEN
+    RETURN NULL;
+  END IF;
+  FOR elem IN SELECT * FROM jsonb_array_elements(NEW.closed_versions) LOOP
+    tbl := elem->>'table';
+    IF tbl = 'worker_employment_versions' THEN
+      idcol := 'employment_id';
+    ELSIF tbl = 'employment_assignment_versions' THEN
+      idcol := 'assignment_id';
+    ELSIF tbl = 'reporting_relationships' THEN
+      idcol := 'relationship_id';
+    ELSE
+      RAISE EXCEPTION 'employment_changes: closed_versions element names an unknown closure table %', tbl
+        USING ERRCODE = '23514';
+    END IF;
+    IF jsonb_typeof(elem->'before') IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'employment_changes: closed_versions element for % must carry a before-image object', tbl
+        USING ERRCODE = '23514';
+    END IF;
+    -- count(*) always returns exactly one row, so INTO needs no FOUND dance.
+    EXECUTE format(
+      'SELECT count(*) FROM public.%I
+        WHERE id = $1 AND org_id = $2 AND %I = $3 AND version_no = $4
+          AND employment_id = $5
+          AND superseded_by IS NOT NULL AND closed_by_change_id = $6',
+      tbl, idcol)
+      INTO row_n
+      USING (elem->>'row_id')::uuid, NEW.org_id, (elem->>'identity')::uuid,
+            (elem->>'version_no')::int, NEW.employment_id, NEW.id;
+    IF row_n <> 1 THEN
+      RAISE EXCEPTION 'employment_changes: closed_versions element must name a real closed row of this employment linked back to this event (table %, identity %)', tbl, elem->>'identity'
+        USING ERRCODE = '23514';
+    END IF;
+  END LOOP;
+  RETURN NULL;
+END $$;
+
+COMMENT ON FUNCTION public.hrm_evidence_closure_reverse_guard() IS
+  'openbooks:hrm_evidence_closure_reverse_guard:v1 - deferred reverse proof per event: every closed_versions element names exactly one really-closed row of this employment linked back to this event';
+
+DROP TRIGGER IF EXISTS employment_changes_closure_reverse ON public.employment_changes;
+CREATE CONSTRAINT TRIGGER employment_changes_closure_reverse
+  AFTER INSERT ON public.employment_changes
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION public.hrm_evidence_closure_reverse_guard();
 
 -- Denormalized employment_id on assignment versions must match the
 -- assignment's own employment (same-employment proof FKs cannot express).
@@ -1003,17 +1144,29 @@ RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
 DECLARE
   found_cycle boolean;
   max_depth integer;
+  bump_n integer;
 BEGIN
   IF NEW.kind <> 'line' OR NEW.superseded_by IS NOT NULL THEN
     RETURN NEW;
   END IF;
   -- Proven serialization FIRST (see hrm_graph_revisions): bump before any
   -- table read, so the walk below never runs on a stale snapshot.
+  -- The seed INSERT is benign initialization only, never the proof:
+  -- concurrent first-writes to a fresh org race to plant the rev = 0 row;
+  -- the loser does nothing and BOTH proceed to the UPDATE below, which
+  -- serializes them on the row lock. The seed carries no product data, so
+  -- DO NOTHING can never silently disable the walk — the exact-row
+  -- assertion after the UPDATE is what keeps a skipped bump loud.
   INSERT INTO public.hrm_graph_revisions AS g (org_id, rev)
     VALUES (NEW.org_id, 0)
     ON CONFLICT (org_id) DO NOTHING;
   UPDATE public.hrm_graph_revisions SET rev = rev + 1, updated_at = now()
     WHERE org_id = NEW.org_id;
+  GET DIAGNOSTICS bump_n = ROW_COUNT;
+  IF bump_n <> 1 THEN
+    RAISE EXCEPTION 'reporting_relationships: graph-revision bump must hit exactly one row (an RLS-hidden row is a serialization failure, never a skip)'
+      USING ERRCODE = '23514';
+  END IF;
   WITH RECURSIVE walk(emp, wfrom, wto, depth, path) AS (
     SELECT NEW.manager_employment_id, NEW.effective_from, NEW.effective_to, 1,
            ARRAY[NEW.employment_id, NEW.manager_employment_id]
