@@ -432,9 +432,70 @@ export async function listStatutoryRates(
 }
 
 /**
+ * The scope point a rate row may occupy for a slot, in the slot's own terms —
+ * the structural half of `statutoryRateProblem` (which additionally checks
+ * region membership against the pack's region declaration and the named
+ * filing account against the accounts table, neither of which this write
+ * boundary takes).
+ *
+ * Returns the problem as a sentence, or null when the point is one the
+ * resolution can answer. A row written outside its slot's scope is accepted
+ * by the unique index but answered by no read: `buildResolution` resolves a
+ * `region`-scoped slot at a region, a `sub_region` slot at a region plus
+ * jurisdiction, a `filing_account` slot at a region plus account, and an
+ * `org` slot at no scope at all — so a sub-region carried on a region-wide
+ * row, or a region carried on an org-wide row, saves successfully and then
+ * resolves to nothing, and the engine prices the levy as unconfigured. That
+ * is a silent write loss on a statutory input, so the write boundary refuses
+ * it rather than the setup route alone: every present and future caller gets
+ * the refusal, not just the one surface that validates today.
+ */
+export function rateScopePointProblem(
+  slot: PayrollStatutoryRateSlot,
+  point: { region: string | null; subRegion?: string | null; filingAccountId: string | null },
+): string | null {
+  const region = point.region === "" ? null : point.region;
+  const subRegion = point.subRegion == null || point.subRegion === "" ? null : point.subRegion;
+  const account = point.filingAccountId === "" ? null : point.filingAccountId;
+  const hasRegion = region != null;
+  const hasSubRegion = subRegion != null;
+  const hasAccount = account != null;
+  if (slot.scope === "org") {
+    if (hasRegion) {
+      return `${slot.label} is declared org-wide — it carries no region, so a rate saved `
+        + `for ${region} would never resolve. Remove the region, or declare the slot per region in the pack.`;
+    }
+  } else if (!hasRegion) {
+    return `${slot.label} varies by region — name the region it applies to, or the saved rate `
+      + "would never resolve for any employee.";
+  }
+  if (slot.scope === "sub_region") {
+    if (!hasSubRegion) {
+      return `${slot.label} varies by taxing jurisdiction inside the region — name the jurisdiction `
+        + "it applies to, or the saved rate would never resolve for any employee.";
+    }
+  } else if (hasSubRegion) {
+    return `${slot.label} is not assigned per sub-jurisdiction — the saved rate would carry `
+      + `${subRegion} where no read looks for it and would never resolve. Remove it, or declare `
+      + "the slot at sub_region scope in the pack.";
+  }
+  if (slot.scope !== "filing_account" && hasAccount) {
+    return `${slot.label} is not assigned per filing account — it applies to every account, so a rate `
+      + "saved against one account would never resolve. Remove the account, or declare the slot per account.";
+  }
+  return null;
+}
+
+/**
  * Write one rate row, keyed by its scope point (country, slot, region, account,
  * tax year) so a second save of the same point is an UPDATE, never a duplicate
  * that would make the resolution ambiguous. Audited with before/after.
+ *
+ * A save that affects no row is a failure, never a success: the UPDATE below
+ * names the locked row it just read, so zero affected rows means the write
+ * did not land (a scope the row-level policy hides, a row deleted mid-flight)
+ * and returning `{ ok: true }` for it would tell the operator a lawful rate
+ * is configured that the engine will never see.
  */
 export async function upsertStatutoryRate(input: {
   orgId: string;
@@ -453,6 +514,11 @@ export async function upsertStatutoryRate(input: {
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
+  const filingAccountId = input.filingAccountId === "" ? null : input.filingAccountId;
+  const scopeProblem = rateScopePointProblem(slot, {
+    region, subRegion, filingAccountId,
+  });
+  if (scopeProblem) throw new PayrollPackError(scopeProblem);
   // The unique index protects the final write, but it cannot serialize two
   // transactions that both observe a missing scope point before either inserts
   // it. An advisory lock keyed by the complete point closes that gap, including
@@ -460,7 +526,7 @@ export async function upsertStatutoryRate(input: {
   // the before-image for updates.
   const lockKey = [
     input.orgId, country, input.rateKey, input.taxYear,
-    region ?? "", subRegion ?? "", input.filingAccountId ?? "",
+    region ?? "", subRegion ?? "", filingAccountId ?? "",
   ].join("\u001f");
   return await inDbTransaction(async (tx) => {
     await tx.execute(sql`
@@ -471,24 +537,30 @@ export async function upsertStatutoryRate(input: {
          and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
          and region is not distinct from ${region}
          and sub_region is not distinct from ${subRegion}
-         and filing_account_id is not distinct from ${input.filingAccountId}
+         and filing_account_id is not distinct from ${filingAccountId}
        for update
     `));
     const before = existing.rows[0];
     const id = before?.id ?? randomUUID();
     if (before) {
-      await tx.execute(sql`
+      const updated = await tx.execute(sql`
         update payroll_statutory_rates
            set rate_values = ${JSON.stringify(values)}::jsonb,
                updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and id = ${id}`);
+      if ((updated.rowCount ?? 0) !== 1) {
+        throw new PayrollPackError(
+          `the ${country} "${input.rateKey}" rate for tax year ${input.taxYear} was not saved — `
+          + "the update matched no row, so nothing was written",
+        );
+      }
     } else {
       await tx.execute(sql`
         insert into payroll_statutory_rates
           (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
            rate_values, created_by, updated_by)
         values (${id}, ${input.orgId}, ${country}, ${input.rateKey}, ${region}, ${subRegion},
-                ${input.filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
+                ${filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
                 ${input.actorId}, ${input.actorId})`);
     }
     await tx.execute(sql`
@@ -496,7 +568,7 @@ export async function upsertStatutoryRate(input: {
       values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
               ${JSON.stringify({
                 country: country, rateKey: input.rateKey, region, subRegion,
-                filingAccountId: input.filingAccountId, taxYear: input.taxYear,
+                filingAccountId, taxYear: input.taxYear,
                 before: before?.rate_values ?? null, after: values,
               })}::jsonb, ${input.actorId})`);
     return { id, values };

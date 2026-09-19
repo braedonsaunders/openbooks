@@ -72,6 +72,11 @@ export const GB_KNOWN_NATIONS: readonly string[] = [...GB_NATIONS];
 export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   {
     key: "paye",
+    // Withheld PAYE sits in the chart's payroll-deductions account: the pack
+    // names the ROLE and the chart resolves it (2110 here, 2300 there) —
+    // never an account number in pack code, and never the vendor-payable
+    // family a subcontractor balance belongs to.
+    liabilityAccountRole: "payrollDeductions",
     components: [
       {
         code: "PAYE",
@@ -86,6 +91,9 @@ export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   },
   {
     key: "nic",
+    // Both NIC shares remit to HMRC with the PAYE, so both ride the same
+    // payroll-deductions account as the income tax they are paid with.
+    liabilityAccountRole: "payrollDeductions",
     components: [
       {
         code: "NIC-EE",

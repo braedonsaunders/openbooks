@@ -60,15 +60,27 @@ export type IePayrollPack = Omit<PayrollCountryPack, "country"> & {
 const IE_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   {
     key: "paye",
+    // Withheld PAYE/PRSI/USC all remit to the Collector-General in the one
+    // payment, so every slot rides the chart's payroll-deductions account:
+    // the pack names the ROLE and the chart resolves it, never a number.
+    liabilityAccountRole: "payrollDeductions",
     components: [
       // Cumulative PAYE on taxable pay after pension deductions, at the
       // credits and rate band the RPN states — so a pre-tax protected order
       // moves it, exactly like T4127 factor T and Pub 15-T FIT.
-      { code: "PAYE", name: "PAYE income tax", systemKey: "paye", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+      //
+      // The code and system key are Ireland-qualified (IEPAYE/ie_paye), not
+      // the bare PAYE/paye the GB pack seeds: pay_components is unique on
+      // (org, code) and (org, system key, kind), so a shared identity means
+      // the second pack installed never seeds its row and its runs push
+      // onto the first pack's component — Irish PAYE posting to the GB
+      // row's liability account. The CA pack's QCTAX precedent, same shape.
+      { code: "IEPAYE", name: "PAYE income tax", systemKey: "ie_paye", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
     ],
   },
   {
     key: "prsi",
+    liabilityAccountRole: "payrollDeductions",
     components: [
       // Class A (full-rate employees): employee share on reckonable pay above
       // the weekly threshold, employer share on all reckonable pay. No
@@ -79,6 +91,7 @@ const IE_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   },
   {
     key: "usc",
+    liabilityAccountRole: "payrollDeductions",
     components: [
       // USC on gross pay at the RPN's cutoff points. Rate × pay, no pre-tax
       // deduction in the formula.
@@ -447,7 +460,7 @@ export async function computeIeStatutory(
     elapsedPeriods: elapsed,
   });
 
-  pushStatutory("paye", "deduction", "PAYE income tax", statutory.paye, 110);
+  pushStatutory("ie_paye", "deduction", "PAYE income tax", statutory.paye, 110);
   pushStatutory("prsi", "deduction", "PRSI (employee)", statutory.prsiEmployee, 120);
   pushStatutory("usc", "deduction", "Universal Social Charge", statutory.usc, 130);
   pushStatutory("prsi", "employer_contribution", "PRSI (employer)", statutory.prsiEmployer, 210);

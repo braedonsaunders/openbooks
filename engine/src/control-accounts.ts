@@ -21,6 +21,13 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
     "liability_current_other",
   ],
   employeePayable: ["liability_payable", "liability_current_other"],
+  // Statutory payroll withholdings and the employer shares remitted with them
+  // (PAYE, NIC, PRSI, USC — the amounts a payroll run credits to a liability
+  // and a remittance later debits). Deliberately NOT liability_payable: that
+  // family holds vendor and subcontractor money, and a withheld-tax balance
+  // parked there mingles employee tax with accounts payable. Every shipped
+  // chart carries its deductions account as liability_current_other.
+  payrollDeductions: ["liability_current_other"],
   // Personal charges on a company card are not an expense: the employee owes
   // the company. This is the debit side of that receivable (0171). A plain
   // asset_receivable account keeps the balance inside the AR control family;
