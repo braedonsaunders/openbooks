@@ -4,7 +4,8 @@ import { submitChangeRequest } from "@openbooks/engine/src/hrm/change-requests.t
 import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
-import { changeRequestErrorResponse, submitChangeRequestBody } from "../../_lib";
+import { changeRequestErrorResponse } from "../../_lib";
+import { submitChangeRequestBody } from "../../bodies";
 
 export const runtime = "nodejs";
 
