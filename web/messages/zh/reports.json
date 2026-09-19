@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "CRM跟进活动",
         "description": "涵盖任务、通话、日程、邮件与跟进笔记的客户互动记录。"
+      },
+      "hrm_headcount": {
+        "label": "人员数量",
+        "description": "每个雇主子公司和部门一行：报表截止日期在职的雇用，以及来自生效主要岗位分配的全职当量合计。需要人力资源雇用权限。"
+      },
+      "hrm_employment_history": {
+        "label": "雇用历史",
+        "description": "每个雇用版本一行：人员、雇主、状态、生效与记录时间戳，以及关闭证据的原因。需要人力资源雇用权限。"
+      },
+      "hrm_change_requests": {
+        "label": "变更申请",
+        "description": "每条雇用变更申请一行：状态、类型、雇用、申请人、提交与决定时间戳、绑定的审批流程和修订绑定。需要人力资源雇用权限。"
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "私密活动",
         "created_at": "创建时间",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "子公司",
+        "department": "部门",
+        "headcount": "人员数量",
+        "fte_total": "全职当量合计",
+        "subsidiary_id": "子公司（ID）",
+        "department_id": "部门（ID）"
+      },
+      "hrm_employment_history": {
+        "person": "人员",
+        "employer": "雇主",
+        "status": "状态",
+        "effective_from": "生效起始日",
+        "effective_to": "生效截止日",
+        "recorded_at": "记录时间",
+        "recorded_until": "记录截止时间",
+        "version_no": "版本",
+        "change_reason": "变更原因",
+        "employment_id": "雇用（ID）",
+        "worker_id": "人员（ID）"
+      },
+      "hrm_change_requests": {
+        "status": "状态",
+        "kind": "类型",
+        "employment": "雇用",
+        "employer": "雇主",
+        "requested_by": "申请人",
+        "submitted_at": "提交时间",
+        "decided_at": "决定时间",
+        "flow_run_id": "审批流程（ID）",
+        "request_revision": "申请修订",
+        "expected_employment_revision": "预期雇用修订",
+        "applied_at": "应用时间",
+        "reason": "原因",
+        "created_at": "创建时间",
+        "id": "申请（ID）",
+        "employment_id": "雇用（ID）"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "已完全对平",
       "clean_within_tolerance": "容差范围内已对平",
       "differences": "待解决差异",
-      "no_comparable_data": "未比较任何数据"
+      "no_comparable_data": "未比较任何数据",
+      "offered": "已录用",
+      "on_leave": "休假中",
+      "suspended": "停职",
+      "terminated": "已离职",
+      "withdrawn": "已撤回",
+      "applied": "已应用",
+      "hire": "录用",
+      "status_change": "状态变更",
+      "assignment_change": "岗位分配变更",
+      "termination": "离职"
     }
   },
   "operators": {
@@ -1365,6 +1425,10 @@
     "crm-lead-conversion-funnel": {
       "name": "线索阶段与来源概览",
       "description": "按生命周期阶段、跟进状态与获客渠道细分的客户分布统计。"
+    },
+    "headcount-statement": {
+      "name": "人员数量报表",
+      "description": "报表日期的人员数量和全职当量，每个雇主子公司和部门一行，并含组织合计。需要人力资源雇用权限。"
     }
   },
   "generalLedger": {

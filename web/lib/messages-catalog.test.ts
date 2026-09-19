@@ -4362,6 +4362,14 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+    'de:reports.catalog.columns.hrm_employment_history.person|Person',
+    'de:reports.catalog.columns.hrm_employment_history.status|Status',
+    'de:reports.catalog.columns.hrm_employment_history.version_no|Version',
+    'de:reports.catalog.columns.hrm_change_requests.status|Status',
+    'pt-BR:reports.catalog.entities.hrm_headcount.label|Headcount',
+    'pt-BR:reports.catalog.columns.hrm_headcount.headcount|Headcount',
+    'pt-BR:reports.catalog.columns.hrm_employment_history.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -5043,7 +5051,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1193,
+  "reports": 1243,
   "sync": 172,
   "login": 33,
   "accounts": 82,

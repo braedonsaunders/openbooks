@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "CRM-Aktivitäten",
         "description": "Vertriebs- und Beziehungsaktivitäten wie Aufgaben, Anrufe, Termine, E-Mails und Notizen."
+      },
+      "hrm_headcount": {
+        "label": "Personalbestand",
+        "description": "Eine Zeile je Arbeitgeber-Tochtergesellschaft und Abteilung: zum Berichtsstichtag aktive Beschäftigungen mit Vollzeitäquivalent-Summen aus der gültigen primären Zuordnung. Erfordert die HRM-Beschäftigungsberechtigung."
+      },
+      "hrm_employment_history": {
+        "label": "Beschäftigungshistorie",
+        "description": "Eine Zeile je Beschäftigungsversion — Person, Arbeitgeber, Status, Gültigkeits- und Erfassungsstempel sowie der Abschlussnachweis-Grund. Erfordert die HRM-Beschäftigungsberechtigung."
+      },
+      "hrm_change_requests": {
+        "label": "Änderungsanträge",
+        "description": "Eine Zeile je Beschäftigungs-Änderungsantrag — Status, Art, Beschäftigung, Antragsteller, Einreichungs- und Entscheidungsstempel, gebundener Genehmigungslauf und Revisionsbindung. Erfordert die HRM-Beschäftigungsberechtigung."
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "Privat",
         "created_at": "Erstellt am",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "Tochtergesellschaft",
+        "department": "Abteilung",
+        "headcount": "Personalbestand",
+        "fte_total": "VZÄ gesamt",
+        "subsidiary_id": "Tochtergesellschaft (ID)",
+        "department_id": "Abteilung (ID)"
+      },
+      "hrm_employment_history": {
+        "person": "Person",
+        "employer": "Arbeitgeber",
+        "status": "Status",
+        "effective_from": "Gültig ab",
+        "effective_to": "Gültig bis",
+        "recorded_at": "Erfasst am",
+        "recorded_until": "Erfasst bis",
+        "version_no": "Version",
+        "change_reason": "Änderungsgrund",
+        "employment_id": "Beschäftigung (ID)",
+        "worker_id": "Person (ID)"
+      },
+      "hrm_change_requests": {
+        "status": "Status",
+        "kind": "Art",
+        "employment": "Beschäftigung",
+        "employer": "Arbeitgeber",
+        "requested_by": "Beantragt von",
+        "submitted_at": "Eingereicht am",
+        "decided_at": "Entschieden am",
+        "flow_run_id": "Genehmigungslauf (ID)",
+        "request_revision": "Antragsrevision",
+        "expected_employment_revision": "Erwartete Beschäftigungsrevision",
+        "applied_at": "Angewendet am",
+        "reason": "Begründung",
+        "created_at": "Erstellt am",
+        "id": "Antrag (ID)",
+        "employment_id": "Beschäftigung (ID)"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "Exakt abgestimmt",
       "clean_within_tolerance": "Innerhalb der Toleranz abgestimmt",
       "differences": "Zu klärende Differenzen",
-      "no_comparable_data": "Es wurde nichts verglichen"
+      "no_comparable_data": "Es wurde nichts verglichen",
+      "offered": "Angeboten",
+      "on_leave": "Beurlaubt",
+      "suspended": "Suspendiert",
+      "terminated": "Beendet",
+      "withdrawn": "Zurückgezogen",
+      "applied": "Angewendet",
+      "hire": "Einstellung",
+      "status_change": "Statusänderung",
+      "assignment_change": "Zuordnungsänderung",
+      "termination": "Beendigung"
     }
   },
   "operators": {
@@ -1365,6 +1425,10 @@
     "crm-lead-conversion-funnel": {
       "name": "Lead-Lebenszyklus & Quellenübersicht",
       "description": "CRM-Beziehungsprofile kategorisiert nach Lebenszyklusphase, Status und Herkunftsquelle."
+    },
+    "headcount-statement": {
+      "name": "Personalbestandsaufstellung",
+      "description": "Personalbestand und Vollzeitäquivalente zum Berichtsdatum, eine Zeile je Arbeitgeber-Tochtergesellschaft und Abteilung mit Organisationssumme. Erfordert die HRM-Beschäftigungsberechtigung."
     }
   },
   "generalLedger": {

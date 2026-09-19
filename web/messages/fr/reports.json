@@ -630,6 +630,18 @@
       "crm_activities": {
         "label": "Activités CRM",
         "description": "Activités commerciales et relationnelles telles que tâches, appels, réunions, courriels et notes."
+      },
+      "hrm_headcount": {
+        "label": "Effectif",
+        "description": "Une ligne par filiale employeuse et par service : emplois en cours à la date d'arrêté du rapport, avec les totaux d'équivalents temps plein issus de l'affectation principale en vigueur. Requiert l'autorisation d'emploi RH."
+      },
+      "hrm_employment_history": {
+        "label": "Historique d'emploi",
+        "description": "Une ligne par version d'emploi : personne, employeur, statut, horodatages d'effet et d'enregistrement, et le motif de la preuve de clôture. Requiert l'autorisation d'emploi RH."
+      },
+      "hrm_change_requests": {
+        "label": "Demandes de changement",
+        "description": "Une ligne par demande de changement d'emploi : statut, type, emploi, demandeur, horodatages de soumission et de décision, exécution d'approbation liée et liaison de révision. Requiert l'autorisation d'emploi RH."
       }
     },
     "columns": {
@@ -1158,6 +1170,44 @@
         "is_private": "Privé",
         "created_at": "Créé le",
         "id": "ID"
+      },
+      "hrm_headcount": {
+        "subsidiary": "Filiale",
+        "department": "Service",
+        "headcount": "Effectif",
+        "fte_total": "Total ETP",
+        "subsidiary_id": "Filiale (id)",
+        "department_id": "Service (id)"
+      },
+      "hrm_employment_history": {
+        "person": "Personne",
+        "employer": "Employeur",
+        "status": "Statut",
+        "effective_from": "Effet à partir du",
+        "effective_to": "Effet jusqu'au",
+        "recorded_at": "Enregistré le",
+        "recorded_until": "Enregistré jusqu'au",
+        "version_no": "Numéro de version",
+        "change_reason": "Motif du changement",
+        "employment_id": "Emploi (id)",
+        "worker_id": "Personne (id)"
+      },
+      "hrm_change_requests": {
+        "status": "Statut",
+        "kind": "Type",
+        "employment": "Emploi",
+        "employer": "Employeur",
+        "requested_by": "Demandé par",
+        "submitted_at": "Soumis le",
+        "decided_at": "Décidé le",
+        "flow_run_id": "Exécution d'approbation (id)",
+        "request_revision": "Révision de la demande",
+        "expected_employment_revision": "Révision d'emploi attendue",
+        "applied_at": "Appliqué le",
+        "reason": "Motif",
+        "created_at": "Créé le",
+        "id": "Demande (id)",
+        "employment_id": "Emploi (id)"
       }
     },
     "enumValues": {
@@ -1225,7 +1275,17 @@
       "clean": "Rapproché exactement",
       "clean_within_tolerance": "Rapproché dans la tolérance",
       "differences": "Écarts à résoudre",
-      "no_comparable_data": "Rien n’a été comparé"
+      "no_comparable_data": "Rien n’a été comparé",
+      "offered": "Proposé",
+      "on_leave": "En congé",
+      "suspended": "Suspendu",
+      "terminated": "Terminé",
+      "withdrawn": "Retirée",
+      "applied": "Appliquée",
+      "hire": "Embauche",
+      "status_change": "Changement de statut",
+      "assignment_change": "Changement d'affectation",
+      "termination": "Fin d'emploi"
     }
   },
   "operators": {
@@ -1348,6 +1408,10 @@
     "crm-lead-conversion-funnel": {
       "name": "Cycle de vie et origines des prospects",
       "description": "Profils relationnels CRM catégorisés selon l'étape du cycle de vie, le statut et l'origine d'acquisition."
+    },
+    "headcount-statement": {
+      "name": "État des effectifs",
+      "description": "Effectif et équivalents temps plein à la date du rapport, une ligne par filiale employeuse et par service avec un total pour l'organisation. Requiert l'autorisation d'emploi RH."
     }
   },
   "generalLedger": {
