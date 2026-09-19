@@ -833,6 +833,14 @@
           "inss": "Verbindlichkeiten aus INSS (Arbeitnehmerbeitrag plus Arbeitgeberbeiträge: patronal, RAT und terceiros)",
           "fgts": "Verbindlichkeiten aus FGTS (8 % Arbeitgeberablagen auf den Arbeitnehmerkonten bei Caixa)"
         }
+      },
+      "SG": {
+        "title": "Singapur — gesetzliche Konten (CPF)",
+        "description": "Verbindlichkeitskonten für die Beträge, die das Singapur-Paket einbehält und abgrenzt. Singapur behält keine monatliche Lohnsteuer ein — IRAS veranlagt jährlich und der Arbeitgeber meldet nur —, daher gibt es kein Lohnsteuerkonto zuzuordnen.",
+        "slots": {
+          "cpf": "CPF-Verbindlichkeit (Arbeitnehmer- und Arbeitgeberanteil, abzuführen an das CPF Board)",
+          "sdl": "Skills Development Levy (SDL) — Verbindlichkeit (nur Arbeitgeber, zusammen mit dem CPF-Beitrag erhoben)"
+        }
       }
     },
     "usConfig": {

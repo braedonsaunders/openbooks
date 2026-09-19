@@ -38,7 +38,11 @@ function toCents(value: string, what: string): bigint {
       `BR 2026 IRRF needs ${what} as a non-negative decimal amount, got "${value}"`,
     );
   }
-  return BigInt(match[1]) * 100n + BigInt((match[2] ?? "00").padEnd(2, "0"));
+  const whole = match[1];
+  if (whole === undefined) {
+    throw new PayrollPackError(`BR 2026 IRRF: unparsed amount "${value}"`);
+  }
+  return BigInt(whole) * 100n + BigInt((match[2] ?? "00").padEnd(2, "0"));
 }
 
 function fromCents(cents: bigint): string {

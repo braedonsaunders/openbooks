@@ -26,6 +26,7 @@ import { BR_WITHHOLDING } from "./withholding.ts";
 
 export const BR_PAYROLL_PACK: PayrollCountryPack = {
   country: "BR",
+  name: "Brazil",
   installable: true,
   // The BR pack computes in reais; IRRF, INSS and FGTS settle in reais.
   statutoryCurrency: "BRL",
