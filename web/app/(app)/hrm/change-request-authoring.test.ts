@@ -44,6 +44,29 @@ test("kind selector mirrors the four governed payload kinds exactly", () => {
   assert.match(drawer, /effectiveFrom/, "dated kinds name their effective start");
 });
 
+test("manager and location ride remote SearchSelects over the options route, never uuid boxes", () => {
+  assert.match(drawer, /api\/hrm\/options/, "pickers read the native HRM options route");
+  assert.match(drawer, /'source', 'employments'/, "the manager picker pages employments");
+  assert.match(drawer, /'source', 'locations'/, "the location picker pages native locations");
+  assert.match(drawer, /params\.set\('include'/, "the draft's stored value pins first under edit");
+  assert.match(drawer, /remote/, "picker search is remote per query, not a fixed roster");
+  assert.match(drawer, /onSearchChange/, "typing forwards the query to the scoped server search");
+  assert.match(drawer, /statusMessage/, "picker lookup errors surface through the native status message");
+  assert.match(
+    drawer,
+    /(managerRequestId|locationRequestId)\.current/,
+    "a sequence guard drops stale picker responses so older results never overwrite newer ones",
+  );
+  assert.match(
+    drawer,
+    /managerEmploymentId \? \{ managerEmploymentId \}/,
+    "the payload carries the picked manager employment id",
+  );
+  assert.match(drawer, /locationId \? \{ locationId \}/, "the payload carries the picked location id");
+  assert.ok(!/<Input[^>]*id="cr-manager"/s.test(drawer), "no raw uuid text box takes the manager");
+  assert.ok(!/<Input[^>]*id="cr-location"/s.test(drawer), "no raw uuid text box takes the location");
+});
+
 test("create posts the exact collection body shape, edit patches the payload shape", () => {
   assert.match(
     drawer,
@@ -146,7 +169,9 @@ test("authoring copy resolves from the hrm catalog, never inline English", () =>
     "jobTitleLabel",
     "departmentLabel",
     "locationLabel",
+    "locationUnset",
     "managerLabel",
+    "managerUnset",
     "fteLabel",
     "primaryLabel",
     "reasonLabel",
