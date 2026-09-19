@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -25,6 +25,12 @@ import { readApiErrorMessage } from '../../../lib/api-error'
 export type ChangeRequestKind = 'hire' | 'status_change' | 'assignment_change' | 'termination'
 
 export type DepartmentOption = {
+  value: string
+  label: string
+}
+
+/** One remote picker row from the HRM options route (manager or location). */
+export type PickerOption = {
   value: string
   label: string
 }
@@ -82,14 +88,109 @@ export function ChangeRequestDrawer({
   const [jobTitle, setJobTitle] = useState(asText(initialPayload.jobTitle))
   const [departmentId, setDepartmentId] = useState(asText(initialPayload.departmentId))
   const [locationId, setLocationId] = useState(asText(initialPayload.locationId))
+  const [locationOptions, setLocationOptions] = useState<PickerOption[]>([])
+  const [locationQuery, setLocationQuery] = useState('')
+  const [locationLoading, setLocationLoading] = useState(true)
+  const [locationStatus, setLocationStatus] = useState<string | undefined>(undefined)
   const [fte, setFte] = useState(asText(initialPayload.fte))
   const [primary, setPrimary] = useState(
     initialPayload.isPrimary === true ? 'yes' : initialPayload.isPrimary === false ? 'no' : 'unchanged',
   )
   const [managerEmploymentId, setManagerEmploymentId] = useState(asText(initialPayload.managerEmploymentId))
+  const [managerOptions, setManagerOptions] = useState<PickerOption[]>([])
+  const [managerQuery, setManagerQuery] = useState('')
+  const [managerLoading, setManagerLoading] = useState(true)
+  const [managerStatus, setManagerStatus] = useState<string | undefined>(undefined)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const managerRequestId = useRef(0)
+  const locationRequestId = useRef(0)
+
+  // Remote per-query pickers over the HRM options route: bounded page per
+  // query so holders beyond the first page stay selectable. A sequence
+  // guard drops stale responses, and the draft's stored value pins first
+  // under edit through the route's include parameter (merged back when the
+  // page does not contain it).
+  useEffect(() => {
+    const id = (managerRequestId.current += 1)
+    const params = new URLSearchParams()
+    params.set('source', 'employments')
+    params.set('limit', '25')
+    if (managerQuery.trim()) params.set('q', managerQuery.trim())
+    if (managerEmploymentId) params.set('include', managerEmploymentId)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== managerRequestId.current) return
+        if (!res.ok) {
+          setManagerStatus(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
+          setManagerLoading(false)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { employmentId?: unknown; label?: unknown }[]
+        }
+        if (id !== managerRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const merged: PickerOption[] = []
+        for (const row of page) {
+          if (typeof row.employmentId === 'string' && typeof row.label === 'string') {
+            merged.push({ value: row.employmentId, label: row.label })
+          }
+        }
+        if (managerEmploymentId && !merged.some((option) => option.value === managerEmploymentId)) {
+          merged.push({ value: managerEmploymentId, label: managerEmploymentId })
+        }
+        setManagerOptions(merged)
+        setManagerStatus(undefined)
+        setManagerLoading(false)
+      })
+      .catch(() => {
+        if (id !== managerRequestId.current) return
+        setManagerStatus(t('employment.changeRequests.requestFailed'))
+        setManagerLoading(false)
+      })
+  }, [managerQuery, managerEmploymentId, t])
+
+  useEffect(() => {
+    const id = (locationRequestId.current += 1)
+    const params = new URLSearchParams()
+    params.set('source', 'locations')
+    params.set('limit', '25')
+    if (locationQuery.trim()) params.set('q', locationQuery.trim())
+    if (locationId) params.set('include', locationId)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== locationRequestId.current) return
+        if (!res.ok) {
+          setLocationStatus(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
+          setLocationLoading(false)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { locationId?: unknown; label?: unknown }[]
+        }
+        if (id !== locationRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const merged: PickerOption[] = []
+        for (const row of page) {
+          if (typeof row.locationId === 'string' && typeof row.label === 'string') {
+            merged.push({ value: row.locationId, label: row.label })
+          }
+        }
+        if (locationId && !merged.some((option) => option.value === locationId)) {
+          merged.push({ value: locationId, label: locationId })
+        }
+        setLocationOptions(merged)
+        setLocationStatus(undefined)
+        setLocationLoading(false)
+      })
+      .catch(() => {
+        if (id !== locationRequestId.current) return
+        setLocationStatus(t('employment.changeRequests.requestFailed'))
+        setLocationLoading(false)
+      })
+  }, [locationQuery, locationId, t])
 
   const kindLabel = (value: ChangeRequestKind): string =>
     value === 'hire'
@@ -121,12 +222,12 @@ export function ChangeRequestDrawer({
       assignmentKey: assignmentKey.trim(),
       ...(jobTitle.trim() ? { jobTitle: jobTitle.trim() } : {}),
       ...(departmentId ? { departmentId } : {}),
-      ...(locationId.trim() ? { locationId: locationId.trim() } : {}),
+      ...(locationId ? { locationId } : {}),
       ...(fte.trim() ? { fte: fte.trim() } : {}),
       ...(primary === 'unchanged' ? {} : { isPrimary: primary === 'yes' }),
       ...(effectiveFrom.trim() ? { effectiveFrom: effectiveFrom.trim() } : {}),
       ...(effectiveTo.trim() ? { effectiveTo: effectiveTo.trim() } : {}),
-      ...(managerEmploymentId.trim() ? { managerEmploymentId: managerEmploymentId.trim() } : {}),
+      ...(managerEmploymentId ? { managerEmploymentId } : {}),
     }
   }
 
@@ -366,11 +467,28 @@ export function ChangeRequestDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-location">{t('employment.changeRequests.locationLabel')}</Label>
-              <Input
+              <SearchSelect
                 id="cr-location"
                 value={locationId}
+                onChange={(next) => {
+                  setLocationId(next)
+                  setError(null)
+                }}
+                options={locationOptions}
+                ariaLabel={t('employment.changeRequests.locationLabel')}
+                sheetTitle={t('employment.changeRequests.locationLabel')}
+                clearable
+                emptyLabel={t('employment.changeRequests.locationUnset')}
+                remote
+                loading={locationLoading}
+                statusMessage={locationStatus}
+                statusTone={locationStatus ? 'error' : 'muted'}
+                onSearchChange={(next) => {
+                  setLocationQuery(next)
+                  setLocationLoading(true)
+                  setLocationStatus(undefined)
+                }}
                 disabled={busy}
-                onChange={(event) => setLocationId(event.target.value)}
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('employment.changeRequests.locationHint')}
@@ -404,11 +522,28 @@ export function ChangeRequestDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-manager">{t('employment.changeRequests.managerLabel')}</Label>
-              <Input
+              <SearchSelect
                 id="cr-manager"
                 value={managerEmploymentId}
+                onChange={(next) => {
+                  setManagerEmploymentId(next)
+                  setError(null)
+                }}
+                options={managerOptions}
+                ariaLabel={t('employment.changeRequests.managerLabel')}
+                sheetTitle={t('employment.changeRequests.managerLabel')}
+                clearable
+                emptyLabel={t('employment.changeRequests.managerUnset')}
+                remote
+                loading={managerLoading}
+                statusMessage={managerStatus}
+                statusTone={managerStatus ? 'error' : 'muted'}
+                onSearchChange={(next) => {
+                  setManagerQuery(next)
+                  setManagerLoading(true)
+                  setManagerStatus(undefined)
+                }}
                 disabled={busy}
-                onChange={(event) => setManagerEmploymentId(event.target.value)}
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('employment.changeRequests.managerHint')}

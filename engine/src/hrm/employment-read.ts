@@ -1100,3 +1100,232 @@ export async function getHeadcountAsOf(query: HeadcountQuery): Promise<Headcount
     return loadHeadcountAsOf(db, query);
   });
 }
+
+// --- Picker options (authoring support; read only) ---------------------------
+
+/** Bounded page defaults shared by the authoring pickers: pages, never dumps. */
+const OPTIONS_DEFAULT_LIMIT = 25;
+const OPTIONS_MAX_LIMIT = 100;
+
+function requireOptionsLimit(limit: number | undefined): number {
+  const resolved = limit ?? OPTIONS_DEFAULT_LIMIT;
+  if (!Number.isSafeInteger(resolved) || resolved < 1 || resolved > OPTIONS_MAX_LIMIT) {
+    throw new EmploymentReadError(
+      "options limit must be an integer from 1 to 100 — the picker pages, it never dumps the roster",
+    );
+  }
+  return resolved;
+}
+
+/** Escape a free-text fragment for a LIKE pattern: % _ and \ match literally. */
+function likeEscape(fragment: string): string {
+  return fragment.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+export interface EmploymentOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the worker's display name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Employment id to pin first (the draft's stored value under edit). */
+  readonly includeEmploymentId?: string;
+}
+
+export interface EmploymentOptionDTO {
+  readonly employmentId: string;
+  readonly label: string;
+}
+
+/**
+ * Employments holding people, for the line-manager picker. Authority is the
+ * aggregate half (grant + employer-subsidiary scope): out-of-scope holders
+ * are filtered, never returned. Labels name the person, the employer, and
+ * the live primary job title when one exists — the drawer submits the
+ * employment id, never a name. An empty page is truthful, never a refusal.
+ */
+export async function loadEmploymentOptions(
+  exec: SqlExecutor,
+  query: EmploymentOptionsQuery,
+): Promise<readonly EmploymentOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const limit = requireOptionsLimit(query.limit);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includeEmploymentId?.trim() ? query.includeEmploymentId.trim() : null;
+
+  type EmploymentOptionRow = {
+    employmentId: string;
+    employerSubsidiaryId: string;
+    personName: string;
+    employerName: string;
+    jobTitle: string | null;
+  };
+  const page = (await exec.execute<EmploymentOptionRow>(sql`
+    select e.id::text as "employmentId",
+           e.employer_subsidiary_id::text as "employerSubsidiaryId",
+           p.display_name as "personName",
+           s.name as "employerName",
+           jt.job_title as "jobTitle"
+      from worker_employments e
+      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+      join subsidiaries s on s.org_id = e.org_id and s.id = e.employer_subsidiary_id
+      left join lateral (
+        select av.job_title
+          from employment_assignment_versions av
+         where av.org_id = e.org_id
+           and av.employment_id = e.id
+           and av.recorded_until is null
+           and av.is_primary
+         order by av.version_no desc
+         limit 1
+      ) jt on true
+     where e.org_id = ${orgId}::uuid
+       and e.employer_subsidiary_id is not null
+       ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     order by p.display_name, e.id
+     limit ${limit}`)).rows.filter(
+    (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
+  );
+  // The pinned draft value is read by id, never by page position: it leads
+  // even when it falls outside the bounded page. An unknown or out-of-scope
+  // id stays absent rather than leaking existence.
+  const pinned = includeId
+    ? (await exec.execute<EmploymentOptionRow>(sql`
+      select e.id::text as "employmentId",
+             e.employer_subsidiary_id::text as "employerSubsidiaryId",
+             p.display_name as "personName",
+             s.name as "employerName",
+             jt.job_title as "jobTitle"
+        from worker_employments e
+        join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+        join subsidiaries s on s.org_id = e.org_id and s.id = e.employer_subsidiary_id
+        left join lateral (
+          select av.job_title
+            from employment_assignment_versions av
+           where av.org_id = e.org_id
+             and av.employment_id = e.id
+             and av.recorded_until is null
+             and av.is_primary
+           order by av.version_no desc
+           limit 1
+        ) jt on true
+       where e.org_id = ${orgId}::uuid
+         and e.id = ${includeId}::uuid
+         and e.employer_subsidiary_id is not null`)).rows.filter(
+        (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
+      )[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
+
+  const toOption = (row: EmploymentOptionRow): EmploymentOptionDTO => ({
+    employmentId: requireText("worker_employments.id", row.employmentId),
+    label: row.jobTitle
+      ? `${row.personName} · ${row.employerName} · ${row.jobTitle}`
+      : `${row.personName} · ${row.employerName}`,
+  });
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map(toOption);
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the scoped employment options.
+ * Read only.
+ */
+export async function listEmploymentOptions(
+  query: EmploymentOptionsQuery,
+): Promise<readonly EmploymentOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadEmploymentOptions(db, query);
+  });
+}
+
+export interface LocationOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the location name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Location id to pin first (the draft's stored value under edit). */
+  readonly includeLocationId?: string;
+}
+
+export interface LocationOptionDTO {
+  readonly locationId: string;
+  readonly label: string;
+}
+
+/**
+ * Active native locations (0184's employment_assignment_versions.location_id
+ * references public.locations), for the assignment location picker. Same
+ * aggregate authority as employments; org-wide (null-subsidiary) locations
+ * are visible to every in-scope reader, subsidiary-assigned ones only
+ * inside the actor's scope. Inactive locations never list — assignment
+ * writes against them would fail closed downstream.
+ */
+export async function loadLocationOptions(
+  exec: SqlExecutor,
+  query: LocationOptionsQuery,
+): Promise<readonly LocationOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const limit = requireOptionsLimit(query.limit);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includeLocationId?.trim() ? query.includeLocationId.trim() : null;
+
+  type LocationOptionRow = {
+    locationId: string;
+    code: string | null;
+    name: string;
+    subsidiaryId: string | null;
+  };
+  const page = (await exec.execute<LocationOptionRow>(sql`
+    select id::text as "locationId", code, name, subsidiary_id::text as "subsidiaryId"
+      from locations
+     where org_id = ${orgId}::uuid
+       and is_active
+       ${fragment ? sql`and name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     order by name, id
+     limit ${limit}`)).rows.filter(
+    (row) => row.subsidiaryId === null || allowed === null || allowed.has(row.subsidiaryId),
+  );
+  // The pinned draft value is read by id, never by page position: it leads
+  // even when it falls outside the bounded page. An unknown, inactive, or
+  // out-of-scope id stays absent rather than leaking existence.
+  const pinned = includeId
+    ? (await exec.execute<LocationOptionRow>(sql`
+      select id::text as "locationId", code, name, subsidiary_id::text as "subsidiaryId"
+        from locations
+       where org_id = ${orgId}::uuid
+         and id = ${includeId}::uuid
+         and is_active`)).rows.filter(
+        (row) => row.subsidiaryId === null || allowed === null || allowed.has(row.subsidiaryId),
+      )[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.locationId !== pinned.locationId)] : page;
+
+  const toOption = (row: LocationOptionRow): LocationOptionDTO => ({
+    locationId: requireText("locations.id", row.locationId),
+    label: row.code ? `${row.code} · ${row.name}` : requireText("locations.name", row.name),
+  });
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map(toOption);
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the scoped location options.
+ * Read only.
+ */
+export async function listLocationOptions(query: LocationOptionsQuery): Promise<readonly LocationOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadLocationOptions(db, query);
+  });
+}
