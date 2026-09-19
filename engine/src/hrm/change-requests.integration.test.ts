@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db, withOrgTransaction } from "../db.ts";
+import { db } from "../db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -18,7 +18,6 @@ import {
   listChangeRequests,
   submitChangeRequest,
   updateChangeRequestPayload,
-  validateChangePayload,
   withdrawChangeRequest,
 } from "./change-requests.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
