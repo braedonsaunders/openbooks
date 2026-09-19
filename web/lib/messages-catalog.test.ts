@@ -3411,7 +3411,11 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   ])
   const I7_SOURCE = flattenCatalog('en')
   const I7_WANTED = [...I7_SOURCE.keys()].filter((key) => key.startsWith('payroll.'))
+<<<<<<< HEAD
   assert.equal(I7_WANTED.length, PAYROLL_SOURCE_KEY_COUNT, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+=======
+  assert.equal(I7_WANTED.length, 1126, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+>>>>>>> 21e55ae52 (feat(payroll): Brazil payroll pack (shard commit, pre-rebase))
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3513,7 +3517,10 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
   assert.equal(I6_wanted.length, 1126, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+<<<<<<< HEAD
   assert.equal(I6_wanted.length, 1128, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+=======
+>>>>>>> 21e55ae52 (feat(payroll): Brazil payroll pack (shard commit, pre-rebase))
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

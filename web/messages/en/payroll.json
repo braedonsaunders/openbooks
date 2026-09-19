@@ -832,6 +832,15 @@
           "zus_er": "Employer social contributions payable (emerytalne, rentowe + wypadkowe)",
           "fundusze_er": "Employer labour funds payable (FP, FS + FGŚP)"
         }
+      },
+      "BR": {
+        "title": "Brazil — statutory accounts",
+        "description": "Liability accounts for the amounts the Brazil pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "irrf": "IRRF payable (monthly withholding on the base after INSS, dependents and the simplified discount)",
+          "inss": "INSS payable (employee contribution plus employer patronal, RAT and terceiros)",
+          "fgts": "FGTS payable (8% employer deposits to workers’ accounts at Caixa)"
+        }
       }
     },
     "usConfig": {

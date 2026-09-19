@@ -74,14 +74,14 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // it/pack.ts:100-101) and ADDCOM (the comune surcharge, it/pack.ts:108-109);
   // NL LH (grondslag reduced by employee pension contributions, nl/pack.ts:148-151);
   // ES IRPF (retribuciones integras less pre-tax minoraciones, es/pack.ts:91-93);
-  // JP GENSEN (looked up on pay after social-insurance premiums, jp/pack.ts).
+  // Registry order, one entry per income-tax line a pack actually pushes.
+  // SG contributes NOTHING here on purpose: Singapore withholds no monthly
+  // income tax at all (IRAS assesses annually), so its pack declares no
+  // income-tax slot — its absence from this list is that design, asserted.
   assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
     "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/PAYE", "AU/PAYG",
     "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
-    "NL/LH", "ES/IRPF", "JP/GENSEN"]);
-  // PL PIT (dochód net of KUP and employee social contributions, pl/pack.ts pit slot).
-    "NL/LH", "ES/IRPF",
-    "PL/PIT"]);
+    "NL/LH", "ES/IRPF", "JP/GENSEN", "PL/PIT", "BR/IRRF"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {

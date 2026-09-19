@@ -824,6 +824,15 @@
           "zus_er": "Cotizaciones sociales del empleador por pagar (emerytalne, rentowe + wypadkowe)",
           "fundusze_er": "Fondos laborales del empleador por pagar (FP, FS + FGŚP)"
         }
+      },
+      "BR": {
+        "title": "Brasil — cuentas legales",
+        "description": "Cuentas de pasivo para los montos que el paquete BR retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "irrf": "IRRF por pagar (retención mensual sobre la base tras INSS, dependientes y descuento simplificado)",
+          "inss": "INSS por pagar (aporte del empleado más patronal, RAT y terceiros del empleador)",
+          "fgts": "FGTS por pagar (depósitos del empleador del 8% en las cuentas de los trabajadores en Caixa)"
+        }
       }
     },
     "usConfig": {

@@ -824,6 +824,15 @@
           "zus_er": "雇主社会缴款应付（emerytalne、rentowe＋wypadkowe）",
           "fundusze_er": "雇主劳动基金应付（FP、FS＋FGŚP）"
         }
+      },
+      "BR": {
+        "title": "巴西 — 法定科目",
+        "description": "巴西包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "irrf": "IRRF应付（扣除INSS、受扶养人和简易扣除后计税基数的月度代扣）",
+          "inss": "INSS应付（雇员缴款加雇主缴款：patronal、RAT和terceiros）",
+          "fgts": "FGTS应付（雇主向Caixa工人账户缴存8%）"
+        }
       }
     },
     "usConfig": {
