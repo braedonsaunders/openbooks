@@ -37,9 +37,12 @@ import { registerFlowApprovalReleaseHandler } from "./approval-release-hook.ts";
  * The field-ticket release delegates to the registered product handler, so a
  * test handler that performs a REAL material write and then throws exercises
  * the actual engine transaction behavior against a disposable database — no
- * mocks, no source-text assertions. Branch-execution failures (as opposed to
- * release failures) still record the decision and return ok:false with the
- * failed run and its retry path.
+ * mocks, no source-text assertions. The unified contract covers every
+ * post-flip stage (resume setup, branch execution, release): a post-gate
+ * test below runs a branch of [successful notify, failing send_email] to
+ * prove the first action's effect row AND its effect checkpoint both roll
+ * back, then proves exactly-once recovery (one notification, one evidence
+ * row, one queued email) when the same decision is retried after repair.
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -78,8 +81,21 @@ function branchGraph(approverId: string, mailTo: Array<{ type: "email"; email: s
         },
       },
       {
-        id: "doomed",
+        id: "note",
         position: { x: 440, y: 0 },
+        data: {
+          kind: "action",
+          action: {
+            action: "notify",
+            to: [{ type: "user", userId: approverId }],
+            title: "Branch ping",
+            body: "the approve branch ran",
+          },
+        },
+      },
+      {
+        id: "doomed",
+        position: { x: 660, y: 0 },
         data: {
           kind: "action",
           action: { action: "send_email", to: mailTo, subject: "post-approval note", body: "hello" },
@@ -88,7 +104,8 @@ function branchGraph(approverId: string, mailTo: Array<{ type: "email"; email: s
     ],
     edges: [
       { id: "e1", source: "trigger", target: "gate", sourceHandle: "next" },
-      { id: "e2", source: "gate", target: "doomed", sourceHandle: "approve" },
+      { id: "e2", source: "gate", target: "note", sourceHandle: "approve" },
+      { id: "e3", source: "note", target: "doomed", sourceHandle: "next" },
     ],
   };
 }
@@ -115,6 +132,28 @@ async function decisionNotifyCount(runId: string, gateId: string): Promise<numbe
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from scheduler_outbox
      where kind = 'flow_email' and occurrence_key = ${`${runId}:decision-notify:${gateId}`}
+  `));
+  return r.rows[0]?.n ?? 0;
+}
+
+/** In-app rows written by the branch's first (successful) notify action. */
+async function branchPingCount(orgId: string, userId: string): Promise<number> {
+  const r = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from notifications
+     where org_id = ${orgId} and user_id = ${userId} and kind = 'flow' and title = 'Branch ping'
+  `));
+  return r.rows[0]?.n ?? 0;
+}
+
+/**
+ * Stamped branch-action checkpoints for a run. The submit-time gate
+ * checkpoint shares the run but its key carries ':gate:', never ':action:',
+ * so this counts only branch-action completions.
+ */
+async function branchCheckpointCount(runId: string): Promise<number> {
+  const r = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_run_effects
+     where run_id = ${runId} and effect_key like '%:action:%'
   `));
   return r.rows[0]?.n ?? 0;
 }
@@ -266,8 +305,9 @@ test("an outer caller that swallows ReleaseError and commits still records nothi
 test("a post-gate branch failure rolls back release and branch, then recovers on re-decide", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     // vendor_bill uses the real documents release (no test handler): the
-    // pre-action release genuinely lands, then the approve branch's
-    // send_email resolves to zero recipients and throws.
+    // pre-action release genuinely lands, then the approve branch runs a
+    // successful notify followed by a send_email that resolves to zero
+    // recipients and throws.
     const { flowId } = await seedBranchFlow(org.orgId, actors.approver1Id);
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     const submit = await submitForApproval("vendor_bill", docId);
@@ -287,14 +327,16 @@ test("a post-gate branch failure rolls back release and branch, then recovers on
     );
 
     // The whole unit rolled back — including the pre-action release that had
-    // already landed — and the retracted submitter email never reached the
-    // durable outbox.
+    // already landed, the first action's notification row and checkpoint,
+    // and the retracted submitter email, which never reached the outbox.
     assert.equal((await gateRows(docId))[0]!.status, "pending");
     assert.equal(await docStatus(docId), "pending_approval");
     assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
     const run = await runRow(gate!.runId);
     assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
     assert.equal(await decisionNotifyCount(gate!.runId, gate!.id), 0, "no submitter email may be queued");
+    assert.equal(await branchPingCount(org.orgId, actors.approver1Id), 0, "the first action's effect rolled back");
+    assert.equal(await branchCheckpointCount(gate!.runId), 0, "the first action's checkpoint rolled back");
 
     // Repair the branch and retry the SAME decision: release, branch, and
     // notification all land exactly once.
@@ -307,6 +349,8 @@ test("a post-gate branch failure rolls back release and branch, then recovers on
     assert.equal(await docStatus(docId), "approved");
     assert.equal(await decisionAuditCount(gate!.id), 1, "exactly one decision evidence row exists");
     assert.equal(await decisionNotifyCount(gate!.runId, gate!.id), 1, "the recovered decision queues one email");
+    assert.equal(await branchPingCount(org.orgId, actors.approver1Id), 1, "the branch effect fired exactly once");
+    assert.equal(await branchCheckpointCount(gate!.runId), 1, "the branch checkpoint stamped exactly once");
   });
 });
 
