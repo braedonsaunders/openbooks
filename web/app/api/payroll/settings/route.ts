@@ -52,9 +52,29 @@ const ACCOUNT_KEYS = [
   'vacationPayableAccountId',
 ] as const
 
+/**
+ * `cogs` is allowed for the two WAGE/BURDEN keys and for nothing else.
+ *
+ * For a contractor or a manufacturer, direct labour IS cost of sales — that is
+ * the basis of job costing and the model this product is built around. The
+ * product's own seeded charts say so: web/lib/industries.ts types
+ * "Direct Labor" as `cogs` in three industry charts (construction 5300,
+ * 5000, manufacturing 5200) and "Manufacturing Overhead" as `cogs` too, which
+ * is precisely a burden account. Refusing `cogs` here meant OpenBooks created
+ * an account called Direct Labor, typed it cogs, and then refused to let
+ * payroll post wages to it — a browser persona picked the account the product
+ * had told it to use and got a 422. Forcing wages into "6000 Office Salaries"
+ * instead would misstate gross margin for every construction tenant.
+ *
+ * NOT added to the liability keys: a payable is not a cost of sales. The
+ * seeded charts agree — every payroll liability they create is
+ * `liability_current_other`, which was already allowed, so this is the only
+ * place the allow-lists and the seeded charts disagreed.
+ * payroll-account-types.test.ts pins both halves of that.
+ */
 const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[]> = {
-  wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
-  burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred'],
+  wageExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
+  burdenExpenseAccountId: ['expense', 'expense_other', 'expense_deferred', 'cogs'],
   netPayAccountId: ['liability_payable', 'liability_current_other'],
   cppPayableAccountId: ['liability_payable', 'liability_current_other'],
   eiPayableAccountId: ['liability_payable', 'liability_current_other'],
