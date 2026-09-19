@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-09-18T13:36:07.851Z",
-      "sha": "2ee713e90280cbd4da7c5b6d444f1fd267c56ed4",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 5459,
-      "functions": 16407,
-      "loc": 1263739,
-      "languages": 15,
-      "topLanguages": [
-        {
-          "ext": "ts",
-          "pct": 65,
-          "lines": 825825
-        },
-        {
-          "ext": "json",
-          "pct": 15,
-          "lines": 187534
-        },
-        {
-          "ext": "tsx",
-          "pct": 13,
-          "lines": 159965
-        },
-        {
-          "ext": "sql",
-          "pct": 6,
-          "lines": 69587
-        },
-        {
-          "ext": "mjs",
-          "pct": 1,
-          "lines": 11725
-        }
-      ],
-      "dead": 101,
-      "deadPct": 0.6,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 9.8,
-      "securityIssues": 637,
-      "patterns": 10,
-      "duplicates": 211,
-      "layerViolations": 11006,
-      "connections": 53251,
-      "avgFnLines": 15.7,
-      "longestFn": 16,
-      "testFiles": 2063,
-      "testRatio": 37.8,
-      "topFolders": [
-        {
-          "name": "web",
-          "count": 3625
-        },
-        {
-          "name": "engine",
-          "count": 1276
-        },
-        {
-          "name": "schema",
-          "count": 254
-        },
-        {
-          "name": "packages",
-          "count": 145
-        },
-        {
-          "name": "scripts",
-          "count": 69
-        }
-      ],
-      "folders": 5,
-      "grade": "F",
-      "score": 58,
-      "topBlast": {
-        "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
-        "direct": 2555,
-        "transitive": 5048,
-        "total": 7603
-      },
-      "fragility": [
-        {
-          "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
-          "direct": 2555,
-          "transitive": 5048,
-          "total": 7603
-        },
-        {
-          "path": "web/lib/docs/articles/taxes.ts",
-          "direct": 2501,
-          "transitive": 5073,
-          "total": 7574
-        },
-        {
-          "path": "web/lib/customization/resolve.ts",
-          "direct": 2219,
-          "transitive": 5041,
-          "total": 7260
-        }
-      ]
-    },
-    {
       "at": "2026-09-18T13:49:05.484Z",
       "sha": "92e4c052e05138db37664691993388819b9933bf",
       "pr": null,
@@ -3005,6 +2903,108 @@
       "duplicates": 217,
       "layerViolations": 11309,
       "connections": 53648,
+      "avgFnLines": 15.7,
+      "longestFn": 16,
+      "testFiles": 2107,
+      "testRatio": 37.9,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 3662
+        },
+        {
+          "name": "engine",
+          "count": 1328
+        },
+        {
+          "name": "schema",
+          "count": 258
+        },
+        {
+          "name": "packages",
+          "count": 148
+        },
+        {
+          "name": "scripts",
+          "count": 71
+        }
+      ],
+      "folders": 5,
+      "grade": "F",
+      "score": 58,
+      "topBlast": {
+        "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
+        "direct": 2611,
+        "transitive": 5112,
+        "total": 7723
+      },
+      "fragility": [
+        {
+          "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
+          "direct": 2611,
+          "transitive": 5112,
+          "total": 7723
+        },
+        {
+          "path": "web/lib/docs/articles/taxes.ts",
+          "direct": 2535,
+          "transitive": 5143,
+          "total": 7678
+        },
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 2266,
+          "transitive": 5104,
+          "total": 7370
+        }
+      ]
+    },
+    {
+      "at": "2026-09-19T03:26:39.223Z",
+      "sha": "3de8737dd02bacb5ab1ebb77d4a9e2517da973f3",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 5557,
+      "functions": 16676,
+      "loc": 1289932,
+      "languages": 15,
+      "topLanguages": [
+        {
+          "ext": "ts",
+          "pct": 66,
+          "lines": 846136
+        },
+        {
+          "ext": "json",
+          "pct": 15,
+          "lines": 189368
+        },
+        {
+          "ext": "tsx",
+          "pct": 13,
+          "lines": 163350
+        },
+        {
+          "ext": "sql",
+          "pct": 5,
+          "lines": 69918
+        },
+        {
+          "ext": "mjs",
+          "pct": 1,
+          "lines": 11981
+        }
+      ],
+      "dead": 104,
+      "deadPct": 0.6,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 9.7,
+      "securityIssues": 637,
+      "patterns": 10,
+      "duplicates": 217,
+      "layerViolations": 11309,
+      "connections": 53656,
       "avgFnLines": 15.7,
       "longestFn": 16,
       "testFiles": 2107,
