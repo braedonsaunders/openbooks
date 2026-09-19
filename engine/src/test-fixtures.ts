@@ -1225,6 +1225,98 @@ function describeResetFailure(error: unknown): string {
   return String(error);
 }
 
+export interface ScratchOrgTouchProbe {
+  /** Org-owned tables whose live rows differ from the committed snapshot. */
+  tables: string[];
+  /** Non-org-keyed evidence (file blobs/versions, tax members, password resets) exists for the org. */
+  special: boolean;
+}
+
+/**
+ * Find the tables a test actually touched, so the reset below can skip the
+ * hundreds it did not. Three round trips, all read-only, inside one
+ * transaction: per-table live-vs-snapshot counts, then a symmetric-difference
+ * check (both EXCEPT directions plus the counts, so an in-place baseline
+ * update with unchanged cardinality is still caught) only for tables whose
+ * counts already match and which hold baseline rows, then existence flags for
+ * the handful of evidence tables without an org_id column. A table the probe
+ * cannot read (or any probe failure at all) fails open to a full reset — the
+ * caller treats a throw as "everything is touched".
+ *
+ * The caller runs with the test login, which owns these tables after the CI
+ * ownership transfer, and inside the bypass scope, so RLS never hides rows
+ * from the comparison.
+ */
+export async function probeScratchOrgTouchedTables(
+  org: ScratchOrg,
+  tables: readonly string[],
+): Promise<ScratchOrgTouchProbe> {
+  const schema = org.snapshotSchema;
+  if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
+  const orgId = org.orgId;
+  const snapshot = quoteIdentifier(schema);
+  const predicate = (table: string) =>
+    table === "orgs" ? sql`id = ${orgId}` : sql`org_id = ${orgId}`;
+  return await db.transaction(async (tx) => {
+    const countBranches = tables.map((table) => sql`
+      select ${table}::text as "table",
+        (select count(*)::int from ${sql.raw(`public.${quoteIdentifier(table)}`)} where ${predicate(table)}) as "live",
+        (select count(*)::int from ${sql.raw(`${snapshot}.${quoteIdentifier(table)}`)}) as "snap"`);
+    const counts = await tx.execute<{ table: string; live: number; snap: number }>(
+      sql.join(countBranches, sql` union all `),
+    );
+    const touched = new Set<string>();
+    const candidates: string[] = [];
+    for (const row of counts.rows) {
+      if (row.live !== row.snap) touched.add(row.table);
+      else if (row.snap > 0) candidates.push(row.table);
+    }
+    // Tables with matching non-zero counts may still hide an in-place
+    // baseline mutation. Compare full row multisets in both directions;
+    // equal counts plus empty differences in both directions is equality.
+    if (candidates.length > 0) {
+      const diffBranches = candidates.map((table) => sql`
+        select ${table}::text as "table", (
+          (select count(*)::int from (
+            (select * from ${sql.raw(`public.${quoteIdentifier(table)}`)} where ${predicate(table)})
+            except
+            (select * from ${sql.raw(`${snapshot}.${quoteIdentifier(table)}`)})
+          ) d1)
+          + (select count(*)::int from (
+            (select * from ${sql.raw(`${snapshot}.${quoteIdentifier(table)}`)})
+            except
+            (select * from ${sql.raw(`public.${quoteIdentifier(table)}`)} where ${predicate(table)})
+          ) d2)
+        ) as "diff"`);
+      const diffs = await tx.execute<{ table: string; diff: number }>(
+        sql.join(diffBranches, sql` union all `),
+      );
+      for (const row of diffs.rows) {
+        if (row.diff !== 0) touched.add(row.table);
+      }
+    }
+    // Evidence the generic org_id probe cannot see: rows keyed only through
+    // a parent (file blobs/versions), through a group (tax members), or
+    // through a user (password resets). Mirrors the reset's delete predicates
+    // exactly, so a hit here means the reset has real work below.
+    const special = await tx.execute<{ blobs: boolean; versions: boolean; members: boolean; resets: boolean }>(sql`
+      select
+        exists(select 1 from file_blobs
+          where version_id in (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${orgId})) as "blobs",
+        exists(select 1 from file_versions
+          where file_id in (select id from files where org_id = ${orgId})) as "versions",
+        exists(select 1 from tax_group_members
+          where tax_group_id in (select id from tax_groups where org_id = ${orgId})) as "members",
+        exists(select 1 from auth_password_resets
+          where user_id in (select id from users where org_id = ${orgId})) as "resets"`);
+    const flag = special.rows[0];
+    return {
+      tables: [...touched],
+      special: !flag || flag.blobs || flag.versions || flag.members || flag.resets,
+    };
+  });
+}
+
 /**
  * Restore every mutable baseline column from the committed template and
  * reinsert deleted baseline rows; bounded passes handle FK ordering. Runs
@@ -1301,6 +1393,21 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
 async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
   const schema = org.snapshotSchema;
   if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
+  // Narrow the reset to the tables the test actually touched: the probe costs
+  // three read-only round trips while the restore/delete loops below cost one
+  // round trip per table per pass across ~400 tables. A probe failure fails
+  // open to the historical full-table reset — slower, never wrong. A pristine
+  // lease (no touched tables and no orphan evidence) skips the write path
+  // entirely; the slot already equals its committed snapshot.
+  let resetTables: readonly string[] = tables;
+  try {
+    const probe = await probeScratchOrgTouchedTables(org, tables);
+    if (probe.tables.length === 0 && !probe.special) return;
+    resetTables = probe.tables;
+  } catch (error) {
+    console.error(`scratch fixture ${org.orgId} touch probe failed; running the full reset:`, error);
+  }
+  const touched = new Set(resetTables);
   // Repair test-mutated baseline references BEFORE deleting: a test that
   // repointed a baseline row (a baseline account aimed at a non-baseline
   // subsidiary) would otherwise hold its own test rows hostage, because the
@@ -1308,8 +1415,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   // first is safe for the deletes below — it touches only baseline rows (by
   // id) and reinserts deleted baseline rows, never test rows — and the
   // post-delete restore still runs after to repair cascade damage.
-  await restoreScratchOrgBaseline(org, tables, columns);
-  let remaining = [...tables].filter((table) => table !== "orgs");
+  await restoreScratchOrgBaseline(org, resetTables, columns);
+  let remaining = [...resetTables].filter((table) => table !== "orgs");
   const errors = new Map<string, string>();
   const coreSet = new Set<string>(CORE_A);
 
@@ -1350,7 +1457,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
         // test-evidence triggers for this transaction, exactly as full teardown
         // does, and re-enable them before commit.
         for (const { table, trigger } of GUARDED_EVIDENCE) {
-          if (!tables.includes(table)) continue;
+          if (!touched.has(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
         }
         const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
@@ -1380,7 +1487,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
             "ap_capture_runs",
             "ap_capture_corrections",
             "ap_capture_events",
-          ].filter((t) => tables.includes(t));
+          ].filter((t) => touched.has(t));
           let captureRows = false;
           for (const t of captureTables) {
             const probe = await tx.execute(sql`select 1 as x from ${qualified(t)} where org_id = ${org.orgId} limit 1`);
@@ -1396,12 +1503,12 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
               ["ap_capture_corrections", "ap_capture_corrections_append_only"],
               ["ap_capture_events", "ap_capture_events_append_only"],
             ] as const) {
-              if (!tables.includes(table)) continue;
+              if (!touched.has(table)) continue;
               await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
               await tx.execute(sql`delete from ${qualified(table)} where org_id = ${org.orgId}`);
               await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
             }
-            if (tables.includes("ap_capture_items")) {
+            if (touched.has("ap_capture_items")) {
               await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
             }
           }
@@ -1475,7 +1582,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           sweepTodo = failures.map((failure) => failure.table);
         }
         for (const { table, trigger } of GUARDED_EVIDENCE) {
-          if (!tables.includes(table)) continue;
+          if (!touched.has(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
         }
         const doomNames = new Set(failures.map((f) => f.table));
@@ -1513,7 +1620,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   // The same restore also runs BEFORE the delete passes (see above) to repair
   // test-mutated baseline references; this second run repairs cascade damage
   // from the deletes themselves.
-  await restoreScratchOrgBaseline(org, tables, columns);
+  await restoreScratchOrgBaseline(org, resetTables, columns);
   await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
     await tx.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId} and name like 'Scratch %'`);
