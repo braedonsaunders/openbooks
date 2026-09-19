@@ -1042,7 +1042,16 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
       await page.goto(`/close?run=${runId}&stage=lock`);
       await dismissSetupWizard(page);
       page.on('dialog', (dialog) => void dialog.accept());
-      await page.locator('#close-owner-attestation').fill('W4 e2e: June figures reviewed, FX revalued, ready to lock.');
+      // Scoped to main: Next.js holds the RSC flight payload for the last
+      // refresh in a hidden div outside main, and its parsed copy of this
+      // same textarea transiently double-matches a page-level id selector
+      // (proven in a trace: two #close-owner-attestation nodes, one under
+      // main, one in div#S:0[hidden], settling to one). The operator box is
+      // the one in main; asserting exactly one there keeps the gate honest —
+      // a product double-render in main still fails loudly.
+      const attestation = page.locator('main #close-owner-attestation');
+      await expect(attestation).toHaveCount(1);
+      await attestation.fill('W4 e2e: June figures reviewed, FX revalued, ready to lock.');
       {
         const attested = page.waitForResponse(
           (r) => r.url().endsWith(`/api/close/runs/${runId}`) && r.request().method() === 'POST',

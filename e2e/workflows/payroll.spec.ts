@@ -83,13 +83,43 @@ const SAM = {
   cost: "349.5000",
   lines: { FIT: "320.3800", SS: "186.0000", MED: "43.5000", SIT: "134.0600", SUTA: "102.0000" },
 };
-// Per-component remittance goldens for the seeded inputs: every agency
-// total is the sum of its components' rows (CRA 1636.83, RQ 839.98,
-// IRS 931.44 on a fresh tenant). RQ carries the health services fund
-// (50.1600) on top of QC tax and QPIP. Asserted as deltas off the pre-commit
-// baseline so shared-tenant history cannot leak in.
+// Consolidated remittance goldens for the seeded inputs, in USD: the tenant
+// runs a CAD entity and a USD entity under a USD root, so the org-wide
+// summary translates every CAD accrual through the derived consolidated
+// average rate (0.74 — see the provisioning step) at 2dp, per component row,
+// before folding provinces into one line. Hand-computed, per row, halves
+// away from zero — e.g. EI is round2(58.68 x 0.74) + round2(39.52 x 0.74) =
+// 43.42 + 29.24 = 72.66, NOT round2(98.20 x 0.74) = 72.67. The USD codes
+// translate to themselves; SUTA (102.00) remits to the IRS vendor alongside
+// SIT by fixture convention. Asserted as deltas off the pre-commit baseline
+// so shared-tenant history cannot leak in. The NATIVE exact figures (the
+// engine pack goldens, and what the bills actually carry) are asserted per
+// entity slice in the remittance test itself.
+const NATIVE_GOLDENS: [string, string][] = [
+  ["TAX", "988.7700"],
+  ["CPP", "389.2300"],
+  ["EI", "98.2000"],
+  ["CPP-ER", "389.2300"],
+  ["EI-ER", "137.4800"],
+  ["QCTAX", "392.3700"],
+  ["QPIP", "13.0700"],
+  ["QPIP-ER", "18.3000"],
+  ["HSF", "50.1600"],
+  ["FIT", "320.3800"],
+  ["SS", "186.0000"],
+  ["MED", "43.5000"],
+  ["SIT", "134.0600"],
+  ["SS-ER", "186.0000"],
+  ["MED-ER", "43.5000"],
+  ["FUTA", "18.0000"],
+  ["SUTA", "102.0000"],
+];
 const RETRO = { gross: "100.0000", net: "70.3500", fit: "22.0000" };
-const RETRO_IRS_RANGE = "37.9000";
+// The amendment's IRS remittance: FIT 22.00 (supplemental 22%) + SS 6.20 +
+// MED 1.45 + SS-ER 6.20 + MED-ER 1.45 + FUTA 0.60 = 37.90, plus SUTA 3.40
+// (100.00 x 3.4% — Sam's YTD is 3000.00, well under the 7000.00 wage base,
+// so the whole amendment is assessable) = 41.30.
+const RETRO_IRS_RANGE = "41.3000";
 // The regular runs' pay-date window (schedule anchor 2026-01-02 + 3 days).
 const RANGE = { from: "2025-12-20", to: "2026-01-05" };
 
@@ -103,6 +133,14 @@ interface RemitGroup {
   filingAccount: { id: string };
   total: string;
   components: { componentId: string; code: string; name: string; kind: string; liabilityAccountId: string; amount: string }[];
+  slices: {
+    subsidiaryId: string;
+    subsidiaryName: string | null;
+    currency: string;
+    total: string;
+    components: { componentId: string; code: string; name: string; kind: string; liabilityAccountId: string; amount: string }[];
+    existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
+  }[];
   existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
 }
 
@@ -136,15 +174,18 @@ interface Ctx {
   stubsCA: Stub[];
   stubsUS: Stub[];
   remitBaselineByCode: Map<string, string>;
+  remitSliceBaselineByCode: Map<string, string>;
   q1pre: Record<string, string>;
   retroPayDate: string;
 }
 
 const ctx = {} as Ctx;
-const digits = String(Date.now()).slice(-4);
+// Time-plus-pid like TAG above: time alone cycles (see payroll-helpers), so
+// account numbers, EIN numbers, and the amendment day mix in the process id.
+const digits = (String(Date.now()) + String(process.pid)).slice(-4);
 // The amendment's pay date moves per run so its remittance range is always
 // history-free, even when a retry shares the tenant with an earlier attempt.
-const RETRO_DAY = String(10 + (Number(String(Date.now()).slice(-2)) % 15)).padStart(2, "0");
+const RETRO_DAY = String(10 + (Number((String(Date.now()) + String(process.pid)).slice(-2)) % 15)).padStart(2, "0");
 
 function employeeName(base: string): string {
   return `${TAG} ${base}`;
@@ -292,14 +333,20 @@ async function formatId(rq: APIRequestContext, code: string): Promise<string> {
 }
 
 /**
- * Raise a remittance bill, deleting a stale draft first when the product
- * refuses a second bill for the same vendor/period/account (one bill per
- * remittance). Returns the new bill's document id.
+ * Raise a remittance bill for one entity slice, deleting a stale draft first
+ * when the product refuses a second bill for the same vendor/period/account/
+ * entity. The subsidiary is always named: a group spanning several entities
+ * (every shared-tenant retry adds its entities' slices) never bills as one
+ * document — the product refuses that — so the caller bills exactly its own
+ * slice. Stale-draft deletion is scoped to our slice for the same reason:
+ * another attempt's drafts are not ours to delete. Returns the new bill's
+ * document id.
  */
 async function createRemittanceBill(
   rq: APIRequestContext,
   partyId: string,
   filingAccountId: string,
+  subsidiaryId: string,
   from: string,
   to: string,
   label: string,
@@ -309,6 +356,7 @@ async function createRemittanceBill(
       action: "create-bill",
       partyId,
       filingAccountId,
+      subsidiaryId,
       from,
       to,
     });
@@ -321,7 +369,8 @@ async function createRemittanceBill(
     const current = ((fresh["groups"] as RemitGroup[]) ?? []).find(
       (candidate) => candidate.partyId === partyId && candidate.filingAccount.id === filingAccountId,
     );
-    for (const stale of current?.existingBills ?? []) {
+    const ours = (current?.slices ?? []).find((slice) => slice.subsidiaryId === subsidiaryId);
+    for (const stale of ours?.existingBills ?? []) {
       const doc = (await rq.get(`/api/documents/${stale.documentId}`).then((r) => r.json())) as {
         doc: { updated_at: string };
       };
@@ -335,6 +384,14 @@ async function createRemittanceBill(
     res = await create();
   }
   return field(ok(res, `bill ${label}`), "documentId");
+}
+
+/** This attempt's slice of a group: retries share the tenant, so a group
+ *  can carry several entities' slices and only ours is asserted and billed. */
+function ourSlice(group: RemitGroup, subsidiaryId: string): RemitGroup["slices"][number] {
+  const slice = group.slices.find((candidate) => candidate.subsidiaryId === subsidiaryId);
+  if (!slice) throw new Error("our slice missing from remittance group");
+  return slice;
 }
 
 /** Release a bank-file artifact's bytes (audited POST, never a GET). */
@@ -418,6 +475,11 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ["rq", `2${digits.slice(2)}40`, "liability_current_other"],
         ["irs", `2${digits.slice(2)}50`, "liability_current_other"],
         ["bank", `1${digits.slice(0, 1)}${digits.slice(3)}00`, "asset_bank"],
+        // Receivable control for the consolidation probe bill: posting any
+        // drawer document requires ar/ap/bank controls, and this tenant
+        // otherwise never posts one (remittance bills stay drafts, pay runs
+        // commit through their own path).
+        ["ar", `1${digits.slice(0, 1)}${digits.slice(3)}10`, "asset_receivable"],
       ];
       ctx.acct = {};
       for (const [key, number, type] of defs) {
@@ -632,20 +694,30 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           isDefault: boolean;
         }[]
       );
+      // One EIN registration per US entity. The default is unique per
+      // country, so a retried attempt whose subsidiary is new cannot adopt
+      // the previous attempt's default as its own registration: billing
+      // our slice under another entity's EIN is rightly refused ("remit
+      // under <our> registration instead"). Find ours by subsidiary, else
+      // mint one pinned to it — the default on a fresh tenant, a second
+      // non-default account on a shared one. Sam's profile names it
+      // explicitly below, so stubs attribute deterministically instead of
+      // falling through to whichever country default `limit 1` finds.
+      const ownEin = usFilings.find(
+        (candidate) =>
+          candidate.country === "US" && candidate.isDefault && (candidate.subsidiaryId ?? null) === ctx.subUS,
+      );
+      const anyUsDefault = usFilings.find((candidate) => candidate.country === "US" && candidate.isDefault);
       ctx.filingUS =
-        usFilings.find(
-          (candidate) =>
-            candidate.country === "US" && candidate.isDefault && (candidate.subsidiaryId ?? null) === ctx.subUS,
-        )?.id ??
-        usFilings.find((candidate) => candidate.country === "US" && candidate.isDefault)?.id ??
+        ownEin?.id ??
         field(
           ok(
             await api(rq, ctx.baseURL, "POST", "/api/admin/setup/payroll-filing-accounts", {
-              accountNumber: `27-${String(Date.now()).slice(-6)}`,
+              accountNumber: `27-${(String(Date.now()) + String(process.pid)).slice(-6)}`,
               name: `${TAG} US EIN`,
               country: "US",
               programType: "us_ein",
-              isDefault: true,
+              isDefault: anyUsDefault == null,
               isActive: true,
               subsidiaryId: ctx.subUS,
             }),
@@ -715,13 +787,115 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         }),
         "CA state unemployment rate",
       );
+      // Consolidated FX rates the org-wide summary translates through. The
+      // tenant runs a CAD entity and a USD entity under a USD root, so any
+      // range touching both currencies refuses (422, "derive rates from
+      // period close first") until the CAD→USD consolidated rate exists for
+      // the stub period. A real multi-currency org derives these at period
+      // close; the fixture does the same through the product API, here in
+      // provisioning, before anything reads a consolidated figure:
+      //   1. one CAD→USD January spot at 0.7400, so the period average is
+      //      exactly 0.74 and every consolidated golden below stays
+      //      hand-computable;
+      //   2. the January period id, read off a $1 probe bill posted into
+      //      January (periods have no list API; a posted drawer document
+      //      names its own posting period, as the close-to-reporting suite
+      //      already relies on). The probe stays posted: it carries no
+      //      remittance marker (invisible to bill coverage), posts no
+      //      payroll stubs (invisible to every group), and no assertion in
+      //      this suite enumerates bare AP documents;
+      //   3. derive-rates for that period (idempotent per period).
+      // Retry-safety: the spot POST 409s on a retry (same asOf/pair/type)
+      // and is adopted like every other fixed-name seed here; the probe
+      // bill mints a fresh document per attempt so it never collides; the
+      // derivation is an upsert.
+      // Posting the probe needs the org's posting controls. The net-pay
+      // account doubles as the AP control (both are vendor-money
+      // liability_payables) and the bank account as the bank control; the
+      // AR control above exists only for this. None of it touches payroll
+      // postings, which commit through their own path.
+      ok(
+        await api(rq, ctx.baseURL, "PUT", "/api/admin/settings", {
+          controlAccounts: { ar: aid("ar"), ap: aid("net"), bank: aid("bank") },
+        }),
+        "posting control accounts",
+      );
+      const spot = await api(rq, ctx.baseURL, "POST", "/api/admin/setup/fx-rates", {
+        asOf: "2026-01-01",
+        fromCurrency: "CAD",
+        toCurrency: "USD",
+        rateType: "spot",
+        rate: "0.7400",
+      });
+      if (spot.status === 409) {
+        const conflict = spot.json as { code?: unknown };
+        if (conflict.code !== "duplicate") {
+          throw new Error(`CAD→USD spot conflict is not ours: ${JSON.stringify(spot.json).slice(0, 300)}`);
+        }
+      } else {
+        ok(spot, "CAD→USD January spot");
+      }
+      const probeDraft = ok(
+        await api(rq, ctx.baseURL, "POST", "/api/documents/draft", { kind: "vendor_bill" }),
+        "probe bill draft",
+      );
+      const probeId = field(probeDraft, "id");
+      const probeCurrent = (await rq.get(`/api/documents/${probeId}`).then((r) => r.json())) as {
+        doc: { updated_at: string };
+      };
+      ok(
+        await api(rq, ctx.baseURL, "PATCH", `/api/documents/${probeId}`, {
+          expectedUpdatedAt: probeCurrent.doc.updated_at,
+          partyId: vid("irs"),
+          currency: "USD",
+          documentDate: "2026-01-05",
+          dueDate: "2026-02-05",
+          lines: [
+            {
+              accountId: aid("wage"),
+              description: `${TAG} consolidation probe`,
+              quantity: "1",
+              unitPrice: "1.00",
+              amount: "1.00",
+            },
+          ],
+        }),
+        "probe bill fill",
+      );
+      ok(
+        await api(rq, ctx.baseURL, "POST", "/api/documents/actions", { action: "submit", documentId: probeId }),
+        "probe bill submit",
+      );
+      const probePosted = await api(rq, ctx.baseURL, "POST", "/api/documents/actions", {
+        action: "post",
+        documentId: probeId,
+      });
+      ok(probePosted, "probe bill post");
+      if ((probePosted.json as Record<string, unknown>)["ok"] !== true) {
+        throw new Error(`probe bill post refused: ${JSON.stringify(probePosted.json).slice(0, 300)}`);
+      }
+      const probeDoc = ok(await api(rq, ctx.baseURL, "GET", `/api/documents/${probeId}`), "probe bill readback");
+      const januaryPeriodId = ((probeDoc["doc"] as Record<string, unknown>)["posting_period_id"] as string) ?? "";
+      if (!januaryPeriodId) throw new Error("probe bill names no posting period");
+      const derived = ok(
+        await api(rq, ctx.baseURL, "POST", "/api/consolidation", {
+          action: "derive-rates",
+          periodId: januaryPeriodId,
+        }),
+        "derive January consolidated rates",
+      );
+      // Exactly one pair exists in this tree (CAD→USD; USD→USD is identity).
+      expect(derived["written"]).toBe(1);
       // Per-component remittance destinations are mapped after the runs
       // commit, when the remittance summary exposes each component's id
       // (no list API names them pre-commit). Slots already carry the
       // liability accounts, which stub lines snapshot at commit.
       // Baseline the remittance range BEFORE any run commits: retries share
       // the tenant, so every range assertion below is a delta off this map.
+      // Both readings are baselined — consolidated components (USD) and
+      // native entity slices (CAD) — because both are asserted below.
       ctx.remitBaselineByCode = new Map<string, string>();
+      ctx.remitSliceBaselineByCode = new Map<string, string>();
       ctx.q1pre = {};
       ctx.retroPayDate = `2026-01-${RETRO_DAY}`;
       const baseline = ok(
@@ -732,6 +906,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         for (const component of group.components) {
           const prior = ctx.remitBaselineByCode.get(component.code) ?? "0.0000";
           ctx.remitBaselineByCode.set(component.code, sumExact([prior, component.amount]));
+        }
+        for (const slice of group.slices ?? []) {
+          for (const component of slice.components) {
+            const prior = ctx.remitSliceBaselineByCode.get(component.code) ?? "0.0000";
+            ctx.remitSliceBaselineByCode.set(component.code, sumExact([prior, component.amount]));
+          }
         }
       }
       // Approval flows: bank-detail fraud control and the pay-run SoD gate,
@@ -860,6 +1040,11 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           filingStatus: "single",
           w4Allowances: 0,
           paymentMethod: "eft",
+          // Explicit registration: without it stubs fall through to the
+          // country default, which on a shared tenant is another attempt's
+          // EIN — and billing our slice under it is rightly refused. On a
+          // fresh tenant this names the same account the default would.
+          filingAccountId: ctx.filingUS,
         },
       ];
       for (const profile of profiles) {
@@ -967,8 +1152,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       const ui = await openPage(browser, `/payroll/runs/${ctx.runCA}`);
       try {
         await expect(ui.page.getByText(ctx.runCAno).first()).toBeVisible();
-        await expect(ui.page.getByText(employeeName(ALICE.base))).toBeVisible();
-        await expect(ui.page.getByText(employeeName(JEAN.base))).toBeVisible();
+        // .first(), like every other name check in this suite: Next.js
+        // holds the last refresh's RSC payload in a hidden div outside main
+        // and its parsed copy transiently double-matches a page-level
+        // selector (see the attestation note in fx-and-tax).
+        await expect(ui.page.getByText(employeeName(ALICE.base)).first()).toBeVisible();
+        await expect(ui.page.getByText(employeeName(JEAN.base)).first()).toBeVisible();
       } finally {
         await ui.close();
       }
@@ -1008,7 +1197,7 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       const ui = await openPage(browser, `/payroll/runs/${ctx.runUS}`);
       try {
         await expect(ui.page.getByText(ctx.runUSno).first()).toBeVisible();
-        await expect(ui.page.getByText(employeeName(SAM.base))).toBeVisible();
+        await expect(ui.page.getByText(employeeName(SAM.base)).first()).toBeVisible();
       } finally {
         await ui.close();
       }
@@ -1230,11 +1419,24 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ["SS-ER", "US", vid("irs")],
         ["MED-ER", "US", vid("irs")],
         ["FUTA", "US", vid("irs")],
+        // State unemployment is an `external` component: unassigned until
+        // the org configures its party, and an unassigned group would fail
+        // the every-group-routed assertion below. It rides the IRS vendor
+        // here by the same fixture convention as SIT (one vendor per test
+        // country), not because California remits to the IRS.
+        ["SUTA", "US", vid("irs")],
       ];
       for (const [code, country, vendorId] of destinations) {
         const component = routed.get(code);
         if (!component) throw new Error(`component ${code} missing from summary`);
-        if (component.partyId !== null) continue;
+        // Always re-point at this attempt's vendor, never adopt a prior
+        // attempt's: re-homing moves old rows between groups, but no
+        // assertion below can mistake history for accruals — per-code
+        // deltas sum across groups (grouping never changes a code total)
+        // and every per-vendor assertion is scoped to our entity slice.
+        // Adopting instead would strand this attempt's rows on a stale
+        // vendor (proven: QCTAX landing in the previous attempt's RQ
+        // group while the rest of the RQ slice billed to ours).
         ok(
           await api(rq, ctx.baseURL, "PATCH", "/api/admin/setup/pay-components", {
             id: component.componentId,
@@ -1265,18 +1467,22 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         const before = ctx.remitBaselineByCode.get(code) ?? "0.0000";
         return sumExact([now, neg(before)]);
       };
+      // Consolidated (USD) goldens: every CAD row translated at the derived
+      // 0.74 average, 2dp, halves away from zero, per component row before
+      // provinces fold — see NATIVE_GOLDENS above for the derivation. USD
+      // codes translate to themselves.
       const CODE_GOLDENS: [string, string][] = [
-        ["TAX", "988.7700"],
-        ["CPP", "389.2300"],
-        ["EI", "98.2000"],
-        ["CPP-ER", "389.2300"],
-        ["EI-ER", "137.4800"],
-        ["QCTAX", "392.3700"],
-        ["QPIP", "13.0700"],
-        ["QPIP-ER", "18.3000"],
+        ["TAX", "731.6900"],
+        ["CPP", "288.0300"],
+        ["EI", "72.6600"],
+        ["CPP-ER", "288.0300"],
+        ["EI-ER", "101.7300"],
+        ["QCTAX", "290.3500"],
+        ["QPIP", "9.6700"],
+        ["QPIP-ER", "13.5400"],
         // Quebec's health services fund remits to Revenu Quebec alongside the
-        // QC tax and QPIP rows: 3040.0000 x 1.65% on the one QC employee.
-        ["HSF", "50.1600"],
+        // QC tax and QPIP rows: round2(50.16 x 0.74) = 37.12 translated.
+        ["HSF", "37.1200"],
         ["FIT", "320.3800"],
         ["SS", "186.0000"],
         ["MED", "43.5000"],
@@ -1284,34 +1490,97 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ["SS-ER", "186.0000"],
         ["MED-ER", "43.5000"],
         ["FUTA", "18.0000"],
+        // State unemployment on the one US employee: 3000.00 x 3.4% =
+        // 102.00, native USD, remitted to the IRS vendor by fixture
+        // convention (see destinations above).
+        ["SUTA", "102.0000"],
       ];
       for (const [code, golden] of CODE_GOLDENS) {
         expect(codeDelta(code)).toBe(golden);
       }
+      // Native exactness per entity slice: the consolidated figures above
+      // are reporting translations; the slices are what the bills carry, in
+      // native units, to the cent — and where the engine pack goldens live
+      // on the remittance leg of the cross-check. Summed across groups like
+      // the consolidated deltas (grouping never changes a code total).
+      const sliceDelta = (code: string): string => {
+        const now = sumExact(
+          groups.flatMap((group) =>
+            group.slices.flatMap((slice) =>
+              slice.components.filter((c) => c.code === code).map((c) => c.amount),
+            ),
+          ),
+        );
+        const before = ctx.remitSliceBaselineByCode.get(code) ?? "0.0000";
+        return sumExact([now, neg(before)]);
+      };
+      for (const [code, golden] of NATIVE_GOLDENS) {
+        expect(sliceDelta(code)).toBe(golden);
+      }
+      // This attempt's three groups, keyed by destination AND filing
+      // account: retries share the tenant, and re-pointed components re-home
+      // old rows under this attempt's vendors while their slices keep their
+      // own filing accounts (each attempt mints its own EIN) — so a vendor
+      // alone does not identify our group. CRA and RQ share the Canadian
+      // filing account; IRS uses this attempt's EIN.
+      const ourGroups: { vendorId: string; filingId: string; subsidiaryId: string; billKey: "cra" | "rq" | "irs" }[] = [
+        { vendorId: vid("cra"), filingId: ctx.filingCA, subsidiaryId: ctx.caSub, billKey: "cra" },
+        { vendorId: vid("rq"), filingId: ctx.filingCA, subsidiaryId: ctx.caSub, billKey: "rq" },
+        { vendorId: vid("irs"), filingId: ctx.filingUS, subsidiaryId: ctx.subUS, billKey: "irs" },
+      ];
+      const ourGroupOf = (vendorId: string, filingId: string): RemitGroup => {
+        const group = groups.find(
+          (candidate) => candidate.partyId === vendorId && candidate.filingAccount.id === filingId,
+        );
+        if (!group) throw new Error("our remittance group missing from summary");
+        return group;
+      };
+      const sliceTotalOf = (vendorId: string, filingId: string, subsidiaryId: string): string => {
+        const group = ourGroupOf(vendorId, filingId);
+        return sumExact([ourSlice(group, subsidiaryId).total]);
+      };
+      // Québec pension (employee and employer) remits to Revenu Québec,
+      // not the CRA, so the CPP/CPP-ER native goldens live across two
+      // slices: CRA 988.77 + 206.19 + 98.20 + 206.19 + 137.48 = 1636.83,
+      // RQ 392.37 + 183.04 + 13.07 + 183.04 + 18.30 + 50.16 = 839.98.
+      expect(sliceTotalOf(vid("cra"), ctx.filingCA, ctx.caSub)).toBe("1636.8300");
+      expect(sliceTotalOf(vid("rq"), ctx.filingCA, ctx.caSub)).toBe("839.9800");
+      expect(sliceTotalOf(vid("irs"), ctx.filingUS, ctx.subUS)).toBe("1033.4400");
       // Group components sum to their group total (no hidden remainder).
       for (const group of groups) {
         expect(sumExact(group.components.map((c) => c.amount))).toBe(group.total);
       }
-      // One vendor bill per group; each bill's total equals its group.
+      // One vendor bill per entity slice; each bill's total equals its slice.
       // Bills are drafts (posting is the AP domain). Stale drafts from a
       // retried attempt are deleted and re-raised inside the helper.
-      for (const group of groups) {
+      for (const spec of ourGroups) {
+        const group = ourGroupOf(spec.vendorId, spec.filingId);
         const documentId = await createRemittanceBill(
           rq,
           group.partyId as string,
           group.filingAccount.id,
+          spec.subsidiaryId,
           range.from,
           range.to,
           `bill ${group.partyName}`,
         );
-        if (group.partyId === vid("cra")) ctx.craBill = documentId;
-        else if (group.partyId === vid("rq")) ctx.rqBill = documentId;
-        else if (group.partyId === vid("irs")) ctx.irsBill = documentId;
+        if (spec.billKey === "cra") ctx.craBill = documentId;
+        else if (spec.billKey === "rq") ctx.rqBill = documentId;
+        else ctx.irsBill = documentId;
       }
       const billed = await readSummary();
-      for (const group of billed) {
-        const totals = group.existingBills.map((bill) => sumExact([bill.total]));
-        expect(totals).toContain(sumExact([group.total]));
+      for (const spec of ourGroups) {
+        // Bills are raised per entity slice in native units (the product
+        // reconciles an entity-stamped bill against its slice, never
+        // against the translated consolidated total), so coverage is per
+        // slice — this attempt's slice, since retries share the tenant.
+        const group = billed.find(
+          (candidate) => candidate.partyId === spec.vendorId && candidate.filingAccount.id === spec.filingId,
+        );
+        if (!group) throw new Error("our billed group missing from summary");
+        const slice = ourSlice(group, spec.subsidiaryId);
+        const totals = slice.existingBills.map((bill) => sumExact([bill.total]));
+        expect(totals).toContain(sumExact([slice.total]));
       }
       const ui = await openPage(browser, `/payroll/remittances?from=${range.from}&to=${range.to}`);
       try {
@@ -1423,9 +1692,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       expect(w2[0]?.["box4"]).toBe(SAM.lines.SS);
       expect(w2[0]?.["box5"]).toBe(SAM.gross);
       expect(w2[0]?.["box6"]).toBe(SAM.lines.MED);
-      const q1 = rowsOf("US", "941").find((row) => row["quarter"] === "Q1") ?? {};
-      // No absolute assert here: the 941 aggregates by filing account, which
-      // a retried attempt shares. The amendment delta below ties it instead.
+      // 941 rows are keyed `filingAccountId:quarter`: match our EIN's Q1
+      // row, not just any Q1 — a retried attempt shares the tenant and the
+      // year-end aggregates per filing account, so each attempt has its own
+      // Q1 row. No absolute assert here; the amendment delta below ties it.
+      const q1 = rowsOf("US", "941").find((row) => row["rowId"] === `${ctx.filingUS}:1`) ?? {};
+      expect(q1["quarter"]).toBe("Q1");
       ctx.q1pre = q1;
       const ui = await openPage(browser, "/payroll/year-end");
       try {
@@ -1516,7 +1788,7 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       const q1post =
         filings
           .find((filing) => filing.country === "US" && filing.key === "941")
-          ?.data.rows.find((row) => row["quarter"] === "Q1") ?? {};
+          ?.data.rows.find((row) => row["rowId"] === `${ctx.filingUS}:1`) ?? {};
       expect(sumExact([q1post["wages"] ?? "0", neg(ctx.q1pre["wages"] ?? "0")])).toBe(RETRO.gross);
       expect(sumExact([q1post["fit"] ?? "0", neg(ctx.q1pre["fit"] ?? "0")])).toBe(RETRO.fit);
       expect(sumExact([q1post["ssTax"] ?? "0", neg(ctx.q1pre["ssTax"] ?? "0")])).toBe("12.4000");
@@ -1535,6 +1807,7 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         rq,
         deltaGroup.partyId,
         deltaGroup.filingAccount.id,
+        ctx.subUS,
         ctx.retroPayDate,
         ctx.retroPayDate,
         "retro IRS bill",

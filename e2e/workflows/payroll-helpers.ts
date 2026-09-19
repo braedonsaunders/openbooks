@@ -20,8 +20,15 @@
 import type { APIRequestContext, Browser } from "@playwright/test";
 import { request } from "@playwright/test";
 
-/** Run-unique tag so retries and local re-runs never collide on natural keys. */
-export const TAG = `W05-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+/**
+ * Run-unique tag so retries and local re-runs never collide on natural keys.
+ * Time alone cycles every few seconds (proven: two runs started ~50s apart
+ * minted the same last-4-millis digits and 422'd on account numbers), so the
+ * process id rides along — unique per attempt process, stable within one.
+ * Kept at the historical 10 characters: fixed-width bank formats (NACHA
+ * individual name) truncate longer tags and break byte assertions.
+ */
+export const TAG = `W05-${Date.now().toString(36).toUpperCase().slice(-4)}${process.pid.toString(36).toUpperCase().slice(-2)}`;
 
 export function originOf(baseURL: string): string {
   return new URL(baseURL).origin;
