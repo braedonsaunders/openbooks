@@ -87,7 +87,7 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
     {
       const response = await post({ ...base, certificateKey: 'gb_made_up', answers: {} })
       assert.equal(response.status, 422, await response.clone().text())
-      assert.match(((await response.json()) as { error: string }).error, /declares no "gb_made_up"/)
+      assert.match(((await response.json()) as { error: string }).error, /unknown certificate "gb_made_up" for GB/)
     }
     // Undeclared field key: refused by name with the declared keys.
     {
@@ -95,7 +95,7 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
         ...base, certificateKey: 'gb_tax_code_notice', answers: { tax_bracket: '1257L' },
       })
       assert.equal(response.status, 422, await response.clone().text())
-      assert.match(((await response.json()) as { error: string }).error, /declares no "tax_bracket"/)
+      assert.match(((await response.json()) as { error: string }).error, /"tax_bracket" is not a field of/)
     }
     // Missing required field with no default: the P6/P9 tax code is required.
     {
@@ -124,7 +124,7 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
         answers: { tax_code: '1257L', non_cumulative: 'perhaps' },
       })
       assert.equal(response.status, 422, await response.clone().text())
-      assert.match(((await response.json()) as { error: string }).error, /non_cumulative|checkbox/)
+      assert.match(((await response.json()) as { error: string }).error, /non.cumulative|checkbox/)
     }
     // Bad choice value on the starter checklist.
     {
@@ -133,7 +133,7 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
         answers: { starter_declaration: 'D', student_loan_plan: 'none' },
       })
       assert.equal(response.status, 422, await response.clone().text())
-      assert.match(((await response.json()) as { error: string }).error, /must be one of A, B, C/)
+      assert.match(((await response.json()) as { error: string }).error, /is not one of A, B, C/)
     }
     // A well-formed filing saves.
     {
@@ -158,8 +158,8 @@ test('count and amount answers hold their declared bands and scale', { skip: !DB
     const base = { employeePartyId: hire, country: 'US', certificateKey: 'us_ca_de4' }
     for (const [label, answers, message] of [
       ['allowances band', { regular_allowances: '100' }, /above the declared maximum 99/],
-      ['allowances shape', { regular_allowances: 'two' }, /whole number/],
-      ['amount shape', { additional_per_period: 'plenty' }, /not a valid amount/],
+      ['allowances shape', { regular_allowances: 'two' }, /is not a whole count/],
+      ['amount shape', { additional_per_period: 'plenty' }, /is not a decimal at up to/],
       ['amount floor', { additional_per_period: '-5' }, /below the declared minimum 0/],
     ] as const) {
       const response = await post({ ...base, answers })
@@ -225,7 +225,7 @@ test('column-stored certificates cannot be filed as rows', { skip: !DB }, async 
     assert.equal(response.status, 422, await response.clone().text())
     assert.match(
       ((await response.json()) as { error: string }).error,
-      /"ca_td1" stores its answers in payroll profile columns/,
+      /"ca_td1" is edited through the payroll profile, not here/,
     )
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*) as count from employee_tax_certificates where org_id = ${org.orgId}`))
@@ -252,7 +252,7 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
     // A backdated filing against a newer current row is refused by name.
     const backdated = await post({ ...base, answers: { tax_code: '0T' }, effectiveFrom: '2026-01-01' })
     assert.equal(backdated.status, 422, await backdated.clone().text())
-    assert.match(((await backdated.json()) as { error: string }).error, /already on file effective 2026-08-01/)
+    assert.match(((await backdated.json()) as { error: string }).error, /\(effective 2026-08-01\) is already on file/)
     const rows = await withOrgContext(org.orgId, () => db.execute<{
       answers: Record<string, string>; effective_from: string; superseded_on: string | null;
     }>(sql`

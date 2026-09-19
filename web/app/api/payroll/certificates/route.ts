@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { normalizeDecimal } from '@openbooks/engine/src/money.ts'
 import {
   PAYROLL_COUNTRY_PACKS,
 } from '@openbooks/engine/src/payroll/packs.ts'
@@ -46,7 +47,10 @@ const certificateBodySchema = z.looseObject({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
-interface StoredRow {
+// A type alias, not an interface: db.execute constrains its row generic to
+// Record<string, unknown>, and an interface carries no implicit index
+// signature, so only the alias satisfies it.
+type StoredRow = {
   certificate_key: string
   country: string
   region: string | null
@@ -133,8 +137,15 @@ export async function POST(req: Request) {
   // country-level form carries no region, a region-level form carries its
   // region, a sub-region form carries both. Anything else would fork "which
   // certificate is in force" into ambiguous rows.
-  const region = body.region == null || body.region === '' ? null : String(body.region)
-  const subRegion = body.subRegion == null || body.subRegion === '' ? null : String(body.subRegion)
+  // Omitting the point means "the certificate's own" — the declaration already
+  // says where a region-scoped form files, so a caller that does not repeat it
+  // is not thereby wrong. Sending a CONFLICTING point still refuses below.
+  const region = body.region === undefined
+    ? certificate.scope.region ?? null
+    : (body.region === null || body.region === '' ? null : String(body.region))
+  const subRegion = body.subRegion === undefined
+    ? certificate.scope.subRegion ?? null
+    : (body.subRegion === null || body.subRegion === '' ? null : String(body.subRegion))
   const { level } = certificate.scope
   if (level === 'country' && (region !== null || subRegion !== null)) {
     return NextResponse.json({ error: `certificate "${certificate.key}" is country-level and carries no region` }, { status: 422 })
@@ -163,8 +174,64 @@ export async function POST(req: Request) {
     if (text === '') continue
     answers[key] = text
   }
+  // The scope check reads the employee's OWN profile, not just the body: a
+  // region-scoped certificate files only for an employee of that region, and a
+  // pack's form files only for an employee under that pack. Without this, a New
+  // York certificate could be filed against a California employee and withhold
+  // by the wrong state's table. The declared scope is the authority — the key's
+  // name is never parsed.
+  const profile = (await db.execute<{ country: string; province: string }>(sql`
+    select country, province from employee_payroll_profiles
+     where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}`)).rows[0]
+  if (!profile) {
+    return NextResponse.json(
+      { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
+      { status: 422 },
+    )
+  }
+  if (profile.country !== country) {
+    return NextResponse.json(
+      {
+        error: `"${certificate.key}" belongs to the ${country} payroll pack but this employee's `
+          + `profile is under ${profile.country} — file the certificate the employee's own pack declares`,
+      },
+      { status: 422 },
+    )
+  }
+  if (certificate.scope.level !== 'country' && profile.province !== region) {
+    return NextResponse.json(
+      {
+        error: `"${certificate.key}" is scoped to ${region ?? '(unscoped)'} but this employee works in `
+          + `${profile.province || '(no region)'} — a certificate files only for its own region`,
+      },
+      { status: 422 },
+    )
+  }
+
+  // A filing that answers NOTHING is refused outright. Where every required
+  // field carries a declared default, nothing below would object — and the
+  // stored row would then read as "on file" downstream while asserting
+  // nothing, which is worse than no certificate at all.
+  if (Object.keys(answers).length === 0) {
+    return NextResponse.json(
+      { error: `"${certificate.key}" was filed with no answers — a certificate on file must state something` },
+      { status: 422 },
+    )
+  }
+
   const problem = certificateAnswersProblem(certificate, answers)
   if (problem) return NextResponse.json({ error: problem }, { status: 422 })
+
+  // Store amounts AT THE DECLARED SCALE. "25.5" and "25.5000" are the same
+  // answer, and leaving whichever the operator typed makes two stored rows
+  // that must compare equal look different to anything reading them back.
+  // Validation above already proved each one normalizes.
+  for (const field of certificate.fields) {
+    if (field.kind !== 'amount' || field.decimals == null) continue
+    const answer = answers[field.key]
+    if (answer === undefined) continue
+    answers[field.key] = normalizeDecimal(answer, field.decimals)
+  }
 
   return withOrgTransaction(orgId, async () => {
     // The open-row lock serializes concurrent saves for one employee and
@@ -218,6 +285,6 @@ export async function POST(req: Request) {
           },
         })}::jsonb,
         ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp())`)
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, certificateKey: certificate.key, effectiveFrom: effective })
   })
 }

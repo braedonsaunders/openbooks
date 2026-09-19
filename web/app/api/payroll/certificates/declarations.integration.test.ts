@@ -51,6 +51,20 @@ async function fixture() {
     await db.execute(sql`
       insert into employee_roles (id, org_id, party_id, terminated_on)
       values (${randomUUID()}, ${org.orgId}, ${employeeId}, null)`)
+    // The route checks a certificate's scope against the employee's OWN
+    // profile, so an employee with no profile can file nothing — there is no
+    // country or region to check the form against.
+    const scheduleId = randomUUID()
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active, created_by, updated_by)
+      values (${scheduleId}, ${org.orgId}, 'Monthly NL', 'monthly', 12, '2026-07-31', 0, true,
+              ${state.actorId}, ${state.actorId})`)
+    await db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+                                             province, pay_basis, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'NL', '', 'salary', true,
+              ${state.actorId}, ${state.actorId})`)
     return { org, employeeId }
   })
 }
