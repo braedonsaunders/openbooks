@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { GateError } from '@openbooks/engine/src/flows/index.ts'
+import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 
@@ -102,6 +102,14 @@ export async function loadFlowSubjectSubsidiary(
  * races and authorization.
  */
 export function gateErrorResponse(e: unknown): NextResponse {
+  // An atomic decision failure (any post-flip stage, including release) is a
+  // server-side defect with the cause and the remedy in the message
+  // (decision NOT recorded, gate still pending) — a 500 with that body
+  // intact, never a success and never a bare 'internal error'.
+  if (e instanceof DecisionFailedError) {
+    console.error('[flows] approval decision failed:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
   if (e instanceof GateError) {
     const msg = e.message
     const status = /not found/.test(msg)

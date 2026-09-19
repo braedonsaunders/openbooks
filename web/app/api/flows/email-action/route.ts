@@ -180,6 +180,11 @@ export async function POST(req: Request) {
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
   try {
+    // decideGate either records the decision or throws: ANY post-flip
+    // failure rolls the whole decide unit back (nothing recorded, gate still
+    // pending), so a throw below renders as not-recorded — never as
+    // "Approved". The one-click link cannot retry the decision itself, so
+    // the failure page points at Approvals.
     await withOrgContext(gate.orgId, () =>
       decideGate({
         gateId: claims.gateId,

@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg, withBypassContext, withOrgContext } from "../db.ts";
+import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -50,6 +50,41 @@ export function gateSubsidiaryScopeAllows(
 }
 
 export class GateError extends Error {}
+
+/**
+ * The unified atomic decision failure: ANY failure after the gate flip —
+ * resume setup (flow/adapter/graph/subject), branch execution, or release —
+ * rolls the whole decide unit back to its savepoint and records NOTHING. The
+ * gate stays pending and the same decision can be retried. Retry-the-RUN is
+ * never the remedy here: the gate checkpoint is already stamped, so a
+ * re-drive would skip the branch and complete vacuously (original-trigger
+ * retryFlowRun plans from the trigger and stops at the gate). The savepoint
+ * (not the throw alone) is the guarantee: an outer caller may catch this and
+ * still commit without preserving anything from the attempt. The message
+ * carries the stage, the cause, and the remedy for every caller.
+ */
+export class DecisionFailedError extends GateError {
+  constructor(args: { decision: "approved" | "rejected"; stage: string; cause: string }) {
+    super(
+      `approval ${args.stage} failed: ${args.cause}. ` +
+        `The decision to ${args.decision === "approved" ? "approve" : "reject"} was not recorded ` +
+        `and the approval is still pending — retry your decision.`,
+    );
+    this.name = "DecisionFailedError";
+  }
+}
+
+/**
+ * A release failure — the adapter threw while releasing the subject. Kept as
+ * a named subclass so callers can distinguish the stage; the contract is the
+ * unified one above (nothing recorded, retry the decision).
+ */
+export class ReleaseError extends DecisionFailedError {
+  constructor(decision: "approved" | "rejected", cause: string) {
+    super({ decision, stage: "release", cause });
+    this.name = "ReleaseError";
+  }
+}
 
 /** Roles that may act on any gate in the org (matches web admin semantics). */
 const GATE_ADMIN_ROLE = "admin";
@@ -180,11 +215,18 @@ async function finalizeRunStatus(runId: string, orgId: string, hadFailure: boole
     .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
 }
 
+/**
+ * A recorded decision whose branch completed: the gate flipped, the branch
+ * (if any) ran, and the engine release landed. There is no recorded-failure
+ * variant — ANY failure after the flip rolls the whole decide unit back to
+ * its savepoint and throws DecisionFailedError (nothing recorded, gate still
+ * pending, retry the decision).
+ */
 export interface DecideGateResult {
   ok: true;
   /** Which branch resumed; null = quorum 'all' still waiting on siblings. */
   resumed: "approve" | "reject" | null;
-  runStatus: "waiting" | "completed" | "failed";
+  runStatus: "waiting" | "completed";
 }
 
 /**
@@ -268,197 +310,241 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
   return withOrg(pre.orgId, async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
 
-    const gate = await loadGate(gateId, pre.orgId);
-    if (!gate || gate.status !== "pending") {
-      throw new GateError("this approval was already resolved");
-    }
-    // The subject may have been edited after the pre-flight read. Re-resolve
-    // its legal entity while holding the same transaction that flips the gate.
-    await assertGateSubsidiaryScope(gate, args.allowedSubsidiaryIds);
+    // Whole-decision savepoint: withOrg joins an ambient transaction when the
+    // caller already owns one (and db.transaction likewise participates), so a
+    // throw alone cannot guarantee rollback — an outer caller may catch
+    // ReleaseError and still commit. Rolling back to this savepoint first
+    // removes the attempt's writes (flip, audit, notifications, branch
+    // effects, run status) before the error propagates, whatever the outer
+    // scope then does. This is the exact swallowed-error topology this slice
+    // handles: catch inside an outer withOrgTransaction + outer commit still
+    // leaves the gate pending with nothing recorded.
+    return withTransactionSavepoint(db, async () => {
+      const gate = await loadGate(gateId, pre.orgId);
+      if (!gate || gate.status !== "pending") {
+        throw new GateError("this approval was already resolved");
+      }
+      // The subject may have been edited after the pre-flight read. Re-resolve
+      // its legal entity while holding the same transaction that flips the gate.
+      await assertGateSubsidiaryScope(gate, args.allowedSubsidiaryIds);
 
-    const comment = args.comment?.trim() || null;
-    const decided = await db
-      .update(schema.flowGates)
-      .set({
-        status: decision,
-        decidedBy: userId,
-        decidedAt: new Date(),
-        comment,
-        // Attestation stored with the decision (only meaningful on approve).
-        signature: decision === "approved" ? signature : null,
-        // Structured provenance: whose gate this was, when a delegate decided it.
-        onBehalfOfUserId: onBehalfOf?.id ?? null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, pre.orgId), eq(schema.flowGates.status, "pending")))
-      .returning({ id: schema.flowGates.id });
-    if (decided.length === 0) throw new GateError("this approval was already resolved");
-
-    // Quorum over the sibling rows of this gate node instance.
-    const siblings = (await db
-      .select({ id: schema.flowGates.id, status: schema.flowGates.status })
-      .from(schema.flowGates)
-      .where(
-        and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.groupKey, gate.groupKey)),
-      )) as SiblingGate[];
-    const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
-
-    if (outcome.cancelIds.length > 0) {
-      await db
+      const comment = args.comment?.trim() || null;
+      const decided = await db
         .update(schema.flowGates)
-        .set({ status: "cancelled", updatedAt: new Date() })
-        .where(
-          and(
-            inArray(schema.flowGates.id, outcome.cancelIds),
-            eq(schema.flowGates.orgId, gate.orgId),
-            inArray(schema.flowGates.status, ["pending", "escalated"]),
-          ),
-        );
-    }
-
-    // Durable decision evidence, part of the same atomic unit: the flip above
-    // releases or returns a financial document, so who decided it, from what
-    // state, with what rationale (and on whose behalf for delegates) must
-    // commit with the flip — an audit failure rolls the decision back, and a
-    // later resume failure rolls the evidence back with it.
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
-        event: decision,
-        actor: { kind: "user", userId },
-        ...(onBehalfOf ? { onBehalfOfUserId: onBehalfOf.id } : {}),
-        before: { status: "pending" },
-        after: {
+        .set({
           status: decision,
+          decidedBy: userId,
+          decidedAt: new Date(),
           comment,
-          signatureProvided: decision === "approved" ? signature !== null : false,
-        },
-        ...(comment ? { reason: comment } : {}),
-        runId: gate.runId,
-        flowId: gate.flowId,
-        subjectKind: gate.subjectKind,
-        subjectId: gate.subjectId,
-        cancelledGateIds: outcome.cancelIds,
-      })}::jsonb, ${userId})
-    `)
+          // Attestation stored with the decision (only meaningful on approve).
+          signature: decision === "approved" ? signature : null,
+          // Structured provenance: whose gate this was, when a delegate decided it.
+          onBehalfOfUserId: onBehalfOf?.id ?? null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, pre.orgId), eq(schema.flowGates.status, "pending")))
+        .returning({ id: schema.flowGates.id });
+      if (decided.length === 0) throw new GateError("this approval was already resolved");
 
-    if (!outcome.resume) {
-      // 'all' quorum still collecting approvals — the run keeps waiting.
-      return { ok: true, resumed: null, runStatus: "waiting" };
-    }
+      // Quorum over the sibling rows of this gate node instance.
+      const siblings = (await db
+        .select({ id: schema.flowGates.id, status: schema.flowGates.status })
+        .from(schema.flowGates)
+        .where(
+          and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.groupKey, gate.groupKey)),
+        )) as SiblingGate[];
+      const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
 
-    // --- Resume the decided branch on the SAME run -------------------------
-    const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
-    const adapter = getFlowAdapter(gate.subjectKind);
-    if (!flow || !adapter) {
-      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow definition or subject adapter is unavailable");
-      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
-    }
-    const graph = parseFlowGraph(flow.id, flow.graph);
-    if (!graph) {
-      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow graph failed validation");
-      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
-    }
-
-    const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
-    const subject = await adapter.loadContext(gate.subjectId);
-
-    // The quorum is resolved — tell the requester what happened to their record
-    // (best-effort: a notification hiccup must never fail the decision).
-    try {
-      await notifySubmitterOfDecision({
-        gate,
-        adapter,
-        subject,
-        branch: outcome.resume,
-        deciderUserId: userId,
-        reason: args.comment?.trim() || null,
-      });
-    } catch (e) {
-      console.error(`[flows] gate ${gateId} submitter notification failed:`, e);
-    }
-
-    // Release a fully-approved aggregate before executing its approve branch.
-    // This makes an authored post_document action consume an APPROVED record;
-    // the action can never use its flow context to bypass lifecycle controls.
-    let releasedBeforeActions = false;
-    if (
-      subject &&
-      outcome.resume === "approve" &&
-      adapter.releaseApproval &&
-      (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
-    ) {
-      try {
-        await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
-          comment: args.comment?.trim() || null,
-        });
-        releasedBeforeActions = true;
-      } catch (e) {
-        await finalizeRunStatus(
-          gate.runId,
-          gate.orgId,
-          true,
-          e instanceof Error ? e.message : String(e),
-        );
-        return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+      if (outcome.cancelIds.length > 0) {
+        await db
+          .update(schema.flowGates)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(
+            and(
+              inArray(schema.flowGates.id, outcome.cancelIds),
+              eq(schema.flowGates.orgId, gate.orgId),
+              inArray(schema.flowGates.status, ["pending", "escalated"]),
+            ),
+          );
       }
-    }
 
-    let hadFailure = false;
-    let error: string | null = null;
-    if (!subject) {
-      hadFailure = true;
-      error = "subject record no longer exists";
-    } else {
-      const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
-      const plan = planFromGate(graph, gate.nodeId, outcome.resume, evalCtx);
-      if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
-        const res = await executeFlowPlan(ctx, adapter, {
-          flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph: flow.graph },
+      // Durable decision evidence, part of the same atomic unit: the flip above
+      // releases or returns a financial document, so who decided it, from what
+      // state, with what rationale (and on whose behalf for delegates) must
+      // commit with the flip — an audit failure rolls the decision back, and a
+      // later resume failure rolls the evidence back with it.
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
+          event: decision,
+          actor: { kind: "user", userId },
+          ...(onBehalfOf ? { onBehalfOfUserId: onBehalfOf.id } : {}),
+          before: { status: "pending" },
+          after: {
+            status: decision,
+            comment,
+            signatureProvided: decision === "approved" ? signature !== null : false,
+          },
+          ...(comment ? { reason: comment } : {}),
           runId: gate.runId,
+          flowId: gate.flowId,
+          subjectKind: gate.subjectKind,
           subjectId: gate.subjectId,
-          plan,
-          evalCtx,
-          submitterUserId: subject.submitterUserId,
+          cancelledGateIds: outcome.cancelIds,
+        })}::jsonb, ${userId})
+      `)
+
+      if (!outcome.resume) {
+        // 'all' quorum still collecting approvals — the run keeps waiting.
+        return { ok: true, resumed: null, runStatus: "waiting" };
+      }
+
+      // --- Resume the decided branch on the SAME run -------------------------
+      const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
+      const adapter = getFlowAdapter(gate.subjectKind);
+      if (!flow || !adapter) {
+        throw new DecisionFailedError({
+          decision,
+          stage: "resume",
+          cause: "flow definition or subject adapter is unavailable",
         });
-        hadFailure = res.failed.length > 0;
-        error = hadFailure ? res.failed.join("; ") : null;
       }
-    }
+      const graph = parseFlowGraph(flow.id, flow.graph);
+      if (!graph) {
+        throw new DecisionFailedError({
+          decision,
+          stage: "resume",
+          cause: "flow graph failed validation",
+        });
+      }
 
-    // --- Engine-enforced release (deterministic, not author-dependent) -----
-    // The document leaves pending_approval because the ENGINE reconciles the
-    // subject's aggregate gate state — never because an author happened to wire
-    // a change_status node. Reject returns to draft and cancels every other
-    // open gate for the subject; approve releases only once no gate remains
-    // open across ALL runs (multi-step and multi-flow safe).
-    if (!hadFailure && adapter.releaseApproval) {
+      const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
+      const subject = await adapter.loadContext(gate.subjectId);
+
+      // The quorum is resolved — tell the requester what happened to their record
+      // (best-effort: a notification hiccup must never fail the decision).
       try {
-        if (outcome.resume === "reject") {
-          await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
-          await adapter.releaseApproval(gate.subjectId, "rejected", ctx, {
-            comment: args.comment?.trim() || null,
-          });
-        } else if (
-          !releasedBeforeActions &&
-          (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
-        ) {
-          await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
-            comment: args.comment?.trim() || null,
-          });
-        }
+        await notifySubmitterOfDecision({
+          gate,
+          adapter,
+          subject,
+          branch: outcome.resume,
+          deciderUserId: userId,
+          reason: args.comment?.trim() || null,
+        });
       } catch (e) {
-        hadFailure = true;
-        error = e instanceof Error ? e.message : String(e);
+        console.error(`[flows] gate ${gateId} submitter notification failed:`, e);
       }
-    }
 
-    await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
-    const runStatus = hadFailure
-      ? "failed"
-      : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
-          ?.status as "waiting" | "completed" | "failed") ?? "completed";
-    return { ok: true, resumed: outcome.resume, runStatus };
+      // Release a fully-approved aggregate before executing its approve branch.
+      // This makes an authored post_document action consume an APPROVED record;
+      // the action can never use its flow context to bypass lifecycle controls.
+      //
+      // A release throw rolls back to the whole-decision savepoint above: the
+      // gate flip, audit evidence, notifications, and any partial adapter
+      // writes are removed before the error propagates (a write-before-throw
+      // adapter leaves nothing committed — even when an outer caller catches
+      // and commits), the gate stays pending, and the caller gets a
+      // ReleaseError stating the decision was NOT recorded. Retrying the
+      // failed RUN would be wrong here — its gate checkpoint is already
+      // stamped, so a re-drive would skip release and complete vacuously —
+      // the truthful remedy is retrying the DECISION.
+      const release = adapter.releaseApproval;
+      let releasedBeforeActions = false;
+      if (
+        subject &&
+        outcome.resume === "approve" &&
+        release &&
+        (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+      ) {
+        try {
+          await release(gate.subjectId, "approved", ctx, {
+            comment: args.comment?.trim() || null,
+          });
+          releasedBeforeActions = true;
+        } catch (e) {
+          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
+        }
+      }
+
+      let hadFailure = false;
+      let error: string | null = null;
+      if (!subject) {
+        hadFailure = true;
+        error = "subject record no longer exists";
+      } else {
+        const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
+        const plan = planFromGate(graph, gate.nodeId, outcome.resume, evalCtx);
+        if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
+          const res = await executeFlowPlan(ctx, adapter, {
+            flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph: flow.graph },
+            runId: gate.runId,
+            subjectId: gate.subjectId,
+            plan,
+            evalCtx,
+            submitterUserId: subject.submitterUserId,
+          });
+          hadFailure = res.failed.length > 0;
+          error = hadFailure ? res.failed.join("; ") : null;
+        }
+      }
+
+      // --- Engine-enforced release (deterministic, not author-dependent) -----
+      // The document leaves pending_approval because the ENGINE reconciles the
+      // subject's aggregate gate state — never because an author happened to wire
+      // a change_status node. Reject returns to draft and cancels every other
+      // open gate for the subject; approve releases only once no gate remains
+      // open across ALL runs (multi-step and multi-flow safe).
+      // --- Engine-enforced release (deterministic, not author-dependent) -----
+      // (see the block comment above for the lifecycle rules). Like the
+      // pre-action release, a throw here rolls back to the whole-decision
+      // savepoint above: the whole decision —
+      // including already-executed branch effects, whose checkpoints roll back
+      // so a retried decision re-fires them exactly once — is undone, the gate
+      // stays pending, and the caller gets a ReleaseError. It is deliberately
+      // NOT converted to hadFailure: committing a failed release is what
+      // stranded subjects with a success result.
+      if (!hadFailure && release) {
+        try {
+          if (outcome.resume === "reject") {
+            await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
+            await release(gate.subjectId, "rejected", ctx, {
+              comment: args.comment?.trim() || null,
+            });
+          } else if (
+            !releasedBeforeActions &&
+            (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+          ) {
+            await release(gate.subjectId, "approved", ctx, {
+              comment: args.comment?.trim() || null,
+            });
+          }
+        } catch (e) {
+          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
+        }
+      }
+
+      // A branch failure (missing subject, failed action) rolls the whole
+      // decide unit back like a release failure: the savepoint removes the
+      // flip, the audit, the notifications, and every effect the branch ran
+      // before failing — including a pre-action release that already landed.
+      // Retry-the-RUN cannot heal this (the gate checkpoint is stamped, so a
+      // re-drive skips the branch and completes vacuously); the caller gets
+      // DecisionFailedError and retries the DECISION, which re-runs the full
+      // branch on the still-pending gate.
+      if (hadFailure) {
+        throw new DecisionFailedError({
+          decision,
+          stage: "branch",
+          cause: error ?? "gate branch failed",
+        });
+      }
+      await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
+      const runStatus =
+        ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
+          ?.status as "waiting" | "completed") ?? "completed";
+      return { ok: true, resumed: outcome.resume, runStatus };
+    });
   });
 }
 
@@ -545,23 +631,30 @@ async function notifySubmitterOfDecision(args: {
   });
 
   try {
-    const [{ enqueueEmail }, { flowNotificationEmail }] = await Promise.all([
-      import("@openbooks/jobs"),
-      import("@openbooks/emails"),
-    ]);
+    const { enqueueFlowEmail } = await import("../scheduler-outbox.ts");
+    const { flowNotificationEmail } = await import("@openbooks/emails");
     const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, gate.orgId));
     const mail = flowNotificationEmail({
       orgName: org?.name ?? "OpenBooks",
       subject: title,
       body: reasonLine ? `${title}\n\n${reasonLine}` : title,
     });
-    await enqueueEmail({
+    // Deferred through the durable outbox, NOT direct-to-Redis: the row rides
+    // this decide transaction, so a rolled-back decision (release failure)
+    // sends nothing — the submitter can never receive an "approved" email for
+    // a decision that was never recorded. The occurrence key is bound to the
+    // gate row, so a retried decision collapses onto one send.
+    await enqueueFlowEmail({
       orgId: gate.orgId,
-      to: submitter.email,
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      meta: { category: "approvals" },
+      runId: gate.runId,
+      occurrenceKey: `${gate.runId}:decision-notify:${gate.id}`,
+      payload: {
+        to: [submitter.email],
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        meta: { category: "approvals" },
+      },
     });
   } catch (e) {
     // In-app row already landed; a down queue only costs the email copy.

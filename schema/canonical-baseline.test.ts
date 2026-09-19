@@ -369,6 +369,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0181_payroll_holiday_eligibility.sql",
     "0182_pay_run_calculation_errors.sql",
     "0183_payroll_statutory_rate_history.sql",
+    "0184_hrm_employment_foundation.sql",
+    "0185_hrm_employment_change_requests.sql",
     "0187_pay_component_treatment_shape.sql",
   ]);
   assert.deepEqual(
@@ -1781,6 +1783,12 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "allocations.run",
     "allocations.approve",
     "feedback.use",
+    // HRM employment foundation: read sees records, manage authors
+    // changes, approve holds approval authority (separation of duties is
+    // enforced separately over the service-loaded request).
+    "hrm.employment.read",
+    "hrm.employment.manage",
+    "hrm.employment.approve",
   ];
   assert.deepEqual(
     snapshot,

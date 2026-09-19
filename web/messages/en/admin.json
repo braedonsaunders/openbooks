@@ -777,10 +777,12 @@
     "emptyFilterDescription": "Try a different status filter.",
     "table": {
       "roles": "Roles",
-      "lastSignIn": "Last sign-in"
+      "lastSignIn": "Last sign-in",
+      "linkedPerson": "Linked person"
     },
     "you": "you",
     "unassignedRole": "no role assigned",
+    "unlinkedPerson": "Not linked",
     "statusActive": "active",
     "statusInactive": "inactive",
     "requestFailed": "Request failed",
@@ -810,7 +812,24 @@
     "inviteCopyLink": "Copy link",
     "inviteCopied": "Link copied",
     "inviteCopyFailed": "Could not copy the link — select it manually",
-    "inviteTooManyAttempts": "Too many invites — try again later"
+    "inviteTooManyAttempts": "Too many invites — try again later",
+    "linkPersonButton": "Link person",
+    "linkChangePerson": "Change person",
+    "linkPersonTitle": "Link person for {name}",
+    "linkPersonDescription": "Link this login to one native person. External people are eligible without an employee role. Party kind is not proof of human identity — check the kind and role signals, then attest explicitly. No employee, hire, or status is created or inferred.",
+    "linkPersonLabel": "Person",
+    "linkPersonPlaceholder": "Select a person…",
+    "linkPersonSearchPlaceholder": "Search people…",
+    "linkPersonSignalsNote": "Only active people are offered. Signals show kind and canonical roles (vendor, customer, employee) for evidence — they never prove human identity on their own.",
+    "linkReasonLabel": "Reason",
+    "linkReasonPlaceholder": "Why is this the correct person for this login?",
+    "linkReasonRequired": "Enter a reason for this change",
+    "linkAttestationLabel": "I attest this native party is the correct human identity for this login.",
+    "linkAttestationRequired": "Explicit attestation is required",
+    "linkSave": "Save link",
+    "linkSaved": "Linked person saved",
+    "linkSelfRefused": "You cannot change your own linked person — another administrator must perform it.",
+    "linkStale": "The linked person changed — close, refresh, and try again."
   },
   "permissions": {
     "groups": {
@@ -826,6 +845,7 @@
       "projects": "Projects & job costing",
       "time": "Time & timesheets",
       "payroll": "Payroll",
+      "hrm": "Human resources",
       "records": "Custom records",
       "assistant": "AI assistant",
       "sql": "Query workbench",
@@ -885,6 +905,9 @@
     "payroll_read": "View pay runs and stubs",
     "payroll_manage": "Configure payroll and employee profiles",
     "payroll_run": "Create, calculate, and commit pay runs",
+    "hrm_employment_read": "View employment records",
+    "hrm_employment_manage": "Author employment changes",
+    "hrm_employment_approve": "Decide employment changes",
     "records_read": "View custom records",
     "records_create": "Create and edit custom records",
     "records_manage_types": "Design custom record types",

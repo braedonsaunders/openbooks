@@ -70,7 +70,10 @@ export async function POST(req: Request) {
       if (gate.status !== 'pending') throw new Error('this approval was already resolved')
       // decideGate is the single authority (assignee / admin / delegate).
       // The caller's scope rides along so the engine re-checks the boundary
-      // at its own write authority.
+      // at its own write authority. A thrown decision failure (any post-flip
+      // stage rolls back; nothing recorded) lands per item below — one
+      // failure never aborts the rest, but it must never be reported as an
+      // approval either.
       await decideGate({
         gateId: item.gateId,
         decision,

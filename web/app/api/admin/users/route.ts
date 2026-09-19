@@ -17,14 +17,18 @@ import { isUuid } from "../../../../lib/list-params";
 export const runtime = "nodejs";
 
 /**
- * Admin user management: assign/unassign roles, toggle active, invite users
- * and re-issue pending invite links.
+ * Admin user management: assign/unassign roles, toggle active, invite users,
+ * re-issue pending invite links, and link/unlink a native person (users.party_id).
  * Gated by admin.users.manage; every mutation is org-scoped and audited.
  *
  * Privilege ceiling: admin.users.manage is an ordinary permission, so an
  * administrator may only grant a role whose permissions sit inside their own
  * effective set, and never to themselves. Super admins are exempt — they
  * already hold everything. Otherwise this route is a one-call escalation.
+ *
+ * Separation of duties for identity links: changing a user's linked person
+ * (link, unlink, or change) is refused for your own user id, even as
+ * superadmin — another authorized administrator must perform and evidence it.
  */
 
 async function audit(
@@ -52,11 +56,15 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
-    action?: "assign" | "unassign" | "set-active" | "invite" | "resend-invite";
+    action?: "assign" | "unassign" | "set-active" | "set-party" | "invite" | "resend-invite";
     userId?: string;
     roleId?: string;
     isActive?: boolean;
     email?: string;
+    partyId?: string | null;
+    expectedPartyId?: string | null;
+    reason?: string;
+    attestation?: boolean;
   };
   if (body.action !== "invite") {
     if (typeof body.userId !== "string" || !isUuid(body.userId)) {
@@ -232,6 +240,159 @@ export async function POST(req: Request) {
           });
         }
         return NextResponse.json({ ok: true });
+      }));
+    }
+    case "set-party": {
+      // Audited native link between a login user and a person party.
+      // Separation of duties: your own link is refused even as superadmin —
+      // another authorized administrator must perform and evidence it. The
+      // same-user check applies to unlink (null party) as well.
+      if (userId === actor.id.toLowerCase()) {
+        return NextResponse.json(
+          { error: "you cannot change your own linked person — another administrator must perform it" },
+          { status: 403 },
+        );
+      }
+      if (!("partyId" in body)) {
+        return NextResponse.json({ error: "partyId required" }, { status: 400 });
+      }
+      let partyId: string | null;
+      if (body.partyId === null) {
+        partyId = null;
+      } else if (typeof body.partyId === "string" && isUuid(body.partyId)) {
+        partyId = body.partyId.toLowerCase();
+      } else {
+        return NextResponse.json({ error: "partyId must be a uuid or null" }, { status: 400 });
+      }
+      // expectedPartyId is the optimistic-concurrency token, null included:
+      // the caller must name the link it saw, including "saw unlinked".
+      if (!("expectedPartyId" in body)) {
+        return NextResponse.json({ error: "expectedPartyId required" }, { status: 400 });
+      }
+      let expected: string | null;
+      if (body.expectedPartyId === null) {
+        expected = null;
+      } else if (typeof body.expectedPartyId === "string" && isUuid(body.expectedPartyId)) {
+        expected = body.expectedPartyId.toLowerCase();
+      } else {
+        return NextResponse.json({ error: "expectedPartyId must be a uuid or null" }, { status: 400 });
+      }
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (!reason) {
+        return NextResponse.json({ error: "reason required" }, { status: 400 });
+      }
+      if (reason.length > 500) {
+        return NextResponse.json({ error: "reason too long" }, { status: 400 });
+      }
+      // Explicit administrator attestation that the selected native party is
+      // the correct human identity for this login user. parties.kind is not
+      // proof (drafts are kind=company even with an employee role), and the
+      // service never infers employment, hire, or status from kind or flags.
+      if (body.attestation !== true) {
+        return NextResponse.json({ error: "attestation required" }, { status: 400 });
+      }
+      return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        // Serialize link decisions on the target user row.
+        const currentRows = await db.execute<{ id: string; party_id: string | null }>(sql`
+          select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
+        const currentRow = currentRows.rows[0];
+        // Wrong-org and missing users share one message so callers cannot
+        // probe which orgs hold which user ids.
+        if (!currentRow) return NextResponse.json({ error: "user not found" }, { status: 404 });
+        const current: string | null = currentRow.party_id
+          ? String(currentRow.party_id).toLowerCase()
+          : null;
+        if (current !== expected) {
+          return NextResponse.json(
+            { error: "stale link: the user's linked person changed — refresh and try again" },
+            { status: 409 },
+          );
+        }
+        // Idempotent retry: already at the requested link, no audit.
+        if (current === partyId) return NextResponse.json({ ok: true, userId, partyId: current });
+        let partySignals: { id: string; kind: string; displayName: string; roles: string[] } | null = null;
+        if (partyId !== null) {
+          // Native party only: same-org, active, non-merged. No kind/role
+          // inference, no automatic employee creation, no hire/status
+          // changes. Wrong-org and missing parties share one message so
+          // callers cannot probe which orgs hold which party ids. Inactive
+          // parties (including inactive drafts/duplicates) fail as 422: the
+          // row exists in this org but is not linkable. There is no separate
+          // merged column on main — inactive covers drafts and merged-away
+          // duplicates.
+          const party = await db.execute<{
+            id: string;
+            kind: string;
+            display_name: string;
+            is_active: boolean;
+          }>(sql`
+            select id, kind, display_name, is_active from parties
+             where id = ${partyId} and org_id = ${actor.orgId}`);
+          const found = party.rows[0];
+          if (!found) return NextResponse.json({ error: "party not found" }, { status: 404 });
+          if (!found.is_active) {
+            return NextResponse.json({ error: "party is not active" }, { status: 422 });
+          }
+          // Kind/role signals for audit evidence only — never proof of human
+          // identity. Role membership comes exclusively from the canonical
+          // role tables, matching the forms parties picker.
+          const rolesR = await db.execute<{ role: string }>(sql`
+            select 'vendor' as role from vendor_roles
+             where org_id = ${actor.orgId} and party_id = ${partyId} and is_active
+            union all
+            select 'customer' as role from customer_roles
+             where org_id = ${actor.orgId} and party_id = ${partyId} and is_active
+            union all
+            select 'employee' as role from employee_roles
+             where org_id = ${actor.orgId} and party_id = ${partyId} and is_active`);
+          partySignals = {
+            id: partyId,
+            kind: found.kind,
+            displayName: found.display_name,
+            roles: rolesR.rows.map((r) => r.role).sort(),
+          };
+        }
+        // Precise affected-row count with the concurrency predicate: under a
+        // race only one writer's predicate still holds, the loser sees zero
+        // rows and reports 409 instead of silently winning.
+        const updated = expected === null
+          ? await db.execute<{ id: string }>(sql`
+              update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
+               where id = ${userId} and org_id = ${actor.orgId} and party_id is null
+              returning id`)
+          : await db.execute<{ id: string }>(sql`
+              update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
+               where id = ${userId} and org_id = ${actor.orgId} and party_id = ${expected}
+              returning id`);
+        if (!updated.rows[0]) {
+          return NextResponse.json(
+            { error: "stale link: the user's linked person changed — refresh and try again" },
+            { status: 409 },
+          );
+        }
+        const event = partyId === null
+          ? "user-party-unlinked"
+          : current === null
+            ? "user-party-linked"
+            : "user-party-changed";
+        await audit(db, {
+          orgId: actor.orgId,
+          tableName: "users",
+          rowId: userId,
+          action: "update",
+          changes: {
+            event,
+            actor: { kind: "user", userId: actor.id },
+            actedAt: new Date().toISOString(),
+            before: { party_id: current },
+            after: { party_id: partyId },
+            reason,
+            attestation: true,
+            party: partySignals,
+          },
+          actorId: actor.id,
+        });
+        return NextResponse.json({ ok: true, userId, partyId });
       }));
     }
     case "invite": {
@@ -431,4 +592,111 @@ export async function POST(req: Request) {
     default:
       return NextResponse.json({ error: "unknown action" }, { status: 400 });
   }
+}
+
+/**
+ * Scoped native person search for the Admin Users link drawer.
+ * Org-scoped, gated by admin.users.manage; per-query bounded page (not a
+ * fixed first-N roster) so people beyond the first page stay selectable via
+ * search. Options are active parties only (inactive fail closed at link
+ * time); `include` preserves the currently selected option across queries
+ * even when it leaves the page or becomes inactive. Cross-org and missing
+ * ids share one null selected so callers cannot probe other orgs.
+ */
+export async function GET(req: Request) {
+  const gate = await guardPermission("admin.users.manage");
+  if (gate instanceof NextResponse) return gate;
+  const orgId = gate.user.orgId;
+
+  const url = new URL(req.url);
+  const rawQ = (url.searchParams.get("q") ?? "").trim();
+  if (rawQ.length > 200) {
+    return NextResponse.json({ error: "q too long" }, { status: 400 });
+  }
+  const rawLimit = Number(url.searchParams.get("limit") ?? "25");
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(5, Math.min(50, Math.trunc(rawLimit)))
+    : 25;
+  const rawInclude = url.searchParams.get("include");
+  let include: string | null = null;
+  if (rawInclude !== null && rawInclude !== "") {
+    if (!isUuid(rawInclude)) {
+      return NextResponse.json({ error: "include must be a uuid" }, { status: 400 });
+    }
+    include = rawInclude.toLowerCase();
+  }
+
+  const like = `%${rawQ}%`;
+  const optionsR = await db.execute<{
+    id: string;
+    display_name: string;
+    kind: string;
+    roles: string[] | null;
+  }>(sql`
+    select p.id::text as id, p.display_name, p.kind,
+           coalesce(array_remove(array_agg(distinct r.role), null), '{}') as roles
+      from parties p
+      left join (
+        select party_id, 'vendor' as role from vendor_roles where org_id = ${orgId} and is_active
+        union all
+        select party_id, 'customer' as role from customer_roles where org_id = ${orgId} and is_active
+        union all
+        select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active
+      ) r on r.party_id = p.id
+     where p.org_id = ${orgId} and p.is_active
+       and (${rawQ} = '' or p.display_name ilike ${like} or coalesce(p.email, '') ilike ${like})
+     group by p.id, p.display_name, p.kind
+     order by p.display_name
+     limit ${limit}`);
+
+  type PersonOption = {
+    value: string;
+    label: string;
+    hint?: string;
+    kind: string;
+    roles: string[];
+    isActive: boolean;
+  };
+  const toOption = (row: { id: string; display_name: string; kind: string; roles: string[] | null }, isActive: boolean): PersonOption => {
+    const roles = Array.isArray(row.roles) ? [...row.roles].sort() : [];
+    const hint = roles.length > 0 ? `${row.kind} · ${roles.join(", ")}` : row.kind;
+    return {
+      value: String(row.id).toLowerCase(),
+      label: row.display_name,
+      hint,
+      kind: row.kind,
+      roles,
+      isActive,
+    };
+  };
+  const options: PersonOption[] = optionsR.rows.map((r) => toOption(r, true));
+
+  let selected: PersonOption | null = null;
+  if (include !== null && !options.some((o) => o.value === include)) {
+    const selR = await db.execute<{
+      id: string;
+      display_name: string;
+      kind: string;
+      is_active: boolean;
+      roles: string[] | null;
+    }>(sql`
+      select p.id::text as id, p.display_name, p.kind, p.is_active,
+             coalesce(array_remove(array_agg(distinct r.role), null), '{}') as roles
+        from parties p
+        left join (
+          select party_id, 'vendor' as role from vendor_roles where org_id = ${orgId} and is_active
+          union all
+          select party_id, 'customer' as role from customer_roles where org_id = ${orgId} and is_active
+          union all
+          select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active
+        ) r on r.party_id = p.id
+       where p.org_id = ${orgId} and p.id = ${include}
+       group by p.id, p.display_name, p.kind, p.is_active`);
+    const found = selR.rows[0];
+    if (found) selected = toOption(found, found.is_active);
+  } else if (include !== null) {
+    selected = options.find((o) => o.value === include) ?? null;
+  }
+
+  return NextResponse.json({ options, selected });
 }

@@ -19,6 +19,8 @@ interface RouteState {
   } | null;
   scopeChecks: Array<string | null>;
   decisions: Array<Record<string, unknown>>;
+  decideThrow: string | null;
+  decideResult: { ok: true; resumed: string; runStatus: string };
 }
 
 const stateKey = Symbol.for("openbooks.flow-decide-route-test");
@@ -46,6 +48,8 @@ const routeState: RouteState = {
   },
   scopeChecks: [],
   decisions: [],
+  decideThrow: null,
+  decideResult: { ok: true, resumed: 'approve', runStatus: 'completed' },
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -90,7 +94,8 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.flow-decide-route-test')]
       export async function decideGate(args) {
         state.decisions.push(args)
-        return { ok: true, resumed: 'approve', runStatus: 'completed' }
+        if (state.decideThrow) throw new Error(state.decideThrow)
+        return state.decideResult
       }
     `,
   ],
@@ -143,6 +148,8 @@ const GATE_ID = "00000000-0000-4000-8000-000000000012";
 const SUBJECT_SUBSIDIARY = "00000000-0000-4000-8000-000000000013";
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
+  routeState.decideThrow = null;
+  routeState.decideResult = { ok: true, resumed: 'approve', runStatus: 'completed' };
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.gate = {
     id: GATE_ID,
@@ -201,5 +208,16 @@ if (isVitest) {
         signature: undefined,
       },
     ]);
+  });
+
+  test("an engine throw delegates to the shared error mapping, never a 200", async () => {
+    reset(new Set([SUBJECT_SUBSIDIARY]));
+    const cause = "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
+    routeState.decideThrow = cause;
+
+    const response = await postRoute!(request());
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: `Error: ${cause}` });
   });
 }
