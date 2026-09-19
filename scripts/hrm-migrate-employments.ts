@@ -11,10 +11,12 @@
  * transaction and any refusal rolls the whole org back, unless
  * --allow-partial accepts the ready subset with the rest listed.
  *
- * Production interlock: when NODE_ENV=production, --apply additionally
- * requires --allow-production AND --dry-run-hash=<sha256> matching the
- * dry-run report hash computed in this same run, so the exact evaluated
- * report the operator reviewed is what gets applied.
+ * Production interlock (fail closed): --apply proceeds without controls
+ * ONLY when NODE_ENV is explicitly development/test AND the target database
+ * carries the ephemeral marker; anything else requires --allow-production
+ * AND --dry-run-hash=<sha256> matching the dry-run report hash computed in
+ * this same run, so the exact evaluated report the operator reviewed is
+ * what gets applied.
  *
  * Exit code is non-zero when any person was not ready (already_migrated is
  * settled and never blocks) unless --allow-partial is given; an empty
@@ -22,7 +24,8 @@
  */
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { pool } from "../engine/src/db.ts";
+import { sql } from "drizzle-orm";
+import { db, pool } from "../engine/src/db.ts";
 import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
 import {
   EmploymentMigrationError,
@@ -50,6 +53,25 @@ function usage(): string {
 function fail(message: string): number {
   console.error(`hrm-migrate-employments: ${message}`);
   return 1;
+}
+
+/**
+ * Read the target database's marker comment (the same catalog read
+ * engine/src/test-fixtures.ts enforces). Read-only; used only as the
+ * interlock's second input, never as a write precondition bypass.
+ */
+async function readDatabaseMarker(): Promise<string | null> {
+  try {
+    const result = (await db.execute<{ marker: string | null }>(sql`
+      select shobj_description(oid, 'pg_database') as marker
+        from pg_database where datname = current_database()`)) as unknown as {
+      rows: Array<{ marker: string | null }>;
+    };
+    return result.rows[0]?.marker ?? null;
+  } catch {
+    // Fail closed: an unreadable marker never counts as ephemeral.
+    return null;
+  }
 }
 
 function printReport(report: EmploymentMigrationReport): void {
@@ -158,14 +180,20 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
     return migrationExitCode(planned);
   }
 
+  // The database is the authority, the environment only supplementary:
+  // read the target's marker before deciding. Unreadable or absent never
+  // counts as ephemeral (fail closed); the dry-run evaluate above already
+  // failed loudly on its own if the database was unreachable.
+  const databaseMarker = await readDatabaseMarker();
   const gate = decideProductionApply({
     nodeEnv: env.NODE_ENV,
+    databaseMarker,
     apply,
     allowProduction,
     dryRunHash,
     computedHash: planned.reportHash,
   });
-  if (!gate.proceed) return fail(gate.reason);
+  if (!gate.proceed) return fail(`[${gate.code}] ${gate.reason}`);
 
   try {
     const applied = await executeEmploymentMigration({ orgId, rows, allowPartial });
