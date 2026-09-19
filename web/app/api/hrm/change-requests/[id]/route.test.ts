@@ -30,25 +30,6 @@ const routeState: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      // Mirrors the real boundary: the schema decides, a refusal is a 400.
-      export async function parseJsonBody(request, schema) {
-        const raw = await request.json().catch(() => undefined)
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          return { ok: false, response: Response.json({ error: 'body must be a JSON object' }, { status: 400 }) }
-        }
-        if (schema && typeof schema.safeParse === 'function') {
-          const parsed = schema.safeParse(raw)
-          if (!parsed.success) return { ok: false, response: Response.json({ error: 'invalid body' }, { status: 400 }) }
-          return { ok: true, data: parsed.data }
-        }
-        return { ok: true, data: raw }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
@@ -124,7 +105,6 @@ const mockSources = new Map<string, string>([
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmIdRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
   ["../../../../../lib/list-params", "mock:list-params"],
@@ -142,6 +122,11 @@ let withdrawRoute: typeof import("./withdraw/route.ts") | undefined;
 if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
+      // The real JSON boundary is pure (Request + schema → value) and runs as-is;
+      // only its server-only marker needs a stand-in outside Next.
+      if (specifier === "server-only") {
+        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+      }
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
