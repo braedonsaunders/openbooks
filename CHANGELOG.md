@@ -6,6 +6,32 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.17] - 2026-09-19
+
+No migrations.
+
+### Fixed
+
+- Insight charts over a time bin render chronologically. A card that stores no
+  explicit sort fell through to the compiler's default, which ranks by the
+  first measure descending — so "Revenue by month" drew twelve months in
+  descending revenue order, a line that always slopes down. A binned temporal
+  dimension now orders by that dimension ascending; an unbinned dimension
+  still ranks by its measure.
+- Chart category labels name the period rather than the instant it begins on
+  (Sep 2026, Q3 2026), and survive the JSON round trip. The formatter tested
+  `instanceof Date`, but every card fetches over HTTP and parses with
+  `res.json()`, which delivers a string — so axes printed a raw
+  `2026-09-01T00:00:00.000Z`.
+
+### Payroll and tax
+
+- Thailand's 7% VAT band renewed for 2026-10-01..2027-09-30 (Revenue
+  Department release 18/2569, rate unchanged).
+- Canada and the United States become country packs like the other eight,
+  rather than object literals inside the registry. Behaviour-preserving: the
+  canonical dump of both packs is byte-identical across 10,241 lines.
+
 ## [0.1.0-alpha.16] - 2026-09-18
 
 Nine forward migrations (0171-0179). The swarm release script migrates
