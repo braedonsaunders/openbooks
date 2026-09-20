@@ -107,7 +107,7 @@ interface TapSummary {
   crashed: boolean;
 }
 
-function parseTap(output: string, exitCode: number | null): TapSummary {
+export function parseTap(output: string, exitCode: number | null): TapSummary {
   const pick = (label: string): number => {
     const m = output.match(new RegExp(`^# ${label} (\\d+)`, "m"));
     return m ? Number(m[1]) : 0;
@@ -116,7 +116,7 @@ function parseTap(output: string, exitCode: number | null): TapSummary {
     tests: pick("tests"),
     pass: pick("pass"),
     fail: pick("fail"),
-    skipped: pick("skip"),
+    skipped: pick("skipped"),
     crashed: false,
   };
   if (summary.fail === 0 && /^not ok /m.test(output)) {
