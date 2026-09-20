@@ -263,3 +263,27 @@ test('a malformed record id is refused as not found before any scope or disclosu
     assert.deepEqual(state.sendCalls, [], `"${bad}" never reaches delivery`)
   }
 })
+
+test('a well-formed template id is forwarded to delivery', async () => {
+  reset()
+  state.granted = new Set(['ar.read', 'ar.create'])
+  const templateId = '00000000-0000-4000-8000-00000000b001'
+
+  const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: templateId })
+
+  assert.equal(response.status, 200)
+  assert.equal(state.sendCalls.length, 1)
+  assert.equal((state.sendCalls[0] as Record<string, unknown>).templateId, templateId)
+})
+
+test('a malformed template id is refused exactly like a missing template, before delivery', async () => {
+  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
+    reset()
+    state.granted = new Set(['ar.read', 'ar.create'])
+
+    const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: bad })
+    assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
+    assert.deepEqual(await response.json(), { error: 'template not found' })
+    assert.deepEqual(state.sendCalls, [], `"${bad}" must never reach resolvePdfTemplate or delivery`)
+  }
+})

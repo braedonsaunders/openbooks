@@ -5,17 +5,42 @@ import test from 'node:test'
 // Route boundary suite for the record PDF print endpoint: the REAL handler runs
 // against scripted gates and spied loaders. It pins that a malformed record id
 // is answered exactly like a missing record (404, same body) before any scope
-// resolution or record load, so an unvalidated id can never reach a uuid
-// column and surface as a 500.
+// resolution or record load, and that a malformed template query is answered
+// exactly like a missing template before resolvePdfTemplate, so an unvalidated
+// id can never reach a uuid column and surface as a 500.
 
 const stateKey = Symbol.for('openbooks.record-pdf-print-route-test')
 interface PrintRouteState {
   granted: Set<string>
   scopeCalls: string[]
   valueCalls: string[]
+  templateCalls: Array<string | null>
+  templateResult: {
+    compiledHtml: string
+    paperSize: string
+    orientation: string
+    marginMm: number
+    headerHtml: null
+    footerHtml: null
+  } | null
   renderCalls: number
 }
-const state: PrintRouteState = { granted: new Set(), scopeCalls: [], valueCalls: [], renderCalls: 0 }
+const defaultTemplate = {
+  compiledHtml: '<p/>',
+  paperSize: 'letter',
+  orientation: 'portrait',
+  marginMm: 14,
+  headerHtml: null,
+  footerHtml: null,
+}
+const state: PrintRouteState = {
+  granted: new Set(),
+  scopeCalls: [],
+  valueCalls: [],
+  templateCalls: [],
+  templateResult: defaultTemplate,
+  renderCalls: 0,
+}
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -48,7 +73,16 @@ const mockSources = new Map<string, string>([
       export async function mergeAndPrintPdf() { state.renderCalls += 1; return Buffer.from('%PDF-1.4 test') }
     `,
   ],
-  ['store', `export async function resolvePdfTemplate() { return { compiledHtml: '<p/>', paperSize: 'letter', orientation: 'portrait', marginMm: 14, headerHtml: null, footerHtml: null } }`],
+  [
+    'store',
+    `
+      const state = globalThis[Symbol.for('openbooks.record-pdf-print-route-test')]
+      export async function resolvePdfTemplate(_orgId, _recordType, templateId) {
+        state.templateCalls.push(templateId ?? null)
+        return state.templateResult
+      }
+    `,
+  ],
   [
     'values',
     `
@@ -113,11 +147,15 @@ function reset(): void {
   state.granted = new Set(['ar.read'])
   state.scopeCalls = []
   state.valueCalls = []
+  state.templateCalls = []
+  state.templateResult = defaultTemplate
   state.renderCalls = 0
 }
 
-function get(id: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(id)}`), {
+function get(id: string, query: Record<string, string> = {}): Promise<Response> {
+  const url = new URL(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(id)}`)
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+  return GET(new Request(url), {
     params: Promise.resolve({ recordType: 'customer_invoice', id }),
   })
 }
@@ -137,6 +175,30 @@ test('a malformed id is refused exactly like a missing record, before scope or r
     assert.deepEqual(await response.json(), { error: 'record not found' })
     assert.deepEqual(state.scopeCalls, [], `"${bad}" never reaches the subsidiary lookup`)
     assert.deepEqual(state.valueCalls, [], `"${bad}" never reaches the record loader`)
+    assert.equal(state.renderCalls, 0)
+  }
+})
+
+test('a well-formed unknown template id is a 404 template not found after the store lookup', async () => {
+  reset()
+  state.templateResult = null
+  const recordId = '00000000-0000-4000-8000-00000000a001'
+  const templateId = '00000000-0000-4000-8000-00000000b001'
+  const response = await get(recordId, { template: templateId })
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: 'template not found' })
+  assert.deepEqual(state.templateCalls, [templateId])
+  assert.equal(state.renderCalls, 0)
+})
+
+test('a malformed template id is refused exactly like a missing template, before the store', async () => {
+  const recordId = '00000000-0000-4000-8000-00000000a001'
+  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
+    reset()
+    const response = await get(recordId, { template: bad })
+    assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
+    assert.deepEqual(await response.json(), { error: 'template not found' })
+    assert.deepEqual(state.templateCalls, [], `"${bad}" must never be bound to pdf_templates.id`)
     assert.equal(state.renderCalls, 0)
   }
 })
