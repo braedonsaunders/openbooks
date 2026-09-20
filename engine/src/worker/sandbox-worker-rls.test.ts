@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { evaluateCloneRlsProof } from "../sandbox/verify-rls.ts";
-import { requireFoundSandbox } from "../sandbox/lifecycle.ts";
+import {
+  REFRESH_CLONE_PROOF_PREFIX,
+  refuseUnprovenRefreshReady,
+  refreshReadyMatchesProvenClone,
+  requireFoundSandbox,
+} from "../sandbox/lifecycle.ts";
 
 const source = readFileSync(
   new URL("./sandbox-worker.ts", import.meta.url),
@@ -261,6 +266,73 @@ test("createSandbox re-verifies RLS against the clone it just created", () => {
 test("create and refresh do not mark the sandbox ready until clone RLS proof succeeds", () => {
   assertProofBeforeReady("createSandbox", createSandboxSource());
   assertProofBeforeReady("refreshSandbox", refreshSandboxSource());
+});
+
+test("refresh ready write refuses a clone this request did not just prove", () => {
+  const sandboxId = "44444444-4444-4444-8444-444444444444";
+  const ours = `${REFRESH_CLONE_PROOF_PREFIX}aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+  const theirs = `${REFRESH_CLONE_PROOF_PREFIX}bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`;
+
+  assert.equal(
+    refreshReadyMatchesProvenClone(
+      { status: "refreshing", lastError: ours },
+      { proofToken: ours },
+    ),
+    true,
+  );
+  refuseUnprovenRefreshReady(
+    { status: "refreshing", lastError: ours },
+    { sandboxId, proofToken: ours },
+  );
+
+  assert.equal(
+    refreshReadyMatchesProvenClone(
+      { status: "refreshing", lastError: theirs },
+      { proofToken: ours },
+    ),
+    false,
+  );
+  assert.throws(
+    () =>
+      refuseUnprovenRefreshReady(
+        { status: "refreshing", lastError: theirs },
+        { sandboxId, proofToken: ours },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, new RegExp(sandboxId));
+      assert.match(error.message, new RegExp(ours));
+      assert.match(error.message, new RegExp(theirs));
+      return true;
+    },
+  );
+  assert.throws(
+    () =>
+      refuseUnprovenRefreshReady(
+        { status: "refreshing", lastError: null },
+        { sandboxId, proofToken: ours },
+      ),
+    /row holds \(none\)/,
+  );
+  assert.throws(
+    () =>
+      refuseUnprovenRefreshReady(
+        { status: "refreshing", lastError: ours },
+        { sandboxId, proofToken: "not-a-proof-token" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, new RegExp(sandboxId));
+      assert.match(error.message, /not-a-proof-token/);
+      return true;
+    },
+  );
+
+  const refresh = refreshSandboxSource();
+  assert.match(refresh, /withSandboxRefreshLock\(/);
+  assert.doesNotMatch(refresh, /advisoryLockKey:/);
+  assert.match(refresh, /last_error = \$\{proofToken\}/);
+  assert.match(refresh, /refuseUnprovenRefreshReady\(/);
 });
 
 test("requireFoundSandbox refuses a missing sandbox instead of succeeding", () => {
