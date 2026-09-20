@@ -52,7 +52,7 @@ const { correctPostedDocument } = await import('./application/documents.ts')
 const NO_PROFILES = { codes: new Map(), groups: new Map() }
 const DOCUMENTS_SOURCE = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
 const DOCUMENT_POLICY_SOURCE = readFileSync(new URL('../../engine/src/records/document-edit-policy.ts', import.meta.url), 'utf8')
-const DOCUMENT_SERVICE_SOURCE = readFileSync(new URL('../../engine/src/records/document-service.ts', import.meta.url), 'utf8')
+const DOCUMENT_SERVICE_SOURCE = readFileSync(new URL('../../engine/src/ledger/document-service.ts', import.meta.url), 'utf8')
 
 async function listenProvider(server: Server): Promise<string> {
   await new Promise<void>((resolve, reject) => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { DocumentEditError } from './document-edit-policy.ts'
+import { DocumentEditError } from '../records/document-edit-policy.ts'
 import { controlDeps, loadDocument, loadDocumentEditCurrent } from './document-service.ts'
 
 test('document service refuses missing organization before attempting any read', async () => {
