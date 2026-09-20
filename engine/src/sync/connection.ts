@@ -482,8 +482,8 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     if (!cfg.aadTenantId || !cfg.environment) {
       throw new Error("Dynamics connection needs its directory (tenant) ID and environment");
     }
-    if (!cfg.companyId) {
-      throw new Error("Dynamics connection is not authorized yet — click Connect to select a company");
+    if (!cfg.companyId || !secret.refreshToken || !secret.accessToken || !secret.expiresAt) {
+      throw new Error("Dynamics connection is not authorized yet — click Connect to grant access");
     }
     const app: DynamicsApp = {
       clientId: secret.clientId,
@@ -491,10 +491,16 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       redirectUri: "",
       aadTenantId: String(cfg.aadTenantId),
     };
-    // App-only (client-credentials) auth — no stored user tokens needed; the
-    // client mints an app token on demand. Start expired so it fetches one.
-    const tokens: DynamicsTokens = { accessToken: "", refreshToken: "", expiresAt: "1970-01-01T00:00:00.000Z" };
-    return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens), {
+    const tokens: DynamicsTokens = {
+      accessToken: secret.accessToken,
+      refreshToken: secret.refreshToken,
+      expiresAt: secret.expiresAt,
+    };
+    const onRefresh = async (t: DynamicsTokens) => {
+      const merged: DynamicsSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
+      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
+    };
+    return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens, onRefresh), {
       orgId: conn.orgId,
       baseCurrency: cfg.baseCurrency,
     });

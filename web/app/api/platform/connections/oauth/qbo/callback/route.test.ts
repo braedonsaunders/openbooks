@@ -20,6 +20,9 @@ const state = {
     status: "pending",
   },
   updated: null as Record<string, unknown> | null,
+  accessToken: "at",
+  companyInfo: [{ CompanyName: "Demo" }] as { CompanyName?: string }[],
+  companyInfoError: null as Error | null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -42,11 +45,15 @@ const mockSources = new Map<string, string>([
   [
     "mock:qbo",
     `
+      const state = globalThis[Symbol.for("openbooks.qbo-oauth-callback-test")]
       export async function exchangeCode() {
-        return { accessToken: "at", refreshToken: "rt", expiresAt: "2099-01-01T00:00:00.000Z" }
+        return { accessToken: state.accessToken, refreshToken: "rt", expiresAt: "2099-01-01T00:00:00.000Z" }
       }
       export class QboClient {
-        async queryAll() { return [{ CompanyName: "Demo" }] }
+        async queryAll() {
+          if (state.companyInfoError) throw state.companyInfoError
+          return state.companyInfo
+        }
       }
     `,
   ],
@@ -114,11 +121,24 @@ hooks.deregister();
 
 const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
-async function callback(init: { state: string; cookie?: string | null }): Promise<Response> {
+function resetQbo(): void {
+  state.updated = null;
+  state.accessToken = "at";
+  state.companyInfo = [{ CompanyName: "Demo" }];
+  state.companyInfoError = null;
+}
+
+function accessTokenForRealm(realm: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ realmid: realm })).toString("base64url");
+  return `${header}.${payload}.sig`;
+}
+
+async function callback(init: { state: string; cookie?: string | null; realmId?: string }): Promise<Response> {
   const url = new URL("https://evil.example/api/platform/connections/oauth/qbo/callback");
   url.searchParams.set("code", "auth-code");
   url.searchParams.set("state", init.state);
-  url.searchParams.set("realmId", "realm-1");
+  url.searchParams.set("realmId", init.realmId ?? "realm-1");
   const headers: Record<string, string> = { host: "evil.example" };
   if (init.cookie) headers.cookie = `${CONNECTION_OAUTH_COOKIE}=${init.cookie}`;
   return GET(new Request(url, { headers }));
@@ -132,6 +152,7 @@ test("QBO callback bounce uses appBaseUrl, not the request Host", async () => {
 });
 
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
+  resetQbo();
   const res = await callback({
     state: sealJson({ orgId: "org-1", connectionId: "conn-1" }),
     cookie: "unrelated-nonce",
@@ -141,11 +162,31 @@ test("a reusable sealed org/connection pair without the cookie nonce is badstate
 });
 
 test("a matching cookie is required to finish the QBO callback", async () => {
+  resetQbo();
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
   const missing = await callback({ state: sealed });
   assert.equal(missing.headers.get("location"), "https://books.example/sync?oauth=badstate");
   const ok = await callback({ state: sealed, cookie: nonce });
   assert.equal(ok.headers.get("location"), "https://books.example/sync?oauth=connected");
+});
+
+test("a tampered query realmId that disagrees with the token realm bounces and writes nothing", async () => {
+  resetQbo();
+  state.accessToken = accessTokenForRealm("authorized-realm");
+  const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
+  const res = await callback({ state: sealed, cookie: nonce, realmId: "tampered-realm" });
+  assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=realm");
+  assert.equal(state.updated, null);
+});
+
+test("CompanyInfo failure without a token realm bounces and writes nothing", async () => {
+  resetQbo();
+  state.accessToken = "opaque-access-token";
+  state.companyInfoError = new Error("QBO CompanyInfo HTTP 401");
+  const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
+  const res = await callback({ state: sealed, cookie: nonce, realmId: "guessed-realm" });
+  assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=realm");
+  assert.equal(state.updated, null);
 });
 
 test("the QBO callback never reads origin from the request URL", () => {

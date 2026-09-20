@@ -132,3 +132,19 @@ export function pinProviderChoice<T>(
   if (items.length === 0) return { ok: false, status: emptyStatus };
   return { ok: false, status: "ambiguous" };
 }
+
+/** Realm claim from an Intuit access-token JWT, or null when the token is opaque. */
+export function realmIdFromAccessToken(accessToken: string): string | null {
+  const parts = accessToken.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as {
+      realmid?: unknown;
+      realmId?: unknown;
+    };
+    const realm = payload.realmid ?? payload.realmId;
+    return typeof realm === "string" && realm.length > 0 ? realm : null;
+  } catch {
+    return null;
+  }
+}
