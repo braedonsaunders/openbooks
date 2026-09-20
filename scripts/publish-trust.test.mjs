@@ -312,6 +312,98 @@ test('a full publication swaps atomically and drops stale components', () => {
   }
 })
 
+test('a matrix whose header disagrees with the corpus is refused before publication', () => {
+  // The August badge drift: the matrix was refreshed by hand while the badge
+  // input came from an older run, and the publisher rendered the stale badge
+  // under a new label. The publisher now refuses a bundle whose two
+  // renderings of one derivation disagree, before touching the output.
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    writeEvidence(tempDirectory, { sha: 'commit-a' })
+    writeFileSync(
+      join(tempDirectory, 'conformance', 'conformance.json'),
+      JSON.stringify({
+        totals: { pass: 77, fail: 0, gap: 15, skipped: 0 },
+        pass: true,
+        cases: Array.from({ length: 77 }, (_, i) => ({ id: `case-${i}`, status: 'pass' })).concat(
+          Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: 'gap' })),
+        ),
+        gitSha: 'commit-a',
+        casesSha256: digestOf(
+          Array.from({ length: 77 }, (_, i) => ({ id: `case-${i}`, status: 'pass' })).concat(
+            Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: 'gap' })),
+          ),
+        ),
+      }),
+    )
+    writeFileSync(
+      join(tempDirectory, 'conformance', 'conformance-matrix.md'),
+      '# Accounting standards conformance matrix\n\n**42 passing · 0 failing · 0 gaps · 0 not run**\n',
+    )
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /badge\/matrix drift|counts differ/)
+    assert.equal(existsSync(out), false, 'a refused publication must leave no output directory')
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('a matrix agreeing with the corpus publishes a badge restating its totals', () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    writeEvidence(tempDirectory, { sha: 'commit-a' })
+    const cases = [{ id: 'case-1', status: 'pass' }]
+    writeFileSync(
+      join(tempDirectory, 'conformance', 'conformance.json'),
+      JSON.stringify({
+        totals: { pass: 1, fail: 0, gap: 2, skipped: 0 },
+        pass: true,
+        cases: cases.concat([
+          { id: 'gap-1', status: 'gap' },
+          { id: 'gap-2', status: 'gap' },
+        ]),
+        gitSha: 'commit-a',
+        casesSha256: digestOf(
+          cases.concat([
+            { id: 'gap-1', status: 'gap' },
+            { id: 'gap-2', status: 'gap' },
+          ]),
+        ),
+      }),
+    )
+    writeFileSync(
+      join(tempDirectory, 'conformance', 'conformance-matrix.md'),
+      '# Accounting standards conformance matrix\n\n**1 passing · 0 failing · 2 gaps · 0 not run**\n',
+    )
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 0, result.stderr)
+    const badge = JSON.parse(readFileSync(join(out, 'badge-conformance.json'), 'utf8'))
+    assert.equal(badge.message, '1 passing, 2 gaps')
+    assert.equal(badge.gitSha, 'commit-a')
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
 test('tampered case payloads are rejected by their digest', () => {
   for (const tamper of ['cases', 'digest']) {
     const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
