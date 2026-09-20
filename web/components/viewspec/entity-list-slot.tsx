@@ -133,8 +133,11 @@ export async function EntityListSlot({
       // Decided here for the same reason the org id is: the customer list
       // spans the relationship lifecycle only for a viewer holding
       // crm.accounts.read, and a capability that travelled through the spec
-      // is a capability a spec could assert for someone who lacks it.
+      // is a capability a spec could assert for someone who lacks it. The
+      // employee list's employment filters and columns likewise require
+      // hrm.employment.read — parties.read alone never shows them.
       crmAccountsVisible={can(authz, 'crm.accounts.read')}
+      hrmEmploymentVisible={can(authz, 'hrm.employment.read')}
       sp={sp}
       drawer={drawer}
       emptyAction={emptyAction}
