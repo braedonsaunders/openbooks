@@ -18,6 +18,7 @@ import {
   extensionContributionsSchema,
   EXTENSION_CONTRIBUTION_PERMISSIONS,
 } from '@/lib/apps/contributions'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 
 /** Definitions remain the canonical package objects; the editor never creates tables directly. */
@@ -48,8 +49,11 @@ export function AppDefinitions({
     const controller = new AbortController()
     void fetch('/api/apps/vocabulary', { signal: controller.signal })
       .then(async (response) => {
+        // Status first: a non-JSON refusal must surface the API message (or
+        // status fallback), never a SyntaxError from response.json().
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, t('invalid')))
         const data = await response.json()
-        if (!response.ok) throw new Error(data.error ?? t('invalid'))
         setRoutes(data.routes)
       })
       .catch((error) => {
