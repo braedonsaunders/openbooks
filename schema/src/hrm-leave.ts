@@ -29,6 +29,9 @@ export const HRM_LEAVE_STATUSES = [
 /** The only two movements a leave day may raise as a pay-run input. */
 export const HRM_LEAVE_VALUE_CROSSINGS = ["none", "payout", "bank_in"] as const;
 
+/** Native Flows subject kind for leave requests. */
+export const HRM_LEAVE_REQUEST_SUBJECT_KIND = "hrm_leave_request";
+
 export const HRM_PAYROLL_INPUT_KINDS = ["payout", "bank_in"] as const;
 
 export const HRM_PAYROLL_INPUT_STATUSES = ["pending", "consumed", "voided"] as const;
