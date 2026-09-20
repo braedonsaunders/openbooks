@@ -64,6 +64,15 @@
     "openEmployee": "Open the employee record",
     "notAvailable": "Not available"
   },
+  "departments": {
+    "title": "Departments",
+    "description": "Headcount as of today per department, with the employer subsidiary breakdown — resolved through the headcount service.",
+    "listTitle": "Headcount by department",
+    "listNote": "The employees list has no department filter, so drill-through opens the full list.",
+    "linksTitle": "Links",
+    "employeesLink": "Employees list",
+    "setupLink": "Manage departments"
+  },
   "employment": {
     "episodes": {
       "title": "Employment episodes",

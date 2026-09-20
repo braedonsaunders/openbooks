@@ -64,6 +64,15 @@
     "openEmployee": "Abrir el registro del empleado",
     "notAvailable": "No disponible"
   },
+  "departments": {
+    "title": "Departamentos",
+    "description": "Plantilla de hoy por departamento, con desglose por empresa empleadora — resuelta a través del servicio de plantilla.",
+    "listTitle": "Plantilla por departamento",
+    "listNote": "La lista de empleados no tiene filtro por departamento, por lo que el enlace abre la lista completa.",
+    "linksTitle": "Enlaces",
+    "employeesLink": "Lista de empleados",
+    "setupLink": "Gestionar departamentos"
+  },
   "employment": {
     "episodes": {
       "title": "Episodios de empleo",

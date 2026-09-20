@@ -64,6 +64,15 @@
     "openEmployee": "Abrir o registro do funcionário",
     "notAvailable": "Indisponível"
   },
+  "departments": {
+    "title": "Departamentos",
+    "description": "Quadro de hoje por departamento, com detalhamento por empregador — resolvido pelo serviço de headcount.",
+    "listTitle": "Quadro por departamento",
+    "listNote": "A lista de funcionários não tem filtro por departamento, por isso o link abre a lista completa.",
+    "linksTitle": "Links",
+    "employeesLink": "Lista de funcionários",
+    "setupLink": "Gerenciar departamentos"
+  },
   "employment": {
     "episodes": {
       "title": "Episódios de emprego",

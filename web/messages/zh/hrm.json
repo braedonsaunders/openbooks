@@ -64,6 +64,15 @@
     "openEmployee": "打开员工档案",
     "notAvailable": "不可用"
   },
+  "departments": {
+    "title": "部门",
+    "description": "今日各部门人数，含雇主子公司明细 — 通过人数统计服务解析。",
+    "listTitle": "各部门人数",
+    "listNote": "员工列表没有部门筛选，因此下钻将打开完整列表。",
+    "linksTitle": "链接",
+    "employeesLink": "员工列表",
+    "setupLink": "管理部门"
+  },
   "employment": {
     "episodes": {
       "title": "雇用阶段",
