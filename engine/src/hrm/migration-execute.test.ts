@@ -144,6 +144,25 @@ test("exit code: clean and already-migrated pass; refused blocks without partial
   assert.equal(migrationExitCode(finalize(refused.persons, { allowPartial: true })), 0);
 });
 
+test("exit code: allow-partial with an empty accepted subset is a failure, not a partial success", () => {
+  const allRefused = [
+    person({ sourceId: "p-1", outcome: "refused", employmentId: null }),
+    person({ sourceId: "p-2", outcome: "refused", employmentId: null }),
+  ];
+  assert.equal(migrationExitCode(finalize(allRefused, { allowPartial: true })), 1, "nothing advanced");
+  assert.equal(migrationExitCode(finalize(allRefused, { allowPartial: true, dryRun: true })), 1, "a dry run that would migrate nobody is not clean either");
+  const settledPlusRefused = [
+    person({ sourceId: "p-old", outcome: "already_migrated", employmentId: "e-1" }),
+    person({ sourceId: "p-bad", outcome: "refused", employmentId: null }),
+  ];
+  assert.equal(migrationExitCode(finalize(settledPlusRefused, { allowPartial: true })), 0, "already_migrated is settled and counts as advanced");
+  const previewPlusRefused = [
+    person({ sourceId: "p-new", outcome: "would_migrate", employmentId: null }),
+    person({ sourceId: "p-bad", outcome: "refused", employmentId: null }),
+  ];
+  assert.equal(migrationExitCode(finalize(previewPlusRefused, { allowPartial: true, dryRun: true })), 0, "a dry run that would migrate someone is a clean preview");
+});
+
 test("evidence token round-trips namespaces needing encoding", () => {
   const ref = buildMigrationRef("legacy/hr extract", "person 001/2", "b".repeat(64), "extract v2");
   const parsed = parseMigrationRef(ref);
