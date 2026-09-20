@@ -964,7 +964,9 @@
     "allocations_run": "Obtener vista previa, contabilizar, revertir y repetir distribuciones",
     "payroll_manage": "Configurar la nómina y los perfiles de empleados",
     "payroll_read": "Ver ciclos de nómina y recibos de pago",
-    "payroll_run": "Crear, calcular y confirmar ciclos de nómina"
+    "payroll_run": "Crear, calcular y confirmar ciclos de nómina",
+    "hrm_process_read": "Ver listas de procesos",
+    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2623,7 +2625,17 @@
       "dateBasis": "Base de fecha",
       "unitsTotal": "Unidades totales",
       "network": "Red",
-      "lastFour": "Últimos cuatro"
+      "lastFour": "Últimos cuatro",
+      "templateId": "Plantilla",
+      "position": "Posición",
+      "title": "Título",
+      "ownerKind": "Responsable",
+      "ownerPartyId": "Parte responsable",
+      "dueOffsetDays": "Desplazamiento (días)",
+      "required": "Obligatorio",
+      "evidenceKind": "Evidencia",
+      "appliesEmployerSubsidiaryId": "Filial aplicable",
+      "appliesDepartmentId": "Departamento aplicable"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2675,7 +2687,9 @@
       "protectionBase": "Contra qué se mide el tope de la deducción. El pago neto es el pago tras cualquier otra deducción. Los ingresos disponibles solo cuentan las percepciones y deducciones marcadas en la base siguiente: así es como una asignación o un beneficio queda fuera de la porción.",
       "protectionMaxPercent": "Lo máximo que esta deducción puede tomar de esa base: 20 % para un embargo ordinario en Ontario, 50 % para manutención familiar, 25 % bajo la CCPA estadounidense. Lo que no quepa se informa como faltante en el ciclo de nómina.",
       "protectionPriority": "Qué orden prevalece cuando varias deducciones protegidas compiten por la misma paga. Primero la menor; las órdenes de manutención normalmente superan a los acreedores ordinarios.",
-      "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta."
+      "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta.",
+      "hrmProcessAppliesSubsidiary": "Vacío: la plantilla se aplica a todas las filiales.",
+      "hrmProcessAppliesDepartment": "Vacío: la plantilla se aplica a todos los departamentos."
     },
     "options": {
       "timeClassification": {
@@ -3012,6 +3026,22 @@
         "qst": "QST",
         "salesUse": "Impuesto sobre ventas y uso",
         "vat": "VAT"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Incorporación",
+        "offboarding": "Salida",
+        "transfer": "Transferencia"
+      },
+      "hrmStepOwner": {
+        "manager": "Mánager",
+        "hr": "RR. HH.",
+        "employee": "Empleado",
+        "namedParty": "Persona designada"
+      },
+      "hrmStepEvidence": {
+        "none": "Ninguna",
+        "acknowledgement": "Acuse de recibo",
+        "attachment": "Adjunto"
       }
     },
     "laborCosting": {

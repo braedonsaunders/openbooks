@@ -7,7 +7,8 @@
       "changeRequests": "Solicitações de alteração",
       "departments": "Departamentos",
       "reports": "Relatórios",
-      "positions": "Posições"
+      "positions": "Posições",
+      "processes": "Processos"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -45,6 +46,14 @@
       "unassignedDepartment": "Sem departamento",
       "empty": "Nenhuma posição está estabelecida em {date}.",
       "total": "Total"
+    },
+    "onboarding": {
+      "title": "Integração",
+      "openLabel": "Listas abertas",
+      "overdueLabel": "Atrasado",
+      "upcomingLabel": "A vencer",
+      "empty": "Nenhuma lista aberta.",
+      "viewAll": "Ver todos os processos"
     }
   },
   "overview": {
@@ -313,6 +322,67 @@
       "warnings": "Avisos",
       "refusal": "Requer atenção",
       "missing": "Esta posição não está mais visível."
+    }
+  },
+  "processes": {
+    "title": "Listas de processos",
+    "description": "Listas de integração, desligamento e transferência com responsáveis, prazos e evidências.",
+    "listTitle": "Listas",
+    "listFailed": "Não foi possível carregar os processos.",
+    "detailTitle": "Lista",
+    "detailFailed": "Não foi possível carregar a lista.",
+    "actionFailed": "Não foi possível concluir a ação.",
+    "loading": "Carregando…",
+    "empty": "Nenhuma lista neste segmento.",
+    "overdueBadge": "{count} atrasado",
+    "progressLine": "{done} de {required} etapas obrigatórias · vigência {effective}",
+    "dueOn": "Vence {date}",
+    "required": "Obrigatório",
+    "completeStep": "Concluir etapa",
+    "skipStep": "Pular etapa",
+    "completeProcess": "Concluir lista",
+    "cancelProcess": "Cancelar lista",
+    "attachmentLabel": "Arquivo de evidência",
+    "attachmentUnset": "Digite para pesquisar",
+    "skipReasonLabel": "Motivo",
+    "skipReasonPlaceholder": "Por que esta etapa foi pulada?",
+    "cancelReasonLabel": "Motivo do cancelamento",
+    "cancelReasonPlaceholder": "Por que esta lista foi cancelada?",
+    "confirmReason": "Confirmar",
+    "cancelReasonAbort": "Voltar",
+    "segments": {
+      "open": "Abertas",
+      "overdue": "Atrasadas",
+      "completed": "Concluídas",
+      "cancelled": "Canceladas"
+    },
+    "columns": {
+      "employee": "Colaborador",
+      "kind": "Tipo",
+      "effective": "Vigência",
+      "progress": "Progresso",
+      "nextDue": "Próximo vencimento"
+    },
+    "kinds": {
+      "onboarding": "Integração",
+      "offboarding": "Desligamento",
+      "transfer": "Transferência"
+    },
+    "owners": {
+      "manager": "Gestor",
+      "hr": "RH",
+      "employee": "Colaborador",
+      "named_party": "Pessoa designada"
+    },
+    "evidence": {
+      "none": "Nenhuma",
+      "acknowledgement": "Ciência",
+      "attachment": "Anexo"
+    },
+    "stepStatus": {
+      "pending": "Pendente",
+      "done": "Concluído",
+      "skipped": "Pulado"
     }
   }
 }

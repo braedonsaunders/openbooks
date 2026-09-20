@@ -7,7 +7,8 @@
       "changeRequests": "Änderungsanträge",
       "departments": "Abteilungen",
       "reports": "Berichte",
-      "positions": "Positionen"
+      "positions": "Positionen",
+      "processes": "Vorgänge"
     },
     "vitals": {
       "headcount": "Personalbestand",
@@ -45,6 +46,14 @@
       "unassignedDepartment": "Keine Abteilung",
       "empty": "Zum {date} sind keine Positionen eingerichtet.",
       "total": "Gesamt"
+    },
+    "onboarding": {
+      "title": "Einarbeitung",
+      "openLabel": "Offene Checklisten",
+      "overdueLabel": "Überfällig",
+      "upcomingLabel": "Bald fällig",
+      "empty": "Keine offenen Checklisten.",
+      "viewAll": "Alle Vorgänge anzeigen"
     }
   },
   "overview": {
@@ -313,6 +322,67 @@
       "warnings": "Warnungen",
       "refusal": "Erfordert Aufmerksamkeit",
       "missing": "Diese Position ist nicht mehr sichtbar."
+    }
+  },
+  "processes": {
+    "title": "Prozess-Checklisten",
+    "description": "Onboarding-, Offboarding- und Versetzungs-Checklisten mit Verantwortlichen, Fälligkeiten und Nachweisen.",
+    "listTitle": "Checklisten",
+    "listFailed": "Vorgänge konnten nicht geladen werden.",
+    "detailTitle": "Checkliste",
+    "detailFailed": "Checkliste konnte nicht geladen werden.",
+    "actionFailed": "Aktion konnte nicht ausgeführt werden.",
+    "loading": "Wird geladen…",
+    "empty": "Keine Checklisten in diesem Bereich.",
+    "overdueBadge": "{count} überfällig",
+    "progressLine": "{done} von {required} erforderlichen Schritten · wirksam {effective}",
+    "dueOn": "Fällig {date}",
+    "required": "Erforderlich",
+    "completeStep": "Schritt abschließen",
+    "skipStep": "Schritt überspringen",
+    "completeProcess": "Checkliste abschließen",
+    "cancelProcess": "Checkliste abbrechen",
+    "attachmentLabel": "Nachweisdatei",
+    "attachmentUnset": "Zum Suchen tippen",
+    "skipReasonLabel": "Grund für das Überspringen",
+    "skipReasonPlaceholder": "Warum wird dieser Schritt übersprungen?",
+    "cancelReasonLabel": "Grund für den Abbruch",
+    "cancelReasonPlaceholder": "Warum wird diese Checkliste abgebrochen?",
+    "confirmReason": "Bestätigen",
+    "cancelReasonAbort": "Zurück",
+    "segments": {
+      "open": "Offen",
+      "overdue": "Überfällig",
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "kind": "Art",
+      "effective": "Wirksam",
+      "progress": "Fortschritt",
+      "nextDue": "Nächste Fälligkeit"
+    },
+    "kinds": {
+      "onboarding": "Einarbeitung",
+      "offboarding": "Austritt",
+      "transfer": "Versetzung"
+    },
+    "owners": {
+      "manager": "Vorgesetzte(r)",
+      "hr": "Personal",
+      "employee": "Mitarbeiter",
+      "named_party": "Benannte Person"
+    },
+    "evidence": {
+      "none": "Keine",
+      "acknowledgement": "Bestätigung",
+      "attachment": "Anhang"
+    },
+    "stepStatus": {
+      "pending": "Offen",
+      "done": "Erledigt",
+      "skipped": "Übersprungen"
     }
   }
 }
