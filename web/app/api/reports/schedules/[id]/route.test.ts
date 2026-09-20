@@ -50,6 +50,22 @@ const ORG_ID = '00000000-0000-4000-8000-00000000b001'
 const USER_ID = '00000000-0000-4000-8000-00000000b002'
 const SCHEDULE_ID = '00000000-0000-4000-8000-00000000b003'
 const DEFINITION_ID = '00000000-0000-4000-8000-00000000b004'
+const PINNED_SUBSIDIARY_ID = '00000000-0000-4000-8000-00000000b005'
+
+/** Original legal-entity pin. null on the editor snapshot means every entity. */
+const restrictedAuthorizationSnapshot = {
+  version: 1,
+  userId: USER_ID,
+  allowedSubsidiaryIds: [PINNED_SUBSIDIARY_ID],
+  definition: {
+    report_type: 'query',
+    query: { entity: 'documents' },
+    statement: null,
+    name: 'Pinned delivery',
+    slug: 'pinned-delivery',
+    kind: 'custom',
+  },
+}
 
 const existingSchedule = {
   id: SCHEDULE_ID,
@@ -123,7 +139,9 @@ const mockSources = new Map<string, string>([
       export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
-      export function snapshotReportAuthorization() { return { version: 1 } }
+      export function snapshotReportAuthorization() {
+        return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
+      }
       export async function guardPermission() {
         return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
       }
@@ -208,6 +226,33 @@ function removeRaw(init: RequestInit): Promise<Response> {
     { params: Promise.resolve({ id: SCHEDULE_ID }) },
   )
 }
+
+test('PATCH hour/active keeps the stored authorization_snapshot and does not persist a wider editor allowlist', async () => {
+  reset()
+  const pinned = { ...existingSchedule, authorization_snapshot: restrictedAuthorizationSnapshot }
+  state.respond = (text) => {
+    if (text.includes('select * from report_schedules')) return { rows: [pinned] }
+    if (text.includes('update report_schedules')) return { rows: [{ ...pinned, hour: 8 }] }
+    return { rows: [] }
+  }
+
+  const response = await patch({ hour: 8, reason: 'shift delivery hour' })
+
+  assert.equal(response.status, 200)
+  const update = state.committed.find((text) => text.includes('update report_schedules'))
+  assert.ok(update, 'the schedule update committed')
+  assert.equal(
+    /authorization_snapshot\s*=/.test(update!),
+    false,
+    'hour/active PATCH must leave authorization_snapshot untouched; restamping would let an org-unrestricted editor persist allowedSubsidiaryIds:null over the restricted pin ' +
+      PINNED_SUBSIDIARY_ID,
+  )
+  assert.equal(
+    update!.includes('"allowedSubsidiaryIds":null'),
+    false,
+    'the editor snapshot allowedSubsidiaryIds:null must not appear in the update',
+  )
+})
 
 test('PATCH locks the tenant schedule and commits complete reasoned before/after audit evidence', async () => {
   reset()
