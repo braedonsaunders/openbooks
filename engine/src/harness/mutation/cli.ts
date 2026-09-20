@@ -246,12 +246,16 @@ export function readRatifiedFloors(path: string): RatifiedFloors {
   if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.floors)) {
     throw new Error(`ratified floors at ${path} are malformed — refusing publish`);
   }
+  const floors: RatifiedFloors["floors"] = {};
   for (const [key, value] of Object.entries(parsed.floors)) {
-    if (!isRecord(value) || typeof value.ratio !== "number" || !Number.isFinite(value.ratio) || value.ratio < 0 || value.ratio > 1) {
+    if (!isRecord(value) || typeof value.ratio !== "number" || !Number.isFinite(value.ratio) || value.ratio < 0 || value.ratio > 1
+      || typeof value.measured !== "number" || !Number.isSafeInteger(value.measured) || value.measured < 0
+      || (value.mode !== "unit" && value.mode !== "db")) {
       throw new Error(`ratified floor for ${key} is malformed — refusing publish`);
     }
+    floors[key] = { ratio: value.ratio, measured: value.measured, mode: value.mode };
   }
-  return parsed as RatifiedFloors;
+  return { version: 1, floors };
 }
 
 function measurementRemedy(target: string): string {

@@ -9,12 +9,16 @@
  * floor entry publish on their real measurement — the gate never invents
  * floors and never writes `mutation-floor.json`.
  *
- * Pure unit tests: no database, no mutation run, no filesystem.
+ * Unit tests: no database or mutation run; floor validation uses disposable JSON.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   checkedInPublishRefusals,
+  readRatifiedFloors,
   toCheckedInReport,
   type CheckedInReport,
   type CheckedInTarget,
@@ -239,5 +243,23 @@ test("invalid measured ratios cannot evade the floor", () => {
     );
     assert.equal(refusals.length, 1);
     assert.ok(refusals[0]!.includes("invalid ratio"));
+  }
+});
+
+
+test("ratified floor input refuses missing, malformed and out-of-range values", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mutation-floor-input-"));
+  const file = join(dir, "floor.json");
+  try {
+    assert.throws(() => readRatifiedFloors(file), /refusing publish/);
+    for (const raw of ["{", JSON.stringify({ version: 1, floors: { [MONEY]: { ratio: -1, measured: 23, mode: "unit" } } }),
+      JSON.stringify({ version: 1, floors: { [MONEY]: { ratio: 0.4 } } })]) {
+      writeFileSync(file, raw);
+      assert.throws(() => readRatifiedFloors(file), /refusing publish/);
+    }
+    writeFileSync(file, JSON.stringify({ version: 1, floors: FLOORS }));
+    assert.deepEqual(readRatifiedFloors(file), { version: 1, floors: FLOORS });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
