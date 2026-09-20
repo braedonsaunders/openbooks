@@ -20,6 +20,7 @@ type RouteState = {
   firstEnqueueStarted?: () => void;
   releaseFirstEnqueue?: () => void;
   config: Record<string, unknown>;
+  versionMatch: boolean;
 };
 
 const stateKey = Symbol.for("openbooks.connection-run-route-test");
@@ -32,6 +33,7 @@ const routeState: RouteState = {
   lockWaiters: [],
   blockFirstEnqueue: false,
   config: {},
+  versionMatch: true,
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -74,7 +76,7 @@ const mockSources = new Map<string, string>([
     `
       export async function getConnection() {
         const state = globalThis[Symbol.for('openbooks.connection-run-route-test')]
-        return { status: 'connected', source: 'netsuite', config: state.config }
+        return { status: 'connected', source: 'netsuite', config: state.config, secrets: null }
       }
     `,
   ],
@@ -142,6 +144,9 @@ const mockSources = new Map<string, string>([
               if (state.lockHeld) await new Promise((resolve) => state.lockWaiters.push(resolve))
               state.lockHeld = true
               lockAcquired = true
+            }
+            if (text.includes('from connections')) {
+              return { rows: state.versionMatch === false ? [] : [{ one: 1 }] }
             }
             if (text.includes('from sync_runs')) {
               return { rows: state.running ? [{ one: 1 }] : [] }
@@ -214,6 +219,7 @@ function reset(): void {
   routeState.firstEnqueueStarted = undefined;
   routeState.releaseFirstEnqueue = undefined;
   routeState.config = {};
+  routeState.versionMatch = true;
 }
 
 function request(mode: string): Request {
@@ -289,6 +295,8 @@ const refusedConnectorUrls = [
   ["loopback IPv6", { url: "http://[::1]/" }],
   ["file scheme", { url: "file:///etc/passwd" }],
   ["NetSuite host loopback", { host: "https://127.0.0.1" }],
+  ["IPv4-mapped IPv6 hex", { url: "http://[::ffff:7f00:1]/" }],
+  ["IPv4-mapped IPv6 dotted", { url: "http://[::ffff:127.0.0.1]/" }],
 ] as const;
 
 for (const [name, config] of refusedConnectorUrls) {
@@ -307,3 +315,17 @@ for (const [name, config] of refusedConnectorUrls) {
     assert.equal(routeState.createdJobIds.length, 0);
   });
 }
+
+test("run does not enqueue after a concurrent connection change", async () => {
+  reset();
+  routeState.versionMatch = false;
+
+  const response = await POST(request("full_migration"), {
+    params: Promise.resolve({ id: "conn-1" }),
+  });
+
+  assert.equal(response.status, 409);
+  const body = (await response.json()) as { errorCode?: string };
+  assert.equal(body.errorCode, "CONNECTION_CHANGED");
+  assert.equal(routeState.enqueueAttempts, 0);
+});

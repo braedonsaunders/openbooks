@@ -14,46 +14,13 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { storageIdentityError } from "../_storage-identity";
+import {
+  callerOwnedConfigRefusal,
+  connectionConfigUrlRefusal,
+  declaredSourceConfig,
+} from "../_connector-guard";
 
 export const runtime = "nodejs";
-
-const CONNECTOR_URL_REFUSED =
-  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
-
-/** Tenant-supplied connector URL/host. Same refusal set as bank-feed metadata hosts. */
-function connectorUrlRefusal(value: unknown): string | null {
-  if (value == null) return null;
-  const raw = String(value).trim();
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return CONNECTOR_URL_REFUSED;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return CONNECTOR_URL_REFUSED;
-  }
-  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  const ipv4 = host.startsWith("::ffff:") ? host.slice(7) : host;
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    host.startsWith("fe80:") ||
-    /^127(?:\.\d{1,3}){3}$/.test(ipv4) ||
-    /^169\.254(?:\.\d{1,3}){2}$/.test(ipv4)
-  ) {
-    return CONNECTOR_URL_REFUSED;
-  }
-  return null;
-}
-
-function connectionConfigUrlRefusal(config: unknown): string | null {
-  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
-  const row = config as Record<string, unknown>;
-  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
-}
 
 /**
  * Update a connection: rename, edit config, rotate/add secrets, toggle mirror,
@@ -81,6 +48,13 @@ export async function PATCH(
     status?: "active" | "paused";
   };
   if (body.config && typeof body.config === "object") {
+    const ownedError = callerOwnedConfigRefusal(body.config);
+    if (ownedError) {
+      return NextResponse.json(
+        { error: ownedError, errorCode: "OAUTH_IDENTITY_REFUSED" },
+        { status: 400 },
+      );
+    }
     const urlError = connectionConfigUrlRefusal(body.config);
     if (urlError) {
       return NextResponse.json(
@@ -125,12 +99,17 @@ export async function PATCH(
         !Array.isArray(existing.config)
           ? existing.config
           : {};
-      const merged = { ...currentConfig, ...body.config };
-      if (manifest) {
-        const configError = validateSourceConfig(manifest, merged, { today });
-        if (configError) {
-          return NextResponse.json({ error: configError }, { status: 400 });
-        }
+      if (!manifest) {
+        return NextResponse.json(
+          { error: "unknown source type" },
+          { status: 400 },
+        );
+      }
+      const incoming = declaredSourceConfig(manifest, body.config);
+      const merged = { ...currentConfig, ...incoming };
+      const configError = validateSourceConfig(manifest, merged, { today });
+      if (configError) {
+        return NextResponse.json({ error: configError }, { status: 400 });
       }
       updates.config = merged;
     }
@@ -252,7 +231,7 @@ export async function DELETE(
   });
   if (!existing)
     return NextResponse.json({ error: "not found" }, { status: 404 });
-  await db.transaction(async (tx) => {
+  const deleted = await db.transaction(async (tx) => {
     // Preserve run history while detaching it from the connection being
     // removed.  The migration makes connection_id nullable; doing this
     // explicitly keeps the delete independent of deferred FK timing.
@@ -261,9 +240,12 @@ export async function DELETE(
          set connection_id = null
        where org_id = ${orgId} and connection_id = ${id}
     `);
-    await tx.execute(
-      sql`delete from connections where org_id = ${orgId} and id = ${id}`,
-    );
+    const removed = await tx.execute<{ id: string }>(sql`
+      delete from connections
+       where org_id = ${orgId} and id = ${id}
+       returning id
+    `);
+    if (!removed.rows[0]) return null;
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
@@ -280,6 +262,13 @@ export async function DELETE(
         ${gate.user.id}
       )
     `);
+    return removed.rows[0];
+  }).catch((e) => {
+    if (storageIdentityError(e)) return null;
+    throw e;
   });
+  if (!deleted) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

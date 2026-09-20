@@ -8,6 +8,7 @@ interface RouteState {
   updates: string[];
   config: Record<string, unknown>;
   pingCalls: number;
+  updateMatches: boolean;
 }
 
 const stateKey = Symbol.for("openbooks.connection-test-route-test");
@@ -17,6 +18,7 @@ const routeState: RouteState = {
   updates: [],
   config: {},
   pingCalls: 0,
+  updateMatches: true,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -79,7 +81,16 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.connectionTestSqlText
       export const db = {
         execute(query) {
-          state.updates.push(sqlText(query))
+          const text = sqlText(query)
+          state.updates.push(text)
+          if (text.includes("update connections")) {
+            return Promise.resolve({ rows: state.updateMatches ? [{ id: "connection-1" }] : [] })
+          }
+          if (text.includes("from connections")) {
+            return Promise.resolve({
+              rows: [{ updatedAt: "t0", config: state.config, secrets: null }],
+            })
+          }
           return Promise.resolve({ rows: [] })
         },
       }
@@ -124,6 +135,11 @@ function reset(): void {
   routeState.updates.length = 0;
   routeState.config = {};
   routeState.pingCalls = 0;
+  routeState.updateMatches = true;
+}
+
+function updateSql(): string {
+  return routeState.updates.find((text) => text.includes("update connections")) ?? "";
 }
 
 function call(): Promise<Response> {
@@ -142,17 +158,15 @@ test("a false ping records error status and preserves provider detail", async ()
 
   const response = await call();
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
     ok: false,
     detail: "token rejected by provider",
   });
-  assert.equal(routeState.updates.length, 1);
-  assert.match(routeState.updates[0]!, /status = '?error/);
-  assert.match(
-    routeState.updates[0]!,
-    /last_error = token rejected by provider/,
-  );
+  assert.match(updateSql(), /status = '?error/);
+  assert.match(updateSql(), /last_error = token rejected by provider/);
+  assert.match(updateSql(), /updated_at is not distinct from/);
+  assert.match(updateSql(), /config is not distinct from/);
 });
 
 test("a successful ping activates the connection and clears stale errors", async () => {
@@ -162,9 +176,9 @@ test("a successful ping activates the connection and clears stale errors", async
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, detail: "Connected" });
-  assert.equal(routeState.updates.length, 1);
-  assert.match(routeState.updates[0]!, /status = '?active/);
-  assert.match(routeState.updates[0]!, /last_error = null/);
+  assert.match(updateSql(), /status = '?active/);
+  assert.match(updateSql(), /last_error = null/);
+  assert.match(updateSql(), /updated_at is not distinct from/);
 });
 
 test("a thrown ping records its error evidence and returns a failed probe", async () => {
@@ -173,14 +187,27 @@ test("a thrown ping records its error evidence and returns a failed probe", asyn
 
   const response = await call();
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
     ok: false,
     error: "provider unavailable",
   });
-  assert.equal(routeState.updates.length, 1);
-  assert.match(routeState.updates[0]!, /status = '?error/);
-  assert.match(routeState.updates[0]!, /last_error = provider unavailable/);
+  assert.match(updateSql(), /status = '?error/);
+  assert.match(updateSql(), /last_error = provider unavailable/);
+});
+
+test("a stale ping does not stamp a rotated connection", async () => {
+  reset();
+  routeState.updateMatches = false;
+
+  const response = await call();
+
+  assert.equal(response.status, 409);
+  const body = (await response.json()) as { errorCode?: string; ok?: boolean };
+  assert.equal(body.errorCode, "CONNECTION_CHANGED");
+  assert.notEqual(body.ok, true);
+  assert.equal(routeState.pingCalls, 1);
+  assert.match(updateSql(), /returning id/);
 });
 
 const refusedConnectorUrls = [
@@ -190,6 +217,8 @@ const refusedConnectorUrls = [
   ["loopback IPv6", { url: "http://[::1]/" }],
   ["file scheme", { url: "file:///etc/passwd" }],
   ["NetSuite host loopback", { host: "https://127.0.0.1" }],
+  ["IPv4-mapped IPv6 hex", { url: "http://[::ffff:7f00:1]/" }],
+  ["IPv4-mapped IPv6 dotted", { url: "http://[::ffff:127.0.0.1]/" }],
 ] as const;
 
 for (const [name, config] of refusedConnectorUrls) {
