@@ -837,6 +837,8 @@
     "hrm_leave_request": "Solicitar ausencias para el propio empleo",
     "hrm_leave_approve": "Decidir solicitudes de ausencias",
     "hrm_leave_manage": "Configurar tipos y políticas de ausencias",
+    "hrm_recruiting_read": "Ver el proceso de contratación",
+    "hrm_recruiting_manage": "Gestionar requisiciones, candidatos, entrevistas y ofertas",
     "hrm_employment_manage": "Redactar cambios de empleo",
     "hrm_employment_approve": "Decidir cambios de empleo",
     "hrm_position_read": "Ver puestos y el plan de plantilla",
@@ -970,7 +972,16 @@
     "payroll_read": "Ver ciclos de nómina y recibos de pago",
     "payroll_run": "Crear, calcular y confirmar ciclos de nómina",
     "hrm_process_read": "Ver listas de procesos",
-    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos"
+    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos",
+    "hrm_performance_read": "Ver ciclos de evaluación y evaluaciones en el ámbito de privacidad",
+    "hrm_performance_manage": "Dirigir ciclos de evaluación, calibrar y compartir evaluaciones",
+    "hrm_retention_read": "Ver registros de salida y rotación",
+    "hrm_benefits_read": "Ver planes de beneficios e inscripciones",
+    "hrm_benefits_manage": "Gestionar planes de beneficios, ventanas e inscripciones",
+    "hrm_self_read": "Ver el resumen del empleo propio",
+    "hrm_self_request": "Presentar cambios de perfil propios",
+    "hrm_team_read": "Ver reportes directos hoy",
+    "hrm_team_manage": "Trabajar pasos asignados por el responsable"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2383,6 +2394,31 @@
         "title": "Pasos de plantilla de proceso",
         "singularTitle": "Paso de plantilla de proceso",
         "description": "Un paso ordenado de una plantilla de proceso con su responsable, plazo y regla de evidencia."
+      },
+      "hrm-review-templates": {
+        "title": "Plantillas de evaluación",
+        "singularTitle": "Plantilla de evaluación",
+        "description": "El formulario de evaluación por organización: nombre, escala de calificación y secciones ordenadas con preguntas."
+      },
+      "hrm-review-template-sections": {
+        "title": "Secciones de evaluación",
+        "singularTitle": "Sección de evaluación",
+        "description": "Secciones ordenadas de una plantilla de evaluación: competencia, objetivos o texto libre, con ponderación opcional."
+      },
+      "hrm-review-template-questions": {
+        "title": "Preguntas de evaluación",
+        "singularTitle": "Pregunta de evaluación",
+        "description": "Preguntas dentro de una sección de la plantilla: calificación, texto o ambas. Las obligatorias deben responderse antes de enviar."
+      },
+      "benefit-plans": {
+        "title": "Planes de beneficios",
+        "singularTitle": "Plan de beneficios",
+        "description": "Lo que la organización ofrece más allá del salario — salud, dental, jubilación — con cifras, regla de prorrateo y componentes."
+      },
+      "benefit-plan-levels": {
+        "title": "Niveles de beneficios",
+        "singularTitle": "Nivel de beneficios",
+        "description": "Niveles de cobertura por plan — solo empleado, familia — con los costos del nivel."
       }
     },
     "fields": {
@@ -2530,6 +2566,7 @@
       "customerId": "Cliente",
       "projectId": "Proyecto",
       "isDefault": "Predeterminado",
+      "isTerminal": "Final",
       "billMultiplier": "Multiplicador de facturación",
       "lienWaiverEnforcement": "Control de renuncias",
       "defaultLienWaiverType": "Formulario predeterminado",
@@ -2672,7 +2709,27 @@
       "accrualPeriodsPerYear": "Períodos de devengo por año",
       "carryoverKind": "Arrastre",
       "carryoverHours": "Tope de arrastre (horas)",
-      "carryoverExpiresAfterDays": "El arrastre vence a los (días)"
+      "carryoverExpiresAfterDays": "El arrastre vence a los (días)",
+      "sectionId": "Sección",
+      "weight": "Ponderación",
+      "prompt": "Pregunta",
+      "answerKind": "Tipo de respuesta",
+      "ratingScaleMin": "Mínimo de la escala",
+      "ratingScaleMax": "Máximo de la escala",
+      "ratingScaleLabels": "Etiquetas de la escala",
+      "providerPartyId": "Proveedor",
+      "employerSubsidiaryId": "Filial empleadora",
+      "employeeCostBasis": "Base del costo del empleado",
+      "employeeCost": "Costo del empleado",
+      "employerCostBasis": "Base del costo del empleador",
+      "employerCost": "Costo del empleador",
+      "pretax": "Pre-impuestos",
+      "prorationBasis": "Prorrateo",
+      "employeePayComponentId": "Componente del empleado",
+      "employerPayComponentId": "Componente del empleador",
+      "waitingPeriodDays": "Espera (días)",
+      "requiresApproval": "Requiere aprobación",
+      "levelKey": "Clave del nivel"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2735,7 +2792,23 @@
       "leaveAccrualPeriodsPerYear": "Períodos completos en un año de devengo (obligatorio para el devengo por período).",
       "leaveCarryoverKind": "Qué pasa con el tiempo no usado al cierre del año: nada, arrastrar todo o hasta un tope.",
       "leaveCarryoverHours": "Máximo de horas arrastradas (obligatorio para «hasta un tope»).",
-      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen."
+      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen.",
+      "hrmReviewScaleMin": "Calificación más baja que acepta la escala, por ejemplo 1.",
+      "hrmReviewScaleMax": "Calificación más alta que acepta la escala, por ejemplo 5.",
+      "hrmReviewScaleLabels": "Etiquetas opcionales de los extremos, la menor primero.",
+      "benefitKind": "Tipo declarado por la organización — salud, dental, visión, vida, jubilación, bienestar, otro. Texto libre, nunca lista cerrada.",
+      "benefitProvider": "Proveedor o aseguradora detrás del plan, si lo hay.",
+      "benefitSubsidiary": "Filial empleadora a la que se ofrece el plan; vacío significa todas.",
+      "benefitCurrency": "Moneda del plan, tres letras. Se guarda en cada inscripción y nunca se convierte.",
+      "benefitCostBasis": "Cómo se lee la cifra: por período, mes, año o porcentaje del salario.",
+      "benefitCost": "Cifra en la moneda del plan. Las cifras de porcentaje son porcentajes.",
+      "benefitPretax": "La propia declaración pre-impuestos de la organización; los paquetes la interpretan.",
+      "benefitProrationBasis": "Obligatorio: cómo paga un mes parcial. Mes completo lleva todo el mes; diario escala por días cubiertos.",
+      "benefitEmployeeComponent": "Componente de deducción que tarifa las filas del empleado. Obligatorio si el plan tarifa costo del empleado.",
+      "benefitEmployerComponent": "Componente de contribución del empleador que tarifa sus filas. Obligatorio si el plan tarifa costo del empleador.",
+      "benefitWaitingPeriod": "Días de servicio antes de poder inscribirse en el plan.",
+      "benefitRequiresApproval": "Las inscripciones esperan hasta que un gerente las apruebe.",
+      "benefitLevelKey": "Clave del nivel que nombra la inscripción — single, family — estable ante cambios de precio."
     },
     "options": {
       "timeClassification": {
@@ -3104,6 +3177,34 @@
         "none": "Ninguno",
         "carry_all": "Arrastrar todo",
         "carry_up_to": "Arrastrar hasta un tope"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Preselección",
+        "interview": "Entrevista",
+        "assessment": "Prueba",
+        "offer": "Oferta",
+        "hired": "Contratado",
+        "rejected": "Rechazado"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competencia",
+        "goals": "Objetivos",
+        "freeText": "Texto libre"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Calificación",
+        "text": "Texto",
+        "ratingAndText": "Calificación y texto"
+      },
+      "benefitCostBasis": {
+        "per_period": "Por período de pago",
+        "per_month": "Por mes",
+        "per_year": "Por año",
+        "percent_of_pay": "Porcentaje del salario"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Mes completo — todo el mes sean cuales sean las fechas",
+        "daily": "Diario — prorrateado por días cubiertos"
       }
     },
     "laborCosting": {
@@ -3966,7 +4067,9 @@
       "basisCaps": "Topes de base",
       "deductionProtection": "Protección de deducciones",
       "holidayCompanyDay": "Festivo de empresa",
-      "holidayElection": "Elección sobre un festivo legal"
+      "holidayElection": "Elección sobre un festivo legal",
+      "benefitCosts": "Costos y prorrateo",
+      "benefitComponents": "Componentes de nómina"
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",

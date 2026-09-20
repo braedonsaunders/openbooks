@@ -8,6 +8,7 @@ import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
+import { loadRecruitingOverview } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { getLocale } from 'next-intl/server'
 import { can, type Authz } from '../authz'
@@ -16,6 +17,7 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
 import { loadLeavePanel, type LeavePanelData } from './leave'
+import { loadBenefitsPanel, type BenefitsPanelData } from './benefits'
 
 /**
  * Human Resources module home — one read for the workspace landing cockpit:
@@ -109,6 +111,18 @@ export interface HrmOnboardingPanelData {
   viewAllHref: string
 }
 
+export interface HrmRecruitingPanelData {
+  panelTitle: string
+  openLabel: string
+  openValue: string
+  awaitingLabel: string
+  awaitingValue: string
+  interviewsLabel: string
+  interviewsValue: string
+  viewAll: string
+  viewAllHref: string
+}
+
 export interface HrmHomeData {
   title: string
   description: string
@@ -180,6 +194,10 @@ export interface HrmHomeData {
   /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
   positions: HrmPositionsSummary | null
   leavePanel: LeavePanelData | null
+  /** Recruiting figures; null without hrm.recruiting.read. */
+  recruiting: HrmRecruitingPanelData | null
+  /** Open windows, pending approvals, months missing inputs; null without hrm.benefits.read. */
+  benefitsPanel: BenefitsPanelData | null
 }
 
 /**
@@ -242,6 +260,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // today: the cockpit's trend is the read service twelve times, never a
   // row count, so it agrees with the hero to the person.
   const locale = await getLocale()
+  // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
+  // person-readable figure, at most two decimals in the viewer's locale.
+  const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
   const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate])
   const trendData: number[] = []
   for (const date of trendDates) {
@@ -274,7 +295,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     positions = {
       openPositionsLabel: t('home.vitals.openPositions'),
       openPositionsValue: String(openCount),
-      openPositionsSub: t('home.vitals.openPositionsSub', { fte: vacancy.totals.vacantFte }),
+      openPositionsSub: t('home.vitals.openPositionsSub', { fte: fte(vacancy.totals.vacantFte) }),
       unfundedFteValue: vacancy.totals.unfundedFilledFte,
       vacancyTitle: t('home.vacancy.title'),
       departmentColumn: t('home.vacancy.department'),
@@ -292,17 +313,17 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         department: group.departmentName ?? unassignedDepartment,
         employer: group.employerSubsidiaryName,
         positions: group.positions,
-        plannedFte: group.plannedFte,
-        fundedFte: group.fundedFte,
-        filledFte: group.filledFte,
-        vacantFte: group.vacantFte,
+        plannedFte: fte(group.plannedFte),
+        fundedFte: fte(group.fundedFte),
+        filledFte: fte(group.filledFte),
+        vacantFte: fte(group.vacantFte),
       })),
       totals: {
         positions: vacancy.totals.positions,
-        plannedFte: vacancy.totals.plannedFte,
-        fundedFte: vacancy.totals.fundedFte,
-        filledFte: vacancy.totals.filledFte,
-        vacantFte: vacancy.totals.vacantFte,
+        plannedFte: fte(vacancy.totals.plannedFte),
+        fundedFte: fte(vacancy.totals.fundedFte),
+        filledFte: fte(vacancy.totals.filledFte),
+        vacantFte: fte(vacancy.totals.vacantFte),
       },
     }
   }
@@ -508,6 +529,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     : null
 
   const leavePanel = await loadLeavePanel(authz)
+  const recruiting = await loadRecruitingPanel(authz)
   const leavePending = leavePanel?.pendingCount ?? 0
   const overdueSteps = onboarding?.overdue.length ?? 0
   const openPositions = positions ? Number(positions.openPositionsValue) : 0
@@ -544,6 +566,14 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       },
     })
   }
+  if (recruiting) {
+    directory.push({
+      href: '/hrm/recruiting',
+      label: t('home.tabs.recruiting'),
+      iconKey: 'target',
+      badge: { value: recruiting.openValue, hint: t('home.directory.recruitingHint', { count: Number(recruiting.awaitingValue) }), tone: Number(recruiting.awaitingValue) > 0 ? 'warning' : 'neutral' },
+    })
+  }
   if (canReadLeave) {
     directory.push({
       href: '/hrm/leave',
@@ -570,7 +600,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     attention.push({ tone: 'warning', text: t('home.attention.leavePending', { count: leavePending }), href: '/hrm/leave?segment=pending' })
   }
   if (positions && unfundedFte > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: positions.unfundedFteValue }), href: '/hrm/positions' })
+    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: fte(positions.unfundedFteValue) }), href: '/hrm/positions' })
   }
   if (unmigrated > 0) {
     attention.push({ tone: 'warning', text: t('overview.readiness.unmigrated', { count: unmigrated }), href: '/docs/employment-migration' })
@@ -650,5 +680,33 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     // Leave panel: on leave today plus pending approvals, for viewers who
     // may open the Leave tab. Null (no panel) without the leave grant.
     leavePanel,
+    recruiting,
+    // Benefits panel: open windows, pending approvals, elections missing
+    // inputs for the current month. Null without the benefits grant.
+    benefitsPanel: await loadBenefitsPanel(authz),
+  }
+}
+
+/**
+ * Recruiting rail panel: open requisitions, offers awaiting response, and
+ * interviews this week, resolved through the canonical recruiting read
+ * service. Null (no panel) without the recruiting grant — never a gated
+ * link.
+ */
+export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPanelData | null> {
+  if (!can(authz, 'hrm.recruiting.read')) return null
+  const t = await getTranslations('hrm')
+  const overview = await loadRecruitingOverview({ orgId: authz.user.orgId, actorId: authz.user.id })
+  if (!overview) return null
+  return {
+    panelTitle: t('home.recruiting.title'),
+    openLabel: t('home.recruiting.open'),
+    openValue: String(overview.openRequisitions),
+    awaitingLabel: t('home.recruiting.awaiting'),
+    awaitingValue: String(overview.offersAwaitingResponse),
+    interviewsLabel: t('home.recruiting.interviews'),
+    interviewsValue: String(overview.interviewsThisWeek),
+    viewAll: t('home.recruiting.viewAll'),
+    viewAllHref: '/hrm/recruiting',
   }
 }

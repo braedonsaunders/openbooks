@@ -837,6 +837,8 @@
     "hrm_leave_request": "为本人雇佣关系申请休假",
     "hrm_leave_approve": "审批休假申请",
     "hrm_leave_manage": "配置休假类型和政策",
+    "hrm_recruiting_read": "查看招聘漏斗",
+    "hrm_recruiting_manage": "管理招聘需求、候选人、面试和录用通知",
     "hrm_employment_manage": "编写雇用变更",
     "hrm_employment_approve": "决定雇用变更",
     "hrm_position_read": "查看职位和人员编制计划",
@@ -970,7 +972,16 @@
     "compliance_waive": "授予合规例外",
     "compliance_file": "定稿并报送信息申报表",
     "hrm_process_read": "查看流程清单",
-    "hrm_process_manage": "创建、完成和取消流程清单"
+    "hrm_process_manage": "创建、完成和取消流程清单",
+    "hrm_performance_read": "在隐私范围内查看评审周期和评审",
+    "hrm_performance_manage": "运行评审周期、校准和共享评审",
+    "hrm_retention_read": "查看离职记录和流失率",
+    "hrm_benefits_read": "查看福利计划和参保",
+    "hrm_benefits_manage": "管理福利计划、参保窗口和参保",
+    "hrm_self_read": "查看本人的雇佣摘要",
+    "hrm_self_request": "提交本人的档案变更",
+    "hrm_team_read": "查看今日直接下属",
+    "hrm_team_manage": "处理经理分配的团队步骤"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2428,6 +2439,31 @@
         "title": "流程模板步骤",
         "singularTitle": "流程模板步骤",
         "description": "流程模板中的一个有序步骤，含负责人、到期偏移和证据规则。"
+      },
+      "hrm-review-templates": {
+        "title": "评审模板",
+        "singularTitle": "评审模板",
+        "description": "每个组织的评审表单：名称、评分量表和带问题的有序章节。"
+      },
+      "hrm-review-template-sections": {
+        "title": "评审章节",
+        "singularTitle": "评审章节",
+        "description": "评审模板的有序章节：能力、目标或自由文本，可带权重。"
+      },
+      "hrm-review-template-questions": {
+        "title": "评审问题",
+        "singularTitle": "评审问题",
+        "description": "评审模板章节内的问题：评分、文本或两者。必答题须在提交前作答。"
+      },
+      "benefit-plans": {
+        "title": "福利计划",
+        "singularTitle": "福利计划",
+        "description": "组织在工资之外提供的 — 健康、牙科、退休 — 含金额、按月分摊规则和工资组成部分。"
+      },
+      "benefit-plan-levels": {
+        "title": "福利档次",
+        "singularTitle": "福利档次",
+        "description": "每个计划的保障档次 — 仅本人、家庭 — 含档次金额。"
       }
     },
     "fields": {
@@ -2618,6 +2654,7 @@
       "customerId": "客户",
       "projectId": "项目",
       "isDefault": "默认",
+      "isTerminal": "终点",
       "billMultiplier": "开票乘数",
       "lienWaiverEnforcement": "留置权弃权管控",
       "defaultLienWaiverType": "默认弃权表格",
@@ -2717,7 +2754,27 @@
       "accrualPeriodsPerYear": "每年累计期数",
       "carryoverKind": "结转",
       "carryoverHours": "结转上限（小时）",
-      "carryoverExpiresAfterDays": "结转到期（天数）"
+      "carryoverExpiresAfterDays": "结转到期（天数）",
+      "sectionId": "章节",
+      "weight": "权重",
+      "prompt": "问题",
+      "answerKind": "作答类型",
+      "ratingScaleMin": "量表最小值",
+      "ratingScaleMax": "量表最大值",
+      "ratingScaleLabels": "量表标签",
+      "providerPartyId": "供应商",
+      "employerSubsidiaryId": "雇佣子公司",
+      "employeeCostBasis": "个人费用基准",
+      "employeeCost": "个人费用",
+      "employerCostBasis": "公司费用基准",
+      "employerCost": "公司费用",
+      "pretax": "税前",
+      "prorationBasis": "分摊",
+      "employeePayComponentId": "个人组成部分",
+      "employerPayComponentId": "公司组成部分",
+      "waitingPeriodDays": "等待期（天）",
+      "requiresApproval": "需要批准",
+      "levelKey": "档次键"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2780,7 +2837,23 @@
       "leaveAccrualPeriodsPerYear": "一个累计年度内的完整期数（按期累计必填）。",
       "leaveCarryoverKind": "年末未使用时间的处理：不结转、全部结转或结转至上限。",
       "leaveCarryoverHours": "最多可结转的小时数（“结转至上限”必填）。",
-      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。"
+      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。",
+      "hrmReviewScaleMin": "量表接受的最低评分，例如1。",
+      "hrmReviewScaleMax": "量表接受的最高评分，例如5。",
+      "hrmReviewScaleLabels": "可选的端点标签，最低值在前。",
+      "benefitKind": "组织自定的类型 — 健康、牙科、眼科、人寿、退休、健康促进、其他。自由文本，绝非封闭列表。",
+      "benefitProvider": "计划背后的供应商或承保人（如有）。",
+      "benefitSubsidiary": "提供该计划的雇佣子公司；为空表示全部。",
+      "benefitCurrency": "计划货币，三个字母。存于每次参保，永不兑换。",
+      "benefitCostBasis": "金额的读法：按发薪期、按月、按年或工资比例。",
+      "benefitCost": "计划货币金额。比例数字为百分比。",
+      "benefitPretax": "组织自己的税前声明；工资包负责解释。",
+      "benefitProrationBasis": "必填：部分月份如何支付。整月支付整月；按日按覆盖天数折算。",
+      "benefitEmployeeComponent": "为个人行计价的扣除组成部分。计划有个人费用时必填。",
+      "benefitEmployerComponent": "为公司行计价的公司缴款组成部分。计划有公司费用时必填。",
+      "benefitWaitingPeriod": "可参保前的服务天数。",
+      "benefitRequiresApproval": "参保需经经理批准后生效。",
+      "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。"
     },
     "options": {
       "payFrequency": {
@@ -3149,6 +3222,34 @@
         "none": "不结转",
         "carry_all": "全部结转",
         "carry_up_to": "结转至上限"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "筛选",
+        "interview": "面试",
+        "assessment": "测评",
+        "offer": "录用通知",
+        "hired": "已入职",
+        "rejected": "已拒绝"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "能力",
+        "goals": "目标",
+        "freeText": "自由文本"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "评分",
+        "text": "文本",
+        "ratingAndText": "评分加文本"
+      },
+      "benefitCostBasis": {
+        "per_period": "按发薪期",
+        "per_month": "按月",
+        "per_year": "按年",
+        "percent_of_pay": "工资比例"
+      },
+      "benefitProrationBasis": {
+        "full_month": "整月 — 无论日期均为整月",
+        "daily": "按日 — 按覆盖天数分摊"
       }
     },
     "payroll": {
@@ -3897,7 +3998,9 @@
       "deductionProtection": "扣款保护",
       "basisCaps": "基数上限",
       "holidayElection": "法定假日选项",
-      "holidayCompanyDay": "公司假日"
+      "holidayCompanyDay": "公司假日",
+      "benefitCosts": "费用与分摊",
+      "benefitComponents": "工资组成部分"
     },
     "guide": {
       "hero": {

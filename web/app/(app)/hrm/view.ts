@@ -274,6 +274,50 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                   }),
                 ]
               : []),
+            ...(data.benefitsPanel
+              ? [
+                  panel({
+                    title: data.benefitsPanel.title,
+                    iconKey: 'heart-pulse',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-benefits-panel', {
+                        openWindows: data.benefitsPanel.openWindows,
+                        openLabel: data.benefitsPanel.openLabel,
+                        openEmpty: data.benefitsPanel.openEmpty,
+                        pendingCount: data.benefitsPanel.pendingCount,
+                        pendingLabel: data.benefitsPanel.pendingLabel,
+                        missingCount: data.benefitsPanel.missingCount,
+                        missingLabel: data.benefitsPanel.missingLabel,
+                        queueHref: data.benefitsPanel.queueHref,
+                        viewAllLabel: data.pendingViewAll,
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
+            ...(data.recruiting
+              ? [
+                  panel({
+                    title: data.recruiting.panelTitle,
+                    iconKey: 'briefcase',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-recruiting-panel', {
+                        figures: [
+                          { label: data.recruiting.openLabel, value: data.recruiting.openValue },
+                          { label: data.recruiting.awaitingLabel, value: data.recruiting.awaitingValue },
+                          { label: data.recruiting.interviewsLabel, value: data.recruiting.interviewsValue },
+                        ],
+                        viewAll: data.recruiting.viewAll,
+                        viewAllHref: data.recruiting.viewAllHref,
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
             panel({
               title: f('recentTitle'),
               iconKey: 'scroll-text',

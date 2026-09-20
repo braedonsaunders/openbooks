@@ -31,6 +31,10 @@ export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
 export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
 export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
 export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
+export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
+export const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
+export const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
+export const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -44,15 +48,33 @@ const HRM_REQUEST_STATUSES = [
   'withdrawn',
   'applied',
 ] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
+const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment', 'profile_change'] as const
 
 const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
+const HRM_ENROLLMENT_STATUSES = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const
+
+const HRM_REQUISITION_STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
+const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
 
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
+
+const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
+const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
+const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
+const HRM_EXIT_REASONS = [
+  'resignation',
+  'retirement',
+  'end_of_contract',
+  'dismissal',
+  'redundancy',
+  'mutual',
+  'death',
+  'other',
+] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -360,5 +382,253 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'id', label: 'Absence (id)', kind: 'uuid', expr: 'a.id' },
     ],
     defaultSort: { column: 'on_date', direction: 'desc' },
+  },
+  {
+    key: 'hrm_requisitions',
+    label: 'Requisitions',
+    category: 'hrm',
+    description:
+      'One row per vacancy opening: number, title, status, employer, department, position, and headcount versus filled count. Requires the HRM recruiting permission.',
+    // One row per requisition with its establishment and placement. The
+    // fill itself is hire-driven (filled_count moves only in the hire
+    // transaction), so the register reads the stored counters, never a
+    // computed join that could disagree with the hire evidence.
+    from: `hrm_requisitions r
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = r.org_id
+  LEFT JOIN departments dep ON dep.id = r.department_id AND dep.org_id = r.org_id
+  LEFT JOIN positions p ON p.id = r.position_id AND p.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // The opening's employer is the legal-entity boundary: the executor
+    // clamps this to the reader's allowlist, so a restricted reader sees
+    // only their own vacancies.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // A register, not a point-in-time statement: no as-of sentinel and no
+    // implicit period — the opened_on column below carries the fact.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'number', label: 'Number', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'r.title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REQUISITION_STATUSES },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'position', label: 'Position', kind: 'text', expr: 'p.position_code' },
+      { key: 'headcount', label: 'Headcount', kind: 'number', expr: 'r.headcount' },
+      { key: 'filled_count', label: 'Filled', kind: 'number', expr: 'r.filled_count' },
+      { key: 'opened_on', label: 'Opened', kind: 'date', expr: 'r.opened_on' },
+      { key: 'closed_on', label: 'Closed', kind: 'date', expr: 'r.closed_on' },
+      { key: 'requisition_id', label: 'Requisition (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'number', direction: 'asc' },
+  },
+  {
+    key: 'hrm_applications',
+    label: 'Applications',
+    category: 'hrm',
+    description:
+      'One row per candidacy with its funnel stage, plus the funnel-per-stage counts and time-to-fill from opening to hire. Candidate contact PII never leaves through reports — names only. Requires the HRM recruiting permission.',
+    // One row per application on its requisition's funnel: the stage name
+    // resolves through the same-org stage join, and the hire day resolves
+    // through the append-only event ledger (the first hired event), never
+    // through a mutable column — so the funnel and the time-to-fill read
+    // the same evidence the services wrote.
+    from: `hrm_applications a
+  JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = a.org_id
+  JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = a.org_id
+  JOIN hrm_pipeline_stages s ON s.id = a.stage_id AND s.org_id = a.org_id
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = a.org_id
+  LEFT JOIN LATERAL (
+    SELECT min(e.recorded_at)::date AS hired_on
+      FROM hrm_application_events e
+     WHERE e.org_id = a.org_id AND e.application_id = a.id AND e.kind = 'hired'
+  ) hire ON TRUE`,
+    orgColumn: 'a.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    defaultPeriodField: null,
+    columns: [
+      { key: 'requisition_number', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'stage', label: 'Stage', kind: 'text', expr: 's.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: HRM_APPLICATION_STATUSES },
+      { key: 'applied_on', label: 'Applied', kind: 'date', expr: 'a.applied_on' },
+      { key: 'opened_on', label: 'Requisition opened', kind: 'date', expr: 'r.opened_on' },
+      { key: 'hired_on', label: 'Hired', kind: 'date', expr: 'hire.hired_on' },
+      {
+        key: 'days_to_fill',
+        label: 'Days to fill',
+        kind: 'number',
+        expr: 'hire.hired_on - r.opened_on',
+      },
+      { key: 'application_id', label: 'Application (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'applied_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_reviews',
+    label: 'Reviews',
+    category: 'hrm',
+    description:
+      'One row per performance review — cycle and period, employee, kind, status, and the author rating beside the calibration. HR-only: runners hold the performance grant, so unshared reviews never leave the HR scope. Requires the HRM performance permission.',
+    // One row per hrm_reviews assessment with its cycle period and the
+    // subject's name. Calibration never overwrites: both ratings read
+    // side by side with the reason. Review texts stay out of the report
+    // (free-text assessments are PII-dense); ratings and lifecycle state
+    // are the reportable facts.
+    from: `hrm_reviews r
+      JOIN hrm_review_cycles c ON c.id = r.cycle_id AND c.org_id = r.org_id
+      JOIN worker_employments e ON e.id = r.employment_id AND e.org_id = r.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = r.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The cycle period end is the fact: the period picker narrows reviews
+    // to the cycles that ended in the window.
+    defaultPeriodField: 'period_end_on',
+    columns: [
+      { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
+      { key: 'period_end_on', label: 'Period end', kind: 'date', expr: 'c.period_end_on' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'r.kind', options: HRM_REVIEW_KINDS },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REVIEW_STATUSES },
+      { key: 'overall_rating', label: 'Rating', kind: 'number', expr: 'r.overall_rating' },
+      { key: 'calibrated_rating', label: 'Calibrated rating', kind: 'number', expr: 'r.calibrated_rating' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
+      { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'period_end_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_goals',
+    label: 'Goals',
+    category: 'hrm',
+    description:
+      'One row per performance goal — employee, title, status, progress, and due date. Requires the HRM performance permission.',
+    from: `hrm_goals g
+      JOIN worker_employments e ON e.id = g.employment_id AND e.org_id = g.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = g.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = g.org_id`,
+    orgColumn: 'g.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'g.title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'g.status', options: HRM_GOAL_STATUSES },
+      { key: 'progress', label: 'Progress', kind: 'number', expr: 'g.progress_percent' },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'g.due_on' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'g.employment_id' },
+      { key: 'id', label: 'Goal (id)', kind: 'uuid', expr: 'g.id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  {
+    key: 'hrm_turnover',
+    label: 'Turnover',
+    category: 'hrm',
+    description:
+      'One row per leaver — person, termination date, tenure in days, exit reason, and the voluntary and regrettable flags from the exit record. Group by termination month and department for the period-by-department leaver table; rates come from the Retention panel, which pairs leavers with both headcount legs. Leavers without an exit record read involuntary until recorded. Requires the HRM retention permission.',
+    // Leaver facts: the terminated version start is the termination date.
+    // The base subquery pins the leaver set (terminated, currently
+    // asserted — superseded rows are not the story); tenure runs from the
+    // earliest version start, the department is the live primary
+    // assignment's department at termination, and the flags come from the
+    // exit record when one exists (LEFT: a missing record is a gap, never
+    // a dropped leaver).
+    from: `(SELECT * FROM worker_employment_versions WHERE status = 'terminated' AND recorded_until IS NULL) t
+      JOIN worker_employments e ON e.id = t.employment_id AND e.org_id = t.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = t.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = t.org_id
+      LEFT JOIN employment_assignment_versions pa
+        ON pa.employment_id = t.employment_id AND pa.org_id = t.org_id
+       AND pa.is_primary AND pa.recorded_until IS NULL
+       AND pa.effective_from <= t.effective_from
+       AND (pa.effective_to IS NULL OR pa.effective_to > t.effective_from)
+      LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = t.org_id
+      LEFT JOIN hrm_exit_records x ON x.employment_id = t.employment_id AND x.org_id = t.org_id
+      JOIN LATERAL (
+        SELECT min(effective_from) AS first_from
+          FROM worker_employment_versions
+         WHERE org_id = t.org_id AND employment_id = t.employment_id
+      ) f ON TRUE`,
+    orgColumn: 't.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_RETENTION_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    defaultPeriodField: 'terminated_on',
+    columns: [
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 't.effective_from' },
+      { key: 'tenure_days', label: 'Tenure (days)', kind: 'number', expr: `(t.effective_from - f.first_from)` },
+      { key: 'reason', label: 'Reason', kind: 'enum', expr: 'x.reason_kind', options: HRM_EXIT_REASONS },
+      { key: 'voluntary', label: 'Voluntary', kind: 'boolean', expr: 'coalesce(x.is_voluntary, false)' },
+      { key: 'regrettable', label: 'Regrettable', kind: 'boolean', expr: 'coalesce(x.is_regrettable, false)' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 't.employment_id' },
+    ],
+    defaultSort: { column: 'terminated_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_benefit_enrollments',
+    label: 'Benefit enrolments',
+    category: 'hrm',
+    description:
+      'One row per benefit election — person, employer, department at election, plan and coverage tier, status, and the stored per-period employee and employer amounts in plan currency. Requires the HRM benefits permission.',
+    // One row per hrm_benefit_enrollments row with its stored amounts: a
+    // later plan repricing never rewrites these figures, so SUM over a
+    // period is the cost the org actually owes. The department is the
+    // primary assignment effective on the election start — the same
+    // half-open containment the absence entity uses — NULL when no primary
+    // covered the day (an unattributed bucket, never dropped and never
+    // misattributed). This entity never joins the payroll ledger: election
+    // amounts here, money movement in payroll's own entities.
+    from: `hrm_benefit_enrollments e
+      JOIN hrm_benefit_plans p ON p.id = e.plan_id AND p.org_id = e.org_id
+      JOIN worker_employments emp ON emp.id = e.employment_id AND emp.org_id = e.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = e.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id
+      LEFT JOIN hrm_benefit_plan_levels lvl
+        ON lvl.plan_id = e.plan_id AND lvl.org_id = e.org_id AND lvl.level_key = e.coverage_level_key
+      LEFT JOIN employment_assignment_versions pa
+        ON pa.employment_id = e.employment_id AND pa.org_id = e.org_id
+       AND pa.is_primary AND pa.recorded_until IS NULL
+       AND pa.effective_from <= e.effective_from
+       AND (pa.effective_to IS NULL OR pa.effective_to > e.effective_from)
+      LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = e.org_id`,
+    orgColumn: 'e.org_id',
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_BENEFITS_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The election start is the fact: the period picker narrows cost by
+    // the month coverage began, so a mid-year election attributes to its
+    // own period, never to the plan year.
+    defaultPeriodField: 'effective_from',
+    columns: [
+      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'e.effective_from' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.code' },
+      { key: 'plan_name', label: 'Plan name', kind: 'text', expr: 'p.name' },
+      { key: 'coverage', label: 'Coverage', kind: 'text', expr: 'lvl.label' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'e.status', options: HRM_ENROLLMENT_STATUSES },
+      { key: 'employee_amount', label: 'Employee amount', kind: 'number', expr: 'e.employee_amount_per_period' },
+      { key: 'employer_amount', label: 'Employer amount', kind: 'number', expr: 'e.employer_amount_per_period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
+      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'e.effective_to' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
+      { key: 'id', label: 'Enrolment (id)', kind: 'uuid', expr: 'e.id' },
+    ],
+    defaultSort: { column: 'effective_from', direction: 'desc' },
   },
 ]

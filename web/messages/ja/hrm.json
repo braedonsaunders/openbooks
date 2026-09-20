@@ -7,7 +7,17 @@
       "positions": "ポジション",
       "processes": "プロセス",
       "leave": "休暇",
-      "myLeave": "自分の休暇"
+      "myLeave": "自分の休暇",
+      "recruiting": "採用",
+      "performance": "パフォーマンス",
+      "benefits": "福利厚生"
+    },
+    "recruiting": {
+      "title": "採用",
+      "open": "募集中の求人",
+      "awaiting": "回答待ちのオファー",
+      "interviews": "今週の面接",
+      "viewAll": "採用を開く"
     },
     "vitals": {
       "headcount": "人員数",
@@ -33,7 +43,8 @@
       "employeesHint": "本日在籍",
       "positionsHint": "募集中",
       "processesHint": "{count, plural, other {期限超過 # 件}}",
-      "leaveHint": "{count, plural, other {承認待ち # 件}}"
+      "leaveHint": "{count, plural, other {承認待ち # 件}}",
+      "recruitingHint": "{count, plural, other {回答待ちのオファー # 件}}"
     },
     "vacancy": {
       "title": "部門別の欠員",
@@ -119,6 +130,13 @@
       "title": "休暇",
       "onLeaveEmpty": "本日欠勤中の人はいません。",
       "pendingSub": "承認待ち"
+    },
+    "benefits": {
+      "title": "福利厚生",
+      "openWindows": "受付中",
+      "noOpenWindow": "受付中の加入期間はありません。",
+      "pendingSub": "承認待ち",
+      "missingSub": "入力のない加入"
     }
   },
   "queue": {
@@ -273,6 +291,16 @@
       "positionRequired": "ポジションを選択するか、配属を未割当としてマークしてください。",
       "unassignLabel": "ポジションから外す",
       "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。"
+    },
+    "exit": {
+      "title": "退職記録",
+      "empty": "退職記録はまだありません。"
+    },
+    "benefits": {
+      "title": "福利厚生",
+      "empty": "福利厚生の加入や扶養家族はまだありません。",
+      "viewAll": "福利厚生",
+      "dependents": "扶養家族（{count}人）: {names}"
     }
   },
   "directory": {
@@ -480,5 +508,442 @@
     "timeKind": "時間",
     "valueKind": "金額",
     "unlimited": "無制限"
+  },
+  "recruiting": {
+    "title": "採用",
+    "description": "欠員から採用まで: 要員計画に対する求人、選考ファネルの候補者、面接、オファー、採用。",
+    "add": "新規求人",
+    "empty": "この条件に一致する求人はありません。",
+    "total": "合計",
+    "segmentsLabel": "ステータス",
+    "statusAll": "すべてのステータス",
+    "status": {
+      "draft": "下書き",
+      "open": "募集中",
+      "on_hold": "保留中",
+      "filled": "充足済み",
+      "cancelled": "取消済み"
+    },
+    "columns": {
+      "number": "番号",
+      "title": "タイトル",
+      "position": "ポジション",
+      "department": "部門",
+      "headcount": "充足 / 計画",
+      "hiringManager": "採用責任者",
+      "opened": "開始",
+      "status": "ステータス"
+    },
+    "drawer": {
+      "title": "求人 {number}",
+      "pipeline": "パイプライン",
+      "applications": "応募",
+      "noApplications": "まだ候補者が紐付いていません。",
+      "candidate": "候補者",
+      "stage": "ステージ",
+      "applied": "応募日",
+      "lastEvent": "最終イベント",
+      "interviews": "面接",
+      "offer": "オファー",
+      "timeToFill": "充足日数",
+      "days": "日",
+      "missing": "このレコードは表示できません。"
+    },
+    "create": {
+      "titleField": "タイトル",
+      "employer": "雇用主",
+      "department": "部門",
+      "noDepartment": "部門なし",
+      "headcount": "人数",
+      "targetStart": "開始予定",
+      "submit": "求人を作成",
+      "failed": "求人を作成できませんでした。"
+    },
+    "attach": {
+      "title": "候補者を紐付け",
+      "name": "氏名",
+      "email": "メール",
+      "phone": "電話",
+      "submit": "候補者を紐付け",
+      "failed": "候補者を紐付けできませんでした。",
+      "rejectTitle": "辞退",
+      "rejectReason": "理由"
+    },
+    "move": {
+      "title": "ステージ移動",
+      "submit": "移動",
+      "failed": "応募を移動できませんでした。",
+      "reject": "辞退",
+      "withdraw": "取下げ"
+    },
+    "interview": {
+      "title": "面接を設定",
+      "kind": "種類",
+      "when": "日時",
+      "duration": "分数",
+      "location": "場所",
+      "panel": "面接官",
+      "submit": "面接を設定",
+      "failed": "面接を設定できませんでした。",
+      "completeTitle": "完了",
+      "outcome": "結果",
+      "feedback": "フィードバック",
+      "completeSubmit": "面接を完了",
+      "cancel": "面接を取消"
+    },
+    "interviewKind": {
+      "phone": "電話",
+      "video": "ビデオ",
+      "onsite": "対面",
+      "panel": "パネル",
+      "assessment": "アセスメント"
+    },
+    "interviewOutcome": {
+      "advance": "次へ",
+      "hold": "保留",
+      "reject": "辞退"
+    },
+    "offerCard": {
+      "title": "条件を作成",
+      "job": "職種",
+      "start": "開始日",
+      "amount": "金額",
+      "currency": "通貨",
+      "basis": "基準",
+      "expires": "期限",
+      "submit": "オファーを作成",
+      "failed": "オファーを作成できませんでした。"
+    },
+    "offerActions": {
+      "send": "送信",
+      "accept": "承諾して採用",
+      "decline": "辞退",
+      "withdraw": "撤回",
+      "reason": "理由",
+      "failed": "オファー操作に失敗しました。"
+    },
+    "basis": {
+      "hourly": "時給",
+      "annual": "年俸"
+    },
+    "candidate": {
+      "email": "メール",
+      "phone": "電話",
+      "source": "経路"
+    }
+  },
+  "performance": {
+    "title": "パフォーマンス",
+    "description": "自己評価と上長評価、キャリブレーション、共有、確認を備えたレビューサイクル — 目標付き。",
+    "newCycle": "新規サイクル",
+    "segmentsLabel": "ステータス",
+    "allCycles": "すべてのサイクル",
+    "mineSegment": "自分のレビュー",
+    "empty": "レビューサイクルはまだありません。",
+    "colName": "サイクル",
+    "colPeriod": "期間",
+    "colTemplate": "テンプレート",
+    "colSelf": "自己",
+    "colManager": "上長",
+    "colStatus": "ステータス",
+    "colKind": "種類",
+    "colRating": "評価",
+    "statusDraft": "下書き",
+    "statusOpen": "進行中",
+    "statusCalibrating": "調整中",
+    "statusClosed": "完了",
+    "kindSelf": "自己レビュー",
+    "kindManager": "上長レビュー",
+    "kindPeer": "ピアレビュー",
+    "reviewsTitle": "レビュー",
+    "reviewsEmpty": "レビューはまだ作成されていません。",
+    "moveToCalibrating": "調整中に移行",
+    "forceCalibrating": "調整を強制",
+    "forceReason": "強制する理由",
+    "forceReasonPlaceholder": "未完了のレビューがあるまま調整を開始する理由",
+    "closeCycle": "サイクルを完了",
+    "gapNote": "上長レビューなしで開始された雇用が{count}件 — 上長が未設定。",
+    "actionFailed": "操作に失敗しました。",
+    "cycleNotFound": "レビューサイクルが見つかりません。",
+    "reviewNotFound": "レビューが見つかりません。",
+    "exitNotFound": "退職記録が見つかりません。",
+    "exitTitle": "退職記録",
+    "overallRating": "総合評価",
+    "calibratedRating": "調整後評価",
+    "goalsTitle": "目標",
+    "goalsEmpty": "このサイクル期間の目標はありません。",
+    "goalTitle": "目標",
+    "goalDue": "期限",
+    "addGoal": "目標を追加",
+    "goalProgress": "進捗",
+    "saveProgress": "進捗を保存",
+    "submitReview": "レビューを提出",
+    "shareReview": "本人と共有",
+    "acknowledgeReview": "確認する",
+    "calibrateReview": "調整する",
+    "calibrateRating": "調整後評価",
+    "reason": "理由",
+    "reopenReview": "差し戻す",
+    "answerRating": "評価",
+    "answerText": "回答",
+    "answerRequired": "必須",
+    "newCycleName": "サイクル名",
+    "periodStart": "期間開始",
+    "periodEnd": "期間終了",
+    "createCycle": "サイクルを作成",
+    "cancel": "キャンセル",
+    "templateLabel": "テンプレート",
+    "templateSetupHint": "設定でレビューテンプレートを管理",
+    "reviewPending": "未完了",
+    "reviewSubmitted": "提出済み",
+    "reviewCalibrated": "調整済み",
+    "reviewShared": "共有済み",
+    "reviewAcknowledged": "確認済み",
+    "exitReason": "退職理由",
+    "exitReason_resignation": "自己都合退職",
+    "exitReason_retirement": "定年退職",
+    "exitReason_end_of_contract": "契約満了",
+    "exitReason_dismissal": "解雇",
+    "exitReason_redundancy": "整理解雇",
+    "exitReason_mutual": "合意退職",
+    "exitReason_death": "死亡",
+    "exitReason_other": "その他",
+    "exitVoluntary": "自己都合",
+    "exitVoluntaryYes": "はい、自己都合",
+    "exitVoluntaryNo": "いいえ、会社都合",
+    "exitDestination": "転職先",
+    "exitNotes": "備考",
+    "saveExit": "退職記録を保存",
+    "recordExit": "退職を記録"
+  },
+  "retention": {
+    "title": "定着",
+    "turnoverTwelveMonths": "離職率（直近12か月）",
+    "regrettableLeavers": "惜しまれる退職者",
+    "missingExits": "退職記録のない終了者",
+    "noMissingExits": "すべての終了者に退職記録があります。",
+    "noInterviewTitle": "面談なしの退職記録",
+    "noInterviewEmpty": "すべての退職記録に面談があります。"
+  },
+  "benefits": {
+    "title": "福利厚生",
+    "description": "プラン、加入期間、加入、および給与への月額金額。",
+    "windowsTitle": "加入期間",
+    "enrolmentsTitle": "加入",
+    "segmentsLabel": "表示",
+    "allLabel": "すべて",
+    "segments": {
+      "open": "受付中",
+      "draft": "下書き",
+      "closed": "終了",
+      "enrolments": "加入"
+    },
+    "columns": {
+      "window": "期間",
+      "kind": "種類",
+      "range": "期間",
+      "elections": "加入数",
+      "pending": "保留中",
+      "status": "状態",
+      "employee": "従業員",
+      "plan": "プラン",
+      "coverage": "区分",
+      "employeeAmount": "本人",
+      "employerAmount": "会社"
+    },
+    "windowsEmptyTitle": "期間はありません",
+    "windowsEmpty": "この区分にはまだ何もありません。",
+    "enrolmentsEmptyTitle": "加入はありません",
+    "enrolmentsEmpty": "まだ加入がありません。",
+    "unknownSegmentTitle": "不明な区分",
+    "unknownSegment": "福利厚生の区分 {segment} は存在しません。",
+    "newWindow": "新規期間",
+    "newWindowTitle": "新規加入期間",
+    "windowName": "名称",
+    "windowKind": "種類",
+    "windowOpens": "開始日",
+    "windowCloses": "終了日",
+    "windowPlanYear": "プラン年度開始日",
+    "windowSubsidiary": "雇用子会社",
+    "windowDepartment": "部門",
+    "windowAll": "すべて",
+    "windowRequired": "保存前に名称と3つの日付を入力してください。",
+    "windowFailed": "期間を保存できませんでした。",
+    "createWindow": "期間を作成",
+    "cancel": "キャンセル",
+    "openAction": "期間を開始",
+    "closeAction": "期間を終了",
+    "closeReasonPlaceholder": "この期間を終了する理由は？保留中の加入はこの理由で却下されます。",
+    "openWindow": "開く",
+    "openEnrollment": "開く",
+    "approve": "承認",
+    "drawerProgress": "加入状況",
+    "drawerEnrolments": "この期間の加入",
+    "drawerNoEnrolments": "この期間にはまだ加入がありません。",
+    "windowKinds": {
+      "open_enrollment": "定期加入",
+      "new_hire": "新規雇用",
+      "life_event": "ライフイベント"
+    },
+    "statusNames": {
+      "draft": "下書き",
+      "open": "受付中",
+      "closed": "終了",
+      "elected": "加入済",
+      "waived": "辞退",
+      "pending_approval": "承認待ち",
+      "active": "有効",
+      "ended": "終了済",
+      "cancelled": "取消済"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "概要",
+      "profile": "プロフィール",
+      "leave": "休暇",
+      "checklists": "チェックリスト",
+      "team": "チーム"
+    },
+    "refusedTitle": "セルフサービスは利用できません",
+    "overview": {
+      "title": "自分",
+      "description": "あなたの雇用、申請、残高 — ここに表示されるのはそれだけです。",
+      "notAvailable": "未設定",
+      "employmentsTitle": "私の雇用",
+      "employmentsEmpty": "雇用記録がありません",
+      "employmentsEmptyDescription": "人事部があなたの雇用をまだ登録していません。",
+      "employer": "雇用主",
+      "jobTitle": "職名",
+      "department": "部門",
+      "status": "ステータス",
+      "manager": "上長",
+      "serviceStart": "勤務開始日",
+      "stepsTitle": "未完了のステップ",
+      "stepsEmpty": "未完了のステップはありません",
+      "stepsEmptyDescription": "あなたに割り当てられたチェックリストのステップがここに表示されます。",
+      "viewChecklists": "チェックリストを開く",
+      "requestsTitle": "処理中の申請",
+      "requestsEmpty": "処理中の申請はありません",
+      "requestsEmptyDescription": "あなたが提出した提案は決定までここに表示されます。",
+      "balancesTitle": "残高",
+      "balancesEmpty": "有効な休暇種別がありません。",
+      "viewLeave": "休暇を開く",
+      "extensionsTitle": "その他"
+    },
+    "profile": {
+      "title": "マイプロフィール",
+      "description": "あなたの連絡先記録です。変更は承認申請として提出されます。",
+      "contactTitle": "連絡先",
+      "addressTitle": "住所",
+      "noAddress": "住所が登録されていません。",
+      "emergencyTitle": "緊急連絡先",
+      "noEmergency": "緊急連絡先が登録されていません。",
+      "edit": "プロフィールを編集",
+      "phone": "電話番号",
+      "email": "個人メール",
+      "addressLabel": "ラベル",
+      "line1": "住所1",
+      "line2": "住所2",
+      "city": "市区町村",
+      "region": "都道府県",
+      "postalCode": "郵便番号",
+      "country": "国",
+      "employment": "雇用",
+      "emergencyName": "氏名",
+      "emergencyRelationship": "続柄",
+      "emergencyPhone": "電話番号",
+      "reason": "理由",
+      "reasonPlaceholder": "承認者向けに変更内容を記入",
+      "clearHint": "この項目をクリア",
+      "submit": "承認申請する",
+      "cancel": "キャンセル",
+      "submitFailed": "プロフィール申請を提出できませんでした。",
+      "dialogTitle": "プロフィールを編集",
+      "dialogDescription": "変更は申請として提出され、承認後に記録が更新されます。",
+      "pendingTitle": "処理中のプロフィール申請",
+      "pendingMessage": "プロフィール変更は{status}です。承認後に記録が更新されます。"
+    },
+    "checklists": {
+      "title": "マイチェックリスト",
+      "description": "あなたに割り当てられたステップと完了処理。",
+      "listTitle": "未完了のステップ",
+      "columns": {
+        "title": "ステップ",
+        "process": "チェックリスト",
+        "due": "期限",
+        "required": "必須",
+        "evidence": "証跡",
+        "status": "ステータス"
+      },
+      "required": "必須",
+      "optional": "任意",
+      "complete": "完了する",
+      "completeFailed": "ステップを完了できませんでした。",
+      "overdue": "期限切れ",
+      "emptyTitle": "未完了のステップはありません",
+      "emptyDescription": "あなたに割り当てられたステップがここに表示されます。"
+    },
+    "requests": {
+      "columns": {
+        "kind": "種類",
+        "status": "ステータス",
+        "submitted": "提出日"
+      }
+    },
+    "requestKinds": {
+      "hire": "採用",
+      "status_change": "ステータス変更",
+      "assignment_change": "配置変更",
+      "termination": "退職",
+      "position_assignment": "役職割当",
+      "profile_change": "プロフィール変更",
+      "unknown": "不明"
+    },
+    "requestStatus": {
+      "draft": "下書き",
+      "pending_approval": "承認待ち",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "withdrawn": "取下げ",
+      "applied": "適用済み"
+    },
+    "employmentStatus": {
+      "offered": "内定",
+      "active": "在職",
+      "on_leave": "休職中",
+      "suspended": "停止中",
+      "terminated": "退職済み"
+    },
+    "stepStatus": {
+      "pending": "未完了",
+      "done": "完了",
+      "skipped": "スキップ"
+    },
+    "evidenceKinds": {
+      "none": "なし",
+      "acknowledgement": "確認",
+      "attachment": "添付"
+    },
+    "team": {
+      "title": "マイチーム",
+      "description": "今日時点の直属の部下 — 名簿、ステップ、未決定事項。",
+      "rosterTitle": "直属の部下",
+      "columns": {
+        "name": "氏名",
+        "title": "職名",
+        "department": "部門",
+        "status": "ステータス",
+        "serviceStart": "勤務開始日"
+      },
+      "rosterEmpty": "直属の部下はいません",
+      "stepsTitle": "自分に割り当てられたステップ",
+      "stepsEmpty": "このチームであなたに割り当てられたステップはありません。",
+      "leaveTitle": "未決定の休暇申請",
+      "leaveEmpty": "決定待ちの休暇申請はありません。",
+      "decideInApprovals": "承認画面で決定する",
+      "changesTitle": "未決定の変更申請",
+      "changesEmpty": "決定待ちの変更申請はありません。"
+    }
   }
 }

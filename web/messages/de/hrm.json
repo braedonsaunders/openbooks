@@ -7,7 +7,17 @@
       "positions": "Positionen",
       "processes": "Vorgänge",
       "leave": "Urlaub",
-      "myLeave": "Mein Urlaub"
+      "myLeave": "Mein Urlaub",
+      "recruiting": "Einstellung",
+      "performance": "Leistung",
+      "benefits": "Leistungen"
+    },
+    "recruiting": {
+      "title": "Einstellung",
+      "open": "Offene Anfragen",
+      "awaiting": "Angebote mit offener Antwort",
+      "interviews": "Interviews diese Woche",
+      "viewAll": "Einstellung öffnen"
     },
     "vitals": {
       "headcount": "Personalbestand",
@@ -33,7 +43,8 @@
       "employeesHint": "heute im Dienst",
       "positionsHint": "offen",
       "processesHint": "{count, plural, one {# Schritt überfällig} other {# Schritte überfällig}}",
-      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}"
+      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}",
+      "recruitingHint": "{count, plural, one {# Angebot wartet auf Antwort} other {# Angebote warten auf Antwort}}"
     },
     "vacancy": {
       "title": "Vakanzen nach Abteilung",
@@ -119,6 +130,13 @@
       "title": "Urlaub",
       "onLeaveEmpty": "Heute niemand abwesend.",
       "pendingSub": "warten auf Genehmigung"
+    },
+    "benefits": {
+      "title": "Leistungen",
+      "openWindows": "Offen",
+      "noOpenWindow": "Kein Anmeldefenster ist offen.",
+      "pendingSub": "Ausstehende Genehmigungen",
+      "missingSub": "Anmeldungen ohne Eingaben"
     }
   },
   "queue": {
@@ -273,6 +291,16 @@
       "positionRequired": "Wählen Sie eine Position oder markieren Sie die Zuordnung als nicht zugeordnet.",
       "unassignLabel": "Von der Position lösen",
       "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand."
+    },
+    "exit": {
+      "title": "Austrittsdatensatz",
+      "empty": "Noch kein Austrittsdatensatz."
+    },
+    "benefits": {
+      "title": "Leistungen",
+      "empty": "Noch keine Leistungsanmeldungen oder Angehörige.",
+      "viewAll": "Leistungen",
+      "dependents": "{count, plural, one {# Angehöriger: {names}} other {# Angehörige: {names}}}"
     }
   },
   "directory": {
@@ -480,5 +508,442 @@
     "timeKind": "Zeit",
     "valueKind": "Geldwert",
     "unlimited": "Unbegrenzt"
+  },
+  "recruiting": {
+    "title": "Einstellung",
+    "description": "Von der Stelle zur Einstellung: Bedarfsanfragen zum Stellenplan, Kandidaten im Auswahlprozess, Interviews, Angebote und die Einstellung.",
+    "add": "Neue Anfrage",
+    "empty": "Keine Anfragen für diesen Filter.",
+    "total": "Gesamt",
+    "segmentsLabel": "Stand",
+    "statusAll": "Alle Status",
+    "status": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "on_hold": "Pausiert",
+      "filled": "Besetzt",
+      "cancelled": "Abgebrochen"
+    },
+    "columns": {
+      "number": "Nummer",
+      "title": "Titel",
+      "position": "Stelle",
+      "department": "Abteilung",
+      "headcount": "Besetzt / Plan",
+      "hiringManager": "Einstellende Führungskraft",
+      "opened": "Eröffnet",
+      "status": "Stand"
+    },
+    "drawer": {
+      "title": "Anfrage {number}",
+      "pipeline": "Prozess",
+      "applications": "Bewerbungen",
+      "noApplications": "Noch keine Kandidaten zugeordnet.",
+      "candidate": "Kandidat",
+      "stage": "Stufe",
+      "applied": "Beworben",
+      "lastEvent": "Letztes Ereignis",
+      "interviews": "Bewerbungsgespräche",
+      "offer": "Angebot",
+      "timeToFill": "Zeit bis Besetzung",
+      "days": "Tage",
+      "missing": "Dieser Datensatz ist nicht mehr sichtbar."
+    },
+    "create": {
+      "titleField": "Titel",
+      "employer": "Arbeitgeber",
+      "department": "Abteilung",
+      "noDepartment": "Keine Abteilung",
+      "headcount": "Planstellen",
+      "targetStart": "Zielstart",
+      "submit": "Anfrage erstellen",
+      "failed": "Die Anfrage konnte nicht erstellt werden."
+    },
+    "attach": {
+      "title": "Kandidat zuordnen",
+      "name": "Kandidatenname",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "submit": "Kandidat zuordnen",
+      "failed": "Der Kandidat konnte nicht zugeordnet werden.",
+      "rejectTitle": "Ablehnen",
+      "rejectReason": "Grund"
+    },
+    "move": {
+      "title": "Stufe wechseln",
+      "submit": "Wechseln",
+      "failed": "Die Bewerbung konnte nicht verschoben werden.",
+      "reject": "Ablehnen",
+      "withdraw": "Zurückziehen"
+    },
+    "interview": {
+      "title": "Interview planen",
+      "kind": "Art",
+      "when": "Wann",
+      "duration": "Minuten",
+      "location": "Ort",
+      "panel": "Auswahlgremium",
+      "submit": "Interview planen",
+      "failed": "Das Interview konnte nicht geplant werden.",
+      "completeTitle": "Abschließen",
+      "outcome": "Ergebnis",
+      "feedback": "Rückmeldung",
+      "completeSubmit": "Interview abschließen",
+      "cancel": "Interview absagen"
+    },
+    "interviewKind": {
+      "phone": "Telefon",
+      "video": "Videoanruf",
+      "onsite": "Vor Ort",
+      "panel": "Gremium",
+      "assessment": "Assessment"
+    },
+    "interviewOutcome": {
+      "advance": "Weiter",
+      "hold": "Warten",
+      "reject": "Ablehnen"
+    },
+    "offerCard": {
+      "title": "Konditionen entwerfen",
+      "job": "Stellenbezeichnung",
+      "start": "Startdatum",
+      "amount": "Betrag",
+      "currency": "Währung",
+      "basis": "Grundlage",
+      "expires": "Läuft ab",
+      "submit": "Angebot entwerfen",
+      "failed": "Das Angebot konnte nicht entworfen werden."
+    },
+    "offerActions": {
+      "send": "Senden",
+      "accept": "Annehmen und einstellen",
+      "decline": "Ablehnen",
+      "withdraw": "Zurückziehen",
+      "reason": "Grund",
+      "failed": "Die Angebotsaktion ist fehlgeschlagen."
+    },
+    "basis": {
+      "hourly": "Stündlich",
+      "annual": "Jährlich"
+    },
+    "candidate": {
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "source": "Quelle"
+    }
+  },
+  "performance": {
+    "title": "Leistung",
+    "description": "Überprüfungszyklen mit Selbst- und Vorgesetztenbeurteilungen, Kalibrierung, Freigabe und Bestätigung – plus Ziele.",
+    "newCycle": "Neuer Zyklus",
+    "segmentsLabel": "Status",
+    "allCycles": "Alle Zyklen",
+    "mineSegment": "Meine Beurteilungen",
+    "empty": "Noch keine Überprüfungszyklen.",
+    "colName": "Zyklus",
+    "colPeriod": "Zeitraum",
+    "colTemplate": "Vorlage",
+    "colSelf": "Selbst",
+    "colManager": "Vorgesetzte",
+    "colStatus": "Stand",
+    "colKind": "Art",
+    "colRating": "Bewertung",
+    "statusDraft": "Entwurf",
+    "statusOpen": "Offen",
+    "statusCalibrating": "Kalibrierung",
+    "statusClosed": "Geschlossen",
+    "kindSelf": "Selbstbeurteilung",
+    "kindManager": "Vorgesetztenbeurteilung",
+    "kindPeer": "Kollegenbeurteilung",
+    "reviewsTitle": "Beurteilungen",
+    "reviewsEmpty": "Noch keine Beurteilungen erstellt.",
+    "moveToCalibrating": "In Kalibrierung überführen",
+    "forceCalibrating": "Kalibrierung erzwingen",
+    "forceReason": "Grund für das Erzwingen",
+    "forceReasonPlaceholder": "Warum die Kalibrierung mit offenen Beurteilungen startet",
+    "closeCycle": "Zyklus schließen",
+    "gapNote": "{count} Anstellungen ohne Vorgesetztenbeurteilung eröffnet – kein Vorgesetzter zugeordnet.",
+    "actionFailed": "Die Aktion ist fehlgeschlagen.",
+    "cycleNotFound": "Überprüfungszyklus nicht gefunden.",
+    "reviewNotFound": "Beurteilung nicht gefunden.",
+    "exitNotFound": "Austrittsdatensatz nicht gefunden.",
+    "exitTitle": "Austrittsdatensatz",
+    "overallRating": "Gesamtbewertung",
+    "calibratedRating": "Kalibrierte Bewertung",
+    "goalsTitle": "Ziele",
+    "goalsEmpty": "Keine Ziele für diesen Zykluszeitraum.",
+    "goalTitle": "Ziel",
+    "goalDue": "Fälligkeitsdatum",
+    "addGoal": "Ziel hinzufügen",
+    "goalProgress": "Fortschritt",
+    "saveProgress": "Fortschritt speichern",
+    "submitReview": "Beurteilung einreichen",
+    "shareReview": "Mit der Person teilen",
+    "acknowledgeReview": "Bestätigen",
+    "calibrateReview": "Kalibrieren",
+    "calibrateRating": "Kalibrierte Bewertung",
+    "reason": "Grund",
+    "reopenReview": "Erneut öffnen",
+    "answerRating": "Bewertung",
+    "answerText": "Antwort",
+    "answerRequired": "erforderlich",
+    "newCycleName": "Zyklusname",
+    "periodStart": "Periodenbeginn",
+    "periodEnd": "Periodenende",
+    "createCycle": "Zyklus erstellen",
+    "cancel": "Abbrechen",
+    "templateLabel": "Vorlage",
+    "templateSetupHint": "Beurteilungsvorlagen in den Einstellungen verwalten",
+    "reviewPending": "Ausstehend",
+    "reviewSubmitted": "Eingereicht",
+    "reviewCalibrated": "Kalibriert",
+    "reviewShared": "Geteilt",
+    "reviewAcknowledged": "Bestätigt",
+    "exitReason": "Austrittsgrund",
+    "exitReason_resignation": "Eigenkündigung",
+    "exitReason_retirement": "Ruhestand",
+    "exitReason_end_of_contract": "Vertragsende",
+    "exitReason_dismissal": "Arbeitgeberkündigung",
+    "exitReason_redundancy": "Betriebliche Kündigung",
+    "exitReason_mutual": "Einvernehmliche Trennung",
+    "exitReason_death": "Todesfall",
+    "exitReason_other": "Sonstiges",
+    "exitVoluntary": "Freiwilliger Austritt",
+    "exitVoluntaryYes": "Ja, freiwillig",
+    "exitVoluntaryNo": "Nein, unfreiwillig",
+    "exitDestination": "Ziel",
+    "exitNotes": "Notizen",
+    "saveExit": "Austrittsdatensatz speichern",
+    "recordExit": "Austritt erfassen"
+  },
+  "retention": {
+    "title": "Bindung",
+    "turnoverTwelveMonths": "Fluktuation, letzte 12 Monate",
+    "regrettableLeavers": "Bedauerte Abgänge",
+    "missingExits": "Beendet ohne Austrittsdatensatz",
+    "noMissingExits": "Jede Beendigung hat ihren Austrittsdatensatz.",
+    "noInterviewTitle": "Austrittsdatensätze ohne Gespräch",
+    "noInterviewEmpty": "Jeder Austrittsdatensatz hat sein Gespräch."
+  },
+  "benefits": {
+    "title": "Leistungen",
+    "description": "Pläne, Anmeldefenster, Anmeldungen und die monatlichen Beträge für die Abrechnung.",
+    "windowsTitle": "Anmeldefenster",
+    "enrolmentsTitle": "Anmeldungen",
+    "segmentsLabel": "Anzeigen",
+    "allLabel": "Alle",
+    "segments": {
+      "open": "Offen",
+      "draft": "Entwurf",
+      "closed": "Geschlossen",
+      "enrolments": "Anmeldungen"
+    },
+    "columns": {
+      "window": "Fenster",
+      "kind": "Art",
+      "range": "Zeitraum",
+      "elections": "Anmeldungen",
+      "pending": "Offen",
+      "status": "Status",
+      "employee": "Mitarbeiter",
+      "plan": "Plan",
+      "coverage": "Stufe",
+      "employeeAmount": "Arbeitnehmer",
+      "employerAmount": "Arbeitgeber"
+    },
+    "windowsEmptyTitle": "Keine Fenster hier",
+    "windowsEmpty": "Noch nichts in diesem Bereich.",
+    "enrolmentsEmptyTitle": "Keine Anmeldungen hier",
+    "enrolmentsEmpty": "Noch nichts angemeldet.",
+    "unknownSegmentTitle": "Unbekannter Bereich",
+    "unknownSegment": "Es gibt keinen Leistungsbereich {segment}.",
+    "newWindow": "Neues Fenster",
+    "newWindowTitle": "Neues Anmeldefenster",
+    "windowName": "Name",
+    "windowKind": "Art",
+    "windowOpens": "Beginn am",
+    "windowCloses": "Ende am",
+    "windowPlanYear": "Planjahr beginnt am",
+    "windowSubsidiary": "Arbeitgebergesellschaft",
+    "windowDepartment": "Abteilung",
+    "windowAll": "Alle",
+    "windowRequired": "Benennen Sie das Fenster und setzen Sie alle drei Daten vor dem Speichern.",
+    "windowFailed": "Das Fenster konnte nicht gespeichert werden.",
+    "createWindow": "Fenster anlegen",
+    "cancel": "Abbrechen",
+    "openAction": "Fenster öffnen",
+    "closeAction": "Fenster schließen",
+    "closeReasonPlaceholder": "Warum schließt dieses Fenster? Offene Anmeldungen werden mit diesem Grund abgelehnt.",
+    "openWindow": "Öffnen",
+    "openEnrollment": "Öffnen",
+    "approve": "Genehmigen",
+    "drawerProgress": "Anmeldefortschritt",
+    "drawerEnrolments": "Anmeldungen in diesem Fenster",
+    "drawerNoEnrolments": "Noch keine Anmeldungen in diesem Fenster.",
+    "windowKinds": {
+      "open_enrollment": "Offene Anmeldung",
+      "new_hire": "Neueinstellung",
+      "life_event": "Lebensereignis"
+    },
+    "statusNames": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "closed": "Geschlossen",
+      "elected": "Angemeldet",
+      "waived": "Verzichtet",
+      "pending_approval": "Zur Genehmigung",
+      "active": "Aktiv",
+      "ended": "Beendet",
+      "cancelled": "Storniert"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "Übersicht",
+      "profile": "Profil",
+      "leave": "Urlaub",
+      "checklists": "Checklisten",
+      "team": "Team"
+    },
+    "refusedTitle": "Self-Service ist nicht verfügbar",
+    "overview": {
+      "title": "Ich",
+      "description": "Ihre Anstellung, Anfragen und Salden — sonst nichts steht hier.",
+      "notAvailable": "keine Angabe",
+      "employmentsTitle": "Meine Anstellung",
+      "employmentsEmpty": "Kein Arbeitsverhältnis",
+      "employmentsEmptyDescription": "Die Personalabteilung hat für Ihre Person noch keine Anstellung erfasst.",
+      "employer": "Arbeitgeber",
+      "jobTitle": "Titel",
+      "department": "Abteilung",
+      "status": "Status",
+      "manager": "Vorgesetzte Person",
+      "serviceStart": "Dienstbeginn",
+      "stepsTitle": "Meine offenen Schritte",
+      "stepsEmpty": "Keine offenen Schritte",
+      "stepsEmptyDescription": "Ihnen zugewiesene Checklistener Schritte stehen hier.",
+      "viewChecklists": "Checklisten öffnen",
+      "requestsTitle": "Meine offenen Anfragen",
+      "requestsEmpty": "Keine offenen Anfragen",
+      "requestsEmptyDescription": "Eingereichte Profil- und Anstellungsvorschläge stehen hier bis zur Entscheidung.",
+      "balancesTitle": "Salden",
+      "balancesEmpty": "Keine aktiven Urlaubsarten.",
+      "viewLeave": "Urlaub öffnen",
+      "extensionsTitle": "Mehr"
+    },
+    "profile": {
+      "title": "Mein Profil",
+      "description": "Ihr Kontaktdatensatz. Änderungen werden als Anfrage zur Genehmigung eingereicht.",
+      "contactTitle": "Kontakt",
+      "addressTitle": "Adresse",
+      "noAddress": "Keine Adresse hinterlegt.",
+      "emergencyTitle": "Notfallkontakt",
+      "noEmergency": "Kein Notfallkontakt hinterlegt.",
+      "edit": "Profil bearbeiten",
+      "phone": "Telefon",
+      "email": "Private E-Mail",
+      "addressLabel": "Bezeichnung",
+      "line1": "Straße",
+      "line2": "Straße (2. Zeile)",
+      "city": "Ort",
+      "region": "Region",
+      "postalCode": "Postleitzahl",
+      "country": "Land",
+      "employment": "Anstellung",
+      "emergencyName": "Name",
+      "emergencyRelationship": "Beziehung",
+      "emergencyPhone": "Telefon",
+      "reason": "Begründung",
+      "reasonPlaceholder": "Was sich geändert hat, für die genehmigende Person",
+      "clearHint": "Dieses Feld leeren",
+      "submit": "Zur Genehmigung einreichen",
+      "cancel": "Abbrechen",
+      "submitFailed": "Die Profilanfrage konnte nicht eingereicht werden.",
+      "dialogTitle": "Profil bearbeiten",
+      "dialogDescription": "Änderungen werden als Anfrage eingereicht — die Genehmigung aktualisiert den Datensatz.",
+      "pendingTitle": "Offene Profilanfrage",
+      "pendingMessage": "Eine Profiländerung ist {status}. Die Genehmigung aktualisiert den Datensatz."
+    },
+    "checklists": {
+      "title": "Meine Checklisten",
+      "description": "Ihnen zugewiesene Checklistener Schritte, mit Erledigung.",
+      "listTitle": "Offene Schritte",
+      "columns": {
+        "title": "Schritt",
+        "process": "Checkliste",
+        "due": "Fällig",
+        "required": "Erforderlich",
+        "evidence": "Nachweis",
+        "status": "Status"
+      },
+      "required": "Erforderlich",
+      "optional": "Optional",
+      "complete": "Erledigen",
+      "completeFailed": "Der Schritt konnte nicht erledigt werden.",
+      "overdue": "Überfällig",
+      "emptyTitle": "Keine offenen Schritte",
+      "emptyDescription": "Ihnen zugewiesene Checklistener Schritte stehen hier."
+    },
+    "requests": {
+      "columns": {
+        "kind": "Art",
+        "status": "Status",
+        "submitted": "Eingereicht"
+      }
+    },
+    "requestKinds": {
+      "hire": "Einstellung",
+      "status_change": "Statusänderung",
+      "assignment_change": "Zuordnungsänderung",
+      "termination": "Beendigung",
+      "position_assignment": "Stellenzuordnung",
+      "profile_change": "Profiländerung",
+      "unknown": "Unbekannt"
+    },
+    "requestStatus": {
+      "draft": "Entwurf",
+      "pending_approval": "Genehmigung ausstehend",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "withdrawn": "Zurückgezogen",
+      "applied": "Angewendet"
+    },
+    "employmentStatus": {
+      "offered": "Angeboten",
+      "active": "Aktiv",
+      "on_leave": "Beurlaubt",
+      "suspended": "Suspendiert",
+      "terminated": "Beendet"
+    },
+    "stepStatus": {
+      "pending": "Offen",
+      "done": "Erledigt",
+      "skipped": "Übersprungen"
+    },
+    "evidenceKinds": {
+      "none": "Keiner",
+      "acknowledgement": "Bestätigung",
+      "attachment": "Anhang"
+    },
+    "team": {
+      "title": "Mein Team",
+      "description": "Direkte Mitarbeitende heute — Liste, Schritte und offene Entscheidungen.",
+      "rosterTitle": "Direkte Mitarbeitende",
+      "columns": {
+        "name": "Name",
+        "title": "Titel",
+        "department": "Abteilung",
+        "status": "Status",
+        "serviceStart": "Dienstbeginn"
+      },
+      "rosterEmpty": "Keine direkten Mitarbeitenden",
+      "stepsTitle": "Mir zugewiesene Schritte",
+      "stepsEmpty": "Keine Ihnen zugewiesenen Schritte in diesem Team.",
+      "leaveTitle": "Offene Urlaubsanfragen",
+      "leaveEmpty": "Keine Urlaubsanfragen zur Entscheidung.",
+      "decideInApprovals": "In Genehmigungen entscheiden",
+      "changesTitle": "Offene Änderungsanfragen",
+      "changesEmpty": "Keine Änderungsanfragen zur Entscheidung."
+    }
   }
 }

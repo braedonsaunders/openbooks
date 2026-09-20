@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "Fehltage",
         "description": "Eine Zeile pro Fehltag — Person, Arbeitgeber, damalige Abteilung, Urlaubsart und Stunden. Stornierungen sind eigene Zeilen; Summen saldieren. Erfordert die Urlaubs-Berechtigung."
+      },
+      "hrm_requisitions": {
+        "label": "Anfragen",
+        "description": "Eine Zeile pro offener Stelle: Nummer, Titel, Status, Arbeitgeber, Abteilung, Position sowie Planstellen gegen besetzte Stellen. Erfordert die Recruiting-Berechtigung."
+      },
+      "hrm_applications": {
+        "label": "Bewerbungen",
+        "description": "Eine Zeile pro Kandidatur mit Funnel-Stufe sowie Zeit bis zur Besetzung. Kontaktdaten erscheinen nie — nur Namen. Erfordert die Recruiting-Berechtigung."
+      },
+      "hrm_reviews": {
+        "label": "Beurteilungen",
+        "description": "Eine Zeile pro Leistungsbeurteilung — Zyklus und Zeitraum, Person, Art, Status sowie Autoren- und kalibrierte Bewertung nebeneinander. Nur HR: Ausführende haben die Leistungsberechtigung, sodass ungeteilte Beurteilungen den HR-Bereich nie verlassen."
+      },
+      "hrm_goals": {
+        "label": "Ziele",
+        "description": "Eine Zeile pro Leistungsziel — Person, Titel, Status, Fortschritt und Fälligkeitsdatum."
+      },
+      "hrm_turnover": {
+        "label": "Fluktuation",
+        "description": "Eine Zeile pro Abgang — Person, Beendigungsdatum, Betriebszugehörigkeit in Tagen, Austrittsgrund sowie Freiwilligkeits- und Bedauerns-Kennzeichen aus dem Austrittsdatensatz. Gruppieren nach Beendigungsmonat und Abteilung für die Abgangstabelle; Quoten kommen aus dem Bindungs-Panel."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Leistungsanmeldungen",
+        "description": "Eine Zeile je Leistungsanmeldung — Person, Arbeitgeber, Abteilung bei Anmeldung, Plan und Deckungsstufe, Status und gespeicherte Beträge je Periode. Erfordert die Leistungsberechtigung."
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "Quelle",
         "employment_id": "Beschäftigung (ID)",
         "id": "Fehltag (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "Nummer",
+        "title": "Titel",
+        "status": "Stand",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "position": "Stelle",
+        "headcount": "Planstellen",
+        "filled_count": "Besetzt",
+        "opened_on": "Eröffnet",
+        "closed_on": "Geschlossen",
+        "requisition_id": "Anfrage (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Anfrage",
+        "candidate": "Kandidat",
+        "stage": "Stufe",
+        "status": "Stand",
+        "applied_on": "Beworben",
+        "opened_on": "Anfrage eröffnet",
+        "hired_on": "Eingestellt",
+        "days_to_fill": "Tage bis Besetzung",
+        "application_id": "Bewerbung (ID)"
+      },
+      "hrm_reviews": {
+        "cycle": "Zyklus",
+        "period_end_on": "Periodenende",
+        "employee": "Beschäftigte Person",
+        "employer": "Arbeitgeber",
+        "kind": "Art",
+        "status": "Stand",
+        "overall_rating": "Bewertung",
+        "calibrated_rating": "Kalibrierte Bewertung",
+        "employment_id": "Anstellung (ID)",
+        "id": "Beurteilung (ID)"
+      },
+      "hrm_goals": {
+        "employee": "Beschäftigte Person",
+        "employer": "Arbeitgeber",
+        "title": "Titel",
+        "status": "Stand",
+        "progress": "Fortschritt",
+        "due_on": "Fällig am",
+        "employment_id": "Anstellung (ID)",
+        "id": "Ziel (ID)"
+      },
+      "hrm_turnover": {
+        "person": "Abgangsperson",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "terminated_on": "Beendet am",
+        "tenure_days": "Zugehörigkeit (Tage)",
+        "reason": "Grund",
+        "voluntary": "Freiwillig",
+        "regrettable": "Bedauerlich",
+        "employment_id": "Anstellung (ID)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Beginn",
+        "person": "Person",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "plan": "Plan",
+        "plan_name": "Planname",
+        "coverage": "Stufe",
+        "status": "Status",
+        "employee_amount": "Arbeitnehmerbetrag",
+        "employer_amount": "Arbeitgeberbetrag",
+        "currency": "Währung",
+        "effective_to": "Ende",
+        "employment_id": "Beschäftigung (ID)",
+        "id": "Anmeldung (ID)"
       }
     },
     "enumValues": {

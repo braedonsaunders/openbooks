@@ -329,3 +329,105 @@ export function HrmLeavePanel({
     </div>
   )
 }
+
+export type HrmRecruitingPanelFigure = {
+  label: string
+  value: string
+}
+
+/**
+ * Recruiting rail panel: the funnel figures beside the queue link — open
+ * requisitions, offers awaiting response, interviews this week. All values
+ * arrive loader-resolved as strings; the table renders strings, never raw
+ * numbers.
+ */
+export function HrmRecruitingPanel({
+  figures,
+  empty,
+  viewAll,
+  viewAllHref,
+}: {
+  figures: HrmRecruitingPanelFigure[]
+  empty?: string
+  viewAll: string
+  viewAllHref: string
+}) {
+  return (
+    <div>
+      {figures.length === 0 ? (
+        <p className="px-4 py-4 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+      ) : (
+        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+          {figures.map((figure) => (
+            <li key={figure.label} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{figure.label}</p>
+              <p className="text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{figure.value}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link
+        href={viewAllHref as never}
+        className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
+      >
+        {viewAll} →
+      </Link>
+    </div>
+  )
+}
+
+export type HrmBenefitsPanelWindow = {
+  id: string
+  name: string
+}
+
+/** Benefits panel: open windows plus pending-approval and missing-input counts beside the queue link. */
+export function HrmBenefitsPanel({
+  openWindows,
+  openLabel,
+  openEmpty,
+  pendingCount,
+  pendingLabel,
+  missingCount,
+  missingLabel,
+  queueHref,
+  viewAllLabel,
+}: {
+  openWindows: HrmBenefitsPanelWindow[]
+  openLabel: string
+  openEmpty: string
+  pendingCount: number
+  pendingLabel: string
+  missingCount: number
+  missingLabel: string
+  queueHref: string
+  viewAllLabel: string
+}) {
+  return (
+    <div>
+      {openWindows.length === 0 ? (
+        <p className="px-4 py-4 text-center text-sm text-slate-400 dark:text-slate-500">{openEmpty}</p>
+      ) : (
+        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+          {openWindows.map((window) => (
+            <li key={window.id} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{window.name}</p>
+              <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{openLabel}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="border-t border-slate-100 px-4 py-2.5 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        {pendingLabel} <span className="font-semibold tabular-nums">{pendingCount}</span>
+        {' · '}
+        {missingLabel} <span className="font-semibold tabular-nums">{missingCount}</span>
+      </p>
+      <Link
+        href={queueHref as never}
+        className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
+      >
+        {viewAllLabel} →
+      </Link>
+    </div>
+  )
+}

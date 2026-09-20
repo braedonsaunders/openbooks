@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "休暇欠勤",
         "description": "欠勤日ごとに1行 — 氏名、雇用主、当時の部門、休暇種別、時間。取消は別行のため、合計は相殺されます。休暇権限が必要です。"
+      },
+      "hrm_requisitions": {
+        "label": "求人",
+        "description": "欠員1件につき1行: 番号、タイトル、ステータス、雇用主、部門、ポジション、計画数と充足数。採用権限が必要です。"
+      },
+      "hrm_applications": {
+        "label": "応募",
+        "description": "候補者1件につき1行: ファネルステージと充足日数。連絡先は表示されません(氏名のみ)。採用権限が必要です。"
+      },
+      "hrm_reviews": {
+        "label": "レビュー",
+        "description": "パフォーマンスレビューごとに1行 — サイクルと期間、従業員、種類、ステータス、作成者評価と調整後評価を併記。HRのみ: 実行者はパフォーマンス権限を持つため、未共有レビューがHR範囲外に出ることはありません。"
+      },
+      "hrm_goals": {
+        "label": "目標",
+        "description": "パフォーマンス目標ごとに1行 — 従業員、タイトル、ステータス、進捗、期限。"
+      },
+      "hrm_turnover": {
+        "label": "離職",
+        "description": "退職者ごとに1行 — 氏名、終了日、勤続日数、退職理由、退職記録の自己都合・惜別フラグ。終了月と部門で集計して期間×部門の退職表に; 率は定着パネルから。"
+      },
+      "hrm_benefit_enrollments": {
+        "label": "福利厚生加入",
+        "description": "加入ごと1行 — 加入者、雇用者、加入時の部門、プランと保障区分、状態、期間ごとの保存金額。福利厚生権限が必要。"
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "出所",
         "employment_id": "雇用 (ID)",
         "id": "欠勤 (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "番号",
+        "title": "タイトル",
+        "status": "ステータス",
+        "employer": "雇用主",
+        "department": "部門",
+        "position": "ポジション",
+        "headcount": "人数",
+        "filled_count": "充足数",
+        "opened_on": "開始",
+        "closed_on": "終了",
+        "requisition_id": "求人 (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "求人",
+        "candidate": "候補者",
+        "stage": "ステージ",
+        "status": "ステータス",
+        "applied_on": "応募日",
+        "opened_on": "求人開始",
+        "hired_on": "採用日",
+        "days_to_fill": "充足日数",
+        "application_id": "応募 (ID)"
+      },
+      "hrm_reviews": {
+        "cycle": "サイクル",
+        "period_end_on": "期間終了",
+        "employee": "従業員",
+        "employer": "雇用主",
+        "kind": "種類",
+        "status": "ステータス",
+        "overall_rating": "評価",
+        "calibrated_rating": "調整後評価",
+        "employment_id": "雇用 (ID)",
+        "id": "レビュー (ID)"
+      },
+      "hrm_goals": {
+        "employee": "従業員",
+        "employer": "雇用主",
+        "title": "タイトル",
+        "status": "ステータス",
+        "progress": "進捗",
+        "due_on": "期限",
+        "employment_id": "雇用 (ID)",
+        "id": "目標 (ID)"
+      },
+      "hrm_turnover": {
+        "person": "氏名",
+        "employer": "雇用主",
+        "department": "部門",
+        "terminated_on": "終了日",
+        "tenure_days": "勤続（日）",
+        "reason": "理由",
+        "voluntary": "自己都合",
+        "regrettable": "惜別",
+        "employment_id": "雇用 (ID)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "開始日",
+        "person": "加入者",
+        "employer": "雇用者",
+        "department": "部門",
+        "plan": "プラン",
+        "plan_name": "プラン名",
+        "coverage": "保障区分",
+        "status": "状態",
+        "employee_amount": "本人金額",
+        "employer_amount": "会社金額",
+        "currency": "通貨",
+        "effective_to": "終了日",
+        "employment_id": "雇用（id）",
+        "id": "加入（id）"
       }
     },
     "enumValues": {

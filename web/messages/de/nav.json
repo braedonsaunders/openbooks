@@ -1,6 +1,7 @@
 {
   "modules": {
     "hrm": "Personalwesen",
+    "me": "Ich",
     "dashboard": "Dashboard",
     "assistant": "KI-Assistent",
     "continuous-close": "Abschlussmonitor",

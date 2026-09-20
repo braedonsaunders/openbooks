@@ -10,10 +10,14 @@ import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
 import { laborPricing } from './articles/labor-pricing'
 import { hrmProcesses } from './articles/hrm-processes'
+import { performanceAndRetention } from './articles/performance-and-retention'
+import { selfService } from './articles/self-service'
 import { payroll } from './articles/payroll'
 import { employmentMigration } from './articles/employment-migration'
 import { positionsAndHeadcount } from './articles/positions-and-headcount'
 import { leaveTimeVersusValue } from './articles/leave-time-versus-value'
+import { recruitingFunnel } from './articles/recruiting-funnel'
+import { benefitsEnrollment } from './articles/benefits-enrollment'
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -245,7 +249,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   propertyManagement,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, leaveTimeVersusValue, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

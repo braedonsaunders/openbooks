@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "Ausencias",
         "description": "Una fila por día de ausencia — persona, empleador, departamento de entonces, tipo y horas. Las reversiones son filas propias; las sumas netean. Requiere el permiso de ausencias."
+      },
+      "hrm_requisitions": {
+        "label": "Requisiciones",
+        "description": "Una fila por vacante: número, título, estado, empleador, departamento, puesto y plazas frente a cubiertas. Requiere el permiso de contratación."
+      },
+      "hrm_applications": {
+        "label": "Candidaturas",
+        "description": "Una fila por candidatura con su etapa del proceso y el tiempo de cobertura. Los datos de contacto nunca aparecen — solo nombres. Requiere el permiso de contratación."
+      },
+      "hrm_reviews": {
+        "label": "Evaluaciones",
+        "description": "Una fila por evaluación de desempeño — ciclo y período, persona, tipo, estado y la calificación del autor junto a la calibrada. Solo RR. HH.: quienes ejecutan tienen el permiso de desempeño, así las evaluaciones no compartidas nunca salen del ámbito de RR. HH."
+      },
+      "hrm_goals": {
+        "label": "Objetivos",
+        "description": "Una fila por objetivo de desempeño — persona, título, estado, progreso y fecha límite."
+      },
+      "hrm_turnover": {
+        "label": "Rotación",
+        "description": "Una fila por salida — persona, fecha de terminación, antigüedad en días, motivo de salida y los indicadores voluntario y lamentado del registro de salida. Agrupe por mes de terminación y departamento para la tabla de salidas; las tasas vienen del panel de retención."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Inscripciones de beneficios",
+        "description": "Una fila por inscripción de beneficios — persona, empleador, departamento al inscribirse, plan y nivel de cobertura, estado e importes guardados por período. Requiere el permiso de beneficios."
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "Origen",
         "employment_id": "Empleo (id)",
         "id": "Ausencia (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Número",
+        "title": "Título",
+        "status": "Estado",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "position": "Puesto",
+        "headcount": "Plazas",
+        "filled_count": "Cubiertas",
+        "opened_on": "Apertura",
+        "closed_on": "Cierre",
+        "requisition_id": "Requisición (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Requisición",
+        "candidate": "Candidato",
+        "stage": "Etapa",
+        "status": "Estado",
+        "applied_on": "Candidatura",
+        "opened_on": "Requisición abierta",
+        "hired_on": "Contratado",
+        "days_to_fill": "Días de cobertura",
+        "application_id": "Candidatura (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Ciclo",
+        "period_end_on": "Fin del período",
+        "employee": "Persona empleada",
+        "employer": "Empleador",
+        "kind": "Tipo",
+        "status": "Estado",
+        "overall_rating": "Calificación",
+        "calibrated_rating": "Calificación calibrada",
+        "employment_id": "Empleo (id)",
+        "id": "Evaluación (id)"
+      },
+      "hrm_goals": {
+        "employee": "Persona empleada",
+        "employer": "Empleador",
+        "title": "Título",
+        "status": "Estado",
+        "progress": "Progreso",
+        "due_on": "Vence el",
+        "employment_id": "Empleo (id)",
+        "id": "Objetivo (id)"
+      },
+      "hrm_turnover": {
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "terminated_on": "Terminó el",
+        "tenure_days": "Antigüedad (días)",
+        "reason": "Motivo",
+        "voluntary": "Voluntaria",
+        "regrettable": "Lamentada",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Vigente desde",
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "plan": "Plan",
+        "plan_name": "Nombre del plan",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "employee_amount": "Importe del empleado",
+        "employer_amount": "Importe del empleador",
+        "currency": "Moneda",
+        "effective_to": "Vigente hasta",
+        "employment_id": "Empleo (id)",
+        "id": "Inscripción (id)"
       }
     },
     "enumValues": {

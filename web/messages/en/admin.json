@@ -970,7 +970,18 @@
     "hrm_leave_read": "View leave records",
     "hrm_leave_request": "Request leave for own employment",
     "hrm_leave_approve": "Decide leave requests",
-    "hrm_leave_manage": "Configure leave types and policies"
+    "hrm_leave_manage": "Configure leave types and policies",
+    "hrm_recruiting_read": "View recruiting funnel",
+    "hrm_recruiting_manage": "Manage requisitions, candidates, interviews, and offers",
+    "hrm_performance_read": "View review cycles and reviews through the privacy scope",
+    "hrm_performance_manage": "Run review cycles, calibrate and share reviews",
+    "hrm_retention_read": "View exit records and turnover",
+    "hrm_benefits_read": "View benefit plans and elections",
+    "hrm_benefits_manage": "Manage benefit plans, windows, and elections",
+    "hrm_self_read": "View own employment summary",
+    "hrm_self_request": "File profile changes for own party",
+    "hrm_team_read": "View direct reports as of today",
+    "hrm_team_manage": "Work manager-assigned team steps"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2428,6 +2439,31 @@
         "title": "Process template steps",
         "singularTitle": "Process template step",
         "description": "One ordered step of a process template with its owner, due offset and evidence rule."
+      },
+      "hrm-review-templates": {
+        "title": "Review templates",
+        "singularTitle": "Review template",
+        "description": "The review form per org: name, the rating scale, and ordered sections with prompts. Deactivation preserves history; a template that opened cycles is never deleted."
+      },
+      "hrm-review-template-sections": {
+        "title": "Review sections",
+        "singularTitle": "Review section",
+        "description": "Ordered sections of a review template: competency, goals, or free text, with an optional weight."
+      },
+      "hrm-review-template-questions": {
+        "title": "Review questions",
+        "singularTitle": "Review question",
+        "description": "Prompts inside a review template section: rating, text, or both. Required prompts must be answered before submit."
+      },
+      "benefit-plans": {
+        "title": "Benefit plans",
+        "singularTitle": "Benefit plan",
+        "description": "What the org offers beyond pay — health, dental, retirement — with cost figures, the proration rule, and pay-component links. Tax treatment lives on the components, never here."
+      },
+      "benefit-plan-levels": {
+        "title": "Benefit tiers",
+        "singularTitle": "Benefit tier",
+        "description": "Coverage tiers per plan — employee-only, family — with the tier costs copied onto elections at elect time."
       }
     },
     "fields": {
@@ -2618,6 +2654,7 @@
       "customerId": "Customer",
       "projectId": "Project",
       "isDefault": "Default",
+      "isTerminal": "Terminal",
       "billMultiplier": "Bill multiplier",
       "lienWaiverEnforcement": "Lien waiver control",
       "defaultLienWaiverType": "Default waiver form",
@@ -2717,7 +2754,27 @@
       "accrualPeriodsPerYear": "Accrual periods per year",
       "carryoverKind": "Carryover",
       "carryoverHours": "Carryover cap (hours)",
-      "carryoverExpiresAfterDays": "Carryover expires after (days)"
+      "carryoverExpiresAfterDays": "Carryover expires after (days)",
+      "sectionId": "Section",
+      "weight": "Weight",
+      "prompt": "Prompt",
+      "answerKind": "Answer kind",
+      "ratingScaleMin": "Scale minimum",
+      "ratingScaleMax": "Scale maximum",
+      "ratingScaleLabels": "Scale labels",
+      "providerPartyId": "Provider",
+      "employerSubsidiaryId": "Employer subsidiary",
+      "employeeCostBasis": "Employee cost basis",
+      "employeeCost": "Employee cost",
+      "employerCostBasis": "Employer cost basis",
+      "employerCost": "Employer cost",
+      "pretax": "Pre-tax",
+      "prorationBasis": "Proration",
+      "employeePayComponentId": "Employee component",
+      "employerPayComponentId": "Employer component",
+      "waitingPeriodDays": "Waiting period (days)",
+      "requiresApproval": "Requires approval",
+      "levelKey": "Tier key"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2780,7 +2837,23 @@
       "leaveAccrualPeriodsPerYear": "Whole periods in an accrual year (required for per-period accrual).",
       "leaveCarryoverKind": "What unused time does at year end: nothing, carry all, or carry up to a cap.",
       "leaveCarryoverHours": "Maximum hours carried forward (required for carry up to).",
-      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not."
+      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not.",
+      "hrmReviewScaleMin": "Lowest rating the scale accepts, for example 1.",
+      "hrmReviewScaleMax": "Highest rating the scale accepts, for example 5.",
+      "hrmReviewScaleLabels": "Optional endpoint labels, lowest first.",
+      "benefitKind": "Org-declared kind — health, dental, vision, life, retirement, wellness, other. Free text, never a closed list.",
+      "benefitProvider": "Vendor or carrier behind the plan, if any.",
+      "benefitSubsidiary": "Employer subsidiary offered the plan; empty means every subsidiary.",
+      "benefitCurrency": "Plan currency, three letters. Stored on every election and never converted.",
+      "benefitCostBasis": "How the cost figure reads: per pay period, per month, per year, or percent of pay.",
+      "benefitCost": "Cost figure in the plan currency. Percent-of-pay figures are percentages.",
+      "benefitPretax": "The org's own pre-tax declaration; payroll packs interpret it.",
+      "benefitProrationBasis": "Required: how a partial month pays. Full month carries the whole month; daily scales by covered days.",
+      "benefitEmployeeComponent": "Deduction component pricing the employee rows. Required when the plan prices an employee cost.",
+      "benefitEmployerComponent": "Employer-contribution component pricing the employer rows. Required when the plan prices an employer cost.",
+      "benefitWaitingPeriod": "Days of service before the plan may be elected.",
+      "benefitRequiresApproval": "Elections land pending until a manager approves them.",
+      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings."
     },
     "options": {
       "payFrequency": {
@@ -3149,6 +3222,34 @@
         "none": "None",
         "carry_all": "Carry all",
         "carry_up_to": "Carry up to a cap"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Screening",
+        "interview": "Interview",
+        "assessment": "Assessment",
+        "offer": "Offer",
+        "hired": "Hired",
+        "rejected": "Rejected"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competency",
+        "goals": "Goals",
+        "freeText": "Free text"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Rating",
+        "text": "Text",
+        "ratingAndText": "Rating and text"
+      },
+      "benefitCostBasis": {
+        "per_period": "Per pay period",
+        "per_month": "Per month",
+        "per_year": "Per year",
+        "percent_of_pay": "Percent of pay"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Full month — the whole month whatever the dates",
+        "daily": "Daily — scaled by covered days"
       }
     },
     "payroll": {
@@ -3897,7 +3998,9 @@
       "deductionProtection": "Deduction protection",
       "basisCaps": "Basis caps",
       "holidayElection": "Election on a statutory holiday",
-      "holidayCompanyDay": "Company holiday"
+      "holidayCompanyDay": "Company holiday",
+      "benefitCosts": "Costs and proration",
+      "benefitComponents": "Pay components"
     },
     "guide": {
       "hero": {

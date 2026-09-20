@@ -119,6 +119,18 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "parties", columnName: "legal_name", transform: "faker_name" },
   { tableName: "parties", columnName: "phone", transform: "faker_phone" },
   { tableName: "parties", columnName: "tax_ids", transform: "null_out" },
+  // 0195: candidate PII masks exactly like parties (a prospect's contact
+  // identity is as sensitive as a worker's). Columns absent from the schema
+  // are skipped by the clone generator, so ordering with the migration is
+  // safe either way.
+  { tableName: "hrm_candidates", columnName: "display_name", transform: "faker_name" },
+  { tableName: "hrm_candidates", columnName: "email", transform: "faker_email" },
+  { tableName: "hrm_candidates", columnName: "phone", transform: "faker_phone" },
+  // HR-8: covered-dependent names are PII like party display names.
+  { tableName: "hrm_benefit_dependents", columnName: "display_name", transform: "faker_name" },
+  // HR-9 self-service (0198): the emergency contact is candidate PII —
+  // nulled in sandboxes like tax_ids, never faked into a plausible lie.
+  { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
   { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
@@ -130,6 +142,12 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "users", columnName: "email", transform: "faker_email" },
   { tableName: "users", columnName: "name", transform: "faker_name" },
   { tableName: "users", columnName: "password_hash", transform: "reseal_secret" },
+  // 0196: review answers and exit records assess named people in free
+  // text, so a masked sandbox redacts the prose (ratings, scales and
+  // status codes carry no PII and copy verbatim on purpose).
+  { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
+  { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
+  { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the

@@ -837,6 +837,8 @@
     "hrm_leave_request": "Urlaub für das eigene Beschäftigungsverhältnis beantragen",
     "hrm_leave_approve": "Urlaubsanträge entscheiden",
     "hrm_leave_manage": "Urlaubsarten und -richtlinien konfigurieren",
+    "hrm_recruiting_read": "Auswahlprozess ansehen",
+    "hrm_recruiting_manage": "Anfragen, Kandidaten, Interviews und Angebote verwalten",
     "hrm_employment_manage": "Beschäftigungsänderungen erfassen",
     "hrm_employment_approve": "Beschäftigungsänderungen entscheiden",
     "hrm_position_read": "Positionen und Personalplan anzeigen",
@@ -970,7 +972,16 @@
     "payroll_read": "Lohnläufe und Abrechnungen anzeigen",
     "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben",
     "hrm_process_read": "Prozess-Checklisten anzeigen",
-    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen"
+    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen",
+    "hrm_performance_read": "Überprüfungszyklen und Beurteilungen im Datenschutzkreis einsehen",
+    "hrm_performance_manage": "Überprüfungszyklen durchführen, Beurteilungen kalibrieren und teilen",
+    "hrm_retention_read": "Austrittsdatensätze und Fluktuation einsehen",
+    "hrm_benefits_read": "Leistungspläne und Anmeldungen anzeigen",
+    "hrm_benefits_manage": "Leistungspläne, Anmeldefenster und Anmeldungen verwalten",
+    "hrm_self_read": "Eigene Anstellungsübersicht ansehen",
+    "hrm_self_request": "Profiländerungen für die eigene Person einreichen",
+    "hrm_team_read": "Direkte Mitarbeitende heute ansehen",
+    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2496,6 +2507,31 @@
         "title": "Prozessvorlagen-Schritte",
         "singularTitle": "Prozessvorlagen-Schritt",
         "description": "Ein geordneter Schritt einer Prozessvorlage mit Verantwortlichem, Fälligkeitsversatz und Nachweisregel."
+      },
+      "hrm-review-templates": {
+        "title": "Beurteilungsvorlagen",
+        "singularTitle": "Beurteilungsvorlage",
+        "description": "Das Beurteilungsformular pro Organisation: Name, Bewertungsskala und geordnete Abschnitte mit Fragen."
+      },
+      "hrm-review-template-sections": {
+        "title": "Beurteilungsabschnitte",
+        "singularTitle": "Beurteilungsabschnitt",
+        "description": "Geordnete Abschnitte einer Beurteilungsvorlage: Kompetenz, Ziele oder Freitext, mit optionaler Gewichtung."
+      },
+      "hrm-review-template-questions": {
+        "title": "Beurteilungsfragen",
+        "singularTitle": "Beurteilungsfrage",
+        "description": "Fragen in einem Beurteilungsabschnitt: Bewertung, Text oder beides. Pflichtfragen müssen vor dem Einreichen beantwortet werden."
+      },
+      "benefit-plans": {
+        "title": "Leistungspläne",
+        "singularTitle": "Leistungsplan",
+        "description": "Was die Organisation über das Gehalt hinaus bietet — Gesundheit, Zahn, Rente — mit Kosten, Teilmonatsregel und Abrechnungskomponenten."
+      },
+      "benefit-plan-levels": {
+        "title": "Leistungsstufen",
+        "singularTitle": "Leistungsstufe",
+        "description": "Deckungsstufen je Plan — nur Mitarbeiter, Familie — mit den Stufenkosten."
       }
     },
     "fields": {
@@ -2646,6 +2682,7 @@
       "customerId": "Kunde",
       "projectId": "Projekt",
       "isDefault": "Standard",
+      "isTerminal": "Endstufe",
       "acquisitionCost": "Anschaffungskosten",
       "acquisitionDate": "Erwerbsdatum",
       "acquisitionRate": "Erwerbs-Wechselkurs",
@@ -2785,7 +2822,27 @@
       "accrualPeriodsPerYear": "Ansammlungsperioden pro Jahr",
       "carryoverKind": "Übertrag",
       "carryoverHours": "Übertragsgrenze (Stunden)",
-      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)"
+      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)",
+      "sectionId": "Abschnitt",
+      "weight": "Gewichtung",
+      "prompt": "Frage",
+      "answerKind": "Antwortart",
+      "ratingScaleMin": "Skalenminimum",
+      "ratingScaleMax": "Skalenmaximum",
+      "ratingScaleLabels": "Skalenbeschriftungen",
+      "providerPartyId": "Anbieter",
+      "employerSubsidiaryId": "Arbeitgebergesellschaft",
+      "employeeCostBasis": "Arbeitnehmer-Kostenbasis",
+      "employeeCost": "Arbeitnehmerkosten",
+      "employerCostBasis": "Arbeitgeber-Kostenbasis",
+      "employerCost": "Arbeitgeberkosten",
+      "pretax": "Vorsteuer",
+      "prorationBasis": "Anteilberechnung",
+      "employeePayComponentId": "Arbeitnehmerkomponente",
+      "employerPayComponentId": "Arbeitgeberkomponente",
+      "waitingPeriodDays": "Wartezeit (Tage)",
+      "requiresApproval": "Genehmigung erforderlich",
+      "levelKey": "Stufenschlüssel"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2848,7 +2905,23 @@
       "leaveAccrualPeriodsPerYear": "Ganze Perioden in einem Ansammlungsjahr (für Ansammlung pro Periode erforderlich).",
       "leaveCarryoverKind": "Was mit ungenutzter Zeit zum Jahresende geschieht: nichts, alles übertragen oder bis zu einer Grenze.",
       "leaveCarryoverHours": "Höchstens übertragene Stunden (für „bis zu einer Grenze“ erforderlich).",
-      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall."
+      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall.",
+      "hrmReviewScaleMin": "Niedrigste Bewertung, die die Skala akzeptiert, zum Beispiel 1.",
+      "hrmReviewScaleMax": "Höchste Bewertung, die die Skala akzeptiert, zum Beispiel 5.",
+      "hrmReviewScaleLabels": "Optionale Endpunktbeschriftungen, niedrigste zuerst.",
+      "benefitKind": "Organisationsweite Art — Gesundheit, Zahn, Sehen, Leben, Rente, Wellness, sonstige. Freitext, niemals eine geschlossene Liste.",
+      "benefitProvider": "Anbieter oder Träger hinter dem Plan, falls vorhanden.",
+      "benefitSubsidiary": "Arbeitgebergesellschaft, der der Plan angeboten wird; leer bedeutet alle.",
+      "benefitCurrency": "Planwährung, drei Buchstaben. Wird auf jeder Anmeldung gespeichert und niemals umgerechnet.",
+      "benefitCostBasis": "Wie die Kostenangabe liest: je Periode, Monat, Jahr oder Prozent vom Lohn.",
+      "benefitCost": "Kostenbetrag in der Planwährung. Prozentwerte sind Prozentsätze.",
+      "benefitPretax": "Die eigene Vorsteuer-Erklärung der Organisation; Abrechnungspakete interpretieren sie.",
+      "benefitProrationBasis": "Pflicht: wie ein Teilmonat zahlt. Voller Monat trägt den ganzen Monat; täglich skaliert nach abgedeckten Tagen.",
+      "benefitEmployeeComponent": "Abzugskomponente für die Arbeitnehmerzeilen. Pflicht, wenn der Plan Arbeitnehmerkosten bepreist.",
+      "benefitEmployerComponent": "Arbeitgeberbeitrags-Komponente für die Arbeitgeberzeilen. Pflicht, wenn der Plan Arbeitgeberkosten bepreist.",
+      "benefitWaitingPeriod": "Diensttage, bevor der Plan gewählt werden darf.",
+      "benefitRequiresApproval": "Anmeldungen warten bis zur Genehmigung durch einen Manager.",
+      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen."
     },
     "options": {
       "timeClassification": {
@@ -3217,6 +3290,34 @@
         "none": "Keiner",
         "carry_all": "Alles übertragen",
         "carry_up_to": "Bis zu einer Grenze übertragen"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Vorauswahl",
+        "interview": "Bewerbungsgespräch",
+        "assessment": "Eignungsbeurteilung",
+        "offer": "Angebot",
+        "hired": "Eingestellt",
+        "rejected": "Abgelehnt"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Kompetenz",
+        "goals": "Ziele",
+        "freeText": "Freitext"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Bewertung",
+        "text": "Textantwort",
+        "ratingAndText": "Bewertung und Text"
+      },
+      "benefitCostBasis": {
+        "per_period": "Je Abrechnungsperiode",
+        "per_month": "Je Monat",
+        "per_year": "Je Jahr",
+        "percent_of_pay": "Prozent vom Lohn"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Voller Monat — der ganze Monat unabhängig von den Daten",
+        "daily": "Täglich — anteilig nach abgedeckten Tagen"
       }
     },
     "bankFeeds": {
@@ -3966,7 +4067,9 @@
       "basisCaps": "Bemessungsdeckel",
       "deductionProtection": "Abzugsschutz",
       "holidayCompanyDay": "Firmenfeiertag",
-      "holidayElection": "Wahl zu einem gesetzlichen Feiertag"
+      "holidayElection": "Wahl zu einem gesetzlichen Feiertag",
+      "benefitCosts": "Kosten und Anteilberechnung",
+      "benefitComponents": "Abrechnungskomponenten"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",

@@ -201,6 +201,7 @@
       "description": "Human resources: employments, change requests, temporal records.",
       "dependsOn": [
         "flows",
+        "money",
         "organization",
         "payroll",
         "platform"

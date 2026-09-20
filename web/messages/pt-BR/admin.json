@@ -837,6 +837,8 @@
     "hrm_leave_request": "Solicitar licença para o próprio emprego",
     "hrm_leave_approve": "Decidir solicitações de licença",
     "hrm_leave_manage": "Configurar tipos e políticas de licença",
+    "hrm_recruiting_read": "Ver o funil de recrutamento",
+    "hrm_recruiting_manage": "Gerenciar requisições, candidatos, entrevistas e ofertas",
     "hrm_employment_manage": "Redigir alterações de emprego",
     "hrm_employment_approve": "Decidir alterações de emprego",
     "hrm_position_read": "Ver posições e o plano de headcount",
@@ -970,7 +972,16 @@
     "compliance_waive": "Conceder exceções de conformidade",
     "compliance_file": "Finalizar e entregar declarações informativas",
     "hrm_process_read": "Ver listas de processos",
-    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos"
+    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos",
+    "hrm_performance_read": "Ver ciclos de avaliação e avaliações no escopo de privacidade",
+    "hrm_performance_manage": "Conduzir ciclos de avaliação, calibrar e compartilhar avaliações",
+    "hrm_retention_read": "Ver registros de saída e rotatividade",
+    "hrm_benefits_read": "Ver planos de benefícios e inscrições",
+    "hrm_benefits_manage": "Gerenciar planos de benefícios, janelas e inscrições",
+    "hrm_self_read": "Ver o resumo do próprio vínculo",
+    "hrm_self_request": "Apresentar alterações do próprio perfil",
+    "hrm_team_read": "Ver subordinados diretos hoje",
+    "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2428,6 +2439,31 @@
         "title": "Etapas de modelo de processo",
         "singularTitle": "Etapa de modelo de processo",
         "description": "Uma etapa ordenada de um modelo de processo com responsável, prazo e regra de evidência."
+      },
+      "hrm-review-templates": {
+        "title": "Modelos de avaliação",
+        "singularTitle": "Modelo de avaliação",
+        "description": "O formulário de avaliação por organização: nome, escala de notas e seções ordenadas com perguntas."
+      },
+      "hrm-review-template-sections": {
+        "title": "Seções de avaliação",
+        "singularTitle": "Seção de avaliação",
+        "description": "Seções ordenadas de um modelo de avaliação: competência, metas ou texto livre, com peso opcional."
+      },
+      "hrm-review-template-questions": {
+        "title": "Perguntas de avaliação",
+        "singularTitle": "Pergunta de avaliação",
+        "description": "Perguntas de uma seção do modelo: nota, texto ou ambos. Perguntas obrigatórias devem ser respondidas antes do envio."
+      },
+      "benefit-plans": {
+        "title": "Planos de benefícios",
+        "singularTitle": "Plano de benefícios",
+        "description": "O que a organização oferece além do salário — saúde, odontológico, aposentadoria — com valores, regra de rateio e componentes."
+      },
+      "benefit-plan-levels": {
+        "title": "Níveis de benefícios",
+        "singularTitle": "Nível de benefícios",
+        "description": "Níveis de cobertura por plano — só empregado, família — com os custos do nível."
       }
     },
     "fields": {
@@ -2618,6 +2654,7 @@
       "customerId": "Cliente",
       "projectId": "Projeto",
       "isDefault": "Padrão",
+      "isTerminal": "Final",
       "billMultiplier": "Multiplicador de faturamento",
       "lienWaiverEnforcement": "Controle de quitações",
       "defaultLienWaiverType": "Modelo de quitação padrão",
@@ -2717,7 +2754,27 @@
       "accrualPeriodsPerYear": "Períodos de acúmulo por ano",
       "carryoverKind": "Transferência",
       "carryoverHours": "Limite de transferência (horas)",
-      "carryoverExpiresAfterDays": "A transferência expira após (dias)"
+      "carryoverExpiresAfterDays": "A transferência expira após (dias)",
+      "sectionId": "Seção",
+      "weight": "Peso",
+      "prompt": "Pergunta",
+      "answerKind": "Tipo de resposta",
+      "ratingScaleMin": "Mínimo da escala",
+      "ratingScaleMax": "Máximo da escala",
+      "ratingScaleLabels": "Rótulos da escala",
+      "providerPartyId": "Fornecedor",
+      "employerSubsidiaryId": "Subsidiária empregadora",
+      "employeeCostBasis": "Base do custo do empregado",
+      "employeeCost": "Custo do empregado",
+      "employerCostBasis": "Base do custo do empregador",
+      "employerCost": "Custo do empregador",
+      "pretax": "Pré-tributário",
+      "prorationBasis": "Rateio",
+      "employeePayComponentId": "Componente do empregado",
+      "employerPayComponentId": "Componente do empregador",
+      "waitingPeriodDays": "Carência (dias)",
+      "requiresApproval": "Requer aprovação",
+      "levelKey": "Chave do nível"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2780,7 +2837,23 @@
       "leaveAccrualPeriodsPerYear": "Períodos inteiros em um ano de acúmulo (obrigatório para o acúmulo por período).",
       "leaveCarryoverKind": "O que acontece com o tempo não usado no fim do ano: nada, transferir tudo ou até um limite.",
       "leaveCarryoverHours": "Máximo de horas transferidas (obrigatório para «até um limite»).",
-      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram."
+      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram.",
+      "hrmReviewScaleMin": "Nota mais baixa que a escala aceita, por exemplo 1.",
+      "hrmReviewScaleMax": "Nota mais alta que a escala aceita, por exemplo 5.",
+      "hrmReviewScaleLabels": "Rótulos opcionais das extremidades, o menor primeiro.",
+      "benefitKind": "Tipo declarado pela organização — saúde, odontológico, visão, vida, aposentadoria, bem-estar, outro. Texto livre, nunca lista fechada.",
+      "benefitProvider": "Fornecedor ou operadora por trás do plano, se houver.",
+      "benefitSubsidiary": "Subsidiária empregadora à qual o plano é oferecido; vazio significa todas.",
+      "benefitCurrency": "Moeda do plano, três letras. Guardada em cada inscrição e nunca convertida.",
+      "benefitCostBasis": "Como o valor se lê: por período, mês, ano ou percentual do salário.",
+      "benefitCost": "Valor na moeda do plano. Valores percentuais são percentuais.",
+      "benefitPretax": "A própria declaração pré-tributária da organização; os pacotes a interpretam.",
+      "benefitProrationBasis": "Obrigatório: como um mês parcial paga. Mês cheio leva o mês inteiro; diário escala pelos dias cobertos.",
+      "benefitEmployeeComponent": "Componente de desconto que tarifa as linhas do empregado. Obrigatório se o plano tarifa custo do empregado.",
+      "benefitEmployerComponent": "Componente de contribuição do empregador que tarifa suas linhas. Obrigatório se o plano tarifa custo do empregador.",
+      "benefitWaitingPeriod": "Dias de serviço antes de poder aderir ao plano.",
+      "benefitRequiresApproval": "As inscrições aguardam até um gerente aprová-las.",
+      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes."
     },
     "options": {
       "payFrequency": {
@@ -3149,6 +3222,34 @@
         "none": "Nenhuma",
         "carry_all": "Transferir tudo",
         "carry_up_to": "Transferir até um limite"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Triagem",
+        "interview": "Entrevista",
+        "assessment": "Avaliação",
+        "offer": "Oferta",
+        "hired": "Contratado",
+        "rejected": "Recusado"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competência",
+        "goals": "Metas",
+        "freeText": "Texto livre"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Nota",
+        "text": "Texto",
+        "ratingAndText": "Nota e texto"
+      },
+      "benefitCostBasis": {
+        "per_period": "Por período de pagamento",
+        "per_month": "Por mês",
+        "per_year": "Por ano",
+        "percent_of_pay": "Percentual do salário"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Mês cheio — o mês inteiro sejam quais forem as datas",
+        "daily": "Diário — rateado pelos dias cobertos"
       }
     },
     "payroll": {
@@ -3897,7 +3998,9 @@
       "deductionProtection": "Proteção de descontos",
       "basisCaps": "Tetos da base",
       "holidayElection": "Opção sobre feriado legal",
-      "holidayCompanyDay": "Feriado da empresa"
+      "holidayCompanyDay": "Feriado da empresa",
+      "benefitCosts": "Custos e rateio",
+      "benefitComponents": "Componentes de folha"
     },
     "guide": {
       "hero": {

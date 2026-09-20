@@ -7,7 +7,17 @@
       "positions": "Posições",
       "processes": "Processos",
       "leave": "Licenças",
-      "myLeave": "Minhas licenças"
+      "myLeave": "Minhas licenças",
+      "recruiting": "Recrutamento",
+      "performance": "Desempenho",
+      "benefits": "Benefícios"
+    },
+    "recruiting": {
+      "title": "Recrutamento",
+      "open": "Requisições abertas",
+      "awaiting": "Ofertas aguardando resposta",
+      "interviews": "Entrevistas esta semana",
+      "viewAll": "Abrir recrutamento"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -33,7 +43,8 @@
       "employeesHint": "em serviço hoje",
       "positionsHint": "abertas",
       "processesHint": "{count, plural, one {# etapa atrasada} other {# etapas atrasadas}}",
-      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}"
+      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}",
+      "recruitingHint": "{count, plural, one {# oferta aguardando resposta} other {# ofertas aguardando resposta}}"
     },
     "vacancy": {
       "title": "Vagas por departamento",
@@ -119,6 +130,13 @@
       "title": "Licenças",
       "onLeaveEmpty": "Ninguém ausente hoje.",
       "pendingSub": "aguardando aprovação"
+    },
+    "benefits": {
+      "title": "Benefícios",
+      "openWindows": "Aberta",
+      "noOpenWindow": "Nenhuma janela de inscrição está aberta.",
+      "pendingSub": "Aprovações pendentes",
+      "missingSub": "Inscrições sem entradas"
     }
   },
   "queue": {
@@ -273,6 +291,16 @@
       "positionRequired": "Escolha uma posição ou marque a atribuição como não atribuída.",
       "unassignLabel": "Desatribuir da posição",
       "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro."
+    },
+    "exit": {
+      "title": "Registro de saída",
+      "empty": "Ainda não há registro de saída."
+    },
+    "benefits": {
+      "title": "Benefícios",
+      "empty": "Ainda não há inscrições de benefícios nem dependentes.",
+      "viewAll": "Benefícios",
+      "dependents": "{count, plural, one {# dependente: {names}} other {# dependentes: {names}}}"
     }
   },
   "directory": {
@@ -480,5 +508,442 @@
     "timeKind": "tempo",
     "valueKind": "valor",
     "unlimited": "Ilimitado"
+  },
+  "recruiting": {
+    "title": "Recrutamento",
+    "description": "Da vaga à contratação: requisições do plano de cargos, candidatos no funil, entrevistas, ofertas e a contratação.",
+    "add": "Nova requisição",
+    "empty": "Nenhuma requisição corresponde a este filtro.",
+    "total": "Totais",
+    "segmentsLabel": "Situação",
+    "statusAll": "Todos os status",
+    "status": {
+      "draft": "Rascunho",
+      "open": "Aberta",
+      "on_hold": "Pausada",
+      "filled": "Preenchida",
+      "cancelled": "Cancelada"
+    },
+    "columns": {
+      "number": "Número",
+      "title": "Título",
+      "position": "Cargo",
+      "department": "Departamento",
+      "headcount": "Preenchidas / plano",
+      "hiringManager": "Gestor contratante",
+      "opened": "Abertura",
+      "status": "Situação"
+    },
+    "drawer": {
+      "title": "Requisição {number}",
+      "pipeline": "Funil",
+      "applications": "Candidaturas",
+      "noApplications": "Nenhum candidato vinculado ainda.",
+      "candidate": "Candidato",
+      "stage": "Etapa",
+      "applied": "Candidatura",
+      "lastEvent": "Último evento",
+      "interviews": "Entrevistas",
+      "offer": "Oferta",
+      "timeToFill": "Tempo de preenchimento",
+      "days": "dias",
+      "missing": "Este registro não está mais visível."
+    },
+    "create": {
+      "titleField": "Título",
+      "employer": "Empregador",
+      "department": "Departamento",
+      "noDepartment": "Sem departamento",
+      "headcount": "Vagas",
+      "targetStart": "Início previsto",
+      "submit": "Criar requisição",
+      "failed": "Não foi possível criar a requisição."
+    },
+    "attach": {
+      "title": "Vincular um candidato",
+      "name": "Nome",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "submit": "Vincular candidato",
+      "failed": "Não foi possível vincular o candidato.",
+      "rejectTitle": "Recusar",
+      "rejectReason": "Motivo"
+    },
+    "move": {
+      "title": "Mover de etapa",
+      "submit": "Mover",
+      "failed": "Não foi possível mover a candidatura.",
+      "reject": "Recusar",
+      "withdraw": "Retirar"
+    },
+    "interview": {
+      "title": "Agendar uma entrevista",
+      "kind": "Tipo",
+      "when": "Quando",
+      "duration": "Minutos",
+      "location": "Local",
+      "panel": "Banca",
+      "submit": "Agendar entrevista",
+      "failed": "Não foi possível agendar a entrevista.",
+      "completeTitle": "Concluir",
+      "outcome": "Resultado",
+      "feedback": "Avaliação",
+      "completeSubmit": "Concluir entrevista",
+      "cancel": "Cancelar entrevista"
+    },
+    "interviewKind": {
+      "phone": "Telefone",
+      "video": "Vídeo",
+      "onsite": "Presencial",
+      "panel": "Banca",
+      "assessment": "Avaliação"
+    },
+    "interviewOutcome": {
+      "advance": "Avançar",
+      "hold": "Aguardar",
+      "reject": "Recusar"
+    },
+    "offerCard": {
+      "title": "Redigir as condições",
+      "job": "Cargo",
+      "start": "Data de início",
+      "amount": "Valor",
+      "currency": "Moeda",
+      "basis": "Base",
+      "expires": "Expira",
+      "submit": "Redigir oferta",
+      "failed": "Não foi possível redigir a oferta."
+    },
+    "offerActions": {
+      "send": "Enviar",
+      "accept": "Aceitar e contratar",
+      "decline": "Recusar",
+      "withdraw": "Retirar",
+      "reason": "Motivo",
+      "failed": "A ação da oferta falhou."
+    },
+    "basis": {
+      "hourly": "Por hora",
+      "annual": "Anual"
+    },
+    "candidate": {
+      "email": "E-mail",
+      "phone": "Telefone",
+      "source": "Origem"
+    }
+  },
+  "performance": {
+    "title": "Desempenho",
+    "description": "Ciclos de avaliação com autoavaliações e avaliações do gestor, calibragem, compartilhamento e confirmação — além de metas.",
+    "newCycle": "Novo ciclo",
+    "segmentsLabel": "Situação",
+    "allCycles": "Todos os ciclos",
+    "mineSegment": "Minhas avaliações",
+    "empty": "Ainda não há ciclos de avaliação.",
+    "colName": "Ciclo",
+    "colPeriod": "Período",
+    "colTemplate": "Modelo",
+    "colSelf": "Auto",
+    "colManager": "Gestor",
+    "colStatus": "Situação",
+    "colKind": "Tipo",
+    "colRating": "Nota",
+    "statusDraft": "Rascunho",
+    "statusOpen": "Aberto",
+    "statusCalibrating": "Calibragem",
+    "statusClosed": "Encerrado",
+    "kindSelf": "Autoavaliação",
+    "kindManager": "Avaliação do gestor",
+    "kindPeer": "Avaliação de pares",
+    "reviewsTitle": "Avaliações",
+    "reviewsEmpty": "Nenhuma avaliação criada ainda.",
+    "moveToCalibrating": "Mover para calibragem",
+    "forceCalibrating": "Forçar calibragem",
+    "forceReason": "Motivo para forçar",
+    "forceReasonPlaceholder": "Por que a calibragem começa com avaliações pendentes",
+    "closeCycle": "Encerrar ciclo",
+    "gapNote": "{count} vínculos abertos sem avaliação do gestor — sem gestor definido.",
+    "actionFailed": "A ação falhou.",
+    "cycleNotFound": "Ciclo de avaliação não encontrado.",
+    "reviewNotFound": "Avaliação não encontrada.",
+    "exitNotFound": "Registro de saída não encontrado.",
+    "exitTitle": "Registro de saída",
+    "overallRating": "Nota geral",
+    "calibratedRating": "Nota calibrada",
+    "goalsTitle": "Metas",
+    "goalsEmpty": "Sem metas para este período do ciclo.",
+    "goalTitle": "Meta",
+    "goalDue": "Prazo",
+    "addGoal": "Adicionar meta",
+    "goalProgress": "Progresso",
+    "saveProgress": "Salvar progresso",
+    "submitReview": "Enviar avaliação",
+    "shareReview": "Compartilhar com a pessoa",
+    "acknowledgeReview": "Confirmar",
+    "calibrateReview": "Calibrar",
+    "calibrateRating": "Nota calibrada",
+    "reason": "Motivo",
+    "reopenReview": "Reabrir",
+    "answerRating": "Nota",
+    "answerText": "Resposta",
+    "answerRequired": "obrigatória",
+    "newCycleName": "Nome do ciclo",
+    "periodStart": "Início do período",
+    "periodEnd": "Fim do período",
+    "createCycle": "Criar ciclo",
+    "cancel": "Cancelar",
+    "templateLabel": "Modelo",
+    "templateSetupHint": "Gerenciar modelos de avaliação em Configurações",
+    "reviewPending": "Pendente",
+    "reviewSubmitted": "Enviada",
+    "reviewCalibrated": "Calibrada",
+    "reviewShared": "Compartilhada",
+    "reviewAcknowledged": "Confirmada",
+    "exitReason": "Motivo de saída",
+    "exitReason_resignation": "Pedido de demissão",
+    "exitReason_retirement": "Aposentadoria",
+    "exitReason_end_of_contract": "Fim de contrato",
+    "exitReason_dismissal": "Demissão sem justa causa",
+    "exitReason_redundancy": "Corte de pessoal",
+    "exitReason_mutual": "Acordo mútuo",
+    "exitReason_death": "Falecimento",
+    "exitReason_other": "Outro",
+    "exitVoluntary": "Saída voluntária",
+    "exitVoluntaryYes": "Sim, voluntária",
+    "exitVoluntaryNo": "Não, involuntária",
+    "exitDestination": "Destino",
+    "exitNotes": "Notas",
+    "saveExit": "Salvar registro de saída",
+    "recordExit": "Registrar saída"
+  },
+  "retention": {
+    "title": "Retenção",
+    "turnoverTwelveMonths": "Rotatividade, últimos 12 meses",
+    "regrettableLeavers": "Saídas lamentadas",
+    "missingExits": "Desligados sem registro de saída",
+    "noMissingExits": "Cada desligamento tem seu registro de saída.",
+    "noInterviewTitle": "Registros de saída sem entrevista",
+    "noInterviewEmpty": "Cada registro de saída tem sua entrevista."
+  },
+  "benefits": {
+    "title": "Benefícios",
+    "description": "Planos, janelas de inscrição, inscrições e os valores mensais para a folha.",
+    "windowsTitle": "Janelas de inscrição",
+    "enrolmentsTitle": "Inscrições",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "open": "Aberta",
+      "draft": "Rascunho",
+      "closed": "Fechada",
+      "enrolments": "Inscrições"
+    },
+    "columns": {
+      "window": "Janela",
+      "kind": "Tipo",
+      "range": "Datas",
+      "elections": "Inscrições",
+      "pending": "Pendentes",
+      "status": "Estado",
+      "employee": "Empregado",
+      "plan": "Plano",
+      "coverage": "Nível",
+      "employeeAmount": "Empregado",
+      "employerAmount": "Empregador"
+    },
+    "windowsEmptyTitle": "Sem janelas aqui",
+    "windowsEmpty": "Nada neste segmento ainda.",
+    "enrolmentsEmptyTitle": "Sem inscrições aqui",
+    "enrolmentsEmpty": "Nada inscrito ainda.",
+    "unknownSegmentTitle": "Segmento desconhecido",
+    "unknownSegment": "Não existe o segmento de benefícios {segment}.",
+    "newWindow": "Nova janela",
+    "newWindowTitle": "Nova janela de inscrição",
+    "windowName": "Nome",
+    "windowKind": "Tipo",
+    "windowOpens": "Abre em",
+    "windowCloses": "Fecha em",
+    "windowPlanYear": "O ano do plano começa em",
+    "windowSubsidiary": "Subsidiária empregadora",
+    "windowDepartment": "Departamento",
+    "windowAll": "Todos",
+    "windowRequired": "Nomeie a janela e defina as três datas antes de salvar.",
+    "windowFailed": "A janela não pôde ser salva.",
+    "createWindow": "Criar janela",
+    "cancel": "Cancelar",
+    "openAction": "Abrir janela",
+    "closeAction": "Fechar janela",
+    "closeReasonPlaceholder": "Por que esta janela está fechando? As inscrições pendentes são recusadas com este motivo.",
+    "openWindow": "Abrir",
+    "openEnrollment": "Abrir",
+    "approve": "Aprovar",
+    "drawerProgress": "Progresso das inscrições",
+    "drawerEnrolments": "Inscrições nesta janela",
+    "drawerNoEnrolments": "Ainda não há inscrições nesta janela.",
+    "windowKinds": {
+      "open_enrollment": "Inscrição aberta",
+      "new_hire": "Nova contratação",
+      "life_event": "Evento de vida"
+    },
+    "statusNames": {
+      "draft": "Rascunho",
+      "open": "Aberta",
+      "closed": "Fechada",
+      "elected": "Inscrito",
+      "waived": "Dispensado",
+      "pending_approval": "Aprovação pendente",
+      "active": "Ativa",
+      "ended": "Encerrada",
+      "cancelled": "Cancelada"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "Visão geral",
+      "profile": "Perfil",
+      "leave": "Licenças",
+      "checklists": "Checklists",
+      "team": "Equipe"
+    },
+    "refusedTitle": "O autoatendimento está indisponível",
+    "overview": {
+      "title": "Eu",
+      "description": "Seu vínculo, solicitações e saldos — nada mais aparece aqui.",
+      "notAvailable": "não informado",
+      "employmentsTitle": "Meu vínculo",
+      "employmentsEmpty": "Sem registro de vínculo",
+      "employmentsEmptyDescription": "O RH ainda não registrou um vínculo para a sua pessoa.",
+      "employer": "Empregador",
+      "jobTitle": "Cargo",
+      "department": "Departamento",
+      "status": "Situação",
+      "manager": "Gestor",
+      "serviceStart": "Início do vínculo",
+      "stepsTitle": "Minhas etapas abertas",
+      "stepsEmpty": "Sem etapas abertas",
+      "stepsEmptyDescription": "As etapas atribuídas a você aparecem aqui.",
+      "viewChecklists": "Abrir checklists",
+      "requestsTitle": "Minhas solicitações pendentes",
+      "requestsEmpty": "Sem solicitações pendentes",
+      "requestsEmptyDescription": "As propostas que você apresenta aparecem aqui até a decisão.",
+      "balancesTitle": "Saldos",
+      "balancesEmpty": "Sem tipos de licença ativos.",
+      "viewLeave": "Abrir licenças",
+      "extensionsTitle": "Mais"
+    },
+    "profile": {
+      "title": "Meu perfil",
+      "description": "Seu registro de contato. Alterações são apresentadas como solicitação de aprovação.",
+      "contactTitle": "Contato",
+      "addressTitle": "Endereço",
+      "noAddress": "Sem endereço registrado.",
+      "emergencyTitle": "Contato de emergência",
+      "noEmergency": "Sem contato de emergência registrado.",
+      "edit": "Editar perfil",
+      "phone": "Telefone",
+      "email": "E-mail pessoal",
+      "addressLabel": "Rótulo",
+      "line1": "Logradouro",
+      "line2": "Complemento",
+      "city": "Cidade",
+      "region": "Estado",
+      "postalCode": "CEP",
+      "country": "País",
+      "employment": "Vínculo",
+      "emergencyName": "Nome",
+      "emergencyRelationship": "Parentesco",
+      "emergencyPhone": "Telefone",
+      "reason": "Motivo",
+      "reasonPlaceholder": "O que mudou, para quem aprova",
+      "clearHint": "Limpar este campo",
+      "submit": "Enviar para aprovação",
+      "cancel": "Cancelar",
+      "submitFailed": "Não foi possível apresentar a solicitação de perfil.",
+      "dialogTitle": "Editar perfil",
+      "dialogDescription": "Alterações são apresentadas como solicitação — a aprovação atualiza o registro.",
+      "pendingTitle": "Solicitação de perfil pendente",
+      "pendingMessage": "Uma alteração de perfil está {status}. A aprovação atualiza o registro."
+    },
+    "checklists": {
+      "title": "Meus checklists",
+      "description": "Etapas atribuídas a você, com conclusão.",
+      "listTitle": "Etapas abertas",
+      "columns": {
+        "title": "Etapa",
+        "process": "Checklist",
+        "due": "Prazo",
+        "required": "Obrigatória",
+        "evidence": "Evidência",
+        "status": "Situação"
+      },
+      "required": "Obrigatória",
+      "optional": "Opcional",
+      "complete": "Concluir",
+      "completeFailed": "Não foi possível concluir a etapa.",
+      "overdue": "Atrasada",
+      "emptyTitle": "Sem etapas abertas",
+      "emptyDescription": "As etapas atribuídas a você aparecem aqui."
+    },
+    "requests": {
+      "columns": {
+        "kind": "Tipo",
+        "status": "Situação",
+        "submitted": "Enviada"
+      }
+    },
+    "requestKinds": {
+      "hire": "Admissão",
+      "status_change": "Mudança de situação",
+      "assignment_change": "Mudança de lotação",
+      "termination": "Desligamento",
+      "position_assignment": "Designação de cargo",
+      "profile_change": "Alteração de perfil",
+      "unknown": "Desconhecido"
+    },
+    "requestStatus": {
+      "draft": "Rascunho",
+      "pending_approval": "Aprovação pendente",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "withdrawn": "Retirada",
+      "applied": "Aplicada"
+    },
+    "employmentStatus": {
+      "offered": "Proposto",
+      "active": "Ativo",
+      "on_leave": "Afastado",
+      "suspended": "Suspenso",
+      "terminated": "Encerrado"
+    },
+    "stepStatus": {
+      "pending": "Pendente",
+      "done": "Concluída",
+      "skipped": "Ignorada"
+    },
+    "evidenceKinds": {
+      "none": "Nenhuma",
+      "acknowledgement": "Confirmação",
+      "attachment": "Anexo"
+    },
+    "team": {
+      "title": "Minha equipe",
+      "description": "Subordinados diretos hoje — relação, etapas e decisões pendentes.",
+      "rosterTitle": "Subordinados diretos",
+      "columns": {
+        "name": "Nome",
+        "title": "Cargo",
+        "department": "Departamento",
+        "status": "Situação",
+        "serviceStart": "Início do vínculo"
+      },
+      "rosterEmpty": "Sem subordinados diretos",
+      "stepsTitle": "Etapas atribuídas a mim",
+      "stepsEmpty": "Sem etapas atribuídas a você nesta equipe.",
+      "leaveTitle": "Licenças pendentes",
+      "leaveEmpty": "Sem solicitações de licença para decidir.",
+      "decideInApprovals": "Decidir em Aprovações",
+      "changesTitle": "Solicitações de alteração pendentes",
+      "changesEmpty": "Sem solicitações de alteração para decidir."
+    }
   }
 }

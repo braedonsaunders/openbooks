@@ -623,6 +623,21 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'hrm.employment.read',
     featureKey: 'hrm',
   },
+  // Me — the person's own workspace (HR-9 self-service), not an HR tab:
+  // employment summary, profile, leave, checklists, and the manager's
+  // team. Visible with the hrm feature plus hrm.self.read, which every
+  // built-in role carries; every row inside scopes by the party behind
+  // the login, so the module gate is presence, never visibility.
+  {
+    key: 'me',
+    href: '/me',
+    label: 'Me',
+    iconKey: 'circle-user',
+    group: 'operations',
+    subgroup: 'people',
+    requiredPermission: 'hrm.self.read',
+    featureKey: 'hrm',
+  },
   // Insights — reports, native analytics, custom dashboards, and saved views.
   {
     key: 'reports',
@@ -891,6 +906,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'equipment',
     'employees',
     'hrm',
+    'me',
   ],
   banking: [
     'banking',

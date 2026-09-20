@@ -1,17 +1,20 @@
 /**
  * HRM rule-slot persistence (pure — no server imports).
  *
- * Two workforce entities edit jsonb rule columns through structured slot
+ * Three workforce entities edit jsonb rule columns through structured slot
  * fields: hrm-process-templates (applies_to) and leave-policies (applies_to,
- * accrual_rule, carryover_rule). The slots are readable prefills projected
- * by STORED GENERATED columns and are NEVER written; the normalizers fold
- * them back into the rule objects before buildRow. buildRow only emits
- * declared fields, so without this step the folded objects were dropped on
- * create (the row kept the database default: applies to all) and an edit
- * tried to write null into a generated slot column, which Postgres refuses
- * — every process-template edit through Setup failed. This fold runs on
- * both paths: it strips any column that is a generated slot and appends the
- * folded jsonb columns present in the normalized body.
+ * accrual_rule, carryover_rule) read their slots back through STORED
+ * GENERATED projections, while hrm-review-templates (rating_scale) has no
+ * generated projections by design — cycles read the scale through the
+ * template row itself, never a slot column. All three share the write
+ * contract: slots are readable prefills, never written; the normalizers
+ * fold them back into the rule objects before buildRow. buildRow only
+ * emits declared fields, so without this step the folded objects were
+ * dropped on create (the row kept the database default: applies to all)
+ * and an edit tried to write null into a generated slot column, which
+ * Postgres refuses — every process-template edit through Setup failed.
+ * This fold runs on both paths: it strips any column that is a generated
+ * slot and appends the folded jsonb columns present in the normalized body.
  */
 import type { Coerced } from './coerce'
 
@@ -26,6 +29,12 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
   'hrm-process-templates': {
     generated: ['applies_employer_subsidiary_id', 'applies_department_id'],
     folded: [{ key: 'appliesTo', column: 'applies_to' }],
+  },
+  'hrm-review-templates': {
+    // No generated slot columns: the scale has no tenant-identity slots
+    // to project, so the drawer fields fold straight into rating_scale.
+    generated: [],
+    folded: [{ key: 'ratingScale', column: 'rating_scale' }],
   },
   'leave-policies': {
     generated: [

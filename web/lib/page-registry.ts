@@ -1360,6 +1360,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/benefits': {
+    route: '/hrm/benefits',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/benefits/view')
+      return {
+        load: (input) => m.loadBenefitsPage(input.searchParams ?? {}),
+        spec: (data) => m.benefitsSpec(data as never),
+      }
+    },
+  },
   '/hrm/change-requests': {
     route: '/hrm/change-requests',
     segments: [],
@@ -1396,6 +1408,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/performance': {
+    route: '/hrm/performance',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/performance/view')
+      return {
+        load: (input) => m.loadPerformancePage(input.searchParams ?? {}),
+        spec: (data) => m.performanceSpec(data as never),
+      }
+    },
+  },
   '/hrm/positions': {
     route: '/hrm/positions',
     segments: [],
@@ -1417,6 +1441,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadProcessesRoute(input.searchParams ?? {}),
         spec: (data) => m.processesSpec(data as never),
+      }
+    },
+  },
+  '/hrm/recruiting': {
+    route: '/hrm/recruiting',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/recruiting/view')
+      return {
+        load: (input) => m.loadRecruitingPage(input.searchParams ?? {}),
+        spec: (data) => m.recruitingSpec(data as never),
       }
     },
   },
@@ -1513,6 +1549,54 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadSavedViewRun({ id: segment(input, 'id') }, input.searchParams ?? {}),
         spec: (data) => m.savedViewRunSpec(data as never),
+      }
+    },
+  },
+  '/me': {
+    route: '/me',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/view')
+      return {
+        load: () => m.loadMePage(),
+        spec: (data) => m.meSpec(data as never),
+      }
+    },
+  },
+  '/me/checklists': {
+    route: '/me/checklists',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/checklists/view')
+      return {
+        load: () => m.loadMeChecklistsPage(),
+        spec: (data) => m.meChecklistsSpec(data as never),
+      }
+    },
+  },
+  '/me/profile': {
+    route: '/me/profile',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/profile/view')
+      return {
+        load: (input) => m.loadMeProfilePage(input.searchParams ?? {}),
+        spec: (data) => m.meProfileSpec(data as never),
+      }
+    },
+  },
+  '/me/team': {
+    route: '/me/team',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/team/view')
+      return {
+        load: () => m.loadMeTeamPage(),
+        spec: (data) => m.meTeamSpec(data as never),
       }
     },
   },

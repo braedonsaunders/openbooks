@@ -7,7 +7,17 @@
       "positions": "Positions",
       "processes": "Processes",
       "leave": "Leave",
-      "myLeave": "My leave"
+      "myLeave": "My leave",
+      "recruiting": "Recruiting",
+      "performance": "Performance",
+      "benefits": "Benefits"
+    },
+    "recruiting": {
+      "title": "Recruiting",
+      "open": "Open requisitions",
+      "awaiting": "Offers awaiting response",
+      "interviews": "Interviews this week",
+      "viewAll": "Open recruiting"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -33,7 +43,8 @@
       "employeesHint": "in service today",
       "positionsHint": "open",
       "processesHint": "{count, plural, one {# step overdue} other {# steps overdue}}",
-      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}"
+      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}",
+      "recruitingHint": "{count, plural, one {# offer awaiting response} other {# offers awaiting response}}"
     },
     "vacancy": {
       "title": "Vacancy by department",
@@ -119,6 +130,13 @@
       "title": "Leave",
       "onLeaveEmpty": "Nobody on leave today.",
       "pendingSub": "awaiting approval"
+    },
+    "benefits": {
+      "title": "Benefits",
+      "openWindows": "Open",
+      "noOpenWindow": "No enrollment window is open.",
+      "pendingSub": "Pending approvals",
+      "missingSub": "Elections missing inputs"
     }
   },
   "queue": {
@@ -273,6 +291,16 @@
       "positionRequired": "Pick a position or mark the assignment as unassigned.",
       "unassignLabel": "Unassign from the position",
       "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment."
+    },
+    "exit": {
+      "title": "Exit record",
+      "empty": "No exit record yet."
+    },
+    "benefits": {
+      "title": "Benefits",
+      "empty": "No benefit elections or dependents yet.",
+      "viewAll": "Benefits",
+      "dependents": "{count, plural, one {# dependent: {names}} other {# dependents: {names}}}"
     }
   },
   "directory": {
@@ -481,5 +509,442 @@
     "timeKind": "time",
     "valueKind": "value",
     "unlimited": "Unlimited"
+  },
+  "recruiting": {
+    "title": "Recruiting",
+    "description": "Vacancies to hires: requisitions against the headcount plan, candidates through the hiring funnel, interviews, offers, and the hire.",
+    "add": "New requisition",
+    "empty": "No requisitions match this filter.",
+    "total": "Total",
+    "segmentsLabel": "Status",
+    "statusAll": "All statuses",
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "on_hold": "On hold",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    },
+    "columns": {
+      "number": "Number",
+      "title": "Title",
+      "position": "Position",
+      "department": "Department",
+      "headcount": "Filled / headcount",
+      "hiringManager": "Hiring manager",
+      "opened": "Opened",
+      "status": "Status"
+    },
+    "drawer": {
+      "title": "Requisition {number}",
+      "pipeline": "Pipeline",
+      "applications": "Applications",
+      "noApplications": "No candidates attached yet.",
+      "candidate": "Candidate",
+      "stage": "Stage",
+      "applied": "Applied",
+      "lastEvent": "Last event",
+      "interviews": "Interviews",
+      "offer": "Offer",
+      "timeToFill": "Time to fill",
+      "days": "days",
+      "missing": "This record is no longer visible."
+    },
+    "create": {
+      "titleField": "Title",
+      "employer": "Employer",
+      "department": "Department",
+      "noDepartment": "No department",
+      "headcount": "Headcount",
+      "targetStart": "Target start",
+      "submit": "Create requisition",
+      "failed": "The requisition could not be created."
+    },
+    "attach": {
+      "title": "Attach a candidate",
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "submit": "Attach candidate",
+      "failed": "The candidate could not be attached.",
+      "rejectTitle": "Reject",
+      "rejectReason": "Reason"
+    },
+    "move": {
+      "title": "Move stage",
+      "submit": "Move",
+      "failed": "The application could not be moved.",
+      "reject": "Reject",
+      "withdraw": "Withdraw"
+    },
+    "interview": {
+      "title": "Schedule an interview",
+      "kind": "Kind",
+      "when": "When",
+      "duration": "Minutes",
+      "location": "Location",
+      "panel": "Panel",
+      "submit": "Schedule interview",
+      "failed": "The interview could not be scheduled.",
+      "completeTitle": "Complete",
+      "outcome": "Outcome",
+      "feedback": "Feedback",
+      "completeSubmit": "Complete interview",
+      "cancel": "Cancel interview"
+    },
+    "interviewKind": {
+      "phone": "Phone",
+      "video": "Video",
+      "onsite": "On-site",
+      "panel": "Panel",
+      "assessment": "Assessment"
+    },
+    "interviewOutcome": {
+      "advance": "Advance",
+      "hold": "Hold",
+      "reject": "Reject"
+    },
+    "offerCard": {
+      "title": "Draft the terms",
+      "job": "Job title",
+      "start": "Start date",
+      "amount": "Amount",
+      "currency": "Currency",
+      "basis": "Basis",
+      "expires": "Expires",
+      "submit": "Draft offer",
+      "failed": "The offer could not be drafted."
+    },
+    "offerActions": {
+      "send": "Send",
+      "accept": "Accept and hire",
+      "decline": "Decline",
+      "withdraw": "Withdraw",
+      "reason": "Reason",
+      "failed": "The offer action failed."
+    },
+    "basis": {
+      "hourly": "Hourly",
+      "annual": "Annual"
+    },
+    "candidate": {
+      "email": "Email",
+      "phone": "Phone",
+      "source": "Source"
+    }
+  },
+  "performance": {
+    "title": "Performance",
+    "description": "Review cycles with self and manager assessments, calibration, sharing, and acknowledgement — plus goals.",
+    "newCycle": "New cycle",
+    "segmentsLabel": "Status",
+    "allCycles": "All cycles",
+    "mineSegment": "My reviews",
+    "empty": "No review cycles yet.",
+    "colName": "Cycle",
+    "colPeriod": "Period",
+    "colTemplate": "Template",
+    "colSelf": "Self",
+    "colManager": "Manager",
+    "colStatus": "Status",
+    "colKind": "Kind",
+    "colRating": "Rating",
+    "statusDraft": "Draft",
+    "statusOpen": "Open",
+    "statusCalibrating": "Calibrating",
+    "statusClosed": "Closed",
+    "kindSelf": "Self review",
+    "kindManager": "Manager review",
+    "kindPeer": "Peer review",
+    "reviewsTitle": "Reviews",
+    "reviewsEmpty": "No reviews instantiated yet.",
+    "moveToCalibrating": "Move to calibrating",
+    "forceCalibrating": "Force calibrating",
+    "forceReason": "Reason for forcing",
+    "forceReasonPlaceholder": "Why calibration starts with reviews pending",
+    "closeCycle": "Close cycle",
+    "gapNote": "{count} employments opened without a manager review — no manager resolved.",
+    "actionFailed": "The action failed.",
+    "cycleNotFound": "Review cycle not found.",
+    "reviewNotFound": "Review not found.",
+    "exitNotFound": "Exit record not found.",
+    "exitTitle": "Exit record",
+    "overallRating": "Overall rating",
+    "calibratedRating": "Calibrated rating",
+    "goalsTitle": "Goals",
+    "goalsEmpty": "No goals for this cycle period.",
+    "goalTitle": "Goal",
+    "goalDue": "Due date",
+    "addGoal": "Add goal",
+    "goalProgress": "Progress",
+    "saveProgress": "Save progress",
+    "submitReview": "Submit review",
+    "shareReview": "Share with subject",
+    "acknowledgeReview": "Acknowledge",
+    "calibrateReview": "Calibrate",
+    "calibrateRating": "Calibrated rating",
+    "reason": "Reason",
+    "reopenReview": "Reopen",
+    "answerRating": "Rating",
+    "answerText": "Answer",
+    "answerRequired": "required",
+    "newCycleName": "Cycle name",
+    "periodStart": "Period start",
+    "periodEnd": "Period end",
+    "createCycle": "Create cycle",
+    "cancel": "Cancel",
+    "templateLabel": "Template",
+    "templateSetupHint": "Manage review templates in Setup",
+    "reviewPending": "Pending",
+    "reviewSubmitted": "Submitted",
+    "reviewCalibrated": "Calibrated",
+    "reviewShared": "Shared",
+    "reviewAcknowledged": "Acknowledged",
+    "exitReason": "Reason for leaving",
+    "exitReason_resignation": "Resignation",
+    "exitReason_retirement": "Retirement",
+    "exitReason_end_of_contract": "End of contract",
+    "exitReason_dismissal": "Dismissal",
+    "exitReason_redundancy": "Redundancy",
+    "exitReason_mutual": "Mutual agreement",
+    "exitReason_death": "Death",
+    "exitReason_other": "Other",
+    "exitVoluntary": "Leaving voluntarily",
+    "exitVoluntaryYes": "Yes, voluntary",
+    "exitVoluntaryNo": "No, involuntary",
+    "exitDestination": "Destination",
+    "exitNotes": "Notes",
+    "saveExit": "Save exit record",
+    "recordExit": "Record exit"
+  },
+  "retention": {
+    "title": "Retention",
+    "turnoverTwelveMonths": "Turnover, last 12 months",
+    "regrettableLeavers": "Regrettable leavers",
+    "missingExits": "Terminated without an exit record",
+    "noMissingExits": "Every termination has its exit record.",
+    "noInterviewTitle": "Exit records without an interview",
+    "noInterviewEmpty": "Every exit record has its interview."
+  },
+  "benefits": {
+    "title": "Benefits",
+    "description": "Plans, enrollment windows, elections, and the monthly amounts that cross into payroll.",
+    "windowsTitle": "Enrollment windows",
+    "enrolmentsTitle": "Enrolments",
+    "segmentsLabel": "Show",
+    "allLabel": "All",
+    "segments": {
+      "open": "Open",
+      "draft": "Draft",
+      "closed": "Closed",
+      "enrolments": "Enrolments"
+    },
+    "columns": {
+      "window": "Window",
+      "kind": "Kind",
+      "range": "Dates",
+      "elections": "Elections",
+      "pending": "Pending",
+      "status": "Status",
+      "employee": "Employee",
+      "plan": "Plan",
+      "coverage": "Coverage",
+      "employeeAmount": "Employee",
+      "employerAmount": "Employer"
+    },
+    "windowsEmptyTitle": "No windows here",
+    "windowsEmpty": "Nothing in this segment yet.",
+    "enrolmentsEmptyTitle": "No enrolments here",
+    "enrolmentsEmpty": "Nothing elected yet.",
+    "unknownSegmentTitle": "Unknown segment",
+    "unknownSegment": "There is no benefits segment {segment}.",
+    "newWindow": "New window",
+    "newWindowTitle": "New enrollment window",
+    "windowName": "Name",
+    "windowKind": "Kind",
+    "windowOpens": "Opens on",
+    "windowCloses": "Closes on",
+    "windowPlanYear": "Plan year starts on",
+    "windowSubsidiary": "Employer subsidiary",
+    "windowDepartment": "Department",
+    "windowAll": "All",
+    "windowRequired": "Name the window and set all three dates before saving.",
+    "windowFailed": "The window could not be saved.",
+    "createWindow": "Create window",
+    "cancel": "Cancel",
+    "openAction": "Open window",
+    "closeAction": "Close window",
+    "closeReasonPlaceholder": "Why is this window closing? Pending elections are refused with this reason.",
+    "openWindow": "Open",
+    "openEnrollment": "Open",
+    "approve": "Approve",
+    "drawerProgress": "Election progress",
+    "drawerEnrolments": "Enrolments in this window",
+    "drawerNoEnrolments": "No elections in this window yet.",
+    "windowKinds": {
+      "open_enrollment": "Open enrollment",
+      "new_hire": "New hire",
+      "life_event": "Life event"
+    },
+    "statusNames": {
+      "draft": "Draft",
+      "open": "Open",
+      "closed": "Closed",
+      "elected": "Elected",
+      "waived": "Waived",
+      "pending_approval": "Pending approval",
+      "active": "Active",
+      "ended": "Ended",
+      "cancelled": "Cancelled"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "Overview",
+      "profile": "Profile",
+      "leave": "Leave",
+      "checklists": "Checklists",
+      "team": "Team"
+    },
+    "refusedTitle": "Self-service is unavailable",
+    "overview": {
+      "title": "Me",
+      "description": "Your employment, requests, and balances — nothing else lists here.",
+      "notAvailable": "—",
+      "employmentsTitle": "My employment",
+      "employmentsEmpty": "No employment record",
+      "employmentsEmptyDescription": "HR has not recorded an employment for your person yet.",
+      "employer": "Employer",
+      "jobTitle": "Title",
+      "department": "Department",
+      "status": "Status",
+      "manager": "Manager",
+      "serviceStart": "Service start",
+      "stepsTitle": "My open steps",
+      "stepsEmpty": "No open steps",
+      "stepsEmptyDescription": "Checklist steps assigned to you list here.",
+      "viewChecklists": "Open checklists",
+      "requestsTitle": "My pending requests",
+      "requestsEmpty": "No pending requests",
+      "requestsEmptyDescription": "Profile and employment proposals you file list here until decided.",
+      "balancesTitle": "Balances",
+      "balancesEmpty": "No active leave types.",
+      "viewLeave": "Open leave",
+      "extensionsTitle": "More"
+    },
+    "profile": {
+      "title": "My profile",
+      "description": "Your contact record. Edits file a request for HR approval.",
+      "contactTitle": "Contact",
+      "addressTitle": "Address",
+      "noAddress": "No address on file.",
+      "emergencyTitle": "Emergency contact",
+      "noEmergency": "No emergency contact on file.",
+      "edit": "Edit profile",
+      "phone": "Phone",
+      "email": "Personal email",
+      "addressLabel": "Label",
+      "line1": "Street",
+      "line2": "Street (2nd line)",
+      "city": "City",
+      "region": "Region",
+      "postalCode": "Postal code",
+      "country": "Country",
+      "employment": "Employment",
+      "emergencyName": "Name",
+      "emergencyRelationship": "Relationship",
+      "emergencyPhone": "Phone",
+      "reason": "Reason",
+      "reasonPlaceholder": "What changed, for the HR approver",
+      "clearHint": "Clear this field",
+      "submit": "Submit for approval",
+      "cancel": "Cancel",
+      "submitFailed": "The profile request could not be filed.",
+      "dialogTitle": "Edit profile",
+      "dialogDescription": "Changes file as a request — HR approves before anything updates.",
+      "pendingTitle": "Pending profile request",
+      "pendingMessage": "A profile change is {status}. HR approval updates the record."
+    },
+    "checklists": {
+      "title": "My checklists",
+      "description": "Checklist steps assigned to you, with completion.",
+      "listTitle": "Open steps",
+      "columns": {
+        "title": "Step",
+        "process": "Checklist",
+        "due": "Due",
+        "required": "Required",
+        "evidence": "Evidence",
+        "status": "Status"
+      },
+      "required": "Required",
+      "optional": "Optional",
+      "complete": "Complete",
+      "completeFailed": "The step could not be completed.",
+      "overdue": "Overdue",
+      "emptyTitle": "No open steps",
+      "emptyDescription": "Checklist steps assigned to you list here."
+    },
+    "requests": {
+      "columns": {
+        "kind": "Kind",
+        "status": "Status",
+        "submitted": "Submitted"
+      }
+    },
+    "requestKinds": {
+      "hire": "Hire",
+      "status_change": "Status change",
+      "assignment_change": "Assignment change",
+      "termination": "Termination",
+      "position_assignment": "Position assignment",
+      "profile_change": "Profile change",
+      "unknown": "Unknown"
+    },
+    "requestStatus": {
+      "draft": "Draft",
+      "pending_approval": "Pending approval",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
+      "applied": "Applied"
+    },
+    "employmentStatus": {
+      "offered": "Offered",
+      "active": "Active",
+      "on_leave": "On leave",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "done": "Done",
+      "skipped": "Skipped"
+    },
+    "evidenceKinds": {
+      "none": "None",
+      "acknowledgement": "Acknowledgement",
+      "attachment": "Attachment"
+    },
+    "team": {
+      "title": "My team",
+      "description": "Direct reports as of today — roster, steps, and pending decisions.",
+      "rosterTitle": "Direct reports",
+      "columns": {
+        "name": "Name",
+        "title": "Title",
+        "department": "Department",
+        "status": "Status",
+        "serviceStart": "Service start"
+      },
+      "rosterEmpty": "No direct reports",
+      "stepsTitle": "Steps assigned to me",
+      "stepsEmpty": "No steps assigned to you on this team.",
+      "leaveTitle": "Pending leave",
+      "leaveEmpty": "No leave requests awaiting decision.",
+      "decideInApprovals": "Decide in Approvals",
+      "changesTitle": "Pending change requests",
+      "changesEmpty": "No change requests awaiting decision."
+    }
   }
 }

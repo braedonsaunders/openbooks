@@ -19,6 +19,7 @@ import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciat
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
+import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
 
 export type SetupFieldKind =
   | 'text'
@@ -1742,6 +1743,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // ./hrm-leave.ts; ordinary registry entities behind the hrm switch.
   LEAVE_TYPES_ENTITY,
   LEAVE_POLICIES_ENTITY,
+  // HRM benefit plans and ordered pricing tiers. Declared in
+  // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
+  BENEFIT_PLANS_ENTITY,
+  BENEFIT_PLAN_LEVELS_ENTITY,
   {
     key: 'pay-schedules',
     table: 'pay_schedules',
@@ -2185,6 +2190,164 @@ export const SETUP_ENTITIES: SetupEntity[] = [
           { value: 'attachment', labelKey: 'options.hrmStepEvidence.attachment' },
         ],
       },
+    ],
+  },
+  // HRM pipeline funnels (0195): the org's own hiring funnel, managed
+  // here; deactivation preserves history, and a template that opened
+  // requisitions cannot be deleted (retire with isActive instead).
+  {
+    key: 'hrm-pipeline-templates',
+    table: 'hrm_pipeline_templates',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-pipeline-stages',
+    table: 'hrm_pipeline_stages',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-pipeline-templates' },
+      { key: 'position', kind: 'number' },
+      { key: 'name', kind: 'text' },
+      { key: 'kind', kind: 'badge' },
+    ],
+    fields: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-pipeline-templates', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'key', kind: 'text', required: true },
+      { key: 'name', kind: 'text', required: true },
+      {
+        key: 'kind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'screening', labelKey: 'options.hrmPipelineStageKind.screening' },
+          { value: 'interview', labelKey: 'options.hrmPipelineStageKind.interview' },
+          { value: 'assessment', labelKey: 'options.hrmPipelineStageKind.assessment' },
+          { value: 'offer', labelKey: 'options.hrmPipelineStageKind.offer' },
+          { value: 'hired', labelKey: 'options.hrmPipelineStageKind.hired' },
+          { value: 'rejected', labelKey: 'options.hrmPipelineStageKind.rejected' },
+        ],
+      },
+      // Derived in storage from kind (never an independent control): the
+      // drawer hides it and the write path folds kind into it before
+      // buildRow (see normalizeHrmPipelineStageInput).
+      { key: 'isTerminal', kind: 'boolean', hidden: true },
+    ],
+  },
+  // Review templates (0196, HR-7): the review form per org — name, the
+  // rating scale edited as structured min/max/labels fields (folded into
+  // rating_scale before buildRow, never raw JSON), and ordered sections
+  // with prompts. Deactivation (isActive) preserves history; deleting a
+  // template that opened cycles is refused by name — retire it instead.
+  {
+    key: 'hrm-review-templates',
+    table: 'hrm_review_templates',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'star',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'ratingScaleMin', kind: 'integer', required: true, helpTextKey: 'fieldHelp.hrmReviewScaleMin' },
+      { key: 'ratingScaleMax', kind: 'integer', required: true, helpTextKey: 'fieldHelp.hrmReviewScaleMax' },
+      { key: 'ratingScaleLabels', kind: 'stringArray', helpTextKey: 'fieldHelp.hrmReviewScaleLabels' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-review-template-sections',
+    table: 'hrm_review_template_sections',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-review-templates' },
+      { key: 'position', kind: 'number' },
+      { key: 'title', kind: 'text' },
+      { key: 'kind', kind: 'badge' },
+    ],
+    fields: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-review-templates', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'title', kind: 'text', required: true },
+      {
+        key: 'kind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'competency', labelKey: 'options.hrmReviewSectionKind.competency' },
+          { value: 'goals', labelKey: 'options.hrmReviewSectionKind.goals' },
+          { value: 'free_text', labelKey: 'options.hrmReviewSectionKind.freeText' },
+        ],
+      },
+      { key: 'weight', kind: 'decimal' },
+    ],
+  },
+  {
+    key: 'hrm-review-template-questions',
+    table: 'hrm_review_template_questions',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'sectionId', kind: 'ref', ref: 'hrm-review-template-sections' },
+      { key: 'position', kind: 'number' },
+      { key: 'prompt', kind: 'text' },
+      { key: 'answerKind', kind: 'badge' },
+      { key: 'required', kind: 'boolean' },
+    ],
+    fields: [
+      { key: 'sectionId', kind: 'ref', ref: 'hrm-review-template-sections', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'prompt', kind: 'textarea', required: true },
+      {
+        key: 'answerKind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'rating', labelKey: 'options.hrmReviewAnswerKind.rating' },
+          { value: 'text', labelKey: 'options.hrmReviewAnswerKind.text' },
+          { value: 'rating_and_text', labelKey: 'options.hrmReviewAnswerKind.ratingAndText' },
+        ],
+      },
+      { key: 'required', kind: 'boolean' },
     ],
   },
   // --- Assets --------------------------------------------------------------

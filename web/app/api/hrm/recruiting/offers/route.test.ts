@@ -1,0 +1,261 @@
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import nodeTest from "node:test";
+import { NextResponse } from "next/server";
+
+interface RouteState {
+  gate: { user: { id: string; orgId: string } } | { status: number };
+  featureOn: boolean;
+  calls: Array<{ fn: string; args: unknown }>;
+  serviceThrow: unknown;
+  mapped: Array<{ error: unknown }>;
+}
+
+const stateKey = Symbol.for("openbooks.hrm-recruiting-offers-route-test");
+const isVitest = process.env.VITEST === "true";
+type TestFn = typeof nodeTest;
+const vitestPackage = "vitest";
+const test: TestFn = isVitest
+  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
+  : nodeTest;
+
+const routeState: RouteState = {
+  gate: { user: { id: "user-1", orgId: "org-1" } },
+  featureOn: true,
+  calls: [],
+  serviceThrow: null,
+  mapped: [],
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+
+const mockSources = new Map<string, string>([
+  [
+    "mock:authz",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      export async function guardPermission(permission) {
+        if (permission !== 'hrm.recruiting.read' && permission !== 'hrm.recruiting.manage') {
+          throw new Error('unexpected permission ' + permission)
+        }
+        if (state.gate && 'status' in state.gate) {
+          const NextResponse = globalThis.openbooksHrmRecruitingOffersNextResponse
+          return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
+        }
+        return state.gate
+      }
+    `,
+  ],
+  [
+    "mock:features",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      export async function isFeatureEnabled(orgId, key) {
+        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
+        return state.featureOn
+      }
+    `,
+  ],
+  [
+    "mock:list-params",
+    `
+      export function isUuid(value) {
+        return typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)
+      }
+    `,
+  ],
+  [
+    "mock:service",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      export async function createOffer(args) {
+        state.calls.push({ fn: 'create', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { id: 'offer-1' }
+      }
+      export async function sendOffer(args) {
+        state.calls.push({ fn: 'send', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { id: args.offerId }
+      }
+      export async function declineOffer(args) {
+        state.calls.push({ fn: 'decline', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { id: args.offerId }
+      }
+      export async function withdrawOffer(args) {
+        state.calls.push({ fn: 'withdraw', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { id: args.offerId }
+      }
+    `,
+  ],
+  [
+    "mock:hire",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      export async function acceptOfferAsHire(args) {
+        state.calls.push({ fn: 'accept', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { offerId: args.offerId }
+      }
+    `,
+  ],
+  [
+    "mock:read",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      export async function getOfferDetail(args) {
+        state.calls.push({ fn: 'get', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return { id: args.offerId }
+      }
+    `,
+  ],
+  [
+    "mock:lib",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
+      const NextResponse = globalThis.openbooksHrmRecruitingOffersNextResponse
+      export function recruitingErrorResponse(error) {
+        state.mapped.push({ error })
+        return NextResponse.json({ error: String((error && error.message) || error) }, { status: 409 })
+      }
+    `,
+  ],
+]);
+
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingOffersNextResponse =
+  NextResponse;
+
+const mockUrls = new Map<string, string>([
+  ["../../../../../lib/authz", "mock:authz"],
+  ["../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/authz", "mock:authz"],
+  ["../../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/list-params", "mock:list-params"],
+  ["@openbooks/engine/src/hrm/recruiting/offers.ts", "mock:service"],
+  ["@openbooks/engine/src/hrm/recruiting/hire.ts", "mock:hire"],
+  ["@openbooks/engine/src/hrm/recruiting/recruiting-read.ts", "mock:read"],
+  ["../_lib", "mock:lib"],
+  ["../../_lib", "mock:lib"],
+]);
+
+let collectionRoute: typeof import("./route.ts") | undefined;
+let itemRoute: typeof import("./[id]/route.ts") | undefined;
+if (!isVitest) {
+  const hooks = registerHooks({
+    resolve(specifier, _context, nextResolve) {
+      if (specifier === "server-only") {
+        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+      }
+      const mocked = mockUrls.get(specifier);
+      if (mocked) return { url: mocked, shortCircuit: true };
+      return nextResolve(specifier);
+    },
+    load(url, _context, nextLoad) {
+      const source = mockSources.get(url);
+      if (source !== undefined) return { format: "module", source, shortCircuit: true };
+      return nextLoad(url);
+    },
+  });
+  const collectionUrl = "./route.ts?hrm-recruiting-offers-collection";
+  collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
+  const itemUrl = "./[id]/route.ts?hrm-recruiting-offers-item";
+  itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
+  hooks.deregister();
+}
+
+const APPLICATION_ID = "00000000-0000-4000-8000-000000000021";
+const SUBSIDIARY_ID = "00000000-0000-4000-8000-000000000022";
+const OFFER_ID = "00000000-0000-4000-8000-000000000023";
+
+function reset(): void {
+  routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.featureOn = true;
+  routeState.calls = [] as RouteState["calls"];
+  routeState.serviceThrow = null;
+  routeState.mapped = [];
+}
+
+function jsonRequest(url: string, method: string, body: unknown): Request {
+  return new Request(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+const validTerms = {
+  applicationId: APPLICATION_ID,
+  employerSubsidiaryId: SUBSIDIARY_ID,
+  jobTitle: "Engineer",
+  proposedStartOn: "2026-10-01",
+  compensationAmount: "90000",
+  compensationCurrency: "USD",
+  compensationBasis: "annual",
+};
+
+if (isVitest) {
+  test("offers routes gate on the hrm feature and the recruiting permissions", async () => {
+    const { readFileSync } = await import("node:fs");
+    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
+    assert.match(readFileSync(new URL("./[id]/route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
+  });
+} else {
+  test("draft validates the terms through the real parser before the service runs", async () => {
+    reset();
+    const url = "http://openbooks.test/api/hrm/recruiting/offers";
+    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
+    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationBasis: "equity" }))).status, 400);
+    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationCurrency: "US" }))).status, 400);
+    assert.deepEqual(routeState.calls, []);
+    const response = await collectionRoute!.POST(jsonRequest(url, "POST", validTerms));
+    assert.equal(response.status, 201);
+    assert.deepEqual(await response.json(), { offer: { id: "offer-1" } });
+  });
+
+  test("item routes validate ids and the action union through the real parser", async () => {
+    reset();
+    const badId = { params: Promise.resolve({ id: "nope" }) };
+    const params = { params: Promise.resolve({ id: OFFER_ID }) };
+    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), badId)).status, 400);
+    const get = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+    assert.equal(get.status, 200);
+    assert.deepEqual(await get.json(), { offer: { id: OFFER_ID } });
+    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "sign" }), params)).status, 400);
+    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "decline" }), params)).status, 400);
+    for (const [body, fn] of [
+      [{ action: "send" }, "send"],
+      [{ action: "accept" }, "accept"],
+      [{ action: "decline", reason: "changed mind" }, "decline"],
+      [{ action: "withdraw", reason: "terms revised" }, "withdraw"],
+    ] as const) {
+      routeState.calls = [] as RouteState["calls"];
+      const response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
+      assert.equal(response.status, 200);
+      assert.equal(routeState.calls[0]!.fn, fn);
+    }
+  });
+
+  test("accepting is the hire: the route forwards to the hire transaction", async () => {
+    reset();
+    const response = await itemRoute!.PATCH(
+      jsonRequest("http://openbooks.test/x", "PATCH", { action: "accept" }),
+      { params: Promise.resolve({ id: OFFER_ID }) },
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { hire: { offerId: OFFER_ID } });
+    assert.deepEqual(routeState.calls, [{ fn: "accept", args: { orgId: "org-1", actorId: "user-1", offerId: OFFER_ID } }]);
+  });
+
+  test("a service refusal delegates to the shared mapping with the error intact", async () => {
+    reset();
+    const refusal = new Error("a live offer already stands on this application");
+    routeState.serviceThrow = refusal;
+    const response = await collectionRoute!.POST(
+      jsonRequest("http://openbooks.test/api/hrm/recruiting/offers", "POST", validTerms),
+    );
+    assert.equal(response.status, 409);
+    assert.equal(routeState.mapped[0]!.error, refusal);
+  });
+}

@@ -2877,7 +2877,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // unitsTotal, depreciationMethodId); all four ship translated in zh/pt-BR.
   // HR-5 grew it to 3416 (leave-types/leave-policies entities, leave fields,
   // fieldHelp, leaveValueCrossing options, hrm.leave.* permission labels);
-  // all 24 ship translated in zh/pt-BR.
+  // all 24 ship translated in zh/pt-BR. HR-9 grows it to 3464 with the
+  // four hrm.self.*/hrm.team.* permission labels; all four ship
+  // translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2996,7 +2998,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3466, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3549, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3337,8 +3339,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3466
-  const ADMIN_I2_SOURCE_HASH = 'd21a8ea2ac6bc0f4f9faca5bf0f5308e9ba780e3915a6751b3e0865bc1ba1015'
+  const ADMIN_I2_SOURCE_COUNT = 3549
+  const ADMIN_I2_SOURCE_HASH = '52d65309e464e0ea225a0d22ffc0aebce0f60aa437bd1b89ab23eb6da5692e0e'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4405,6 +4407,10 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+    'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
+    'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
+    'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
+    'es:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
   // Spanish 'General' is the reviewed cognate for the payroll General sub-tab.
   'es:parties.drawer.payrollTabs.general|General',
     'de:reports.catalog.columns.hrm_employment_history.person|Person',
@@ -5109,7 +5115,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1290,
+  "reports": 1363,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5122,7 +5128,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
-  "nav": 106,
+  "nav": 107,
   "parties": 221,
   "payments": 255,
   "pdfTemplates": 50,
