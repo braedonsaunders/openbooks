@@ -74,7 +74,8 @@ registerHooks({
   },
 })
 
-const { PATCH } = await import('./route.ts?list-view-inactive-default')
+const routeUrl = './route.ts?list-view-inactive-default'
+const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 
 const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 
