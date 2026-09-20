@@ -390,6 +390,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0195_hrm_recruiting.sql",
     "0196_hrm_performance_retention.sql",
     "0197_hrm_benefits.sql",
+    "0198_hrm_self_service_profile.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
