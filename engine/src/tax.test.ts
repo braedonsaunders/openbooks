@@ -30,11 +30,12 @@ test("line tax is exact beyond Number.MAX_SAFE_INTEGER", () => {
   );
 });
 
+// Synthetic compound taxes exercise the generic calculator; they are not Québec GST/QST.
 test("exclusive compound components use the ordered prior-tax basis", () => {
   const result = computeLineTaxes("100.0000", [
-    code({ taxCodeId: "gst", sequence: 1, ratePercent: "5" }),
+    code({ taxCodeId: "base-tax", sequence: 1, ratePercent: "5" }),
     code({
-      taxCodeId: "qst",
+      taxCodeId: "compound-tax",
       sequence: 2,
       ratePercent: "9.975",
       compoundOnPrevious: true,
@@ -55,13 +56,13 @@ test("exclusive compound components use the ordered prior-tax basis", () => {
 test("inclusive compound tax extracts a net that cross-foots exactly", () => {
   const result = computeLineTaxes("115.4700", [
     code({
-      taxCodeId: "gst",
+      taxCodeId: "base-tax",
       sequence: 1,
       ratePercent: "5",
       priceIncludesTax: true,
     }),
     code({
-      taxCodeId: "qst",
+      taxCodeId: "compound-tax",
       sequence: 2,
       ratePercent: "9.975",
       priceIncludesTax: true,
