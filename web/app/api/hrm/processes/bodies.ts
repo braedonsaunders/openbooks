@@ -28,3 +28,12 @@ export const skipStepBody = z.object({
 export const cancelProcessBody = z.object({
   reason: z.string().trim().min(1, "reason required").max(2000),
 });
+
+/**
+ * Completing a checklist takes no body — but it still parses one. A
+ * bodyless lifecycle action that never reads its body accepts hostile
+ * payloads silently and sits outside every shared boundary; the empty
+ * schema keeps the route inside parseJsonBody so malformed and non-object
+ * payloads fail closed before the service runs.
+ */
+export const completeProcessBody = z.object({});
