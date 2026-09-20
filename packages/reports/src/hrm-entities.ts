@@ -29,11 +29,17 @@ import type { ReportEntity } from './entities'
 
 export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
 export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
+export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
 
 const HRM_EMPLOYMENT_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
+const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
+const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
+const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
+const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 const HRM_REQUEST_STATUSES = [
   'draft',
   'pending_approval',
@@ -262,5 +268,46 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'position_id', label: 'Position (id)', kind: 'uuid', expr: 'p.id' },
     ],
     defaultSort: { column: 'code', direction: 'asc' },
+    key: 'hrm_processes',
+    label: 'Process checklists',
+    category: 'hrm',
+    description:
+      'One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission.',
+    // The 0193 runtime: every row is a snapshot step copied at open time, so
+    // the template join only names the checklist (LEFT: a retired template
+    // row is never required for history to read). Skip reasons and done
+    // stamps read NULL until set — never inferred. Overdue is derived in
+    // the viewer from due_on against the org business day, never stored.
+    from: `hrm_process_steps s
+      JOIN hrm_processes p ON p.id = s.process_id AND p.org_id = s.org_id
+      JOIN worker_employments e ON e.id = p.employment_id AND e.org_id = s.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = s.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = s.org_id
+      LEFT JOIN hrm_process_templates t ON t.id = p.template_id AND t.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PROCESS_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The period picker narrows steps by due date; the open register reads
+    // the full checklist regardless of window.
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'process_kind', label: 'Process kind', kind: 'enum', expr: 'p.kind', options: HRM_PROCESS_KINDS },
+      { key: 'process_status', label: 'Process status', kind: 'enum', expr: 'p.status', options: HRM_PROCESS_STATUSES },
+      { key: 'effective_date', label: 'Effective date', kind: 'date', expr: 'p.effective_date' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'template', label: 'Template', kind: 'text', expr: 't.name' },
+      { key: 'step', label: 'Step', kind: 'text', expr: 's.title' },
+      { key: 'step_status', label: 'Step status', kind: 'enum', expr: 's.status', options: HRM_STEP_STATUSES },
+      { key: 'owner', label: 'Owner', kind: 'enum', expr: 's.owner_kind', options: HRM_STEP_OWNERS },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 's.due_on' },
+      { key: 'evidence', label: 'Evidence', kind: 'enum', expr: 's.evidence_kind', options: HRM_STEP_EVIDENCE },
+      { key: 'done_at', label: 'Done at', kind: 'timestamp', expr: 's.done_at' },
+      { key: 'skip_reason', label: 'Skip reason', kind: 'text', expr: 's.skip_reason' },
+      { key: 'process_id', label: 'Process (id)', kind: 'uuid', expr: 'p.id' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'p.employment_id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
   },
 ]

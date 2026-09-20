@@ -83,6 +83,8 @@ import {
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
+import { HrmHeadcountTable, OnboardingPanel } from '../../app/(app)/hrm/sections'
+import { ProcessesPanel } from '../../app/(app)/hrm/processes-client'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1172,6 +1174,25 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       totalLabel={str(props, 'totalLabel') ?? ''}
     />
   ),
+  /** The onboarding rail panel: loader-resolved open counts plus the overdue
+   *  and upcoming steps with loader-resolved strings — the same widget-not-
+   *  slot division as the headcount hero above. */
+  'hrm-onboarding-panel': (props) => (
+    <OnboardingPanel
+      openCount={num(props, 'openCount') ?? 0}
+      overdue={(props.overdue as ComponentProps<typeof OnboardingPanel>['overdue']) ?? []}
+      upcoming={(props.upcoming as ComponentProps<typeof OnboardingPanel>['upcoming']) ?? []}
+      openLabel={str(props, 'openLabel') ?? ''}
+      overdueLabel={str(props, 'overdueLabel') ?? ''}
+      upcomingLabel={str(props, 'upcomingLabel') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+      viewAll={str(props, 'viewAll') ?? ''}
+      viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
+    />
+  ),
+  /** The interactive processes list: segments and the checklist drawer fetch
+   *  the processes collection behind the page's own double gate. */
+  'hrm-processes': () => <ProcessesPanel />,
 
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
    *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */

@@ -27,6 +27,79 @@ export type HrmHeadcountRow = {
  * on the date), and the component that knows how to render itself when it
  * has no rows is the ordinary answer.
  */
+export type OnboardingPanelItem = {
+  worker: string
+  title: string
+  dueOn: string
+}
+
+/**
+ * Onboarding panel for the HR cockpit rail: open checklist counts plus the
+ * overdue steps and the next seven days, all resolved by the loader through
+ * the canonical process read service. The panel links to the processes tab;
+ * the checklist itself lives there, never as a second copy here.
+ */
+export function OnboardingPanel({
+  openCount,
+  overdue,
+  upcoming,
+  openLabel,
+  overdueLabel,
+  upcomingLabel,
+  empty,
+  viewAll,
+  viewAllHref,
+}: {
+  openCount: number
+  overdue: OnboardingPanelItem[]
+  upcoming: OnboardingPanelItem[]
+  openLabel: string
+  overdueLabel: string
+  upcomingLabel: string
+  empty: string
+  viewAll: string
+  viewAllHref: string
+}) {
+  if (openCount === 0) {
+    return <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+  }
+  const rows = [
+    ...overdue.map((item) => ({ ...item, tone: 'overdue' as const })),
+    ...upcoming.map((item) => ({ ...item, tone: 'upcoming' as const })),
+  ]
+  return (
+    <div className="px-4 py-3">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{openLabel}</p>
+      <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{openCount}</p>
+      {rows.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {rows.slice(0, 7).map((row, i) => (
+            <li key={`${row.worker}-${row.title}-${i}`} className="text-sm">
+              <span
+                className={
+                  row.tone === 'overdue'
+                    ? 'font-medium text-red-700 dark:text-red-300'
+                    : 'font-medium text-slate-700 dark:text-slate-200'
+                }
+              >
+                {row.tone === 'overdue' ? overdueLabel : upcomingLabel} · {row.dueOn}
+              </span>{' '}
+              <span className="text-slate-500 dark:text-slate-400">
+                {row.title} — {row.worker}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <a href={viewAllHref} className="mt-3 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
+        {viewAll}
+      </a>
+    </div>
+  )
+}
+
 export function HrmHeadcountTable({
   groups,
   total,

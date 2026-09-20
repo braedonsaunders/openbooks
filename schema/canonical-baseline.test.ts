@@ -1808,6 +1808,12 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     // an authorization decision, not a snapshot bump.
     "hrm.position.read",
     "hrm.position.manage",
+    // HRM process checklists (0193): read sees checklists, manage opens,
+    // completes, and cancels them — granted to the same built-in roles as
+    // the employment read/manage keys (admin only, via the catalogue
+    // spread; the role seed refreshes on re-run).
+    "hrm.process.read",
+    "hrm.process.manage",
   ];
   assert.deepEqual(
     snapshot,
@@ -1942,6 +1948,11 @@ test("hrm employment processes carry snapshot history with org isolation", () =>
   // Terminal immutability is an audit-touch allowlist, not a freeze: the
   // prose claim ("except a pure audit touch") must show in the DDL.
   assert.match(migration, /to_jsonb\(NEW\) - ARRAY\['updated_at','updated_by'\]/);
+  // The applies_to slots project as read-only generated columns for
+  // structured surfaces (never a raw-JSON workforce field): readable, never
+  // written, with the shape CHECK staying the single authority.
+  assert.match(migration, /applies_employer_subsidiary_id uuid\s*\n\s*GENERATED ALWAYS AS/);
+  assert.match(migration, /applies_department_id uuid\s*\n\s*GENERATED ALWAYS AS/);
   // Evidence pins its file and its actor: composite tenant FK plus frozen
   // users evidence, never nulled away.
   assert.match(migration, /hrm_process_steps_attachment_tenant_fkey/);
