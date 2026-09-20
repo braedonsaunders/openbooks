@@ -13,10 +13,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { departments, locations, orgs } from "./core";
+import { departments, orgs } from "./core";
 import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
-import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 import { workerEmployments } from "./hrm";
 import { positions } from "./hrm-positions";

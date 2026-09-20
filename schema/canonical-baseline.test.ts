@@ -102,6 +102,10 @@ const payrollProfilePackFactsMigrationPath =
 const hrmEmploymentProcessesMigrationPath =
   "schema/migrations/generated/0193_hrm_employment_processes.sql";
 const hrmRecruitingMigrationPath = "schema/migrations/generated/0195_hrm_recruiting.sql";
+// HR-12 begin
+const hrmCompensationMigrationPath = "schema/migrations/generated/0221_hrm_compensation_architecture.sql";
+const hrmTransparencyMigrationPath = "schema/migrations/generated/0222_hrm_headcount_plans_transparency.sql";
+// HR-12 end
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -403,6 +407,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0223_hrm_construction_rates.sql",
     "0224_hrm_construction_certified.sql",
     // HR-13 end
+    // HR-12 begin: compensation architecture/bands/cycles (0221) and
+    // headcount plans/transparency (0222).
+    "0221_hrm_compensation_architecture.sql",
+    "0222_hrm_headcount_plans_transparency.sql",
+    // HR-12 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1885,6 +1894,16 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.construction.read",
     "hrm.construction.manage",
     // HR-13 end
+    // HR-12 compensation (migrations 0221/0222): read sees bands,
+    // architecture and cycle reads; manage runs cycles, pushes rates,
+    // authors plans and computes snapshots; approve holds the Flows
+    // gate on cycle decisions. Admin-only like the employment keys
+    // above.
+    // HR-12 begin
+    "hrm.compensation.read",
+    "hrm.compensation.manage",
+    "hrm.compensation.approve",
+    // HR-12 end
   ];
   assert.deepEqual(
     snapshot,
@@ -2087,3 +2106,80 @@ test("hrm recruiting carries funnel evidence with org isolation", () => {
   assert.match(migration, /[^\n]\n$/);
   assert.doesNotMatch(migration, /\n\n$/);
 });
+
+// HR-12 begin
+test("hrm compensation carries versioned bands with org isolation", () => {
+  // 0221 opens job architecture, versioned SHOULD-pay bands, merit
+  // cycles with snapshotted lines, the append-only event ledger, and
+  // frozen statements. Bands version by overlap exclusion (a partial
+  // unique would go blind under READ COMMITTED); a band change is a new
+  // row, never an overwrite. Events are append-only on every path;
+  // decided lines move only through the service lifecycle; pushed lines
+  // name their wage row (single-column FK to the rates primary key —
+  // the baseline table has no UNIQUE (org_id, id) for a composite FK,
+  // so cross-org safety is RLS plus the service org check).
+  const migration = readFileSync(hrmCompensationMigrationPath, "utf8");
+  for (const table of [
+    "hrm_job_families",
+    "hrm_job_levels",
+    "hrm_pay_bands",
+    "hrm_comp_cycles",
+    "hrm_comp_cycle_budgets",
+    "hrm_comp_cycle_lines",
+    "hrm_comp_events",
+    "hrm_comp_statements",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
+  }
+  assert.match(migration, /hrm_pay_bands_no_overlap/);
+  assert.match(migration, /hrm_pay_bands_ordered/);
+  assert.match(migration, /hrm_comp_cycle_lines_one_per_employment/);
+  assert.match(migration, /hrm_comp_cycle_lines_push_paired/);
+  assert.match(migration, /hrm_comp_cycle_lines_pushed_rate_fkey/);
+  assert.match(migration, /REFERENCES public\.labor_cost_rates\(id\)/);
+  assert.match(migration, /position_versions_job_level_tenant_fkey/);
+  assert.match(migration, /hrm_comp_events_immutable/);
+  assert.match(migration, /record a new event instead of editing one/);
+  assert.match(migration, /hrm_comp_cycles_flow_run_fkey/);
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /openbooks:org_isolation:v1/);
+  assert.match(migration, /openbooks\.amend/);
+  assert.match(migration, /a pushed line already moved payroll/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("hrm headcount plans and transparency freeze their evidence", () => {
+  // 0222 opens workforce plans with computed line costs, frozen gap
+  // snapshots, and worker information requests. Snapshots are frozen
+  // outright (a new snapshot supersedes, never edits); terminate lines
+  // are informational and storage has no path that ends an employment;
+  // plan create lines name no position until approval.
+  const migration = readFileSync(hrmTransparencyMigrationPath, "utf8");
+  for (const table of [
+    "hrm_headcount_plans",
+    "hrm_headcount_plan_lines",
+    "hrm_pay_gap_snapshots",
+    "hrm_pay_information_requests",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
+  }
+  assert.match(migration, /hrm_headcount_plan_lines_kind/);
+  assert.match(migration, /hrm_headcount_plan_lines_create_has_no_position/);
+  assert.match(migration, /hrm_headcount_plan_lines_cost_basis_shape/);
+  assert.match(migration, /hrm_pay_gap_snapshots_frozen/);
+  assert.match(migration, /compute a new snapshot instead of editing one/);
+  assert.match(migration, /hrm_pay_information_requests_outcome_paired/);
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /openbooks:org_isolation:v1/);
+  assert.match(migration, /openbooks\.amend/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+// HR-12 end

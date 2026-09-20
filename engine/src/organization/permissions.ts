@@ -461,13 +461,13 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
       { key: "hrm.benefits.read", labelKey: permissionLabelKey("hrm.benefits.read") },
       { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
+      { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
+      { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
       // HR-12 begin
       { key: "hrm.compensation.read", labelKey: permissionLabelKey("hrm.compensation.read") },
       { key: "hrm.compensation.manage", labelKey: permissionLabelKey("hrm.compensation.manage") },
       { key: "hrm.compensation.approve", labelKey: permissionLabelKey("hrm.compensation.approve") },
       // HR-12 end
-      { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
-      { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
       { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
       { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
       // HR-13 begin: appended after the team keys so the pinned group
