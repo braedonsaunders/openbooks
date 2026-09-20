@@ -1,5 +1,7 @@
 import "server-only";
 import { z } from "zod";
+import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
+import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
@@ -9,8 +11,6 @@ import {
   getHeadcountAsOf,
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
-import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
-import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
@@ -45,10 +45,8 @@ import {
  * The one SQL in this file enumerates stable employment identities for the
  * org-wide change-request list (org + subsidiary scope, capped). Version and
  * request rows are never selected here: they come only from the loaders.
- * The process checklist tool likewise reuses the canonical process read
- * service (processes-read.ts) — no process SQL here either.
  * Authoring stays human-attested — there are no HRM write tools in this
- * slice, so nothing here can mutate an employment, a request, or a checklist.
+ * slice, so nothing here can mutate an employment or a request.
  */
 
 const HRM_FEATURE_OFF = "hrm_feature_disabled";
@@ -63,7 +61,6 @@ export function hrmRefusal(error: unknown): ToolResult {
   if (
     error instanceof EmploymentReadError ||
     error instanceof HrmPositionError ||
-    error instanceof HrmProcessError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -336,21 +333,6 @@ const hrmPositionsAsOf: AssistantToolDef = {
       .enum(["planned", "open", "filled", "frozen", "closed"])
       .optional()
       .describe("Keep only this lifecycle status"),
-const processSegments = ["open", "overdue", "completed", "cancelled"] as const;
-
-const hrmProcesses: AssistantToolDef = {
-  name: "hrm_processes",
-  description:
-    "Process checklists with step status, owners, and due dates: one checklist in full, or every visible checklist in a segment with progress and next due. Read-only.",
-  category: "search",
-  gate: { mode: "anyOf", perms: ["hrm.process.read"] },
-  feature: "hrm",
-  tier: "module",
-  inputSchema: z.object({
-    processId: uuidInput.optional().describe("One checklist in full; omit for the segment list"),
-    segment: z.enum(processSegments).optional().describe("List segment (default open)"),
-    employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -404,6 +386,33 @@ const hrmProcesses: AssistantToolDef = {
             holders: row.holders,
           })),
           href: "/hrm/positions",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const processSegments = ["open", "overdue", "completed", "cancelled"] as const;
+
+const hrmProcesses: AssistantToolDef = {
+  name: "hrm_processes",
+  description:
+    "Process checklists with step status, owners, and due dates: one checklist in full, or every visible checklist in a segment with progress and next due. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.process.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    processId: uuidInput.optional().describe("One checklist in full; omit for the segment list"),
+    segment: z.enum(processSegments).optional().describe("List segment (default open)"),
+    employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
     const a = raw as {
       processId?: string;
       segment?: (typeof processSegments)[number];
@@ -490,5 +499,4 @@ const hrmProcesses: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf];
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmProcesses];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses];

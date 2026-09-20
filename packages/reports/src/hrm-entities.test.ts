@@ -15,8 +15,7 @@ import { validateCustomQuery } from './validate'
 // entity (0193) carries hrm.process.read: checklist state is governed by
 // the process gate, not the employment one.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions'] as const
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_processes'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -36,7 +35,6 @@ test('workforce entities are registered on the shared catalog exactly once', () 
 })
 
 test('workforce entities refuse without the hrm gate and their own read permission', () => {
-test('workforce entities refuse without the hrm gate and their domain permission', () => {
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
