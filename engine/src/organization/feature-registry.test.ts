@@ -84,3 +84,24 @@ test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm",
   assert.equal(verbs.defaultEnabled, false);
   assert.equal(verbs.parentKey, "hrm");
   assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);
+// HR-12 begin: compensation is an opt-in HRM feature with three
+// subordinate switches; merit cycles additionally require payroll.
+test("hrmCompensation is an opt-in hrm feature with subordinate switches", () => {
+  const def = FEATURE_BY_KEY.get("hrmCompensation");
+  assert.ok(def, "hrmCompensation must be registered before routes gate on it");
+  assert.equal(featureEnabled({}, "hrmCompensation"), false);
+  assert.equal(featureEnabled({ hrm: false, hrmCompensation: true }, "hrmCompensation"), false);
+  assert.equal(featureEnabled({ hrm: true }, "hrmCompensation"), false);
+  assert.equal(featureEnabled({ hrm: true, hrmCompensation: true }, "hrmCompensation"), true);
+  for (const key of ["hrmMeritCycles", "hrmHeadcountPlans", "hrmPayTransparency"]) {
+    assert.ok(sub, `${key} must be registered before routes gate on it`);
+    assert.equal(sub.parentKey, "hrmCompensation");
+    assert.equal(featureEnabled({ hrm: true, hrmCompensation: false, [key]: true }, key), false);
+  const merit = FEATURE_BY_KEY.get("hrmMeritCycles");
+  assert.deepEqual(merit?.requiresAll, ["payroll"]);
+  assert.equal(featureEnabled({ hrm: true, hrmCompensation: true, hrmMeritCycles: true }, "hrmMeritCycles"), false);
+  assert.equal(
+    featureEnabled({ hrm: true, hrmCompensation: true, payroll: true, hrmMeritCycles: true }, "hrmMeritCycles"),
+    true,
+  );
+// HR-12 end
