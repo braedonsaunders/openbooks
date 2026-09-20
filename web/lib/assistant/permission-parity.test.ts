@@ -236,6 +236,12 @@ const UNION_ROWS: Row[] = [
     routes: [["../../app/api/journals/draft/route.ts", "guardPermission(\"gl.post\")"]],
     note: "draft creation (commit path re-checks at /api/assistant/commit)",
   },
+  {
+    tools: ["preview_allocation"], file: "./tools-allocations.ts",
+    gate: ["allocations.run"],
+    routes: [["../../app/api/allocations/runs/preview/route.ts", 'guardAllocations("allocations.run")']],
+    note: "preview persists a previewed allocation_runs row; same gate as POST /api/allocations/runs/preview",
+  },
 ];
 
 test("assistant tool doorways cover every cited surface and admit nothing uncited", () => {

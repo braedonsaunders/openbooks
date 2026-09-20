@@ -56,12 +56,13 @@ import {
  * the posting path's composed driver resolver (runs preview route),
  * `listRuns`/`getRun`/`queryLineage` (runs list, run drawer, lineage
  * drill) — under the same gates: the `allocations` feature switch plus
- * `allocations.read`, with the actor's subsidiary scope carried into run
- * reads exactly as the routes carry it.
+ * `allocations.read` for reads, and `allocations.run` for preview (the same
+ * persist the HTTP preview route writes), with the actor's subsidiary scope
+ * carried into run reads exactly as the routes carry it.
  *
- * Read-only in the posting sense: preview_allocation computes (and, like the
- * Setup Preview button, stores a `previewed` run row) but never posts,
- * reverses, or re-runs. There are no post/reverse tools in this slice.
+ * preview_allocation computes and stores a `previewed` run row — the same
+ * write as the Setup Preview button — so it is a write tool gated on
+ * `allocations.run`. It never posts, reverses, or re-runs.
  */
 
 const ALLOCATIONS_HREF = "/admin/setup/allocations";
@@ -470,9 +471,9 @@ const previewAllocation: AssistantToolDef = {
   name: "preview_allocation",
   tier: "module",
   description:
-    "Preview a period allocation sweep for a rule and period id or fiscal preset: sources, driver vector, per-target shares and amounts. Saves a preview run; never posts. Read-only.",
-  category: "read",
-  gate: { mode: "anyOf", perms: ["allocations.read"] },
+    "Preview a period allocation sweep for a rule and period id or fiscal preset: sources, driver vector, per-target shares and amounts. Persists a previewed run; never posts.",
+  category: "write",
+  gate: { mode: "anyOf", perms: ["allocations.run"] },
   feature: "allocations",
   inputSchema: z.object({
     ruleId: uuidInput.optional().describe("Rule id from list_allocation_rules"),
@@ -483,6 +484,12 @@ const previewAllocation: AssistantToolDef = {
     subsidiaryId: uuidInput.optional().describe("Pin the sweep to one subsidiary; must be inside your scope"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    // HTTP parity: POST /api/allocations/runs/preview is allocations.run.
+    // Persist is a write; a read-only caller must see a named refusal even
+    // if they reach execute without canRunTool.
+    if (!can(authz, "allocations.run")) {
+      return { ok: false, error: "forbidden" };
+    }
     const off = await allocationsOff(authz);
     if (off) return off;
     const a = raw as {
