@@ -1020,6 +1020,11 @@ export const payRunHolidayAssertions = pgTable(
   },
   (t) => [
     foreignKey({
+      name: "pay_run_holiday_assertions_run_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }).onDelete("cascade"),
+    foreignKey({
       name: "pay_run_holiday_assertions_employment_tenant_fkey",
       columns: [t.orgId, t.employmentId],
       foreignColumns: [workerEmployments.orgId, workerEmployments.id],
