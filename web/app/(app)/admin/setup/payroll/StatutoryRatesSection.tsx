@@ -7,7 +7,7 @@ import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/u
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 import { countryName } from '../../../../../lib/countries'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { formatRateFieldValue } from './statutory-rates-format'
 
 /**

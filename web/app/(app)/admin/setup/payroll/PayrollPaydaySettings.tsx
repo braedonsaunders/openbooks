@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowUpRight, CheckCircle2, CircleAlert } from 'lucide-react'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Input, Label } from '@openbooks/ui'
 import type { StubPasswordPolicy } from './PayrollSetupWorkspace'
 

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Label, Select } from '@openbooks/ui'
 import type { PayrollSettings } from '@openbooks/engine/src/payroll/run.ts'
 
