@@ -150,6 +150,24 @@ export function recordVisibleInSubsidiaryFence(
 }
 
 /**
+ * stripUnknownData drops undeclared keys. After the live type no longer
+ * declares subsidiary_id, that would erase the stored JSON token and the
+ * fence above would treat the row as dimensionless. Copy the existing value
+ * onto the stripped bag before persist so the row stays scoped.
+ */
+export function retainStoredSubsidiaryId(
+  sections: FormSection[],
+  stored: FieldValueMap,
+  next: FieldValueMap,
+): FieldValueMap {
+  if (hasSubsidiaryField(sections)) return next
+  const storedId = stored.subsidiary_id
+  if (typeof storedId !== 'string' || storedId.length === 0) return next
+  if (next.subsidiary_id === storedId) return next
+  return { ...next, subsidiary_id: storedId }
+}
+
+/**
  * Query form of recordVisibleInSubsidiaryFence for custom_records.data.
  * Returns null when the caller is unrestricted (no extra predicate).
  */
