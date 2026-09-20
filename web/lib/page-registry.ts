@@ -1384,6 +1384,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/leave': {
+    route: '/hrm/leave',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/leave/view')
+      return {
+        load: (input) => m.loadLeaveQueuePage(input.searchParams ?? {}),
+        spec: (data) => m.leaveQueueSpec(data as never),
+      }
+    },
+  },
+  '/hrm/my-leave': {
+    route: '/hrm/my-leave',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/my-leave/view')
+      return {
+        load: () => m.loadMyLeavePage(),
+        spec: (data) => m.myLeaveSpec(data as never),
+      }
+    },
+  },
   '/hrm/positions': {
     route: '/hrm/positions',
     segments: [],
