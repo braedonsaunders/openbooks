@@ -5,11 +5,8 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 /**
- * Pay-run module boundary: run.ts is a thin facade over run-*.ts operation
- * modules. Internal modules must never backimport the facade (that would
- * re-create the god file as a cycle), the sibling graph must be acyclic, and
- * the facade must stay free of implementation so every public name keeps one
- * home. Source-text only: no engine imports, no database.
+ * Pay-run operations have one owner and no legacy entrypoint. Their sibling
+ * graph stays acyclic and bounded. Source-only: no engine imports or database.
  */
 const dir = dirname(fileURLToPath(import.meta.url))
 const sources = readdirSync(dir)

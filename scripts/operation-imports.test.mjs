@@ -21,10 +21,21 @@ function target(file, specifier) {
 function references(file, source) {
   const found = []
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+  function isBoundaryAssertion(node) {
+    if (!/(?:inventory-boundary|posting-boundary|payments-boundary|close-boundary|run-modular-boundary)\.test\.ts$/.test(file)) return false
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)
+        || (ts.isCallExpression(parent) && parent.expression.kind === ts.SyntaxKind.ImportKeyword)) return false
+      if (ts.isCallExpression(parent) && ts.isPropertyAccessExpression(parent.expression)
+        && parent.expression.expression.getText(ast) === 'assert') return true
+    }
+    return false
+  }
   function visit(node) {
     // Includes dynamic imports, type queries, test-loader maps and embedded
     // scripts: a string naming a retired module is still an active dependency.
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      if (isBoundaryAssertion(node)) return
       const resolved = target(file, node.text)
       if (retired.includes(resolved)) found.push(resolved)
       else for (const path of retired) if (node.text.includes(path)) found.push(path)
@@ -44,8 +55,6 @@ test('retired engine entrypoints are absent and each reference census is zero', 
   const counts = Object.fromEntries(retired.map((path) => [path, []]))
   for (const file of files) {
     if (file === 'scripts/operation-imports.test.mjs') continue
-    // Domain boundary tests intentionally assert that their old local file is absent.
-    if (/(?:inventory-boundary|posting-boundary|payments-boundary|close-boundary|run-modular-boundary)\.test\.ts$/.test(file)) continue
     for (const path of references(file, readFileSync(resolve(root, file), 'utf8'))) counts[path].push(file)
   }
   for (const path of retired) {
@@ -63,4 +72,11 @@ test('census catches direct imports, dynamic imports, loader maps and embedded s
     `const mocks = [['@openbooks/${path}', 'mock:posting']]`,
     'const child = `import { postDocument } from "./' + path + '";`',
   ]) assert.deepEqual(references('scripts/example.ts', source), [path])
+})
+
+test('boundary assertions do not exempt imports in their test file', () => {
+  const file = 'engine/src/ledger/posting-boundary.test.ts'
+  assert.deepEqual(references(file, "assert.equal(existsSync(new URL('./posting.ts', import.meta.url)), false)"), [])
+  assert.deepEqual(references(file, "import { postDocument } from './posting.ts'"), [retired[0]])
+  assert.deepEqual(references(file, "assert.ok(await import('./posting.ts'))"), [retired[0]])
 })
