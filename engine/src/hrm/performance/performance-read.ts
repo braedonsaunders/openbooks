@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -117,7 +116,7 @@ async function readableReviewIds(
   return new Set(rows.map((row) => row.id));
 }
 
-export interface CycleProgressDTO extends CycleDTO {
+export interface CycleProgressDTO extends ReadCycleDTO {
   /** Reviews visible to the reader (HR scope, or the actor's own slice). */
   readonly scoped: boolean;
   readonly totalSelf: number;
@@ -149,10 +148,18 @@ async function cycleProgress(
   };
 }
 
-async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): Promise<CycleDTO> {
+/** A cycle as the read service renders it: the write-service shape plus the
+ * template name the table and drawer show (joined here, in the service —
+ * loaders never read domain tables directly). */
+export interface ReadCycleDTO extends CycleDTO {
+  readonly templateName: string;
+}
+
+async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): Promise<ReadCycleDTO> {
   const row = (await exec.execute<{
     id: string;
     templateId: string;
+    templateName: string;
     name: string;
     periodStartOn: string;
     periodEndOn: string;
@@ -164,9 +171,10 @@ async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): 
     openedAt: string | null;
     closedAt: string | null;
   }>(sql`
-    select id,
-           template_id as "templateId",
-           name,
+    select c.id,
+           c.template_id as "templateId",
+           t.name as "templateName",
+           c.name,
            period_start_on::text as "periodStartOn",
            period_end_on::text as "periodEndOn",
            self_due_on::text as "selfDueOn",
@@ -176,8 +184,10 @@ async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): 
            manager_gap_count as "managerGapCount",
            opened_at as "openedAt",
            closed_at as "closedAt"
-      from hrm_review_cycles
-     where org_id = ${orgId} and id = ${cycleId}
+      from hrm_review_cycles c
+      join hrm_review_templates t
+        on t.org_id = c.org_id and t.id = c.template_id
+     where c.org_id = ${orgId} and c.id = ${cycleId}
   `)).rows[0];
   if (!row) {
     throw new HrmPerformanceError(
@@ -191,6 +201,7 @@ async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): 
   return {
     id: row.id,
     templateId: row.templateId,
+    templateName: row.templateName,
     name: row.name,
     periodStartOn: row.periodStartOn,
     periodEndOn: row.periodEndOn,

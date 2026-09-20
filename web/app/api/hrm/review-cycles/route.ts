@@ -1,11 +1,8 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import {
-  createCycle,
-  listCycles,
-} from "@openbooks/engine/src/hrm/performance/review-cycles.ts";
+import { createCycle } from "@openbooks/engine/src/hrm/performance/review-cycles.ts";
 import { listCycleProgress } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
-import { can, getAuthz, guardPermission } from "../../../../lib/authz";
+import { getAuthz, guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "./_lib";
 import { createCycleBody } from "./bodies";
@@ -26,10 +23,9 @@ export async function GET() {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   try {
-    if (can(authz, "hrm.performance.read")) {
-      const cycles = await listCycles({ orgId: authz.user.orgId, actorId: authz.user.id });
-      return NextResponse.json({ cycles });
-    }
+    // One loader for both audiences: HR sees every cycle with org-wide
+    // counts, structural viewers see their slice (scoped counts) — the
+    // read service narrows every row to the actor's privacy scope.
     const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id });
     return NextResponse.json({ cycles });
   } catch (e) {
