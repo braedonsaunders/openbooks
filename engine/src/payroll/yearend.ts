@@ -867,9 +867,15 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
            s.filing_account_id as filing_account_id,
+           -- 941 line 2 is FIT-able wages: taxable earnings less the pack's
+           -- income-reducing pre-tax deferrals (us/pack.ts deductionTreatments).
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))
+               - (select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.tax_treatment in ('pension_f', 'union_dues', 'alimony'))) as wages,
            sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
            sum(s.pensionable_earnings) as medicare_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -1124,9 +1130,15 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
            s.province as province,
            s.filing_account_id as filing_account_id,
            min(s.pay_date) as first_pay_date,
+           -- Box 1 is FIT-able wages: taxable earnings less the pack's
+           -- income-reducing pre-tax deferrals (us/pack.ts deductionTreatments).
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))
+               - (select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.tax_treatment in ('pension_f', 'union_dues', 'alimony'))) as wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'fit')) as fit,

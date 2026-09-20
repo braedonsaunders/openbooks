@@ -83,17 +83,23 @@ export async function computeUsStatutory(
   const {
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, country, region,
     run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
-    insurable, employerEmployeeCount, deduction, pushStatutory, storedCertificates, certificateFor, bool,
+    insurable, employerEmployeeCount, reducedBases, deduction, pushStatutory, storedCertificates, certificateFor, bool,
     assertRegionSupported,
   } = ctx;
 
   assertRegionSupported(region);
+  // FIT prices the income leg AFTER pack-declared pre-tax treatments:
+  // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
+  // NOT Social Security or Medicare wages, so the Pub 15-T wages leg reads
+  // the reduced base while the FICA/FUTA legs below pass through untouched
+  // (the AU salary-sacrifice shape: PAYG moves, superannuation does not).
+  const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const statutory = calculatePub15T({
     payDate: run.pay_date!, periodsPerYear: P,
-    wages: income, supplemental: nonPeriodic,
+    wages: fitWages, supplemental: nonPeriodic,
     ficaWages: pensionable, futaWages: insurable,
     filingStatus,
     multipleJobs: bool(empFact("US", emp, "multiple_jobs")),
@@ -125,7 +131,9 @@ export async function computeUsStatutory(
   pushStatutory("suta", "employer_contribution", "State unemployment (SUI)", statutory.suta, 250);
   let factors: Record<string, string> = {
     ...statutory.factors,
-    B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
+    // The trace factor moves with the base it prices: I is the FIT-able
+    // periodic wage, so it reads the reduced leg, not the reported gross.
+    B: nonPeriodic, I: fitWages, PI: pensionable, IE: insurable,
   };
 
   const certificateKeysOnFile = (): string[] =>
@@ -194,6 +202,11 @@ export async function computeUsStatutory(
       employerEmployeeCount,
       periodEnd: run.period_end!,
       periodsPerYear: P,
+      // State engines price the reported wage under their own transcribed
+      // treatment (conformity differs by state — Pennsylvania taxes 401(k)
+      // deferrals, most states do not), so only the FIT leg above reads the
+      // reduced base. States that honor qualified deductions take them
+      // explicitly through taxQualifiedDeductions (the Nebraska minimum).
       wages: income,
       supplemental: nonPeriodic,
       federalIncomeTax: statutory.fit,
