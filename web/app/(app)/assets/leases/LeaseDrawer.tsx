@@ -238,32 +238,47 @@ function LeaseCreateForm({
           ))}
           <Field label="Frequency">
             <Select
-              options={frequencies}
               value={f.paymentFrequency}
               onChange={(e) => set("paymentFrequency", e.target.value)}
-            />
+            >
+              {frequencies.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Contractual payment timing">
             <Select
-              options={timings}
               value={f.paymentTiming}
               onChange={(e) => set("paymentTiming", e.target.value)}
-            />
+            >
+              {timings.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
         <Field label="Recognition exemption election">
           <Select
             value={f.exemption ?? ""}
             onChange={(e) => set("exemption", e.target.value)}
-            options={[
+          >
+            {[
               { value: "", label: "None — recognize ROU and liability" },
               { value: "short_term", label: "Qualifying short-term lease" },
               {
                 value: "low_value",
                 label: "Low-value underlying asset (IFRS only)",
               },
-            ]}
-          />
+            ].map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <fieldset className="space-y-2">
           <legend className="font-medium">Classification evidence</legend>
@@ -474,12 +489,17 @@ function ChangeLease({
           <Select
             value={operation}
             onChange={(e) => setOperation(e.target.value)}
-            options={[
+          >
+            {[
               { value: "modification", label: "Contract modification" },
               { value: "remeasurement", label: "Remeasurement" },
               { value: "termination", label: "Full termination" },
-            ]}
-          />
+            ].map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="Effective date">
           <Input
@@ -508,16 +528,26 @@ function ChangeLease({
             <Field label="Payment frequency">
               <Select
                 value={frequency}
-                options={frequencies}
                 onChange={(e) => setFrequency(e.target.value)}
-              />
+              >
+                {frequencies.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Payment timing">
               <Select
                 value={timing}
-                options={timings}
                 onChange={(e) => setTiming(e.target.value)}
-              />
+              >
+                {timings.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             {(
               [

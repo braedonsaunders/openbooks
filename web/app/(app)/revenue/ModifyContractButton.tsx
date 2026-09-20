@@ -234,7 +234,11 @@ function Form({
             <Field label="Accounting treatment">
               <Select
                 value={g.treatment}
-                options={[
+                onChange={(e) =>
+                  patch(i, { treatment: e.target.value as Group["treatment"] })
+                }
+              >
+                {[
                   {
                     value: "prospective",
                     label: "Remaining distinct promises — prospective",
@@ -249,11 +253,12 @@ function Form({
                     label:
                       "Additional distinct promises at SSP — separate contract",
                   },
-                ]}
-                onChange={(e) =>
-                  patch(i, { treatment: e.target.value as Group["treatment"] })
-                }
-              />
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Change in consideration (negative for a reduction)">
               <Input
