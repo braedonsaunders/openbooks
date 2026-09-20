@@ -18,11 +18,16 @@ import type { SetupEntity } from './registry'
  * here. The two are never conflated in code or copy — see the in-app docs
  * article "leave-time-versus-value".
  *
- * Rule-shape validation (accrual kinds, periods_per_year, carryover caps)
- * lives in the engine leave service; the generic setup write path persists
- * the declared JSON and the storage CHECKs enforce the SQL-expressible
- * half. A malformed rule fails closed at read time (the balance read
- * throws instead of accruing zero), never as a silent nil.
+ * Policies never edit raw JSON (a json-kind field on a workforce entity is
+ * barred by registry.test.ts). The drawer edits scope, accrual, and
+ * carryover through typed slot controls backed by 0194 STORED GENERATED
+ * columns (readable for prefill, never written); normalizeHrmLeavePolicyInput
+ * folds the slots back into applies_to, accrual_rule, and carryover_rule
+ * before buildRow, write.ts persists the folded objects explicitly, and
+ * leavePolicyRuleProblem refuses malformed shapes with the engine's own
+ * words before the write. The stored jsonb stays the source of truth, and a
+ * rule that still arrives malformed fails closed at read time (the balance
+ * read throws instead of accruing zero), never as a silent nil.
  */
 
 const VALUE_CROSSINGS = [
