@@ -224,9 +224,8 @@ export async function loadApprovals(
   // gateless document approvals + pending pay runs); the center reads the
   // same reader so same-labeled figures tie by construction. Same doorway
   // as the tile and get_vitals: a caller who cannot approve anything sees
-  // no rows rather than a forbidden error.
-  const mayApprove =
-    can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve') || can(authz, 'budgets.approve')
+  // no rows rather than a forbidden error. Same doorway as the count route.
+  const mayApprove = maySeeUnion(authz)
   // One server-side page over the union: each leg fetches its leading
   // offset+limit rows in SQL and the total/chips come from aggregates, so no
   // request ever scans a whole leg. Same reader family as the dashboard tile

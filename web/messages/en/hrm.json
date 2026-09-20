@@ -220,7 +220,7 @@
       "binding": "Binding",
       "bindingValue": "Request revision {request} against employment revision {expected}",
       "submitted": "Submitted",
-      "viewInApprovals": "View in approvals",
+      "viewInApprovals": "View in inbox",
       "noRun": "Draft — no approval run yet.",
       "empty": "No change requests yet.",
       "proposeButton": "Propose change",

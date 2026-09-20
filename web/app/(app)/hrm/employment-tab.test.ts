@@ -68,7 +68,7 @@ test("change requests list status, revision binding, and the approval link", () 
   assert.match(tab, /changeRequests\.title/, "requests section carries the catalog heading");
   assert.match(tab, /bindingValue/, "rows bind the request revision to the employment revision");
   assert.match(tab, /statusNames\./, "status renders through catalog labels");
-  assert.match(tab, /href="\/approvals"/, "bound runs link to the native approvals surface");
+  assert.match(tab, /href="\/inbox"/, "bound runs link to the native inbox surface");
   assert.match(tab, /viewInApprovals/, "approval link labels the interim destination honestly");
   assert.match(tab, /noRun/, "drafts state their lack of a run instead of a dead link");
   assert.match(tab, /changeRequests\.empty/, "an employment with no requests states so explicitly");

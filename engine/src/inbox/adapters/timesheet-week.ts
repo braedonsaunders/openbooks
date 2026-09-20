@@ -18,7 +18,7 @@ import { sql } from "drizzle-orm";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
-import { loadApprovalPerson } from "../../hrm/authorization.ts";
+import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
 import { toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -57,13 +57,13 @@ export const timesheetWeekAdapter: InboxAdapter = {
         source: { kind: "timesheet_week_gate", id: gate.id },
       });
     }
-    const person = await loadApprovalPerson(db, ctx.orgId, ctx.actorId);
-    if (person.partyId) {
+    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (partyId) {
       const weeks = (await db.execute<OwnWeekRow>(sql`
         select id::text as id, week_start::text as week_start, status
           from timesheet_weeks
          where org_id = ${ctx.orgId}
-           and employee_party_id = ${person.partyId}
+           and employee_party_id = ${partyId}
            and status in ('draft', 'rejected')
            and week_start < date_trunc('week', current_date)::date
          order by week_start desc

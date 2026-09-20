@@ -12,7 +12,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { loadApprovalPerson } from "../../hrm/authorization.ts";
+import { actorPartyId } from "../guard.ts";
 import { completeProcessStep } from "../../hrm/processes.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { db } from "../../platform/db.ts";
@@ -36,8 +36,8 @@ export const hrmProcessStepAdapter: InboxAdapter = {
   kind: "hrm_process_step",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     if (!(await hrmOn(db, ctx.orgId))) return [];
-    const person = await loadApprovalPerson(db, ctx.orgId, ctx.actorId);
-    if (!person.partyId) return [];
+    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!partyId) return [];
     const today = await businessToday(ctx.orgId);
     const rows = (await db.execute<StepRow>(sql`
       select s.id, s.process_id::text as process_id, s.title,
@@ -50,8 +50,8 @@ export const hrmProcessStepAdapter: InboxAdapter = {
        where s.org_id = ${ctx.orgId}
          and p.status = 'open'
          and s.status = 'pending'
-         and ((s.owner_kind = 'employee' and e.worker_party_id = ${person.partyId})
-              or (s.owner_kind = 'named_party' and s.owner_party_id = ${person.partyId}))
+         and ((s.owner_kind = 'employee' and e.worker_party_id = ${partyId})
+              or (s.owner_kind = 'named_party' and s.owner_party_id = ${partyId}))
        order by s.due_on, s.id
        limit 100
     `)).rows;

@@ -220,7 +220,7 @@
       "binding": "Liaison",
       "bindingValue": "Révision de demande {request} contre révision d'emploi {expected}",
       "submitted": "Soumise",
-      "viewInApprovals": "Voir dans les approbations",
+      "viewInApprovals": "Voir dans Boite de reception",
       "noRun": "Brouillon : aucune exécution d'approbation pour l'instant.",
       "empty": "Aucune demande de changement pour l'instant.",
       "statusNames": {

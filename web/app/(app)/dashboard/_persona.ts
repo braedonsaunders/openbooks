@@ -16,7 +16,6 @@ import { isFeatureEnabled } from '@/lib/features'
 import { hasAdminPersona } from './_widget-access'
 import { permissionSetCovers } from '@/lib/permissions'
 import type { Persona } from './_persona-layout'
-import type { DashboardLayoutData } from '@openbooks/schema'
 
 /**
  * HR-15 persona homes as dashboard defaults: employee (everyone), manager

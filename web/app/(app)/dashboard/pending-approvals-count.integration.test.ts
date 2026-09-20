@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// The dashboard "Pending approvals" tile links to /approvals?tab=all — the
+// The dashboard "Pending approvals" tile links to /inbox — the
 // unified worklist — so its number must BE the unified count (Flows gates +
 // gateless document-status approvals + pending pay runs). It counted only
 // flow_gates, so it under-reported whenever a document waited outside a gate

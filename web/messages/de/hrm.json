@@ -220,7 +220,7 @@
       "binding": "Bindung",
       "bindingValue": "Antragsrevision {request} gegen Beschäftigungsrevision {expected}",
       "submitted": "Eingereicht",
-      "viewInApprovals": "In Genehmigungen anzeigen",
+      "viewInApprovals": "Im Posteingang anzeigen",
       "noRun": "Entwurf — noch kein Genehmigungslauf.",
       "empty": "Noch keine Änderungsanträge.",
       "statusNames": {
