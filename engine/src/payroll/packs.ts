@@ -1688,19 +1688,25 @@ export interface PayrollTaxYearProblem {
  * The operator half of a tax-year refusal: what the pack publishes and the
  * fact that no in-product action loads what it does not. The developer half
  * (scaffold command, rates module) stays on `message` for engine throws.
+ * Exported for the setup check, which must refuse an undeclared country
+ * without a tax year (see below).
  */
-function payrollTaxYearOperatorMessage(
+export function payrollTaxYearOperatorMessage(
   country: string,
   scope: string,
-  taxYear: number,
+  taxYear: number | null,
   kind: "missing" | "draft" | "undeclared",
   loaded: number[],
 ): string {
   const published = loaded.length > 0 ? loaded.join(", ") : "no tax years";
   if (kind === "undeclared") {
+    // No pack ⇒ no year arithmetic: the calendar-year guess (`date.slice`)
+    // is wrong for every fiscal-year jurisdiction, so when the caller has no
+    // year the refusal names the country and stops there.
+    const yearClause = taxYear === null ? "" : `, so ${taxYear} cannot be calculated`;
     return (
       `No statutory tables are published for ${country || "(unset)"} — no payroll pack declares `
-      + `that country, so ${taxYear} cannot be calculated. No action in the product loads tables `
+      + `that country${yearClause}. No action in the product loads tables `
       + `for a country with no pack; the packs tab of payroll setup shows which packs are `
       + `available and the years each publishes.`
     );

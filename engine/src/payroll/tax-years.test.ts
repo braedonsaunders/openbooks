@@ -155,6 +155,30 @@ test("the setup check reports an unpublished year in operator text", () => {
   assert.equal(okCheck.href, "/admin/setup/payroll?tab=packs");
 });
 
+test("the setup check returns a blocker for a country with no pack", () => {
+  // The composer answers undeclared for XX, but the setup path THREW
+  // PayrollJurisdictionError out of the pack registry before reaching it —
+  // the setup page crashed instead of showing a blocker. This asserts on
+  // the CHECK, so the throw fails it. REALISTIC: a settings blob naming XX
+  // (the blob reader does not filter against the registry), as a hand edit
+  // or a future writer that forgets the API guard could leave behind.
+  const check = setupTaxYearCheck("XX", "2026-06-15", "/admin/setup/payroll");
+  assert.equal(check.code, "setup.taxYear");
+  assert.equal(check.severity, "blocker");
+  assert.equal(check.ok, false);
+  assert.equal(check.href, "/admin/setup/payroll?tab=packs");
+  const detail = check.detail ?? "";
+  assert.match(detail, /XX/);
+  assert.match(detail, /no payroll pack/i);
+  assert.match(detail, /No action in the product/);
+  // Year-free: with no pack there is no year arithmetic, so no year may be
+  // named (and the calendar-year guess is wrong for fiscal jurisdictions).
+  assert.ok(!/(19|20)\d{2}/.test(detail), `undeclared setup detail must name no year:\n${detail}`);
+  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
+  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+});
+
 test("a country with no pack tells the operator there is nothing to load", () => {
   // REALISTIC: XX is declared nowhere, so the operator must learn the
   // country itself is uncovered — not go looking for a year to load.
