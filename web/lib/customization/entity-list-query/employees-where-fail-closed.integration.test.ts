@@ -116,7 +116,15 @@ test("directory filters without the joins fail closed to nothing instead of a SQ
   try {
     assert.ok((await employeeCountWithoutJoins(org.orgId)) >= 0, "no filter, no joins: the base list still counts");
     // The caller said nothing: undefined must read as off.
-    for (const adhoc of [{ department: "unassigned" }, { employment_status: "active" }, { employer: org.orgId }]) {
+    // Annotated: an array of differing object literals infers a UNION whose
+    // members carry optional-undefined siblings, and `undefined` is not
+    // assignable to a Record<string, string> index signature.
+    const unstated: Record<string, string>[] = [
+      { department: "unassigned" },
+      { employment_status: "active" },
+      { employer: org.orgId },
+    ];
+    for (const adhoc of unstated) {
       assert.equal(await employeeCountWithoutJoins(org.orgId, [], adhoc), 0, `${JSON.stringify(adhoc)} matches nothing without the joins`);
     }
     // The caller said off: same answer, by the same predicate.
