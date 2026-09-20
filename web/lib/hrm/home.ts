@@ -260,6 +260,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // today: the cockpit's trend is the read service twelve times, never a
   // row count, so it agrees with the hero to the person.
   const locale = await getLocale()
+  // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
+  // person-readable figure, at most two decimals in the viewer's locale.
+  const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
   const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate])
   const trendData: number[] = []
   for (const date of trendDates) {
@@ -292,7 +295,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     positions = {
       openPositionsLabel: t('home.vitals.openPositions'),
       openPositionsValue: String(openCount),
-      openPositionsSub: t('home.vitals.openPositionsSub', { fte: vacancy.totals.vacantFte }),
+      openPositionsSub: t('home.vitals.openPositionsSub', { fte: fte(vacancy.totals.vacantFte) }),
       unfundedFteValue: vacancy.totals.unfundedFilledFte,
       vacancyTitle: t('home.vacancy.title'),
       departmentColumn: t('home.vacancy.department'),
@@ -310,17 +313,17 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         department: group.departmentName ?? unassignedDepartment,
         employer: group.employerSubsidiaryName,
         positions: group.positions,
-        plannedFte: group.plannedFte,
-        fundedFte: group.fundedFte,
-        filledFte: group.filledFte,
-        vacantFte: group.vacantFte,
+        plannedFte: fte(group.plannedFte),
+        fundedFte: fte(group.fundedFte),
+        filledFte: fte(group.filledFte),
+        vacantFte: fte(group.vacantFte),
       })),
       totals: {
         positions: vacancy.totals.positions,
-        plannedFte: vacancy.totals.plannedFte,
-        fundedFte: vacancy.totals.fundedFte,
-        filledFte: vacancy.totals.filledFte,
-        vacantFte: vacancy.totals.vacantFte,
+        plannedFte: fte(vacancy.totals.plannedFte),
+        fundedFte: fte(vacancy.totals.fundedFte),
+        filledFte: fte(vacancy.totals.filledFte),
+        vacantFte: fte(vacancy.totals.vacantFte),
       },
     }
   }
@@ -597,7 +600,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     attention.push({ tone: 'warning', text: t('home.attention.leavePending', { count: leavePending }), href: '/hrm/leave?segment=pending' })
   }
   if (positions && unfundedFte > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: positions.unfundedFteValue }), href: '/hrm/positions' })
+    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: fte(positions.unfundedFteValue) }), href: '/hrm/positions' })
   }
   if (unmigrated > 0) {
     attention.push({ tone: 'warning', text: t('overview.readiness.unmigrated', { count: unmigrated }), href: '/docs/employment-migration' })
