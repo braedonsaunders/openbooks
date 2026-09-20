@@ -2,9 +2,11 @@
 // present in this directory. Do not edit by hand — add a year by running the
 // scaffold, then transcribe the published TP-1015.F-V figures into the year
 // module.
+import { QC_RATES_2024 } from "./rates-2024.ts";
 import { QC_RATES_2025 } from "./rates-2025.ts";
 import type { QcEditionRates } from "./rates.ts";
 
 export const QC_EXTRA_EDITIONS: readonly QcEditionRates[] = [
+  QC_RATES_2024,
   QC_RATES_2025,
 ];
