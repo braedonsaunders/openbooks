@@ -128,6 +128,27 @@ export function recordSubsidiaryScopeAllows(
 }
 
 /**
+ * Visibility when the live type no longer declares subsidiary_id: honor the
+ * JSON value if one is still stored, and keep field-less rows without a
+ * subsidiary_id org-visible. Field-present types stay on the existing
+ * fail-closed helper. Dropping the field must not unscope stored JSON rows.
+ */
+export function recordVisibleInSubsidiaryFence(
+  sections: FormSection[],
+  data: FieldValueMap,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): boolean {
+  const fence = allowedSubsidiaryIds ?? null
+  if (fence === null) return true
+  if (hasSubsidiaryField(sections)) {
+    return recordSubsidiaryScopeAllows(sections, data, fence)
+  }
+  const subsidiaryId = data.subsidiary_id
+  if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
+  return fence.has(subsidiaryId)
+}
+
+/**
  * A type's allowed_roles audience: empty/null ⇒ every records.* holder;
  * non-empty ⇒ listed role keys plus admins (same contract as form
  * templates). Type authoring is records.manage_types regardless.
