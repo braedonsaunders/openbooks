@@ -12,7 +12,7 @@ import { getAuthz } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
-import { patchReviewBody } from "../../compensation/bodies";
+import { patchReviewBody } from "../bodies";
 
 export const runtime = "nodejs";
 

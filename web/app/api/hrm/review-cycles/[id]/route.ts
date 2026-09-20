@@ -9,8 +9,8 @@ import { getCycleDetail } from "@openbooks/engine/src/hrm/performance/performanc
 import { getAuthz, guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
-import { performanceErrorResponse } from "../../compensation/_lib";
-import { patchCycleBody } from "../../compensation/bodies";
+import { performanceErrorResponse } from "../_lib";
+import { patchCycleBody } from "../bodies";
 
 export const runtime = "nodejs";
 
