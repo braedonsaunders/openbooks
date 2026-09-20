@@ -1935,7 +1935,7 @@ test("hrm employment processes carry snapshot history with org isolation", () =>
     assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
   }
   assert.match(migration, /hrm_processes_open_one_per_kind/);
-  assert.match(migration, /UNIQUE \(org_id, employment_id, kind\) WHERE status = 'open'/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS hrm_processes_open_one_per_kind\s+ON public\.hrm_processes \(org_id, employment_id, kind\) WHERE status = 'open'/);
   assert.match(
     migration,
     /'hrm_process_templates', 'hrm_process_template_steps',\s*\n\s*'hrm_processes', 'hrm_process_steps'/,
