@@ -112,7 +112,8 @@ const hooks = registerHooks({
   },
 })
 
-const { PUT } = (await import('./route.ts?list-preferences-inactive-lock')) as typeof import('./route.ts')
+const list_preferences_inactive_lockUrl = './route.ts?list-preferences-inactive-lock'
+const { PUT } = (await import(list_preferences_inactive_lockUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(respondTx: RouteState['respondTx']): void {

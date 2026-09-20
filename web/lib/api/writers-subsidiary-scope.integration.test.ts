@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import type { ResolvedApiType } from "./registry-data.ts";
 
 // The writer imports server-only services. Shim the marker package so this
 // focused integration suite can load the production module under node:test.
@@ -166,7 +167,7 @@ test(
       `);
       return rows.rows[0]!.revision;
     };
-    const resolved = {
+    const resolved: ResolvedApiType = {
       key: typeKey,
       table: "custom_records",
       searchColumn: "search_text",

@@ -88,10 +88,6 @@ function postReq(slug = SLUG): Request {
   });
 }
 
-function getReq(slug = SLUG): Request {
-  return new Request(`http://audit.local/api/scripts/e/${slug}`, { method: "GET" });
-}
-
 const params = { params: Promise.resolve({ slug: SLUG }) };
 
 test("GET /api/scripts/e/[slug] must refuse before handle, auth, or runEndpointScript", () => {
@@ -126,7 +122,7 @@ test("an unauthenticated caller cannot invoke an endpoint script", { skip: !DB }
     await enableScripts(org.orgId);
     await seedEndpoint(org.orgId, "home");
     session.user = null;
-    const getRes = await GET(getReq(), params);
+    const getRes = await GET();
     assert.equal(getRes.status, 405, "GET must refuse before the session gate");
     assert.match((await getRes.json()).error, /only POST executes/);
     const postRes = await POST(postReq(), params);
@@ -148,7 +144,7 @@ test("authenticated GET /api/scripts/e/[slug] is 405, names that only POST execu
     await grant(org.orgId, "script_exec", ["scripts.execute"]);
     session.user = caller(org.orgId, userId);
 
-    const getRes = await GET(getReq(), params);
+    const getRes = await GET();
     assert.equal(getRes.status, 405);
     const getBody = await getRes.json() as { error: string };
     assert.match(getBody.error, /only POST executes/);

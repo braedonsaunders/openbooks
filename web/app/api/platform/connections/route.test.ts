@@ -114,7 +114,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?connection-create-url")) as typeof import("./route.ts");
+const connection_create_urlUrl = './route.ts?connection-create-url'
+const { POST } = (await import(connection_create_urlUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const refused = [

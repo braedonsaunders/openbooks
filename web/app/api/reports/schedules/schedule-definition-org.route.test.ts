@@ -125,7 +125,8 @@ const hooks = registerHooks({
   },
 })
 
-const { POST } = (await import('./route.ts?schedule-definition-org')) as typeof import('./route.ts')
+const schedule_definition_orgUrl = './route.ts?schedule-definition-org'
+const { POST } = (await import(schedule_definition_orgUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function post(definitionId: string): Promise<Response> {

@@ -148,7 +148,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?flow-retry")) as typeof import("./route.ts");
+const flow_retryUrl = './route.ts?flow-retry'
+const { POST } = (await import(flow_retryUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const RUN_ID = "019f0000-0000-4000-8000-000000000001";

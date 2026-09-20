@@ -74,7 +74,8 @@ registerHooks({
   },
 })
 
-const { POST } = await import('./route.ts?list-view-post-flags')
+const list_view_post_flagsUrl = './route.ts?list-view-post-flags'
+const { POST } = await import(list_view_post_flagsUrl)
 
 const config = { schemaVersion: 1, recordType: 'employee' }
 

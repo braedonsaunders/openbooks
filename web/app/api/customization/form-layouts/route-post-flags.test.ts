@@ -62,7 +62,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?form-layout-post-bool-unit")) as typeof import("./route.ts");
+const form_layout_post_bool_unitUrl = './route.ts?form-layout-post-bool-unit'
+const { POST } = (await import(form_layout_post_bool_unitUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const layout = { schemaVersion: 1, recordType: "vendor_bill" };

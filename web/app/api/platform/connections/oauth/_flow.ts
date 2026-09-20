@@ -103,11 +103,12 @@ export function acceptConnectionOauthState(
     || !st.connectionId
     || typeof st.nonce !== "string"
     || st.nonce.length < 16
+    || typeof st.exp !== "number"
     || !Number.isSafeInteger(st.exp)
-    || st.exp < Math.floor(Date.now() / 1000)
   ) {
     return null;
   }
+  if (st.exp < Math.floor(Date.now() / 1000)) return null;
   if (!cookieNonce || !sameNonce(st.nonce, cookieNonce)) return null;
   return { orgId: st.orgId, connectionId: st.connectionId, nonce: st.nonce, exp: st.exp };
 }
