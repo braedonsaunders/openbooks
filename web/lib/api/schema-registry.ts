@@ -44,6 +44,7 @@ export * from "./registry-data";
 
 interface ColumnRow extends Record<string, unknown> {
   table_name: string; column_name: string; data_type: string; is_nullable: "YES" | "NO"; column_default: string | null;
+  is_generated: "ALWAYS" | "NEVER";
 }
 interface CustomFieldRow extends Record<string, unknown> {
   target_table: string; target_kind: string | null; key: string; label: string | null;
@@ -76,7 +77,7 @@ export async function loadApiSchema(
   // Query live column metadata for all built-in tables at once.
   const tables = [...new Set(builtIn.map((t) => t.table!))];
   const cols = await db.execute<ColumnRow>(sql`
-    select table_name, column_name, data_type, is_nullable, column_default
+    select table_name, column_name, data_type, is_nullable, column_default, is_generated
       from information_schema.columns
      where table_schema = 'public' and table_name = any(${sql.raw(`ARRAY[${tables.map((t) => `'${t}'`).join(",")}]::text[]`)})
      order by table_name, ordinal_position`);
@@ -143,8 +144,10 @@ export async function loadApiSchema(
       .map((c): ApiField => ({
         name: c.column_name,
         type: pgTypeToOpenApi(c.data_type),
-        required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
-        writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom"
+        // GENERATED ALWAYS columns are projections the row computes itself:
+        // advertised for reads, never required of or accepted from a writer.
+        required: c.is_nullable === "NO" && !c.column_default && c.is_generated === "NEVER" && !READONLY_COLUMNS.has(c.column_name),
+        writable: c.is_generated === "NEVER" && !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom"
           && (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
         custom: false,
         ...(t.table === "documents" && c.column_name === "updated_at"

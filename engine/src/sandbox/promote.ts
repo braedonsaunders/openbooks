@@ -511,10 +511,15 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
             }
           }
         }
-        const columns = (await db.execute<{ column_name: string }>(sql`
-          select column_name from information_schema.columns
-           where table_schema = 'public' and table_name = ${t} order by ordinal_position`)).rows.map((row) => row.column_name);
-        if (Object.keys(payload).some((key) => !columns.includes(key))) {
+        // The payload was captured with row_to_json, so it carries GENERATED
+        // ALWAYS projections too. They are known columns (never "obsolete") but
+        // are recomputed by the target row and can never be SET or inserted.
+        const catalog = (await db.execute<{ column_name: string; is_generated: string }>(sql`
+          select column_name, is_generated from information_schema.columns
+           where table_schema = 'public' and table_name = ${t} order by ordinal_position`)).rows;
+        const known = catalog.map((row) => row.column_name);
+        const columns = catalog.filter((row) => row.is_generated === "NEVER").map((row) => row.column_name);
+        if (Object.keys(payload).some((key) => !known.includes(key))) {
           throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
         }
         const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
