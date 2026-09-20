@@ -197,6 +197,15 @@
         "sim"
       ]
     },
+    "inbox": {
+      "description": "HR-15 inbox read model: one My Tasks list over approvals, checklist steps, requests, reviews, windows, signatures, weeks, and expenses.",
+      "dependsOn": [
+        "flows",
+        "hrm",
+        "organization",
+        "platform"
+      ]
+    },
     "hrm": {
       "description": "Human resources: employments, change requests, temporal records.",
       "dependsOn": [
