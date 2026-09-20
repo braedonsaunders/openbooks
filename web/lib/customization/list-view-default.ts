@@ -37,6 +37,25 @@ export class AmbiguousListViewDefaultError extends Error {
   }
 }
 
+/**
+ * resolveListView (and the views list) only sees is_active rows before
+ * picking isDefault. Persisting default+inactive stores a flag no read
+ * can observe. Activate the view, or unset default first — both
+ * checkboxes are on the list-view designer.
+ */
+export class InactiveListViewDefaultError extends Error {
+  constructor() {
+    super(
+      "An inactive view cannot be the default — activate it, or unset default before deactivating",
+    );
+    this.name = "InactiveListViewDefaultError";
+  }
+}
+
+export function assertActiveListViewDefault(isDefault: boolean, isActive: boolean): void {
+  if (isDefault && !isActive) throw new InactiveListViewDefaultError();
+}
+
 type ListViewDefaultScope = {
   orgId: string;
   recordType: string;

@@ -140,13 +140,14 @@ test(
 );
 
 test(
-  "PATCH refuses an inactive default instead of storing a row resolve cannot see",
+  "PATCH refuses an inactive personal isDefault instead of storing a flag resolve cannot see",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
       params: Promise.resolve({ id: VIEW_ID }),
     });
+    assert.notEqual(res.status, 200, "an inactive personal default must not report success");
     assert.equal(res.status, 400);
     const body = await res.json();
     assert.match(String(body.error), /inactive view cannot be the default/i);

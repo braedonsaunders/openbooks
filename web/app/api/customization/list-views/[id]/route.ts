@@ -10,6 +10,7 @@ import { isUuid } from "../../../../../lib/list-params";
 import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
 import {
   AmbiguousListViewDefaultError,
+  InactiveListViewDefaultError,
   assertSingleListViewDefault,
   clearSiblingListViewDefaults,
   lockListViewDefaultScope,
@@ -192,6 +193,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const msg = (e as Error).message ?? "update failed";
     if (e instanceof AmbiguousListViewDefaultError)
       return NextResponse.json({ error: e.message }, { status: 409 });
+    if (e instanceof InactiveListViewDefaultError)
+      return NextResponse.json({ error: e.message }, { status: 400 });
     if (msg.includes("unique"))
       return NextResponse.json({ error: "A view with that name already exists" }, { status: 409 });
     return NextResponse.json({ error: msg }, { status: 500 });
