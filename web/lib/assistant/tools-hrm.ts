@@ -61,6 +61,7 @@ export function hrmRefusal(error: unknown): ToolResult {
   if (
     error instanceof EmploymentReadError ||
     error instanceof HrmPositionError ||
+    error instanceof HrmProcessError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
