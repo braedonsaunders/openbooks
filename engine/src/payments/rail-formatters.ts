@@ -1250,18 +1250,17 @@ export interface Cnab240BbRun {
  *    for 03/41/43 and '000' for crédito no BB; Segmento A DAC blank for BB
  *    accounts (BB's wording); the arquivo/lote version pairing table
  *    (031↔050 … 043↔084); trailer fills as emitted.
- * 4. bradesco-cnab240 (thiagosantos, open source, PRODUCTION payroll:
- *    "Padrão Bradesco Multipag CNAB240 para folha de pagamento" — tested
- *    against folha with Bradesco): Segmento A/B serializers whose field
- *    widths sum to exactly 240, header-lote serviço '30' + forma '01' +
- *    lote version '045', A+B pair per employee, câmara '000' = crédito em
- *    conta with '018' TED / '700' DOC noted.
- * 5. OCA l10n-brazil `l10n_br_cnab_structure` data (Akretion/Engenere,
- *    production Odoo, files accepted by banks daily): position-level field
- *    rows for Itaú/BB/Santander/Sicoob 240 pagamento structures — BB lote
- *    version default '045', BB convênio slot default '0126', BB densidade
- *    default '00000', BB Segmento A/B skeletons, per-bank payment-way
- *    tables (forma 01/41 with câmara 018 for TED, 009 for PIX).
+ * 4. bradesco-cnab240 (thiagosantos, open source implementation of
+ *    "Padrão Bradesco Multipag CNAB240 para folha de pagamento"): Segmento
+ *    A/B serializers whose field widths sum to exactly 240, header-lote
+ *    serviço '30' + forma '01' + lote version '045', A+B pair per employee,
+ *    câmara '000' = crédito em conta with '018' TED / '700' DOC noted.
+ * 5. OCA l10n-brazil `l10n_br_cnab_structure` data (Akretion/Engenere):
+ *    position-level field rows for Itaú/BB/Santander/Sicoob 240 pagamento
+ *    structures — BB lote version default '045', BB convênio slot default
+ *    '0126', BB densidade default '00000', BB Segmento A/B skeletons,
+ *    per-bank payment-way tables (forma 01/41 with câmara 018 for TED,
+ *    009 for PIX).
  *
  * Corroboration gradient, stated plainly: every MONEY byte (Segmento A
  * 120–134 valor, 94–101 data, the 24–43 conta block positions, 44–93 nome
