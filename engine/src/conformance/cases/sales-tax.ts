@@ -112,39 +112,39 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
   },
 
   {
-    id: "sales-tax-compound-qst-on-gst",
-    title: "QST compounds on the GST-included price",
+    id: "sales-tax-qst-excludes-gst",
+    title: "QST and GST both use the pre-tax selling price",
     citations: [
       {
         standard: "RQ QST",
-        reference: "RQ calculating GST and QST",
+        reference: "Revenu Québec — Calculating the Taxes, two-step calculation (https://www.revenuquebec.ca/en/businesses/consumption-taxes/gsthst-and-qst/collecting-gst-and-qst/calculating-the-taxes/; verified 2026-09-19)",
         kind: "requirement",
         requirement:
-          "QST at 9.975% is calculated on the selling price including GST, not on the pre-tax price.",
+          "GST at 5% and QST at 9.975% are each calculated on the selling price excluding the other tax.",
       },
     ],
     support: "supported",
     tier: "computation",
     assertion:
-      "On a $100.00 Québec sale the engine charges $5.00 of GST and then 9.975% on the GST-included $105.00 — $10.47 of QST — for a $115.47 total. The compounding order is the return-affecting figure, and it is exact.",
+      "On a $100.00 Québec sale the engine charges $5.00 of GST and $9.98 of QST, each on the $100.00 selling price, for a $114.98 total. QST does not tax the GST amount.",
     facts: [
       "Pre-tax price of $100.00; GST at 5% is $5.00.",
-      "The QST base is 100.00 + 5.00 = $105.00; QST is 105.00 × 9.975% = 10.47375, rounded half-up to $10.47.",
-      "Settlement total is 100.00 + 5.00 + 10.47 = $115.47.",
+      "The QST base is $100.00; QST is 100.00 × 9.975% = 9.975, rounded half-up to $9.98.",
+      "Settlement total is 100.00 + 5.00 + 9.98 = $114.98.",
     ],
     expected: {
       values: {
         net: "100.0000",
         gst: "5.0000",
-        qstBase: "105.0000",
-        qst: "10.4700",
-        total: "115.4700",
+        qstBase: "100.0000",
+        qst: "9.9800",
+        total: "114.9800",
       },
     },
     run: () => {
       const result = computeLineTaxes("100.00", [
         { taxCodeId: "GST", sequence: 1, ratePercent: "5" },
-        { taxCodeId: "QST", sequence: 2, ratePercent: "9.975", compoundOnPrevious: true },
+        { taxCodeId: "QST", sequence: 2, ratePercent: "9.975", compoundOnPrevious: false },
       ]);
       const gst = result.components[0]!;
       const qst = result.components[1]!;
