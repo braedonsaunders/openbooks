@@ -293,6 +293,12 @@ export const flowLocks = pgTable(
   (t) => [
     uniqueIndex("flow_locks_subject").on(t.subjectKind, t.subjectId),
     index("flow_locks_org").on(t.orgId, t.subjectKind),
+    // Tenant pair required by 0215: a lock may only name a flow of its own org.
+    foreignKey({
+      name: "flow_locks_flow_id_fkey",
+      columns: [t.orgId, t.flowId],
+      foreignColumns: [flows.orgId, flows.id],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -383,7 +389,7 @@ schema/migrations/referential-integrity.sql):
   approval_delegations.from_user_id → users.id
   approval_delegations.to_user_id   → users.id
   flow_locks.org_id             → orgs.id (on delete cascade)
-  flow_locks.flow_id            → flows.id (on delete cascade)
+  flow_locks.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0215)
   notifications.org_id          → orgs.id (on delete cascade)
   notifications.user_id         → users.id (on delete cascade)
   flow_scheduled_occurrences.org_id  → orgs.id
