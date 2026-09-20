@@ -10,8 +10,8 @@ import { getPositionAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
-import { positionErrorResponse } from "../_lib";
-import { patchPositionBody } from "../bodies";
+import { positionErrorResponse } from "../../compensation/_lib";
+import { patchPositionBody } from "../../compensation/bodies";
 
 export const runtime = "nodejs";
 
