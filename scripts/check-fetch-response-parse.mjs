@@ -29,8 +29,8 @@
  *          Compound guards count when the boolean structure still routes
  *          every failure out (`if (!res.ok || cancelled) return` guards;
  *          `if (!res.ok && retryable) throw` does not), and a parse nested
- *          in the success branch (`if (res.ok && fresh) { ...parse... }`)
- *          is guarded;
+ *          in the success branch (`if (res.ok && fresh) { ...parse... }`,
+ *          or the ternary `r.ok ? r.json() : fallback`) is guarded;
  *   viol3  the parse is not the guarded expression the convention blesses:
  *          `res.json().catch(...)`, a parse already inside the success
  *          branch of a status check, or the sanctioned helper shape — a
@@ -415,6 +415,14 @@ function thenBranchGuards(condition, name) {
   );
 }
 
+/** A ternary routes the same way an if does: `r.ok ? r.json() : fallback`
+ *  parses only on success, and `!r.ok ? fallback : r.json()` only on failure.
+ *  The parse nested in the success side saw ok. */
+function ternaryBranchSawOk(conditional, name, inConsequent) {
+  if (inConsequent) return thenBranchSawOk(conditional.condition, name);
+  return elseBranchSawOk(conditional.condition, name);
+}
+
 /** The taken branch runs only when every conjunct holds — the parse nested
  *  in it saw ok when a POSITIVE status test is one of them. */
 function thenBranchSawOk(condition, name) {
@@ -511,12 +519,27 @@ function jsonCallWithin(root, target) {
 function guardedBeforeParse(parseFn, sourceFile, jsonCall, name) {
   const jsonPos = jsonCall.getStart();
   // Containment first: the parse already sits in the success branch.
+  // Direct ternary branch first: `r.ok ? r.json() : fallback` nests the
+  // parse as the conditional itself, one level above where the climb starts.
+  const directParent = jsonCall.parent;
+  if (directParent && ts.isConditionalExpression(directParent)) {
+    if (directParent.whenTrue === jsonCall && ternaryBranchSawOk(directParent, name, true)) {
+      return true;
+    }
+    if (directParent.whenFalse === jsonCall && ternaryBranchSawOk(directParent, name, false)) {
+      return true;
+    }
+  }
   let current = jsonCall.parent;
   while (current && current !== parseFn && current !== sourceFile) {
     const parent = current.parent;
     if (parent && ts.isIfStatement(parent)) {
       if (parent.thenStatement === current && thenBranchSawOk(parent.expression, name)) return true;
       if (parent.elseStatement === current && elseBranchSawOk(parent.expression, name)) return true;
+    }
+    if (parent && ts.isConditionalExpression(parent)) {
+      if (parent.whenTrue === current && ternaryBranchSawOk(parent, name, true)) return true;
+      if (parent.whenFalse === current && ternaryBranchSawOk(parent, name, false)) return true;
     }
     current = parent;
   }

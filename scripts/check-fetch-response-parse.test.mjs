@@ -159,6 +159,24 @@ export function AssistantApp() {
   assert.deepEqual(violations, [])
 })
 
+test('does not flag a ternary that parses only on success', () => {
+  const violations = auditOne(
+    'web/app/(app)/admin/flows/FlowsClient.tsx',
+    `
+export function FlowsAdmin() {
+  function openDrawer() {
+    fetch('/api/admin/flows/profiles')
+      .then((r) => (r.ok ? r.json() : { profiles: [] }))
+      .then((d) => d.profiles)
+      .catch(() => [])
+  }
+  return openDrawer
+}
+`,
+  )
+  assert.deepEqual(violations, [])
+})
+
 test('flags a conjunctive guard that lets failures fall through', () => {
   const violations = auditOne(
     'web/app/(app)/sync/PlatformClient.tsx',
