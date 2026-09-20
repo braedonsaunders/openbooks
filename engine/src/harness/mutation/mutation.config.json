@@ -20,6 +20,45 @@
       ]
     },
     {
+      "path": "engine/src/ledger/posting-rules.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-tax-policy.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-contracts.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
       "path": "engine/src/ledger/posting-effects.ts",
       "tests": [
         "engine/src/ledger/posting-effects.test.ts",
@@ -48,12 +87,79 @@
       ]
     },
     {
+      "path": "engine/src/payroll/run-calculation-evidence.ts",
+      "needsDb": true,
+      "lineRanges": [
+        {
+          "start": 80,
+          "end": 82
+        },
+        {
+          "start": 84,
+          "end": 88
+        },
+        {
+          "start": 90,
+          "end": 107
+        },
+        {
+          "start": 121,
+          "end": 183
+        }
+      ],
+      "tests": [
+        "engine/src/payroll/run.test.ts",
+        "engine/src/payroll/agnostic-core.test.ts"
+      ]
+    },
+    {
       "path": "engine/src/payroll/run.ts",
       "needsDb": true,
       "lineRanges": [
-        { "start": 1536, "end": 1639 },
-        { "start": 2048, "end": 2196 },
-        { "start": 3097, "end": 3484 }
+        {
+          "start": 1205,
+          "end": 1226
+        },
+        {
+          "start": 1229,
+          "end": 1233
+        },
+        {
+          "start": 1235,
+          "end": 1277
+        },
+        {
+          "start": 1279,
+          "end": 1284
+        },
+        {
+          "start": 1286,
+          "end": 1353
+        },
+        {
+          "start": 2254,
+          "end": 2295
+        },
+        {
+          "start": 2300,
+          "end": 2372
+        },
+        {
+          "start": 2379,
+          "end": 2432
+        },
+        {
+          "start": 2440,
+          "end": 2517
+        },
+        {
+          "start": 2525,
+          "end": 2579
+        },
+        {
+          "start": 2587,
+          "end": 2641
+        }
       ],
       "tests": [
         "engine/src/payroll/run.test.ts",
