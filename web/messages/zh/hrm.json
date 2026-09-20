@@ -29,6 +29,41 @@
       "title": "名录"
     }
   },
+  "queue": {
+    "title": "变更申请",
+    "description": "所有雇佣变更提案集中在一个队列中 — 草稿、已提交和已决定的申请 — 均通过变更申请服务解析。",
+    "listTitle": "申请",
+    "segmentsLabel": "状态",
+    "allLabel": "全部",
+    "truncatedNote": "仅显示前{limit}个申请 — 分段计数仅涵盖这些。",
+    "refusalTitle": "队列加载失败",
+    "unknownSegment": "未知分段{value} — 请按草稿、已提交、已批准、已拒绝或已撤回筛选，或清除筛选条件。",
+    "segments": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "withdrawn": "已撤回"
+    },
+    "columns": {
+      "employee": "员工",
+      "kind": "变更",
+      "effective": "生效",
+      "requester": "申请人",
+      "submitted": "已提交"
+    },
+    "emptyTitle": "此处没有变更申请",
+    "emptyDescription": "该视图为空 — 此分段中尚未提出任何申请。",
+    "proposeTitle": "为雇佣关系提议变更",
+    "proposeButton": "提议变更",
+    "proposeEmploymentLabel": "雇佣",
+    "proposeEmploymentPlaceholder": "搜索雇佣关系…",
+    "proposeEmpty": "没有匹配的雇佣关系。",
+    "proposeFailed": "雇佣列表加载失败。",
+    "draftBadge": "操作",
+    "openEmployee": "打开员工档案",
+    "notAvailable": "不可用"
+  },
   "employment": {
     "episodes": {
       "title": "雇用阶段",

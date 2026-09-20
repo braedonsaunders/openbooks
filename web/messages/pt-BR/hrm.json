@@ -29,6 +29,41 @@
       "title": "Diretório"
     }
   },
+  "queue": {
+    "title": "Solicitações de alteração",
+    "description": "Cada proposta de alteração de emprego em uma única fila — rascunhos, envios e decisões — resolvida pelo serviço de solicitações de alteração.",
+    "listTitle": "Solicitações",
+    "segmentsLabel": "Status",
+    "allLabel": "Todas",
+    "truncatedNote": "Mostrando as primeiras {limit} solicitações — as contagens cobrem apenas essas.",
+    "refusalTitle": "A fila não pôde ser carregada",
+    "unknownSegment": "Segmento desconhecido {value} — filtre por rascunho, enviada, aprovada, rejeitada ou retirada, ou limpe o filtro.",
+    "segments": {
+      "draft": "Rascunho",
+      "submitted": "Enviada",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "withdrawn": "Retirada"
+    },
+    "columns": {
+      "employee": "Funcionário",
+      "kind": "Alteração",
+      "effective": "Vigência",
+      "requester": "Solicitante",
+      "submitted": "Enviada"
+    },
+    "emptyTitle": "Nenhuma solicitação de alteração aqui",
+    "emptyDescription": "Esta visão está vazia — nada foi proposto neste segmento ainda.",
+    "proposeTitle": "Propor uma alteração para um emprego",
+    "proposeButton": "Propor alteração",
+    "proposeEmploymentLabel": "Emprego",
+    "proposeEmploymentPlaceholder": "Pesquisar empregos…",
+    "proposeEmpty": "Nenhum emprego corresponde.",
+    "proposeFailed": "A lista de empregos não pôde ser carregada.",
+    "draftBadge": "Ações",
+    "openEmployee": "Abrir o registro do funcionário",
+    "notAvailable": "Indisponível"
+  },
   "employment": {
     "episodes": {
       "title": "Episódios de emprego",

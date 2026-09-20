@@ -1360,6 +1360,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/change-requests': {
+    route: '/hrm/change-requests',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/change-requests/view')
+      return {
+        load: (input) => m.loadChangeRequestQueuePage(input.searchParams ?? {}),
+        spec: (data) => m.changeRequestQueueSpec(data as never),
+      }
+    },
+  },
   '/insights': {
     route: '/insights',
     segments: [],
