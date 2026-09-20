@@ -26,3 +26,30 @@ test("allocation binding-moment gates are subordinate to the parent", () => {
     assert.equal(featureEnabled({ allocations: true, [key]: false }, key), false);
   }
 });
+
+// HR-15 begin: optional persona-home complexity gates.
+test("hrm celebrations and manager nudges are subordinate to hrm", () => {
+  for (const key of ["hrmCelebrations", "hrmManagerNudges"]) {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered`);
+    assert.equal(def.category, "operations");
+    assert.equal(def.parentKey, "hrm");
+    assert.equal(featureEnabled({ hrm: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({}, key), false);
+    // Opt-in sub-features: the parent alone does not light them.
+    assert.equal(featureEnabled({ hrm: true }, key), false);
+    assert.equal(featureEnabled({ hrm: true, [key]: true }, key), true);
+    assert.equal(featureEnabled({ hrm: true, [key]: false }, key), false);
+  }
+});
+
+test("home announcements is a default-on platform feature with no parent", () => {
+  const def = FEATURE_BY_KEY.get("homeAnnouncements");
+  assert.ok(def, "homeAnnouncements must be registered");
+  assert.equal(def.defaultEnabled, true);
+  assert.equal(def.category, "platform");
+  assert.equal(def.parentKey, undefined);
+  assert.equal(featureEnabled({}, "homeAnnouncements"), true);
+  assert.equal(featureEnabled({ homeAnnouncements: false }, "homeAnnouncements"), false);
+});
+// HR-15 end

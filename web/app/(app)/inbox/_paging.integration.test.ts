@@ -29,13 +29,13 @@ registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "../../../lib/authz" && context.parentURL?.includes("/approvals/")) {
+    if (specifier === "../../../lib/authz" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-paging-authz", shortCircuit: true };
     }
     if (specifier === "next-intl/server") {
       return { url: "mock:approvals-paging-intl", shortCircuit: true };
     }
-    if (specifier === "@/lib/money-server" && context.parentURL?.includes("/approvals/")) {
+    if (specifier === "@/lib/money-server" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-paging-money", shortCircuit: true };
     }
     if (specifier.startsWith("@/")) {

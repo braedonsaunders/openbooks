@@ -30,13 +30,13 @@ registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "../../../lib/authz" && context.parentURL?.includes("/approvals/")) {
+    if (specifier === "../../../lib/authz" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-union-authz", shortCircuit: true };
     }
     if (specifier === "next-intl/server") {
       return { url: "mock:approvals-union-intl", shortCircuit: true };
     }
-    if (specifier === "@/lib/money-server" && context.parentURL?.includes("/approvals/")) {
+    if (specifier === "@/lib/money-server" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-union-money", shortCircuit: true };
     }
     if (specifier.startsWith("@/")) {

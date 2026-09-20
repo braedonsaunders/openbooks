@@ -15,7 +15,8 @@ import {
   getUserRoleTier,
   type RoleTier,
 } from './_role-tier'
-import { personaDefaultLayout, resolvePersona } from './_persona'
+import { resolvePersona } from './_persona'
+import { personaDefaultLayout } from './_persona-layout'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { DashboardLayoutInputSchema, clampToWidgetMinimums } from './_layout-input'
 
