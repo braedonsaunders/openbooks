@@ -6,6 +6,7 @@ import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadAsset } from "../../app/api/assets/_lib";
+import { loadLease } from "../../app/(app)/assets/leases/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { uuidInput } from "./tools-shared";
 
@@ -177,4 +178,55 @@ const assetTaxPools: AssistantToolDef = {
   },
 };
 
-export const ASSETS_TOOLS: AssistantToolDef[] = [searchAssets, getAsset, assetTaxPools];
+const searchLeaseAgreements: AssistantToolDef = {
+  name: "search_lease_agreements",
+  description: "Find lessee lease agreements by number or description, with contractual timing, currency and status. Read-only; returns links to the native lease workpaper.",
+  category: "search",
+  gate: assetGate(),
+  feature: "fixedAssets",
+  inputSchema: z.object({
+    query: z.string().max(100).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "fixedAssets")))
+      return { ok: false, error: "fixedAssets_feature_disabled" };
+    const input = raw as { query?: string; limit?: number };
+    const limit = input.limit ?? 20;
+    let predicate = sql`la.org_id=${authz.user.orgId} ${subsidiaryVisibleFilter(sql`la.subsidiary_id`, authz.allowedSubsidiaryIds)}`;
+    if (input.query) {
+      const query = `%${input.query}%`;
+      predicate = sql`${predicate} and (la.lease_number ilike ${query} or la.description ilike ${query})`;
+    }
+    const rows = (await db.execute<Record<string, unknown>>(sql`
+      select la.id,la.lease_number,la.description,la.status,la.subsidiary_id,
+        la.commencement_on::text,la.currency,la.payment_amount::text,
+        la.payment_timing,la.payment_frequency,la.term_periods,la.revision
+      from lease_agreements la where ${predicate}
+      order by la.lease_number,la.id limit ${limit + 1}`)).rows;
+    return { ok: true, data: {
+      items: rows.slice(0, limit).map((row) => ({ ...row, href: `/assets/leases?lease=${row.id}` })),
+      truncated: rows.length > limit,
+      href: "/assets/leases",
+    } };
+  },
+};
+
+const getLeaseAgreement: AssistantToolDef = {
+  name: "get_lease_agreement",
+  description: "Read a lessee lease agreement, its versioned payment/accrual schedule, and approval changes. Reuses the native lease drawer; read-only.",
+  category: "read",
+  gate: assetGate(),
+  feature: "fixedAssets",
+  inputSchema: z.object({ id: uuidInput.describe("Lease agreement id from search_lease_agreements") }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "fixedAssets")))
+      return { ok: false, error: "fixedAssets_feature_disabled" };
+    const input = raw as { id: string };
+    const payload = await loadLease(authz.user.orgId, input.id, authz.allowedSubsidiaryIds);
+    if (!payload) return { ok: false, error: "not found" };
+    return { ok: true, data: { ...payload, href: `/assets/leases?lease=${input.id}` } };
+  },
+};
+
+export const ASSETS_TOOLS: AssistantToolDef[] = [searchAssets, getAsset, assetTaxPools, searchLeaseAgreements, getLeaseAgreement];

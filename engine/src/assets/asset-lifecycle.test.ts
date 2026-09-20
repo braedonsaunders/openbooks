@@ -23,13 +23,15 @@ test("disposal snapshots carrying value after locking the asset row", () => {
   const transaction = dispose.indexOf("return db.transaction");
   const lock = dispose.indexOf("await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds)", transaction);
   const assetRead = dispose.indexOf("select a.id", transaction);
-  const deltaRead = dispose.indexOf("await netRemeasurementDelta(orgId, assetId, bookId, tx)", transaction);
+  const deltaRead = /await\s+netRemeasurementDelta\(\s*orgId\s*,\s*assetId\s*,\s*bookId\s*,\s*tx\s*,?\s*\)/.exec(dispose)?.index ?? -1;
+  const basisRead = /await\s+assetBasisDelta\(\s*tx\s*,\s*orgId\s*,\s*assetId\s*,\s*bookId\s*,?\s*\)/.exec(dispose)?.index ?? -1;
   const compute = dispose.indexOf("computeDisposal({", transaction);
 
   assert.ok(transaction >= 0, "disposal must post in one database transaction");
   assert.ok(lock > transaction, "disposal must lock the asset row inside its transaction");
   assert.ok(assetRead > lock, "disposal must read asset and posted depreciation after locking");
   assert.ok(deltaRead > assetRead, "disposal must read remeasurement events after locking");
+  assert.ok(basisRead > assetRead && basisRead < compute, "disposal must consume lifecycle basis changes from the same locked snapshot");
   assert.ok(compute > deltaRead, "disposal must compute carrying value from the locked snapshot");
   assert.equal(
     dispose.slice(0, transaction).includes("db.execute"),

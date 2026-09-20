@@ -7,6 +7,9 @@ const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
 ] = state;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    // Resolve framework imports against this real file, not the virtual auth URL.
+    if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
+      return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "server-only")
       return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/authz")
