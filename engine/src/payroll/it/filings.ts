@@ -28,7 +28,7 @@ function refusePopulation(filing: string, year: number): Promise<PayrollFilingDa
   return Promise.reject(
     new ItFilingRefusal(
       `the IT payroll pack declares the ${filing} filing but cannot populate it for tax year ${year}: `
-      + "no tax-year edition is transcribed (see engine/src/payroll/it/rates.ts). "
+      + "no filing population is transcribed (see engine/src/payroll/it/rates.ts). "
       + "Withholding tables must be transcribed before this filing can report committed stubs.",
     ),
   );

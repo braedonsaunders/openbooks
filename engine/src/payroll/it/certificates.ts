@@ -41,7 +41,7 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
           label: "Titolare di pensione o assegno equiparato",
           kind: "flag",
           default: "false",
-          help: "The worker's income is art. 49 c. 2 lett. a) TUIR pension income: the 2025 engine "
+          help: "The worker's income is art. 49 c. 2 lett. a) TUIR pension income: the IT engine "
             + "refuses it by name (pensionati use the TABELLA 7 detrazioni, not transcribed).",
         },
         {
@@ -57,7 +57,7 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
           kind: "flag",
           default: "false",
           help: "Workers first insured after 31 December 1995 (or on the contributivo option) fall "
-            + "under the L. 335/1995 massimale of 120.607 euro for 2025. Not part of the detrazioni "
+            + "under the L. 335/1995 massimale for the tax year. Not part of the detrazioni "
             + "form; recorded here as the pack's only employee-filed input channel.",
         },
         {
