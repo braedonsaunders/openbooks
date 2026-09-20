@@ -659,37 +659,6 @@ export async function closeCycle(args: {
   });
 }
 
-/** Cycles for the Performance tab: newest period first. */
-export async function listCycles(args: { orgId: string; actorId: string }): Promise<CycleDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async () => {
-    await assertPerformanceFeature(db, orgId);
-    // Listing needs no grant: the read service below narrows every row to
-    // the actor's privacy scope, so an ungranted manager still gets the tab
-    // with only their reviews. The grant only widens the scope.
-    void actorId;
-    const rows = (await db.execute<StoredCycle>(sql`
-      select id,
-             template_id as "templateId",
-             name,
-             period_start_on::text as "periodStartOn",
-             period_end_on::text as "periodEndOn",
-             self_due_on::text as "selfDueOn",
-             manager_due_on::text as "managerDueOn",
-             status,
-             applies_to as "appliesTo",
-             manager_gap_count as "managerGapCount",
-             opened_at as "openedAt",
-             closed_at as "closedAt"
-        from hrm_review_cycles
-       where org_id = ${orgId}
-       order by period_end_on desc, created_at desc
-    `)).rows;
-    return rows.map(toCycleDTO);
-  });
-}
-
 export type ReviewTemplateOption = {
   readonly id: string;
   readonly name: string;
