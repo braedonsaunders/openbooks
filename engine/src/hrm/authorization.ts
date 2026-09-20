@@ -785,6 +785,32 @@ export async function requireRecruitingManageForEmployer(
  * (null = unrestricted) for the caller to filter by, never a boolean.
  */
 export async function requireAggregateRecruitingRead(
+/** Performance and retention duties (HR-7, 0196). Confidential like employment. */
+export const HRM_PERFORMANCE_PERMISSIONS = [
+  "hrm.performance.read",
+  "hrm.performance.manage",
+] as const;
+
+export type HrmPerformancePermission = (typeof HRM_PERFORMANCE_PERMISSIONS)[number];
+
+/** Retention duties (HR-7, 0196): HR-only read of exit records and turnover. */
+export const HRM_RETENTION_PERMISSIONS = ["hrm.retention.read"] as const;
+
+export type HrmRetentionPermission = (typeof HRM_RETENTION_PERMISSIONS)[number];
+
+async function requireHrmPerformanceGrant(
+  permission: HrmPerformancePermission,
+): Promise<void> {
+  // Same hardwiring as every HRM gate: the live grant set decides, never a
+  // caller-supplied boolean. Cycles and reviews name no single employment,
+  // so there is no trusted subject here — the aggregate subsidiary scope
+  // below is what list-shaped callers filter by.
+      `Performance access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+
+ * The aggregate half of performance authority for cycle-scoped writes and
+ * list-shaped reads: the grant, then the allowed employer set (null =
+ * unrestricted) for the caller to filter by, never a boolean.
+export async function requireAggregatePerformanceRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -794,6 +820,7 @@ export async function requireAggregateRecruitingRead(
       "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
     );
   }
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.read");
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -877,6 +904,26 @@ export async function actorOnInterviewPanel(
  * runner so this check and the subsequent write are atomic.
  */
 export async function requireHrmRecruitingManageOrg(
+ * Run cycles, calibrate and share reviews. The caller MUST pass its write
+ * transaction's runner so this check and the subsequent write are atomic.
+export async function requireAggregatePerformanceManage(
+): Promise<Set<string> | null> {
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.manage");
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+
+ * Employment-scoped performance gate for goal and exit writes against one
+ * employment: the live grant plus the trusted subject plus employer scope,
+ * exactly like the employment gates.
+export async function requireHrmPerformanceOnEmployment(
+  employmentId: string,
+  permission: HrmPerformancePermission,
+): Promise<TrustedEmploymentSubject> {
+  await requireHrmPerformanceGrant(exec, orgId, actorId, permission);
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+
+/** See exit records and turnover. HR-only: no structural scope exists here. */
+export async function requireHrmRetentionRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -887,3 +934,41 @@ export async function requireHrmRecruitingManageOrg(
     );
   }
 }
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
+      "Retention access requires the hrm.retention.read permission — ask an administrator to grant it in /admin/roles.",
+
+/**
+ * Employments reporting to the actor through the live line relationship:
+ * the actor's own employments (from users.party_id on the trusted runner,
+ * never caller input) as manager_employment_id of recorded-live line rows
+ * whose effective window contains the as-of date. Returns employment ids
+ * the actor manages as of that date — the structural manager scope for
+ * reviews and goals. An actor with no person identity manages nobody.
+ */
+export async function loadManagedEmploymentIds(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  asOf: string,
+): Promise<string[]> {
+  const person = await loadApprovalPerson(exec, orgId, actorId);
+  if (!person.partyId) return [];
+  const own = (await exec.execute<{ id: string }>(sql`
+    select id from worker_employments
+     where org_id = ${orgId} and worker_party_id = ${person.partyId}
+  `)).rows.map((row) => row.id);
+  if (own.length === 0) return [];
+  // One parameter per id: bare JS arrays must never be interpolated into
+  // ANY() (they bind as row constructors, not PostgreSQL arrays).
+  const ids = own.map((id) => sql`${id}::uuid`);
+  const rows = (await exec.execute<{ employmentId: string }>(sql`
+    select distinct r.employment_id as "employmentId"
+      from reporting_relationships r
+     where r.org_id = ${orgId}
+       and r.manager_employment_id in (${sql.join(ids, sql`, `)})
+       and r.kind = 'line'
+       and r.recorded_until is null
+       and r.effective_from <= ${asOf}::date
+       and (r.effective_to is null or r.effective_to > ${asOf}::date)
+  `)).rows;
+  return rows.map((row) => row.employmentId);
