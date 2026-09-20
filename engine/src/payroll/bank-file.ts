@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, type CemtexPayment, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, validateSepaSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
+import { buildBacsFile, buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, type BacsPayment, type CemtexPayment, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -37,7 +37,7 @@ import { unsealJson } from "../platform/secrets.ts";
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
 
-export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex";
+export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs";
 
 export interface PayRunBankFileFormatSpec {
   /** Off means: do not emit these bytes, and say why. */
@@ -153,9 +153,28 @@ export interface PayRunBankFileFormatSpec {
  * digit account number is a named refusal, never a silent drop and never a
  * coerced account (a coerced BSB pays a stranger).
  *
- * All four writers are the audited AP ones in engine/src/payments/rail-formatters.ts
- * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`) — payroll deliberately does not fork a
+ * All five writers are the audited AP ones in engine/src/payments/rail-formatters.ts
+ * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`, `buildBacsFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
+ *
+ * ── BACS (United Kingdom) — ON ────────────────────────────────────────────
+ * The Bacs Standard 18 Direct Credit submission (80-char VOL1/HDR1/HDR2/UHL1
+ * labels, 100-char code-99 credit records, a code-17 debit contra, EOF1/EOF2
+ * and the UTL1 totals trailer), rendered by the shared AP builder
+ * (`buildBacsFile`, engine/src/payments/rail-formatters.ts) — payroll maps
+ * its EFT population onto the builder's generic payment rows and adds
+ * nothing of its own, so AP can originate the same rail later with no fork.
+ * Single-processing-day, single-SUN direct submission only. The formal
+ * specification (Bacs Electronic Funds Transfer, File Structures, PN5011
+ * v3.10) is published to service users and members rather than openly; the
+ * writer's evidence log — three concordant transcriptions plus a worked
+ * example for the money bytes, single-transcription envelope offsets that
+ * fail loud at bank validation — is on `buildBacsFile`, which names every
+ * source with publisher, edition and date. An employee row without a shaped
+ * sort code and 8-digit account is a named refusal, never a silent drop and
+ * never a coerced account (a coerced sort code pays a stranger). No bank has
+ * cleared a file from this writer; Bacs is a weaker evidence class than
+ * Cemtex.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
   cpa005: {
@@ -186,6 +205,13 @@ export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankF
     currency: "AUD",
     rails: ["cemtex_credit"],
     extension: "aba",
+    contentType: "text/plain; charset=us-ascii",
+  },
+  bacs: {
+    enabled: true,
+    currency: "GBP",
+    rails: ["bacs_credit"],
+    extension: "txt",
     contentType: "text/plain; charset=us-ascii",
   },
 };
@@ -304,6 +330,7 @@ export interface PayrollOriginatorConfig {
   nacha?: NachaSettings & { entryClassCode: "PPD" | "CCD"; entryDescription: string };
   sepa?: SepaSettings;
   cemtex?: CemtexSettings;
+  bacs?: BacsSettings;
 }
 
 export type PayrollOriginatorResult =
@@ -318,11 +345,12 @@ type ProfileRow = {
   originator_secrets_encrypted: string | null;
 };
 
-/** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI; SEPA pain.001 is LF-terminated XML; Cemtex files are CR/LF-delimited per the annotated sample. */
+/** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI; SEPA pain.001 is LF-terminated XML; Cemtex files are CR/LF-delimited per the annotated sample; Bacs files are CR/LF-delimited per the byte-level implementation. */
 function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "crlf" {
   if (format === "cpa005") return "crlf";
   if (format === "sepa") return "lf";
   if (format === "cemtex") return "crlf";
+  if (format === "bacs") return "crlf";
   return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
 }
 
@@ -584,11 +612,51 @@ function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * Bacs originator validation.
+ *
+ * The originator half of a Standard 18 credit submission is four values the
+ * employer's bank assigned: the 6-digit Service User Number (VOL1 owner and
+ * HDR1 SUN), the originating sort code and account the Bacs debit will draw
+ * (every data record and the contra), and the service user name employees
+ * see on their statements (field 9). All four are tenant configuration on
+ * the payment bank profile (Setup → Payment operations, `bacs_credit` rail)
+ * and all four are validated by the shared `validateBacsSettings` — a
+ * malformed SUN or sort code is refused by name rather than emitted into a
+ * field the bank would misread as another account. Payroll submits direct
+ * (one SUN in VOL1 and HDR1 alike); bureau split-SUN submission is out of
+ * scope — the settings carry a single SUN, so it cannot be expressed.
+ */
+function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
+  const raw = unsealJson<Partial<BacsSettings>>(row.originator_secrets_encrypted) ?? {};
+  const checked = validateBacsSettings(raw);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: checked.missing.map(
+        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+      ),
+    };
+  }
+  return {
+    ok: true,
+    config: {
+      paymentBankProfileId: row.id,
+      profileName: row.name,
+      format: "bacs",
+      currency: row.currency ?? "GBP",
+      lineEnding: "crlf",
+      bacs: checked.settings,
+    },
+  };
+}
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
   // Branch on the profile's rail-mapped format, never on a country: packs
   // declare which rail they settle on and this resolver only reads it.
   const resolved =
-    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : resolveNacha(row);
+    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : resolveNacha(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -628,7 +696,7 @@ export async function payrollOriginatorConfig(
 export interface PayRunBankFileCredit extends PayRunBankFileEntry {
   /** employee_roles.employee_number, or a stable fallback. */
   employeeNumber: string;
-  /** CA: { institution, transit }. US: 9-digit ABA. SEPA: { iban, bic }. Cemtex: { bsb }. */
+  /** CA: { institution, transit }. US: 9-digit ABA. SEPA: { iban, bic }. Cemtex: { bsb }. Bacs: { sortCode }. */
   routing: Record<string, string>;
   accountNumber: string;
   /** SEPA only: the validated creditor IBAN this credit will be paid to. */
@@ -637,6 +705,8 @@ export interface PayRunBankFileCredit extends PayRunBankFileEntry {
   bic?: string | null;
   /** Cemtex only: the validated creditor BSB (NNN-NNN) this credit will be paid to. */
   bsb?: string;
+  /** Bacs only: the validated creditor sort code (NN-NN-NN) this credit will be paid to. */
+  sortCode?: string;
 }
 
 /**
@@ -709,6 +779,41 @@ export function resolveCemtexCreditor(
     };
   }
   return { ok: true, bsb, accountNumber: normalized };
+}
+
+/**
+ * The Bacs address of one payroll credit, resolved purely.
+ *
+ * Split out from `loadCredits` so the refusal logic is unit-testable with no
+ * database: a sort code that is not six digits or an account number that is
+ * not eight digits is a typed refusal naming the employee and the remedy,
+ * never a silent drop and never a coerced account — a coerced sort code pays
+ * a stranger. Hyphens and spaces are pure formatting and canonicalize
+ * (`204512` → `20-45-12`); the IBAN validator is never consulted, because a
+ * UK sort code plus account number is not an IBAN. Shape only: allocation
+ * validity (EISCD directory, VocaLink modulus weight tables) is the bank's,
+ * not a transcription here.
+ */
+export function resolveBacsCreditor(
+  employeeName: string,
+  routing: Record<string, string>,
+  accountNumber: string,
+): { ok: true; sortCode: string; accountNumber: string } | { ok: false; reason: string } {
+  const sortCode = normalizeSortCode(routing.sortCode ?? routing.sort_code ?? routing.sortcode ?? "");
+  if (!sortCode) {
+    return {
+      ok: false,
+      reason: `${employeeName}: Bacs needs a 6-digit sort code (NN-NN-NN) on the employee's approved bank account — add one or pay this employee by cheque`,
+    };
+  }
+  const normalized = normalizeGbAccountNumber(accountNumber);
+  if (normalized === null) {
+    return {
+      ok: false,
+      reason: `${employeeName}: "${accountNumber}" is not a valid UK account number (8 digits) — correct it on the employee's approved bank account or pay this employee by cheque`,
+    };
+  }
+  return { ok: true, sortCode, accountNumber: normalized };
 }
 
 /**
@@ -809,6 +914,25 @@ export async function loadCredits(
         bsb: resolved.bsb,
       });
       continue;
+    } else if (format === "bacs") {
+      // A Bacs credit is addressed by sort code + account number: the sort
+      // code lives on the employee's bank row (`routing.sortCode`) and the
+      // account number is the stored approved number. Either one unshaped
+      // is a named refusal — never silently dropped, never coerced into a
+      // differently-numbered account.
+      const resolved = resolveBacsCreditor(entry.employeeName, routing, accountNumber);
+      if (!resolved.ok) {
+        problems.push(resolved.reason);
+        continue;
+      }
+      credits.push({
+        ...entry,
+        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+        routing,
+        accountNumber: resolved.accountNumber,
+        sortCode: resolved.sortCode,
+      });
+      continue;
     } else {
       const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
       if (!/^\d{9}$/.test(aba)) {
@@ -865,6 +989,10 @@ export interface TrailerTotals {
  * parsed back out of the produced XML, never assumed from the inputs.
  * Cemtex file-total "7" record: positions 31–40 credit total (10, cents),
  * positions 75–80 detail-record count (6).
+ * Bacs UTL1 trailer: positions 18–30 credit monetary total (13, pence),
+ * positions 38–44 credit count (7). The debit total at 5–17 must equal the
+ * credit total on a payroll file (one contra for all credits), so the
+ * credit field alone ties to the ledger.
  */
 export function readTrailerTotals(format: PayRunBankFileFormat, content: string): TrailerTotals {
   // Split on either terminator: the terminator is per-institution and never
@@ -909,6 +1037,21 @@ export function readTrailerTotals(format: PayRunBankFileFormat, content: string)
     return {
       totalCents: BigInt(last.slice(30, 40)),
       count: Number(last.slice(74, 80)),
+    };
+  }
+  if (format === "bacs") {
+    // The UTL1 trailer is the LAST record; the credit monetary total sits at
+    // positions 18–30 (slice 17–30) and the credit count at 38–44 (slice
+    // 37–44). The debit total at 5–17 must equal it on a payroll file (one
+    // debit contra balancing all credits) — asserted by the builder, tied to
+    // the ledger here through the credit field.
+    const last = records[records.length - 1];
+    if (!last || last.slice(0, 4) !== "UTL1" || last.length !== 80) {
+      throw new PayrollError("generated Bacs file has no readable UTL1 trailer record");
+    }
+    return {
+      totalCents: BigInt(last.slice(17, 30)),
+      count: Number(last.slice(37, 44)),
     };
   }
   if (!trailer || trailer.length !== 94) {
@@ -967,6 +1110,14 @@ export interface PayRunBankFileBuildInput {
    * must be unique per file — never re-derived at download time.
    */
   messageId?: string;
+  /**
+   * Bacs VOL1 serial (6 chars), allocated by the artifact module from the
+   * same number sequence. Bacs validates serials against duplicates, so it
+   * must be unique per file — never re-derived at download time.
+   */
+  bacsVolSerial?: string;
+  /** Bacs UHL1 file number (3 digits), allocated by the artifact module. */
+  bacsFileNumber?: string;
   /** The date the money must be in employees' accounts (the run's pay date). */
   fundsDate: string;
   /** File creation instant. Explicit so a golden test is reproducible. */
@@ -1085,8 +1236,13 @@ export function renderPayRunBankFile(
         ? buildSepaPayroll(input, credits)
         : format === "cemtex"
           ? buildCemtexPayroll(input, credits)
-          : buildNachaPayroll(input, credits),
+          : format === "bacs"
+            ? buildBacsPayroll(input, credits)
+            : buildNachaPayroll(input, credits),
     input.originator.lineEnding,
+    // Mixed widths (80-char labels, 100-char data) are asserted per record
+    // by the Bacs builder itself; applyLineEnding only applies the
+    // terminator for that rail.
     format === "cpa005" ? 1464 : format === "nacha" ? 94 : format === "cemtex" ? 120 : null,
   );
 
@@ -1233,6 +1389,57 @@ function buildCemtexPayroll(
     // The release date: the day the money must be in employees' accounts —
     // the run's pay date, the same date the other rails settle on.
     processingDate: localDate(input.fundsDate),
+    payments,
+  });
+}
+
+/**
+ * Render payroll credits through the SHARED AP Bacs builder (`buildBacsFile`,
+ * engine/src/payments/rail-formatters.ts) — the same function, the same
+ * sort-code shape gate, the same 100-character credit records. Payroll only
+ * maps its own population onto the builder's generic payment rows; there is
+ * no second Standard 18 implementation here.
+ */
+function buildBacsPayroll(
+  input: PayRunBankFileBuildInput,
+  credits: PayRunBankFileCredit[],
+): string {
+  const settings = input.originator.bacs;
+  if (!settings) throw new PayrollError("Bacs originator configuration is missing");
+  if (!input.bacsVolSerial) {
+    throw new PayrollError("Bacs requires an allocated VOL1 serial number");
+  }
+  if (!input.bacsFileNumber) {
+    throw new PayrollError("Bacs requires an allocated file number");
+  }
+  const payments: BacsPayment[] = credits.map((credit) => {
+    if (!credit.sortCode) {
+      throw new PayrollError(
+        `payroll bank file refuses ${credit.employeeName}: no validated sort code was resolved for this credit`,
+      );
+    }
+    return {
+      // Pence via money.ts bigint units — never a float division.
+      amountCents: toUnits(credit.amount) / 100n,
+      sortCode: credit.sortCode,
+      accountNumber: credit.accountNumber,
+      accountName: credit.employeeName,
+      // Service user's reference (18 chars) — what the employee sees on
+      // their statement. Mirrors the CPA-005 cross-reference
+      // `PAY ${employeeNumber}`.
+      reference: `PAY ${credit.employeeNumber}`.slice(0, 18),
+    };
+  });
+  return buildBacsFile({
+    settings,
+    // The processing date: the day the money must be in employees' accounts
+    // — the run's pay date, the same date the other rails settle on. It must
+    // be a valid Bacs processing day from the bank calendar, which is not
+    // transcribed here: an invalid day is the bank's loud rejection.
+    processingDate: localDate(input.fundsDate),
+    creationDate: input.createdAt,
+    volSerial: input.bacsVolSerial,
+    fileNumber: input.bacsFileNumber,
     payments,
   });
 }
