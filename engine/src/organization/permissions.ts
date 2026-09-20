@@ -167,6 +167,13 @@ export const PERMISSION_CATALOGUE = [
   // elections and generates inputs. Admin-only like the employment keys.
   "hrm.benefits.read",
   "hrm.benefits.manage",
+  // HR-13 begin: construction compliance — read sees rate tables,
+  // classifications, comp classes, per-diem policies, certified runs and
+  // findings; manage authors them and runs generation, approval, voids
+  // and finding transitions. Admin-only like the employment keys above.
+  "hrm.construction.read",
+  "hrm.construction.manage",
+  // HR-13 end
   // HR-9 self-service — the person's own view and the manager's team.
   // self.read sees only the actor's own employment summary, requests and
   // steps (every read scopes by the party behind the login, never by a
@@ -449,6 +456,11 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
       { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
       { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
+      // HR-13 begin: appended after the team keys so the pinned group
+      // order (admin keys, self keys, team keys, construction keys) holds.
+      { key: "hrm.construction.read", labelKey: permissionLabelKey("hrm.construction.read") },
+      { key: "hrm.construction.manage", labelKey: permissionLabelKey("hrm.construction.manage") },
+      // HR-13 end
     ],
   },
   {

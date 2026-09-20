@@ -398,6 +398,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0226_hrm_automations.sql",
     "0227_hrm_action_reasons_event_verbs.sql",
     // HR-16 end
+    // HR-13 begin: construction compliance rate tables (0223) and
+    // certified payroll plus comp classes (0224).
+    "0223_hrm_construction_rates.sql",
+    "0224_hrm_construction_certified.sql",
+    // HR-13 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1872,6 +1877,14 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "automations.manage",
     "automations.run",
     // HR-16 end
+    // HR-13 begin: construction compliance (migrations 0223/0224): read
+    // sees rate tables, classifications, comp classes, per-diem policies,
+    // certified runs and findings; manage authors them and runs
+    // generation, approval, voids and finding transitions. Admin-only
+    // like the employment keys above.
+    "hrm.construction.read",
+    "hrm.construction.manage",
+    // HR-13 end
   ];
   assert.deepEqual(
     snapshot,

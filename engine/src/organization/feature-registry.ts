@@ -164,6 +164,19 @@ export const FEATURES: FeatureDef[] = [
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },
   { key: 'mcpAccess', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },
   { key: 'queryConsole', defaultEnabled: false, category: 'platform', navModules: ['sql'] },
+  // HR-13 begin: construction compliance — prevailing-wage and union rate
+  // tables, certified payroll, workers'-comp class splits, apprentice
+  // ratios, per-diem and travel pay. A general-business org never sees
+  // any of this: the parent needs payroll, projects and time tracking,
+  // and every complexity below it is a sub-feature that hides and
+  // switches off independently. Toggling never deletes data.
+  { key: 'hrmConstructionCompliance', defaultEnabled: false, category: 'operations', navModules: ['hrm-compliance'], parentKey: 'hrm', requiresAll: ['payroll', 'projects', 'timeTracking'] },
+  { key: 'hrmPrevailingWage', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  { key: 'hrmCertifiedPayroll', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
+  { key: 'hrmWorkersCompClasses', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  { key: 'hrmApprenticeRatios', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
+  { key: 'hrmPerDiem', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  // HR-13 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

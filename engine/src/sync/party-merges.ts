@@ -144,6 +144,11 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // so re-pointing cannot duplicate (the party-merges coverage test names
   // every parties(id) foreign key; this one was missing from the seam).
   ["hrm_benefit_plans", "provider_party_id"],
+  // HR-13 begin: the allowance seam keys the run's read on
+  // employee_party_id like the benefits seam above — same guarded shape,
+  // same reason (entry-keyed uniqueness, no party merge collision).
+  ["hrm_allowance_payroll_inputs", "employee_party_id"],
+  // HR-13 end
 ];
 
 /**

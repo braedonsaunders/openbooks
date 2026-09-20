@@ -84,5 +84,7 @@ export * from "./hrm-positions";
 export * from "./hrm-benefits";
 // HR-16 automations (0226) + action reasons and event verbs (0227).
 export * from "./hrm-automations";
+// HR-13: construction-compliance drizzle mirror (0223/0224).
+export * from "./hrm-construction";
 
 export * from './extension-drafts';
