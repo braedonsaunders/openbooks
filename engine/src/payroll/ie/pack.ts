@@ -565,4 +565,7 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   computeStatutory: computeIeStatutory,
   statutoryEngineLabel: "PAYE",
   factorLabels: { ...IE_FACTOR_LABELS },
+  // No `emp` facts: the engine reads credits and cut-off points off the
+  // certificate answers, never off bare profile keys.
+  employeeFacts: [],
 };

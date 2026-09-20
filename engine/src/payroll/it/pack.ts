@@ -165,6 +165,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   ],
   computeStatutory: computeItStatutory,
   factorLabels: { ...IT_FACTOR_LABELS },
+  // No `emp` facts: the engine reads detrazioni answers off the
+  // certificate rows, never off bare profile keys.
+  employeeFacts: [],
   // The withholding computation lives under the sostituto statute itself; no
   // single named table publication exists until the first edition lands.
   statutoryEngineLabel: "DPR 600/1973",

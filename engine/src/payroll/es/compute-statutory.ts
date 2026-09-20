@@ -16,6 +16,11 @@
  * pure calculators serve those cases directly.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateEsIrpf2026 } from "./irpf-2026.ts";
@@ -114,24 +119,26 @@ export async function computeEsStatutory(
     );
   }
 
-  const situacionLaboral = emp["es_situacion_laboral"];
+  // Resolved through the pack's employeeFacts declaration (see the PL
+  // adapter): raw values untouched, undeclared keys refused at authoring.
+  const situacionLaboral = empFact("ES", emp, "es_situacion_laboral");
   if (situacionLaboral !== "activo" && situacionLaboral !== "pensionista" && situacionLaboral !== "desempleado") {
     fail(
       `employee es_situacion_laboral "${situacionLaboral ?? ""}" is not activo/pensionista/desempleado: `
       + "SITUPER moves gastos and REDU, so it is never defaulted",
     );
   }
-  const grupoRaw = emp["es_grupo_cotizacion"];
+  const grupoRaw = empFact("ES", emp, "es_grupo_cotizacion");
   const grupo = grupoRaw == null || grupoRaw === "" ? NaN : Number(grupoRaw);
   if (!Number.isInteger(grupo) || grupo < 1 || grupo > 11) {
     fail(`employee es_grupo_cotizacion "${grupoRaw ?? ""}" is not an integer 1–11`);
   }
-  const anoRaw = emp["es_ano_nacimiento"];
+  const anoRaw = empFact("ES", emp, "es_ano_nacimiento");
   const ano = anoRaw == null || anoRaw === "" ? NaN : Number(anoRaw);
   if (!Number.isInteger(ano) || ano < 1906 || ano > 2026) {
     fail(`employee es_ano_nacimiento "${anoRaw ?? ""}" is out of range 1906–2026`);
   }
-  const temporal = emp["es_contrato_temporal"];
+  const temporal = empFact("ES", emp, "es_contrato_temporal");
   if (temporal !== undefined && temporal !== null && temporal !== "true" && temporal !== "false") {
     fail(`employee es_contrato_temporal "${temporal}" is not "true"/"false"`);
   }

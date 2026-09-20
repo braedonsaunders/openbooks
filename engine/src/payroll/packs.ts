@@ -34,6 +34,7 @@ import {
   type PayrollPackWithholding,
   registerPayrollWithholdingSource,
 } from "./withholding-jurisdictions.ts";
+import type { PayrollEmployeeFact } from "./employee-facts.ts";
 import type { PayrollPackRates, PayrollStatutoryRateSlot } from "./statutory-rates.ts";
 import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts";
 import { taxYearFor } from "./tax-year-math.ts";
@@ -709,6 +710,18 @@ export interface PayrollCountryPack {
    * exactly two places — never a third list in UI code.
    */
   profileExemptionFlags?: readonly PayrollProfileExemptionFlag[];
+  /**
+   * The `emp[...]` facts the pack's statutory engine reads that no other
+   * declaration carries (see `PayrollEmployeeFact`). REQUIRED: a pack whose
+   * engine reads no employee fact declares `[]`, which is a statement;
+   * silence is not. Four packs read facts no surface produces (PL birth
+   * year, ES grupo/situación/año, JP hyōjun/kaigo, BR dependentes) while
+   * `installable: true` — the declaration that gap is refused at
+   * authoring time by the employee-facts conformance test, and what
+   * `payable` derives from. A claimed producer must resolve in the typed
+   * certificate / profile-column declarations, never in prose.
+   */
+  employeeFacts: readonly PayrollEmployeeFact[];
   /**
    * Which regions levy income tax, what sits below them, and how each one
    * treats its residents' out-of-region wages

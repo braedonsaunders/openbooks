@@ -55,6 +55,11 @@
  * FR precedent). Never floating point.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers PL_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
@@ -443,7 +448,10 @@ export async function computePlStatutory(
   }
   requireMonthly(periodsPerYear);
 
-  const yobRaw = emp["pl_rok_urodzenia"];
+  // Resolved through the pack's employeeFacts declaration: the raw value is
+  // untouched (presence and refusal stay here), but a key the pack never
+  // declared refuses at authoring time instead of reading undefined forever.
+  const yobRaw = empFact("PL", emp, "pl_rok_urodzenia");
   const yob = yobRaw === null || yobRaw === undefined ? NaN : Number(yobRaw);
   if (yobRaw === null || yobRaw === undefined || yobRaw === "" || !Number.isInteger(yob)) {
     throw new PayrollPackError(

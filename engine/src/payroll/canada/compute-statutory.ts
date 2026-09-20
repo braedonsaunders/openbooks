@@ -1,5 +1,10 @@
 import { sql } from "drizzle-orm";
 import { cmp } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import { calculateT4127, type T4127Input } from "./t4127.ts";
 import { calculateTp1015 } from "./quebec/tp1015.ts";
 import type { Province } from "./rates.ts";
@@ -118,20 +123,20 @@ export async function computeCaStatutory(
     pensionDeductions: deduction("pension_f"),
     alimonyDeductions: deduction("alimony"),
     unionDues: deduction("union_dues"),
-    prescribedZoneDeduction: emp.prescribed_zone_deduction ?? undefined,
-    authorizedAnnualDeductions: emp.authorized_annual_deductions ?? undefined,
-    authorizedFederalCredits: emp.authorized_federal_credits ?? undefined,
-    authorizedProvincialCredits: emp.authorized_provincial_credits ?? undefined,
-    additionalTaxPerPeriod: emp.additional_tax_per_period ?? undefined,
-    federalClaim: emp.federal_claim_amount ?? undefined,
-    federalClaimCode: emp.federal_claim_amount == null && emp.federal_claim_code != null
-      ? Number(emp.federal_claim_code) : undefined,
-    provincialClaim: emp.provincial_claim_amount ?? undefined,
-    provincialClaimCode: emp.provincial_claim_amount == null && emp.provincial_claim_code != null
-      ? Number(emp.provincial_claim_code) : undefined,
-    taxExempt: bool(emp.tax_exempt),
-    cppExempt: bool(emp.cpp_exempt),
-    eiExempt: bool(emp.ei_exempt),
+    prescribedZoneDeduction: empFact("CA", emp, "prescribed_zone_deduction") ?? undefined,
+    authorizedAnnualDeductions: empFact("CA", emp, "authorized_annual_deductions") ?? undefined,
+    authorizedFederalCredits: empFact("CA", emp, "authorized_federal_credits") ?? undefined,
+    authorizedProvincialCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
+    additionalTaxPerPeriod: empFact("CA", emp, "additional_tax_per_period") ?? undefined,
+    federalClaim: empFact("CA", emp, "federal_claim_amount") ?? undefined,
+    federalClaimCode: empFact("CA", emp, "federal_claim_amount") == null && empFact("CA", emp, "federal_claim_code") != null
+      ? Number(empFact("CA", emp, "federal_claim_code")) : undefined,
+    provincialClaim: empFact("CA", emp, "provincial_claim_amount") ?? undefined,
+    provincialClaimCode: empFact("CA", emp, "provincial_claim_amount") == null && empFact("CA", emp, "provincial_claim_code") != null
+      ? Number(empFact("CA", emp, "provincial_claim_code")) : undefined,
+    taxExempt: bool(empFact("CA", emp, "tax_exempt")),
+    cppExempt: bool(empFact("CA", emp, "cpp_exempt")),
+    eiExempt: bool(empFact("CA", emp, "ei_exempt")),
     ytd: {
       cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip, qpipEmployer: ytd.qpip_employer,
       pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
@@ -158,9 +163,9 @@ export async function computeCaStatutory(
       pensionDeductions: deduction("pension_f"),
       qpp: statutory.cpp, qpp2: statutory.cpp2,
       pensionable,
-      personalCredits: emp.provincial_claim_amount ?? undefined,
-      authorizedAnnualCredits: emp.authorized_provincial_credits ?? undefined,
-      taxExempt: bool(emp.tax_exempt),
+      personalCredits: empFact("CA", emp, "provincial_claim_amount") ?? undefined,
+      authorizedAnnualCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
+      taxExempt: bool(empFact("CA", emp, "tax_exempt")),
       ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
     });
     pushStatutory("qc_income_tax", "deduction", "Québec income tax", qc.totalTax, 115);

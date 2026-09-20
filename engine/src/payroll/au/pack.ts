@@ -144,4 +144,7 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   computeStatutory: computeAuStatutory,
   statutoryEngineLabel: "PAYG withholding",
   factorLabels: { ...AU_FACTOR_LABELS },
+  // No `emp` facts: the engine reads TFN declarations off the certificate
+  // answers, never off bare profile keys.
+  employeeFacts: [],
 };

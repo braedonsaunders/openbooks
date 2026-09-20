@@ -26,6 +26,7 @@ import { plPackFilings } from "./filings.ts";
 import { PL_JURISDICTIONS } from "./jurisdictions.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
 import { PL_WITHHOLDING } from "./withholding.ts";
+import { PL_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 // ---------------------------------------------------------------------------
 // Regions: PIT advances and ZUS contributions are both national — no
@@ -199,4 +200,5 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   computeStatutory: computePlStatutory,
   statutoryEngineLabel: "PIT/ZUS",
   factorLabels: { ...PL_FACTOR_LABELS },
+  employeeFacts: PL_EMPLOYEE_FACTS,
 };

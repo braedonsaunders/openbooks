@@ -282,6 +282,9 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   computeStatutory: computeSgStatutory,
   statutoryEngineLabel: "CPF",
   factorLabels: { ...SG_FACTOR_LABELS },
+  // No `emp` facts: the engine reads age band and contribution answers off
+  // the certificate rows, never off bare profile keys.
+  employeeFacts: [],
 };
 
 export { SG_CERTIFICATES, SG_PACK_RATES as SG_RATES, SG_TAX_YEARS, SG_WITHHOLDING };

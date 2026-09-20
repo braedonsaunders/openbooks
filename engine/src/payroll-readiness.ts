@@ -47,6 +47,7 @@ import {
   type UnconfiguredStatutoryRate,
 } from "./payroll/statutory-rates.ts";
 import { packRates, payrollTaxYearForDate, payrollTaxYearProblem } from "./payroll/packs.ts";
+import { packPayableProblem } from "./payroll/employee-facts.ts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -580,6 +581,25 @@ export async function payRunReadiness(
         "blocker", "statutory.taxYear",
         people.filter((p) => p.country === country && (region === null || p.province === region)),
         { detail: problem.message, href: `${setupHref}?tab=packs` },
+      );
+    }
+
+    // --- Pack payable: required employee facts with no producer ------------
+    // A pack that cannot pay ANY employee says so here, before calculation,
+    // rather than refusing every employee at test-calculation time: the PL
+    // birth year, the ES grupo/situación/año trio, the JP hyōjun/kaigo pair
+    // and the BR dependent count are declared on each pack's employeeFacts
+    // with no producer yet. Countries with no registered pack are skipped —
+    // the statutory.taxYear "undeclared" blocker above already carries them.
+    for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
+      const pack = PAYROLL_COUNTRY_PACKS[country];
+      if (!pack) continue;
+      const payableProblem = packPayableProblem(pack);
+      if (!payableProblem) continue;
+      flag(
+        "blocker", "pack.notPayable",
+        people.filter((p) => p.country === country),
+        { detail: payableProblem, href: `${setupHref}?tab=packs` },
       );
     }
 
