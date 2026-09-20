@@ -71,7 +71,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.name !== undefined && typeof body.name !== "string") {
     return NextResponse.json({ error: "name must be a string" }, { status: 400 });
   }
-  if (body.name !== undefined && body.name.trim()) {
+  // A supplied name is an explicit write. Collection POST already refuses
+  // !body.name?.trim(); dropping whitespace here would report
+  // {ok:true, changed:false} (or apply sibling fields) as if the operator
+  // asked for a no-op. Refuse by name instead.
+  if (body.name !== undefined && !body.name.trim()) {
+    return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+  }
+  if (body.name !== undefined) {
     const name = body.name.trim();
     sets.push(sql`name = ${name}`);
     changes.name = name;
