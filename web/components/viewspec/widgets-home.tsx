@@ -33,7 +33,7 @@ import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(a
 import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
-import { str, num, type WidgetRenderer } from './widget-props'
+import { str, type WidgetRenderer } from './widget-props'
 
 /** Home, discovery and presentation adapters: module home, hubs, dashboards, apps and docs. Compose native components without changing their props or boundaries. */
 export const HOME_WIDGETS = {
