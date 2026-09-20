@@ -23,7 +23,7 @@ import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend
 import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
-import { countryName } from '../../../../lib/format'
+import { countryName } from '../../../../lib/countries'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
 import {

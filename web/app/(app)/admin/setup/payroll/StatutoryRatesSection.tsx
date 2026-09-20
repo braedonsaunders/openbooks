@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
-import { countryName } from '../../../../../lib/format'
+import { countryName } from '../../../../../lib/countries'
 import { formatRateFieldValue } from './statutory-rates-format'
 
 /**
@@ -467,7 +467,7 @@ function RateDrawer({
       open={draft !== null}
       onClose={onClose}
       title={slot?.label ?? label('rates.add', 'Add a rate')}
-      description={draft ? `${draft.country} · ${draft.taxYear}` : undefined}
+      description={draft ? `${countryName(draft.country, locale)} · ${draft.taxYear}` : undefined}
       footer={draft ? (
         <div className="flex items-center justify-between gap-2">
           {draft.existingId ? (
