@@ -167,19 +167,26 @@ test("markEmailUncertain refuses when the uncertainty fence writes zero rows and
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markEmailFailed does not rewrite an uncertain row when the status guard matches zero rows", async () => {
+test("markEmailFailed refuses when the failed-state update writes zero rows even if a follow-up read would see uncertain", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "uncertain" }] });
-  await markEmailFailedUnderTest("org-1", "log-uncertain", "retry also failed");
+  await assert.rejects(
+    () => markEmailFailedUnderTest("org-1", "log-uncertain", "retry also failed"),
+    /email_log log-uncertain was not marked failed[\s\S]*matched no row/u,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.match(writeEffectHarness.queries[1]!.text, /select status/u);
+  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
 });
 
-test("markEmailUncertain is idempotent when the row is already parked as uncertain", async () => {
+test("markEmailUncertain refuses when the uncertainty update writes zero rows even if a follow-up read would see uncertain", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "uncertain" }] });
-  await markEmailUncertainUnderTest("org-1", "log-uncertain", "already parked");
+  await assert.rejects(
+    () => markEmailUncertainUnderTest("org-1", "log-uncertain", "already parked"),
+    /email_log log-uncertain was not marked uncertain[\s\S]*matched no row/u,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
+  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
 });
 
 test("markEmailSent resolves when the sent-state update returns the log id", async () => {
@@ -199,11 +206,15 @@ test("markEmailSuppressed refuses when the suppression update writes zero rows a
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markEmailSuppressed is idempotent when the row is already suppressed", async () => {
+test("markEmailSuppressed refuses when the suppression update writes zero rows even if a follow-up read would see suppressed", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "suppressed" }] });
-  await markEmailSuppressedUnderTest("org-1", "log-suppressed", "sandbox environment — email egress blocked");
+  await assert.rejects(
+    () => markEmailSuppressedUnderTest("org-1", "log-suppressed", "sandbox environment — email egress blocked"),
+    /email_log log-suppressed was not marked suppressed[\s\S]*matched no row/u,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
+  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
 });
 
 test("appendEmailAttemptEvent refuses when the lineage update writes zero rows", async () => {
@@ -225,11 +236,15 @@ test("markPaymentRemittanceAttempt refuses when the pending stamp writes zero ro
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markPaymentRemittanceAttempt does not throw when the remittance is already sent", async () => {
+test("markPaymentRemittanceAttempt refuses when the pending stamp writes zero rows even if a follow-up read would see sent", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "sent" }] });
-  await markPaymentRemittanceAttemptUnderTest("org-1", "remit-sent", 2);
+  await assert.rejects(
+    () => markPaymentRemittanceAttemptUnderTest("org-1", "remit-sent", 2),
+    /payment remittance remit-sent was not marked attempted[\s\S]*matched no row/u,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
+  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
 });
 
 test("markPaymentRemittanceFailed refuses when the pending update writes zero rows and the remittance is still pending", async () => {
@@ -242,9 +257,13 @@ test("markPaymentRemittanceFailed refuses when the pending update writes zero ro
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markPaymentRemittanceFailed does not overwrite a sent remittance", async () => {
+test("markPaymentRemittanceFailed refuses when the pending update writes zero rows even if a follow-up read would see sent", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "sent" }] });
-  await markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "smtp down", 1, true);
+  await assert.rejects(
+    () => markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "smtp down", 1, true),
+    /payment remittance remit-sent was not marked failed[\s\S]*matched no row/u,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
+  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
 });

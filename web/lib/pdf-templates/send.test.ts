@@ -537,10 +537,13 @@ test('markEmailUncertain refuses when the uncertainty fence writes zero rows and
   assert.match(state.updates.at(-1)!.text, /returning/u)
 })
 
-test('markEmailFailed does not throw when the status guard refuses to overwrite an uncertain row', async () => {
+test('markEmailFailed refuses when the failed-state update writes zero rows even if a follow-up read would see uncertain', async () => {
   reset()
   state.auditUpdateMatches = false
   state.existingEmailLogStatus = 'uncertain'
-  await markEmailFailed('org-1', 'log-uncertain', 'retry also failed')
+  await assert.rejects(
+    () => markEmailFailed('org-1', 'log-uncertain', 'retry also failed'),
+    /email_log log-uncertain was not marked failed[\s\S]*matched no row/u,
+  )
   assert.match(state.updates.at(-1)!.text, /returning/u)
 })

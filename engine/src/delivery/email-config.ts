@@ -278,29 +278,9 @@ function refuseUnwrittenEmailLog(updatedRows: number, id: string, intended: stri
   refuseZeroRowWrite(`email_log ${id} was not marked ${intended}`);
 }
 
-/**
- * Guarded transitions may legally match zero rows when the durable row is
- * already outside `writableStatuses`. A missing row, or a still-writable row
- * whose UPDATE wrote nothing, is a lost write and must refuse.
- */
-async function requireGuardedStatusTransition(
-  table: "email_log" | "payment_remittances",
-  updated: { rows: unknown[] },
-  orgId: string,
-  id: string,
-  intended: string,
-  writableStatuses: readonly string[],
-): Promise<void> {
-  if ((updated.rows?.length ?? 0) > 0) return;
-  const existing = await db.execute<{ status: string }>(
-    table === "email_log"
-      ? sql`select status from email_log where id = ${id} and org_id = ${orgId}`
-      : sql`select status from payment_remittances where id = ${id} and org_id = ${orgId}`,
-  );
-  const status = existing.rows[0]?.status;
-  if (status && !writableStatuses.includes(status)) return;
-  const subject = table === "email_log" ? "email_log" : "payment remittance";
-  refuseZeroRowWrite(`${subject} ${id} was not marked ${intended}`);
+function refuseUnwrittenRemittance(updatedRows: number, id: string, intended: string): void {
+  if (updatedRows > 0) return;
+  refuseZeroRowWrite(`payment remittance ${id} was not marked ${intended}`);
 }
 
 export async function markEmailSent(orgId: string, id: string, providerMessageId: string): Promise<void> {
@@ -316,14 +296,14 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
   // Guarded transition: confirmed acceptance (`sent`) and unresolved
   // uncertainty must never be overwritten by a later failure mark — a retried
   // attempt that fails after its predecessor was accepted has no authority to
-  // rewrite the outcome (audit finding #52). A zero-row match is success only
-  // when that guard held; a missing or still-open row is a lost write.
+  // rewrite the outcome (audit finding #52). Empty RETURNING is still a
+  // failed write, including when the row is already terminal.
   const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
     returning id
   `);
-  await requireGuardedStatusTransition("email_log", updated, orgId, id, "failed", ["queued", "failed"]);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "failed");
 }
 
 /**
@@ -336,7 +316,7 @@ export async function markEmailUncertain(orgId: string, id: string, reason: stri
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
     returning id
   `);
-  await requireGuardedStatusTransition("email_log", updated, orgId, id, "uncertain", ["queued", "failed"]);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "uncertain");
 }
 
 /** Acknowledge provider acceptance; legal from any non-suppressed state, so a late reconciliation can still complete a delivery idempotently. */
@@ -363,14 +343,7 @@ export async function markEmailSuppressed(orgId: string, id: string, reason: str
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
     returning id
   `);
-  await requireGuardedStatusTransition(
-    "email_log",
-    updated,
-    orgId,
-    id,
-    "suppressed",
-    ["queued", "failed", "uncertain"],
-  );
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "suppressed");
 }
 
 /** Record one queued payment-remittance attempt without claiming delivery. */
@@ -386,14 +359,7 @@ export async function markPaymentRemittanceAttempt(
      where id = ${id} and org_id = ${orgId} and status = 'pending'
     returning id
   `);
-  await requireGuardedStatusTransition(
-    "payment_remittances",
-    updated,
-    orgId,
-    id,
-    "attempted",
-    ["pending"],
-  );
+  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "attempted");
 }
 
 /**
@@ -416,14 +382,7 @@ export async function markPaymentRemittanceFailed(
      where id = ${id} and org_id = ${orgId} and status = 'pending'
     returning id
   `);
-  await requireGuardedStatusTransition(
-    "payment_remittances",
-    updated,
-    orgId,
-    id,
-    "failed",
-    ["pending"],
-  );
+  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "failed");
 }
 
 /**
