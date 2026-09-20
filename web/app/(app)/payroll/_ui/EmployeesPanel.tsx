@@ -220,8 +220,23 @@ export function ProfileEditor(props: {
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
   inline?: boolean
+  /**
+   * Values only: no inputs, no Save. The employee drawer honours its edit
+   * mode exactly like its Overview tab — read mode renders values.
+   */
+  readOnly?: boolean
+  /**
+   * Which half renders: the generic employment facts (schedule, basis,
+   * country, region, labour jurisdiction, stub delivery, payment method,
+   * vacation, active flag) or the pack-declared tax half (identifier,
+   * withholding fields, exemption flags). Defaults to both, preserving the
+   * standalone editor; the employee drawer mounts ONE editor and switches
+   * this prop so unsaved edits survive sub-tab switches.
+   */
+  section?: 'general' | 'tax'
 }) {
   const t = useTranslations('payroll.profiles')
+  const tc = useTranslations('common')
   const p = props.profile
   const [busy, setBusy] = useState(false)
   const [payScheduleId, setPayScheduleId] = useState(p.pay_schedule_id)
@@ -628,8 +643,10 @@ export function ProfileEditor(props: {
   // Every checkbox in declaration order: the applicable certificates' flag
   // fields, then the pack's exemption flags, then the generic active toggle.
   // Column-backed flags bind the profile columns; row-backed flags bind the
-  // row answers filed through the certificates API.
-  const flagEntries: { id: string; label: string; help: string; checked: boolean; set: (value: boolean) => void }[] = []
+  // row answers filed through the certificates API. Withholding flags stay
+  // separate from the active toggle so the tax half renders without it.
+  type FlagEntry = { id: string; label: string; help: string; checked: boolean; set: (value: boolean) => void }
+  const withholdingFlags: FlagEntry[] = []
   for (const certificate of applicableCertificates) {
     for (const field of certificate.fields) {
       if (field.kind !== 'flag') continue
@@ -637,7 +654,7 @@ export function ProfileEditor(props: {
       if (column) {
         const binding = columnFlag[column]
         if (binding) {
-          flagEntries.push({
+          withholdingFlags.push({
             id: `pp-${certificate.key}-${field.key}`,
             label: fieldLabel(column, field.label),
             help: field.help,
@@ -649,7 +666,7 @@ export function ProfileEditor(props: {
         // Generic text-backed flag (the JP kaigo status and any future
         // pack's): answers are "true"/"false" strings, and untouched is
         // unanswered — never defaulted into either position.
-        flagEntries.push({
+        withholdingFlags.push({
           id: `pp-${certificate.key}-${field.key}`,
           label: fieldLabel(column, field.label),
           help: field.help,
@@ -658,7 +675,7 @@ export function ProfileEditor(props: {
         })
         continue
       }
-      flagEntries.push({
+      withholdingFlags.push({
         id: `pp-${certificate.key}-${field.key}`,
         label: field.label,
         help: field.help,
@@ -670,7 +687,7 @@ export function ProfileEditor(props: {
   for (const flag of pack?.exemptionFlags ?? []) {
     const binding = columnFlag[flag.column]
     if (!binding) continue
-    flagEntries.push({
+    withholdingFlags.push({
       id: `pp-exempt-${flag.column}`,
       label: fieldLabel(flag.column, flag.label),
       help: flag.help,
@@ -678,24 +695,36 @@ export function ProfileEditor(props: {
       set: binding[1],
     })
   }
-  flagEntries.push({ id: 'pp-active', label: t('fields.isActive'), help: '', checked: isActive, set: setIsActive })
+  const activeEntry: FlagEntry = { id: 'pp-active', label: t('fields.isActive'), help: '', checked: isActive, set: setIsActive }
+  const flagEntries: FlagEntry[] = [...withholdingFlags, activeEntry]
+
+  const showGeneral = props.section !== 'tax'
+  const showTax = props.section !== 'general'
+  // The pack-declared employee identifier (SIN/SSN/...) files with
+  // withholding, so it renders on the tax half, not with the generic facts.
+  const identifierField = (
+    <div>
+      <Label htmlFor="pp-sin">{pack?.identifier.label ?? t('fields.sin')}</Label>
+      <Input
+        id="pp-sin"
+        value={sin}
+        onChange={(e) => setSin(e.target.value)}
+        placeholder={(p as { sin_last3?: string | null }).sin_last3
+          ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
+          : (pack?.identifier.example ?? t('fields.sinPlaceholder'))}
+        inputMode={pack?.identifier.numericEntry === false ? 'text' : 'numeric'}
+        autoComplete="off"
+      />
+    </div>
+  )
+  // Flags for the rendered half; the full view keeps today's single group so
+  // its order never changes.
+  const sectionFlags = showGeneral && showTax ? flagEntries : showGeneral ? [activeEntry] : withholdingFlags
 
   const body = (
       <div className="space-y-4">
+        {showGeneral && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="pp-sin">{pack?.identifier.label ?? t('fields.sin')}</Label>
-            <Input
-              id="pp-sin"
-              value={sin}
-              onChange={(e) => setSin(e.target.value)}
-              placeholder={(p as { sin_last3?: string | null }).sin_last3
-                ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
-                : (pack?.identifier.example ?? t('fields.sinPlaceholder'))}
-              inputMode={pack?.identifier.numericEntry === false ? 'text' : 'numeric'}
-              autoComplete="off"
-            />
-          </div>
           <div>
             <Label htmlFor="pp-schedule">{t('fields.schedule')}</Label>
             <Select id="pp-schedule" value={payScheduleId} onChange={(e) => setPayScheduleId(e.target.value)}>
@@ -859,6 +888,13 @@ export function ProfileEditor(props: {
             </Select>
           </div>
         </div>
+        )}
+        {showTax && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {identifierField}
+        </div>
+        )}
+        {showTax && (<>
 
         {/* Withholding, from the selected pack's declared certificates: the
             country-level form, plus the subdivision's own form when one is
@@ -881,7 +917,9 @@ export function ProfileEditor(props: {
             </div>
           </div>
         ))}
+        </>)}
 
+        {showGeneral && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="pp-vac-pct">{t('fields.vacationPercent')}</Label>
@@ -905,9 +943,10 @@ export function ProfileEditor(props: {
             </Select>
           </div>
         </div>
+        )}
 
         <div className="space-y-2">
-          {flagEntries.map((entry) => (
+          {sectionFlags.map((entry) => (
             <label
               key={entry.id}
               htmlFor={entry.id}
@@ -927,6 +966,118 @@ export function ProfileEditor(props: {
         </div>
       </div>
   )
+  // Read-only values for the drawer read mode: the same derived data the
+  // editor binds (pack declarations, lookups, stored answers), rendered as
+  // values with no inputs and no Save. Respects the section prop like the
+  // editor, so each sub-tab reads exactly what it would edit.
+  if (props.readOnly) {
+    const roRow = (key: string, label: string, value: string) => (
+      <div key={key}>
+        <Label>{label}</Label>
+        <p className="text-sm text-slate-800 dark:text-slate-200">{value}</p>
+      </div>
+    )
+    const roFieldValue = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField): string => {
+      const column = columnOf(field)
+      if (field.kind === 'flag') {
+        const checked = column
+          ? (columnFlag[column]?.[0] ?? false)
+          : rowAnswers[certificate.key]?.[field.key] === 'true'
+        return checked ? tc('labels.yes') : tc('labels.no')
+      }
+      const raw = column
+        ? (columnText[column]?.[0] ?? '')
+        : (rowAnswers[certificate.key]?.[field.key] ?? '')
+      if (field.kind === 'choice') {
+        const current = raw || field.default || ''
+        if (!current) return '—'
+        const choice = (field.choices ?? []).find((candidate) => candidate.value === current)
+        if (!choice) return current
+        return column ? choiceLabel(column, choice.value, choice.label) : choice.label
+      }
+      return raw === '' ? '—' : raw
+    }
+    const roFieldLabel = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField): string => {
+      const column = columnOf(field)
+      if (field.kind === 'flag' && !column) return field.label
+      return fieldLabel(column, field.label)
+    }
+    const scheduleName = props.schedules.find((schedule) => schedule.id === payScheduleId)?.name ?? '—'
+    const filingAccount = filingAccounts.find((account) => account.id === filingAccountId)
+    const sinLast3 = (p as { sin_last3?: string | null }).sin_last3
+    return (
+      <div className="space-y-4">
+        {showGeneral && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {roRow('schedule', t('fields.schedule'), scheduleName)}
+            {roRow('country', t('fields.country'), country ? countryLabel(country) : '—')}
+            {pack ? roRow('province', textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel), province ? (pack.subdivisionNames[province] ?? province) : '—') : null}
+            {labourOptions.length > 0
+              ? roRow(
+                  'labour',
+                  t('fields.labourJurisdiction'),
+                  labourJurisdiction
+                    ? (labourOptions.find((option) => option.key === labourJurisdiction)?.name ?? labourJurisdiction)
+                    : t('labourJurisdiction.fromRegion'),
+                )
+              : null}
+            {roRow('basis', t('fields.payBasis'), t(`basis.${payBasis}`))}
+            {filingAccounts.length > 0
+              ? roRow(
+                  'filing',
+                  t('fields.filingAccount'),
+                  filingAccount ? `${filingAccount.accountNumber} · ${filingAccount.name}` : t('filingAccountDefault'),
+                )
+              : null}
+            {roRow('stub', t('fields.stubDelivery'), t(`stubDelivery.${stubDelivery}`))}
+            {roRow('payment', t('fields.paymentMethod'), paymentMethod ? t(`paymentMethod.${paymentMethod as 'eft' | 'cheque'}`) : t('paymentMethod.inherit'))}
+            {roRow(
+              'commission',
+              textOf('fields.paidOnCommission', 'Paid on commission'),
+              paidOnCommission === ''
+                ? textOf('paidOnCommission.unanswered', 'Not answered')
+                : paidOnCommission === 'true'
+                  ? textOf('paidOnCommission.yes', 'Yes, in whole or in part')
+                  : textOf('paidOnCommission.no', 'No'),
+            )}
+            {roRow('vacation', t('fields.vacationPercent'), `${vacationPercent || '—'} · ${t(`vacation.${vacationMethod}`)}`)}
+            {roRow('active', t('fields.isActive'), isActive ? t('active') : t('inactive'))}
+          </div>
+        )}
+        {showTax && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {roRow('identifier', pack?.identifier.label ?? t('fields.sin'), sinLast3 ? `••• ••• ${sinLast3}` : '—')}
+            </div>
+            {applicableCertificates.map((certificate) => {
+              const rows = certificate.fields
+                .filter((field) => field.kind !== 'flag')
+                .map((field) => roRow(`${certificate.key}.${field.key}`, roFieldLabel(certificate, field), roFieldValue(certificate, field)))
+              if (rows.length === 0) return null
+              return (
+                <div key={certificate.key} className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {certificate.form} · {certificate.label}
+                  </p>
+                  {certificate.citation && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {certificate.citation}
+                    </p>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">{rows}</div>
+                </div>
+              )
+            })}
+            {withholdingFlags.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {withholdingFlags.map((entry) => roRow(entry.id, entry.label, entry.checked ? tc('labels.yes') : tc('labels.no')))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
   if (props.inline) {
     return (
       <div className="space-y-4">

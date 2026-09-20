@@ -18,7 +18,17 @@ const { renderToStaticMarkup } = await import('react-dom/server')
 // tsx compiles JSX classic: the component under test never imports React
 // (Next provides the automatic runtime in production), so the test bridges it.
 Object.assign(globalThis, { React })
+const { NextIntlClientProvider } = await import('next-intl')
 const { CertificateForm } = await import('./PackCertificateForms')
+const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
+
+// The read-only form renders values through the shared catalog, so it needs
+// the same provider the drawer gives it in production.
+function renderReadOnly(element: React.ReactElement): string {
+  return renderToStaticMarkup(
+    React.createElement(NextIntlClientProvider, { locale: 'en', messages: { common: commonMessages } }, element),
+  )
+}
 // Side effect: publishes the built-in packs' certificate sources, the same
 // way any production importer of the pack registry does.
 await import('@openbooks/engine/src/payroll/packs.ts')
@@ -49,7 +59,7 @@ test('declared NL certificates render their fields with stored answers', () => {
   const declared = packCertificates('NL').certificates
   assert.equal(declared.length, 2)
   for (const certificate of declared) {
-    const html = renderToStaticMarkup(
+    const html = renderReadOnly(
       React.createElement(CertificateForm, {
         partyId: 'employee',
         country: 'NL',
@@ -81,4 +91,81 @@ test('declared NL certificates render their fields with stored answers', () => {
       assert.ok(html.includes(field.label), field.key)
     }
   }
+})
+
+// The drawer read mode serves the latest filing as values: pack labels with
+// stored answers, no inputs, and no save button.
+test('read mode renders the latest filing with no form controls', () => {
+  const declared = packCertificates('NL').certificates
+  assert.ok(declared.length > 0)
+  for (const certificate of declared) {
+    const field = certificate.fields[0]!
+    const storedAnswer = field.kind === 'flag' ? 'true' : field.kind === 'choice'
+      ? (field.choices?.[0]?.value ?? 'x')
+      : 'filed-value'
+    const html = renderReadOnly(
+      React.createElement(CertificateForm, {
+        partyId: 'employee',
+        country: 'NL',
+        certificate: {
+          key: certificate.key,
+          form: certificate.form,
+          label: certificate.label,
+          scope: certificate.scope,
+          citation: certificate.citation,
+          summary: certificate.summary,
+          fields: certificate.fields,
+        },
+        stored: [
+          {
+            certificate_key: certificate.key,
+            country: 'NL',
+            region: null,
+            sub_region: null,
+            answers: { [field.key]: storedAnswer },
+            effective_from: '2026-01-01',
+            superseded_on: null,
+          },
+        ],
+        readOnly: true,
+      }),
+    )
+    assert.ok(html.includes(certificate.label), certificate.key)
+    assert.ok(html.includes(field.label), field.key)
+    assert.doesNotMatch(html, /<input/)
+    assert.doesNotMatch(html, /<select/)
+    assert.doesNotMatch(html, /<textarea/)
+    assert.doesNotMatch(html, /<button/)
+    assert.doesNotMatch(html, /Save certificate/)
+    if (field.kind === 'flag') assert.ok(html.includes('Yes'), field.key)
+    else if (field.kind === 'choice') {
+      const expected = field.choices?.[0]?.label ?? storedAnswer
+      assert.ok(html.includes(expected), field.key)
+    } else assert.ok(html.includes('filed-value'), field.key)
+    assert.ok(html.includes('2026-01-01'), certificate.key)
+  }
+})
+
+test('edit mode keeps the inputs and the save button', () => {
+  const declared = packCertificates('NL').certificates
+  const certificate = declared[0]!
+  const html = renderReadOnly(
+    React.createElement(CertificateForm, {
+      partyId: 'employee',
+      country: 'NL',
+      certificate: {
+        key: certificate.key,
+        form: certificate.form,
+        label: certificate.label,
+        scope: certificate.scope,
+        citation: certificate.citation,
+        summary: certificate.summary,
+        fields: certificate.fields,
+      },
+      stored: [],
+      onSaved: () => {},
+    }),
+  )
+  assert.match(html, /<input|<select/)
+  assert.match(html, /Save certificate/)
 })

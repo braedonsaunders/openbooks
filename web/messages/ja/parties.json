@@ -31,6 +31,13 @@
     "holdReason": "保留理由",
     "activated": "取引先を有効化しました",
     "deactivated": "取引先を無効化しました",
+    "payrollTabs": {
+      "ariaLabel": "給与セクション",
+      "general": "一般",
+      "tax": "税金と源泉徴収",
+      "banks": "バンク",
+      "accounts": "銀行口座"
+    },
     "tabs": {
       "employment": "雇用",
       "ariaLabel": "取引先レコードのセクション",

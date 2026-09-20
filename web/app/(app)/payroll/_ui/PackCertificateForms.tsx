@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
@@ -134,9 +135,12 @@ export function CertificateForm(props: {
   country: string
   certificate: DeclaredRowCertificate
   stored: readonly StoredCertificateRow[]
-  onSaved: () => void
+  onSaved?: () => void
+  /** Values only: no inputs, no save. The employee drawer read mode. */
+  readOnly?: boolean
 }) {
-  const { partyId, country, certificate, stored, onSaved } = props
+  const { partyId, country, certificate, stored, onSaved, readOnly } = props
+  const tc = useTranslations('common')
   // The parent remounts this form (via `key`) whenever the underlying row
   // changes, so the draft below is always seeded from the latest answers and
   // no effect has to sync props into state.
@@ -165,12 +169,47 @@ export function CertificateForm(props: {
       // must surface the failure, never a SyntaxError from res.json().
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the certificate'))
       toast.success('Certificate saved')
-      onSaved()
+      onSaved?.()
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
       setBusy(false)
     }
+  }
+
+  // Read mode serves the latest filing as values: the pack's own labels with
+  // the stored answers, the yes/no words from the shared catalog (this file
+  // otherwise carries no translations), and no inputs or save button.
+  if (readOnly) {
+    const latest = latestCertificateRow(stored, certificate.key)
+    const display = (field: DeclaredCertificateField): string => {
+      const raw = latest?.answers[field.key] ?? ''
+      if (field.kind === 'flag') return raw === 'true' ? tc('labels.yes') : tc('labels.no')
+      if (field.kind === 'choice') {
+        if (!raw) return '—'
+        return field.choices?.find((choice) => choice.value === raw)?.label ?? raw
+      }
+      return raw === '' ? '—' : raw
+    }
+    return (
+      <section className="rounded border border-slate-200 p-4 dark:border-slate-700">
+        <h4 className="text-sm font-semibold">{certificate.label}</h4>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{certificate.form}</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{certificate.summary}</p>
+        <div className="mt-3 grid gap-3">
+          {certificate.fields.map((field) => (
+            <div key={field.key}>
+              <p className="block text-sm font-medium">{field.label}{field.required ? ' *' : ''}</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{display(field)}</p>
+            </div>
+          ))}
+          <div>
+            <p className="block text-sm font-medium">Effective from</p>
+            <p className="text-sm text-slate-800 dark:text-slate-200">{latest?.effective_from ?? '—'}</p>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -212,8 +251,8 @@ export function CertificateForm(props: {
   )
 }
 
-export function PackCertificateForms(props: { partyId: string; country: string }) {
-  const { partyId, country } = props
+export function PackCertificateForms(props: { partyId: string; country: string; readOnly?: boolean }) {
+  const { partyId, country, readOnly } = props
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
     certificates: DeclaredRowCertificate[]
@@ -274,6 +313,7 @@ export function PackCertificateForms(props: { partyId: string; country: string }
             country={country}
             certificate={certificate}
             stored={rows}
+            readOnly={readOnly}
             onSaved={() => setVersion((v) => v + 1)}
           />
         )

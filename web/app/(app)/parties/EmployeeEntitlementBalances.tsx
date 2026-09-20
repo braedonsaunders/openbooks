@@ -49,7 +49,7 @@ interface MovementRow {
  * which is the honest way round: the dollars are what the employer owes, the
  * hours are what they currently buy.
  */
-export function EmployeeEntitlementBalances({ partyId }: { partyId: string }) {
+export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: string; readOnly?: boolean }) {
   const t = useTranslations('payroll.entitlements')
   const tc = useTranslations('common')
   const format = useFormatter()
@@ -194,7 +194,9 @@ export function EmployeeEntitlementBalances({ partyId }: { partyId: string }) {
         <PagedTable
           rows={data.movements}
           rowKey={(row) => row.id}
-          searchable
+          // Read mode renders values, not inputs: the movement search box
+          // stays an edit-mode affordance.
+          searchable={!readOnly}
           pageSize={10}
           empty={<p className="py-6 text-center text-sm text-slate-400">{t('noMovements')}</p>}
           columns={[

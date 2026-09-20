@@ -28,6 +28,13 @@
     "viewStatement": "Ver extracto",
     "activated": "Tercero activado",
     "deactivated": "Tercero desactivado",
+    "payrollTabs": {
+      "ariaLabel": "Secciones de nómina",
+      "general": "General",
+      "tax": "Impuestos y retenciones",
+      "banks": "Bancos de pago",
+      "accounts": "Cuentas bancarias"
+    },
     "tabs": {
       "employment": "Empleo",
       "ariaLabel": "Secciones del registro del tercero",

@@ -45,7 +45,8 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { SendButton } from '../../../components/send-button'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
-import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
+import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
@@ -407,6 +408,11 @@ export function PartyDrawer({
       ? 'overview'
       : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
+  // The Payroll tab's own sub-tab. Client-local like the rail: switching
+  // never navigates, and every section below stays mounted (hidden) so
+  // unsaved edits survive sub-tab switches. A ?partyTab=payroll deep link
+  // lands on the tab with the General half showing.
+  const [payrollSubTab, setPayrollSubTab] = useState<PayrollSubTab>('general')
   // Tabs visited this drawer session. The employee compensation panels stay
   // mounted once visited (see the keep-alive blocks below) so tab switches
   // never discard their local edits. The drawer remounts per party
@@ -1729,13 +1735,43 @@ export function PartyDrawer({
       ) : null}
       {role === 'employee' && canManagePayroll && keptTabs.has('payroll') ? (
         <div hidden={tab !== 'payroll'} className="space-y-6 p-1">
-          <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+          {/* The Payroll tab splits into sub-tabs on the shared drawer strip
+              (the same primitive as the rail, not a second tab style). The
+              profile editor mounts once inside PayrollProfileTab and switches
+              halves by prop; every section stays mounted (hidden). */}
+          <DrawerTabStrip
+            tabs={[
+              { key: 'general', label: t('payrollTabs.general') },
+              { key: 'tax', label: t('payrollTabs.tax') },
+              { key: 'banks', label: t('payrollTabs.banks') },
+              { key: 'accounts', label: t('payrollTabs.accounts') },
+            ]}
+            activeKey={payrollSubTab}
+            onSelect={(key) => setPayrollSubTab(key as PayrollSubTab)}
+            ariaLabel={t('payrollTabs.ariaLabel')}
+          />
+          <PayrollProfileTab
+            partyId={String(p.id)}
+            partyName={String(p.display_name ?? '')}
+            readOnly={!editable}
+            section={payrollSubTab}
+          />
           {/* Pay banks (banked time, vacation, benefit recoup) belong beside
               the payroll profile — one home for this person's compensation. */}
-          <EmployeeEntitlementBalances partyId={String(p.id)} />
+          <div hidden={payrollSubTab !== 'banks'}>
+            <EmployeeEntitlementBalances partyId={String(p.id)} readOnly={!editable} />
+          </div>
           {/* Direct deposit: the same approval-gated bank accounts the AP
               side uses — the pay-run bank file only pays approved accounts. */}
-          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
+          <div hidden={payrollSubTab !== 'accounts'}>
+            <BankAccountsPanel
+              partyId={String(p.id)}
+              initialAccounts={payload.bankAccounts}
+              canManage={canManage}
+              multiCurrency={multiCurrency}
+              readOnly={!editable}
+            />
+          </div>
         </div>
       ) : null}
     </TransactionDrawer>
@@ -1954,12 +1990,21 @@ function BankAccountsPanel({
   initialAccounts,
   canManage,
   multiCurrency = false,
+  readOnly = false,
 }: {
   partyId: string
   initialAccounts: BankAccountClient[]
   canManage: boolean
   multiCurrency?: boolean
+  /**
+   * The employee drawer read mode: values only — no add/edit/retire, no
+   * search input, no approval or flow actions. History stays: it reads.
+   */
+  readOnly?: boolean
 }) {
+  // Mutating controls need both the permission and the drawer edit mode,
+  // exactly like the Overview tab's editable gate.
+  const canEditAccounts = canManage && !readOnly
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const locale = useLocale()
@@ -2120,7 +2165,7 @@ function BankAccountsPanel({
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SublistHeading title={t('bankAccountsHeading')} description={t('bankAccountsDescription')} icon={<Landmark size={16} />} />
-        {canManage ? <Button variant="outline" size="sm" onClick={() => setDraft(emptyBankDraft())}><Plus size={14} />{t('addBankAccount')}</Button> : null}
+        {canEditAccounts ? <Button variant="outline" size="sm" onClick={() => setDraft(emptyBankDraft())}><Plus size={14} />{t('addBankAccount')}</Button> : null}
       </div>
 
       <Drawer
@@ -2179,10 +2224,12 @@ function BankAccountsPanel({
         <SublistEmpty icon={<Landmark size={22} />} text={t('noBankAccounts')} />
       ) : (
         <>
+          {!readOnly ? (
           <div className="relative max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
             <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={t('bankAccountSearch')} className="pl-8" />
           </div>
+          ) : null}
           <Table>
             <TableHeader><TableRow>
               <TableHead>{t('bankName')}</TableHead><TableHead>{t('routing')}</TableHead>
@@ -2199,7 +2246,8 @@ function BankAccountsPanel({
                   <TableCell><Badge variant={account.retired_at ? 'outline' : account.approval_status === 'approved' || account.approved_at ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} />
+                      {canEditAccounts ? <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} /> : null}
+                      {canEditAccounts ? (
                       <ApprovalActions
                         subjectKind="party_bank_account"
                         subjectId={String(account.id)}
@@ -2209,11 +2257,12 @@ function BankAccountsPanel({
                             : undefined
                         }
                       />
+                      ) : null}
                       <Button variant="ghost" size="sm" onClick={() => setHistoryAccount(account)}>
                         {tc('approvalFlow.historyTitle')}
                       </Button>
-                      {canManage && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button> : null}
-                      {canManage && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => retire(account)}>{tc('actions.retire')}</Button> : null}
+                      {canEditAccounts && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button> : null}
+                      {canEditAccounts && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => retire(account)}>{tc('actions.retire')}</Button> : null}
                     </div>
                   </TableCell>
                 </TableRow>

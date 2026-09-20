@@ -31,6 +31,13 @@
     "holdReason": "冻结原因",
     "activated": "往来单位已启用",
     "deactivated": "往来单位已停用",
+    "payrollTabs": {
+      "ariaLabel": "工资部分",
+      "general": "常规",
+      "tax": "税务与预扣",
+      "banks": "工资银行",
+      "accounts": "银行账户"
+    },
     "tabs": {
       "employment": "雇用",
       "ariaLabel": "往来单位记录分区",

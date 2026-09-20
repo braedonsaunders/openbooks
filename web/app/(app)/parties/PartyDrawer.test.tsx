@@ -129,3 +129,63 @@ test('every static drawer key resolves in all locales (no doubled namespace)', a
     }
   }
 })
+
+// HR-1 defect 2: the Payroll tab honours the drawer edit mode exactly like
+// Overview (editable = mode === 'edit' && canManage). Read mode renders
+// values; only edit mode renders the editors.
+test('the payroll tab passes the overview edit gate to every section', () => {
+  assert.match(drawerSource, /const editable = mode === 'edit' && canManage/)
+  assert.match(drawerSource, /<PayrollProfileTab[\s\S]*?readOnly=\{!editable\}/)
+  assert.match(drawerSource, /<EmployeeEntitlementBalances partyId=\{String\(p\.id\)\} readOnly=\{!editable\} \/>/)
+  assert.match(drawerSource, /<BankAccountsPanel[\s\S]*?readOnly=\{!editable\}/)
+})
+
+// The Payroll tab splits into sub-tabs on the shared drawer strip — the same
+// primitive as the rail, not a second tab style — with every section staying
+// mounted (hidden) so unsaved edits survive sub-tab switches.
+test('the payroll tab splits into four sub-tabs on the shared strip', () => {
+  assert.match(drawerSource, /import \{ DrawerTabStrip \} from '\.\.\/\.\.\/\.\.\/components\/drawer-tab-strip'/)
+  for (const key of ['general', 'tax', 'banks', 'accounts']) {
+    assert.match(drawerSource, new RegExp(`\\{ key: '${key}', label: t\\('payrollTabs\\.${key}'\\) \\}`))
+  }
+  assert.match(drawerSource, /ariaLabel=\{t\('payrollTabs\.ariaLabel'\)\}/)
+  assert.match(drawerSource, /const \[payrollSubTab, setPayrollSubTab\] = useState<PayrollSubTab>\('general'\)/)
+  assert.match(drawerSource, /<div hidden=\{payrollSubTab !== 'banks'\}>/)
+  assert.match(drawerSource, /<div hidden=\{payrollSubTab !== 'accounts'\}>/)
+})
+
+// Pay banks are values on a ledger: the movement search box is an edit-mode
+// affordance, so read mode renders the table without it.
+test('the entitlement balances hide their search input in read mode', () => {
+  const balancesSource = readFileSync(new URL('./EmployeeEntitlementBalances.tsx', import.meta.url), 'utf8')
+  assert.match(balancesSource, /searchable=\{!readOnly\}/)
+})
+
+// One editor instance serves General and Tax: PayrollProfileTab keeps the
+// single ProfileEditor mounted and switches its half by prop, so typed values
+// survive the switch; the certificate drafts stay mounted the same way.
+test('one profile editor serves both halves without unmounting', () => {
+  const payrollSource = readFileSync(new URL('../payroll/_ui/PayrollProfileTab.tsx', import.meta.url), 'utf8')
+  assert.equal(payrollSource.match(/<ProfileEditor/g)?.length, 1)
+  assert.match(payrollSource, /const editorSection = section === 'tax' \? 'tax' : 'general'/)
+  assert.match(payrollSource, /section=\{editorSection\}/)
+  assert.match(payrollSource, /<div hidden=\{section === 'banks' \|\| section === 'accounts'\}>/)
+  assert.match(payrollSource, /<div hidden=\{section !== 'tax'\}>/)
+  assert.match(payrollSource, /<PackCertificateForms partyId=\{partyId\} country=\{profile\.country\} readOnly=\{readOnly\} \/>/)
+})
+
+// Read mode is values only: the bank panel hides its add/search/edit/retire
+// and approval/flow actions behind the edit gate, while history (which reads)
+// stays. The accounting-tab usage is untouched: readOnly defaults to false.
+test('the bank panel hides mutations in read mode but keeps history', () => {
+  assert.match(drawerSource, /const canEditAccounts = canManage && !readOnly/)
+  assert.match(drawerSource, /\{canEditAccounts \? <Button variant="outline" size="sm" onClick=\{\(\) => setDraft\(emptyBankDraft\(\)\)\}>/)
+  assert.match(drawerSource, /\{!readOnly \? \(\n          <div className="relative max-w-sm">/)
+  assert.match(drawerSource, /\{canEditAccounts \? <FlowManualButtons/)
+  assert.match(drawerSource, /\{canEditAccounts \? \(\n                      <ApprovalActions/)
+  assert.match(drawerSource, /\{canEditAccounts && !account\.retired_at \? <Button variant="ghost" size="sm" onClick=\{\(\) => edit\(account\)\}>/)
+  assert.match(drawerSource, /\{canEditAccounts && !account\.retired_at \? <Button variant="ghost" size="sm" onClick=\{\(\) => retire\(account\)\}>/)
+  // History is a read, not a mutation: it stays in both modes.
+  assert.match(drawerSource, /onClick=\{\(\) => setHistoryAccount\(account\)\}>/)
+  assert.match(drawerSource, /\{tab === 'accounting' && \(!role \|\| role === 'vendor'\) \? \(\n          <BankAccountsPanel partyId=\{String\(p\.id\)\} initialAccounts=\{payload\.bankAccounts\} canManage=\{canManage\} multiCurrency=\{multiCurrency\} \/>\n        \) : null\}/)
+})

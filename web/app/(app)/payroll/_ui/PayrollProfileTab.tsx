@@ -21,8 +21,27 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
  * edited, living on the native employee entity (no second payroll roster).
  * Loads the profile (or a blank default) + schedules and renders the shared
  * editor inline.
+ *
+ * The drawer splits the tab into sub-tabs (General / Tax and withholding /
+ * Pay banks / Bank accounts) but mounts this panel ONCE: the editor stays
+ * mounted (hidden) across sub-tab switches so unsaved edits survive, and the
+ * `section` prop decides which half the single editor instance shows.
  */
-export function PayrollProfileTab({ partyId, partyName }: { partyId: string; partyName: string }) {
+export type PayrollSubTab = 'general' | 'tax' | 'banks' | 'accounts'
+
+export function PayrollProfileTab({
+  partyId,
+  partyName,
+  readOnly = false,
+  section = 'general',
+}: {
+  partyId: string
+  partyName: string
+  /** Drawer read mode: values only, like the Overview tab. */
+  readOnly?: boolean
+  /** Which sub-tab the drawer shows; the editor half follows it. */
+  section?: PayrollSubTab
+}) {
   const t = useTranslations('payroll.profiles')
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
@@ -167,25 +186,36 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     is_active: true,
   }
 
+  // ONE editor instance for both halves: the section prop switches what it
+  // shows without unmounting, so typed-but-unsaved values survive General ↔
+  // Tax switches. Both halves stay mounted (hidden) for the same reason, as
+  // do the row-backed certificate drafts below.
+  const editorSection = section === 'tax' ? 'tax' : 'general'
   return (
     <>
-      <ProfileEditor
-        inline
-        profile={profile}
-        schedules={state.schedules}
-        filingAccounts={state.filingAccounts}
-        labourJurisdictions={state.labourJurisdictions}
-        countries={state.countries}
-        packProfiles={state.packProfiles}
-        storedCertificates={state.storedCertificates}
-        derivedColumns={state.derivedColumns}
-        onClose={() => {}}
-        onSaved={() => setVersion((v) => v + 1)}
-      />
+      <div hidden={section === 'banks' || section === 'accounts'}>
+        <ProfileEditor
+          inline
+          readOnly={readOnly}
+          section={editorSection}
+          profile={profile}
+          schedules={state.schedules}
+          filingAccounts={state.filingAccounts}
+          labourJurisdictions={state.labourJurisdictions}
+          countries={state.countries}
+          packProfiles={state.packProfiles}
+          storedCertificates={state.storedCertificates}
+          derivedColumns={state.derivedColumns}
+          onClose={() => {}}
+          onSaved={() => setVersion((v) => v + 1)}
+        />
+      </div>
       {/* Row-backed certificate answers for the profile's pack (the NL opgaaf
         and SV facts, the DE ELStAM, the FR PAS option): rendered from the
         pack declarations, never a per-country form in this file. */}
-      <PackCertificateForms partyId={partyId} country={profile.country} />
+      <div hidden={section !== 'tax'}>
+        <PackCertificateForms partyId={partyId} country={profile.country} readOnly={readOnly} />
+      </div>
     </>
   )
 }
