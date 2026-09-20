@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# 名员工} other {# 名员工}}设为直接存款但没有已审核的银行账户,且支票兜底已关闭,因此无法向其付款。",
           "noOpeningBalance": "{count, plural, one {# 名员工} other {# 名员工}}没有原工资系统的 {detail} 期初余额,因此其年度法定上限将在本次核算从零起算。",
           "noOpeningComponentYtd": "{count, plural, one {# 名员工} other {# 名员工}}没有 {detail} 的期初本年累计(该项目有年度上限)——上限将在本次核算从零起算,因此其全年可能缴足两次年度限额。",
-          "noOpeningEntitlement": "{count, plural, one {# 名员工} other {# 名员工}}在原工资系统有结存,但没有 {detail} 的期初余额。这是首个结转该余额的工资核算,因此其银行从零起算。"
+          "noOpeningEntitlement": "{count, plural, one {# 名员工} other {# 名员工}}在原工资系统有结存,但没有 {detail} 的期初余额。这是首个结转该余额的工资核算,因此其银行从零起算。",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "无法计算法定假日工资:{detail}",

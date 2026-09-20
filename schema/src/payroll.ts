@@ -355,6 +355,25 @@ export const employeePayrollProfiles = pgTable(
      * entry does — never default this to false (see migration 0181).
      */
     paidOnCommission: boolean("paid_on_commission"),
+    /**
+     * Pack-declared employee facts for the PL/ES/JP/BR statutory engines
+     * (0191): one nullable column per fact, named for the engine key that
+     * reads it. Null is "unknown" — never zero, never a guess — and the
+     * packs' compute paths fail closed on it by design. Bounds live in the
+     * migration CHECKs below, restating what each pack's engine enforces;
+     * columns with no declared bounds (PL birth year, JP grade) carry none.
+     * kaigo and situación are TEXT holding closed answer strings because
+     * their engines compare against "false"/SITUPER strings — a boolean
+     * column would refuse forever (false is not "false").
+     */
+    plRokUrodzenia: integer("pl_rok_urodzenia"),
+    esAnoNacimiento: integer("es_ano_nacimiento"),
+    esGrupoCotizacion: integer("es_grupo_cotizacion"),
+    esSituacionLaboral: text("es_situacion_laboral"),
+    jpHyojunHoshu: integer("jp_hyojun_hoshu"),
+    jpKaigoDainigou: text("jp_kaigo_dainigou"),
+    brDependentes: integer("br_dependentes"),
+    brPensaoMensal: money("br_pensao_mensal"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -379,6 +398,20 @@ export const employeePayrollProfiles = pgTable(
       sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`),
     check("employee_payroll_profiles_allowances",
       sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`),
+    // 0191 pack-fact bounds, mirroring the migration CHECKs exactly: the ES
+    // año/grupo bands, the ES situación and JP kaigo closed sets, and the
+    // non-negative BR dependent count. PL rok urodzenia and JP hyōjun carry
+    // no declared bounds, so they carry no CHECK either.
+    check("employee_payroll_profiles_es_ano",
+      sql`${t.esAnoNacimiento} is null or (${t.esAnoNacimiento} >= 1906 and ${t.esAnoNacimiento} <= 2026)`),
+    check("employee_payroll_profiles_es_grupo",
+      sql`${t.esGrupoCotizacion} is null or (${t.esGrupoCotizacion} >= 1 and ${t.esGrupoCotizacion} <= 11)`),
+    check("employee_payroll_profiles_es_situacion",
+      sql`${t.esSituacionLaboral} is null or ${t.esSituacionLaboral} in ('activo', 'pensionista', 'desempleado')`),
+    check("employee_payroll_profiles_jp_kaigo",
+      sql`${t.jpKaigoDainigou} is null or ${t.jpKaigoDainigou} in ('true', 'false')`),
+    check("employee_payroll_profiles_br_dependentes",
+      sql`${t.brDependentes} is null or ${t.brDependentes} >= 0`),
   ],
 );
 

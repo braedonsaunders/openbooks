@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { PayrollError } from "./payroll-error.ts";
@@ -47,7 +47,12 @@ import {
   type UnconfiguredStatutoryRate,
 } from "./payroll/statutory-rates.ts";
 import { packRates, payrollTaxYearForDate, payrollTaxYearProblem } from "./payroll/packs.ts";
-import { packPayableProblem } from "./payroll/employee-facts.ts";
+import {
+  employeeFactsFor,
+  missingEmployeeFacts,
+  packPayableProblem,
+} from "./payroll/employee-facts.ts";
+import { employeePayrollProfiles } from "@openbooks/schema";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -601,6 +606,62 @@ export async function payRunReadiness(
         people.filter((p) => p.country === country),
         { detail: payableProblem, href: `${setupHref}?tab=packs` },
       );
+    }
+
+    // --- Per-employee facts: a blank birth year blocks its employee ------
+    // `pack.notPayable` fires only while a pack has NO producer for a
+    // required fact. Once the channel exists, the gap moves per employee:
+    // a PL profile with no birth year refuses at calculation, so it must
+    // refuse here instead — naming the fact's operator-facing label and
+    // pointing at the employee's Payroll tab. Read generically off the
+    // packs' own declarations: the columns are whatever required facts
+    // map to profile columns, so the next pack's fact is enumerated with
+    // no edit here. Unregistered countries enumerate nothing — their reads
+    // refuse at authoring time, never silently.
+    if (people.length > 0) {
+      const storedColumns = new Set(
+        Object.values(getTableColumns(employeePayrollProfiles)).map((column) => column.name),
+      );
+      const wanted = new Set<string>();
+      for (const person of people) {
+        for (const fact of employeeFactsFor(person.country)) {
+          if (
+            fact.required && fact.producer.kind === "profile_column"
+            && storedColumns.has(fact.producer.column)
+          ) {
+            wanted.add(fact.producer.column);
+          }
+        }
+      }
+      if (wanted.size > 0) {
+        const columns = [...wanted].sort().map((column) => sql.identifier(column));
+        const partyIds = [...new Set(people.map((p) => p.employee_party_id))];
+        const factRows = (await db.execute<Record<string, string | null>>(sql`
+          select prof.employee_party_id, ${sql.join(columns, sql`, `)}
+            from employee_payroll_profiles prof
+           where prof.org_id = ${orgId}
+             and prof.employee_party_id in (${sql.join(partyIds.map((id) => sql`${id}`), sql`, `)})
+        `));
+        const factsByEmployee = new Map<string, Record<string, string | null>>(
+          factRows.rows.map((row) => [String(row.employee_party_id), row]),
+        );
+        const missingByFact = new Map<string, { fact: string; label: string; people: ScopeRow[] }>();
+        for (const person of people) {
+          const emp = factsByEmployee.get(person.employee_party_id) ?? {};
+          for (const fact of missingEmployeeFacts(person.country, emp)) {
+            const entry = missingByFact.get(fact.key)
+              ?? { fact: fact.key, label: fact.label, people: [] };
+            entry.people.push(person);
+            missingByFact.set(fact.key, entry);
+          }
+        }
+        for (const { label, people: missing } of [...missingByFact.values()]) {
+          flag("blocker", "employee.missingFact", missing, {
+            detail: `${label} is not set — enter it on the employee's Payroll tab before calculating`,
+            href: "/entities/employees",
+          });
+        }
+      }
     }
 
     // --- Statutory rates the employer has to supply -------------------------

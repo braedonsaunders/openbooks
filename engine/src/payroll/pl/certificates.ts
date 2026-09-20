@@ -68,7 +68,63 @@ const PL_PIT2_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * The payer-held birth year for the FP age bar and the under-26 refusal.
+ *
+ * This is NOT an employee-filed form — no PIT attachment carries it — so it
+ * is declared as what it is: one payer-held fact with a verified origin.
+ * The PESEL the pack already collects encodes the birth year in its first
+ * six digits (ustawa o ewidencji ludności, art. 15 ust. 2: YYMMDD with the
+ * century in the month digits — 01–12 → 1900s, 21–32 → 2000s, 81–92 →
+ * 1800s; see `./pesel.ts`), so a filed PESEL derives and prefills this
+ * field, while employees without a PESEL (foreign workers on NIP/passport)
+ * are entered here directly. A saved value contradicting the PESEL refuses
+ * at the profile API naming both — one source with a verified origin, never
+ * two sources that disagree.
+ *
+ * Column-backed (`storage: "profile_columns"`), like the TD1/W-4 mappings:
+ * the answer lives on `employee_payroll_profiles.pl_rok_urodzenia`, the
+ * profile editor renders it from this declaration, and the engine reads it
+ * off the profile row. The 1900–2026 band restates what calculatePlZus2026
+ * enforces — never narrower, never wider.
+ */
+const PL_WIEK_CERTIFICATE: PayrollCertificate = {
+  key: "pl_wiek",
+  // Not a numbered form: there is no agency form behind this fact, so the
+  // form names the declaration itself instead of inventing a code (the same
+  // convention the JP 扶養控除等申告書 declaration states).
+  form: "Rok urodzenia",
+  label: "Birth year (rok urodzenia) — PESEL-derived with a declared fallback",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "ustawa o ewidencji ludności, art. 15 ust. 2 (Dz.U. 2018 poz. 1382: century in the PESEL month "
+    + "digits); updof FP/FS age bar (art. 261) and the under-26 refusal, which cannot be decided "
+    + "without the year",
+  summary:
+    "The employee's birth year for the FP age bar. Derived from the PESEL on file where one "
+    + "exists; entered here for employees without one. A value contradicting the PESEL refuses.",
+  storage: "profile_columns",
+  fields: [
+    {
+      key: "rok_urodzenia",
+      label: "Birth year (rok urodzenia)",
+      kind: "count",
+      min: "1900",
+      max: "2026",
+      storage: { kind: "column", column: "pl_rok_urodzenia" },
+      // Required: the engine prices no PL employee without it — but an
+      // UNANSWERED profile still saves, so readiness names the gap before
+      // calculation rather than the save refusing an incomplete setup.
+      required: true,
+      help: "Four-digit birth year. Prefilled from the employee's PESEL where one is on file "
+        + "(first six digits YYMMDD, century in the month digits); enter it directly for "
+        + "employees without a PESEL. A year contradicting the PESEL refuses on save.",
+    },
+  ],
+};
+
 export const PL_CERTIFICATES: PayrollPackCertificates = {
   country: "PL",
-  certificates: [PL_PIT2_CERTIFICATE],
+  certificates: [PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE],
 };

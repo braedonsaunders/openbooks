@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# Mitarbeiter soll} other {# Mitarbeiter sollen}} per Direktüberweisung bezahlt werden, hat aber keine geprüften Bankdaten, und die Scheck-Alternative ist ausgeschaltet, sodass es keine Möglichkeit gibt, sie zu bezahlen.",
           "noOpeningBalance": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen {detail}-Anfangssaldo aus Ihrem früheren Lohnsystem, daher starten ihre gesetzlichen Jahresgrenzen in diesem Lauf bei null.",
           "noOpeningComponentYtd": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen Eröffnungsjahresstand für {detail} mit Jahresobergrenze — die Grenze startet in diesem Lauf bei null, sodass sie eine zweite volle Jahresgrenze einzahlen können.",
-          "noOpeningEntitlement": "{count, plural, one {# Mitarbeiter bringt} other {# Mitarbeiter bringen}} einen Saldo aus Ihrem früheren Lohnsystem mit, aber keinen Anfangssaldo für {detail}. Dies ist der erste Lohnlauf, der ihn bewegt, daher startet ihr Konto bei null."
+          "noOpeningEntitlement": "{count, plural, one {# Mitarbeiter bringt} other {# Mitarbeiter bringen}} einen Saldo aus Ihrem früheren Lohnsystem mit, aber keinen Anfangssaldo für {detail}. Dies ist der erste Lohnlauf, der ihn bewegt, daher startet ihr Konto bei null.",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "Feiertagsvergütung kann nicht berechnet werden: {detail}",

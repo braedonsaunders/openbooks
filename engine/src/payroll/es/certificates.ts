@@ -83,7 +83,85 @@ const MODELO_145: PayrollCertificate = {
   ],
 };
 
+/**
+ * The payer-held employment facts the AEAT retention algorithm prices:
+ * SITUPER (the labour status), the TGSS contribution group and the birth
+ * year (AÑOPER).
+ *
+ * This is NOT the Modelo 145: that form's situación familiar (art. 81
+ * RIRPF) is a FAMILY status, while SITUPER is the LABOUR status the
+ * algorithm moves gastos and REDU on — the two must never be conflated, so
+ * they are declared on separate certificates. Which AEAT/TGSS artefact the
+ * operator copies each value off (contrato, alta en Seguridad Social, otro)
+ * is still an open sourcing question, recorded on the employeeFacts notes;
+ * the values themselves are the algorithm's own inputs (SITUPER, grupo
+ * 1–11 per Orden PJC/297/2026 art. 33, AÑOPER), so the channel does not
+ * wait on it.
+ *
+ * Column-backed (`storage: "profile_columns"`), like the TD1/W-4 mappings:
+ * the answers live on `employee_payroll_profiles.es_*`, the profile editor
+ * renders them from this declaration, and the engine reads them off the
+ * profile row. Every band restates what computeEsStatutory enforces — never
+ * narrower, never wider.
+ */
+const ES_DATOS_PERCEPTOR: PayrollCertificate = {
+  key: "es_datos_perceptor",
+  // Not a numbered form: no single agency form carries these three facts, so
+  // the form names the declaration itself instead of inventing a code.
+  form: "Datos laborales del perceptor",
+  label: "Employment facts for IRPF/Seguridad Social (SITUPER, grupo, año)",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026 (SITUPER, AÑOPER); Orden PJC/297/2026 "
+    + "art. 33 (grupos de cotización 1–11); LIRPF art. 12 (período impositivo: año natural)",
+  summary:
+    "The labour status, contribution group and birth year the AEAT algorithm prices. Kept apart "
+    + "from the Modelo 145, whose situación familiar is a different fact.",
+  storage: "profile_columns",
+  fields: [
+    {
+      key: "situacion_laboral",
+      label: "Situación laboral (SITUPER)",
+      kind: "choice",
+      choices: [
+        { value: "activo", label: "Activo" },
+        { value: "pensionista", label: "Pensionista" },
+        { value: "desempleado", label: "Desempleado" },
+      ],
+      storage: { kind: "column", column: "es_situacion_laboral" },
+      // Required: the engine prices no ES employee without it — but an
+      // UNANSWERED profile still saves, so readiness names the gap before
+      // calculation rather than the save refusing an incomplete setup.
+      required: true,
+      help: "SITUPER moves gastos and REDU, so it is never defaulted. This is the LABOUR status, "
+        + "not the Modelo 145 situación familiar.",
+    },
+    {
+      key: "grupo_cotizacion",
+      label: "Grupo de cotización (1–11)",
+      kind: "count",
+      min: "1",
+      max: "11",
+      storage: { kind: "column", column: "es_grupo_cotizacion" },
+      required: true,
+      help: "The TGSS contribution group from the professional category (Orden PJC/297/2026 art. 33). "
+        + "An undeclared group never falls through to group 1 pricing.",
+    },
+    {
+      key: "ano_nacimiento",
+      label: "Año de nacimiento",
+      kind: "count",
+      min: "1906",
+      max: "2026",
+      storage: { kind: "column", column: "es_ano_nacimiento" },
+      required: true,
+      help: "The AÑOPER the age-banded rule reads. An unknown age never falls through to standard pricing.",
+    },
+  ],
+};
+
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR],
 };

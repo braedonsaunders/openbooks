@@ -97,6 +97,8 @@ const allocationOutboxScopeMigrationPath =
   "schema/migrations/generated/0162_scheduler_outbox_allocation_scope.sql";
 const payrollProfileCountryNoDefaultMigrationPath =
   "schema/migrations/generated/0190_payroll_profile_country_no_default.sql";
+const payrollProfilePackFactsMigrationPath =
+  "schema/migrations/generated/0191_payroll_profile_pack_facts.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -378,6 +380,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0188_hrm_change_request_wipe_allowance.sql",
     "0189_pay_components_country_identity.sql",
     "0190_payroll_profile_country_no_default.sql",
+    "0191_payroll_profile_pack_facts.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1859,6 +1862,43 @@ test("payroll profile country drops its Canada default and fails closed", () => 
   assert.doesNotMatch(migration, /DROP NOT NULL/);
   assert.doesNotMatch(migration, /UPDATE\s+public\.employee_payroll_profiles/);
   assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("payroll profile pack facts add nullable columns and fail closed", () => {
+  // 0191 carries the PL/ES/JP/BR employee-fact channel: one nullable column
+  // per fact, CHECKs restating only the bounds the packs declare, no
+  // backfill (any filled value would be a guess), and no touch to
+  // 0001_baseline. Existing rows gain NULL — the honest absent state — so
+  // the migration is inert for every current writer and reader.
+  const migration = readFileSync(payrollProfilePackFactsMigrationPath, "utf8");
+  for (const column of [
+    "pl_rok_urodzenia",
+    "es_ano_nacimiento",
+    "es_grupo_cotizacion",
+    "es_situacion_laboral",
+    "jp_hyojun_hoshu",
+    "jp_kaigo_dainigou",
+    "br_dependentes",
+    "br_pensao_mensal",
+  ]) {
+    assert.match(migration, new RegExp(`ADD COLUMN ${column}`));
+  }
+  assert.match(migration, /es_ano_nacimiento >= 1906 AND es_ano_nacimiento <= 2026/);
+  assert.match(migration, /es_grupo_cotizacion >= 1 AND es_grupo_cotizacion <= 11/);
+  assert.match(
+    migration,
+    /es_situacion_laboral IN \('activo', 'pensionista', 'desempleado'\)/,
+  );
+  assert.match(migration, /jp_kaigo_dainigou IN \('true', 'false'\)/);
+  assert.match(migration, /br_dependentes >= 0/);
+  // No column carries a default (the prose says so in words; the DDL must
+  // show it): a defaulted fact would price employees off a guess.
+  assert.doesNotMatch(migration, /ADD COLUMN \w+ [\w(),]+ DEFAULT/);
+  assert.doesNotMatch(migration, /UPDATE\s+public\.employee_payroll_profiles/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /SAFETY ARGUMENT/);
   assert.match(migration, /[^\n]\n$/);
   assert.doesNotMatch(migration, /\n\n$/);
 });

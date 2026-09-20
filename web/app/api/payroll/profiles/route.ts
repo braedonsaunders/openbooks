@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { sealSecret } from '@openbooks/engine/src/secrets.ts'
+import { sealSecret, unsealSecret } from '@openbooks/engine/src/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
 import {
   employmentJurisdictionsOf,
@@ -16,6 +16,7 @@ import {
   packCertificates,
   profileColumnChoices,
   profileColumnCountBounds,
+  profileColumnField,
   type PayrollCertificate,
 } from '@openbooks/engine/src/payroll/certificates.ts'
 import type { PayrollProfileExemptionFlag } from '@openbooks/engine/src/payroll/packs.ts'
@@ -70,6 +71,19 @@ const profileBodySchema = z.looseObject({
   cppExempt: z.boolean().optional(),
   eiExempt: z.boolean().optional(),
   taxExempt: z.boolean().optional(),
+  // Pack-declared employee facts (0191): one body key per profile column,
+  // named camelCase(column) exactly like the CA/US keys above. Validated
+  // below against the pack's own certificate declarations — never
+  // hardcoded bands here — and refused with the fact's operator-facing
+  // label, never the engine key.
+  plRokUrodzenia: optionalCount,
+  esAnoNacimiento: optionalCount,
+  esGrupoCotizacion: optionalCount,
+  esSituacionLaboral: z.string().nullable().optional(),
+  jpHyojunHoshu: optionalCount,
+  jpKaigoDainigou: z.string().nullable().optional(),
+  brDependentes: optionalCount,
+  brPensaoMensal: z.union([z.number(), z.string()]).nullable().optional(),
   // Standing commission-pay status for statutory-holiday rules that read it.
   // Nullable three-state: true/false answers, null un-answers. Omit to keep.
   paidOnCommission: z.boolean().nullable().optional(),
@@ -89,6 +103,8 @@ const PROFILE_AUDIT_COLUMNS = sql`
   union_agreement_id, union_classification_id,
   filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
   w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
+  pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
+  jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal,
   (sin_encrypted is not null) as sin_present, sin_last3,
   filing_account_id, stub_delivery, payment_method, paid_on_commission,
   created_at, created_by, updated_at, updated_by`
@@ -225,6 +241,91 @@ function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
+/** snake_case profile column → the camelCase body key (`es_grupo_cotizacion` → `esGrupoCotizacion`). */
+function packFactBodyKey(column: string): string {
+  return column.replace(/_([a-z])/g, (_, letter: string) => String(letter).toUpperCase())
+}
+
+/**
+ * The operator-facing label for a profile column, read off the pack's own
+ * employeeFacts declaration — the statutory artefact the operator can go
+ * and find (the JPS notice's 標準報酬月額), never the engine key. Falls
+ * back to the column only when the pack declares no such fact, which the
+ * conformance test refuses for every consumed key.
+ */
+function packFactLabel(country: string, column: string): string {
+  const fact = (PAYROLL_COUNTRY_PACKS[country]?.employeeFacts ?? []).find(
+    (entry) => entry.producer.kind === 'profile_column' && entry.producer.column === column,
+  )
+  return fact?.label ?? column
+}
+
+/**
+ * A pack-declared `count` answer (birth years, grupo 1–11, dependent
+ * counts, whole-yen grades) against the band the pack declares for the
+ * column. Refusals name the fact's operator-facing label and the declared
+ * band — never the engine key. An answer for a column the pack does not
+ * declare is refused rather than stored where no engine reads it.
+ */
+function packFactCount(
+  country: string,
+  column: string,
+  value: unknown,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (value === null || value === undefined || value === '') return { ok: true, value: null }
+  const label = packFactLabel(country, column)
+  const bounds = profileColumnCountBounds(country, column)
+  if (!bounds) return { ok: false, error: `${label} is not declared by the ${country} payroll pack — it cannot be stored here` }
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < bounds.min || n > bounds.max) {
+    const band = bounds.max >= Number.MAX_SAFE_INTEGER
+      ? `a whole number at least ${bounds.min}`
+      : `${bounds.min}–${bounds.max}`
+    return { ok: false, error: `${label} must be ${band}` }
+  }
+  return { ok: true, value: n }
+}
+
+/**
+ * A pack-declared `choice` answer (ES SITUPER) against the closed set the
+ * pack declares for the column. Refusals name the label and the valid
+ * answers — never the engine key.
+ */
+function packFactChoice(
+  country: string,
+  column: string,
+  value: unknown,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null || value === undefined || value === '') return { ok: true, value: null }
+  const label = packFactLabel(country, column)
+  const choices = profileColumnChoices(country, column)
+  const answer = String(value)
+  if (!choices || !choices.includes(answer)) {
+    const valid = choices && choices.length > 0 ? `one of ${choices.join(', ')}` : 'a pack-declared answer'
+    return { ok: false, error: `${label} must be ${valid}` }
+  }
+  return { ok: true, value: answer }
+}
+
+/**
+ * A pack-declared `flag` answer (JP kaigo status) as the "true"/"false"
+ * text the engine compares against. Stored as text — a boolean column
+ * would refuse forever (false is not "false").
+ */
+function packFactFlag(
+  country: string,
+  column: string,
+  value: unknown,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null || value === undefined || value === '') return { ok: true, value: null }
+  const label = packFactLabel(country, column)
+  const answer = String(value).trim()
+  if (answer !== 'true' && answer !== 'false') {
+    return { ok: false, error: `${label} must be answered "true" or "false"` }
+  }
+  return { ok: true, value: answer }
+}
+
 async function visibleFilingAccounts(gate: Parameters<typeof guardPayrollFilingAccounts>[0]) {
   const accounts = await listFilingAccounts(gate.user.orgId)
   if (gate.allowedSubsidiaryIds === null) return accounts
@@ -289,6 +390,9 @@ export async function GET(req: Request) {
                prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
                prof.other_income_annual, prof.deductions_annual,
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
+               prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
+               prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
+               prof.br_dependentes, prof.br_pensao_mensal,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
                prof.stub_delivery, prof.payment_method, prof.paid_on_commission
@@ -323,8 +427,29 @@ export async function GET(req: Request) {
        where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
          and superseded_on is null
        order by certificate_key`)
+    // Pack-derived prefill hints (0191): values the pack derives from facts
+    // already on file — today only the PL birth year off the PESEL — so the
+    // editor shows them before anything is saved. The sealed identifier is
+    // unsealed here, inside the request that needs it: the plaintext never
+    // leaves the server, only the derived fact does, and only to an
+    // operator who may already edit the profile. Keyed by profile column,
+    // read generically off the pack's own hook — never a country branch.
+    const derivedProfileColumns: Record<string, string> = {}
+    const profileCountry = (profileRes.rows[0] as { country?: unknown } | undefined)?.country
+    const drawerDeriveHook = typeof profileCountry === 'string'
+      ? PAYROLL_COUNTRY_PACKS[profileCountry]?.deriveEmployeeFacts : undefined
+    if (drawerDeriveHook) {
+      const sealed = (await db.execute<{ sealed: string | null }>(sql`
+        select sin_encrypted as sealed from employee_payroll_profiles
+         where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
+      `)).rows[0]?.sealed
+      for (const derived of drawerDeriveHook({ identifier: unsealSecret(sealed) }) ?? []) {
+        derivedProfileColumns[derived.column] = derived.value
+      }
+    }
     return NextResponse.json({
       profile: profileRes.rows[0] ?? null,
+      derivedProfileColumns,
       storedCertificates: storedRes.rows,
       schedules: schedulesRes.rows,
       filingAccounts: await visibleFilingAccounts(gate),
@@ -347,6 +472,9 @@ export async function GET(req: Request) {
            prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
            prof.other_income_annual, prof.deductions_annual,
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
+           prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
+           prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
+           prof.br_dependentes, prof.br_pensao_mensal,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
            prof.stub_delivery, prof.payment_method, prof.paid_on_commission
@@ -489,6 +617,58 @@ export async function POST(req: Request) {
       { error: 'Québec uses a TP-1015.3-V claim AMOUNT, not a claim code — enter the amount and leave the provincial claim code empty' },
       { status: 422 },
     )
+  }
+  // Pack-declared employee facts (0191): one answer per profile column, each
+  // validated against the band or closed set the pack's own certificate
+  // declaration states — never a hardcoded copy here — and refused with the
+  // fact's operator-facing label, never the engine key. An answer for a
+  // column the pack does not declare is refused rather than stored where no
+  // engine reads it; a blank answer saves as null (unknown), and readiness
+  // names the gap before calculation rather than the save refusing it.
+  const factValues: Record<string, number | string | null> = {}
+  for (const column of [
+    'pl_rok_urodzenia',
+    'es_ano_nacimiento',
+    'es_grupo_cotizacion',
+    'jp_hyojun_hoshu',
+    'br_dependentes',
+  ]) {
+    const parsed = packFactCount(country, column, (body as Record<string, unknown>)[packFactBodyKey(column)])
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 422 })
+    factValues[column] = parsed.value
+  }
+  const situacionParsed = packFactChoice(country, 'es_situacion_laboral', body.esSituacionLaboral)
+  if (!situacionParsed.ok) return NextResponse.json({ error: situacionParsed.error }, { status: 422 })
+  factValues['es_situacion_laboral'] = situacionParsed.value
+  const kaigoParsed = packFactFlag(country, 'jp_kaigo_dainigou', body.jpKaigoDainigou)
+  if (!kaigoParsed.ok) return NextResponse.json({ error: kaigoParsed.error }, { status: 422 })
+  factValues['jp_kaigo_dainigou'] = kaigoParsed.value
+  if (body.brPensaoMensal !== null && body.brPensaoMensal !== undefined && body.brPensaoMensal !== '') {
+    // The BR pensão amount follows the profile money shape (numeric(19,4))
+    // but refuses with the fact's operator-facing label, not the body key.
+    const pensaoLabel = packFactLabel(country, 'br_pensao_mensal')
+    const pensaoRaw = canonicalDecimal(body.brPensaoMensal, 4)
+    if (pensaoRaw === null) {
+      return NextResponse.json(
+        { error: decimalNullRefusal(pensaoLabel, 'an amount', body.brPensaoMensal, 4) },
+        { status: 422 },
+      )
+    }
+    if (compareDecimal(pensaoRaw, '0') < 0) {
+      return NextResponse.json(
+        { error: `${pensaoLabel} cannot be negative — got ${pensaoRaw}` },
+        { status: 422 },
+      )
+    }
+    if (wholeDigits(pensaoRaw) > 15) {
+      return NextResponse.json(
+        { error: `${pensaoLabel} is limited to 15 digits before the decimal point — got ${wholeDigits(pensaoRaw)}` },
+        { status: 422 },
+      )
+    }
+    factValues['br_pensao_mensal'] = normalizeMoney(pensaoRaw)
+  } else {
+    factValues['br_pensao_mensal'] = null
   }
 
   const money: Record<(typeof MONEY_KEYS)[number], string | null> = {
@@ -645,11 +825,15 @@ export async function POST(req: Request) {
     // required for payroll clears on empty.
     let sinEncrypted: string | null | undefined
     let sinLast3: string | null | undefined
+    // The identifier as saved by THIS request — undefined when the body is
+    // silent on it, in which case the stored value (if any) still answers.
+    let suppliedIdentifier: string | null | undefined
     if ('sin' in body) {
       const verdict = validatePackEmployeeIdentifier(country, body.sin)
       if (!verdict.valid) {
         return NextResponse.json({ error: verdict.message }, { status: 422 })
       }
+      suppliedIdentifier = verdict.saved
       if (verdict.saved === null) {
         sinEncrypted = null
         sinLast3 = null
@@ -666,6 +850,56 @@ export async function POST(req: Request) {
        where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
        for update
     `)).rows[0]
+    // Pack-derived employee facts (0191): the pack reads its own
+    // `deriveEmployeeFacts` hook generically — today only PL derives
+    // anything (birth year off the PESEL). The effective identifier is what
+    // THIS save leaves behind: the newly supplied one, or the stored one
+    // unsealed when the body is silent (unsealed here, inside the request
+    // that needs it — the plaintext never leaves the server, only the
+    // derived fact does). A supplied value that contradicts the derivation
+    // refuses naming both values and both sources; a blank field takes the
+    // derived value (prefill at write); with no derivation the declared
+    // field stands alone.
+    const deriveHook = PAYROLL_COUNTRY_PACKS[country]?.deriveEmployeeFacts
+    if (deriveHook) {
+      let effectiveIdentifier: string | null = null
+      if (suppliedIdentifier !== undefined) {
+        effectiveIdentifier = suppliedIdentifier
+      } else {
+        const stored = (await db.execute<{ sealed: string | null }>(sql`
+          select sin_encrypted as sealed from employee_payroll_profiles
+           where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+        `)).rows[0]?.sealed
+        effectiveIdentifier = unsealSecret(stored)
+      }
+      const identifierLabel = PAYROLL_COUNTRY_PACKS[country]?.employeeIdentifier.label ?? 'identifier'
+      for (const derived of deriveHook({ identifier: effectiveIdentifier }) ?? []) {
+        const label = packFactLabel(country, derived.column)
+        const supplied = factValues[derived.column]
+        const storedRaw = before?.[derived.column]
+        const storedText = storedRaw === null || storedRaw === undefined || storedRaw === ''
+          ? null : String(storedRaw)
+        const effective = supplied === null || supplied === undefined || supplied === ''
+          ? storedText : String(supplied)
+        if (effective !== null && effective !== derived.value) {
+          return NextResponse.json(
+            {
+              error: `${label} ${effective} does not match the ${identifierLabel} on file, `
+                + `which gives ${derived.value} — correct the ${label} or the ${identifierLabel}; `
+                + 'the two must agree',
+            },
+            { status: 422 },
+          )
+        }
+        if (supplied === null || supplied === undefined || supplied === '') {
+          // Prefill the blank field from the derivation, in the column's
+          // own shape: counts store numbers (the certificate field kind
+          // decides, never a hardcoded column list here).
+          factValues[derived.column] = profileColumnField(country, derived.column)?.kind === 'count'
+            ? Number(derived.value) : derived.value
+        }
+      }
+    }
     const after = (await db.execute<Record<string, unknown>>(sql`
       insert into employee_payroll_profiles
         (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, pay_basis,
@@ -675,6 +909,8 @@ export async function POST(req: Request) {
          filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
          w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
          cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+         pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
+         jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal,
          sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
          paid_on_commission,
          created_by, updated_by)
@@ -689,6 +925,10 @@ export async function POST(req: Request) {
               ${body.ficaExempt === true}, ${body.futaExempt === true},
               ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
               ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
+              ${factValues['pl_rok_urodzenia'] ?? null}, ${factValues['es_ano_nacimiento'] ?? null},
+              ${factValues['es_grupo_cotizacion'] ?? null}, ${factValues['es_situacion_laboral'] ?? null},
+              ${factValues['jp_hyojun_hoshu'] ?? null}, ${factValues['jp_kaigo_dainigou'] ?? null},
+              ${factValues['br_dependentes'] ?? null}, ${factValues['br_pensao_mensal'] ?? null},
               ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
               ${paymentMethod},
               ${paidOnCommission},
@@ -716,6 +956,14 @@ export async function POST(req: Request) {
                     cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
                     tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
                     vacation_method = excluded.vacation_method, is_active = excluded.is_active,
+                    pl_rok_urodzenia = excluded.pl_rok_urodzenia,
+                    es_ano_nacimiento = excluded.es_ano_nacimiento,
+                    es_grupo_cotizacion = excluded.es_grupo_cotizacion,
+                    es_situacion_laboral = excluded.es_situacion_laboral,
+                    jp_hyojun_hoshu = excluded.jp_hyojun_hoshu,
+                    jp_kaigo_dainigou = excluded.jp_kaigo_dainigou,
+                    br_dependentes = excluded.br_dependentes,
+                    br_pensao_mensal = excluded.br_pensao_mensal,
                     filing_account_id = excluded.filing_account_id,
                     stub_delivery = excluded.stub_delivery,
                     payment_method = excluded.payment_method,

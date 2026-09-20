@@ -154,6 +154,15 @@ export type ProfileRow = {
   w4_allowances: number | null
   fica_exempt: boolean
   futa_exempt: boolean
+  /** Pack-declared employee facts (0191), served by GET /api/payroll/profiles. */
+  pl_rok_urodzenia: number | null
+  es_ano_nacimiento: number | null
+  es_grupo_cotizacion: number | null
+  es_situacion_laboral: string | null
+  jp_hyojun_hoshu: number | null
+  jp_kaigo_dainigou: string | null
+  br_dependentes: number | null
+  br_pensao_mensal: string | null
   vacation_percent: string | null
   vacation_method: 'accrue' | 'pay_each_period'
   filing_account_id: string | null
@@ -177,6 +186,16 @@ function columnLocaleBase(column: string): string {
   return column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
 }
 
+/**
+ * snake_case profile column → the camelCase profile-POST body key
+ * (`es_grupo_cotizacion` → `esGrupoCotizacion`): the same transform as the
+ * locale namespace above, because the API names its body keys
+ * camelCase(column) exactly like the locale keys.
+ */
+function columnBodyKey(column: string): string {
+  return columnLocaleBase(column)
+}
+
 export function ProfileEditor(props: {
   profile: ProfileRow
   schedules: ScheduleOption[]
@@ -193,6 +212,10 @@ export function ProfileEditor(props: {
    *  fields. Served with the profile; absent on the list variant, which does
    *  not edit. */
   storedCertificates?: StoredCertificateRow[]
+  /** Pack-derived prefill hints by profile column (0191: the PL birth year
+   *  off the PESEL), served with the profile. Shown where the row is blank
+   *  and saved on submit — the visible half of derive-and-prefill. */
+  derivedColumns?: Record<string, string>
   onClose: () => void
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
@@ -303,6 +326,22 @@ export function ProfileEditor(props: {
     ei_exempt: [eiExempt, setEiExempt],
     tax_exempt: [taxExempt, setTaxExempt],
   }
+  // Pack-declared columns with no bespoke binding above (every 0191 fact and
+  // any future pack's): answers held as text, keyed by column. The profile
+  // row seeds them, the pack-derived hints (PESEL birth year) fill blanks,
+  // and an operator edit wins over both — so the next pack's fact renders
+  // and saves with no edit to this file.
+  const [extraColumns, setExtraColumns] = useState<Record<string, string>>({})
+  const rowCellText = (column: string): string => {
+    const raw: unknown = (p as unknown as Record<string, unknown>)[column]
+    if (raw === null || raw === undefined) return ''
+    if (typeof raw === 'boolean') return raw ? 'true' : 'false'
+    return String(raw)
+  }
+  const extraValue = (column: string): string =>
+    extraColumns[column] ?? props.derivedColumns?.[column] ?? rowCellText(column)
+  const setExtraValue = (column: string) => (value: string) =>
+    setExtraColumns((prev) => ({ ...prev, [column]: value }))
   // Answers on row-backed certificates, keyed by certificate then field —
   // prefilled from the employee's current filings. Column-backed answers live
   // in the column state above; the two never share a field, so neither path
@@ -350,6 +389,29 @@ export function ProfileEditor(props: {
   async function save() {
     setBusy(true)
     try {
+      // Declared columns with no bespoke binding above save generically:
+      // counts as numbers, flags as "true"/"false" text, everything else
+      // as text — blank is null (unknown), and the API validates each one
+      // against the pack's own declaration. Columns of a pack that is not
+      // selected are never sent: carrying one pack's facts on another's
+      // profile is refused on save.
+      const extraFactSave: Record<string, string | number | null> = {}
+      for (const certificate of applicableCertificates) {
+        for (const field of certificate.fields) {
+          const column = columnOf(field)
+          if (!column || columnText[column] || columnFlag[column]) continue
+          const raw = extraColumns[column]
+            ?? props.derivedColumns?.[column]
+            ?? rowCellText(column)
+          if (raw === '') {
+            extraFactSave[columnBodyKey(column)] = null
+          } else if (field.kind === 'count') {
+            extraFactSave[columnBodyKey(column)] = Number(raw)
+          } else {
+            extraFactSave[columnBodyKey(column)] = raw
+          }
+        }
+      }
       const res = await fetch('/api/payroll/profiles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -391,6 +453,7 @@ export function ProfileEditor(props: {
           // untouched control keeps whatever the row holds (including null).
           paidOnCommission: paidOnCommission === '' ? null : paidOnCommission === 'true',
           isActive,
+          ...extraFactSave,
         }),
       })
       // The status is checked before the body is parsed: a non-JSON error body
@@ -537,8 +600,10 @@ export function ProfileEditor(props: {
   const renderBodyField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
     const column = columnOf(field)
     if (field.kind === 'flag' || !column) return null
-    const binding = columnText[column]
-    if (!binding) return null
+    // Bespoke bindings first (the CA/US columns); anything the packs declare
+    // beyond them binds the generic extra-column state — the next pack's
+    // fact renders with no edit here.
+    const binding = columnText[column] ?? [extraValue(column), setExtraValue(column)] as const
     const [value, set] = binding
     return renderFieldInput(certificate, field, column, value, set)
   }
@@ -568,13 +633,25 @@ export function ProfileEditor(props: {
       const column = columnOf(field)
       if (column) {
         const binding = columnFlag[column]
-        if (!binding) continue
+        if (binding) {
+          flagEntries.push({
+            id: `pp-${certificate.key}-${field.key}`,
+            label: fieldLabel(column, field.label),
+            help: field.help,
+            checked: binding[0],
+            set: binding[1],
+          })
+          continue
+        }
+        // Generic text-backed flag (the JP kaigo status and any future
+        // pack's): answers are "true"/"false" strings, and untouched is
+        // unanswered — never defaulted into either position.
         flagEntries.push({
           id: `pp-${certificate.key}-${field.key}`,
           label: fieldLabel(column, field.label),
           help: field.help,
-          checked: binding[0],
-          set: binding[1],
+          checked: extraValue(column) === 'true',
+          set: (value: boolean) => setExtraValue(column)(value ? 'true' : 'false'),
         })
         continue
       }
