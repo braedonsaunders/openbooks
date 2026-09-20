@@ -32,19 +32,48 @@ const INPUT_COLUMNS = sql`id, employee_party_id as "employeePartyId", employment
   source_leave_request_id as "sourceLeaveRequestId", status,
   consumed_by_run_document_id as "consumedByRunDocumentId"`;
 
-function toInput(row: Record<string, unknown>): LeavePayrollInput {
+const INPUT_KINDS: ReadonlySet<string> = new Set(["payout", "bank_in"]);
+const INPUT_STATUSES: ReadonlySet<string> = new Set(["pending", "consumed", "voided"]);
+
+/**
+ * Read one stored input row into the typed contract. Exhaustive on purpose:
+ * a kind or status this module does not know is REFUSED by name, never
+ * mapped to a default. The old fallthrough turned every unknown kind into
+ * `payout` — and a payout is money to the employee, so a future third leave
+ * kind would have become a silent mispayment instead of a loud refusal
+ * (packs declare, the generic layer branches on nothing — same doctrine).
+ */
+export function readLeavePayrollInputRow(row: Record<string, unknown>): LeavePayrollInput {
+  const kind = String(row.kind);
+  if (!INPUT_KINDS.has(kind)) {
+    throw new LeaveError(
+      "REFUSED",
+      `payroll input ${String(row.id)} carries kind ${JSON.stringify(row.kind)}, which this consumer does not price — ` +
+        "declare the kind in the leave payroll-input contract (payout or bank_in) before it can reach a pay run",
+    );
+  }
+  const status = String(row.status);
+  if (!INPUT_STATUSES.has(status)) {
+    throw new LeaveError(
+      "REFUSED",
+      `payroll input ${String(row.id)} carries status ${JSON.stringify(row.status)}, which this consumer does not know — ` +
+        "pending, consumed and voided are the only states a pay run may read",
+    );
+  }
   return {
     id: String(row.id),
     employeePartyId: String(row.employeePartyId),
     employmentId: String(row.employmentId),
-    kind: row.kind === "bank_in" ? "bank_in" : "payout",
+    kind: kind as LeavePayrollInput["kind"],
     absenceDate: String(row.absenceDate).slice(0, 10),
     hours: String(row.hours),
     sourceLeaveRequestId: String(row.sourceLeaveRequestId),
-    status: row.status as LeavePayrollInput["status"],
+    status: status as LeavePayrollInput["status"],
     consumedByRunDocumentId: row.consumedByRunDocumentId != null ? String(row.consumedByRunDocumentId) : null,
   };
 }
+
+const toInput = readLeavePayrollInputRow;
 
 export interface ConsumeLeavePayrollInputsQuery {
   readonly orgId: string;
