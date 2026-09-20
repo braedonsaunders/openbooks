@@ -69,6 +69,13 @@ test("missing organization refuses a claimed dispatch instead of acknowledging s
 
 test("a posted vendor bill without its entry refuses before inventory receipts", async t => {
   const done = reads(t, [[{ ...posted, kind: "vendor_bill", documentNumber: "BILL-17", postedEntryId: null }]]);
-  await assert.rejects(runPostDocumentEffects("doc", "draft", { alreadyClaimed: { ...claimed, entry_id: null }, suppressAutomation: true }), /BILL-17.*no posted journal entry.*inventory receipts cannot run/);
+  let claimReads = 0;
+  t.mock.method(db, "execute", async () => {
+    claimReads++;
+    assert.ok(claimReads <= 2, "a missing claim must not produce an effects write");
+    return { rows: [] };
+  });
+  await assert.rejects(runPostDocumentEffects("doc", "draft", { suppressAutomation: true }), /BILL-17.*no posted journal entry.*inventory receipts cannot run/);
+  assert.equal(claimReads, 2, "both claim lookup paths establish that no durable claim exists");
   done();
 });

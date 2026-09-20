@@ -157,7 +157,7 @@ test("non-expense documents and preset deps never touch the database", async () 
   const preset = deps();
   preset.control.employeeReceivable = randomUUID();
   const presetRunner = scripted([]);
-  const kept = await resolveExpenseReceivableDeps(presetRunner, expenseDoc(), preset);
+  const kept = await resolveExpenseReceivableDeps(presetRunner.runner, expenseDoc(), preset);
   assert.ok(kept === preset, "explicit caller values still win without a read");
   assert.equal(kept.control.employeeReceivable, preset.control.employeeReceivable);
   presetRunner.assertDrained();
