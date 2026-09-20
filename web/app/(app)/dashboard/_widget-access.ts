@@ -48,6 +48,25 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // is how an ungated tile used to ship through the fallthrough below.
   'personal-in-progress': [],
   'personal-actions': [],
+  // HR-15 persona tiles: own/team-scoped reads with null-absent data.
+  'inbox-list': [],
+  'pay-tile': [],
+  'balance-tile': [],
+  'whos-out-strip': [],
+  'home-upcoming': [],
+  'celebrations-list': [],
+  'announcements-card': [],
+  'home-ask': [],
+  'team-approvals': [],
+  'team-steps': [],
+  'team-nudges': [],
+  'team-headcount': [],
+  'team-quals': [],
+  // Admin-rail tiles gate on the admin persona (grants, not role names).
+  // The marker below is resolved in canSeeWidget, not a permission key.
+  'admin-attention': ['admin.setup.manage'],
+  'workflow-errors': ['admin.setup.manage'],
+  'admin-calendar': ['admin.setup.manage'],
 }
 
 function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
@@ -55,7 +74,26 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
   return required.some((p) => permissionSetCovers(permissions, p))
 }
 
+/**
+ * HR-15 admin persona: admin.setup.manage, an hrm.*.manage grant, or
+ * payroll.manage — what the actor HOLDS, never their role name. Shared
+ * with the persona layout resolution (_persona.ts).
+ */
+export function hasAdminPersona(authz: Authz): boolean {
+  if (hasAnyPermission(authz.permissions, ['admin.setup.manage'])) return true
+  if (hasAnyPermission(authz.permissions, ['payroll.manage'])) return true
+  for (const permission of authz.permissions) {
+    if (permission === '*' || permission === 'hrm.*') return true
+    if (permission.startsWith('hrm.') && permission.endsWith('.manage')) return true
+  }
+  return false
+}
+
+/** Admin-rail tiles resolve through the persona, not a single grant. */
+const ADMIN_PERSONA_WIDGETS = new Set(['admin-attention', 'workflow-errors', 'admin-calendar'])
+
 export function canSeeWidget(authz: Authz, id: string): boolean {
+  if (ADMIN_PERSONA_WIDGETS.has(id)) return hasAdminPersona(authz)
   const required = WIDGET_PERMISSIONS[id]
   // An empty entry is a reviewed public tile (see above), not a missing one.
   if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required)

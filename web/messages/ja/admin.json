@@ -2532,6 +2532,10 @@
         "title": "福利厚生区分",
         "singularTitle": "福利厚生区分",
         "description": "プランごとの保障区分 — 本人のみ、家族 — 区分金額付き。"
+      },
+      "home-announcements": {
+        "title": "お知らせ",
+        "description": "対象者と期間付きの、ホーム向け会社お知らせ。"
       }
     },
     "fields": {
@@ -2842,7 +2846,11 @@
       "employerPayComponentId": "会社コンポーネント",
       "waitingPeriodDays": "待機期間（日）",
       "requiresApproval": "承認が必要",
-      "levelKey": "区分キー"
+      "levelKey": "区分キー",
+      "body": "本文",
+      "audience": "対象者",
+      "startsOn": "開始日",
+      "endsOn": "終了日"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3318,6 +3326,11 @@
       "benefitProrationBasis": {
         "full_month": "満月 — 日付にかかわらず月全体",
         "daily": "日割り — 対象日数で按分"
+      },
+      "announcementAudience": {
+        "all": "全員",
+        "managers": "マネージャー",
+        "employees": "従業員"
       }
     },
     "invoicing": {

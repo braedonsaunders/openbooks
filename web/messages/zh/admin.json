@@ -2464,6 +2464,10 @@
         "title": "福利档次",
         "singularTitle": "福利档次",
         "description": "每个计划的保障档次 — 仅本人、家庭 — 含档次金额。"
+      },
+      "home-announcements": {
+        "title": "公告",
+        "description": "面向首页的公司公告，可设置受众与日期。"
       }
     },
     "fields": {
@@ -2774,7 +2778,11 @@
       "employerPayComponentId": "公司组成部分",
       "waitingPeriodDays": "等待期（天）",
       "requiresApproval": "需要批准",
-      "levelKey": "档次键"
+      "levelKey": "档次键",
+      "body": "正文",
+      "audience": "受众",
+      "startsOn": "开始于",
+      "endsOn": "结束于"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3250,6 +3258,11 @@
       "benefitProrationBasis": {
         "full_month": "整月 — 无论日期均为整月",
         "daily": "按日 — 按覆盖天数分摊"
+      },
+      "announcementAudience": {
+        "all": "所有人",
+        "managers": "管理者",
+        "employees": "员工"
       }
     },
     "payroll": {

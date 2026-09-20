@@ -2464,6 +2464,10 @@
         "title": "Benefit tiers",
         "singularTitle": "Benefit tier",
         "description": "Coverage tiers per plan — employee-only, family — with the tier costs copied onto elections at elect time."
+      },
+      "home-announcements": {
+        "title": "Announcements",
+        "description": "Company announcements for the home page, with audience scope and dates."
       }
     },
     "fields": {
@@ -2774,7 +2778,11 @@
       "employerPayComponentId": "Employer component",
       "waitingPeriodDays": "Waiting period (days)",
       "requiresApproval": "Requires approval",
-      "levelKey": "Tier key"
+      "levelKey": "Tier key",
+      "body": "Body",
+      "audience": "Audience",
+      "startsOn": "Starts on",
+      "endsOn": "Ends on"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3250,6 +3258,11 @@
       "benefitProrationBasis": {
         "full_month": "Full month — the whole month whatever the dates",
         "daily": "Daily — scaled by covered days"
+      },
+      "announcementAudience": {
+        "all": "Everyone",
+        "managers": "Managers",
+        "employees": "Employees"
       }
     },
     "payroll": {

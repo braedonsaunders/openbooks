@@ -2464,6 +2464,10 @@
         "title": "Níveis de benefícios",
         "singularTitle": "Nível de benefícios",
         "description": "Níveis de cobertura por plano — só empregado, família — com os custos do nível."
+      },
+      "home-announcements": {
+        "title": "Avisos",
+        "description": "Avisos da empresa para a página inicial, com público e datas."
       }
     },
     "fields": {
@@ -2774,7 +2778,11 @@
       "employerPayComponentId": "Componente do empregador",
       "waitingPeriodDays": "Carência (dias)",
       "requiresApproval": "Requer aprovação",
-      "levelKey": "Chave do nível"
+      "levelKey": "Chave do nível",
+      "body": "Corpo",
+      "audience": "Público",
+      "startsOn": "Começa em",
+      "endsOn": "Termina em"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3250,6 +3258,11 @@
       "benefitProrationBasis": {
         "full_month": "Mês cheio — o mês inteiro sejam quais forem as datas",
         "daily": "Diário — rateado pelos dias cobertos"
+      },
+      "announcementAudience": {
+        "all": "Todos",
+        "managers": "Gestores",
+        "employees": "Funcionários"
       }
     },
     "payroll": {

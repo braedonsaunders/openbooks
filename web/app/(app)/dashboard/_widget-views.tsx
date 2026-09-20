@@ -5,6 +5,7 @@ import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import {
+  Activity,
   ArrowUpRight,
   AlertTriangle,
   BookOpen,
@@ -187,6 +188,51 @@ export function WidgetCard({
       return <InProgressList documents={data.draftDocuments} />
     case 'personal-inbox':
       return <PendingApprovalsList approvals={data.myApprovalList} title={t('widgets.myApprovals')} />
+    // HR-15 persona-home tiles (readers in _persona.ts, registry in
+    // _widget-registry.ts). Null data renders the honest empty card — a
+    // tile with nothing true to say never renders a zero as a fact.
+    case 'inbox-list':
+      return <PersonaTaskList title={t('widgets.inboxList')} href="/inbox" items={data.inboxTasksTop} empty={t('persona.nothingWaiting')} />
+    case 'team-approvals':
+      return <PersonaTaskList title={t('widgets.teamApprovals')} href="/inbox?filter=approvals" items={data.inboxApprovalsTop} empty={t('persona.nothingWaiting')} />
+    case 'pay-tile':
+      return data.payTile === null
+        ? <PersonaEmpty title={t('widgets.payTile')} icon={<Wallet size={14} />} />
+        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.payTile')} value={data.payTile.nextPayDate ?? '—'} href="/payroll" tone="emerald" hint={data.payTile.lastPayDate ? t('persona.lastSlip', { date: data.payTile.lastPayDate }) : undefined} />
+    case 'balance-tile':
+      return <PersonaRows title={t('widgets.balanceTile')} icon={<Hourglass size={14} />} href="/hrm/my-leave" actionLabel={t('persona.requestTimeOff')} rows={(data.balances ?? []).map((b) => ({ label: b.code, detail: b.hours }))} empty={t('persona.noBalances')} />
+    case 'whos-out-strip':
+      return <PersonaRows title={t('widgets.whosOut')} icon={<Users size={14} />} rows={(data.whosOut ?? []).map((w) => ({ label: w.name, detail: w.range }))} empty={t('persona.nobodyOut')} />
+    case 'home-upcoming':
+      return <PersonaRows title={t('widgets.homeUpcoming')} icon={<CalendarClock size={14} />} rows={(data.upcoming ?? []).map((u) => ({ label: u.label, detail: u.date, href: u.href }))} empty={t('persona.nothingUpcoming')} />
+    case 'celebrations-list':
+      return <PersonaRows title={t('widgets.celebrations')} icon={<Sparkles size={14} />} rows={(data.celebrations ?? []).map((c) => ({ label: c.name, detail: c.detail }))} empty={t('persona.noCelebrations')} />
+    case 'announcements-card':
+      return <PersonaRows title={t('widgets.announcements')} icon={<NotebookPen size={14} />} rows={(data.announcements ?? []).map((a) => ({ label: a.title, detail: a.body }))} empty={t('persona.noAnnouncements')} />
+    case 'home-ask':
+      return (
+        <CardShell title={t('widgets.homeAsk')} icon={<Sparkles size={14} />} href="/assistant">
+          <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{t('persona.askHint')}</div>
+        </CardShell>
+      )
+    case 'team-steps':
+      return <PersonaRows title={t('widgets.teamSteps')} icon={<ListChecks size={14} />} href="/hrm/processes" rows={(data.teamSteps ?? []).map((s) => ({ label: s.title, detail: `${s.owner} · ${s.due}` }))} empty={t('persona.noOverdueSteps')} />
+    case 'team-nudges':
+      return <PersonaRows title={t('widgets.teamNudges')} icon={<AlertTriangle size={14} />} rows={(data.teamNudges ?? []).map((n) => ({ label: n.text, href: n.href }))} empty={t('persona.noNudges')} />
+    case 'team-headcount':
+      return data.teamHeadcount === null
+        ? <PersonaEmpty title={t('widgets.teamHeadcount')} icon={<Users size={14} />} />
+        : <MetricTile icon={<Users size={15} />} label={t('widgets.teamHeadcount')} value={String(data.teamHeadcount)} href="/hrm" tone="teal" />
+    case 'team-quals':
+      return <PersonaRows title={t('widgets.teamQuals')} icon={<BookOpen size={14} />} href="/hrm" rows={[]} empty={t('persona.noExpiringQuals')} />
+    case 'admin-attention':
+      return <PersonaRows title={t('widgets.adminAttention')} icon={<AlertTriangle size={14} />} rows={(data.adminAttention ?? []).map((a) => ({ label: a.label, detail: String(a.count), href: a.href }))} empty={t('persona.allClear')} />
+    case 'workflow-errors':
+      return data.workflowErrors === null
+        ? <PersonaEmpty title={t('widgets.workflowErrors')} icon={<Activity size={14} />} />
+        : <MetricTile icon={<Activity size={15} />} label={t('widgets.workflowErrors')} value={String(data.workflowErrors.count)} href="/admin/flows" tone={data.workflowErrors.count > 0 ? 'rose' : 'emerald'} hint={data.workflowErrors.count > 0 ? t('persona.needsAttention') : t('persona.allClear')} />
+    case 'admin-calendar':
+      return <PersonaRows title={t('widgets.adminCalendar')} icon={<CalendarClock size={14} />} rows={(data.adminCalendar ?? []).map((c) => ({ label: c.label, detail: c.date }))} empty={t('persona.nothingUpcoming')} />
     case 'list-close-readiness':
       return <CloseReadinessList runs={data.closeRuns} />
     default:
@@ -227,8 +273,120 @@ function CardShell({
   )
 }
 
-type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
+/**
+ * HR-15 persona render helpers. Every tile links where its rows live — a
+ * tile with no rows renders the honest empty card, never a zero as a fact.
+ */
+function PersonaEmpty({ title, icon }: { title: string; icon?: React.ReactNode }) {
+  return (
+    <CardShell title={title} icon={icon}>
+      <EmptyRow />
+    </CardShell>
+  )
+}
 
+function PersonaRows({
+  title,
+  icon,
+  href,
+  actionLabel,
+  rows,
+  empty,
+}: {
+  title: string
+  icon?: React.ReactNode
+  href?: string
+  actionLabel?: string
+  rows: { label: string; detail?: string | null; href?: string }[]
+  empty: string
+}) {
+  if (rows.length === 0) {
+    return (
+      <CardShell title={title} icon={icon} href={href}>
+        <div className="flex h-full items-center justify-center px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+          {empty}
+        </div>
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell title={title} icon={icon} href={href}>
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {rows.map((row, index) => {
+          const body = (
+            <>
+              <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{row.label}</div>
+              {row.detail ? (
+                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{row.detail}</div>
+              ) : null}
+            </>
+          )
+          return (
+            <li key={index} className="px-4 py-2.5">
+              {row.href ? (
+                <Link href={row.href as never} className="block transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {actionLabel && href ? (
+        <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
+          <Link href={href as never} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {actionLabel}
+          </Link>
+        </div>
+      ) : null}
+    </CardShell>
+  )
+}
+
+function PersonaTaskList({
+  title,
+  href,
+  items,
+  empty,
+}: {
+  title: string
+  href: string
+  items: DashboardMetrics['inboxTasksTop']
+  empty: string
+}) {
+  if (!items || items.length === 0) {
+    return (
+      <CardShell title={title} icon={<ClipboardList size={14} />} href={href}>
+        <div className="flex h-full items-center justify-center px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+          {empty}
+        </div>
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell title={title} icon={<ClipboardList size={14} />} href={href}>
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {items.map((item) => (
+          <li key={item.id}>
+            <Link
+              href={item.href as never}
+              className="block px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
+            >
+              <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.title}</div>
+              {item.subtitle ? (
+                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</div>
+              ) : null}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </CardShell>
+  )
+}
+
+type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
 const METRIC_TONES: Record<MetricTone, { icon: string; accent: string; wash: string; hover: string; dot: string }> = {
   teal: { icon: 'bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300', accent: 'from-teal-500 to-cyan-400', wash: 'from-teal-500/[0.07]', hover: 'hover:border-teal-300/80 dark:hover:border-teal-700/70', dot: 'bg-teal-500' },
   sky: { icon: 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/10 dark:text-sky-300', accent: 'from-sky-500 to-indigo-400', wash: 'from-sky-500/[0.07]', hover: 'hover:border-sky-300/80 dark:hover:border-sky-700/70', dot: 'bg-sky-500' },

@@ -2532,6 +2532,10 @@
         "title": "Leistungsstufen",
         "singularTitle": "Leistungsstufe",
         "description": "Deckungsstufen je Plan — nur Mitarbeiter, Familie — mit den Stufenkosten."
+      },
+      "home-announcements": {
+        "title": "Ankündigungen",
+        "description": "Firmenankündigungen für die Startseite, mit Zielgruppe und Zeitraum."
       }
     },
     "fields": {
@@ -2842,7 +2846,11 @@
       "employerPayComponentId": "Arbeitgeberkomponente",
       "waitingPeriodDays": "Wartezeit (Tage)",
       "requiresApproval": "Genehmigung erforderlich",
-      "levelKey": "Stufenschlüssel"
+      "levelKey": "Stufenschlüssel",
+      "body": "Text",
+      "audience": "Zielgruppe",
+      "startsOn": "Beginnt am",
+      "endsOn": "Endet am"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3318,6 +3326,11 @@
       "benefitProrationBasis": {
         "full_month": "Voller Monat — der ganze Monat unabhängig von den Daten",
         "daily": "Täglich — anteilig nach abgedeckten Tagen"
+      },
+      "announcementAudience": {
+        "all": "Alle",
+        "managers": "Führungskräfte",
+        "employees": "Mitarbeitende"
       }
     },
     "bankFeeds": {
