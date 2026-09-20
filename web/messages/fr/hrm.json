@@ -29,6 +29,41 @@
       "title": "Annuaire"
     }
   },
+  "queue": {
+    "title": "Demandes de changement",
+    "description": "Chaque proposition de changement d'emploi dans une seule file — brouillons, soumissions et décisions — résolue par le service des demandes de changement.",
+    "listTitle": "Demandes",
+    "segmentsLabel": "Statut",
+    "allLabel": "Toutes",
+    "truncatedNote": "Les {limit} premières demandes sont affichées — les chiffres couvrent uniquement celles-ci.",
+    "refusalTitle": "La file n'a pas pu être chargée",
+    "unknownSegment": "Segment inconnu {value} — filtrez par brouillon, soumise, approuvée, rejetée ou retirée, ou effacez le filtre.",
+    "segments": {
+      "draft": "Brouillon",
+      "submitted": "Soumise",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "withdrawn": "Retirée"
+    },
+    "columns": {
+      "employee": "Employé",
+      "kind": "Changement",
+      "effective": "Effet",
+      "requester": "Demandeur",
+      "submitted": "Soumise"
+    },
+    "emptyTitle": "Aucune demande de changement ici",
+    "emptyDescription": "Cette vue est vide — rien n'a encore été proposé dans ce segment.",
+    "proposeTitle": "Proposer un changement pour un emploi",
+    "proposeButton": "Proposer un changement",
+    "proposeEmploymentLabel": "Emploi",
+    "proposeEmploymentPlaceholder": "Rechercher des emplois…",
+    "proposeEmpty": "Aucun emploi ne correspond.",
+    "proposeFailed": "La liste des emplois n'a pas pu être chargée.",
+    "draftBadge": "Actions",
+    "openEmployee": "Ouvrir le dossier de l'employé",
+    "notAvailable": "Non disponible"
+  },
   "employment": {
     "episodes": {
       "title": "Épisodes d'emploi",

@@ -171,6 +171,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'grant-acting-cell': { props: ['email', 'name'] },
   'grant-control-cell': { props: ['grantId', 'isActive'] },
   'health-hero': { props: ['categories', 'fullAnalysisLabel', 'gaugeLabel', 'gaugeValue', 'ratioLabels', 'ratios'] },
+  'hrm-change-request-queue': { props: ['canManage', 'columns', 'departmentOptions', 'draftBadge', 'emptyDescription', 'emptyTitle', 'notAvailable', 'openEmployee', 'proposeButton', 'proposeEmploymentLabel', 'proposeEmploymentPlaceholder', 'proposeEmpty', 'proposeFailed', 'proposeTitle', 'rows', 'truncated', 'truncatedNote'] },
   'hrm-headcount-table': { props: ['departmentColumn', 'employerColumn', 'empty', 'groups', 'headcountColumn', 'total', 'totalLabel', 'unassigned'] },
   'identity-cell': { props: ['detail', 'name'] },
   'identity-record-card': { props: ['facts', 'title'] },

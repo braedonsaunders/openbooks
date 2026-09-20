@@ -29,6 +29,41 @@
       "title": "Directory"
     }
   },
+  "queue": {
+    "title": "Change requests",
+    "description": "Every employment change proposal in one queue — drafts, submissions, and decisions — resolved through the change-request service.",
+    "listTitle": "Requests",
+    "segmentsLabel": "Status",
+    "allLabel": "All",
+    "truncatedNote": "Showing the first {limit} requests — segment counts cover only those.",
+    "refusalTitle": "The queue refused to load",
+    "unknownSegment": "Unknown segment {value} — filter by draft, submitted, approved, rejected, or withdrawn, or clear the filter.",
+    "segments": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn"
+    },
+    "columns": {
+      "employee": "Employee",
+      "kind": "Change",
+      "effective": "Effective",
+      "requester": "Requester",
+      "submitted": "Submitted"
+    },
+    "emptyTitle": "No change requests here",
+    "emptyDescription": "This view is empty — nothing has been proposed in this segment yet.",
+    "proposeTitle": "Propose a change for an employment",
+    "proposeButton": "Propose change",
+    "proposeEmploymentLabel": "Employment",
+    "proposeEmploymentPlaceholder": "Search employments…",
+    "proposeEmpty": "No employments match.",
+    "proposeFailed": "The employment list could not be loaded.",
+    "draftBadge": "Actions",
+    "openEmployee": "Open the employee record",
+    "notAvailable": "Not available"
+  },
   "employment": {
     "episodes": {
       "title": "Employment episodes",

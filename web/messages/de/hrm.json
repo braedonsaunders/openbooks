@@ -29,6 +29,41 @@
       "title": "Verzeichnis"
     }
   },
+  "queue": {
+    "title": "Änderungsanträge",
+    "description": "Jeder beantragte Beschäftigungswechsel in einer Liste — Entwürfe, Einreichungen und Entscheidungen — gelesen über den Änderungsantrags-Service.",
+    "listTitle": "Anträge",
+    "segmentsLabel": "Status",
+    "allLabel": "Alle",
+    "truncatedNote": "Die ersten {limit} Anträge werden gezeigt — die Segmentzahlen decken nur diese ab.",
+    "refusalTitle": "Die Liste konnte nicht geladen werden",
+    "unknownSegment": "Unbekanntes Segment {value} — filtern Sie nach Entwurf, eingereicht, genehmigt, abgelehnt oder zurückgezogen, oder löschen Sie den Filter.",
+    "segments": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "withdrawn": "Zurückgezogen"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "kind": "Änderung",
+      "effective": "Wirksam",
+      "requester": "Antragsteller",
+      "submitted": "Eingereicht"
+    },
+    "emptyTitle": "Keine Änderungsanträge in dieser Ansicht",
+    "emptyDescription": "Diese Ansicht ist leer — in diesem Segment wurde noch nichts beantragt.",
+    "proposeTitle": "Änderung für eine Beschäftigung beantragen",
+    "proposeButton": "Änderung beantragen",
+    "proposeEmploymentLabel": "Beschäftigung",
+    "proposeEmploymentPlaceholder": "Beschäftigungen suchen…",
+    "proposeEmpty": "Keine Beschäftigung passt.",
+    "proposeFailed": "Die Beschäftigungsliste konnte nicht geladen werden.",
+    "draftBadge": "Aktionen",
+    "openEmployee": "Personalakte öffnen",
+    "notAvailable": "Nicht verfügbar"
+  },
   "employment": {
     "episodes": {
       "title": "Beschäftigungsepisoden",

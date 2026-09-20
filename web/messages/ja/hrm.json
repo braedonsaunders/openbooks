@@ -29,6 +29,41 @@
       "title": "名簿"
     }
   },
+  "queue": {
+    "title": "変更申請",
+    "description": "すべての雇用変更提案を1つのキューに — 下書き、提出、決定 — 変更申請サービス経由で解決します。",
+    "listTitle": "申請",
+    "segmentsLabel": "ステータス",
+    "allLabel": "すべて",
+    "truncatedNote": "最初の{limit}件の申請を表示しています — 件数はその範囲のみを対象とします。",
+    "refusalTitle": "キューを読み込めませんでした",
+    "unknownSegment": "不明なセグメント{value} — 下書き、提出済み、承認済み、却下、取り下げで絞り込むか、フィルターを解除してください。",
+    "segments": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "withdrawn": "取り下げ"
+    },
+    "columns": {
+      "employee": "従業員",
+      "kind": "変更",
+      "effective": "発効",
+      "requester": "申請者",
+      "submitted": "提出"
+    },
+    "emptyTitle": "ここに変更申請はありません",
+    "emptyDescription": "このビューは空です — このセグメントではまだ何も提案されていません。",
+    "proposeTitle": "雇用の変更を提案する",
+    "proposeButton": "変更を提案",
+    "proposeEmploymentLabel": "雇用",
+    "proposeEmploymentPlaceholder": "雇用を検索…",
+    "proposeEmpty": "一致する雇用がありません。",
+    "proposeFailed": "雇用リストを読み込めませんでした。",
+    "draftBadge": "操作",
+    "openEmployee": "従業員レコードを開く",
+    "notAvailable": "利用不可"
+  },
   "employment": {
     "episodes": {
       "title": "雇用エピソード",

@@ -29,6 +29,41 @@
       "title": "Directorio"
     }
   },
+  "queue": {
+    "title": "Solicitudes de cambio",
+    "description": "Cada propuesta de cambio de empleo en una sola lista — borradores, envíos y decisiones — resuelta a través del servicio de solicitudes de cambio.",
+    "listTitle": "Solicitudes",
+    "segmentsLabel": "Estado",
+    "allLabel": "Todas",
+    "truncatedNote": "Se muestran las primeras {limit} solicitudes — los recuentos cubren solo esas.",
+    "refusalTitle": "La lista no se pudo cargar",
+    "unknownSegment": "Segmento desconocido {value} — filtre por borrador, enviada, aprobada, rechazada o retirada, o borre el filtro.",
+    "segments": {
+      "draft": "Borrador",
+      "submitted": "Enviada",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "withdrawn": "Retirada"
+    },
+    "columns": {
+      "employee": "Empleado",
+      "kind": "Cambio",
+      "effective": "Vigencia",
+      "requester": "Solicitante",
+      "submitted": "Enviada"
+    },
+    "emptyTitle": "No hay solicitudes de cambio aquí",
+    "emptyDescription": "Esta vista está vacía — aún no se ha propuesto nada en este segmento.",
+    "proposeTitle": "Proponer un cambio para un empleo",
+    "proposeButton": "Proponer cambio",
+    "proposeEmploymentLabel": "Empleo",
+    "proposeEmploymentPlaceholder": "Buscar empleos…",
+    "proposeEmpty": "Ningún empleo coincide.",
+    "proposeFailed": "La lista de empleos no se pudo cargar.",
+    "draftBadge": "Acciones",
+    "openEmployee": "Abrir el registro del empleado",
+    "notAvailable": "No disponible"
+  },
   "employment": {
     "episodes": {
       "title": "Episodios de empleo",

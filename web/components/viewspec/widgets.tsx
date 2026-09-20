@@ -75,6 +75,7 @@ import {
 import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
 import { HrmHeadcountTable } from '../../app/(app)/hrm/sections'
+import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1028,6 +1029,31 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       ratios={props.ratios as ComponentProps<typeof HealthHero>['ratios']}
       ratioLabels={props.ratioLabels as ComponentProps<typeof HealthHero>['ratioLabels']}
       fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
+    />
+  ),
+  /** The queue body: loader-resolved rows (newest first) plus loader-
+   *  resolved strings. Lifecycle actions ride the existing
+   *  ChangeRequestActions and API routes inside the island; no org id,
+   *  user id or Authz crosses the spec. */
+  'hrm-change-request-queue': (props) => (
+    <ChangeRequestQueue
+      rows={(props.rows as ComponentProps<typeof ChangeRequestQueue>['rows']) ?? []}
+      columns={props.columns as ComponentProps<typeof ChangeRequestQueue>['columns']}
+      canManage={props.canManage === true}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestQueue>['departmentOptions']) ?? []}
+      proposeTitle={str(props, 'proposeTitle') ?? ''}
+      proposeButton={str(props, 'proposeButton') ?? ''}
+      proposeEmploymentLabel={str(props, 'proposeEmploymentLabel') ?? ''}
+      proposeEmploymentPlaceholder={str(props, 'proposeEmploymentPlaceholder') ?? ''}
+      proposeEmpty={str(props, 'proposeEmpty') ?? ''}
+      proposeFailed={str(props, 'proposeFailed') ?? ''}
+      draftBadge={str(props, 'draftBadge') ?? ''}
+      openEmployee={str(props, 'openEmployee') ?? ''}
+      notAvailable={str(props, 'notAvailable') ?? ''}
+      emptyTitle={str(props, 'emptyTitle') ?? ''}
+      emptyDescription={str(props, 'emptyDescription') ?? ''}
+      truncated={props.truncated === true}
+      truncatedNote={str(props, 'truncatedNote') ?? ''}
     />
   ),
   /** A widget, not a slot: the loader already resolved headcount through the
