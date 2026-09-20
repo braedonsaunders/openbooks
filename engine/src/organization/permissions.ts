@@ -167,6 +167,18 @@ export const PERMISSION_CATALOGUE = [
   // elections and generates inputs. Admin-only like the employment keys.
   "hrm.benefits.read",
   "hrm.benefits.manage",
+  // HR-9 self-service — the person's own view and the manager's team.
+  // self.read sees only the actor's own employment summary, requests and
+  // steps (every read scopes by the party behind the login, never by a
+  // caller-supplied id); self.request files profile-change proposals for
+  // one's own party (leave already files under hrm.leave.request).
+  // team.read/team.manage are STRUCTURAL, not role grants: the team read
+  // service resolves them by holding direct reports as of today, and no
+  // role grant of these keys ever substitutes for that resolution.
+  "hrm.self.read",
+  "hrm.self.request",
+  "hrm.team.read",
+  "hrm.team.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -424,6 +436,10 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
       { key: "hrm.benefits.read", labelKey: permissionLabelKey("hrm.benefits.read") },
       { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
+      { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
+      { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
+      { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
+      { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
     ],
   },
   {

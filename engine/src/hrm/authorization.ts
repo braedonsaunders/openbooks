@@ -1118,3 +1118,44 @@ export async function requireAggregateBenefitsRead(
   }
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
+ * Self-service duties (HR-9). self.read sees only the actor's own rows
+ * (every read scopes by the party behind the login); self.request files
+ * profile-change proposals for one's own party. team.read/team.manage are
+ * STRUCTURAL: holding direct reports as of today is what grants them, so
+ * there are deliberately no requireHrmTeam* role gates here — the team
+ * read service (engine/src/hrm/self-service/team-read.ts) resolves the
+ * structure and refuses a report-less actor by name. A role grant of these
+ * keys never substitutes for that resolution and never widens it.
+export const HRM_SELF_PERMISSIONS = ["hrm.self.read", "hrm.self.request"] as const;
+
+export type HrmSelfPermission = (typeof HRM_SELF_PERMISSIONS)[number];
+
+export const HRM_TEAM_PERMISSIONS = ["hrm.team.read", "hrm.team.manage"] as const;
+
+export type HrmTeamPermission = (typeof HRM_TEAM_PERMISSIONS)[number];
+
+ * See one's own employment summary, requests, and steps. Permission only —
+ * scope comes from users.party_id on the trusted runner in the read
+ * service, never from a caller-supplied party.
+export async function requireHrmSelfRead(
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) {
+      "Self-service requires the hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
+
+ * Propose a profile change for one's own party. Permission only — the
+ * profile service additionally proves the bound employment is the actor's
+ * own before a draft is stored.
+export async function requireHrmSelfRequest(
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.request"))) {
+      "Profile changes require the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
+
+ * Own-employment subject gate for the self-service change kinds
+ * (profile_change): the named self permission, proof the employment sits
+ * behind the actor's own party link, then the same employer-subsidiary
+ * scope every employment gate enforces. Returns the trusted subject so
+ * the service binds the live revision exactly like a managed change.
+ * Throws HrmAuthorizationError naming the refused shape — the caller
+ * must not learn whether a foreign id exists.
+export async function requireOwnEmploymentSubject(
+  permission: HrmSelfPermission,
+      `Self-service requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+      "Self-service reaches only your own employment — HR files anything else as an employment change.",

@@ -48,7 +48,7 @@ const HRM_REQUEST_STATUSES = [
   'withdrawn',
   'applied',
 ] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
+const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment', 'profile_change'] as const
 
 const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
 const HRM_ENROLLMENT_STATUSES = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const
