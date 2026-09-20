@@ -47,6 +47,11 @@ import {
   hrmLeaveRequestFlowAdapter,
   hrmLeaveRequestSubjectProfile,
 } from "./leave-requests-adapter.ts";
+import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
+import {
+  hrmCompCycleFlowAdapter,
+  hrmCompCycleSubjectProfile,
+} from "./comp-cycles-adapter.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 
@@ -69,6 +74,9 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
   if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND) return hrmLeaveRequestFlowAdapter;
+  // HR-12 begin: compensation cycles approve through Flows.
+  if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND) return hrmCompCycleFlowAdapter;
+  // HR-12 end
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -94,6 +102,9 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     timesheetWeekSubjectProfile,
     hrmChangeRequestSubjectProfile,
     hrmLeaveRequestSubjectProfile,
+    // HR-12 begin
+    hrmCompCycleSubjectProfile,
+    // HR-12 end
   ];
 }
 

@@ -1332,12 +1332,37 @@ export async function requireHrmConstructionRead(
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.read"))) {
     throw new HrmAuthorizationError(
       "Construction compliance access requires the hrm.construction.read permission — ask an administrator to grant it in /admin/roles.",
+/**
+ * Compensation duties (HR-12, 0221/0222). read = bands, architecture and
+ * cycle reads; manage = cycles, push, plans and snapshots; approve =
+ * the Flows gate on cycle decisions (the service additionally requires
+ * the identity invariant over the persisted cycle revision — this key
+ * alone never decides). Structural managers propose on direct reports
+ * without the manage grant (fenced per-employment in cycles.ts); own
+ * statements and pay-information requests ride hrm.self.read/request.
+ * Admin-only like the employment keys above (granted via the catalogue
+ * spread; the role seed refreshes on re-run).
+ */
+// HR-12 begin
+export const HRM_COMPENSATION_PERMISSIONS = [
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "hrm.compensation.approve",
+
+export type HrmCompensationPermission = (typeof HRM_COMPENSATION_PERMISSIONS)[number];
+
+async function requireHrmCompensationAccess(
+  permission: HrmCompensationPermission,
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+      `Compensation access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
     );
   }
 }
 
 /** Author construction-compliance configuration, entries, runs and findings transitions. */
 export async function requireHrmConstructionManage(
+/** See bands, architecture and cycle reads (org configuration). */
+export async function requireHrmCompensationRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -1349,3 +1374,35 @@ export async function requireHrmConstructionManage(
   }
 }
 // HR-13 end
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.read");
+
+/** Run cycles, push rates, author plans and compute snapshots. */
+export async function requireHrmCompensationManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.manage");
+
+/** Decide cycle lines through the Flows approval run. */
+export async function requireHrmCompensationApprove(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.approve");
+
+/**
+ * Aggregate compensation read for list-shaped reads that name no single
+ * employment: the hrm.compensation.read grant, then the
+ * employer-subsidiary scope for the caller to filter by (null =
+ * unrestricted), never a boolean to trust.
+ */
+export async function requireAggregateCompensationRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmCompensationRead(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+// HR-12 end
