@@ -71,7 +71,9 @@ export const hrmLeaveTypes = pgTable(
  * HRM leave policies (0194): HR entitlement in TIME per type. applies_to
  * scopes by employer subsidiary and department (nullable = org-wide);
  * accrual_rule declares none | per_period | per_year | unlimited with hours
- * as decimal strings; carryover_rule declares the carryover shape.
+ * as decimal strings; carryover_rule declares the carryover shape. The rule
+ * shapes mirror engine/src/hrm/leave-math.ts (AccrualRule, CarryoverRule);
+ * the jsonb columns stay the source of truth.
  * Effective-dated so a rule change never reinterprets history. This is not
  * the payroll bank in VALUE; the two are never conflated.
  */
@@ -85,9 +87,39 @@ export const hrmLeavePolicies = pgTable(
       .$type<{ employer_subsidiary_id: string | null; department_id: string | null }>()
       .notNull(),
     accrualRule: jsonb("accrual_rule")
-      .$type<{ kind: "none" | "per_period" | "per_year" | "unlimited"; hours?: string }>()
+      .$type<{
+        kind: "none" | "per_period" | "per_year" | "unlimited";
+        hours?: string;
+        periods_per_year?: number;
+      }>()
       .notNull(),
-    carryoverRule: jsonb("carryover_rule").$type<Record<string, unknown>>().notNull(),
+    carryoverRule: jsonb("carryover_rule")
+      .$type<{
+        kind: "none" | "carry_all" | "carry_up_to";
+        hours?: string | null;
+        expires_after_days?: number | null;
+      }>()
+      .notNull(),
+    // Read-only slot projections of the three rule jsonb columns for
+    // structured surfaces (0194 STORED GENERATED columns): readable for
+    // prefill, never written — the Setup write path folds the drawer slots
+    // back into the jsonb before buildRow.
+    appliesEmployerSubsidiaryId: uuid("applies_employer_subsidiary_id").generatedAlwaysAs(
+      sql`(applies_to ->> 'employer_subsidiary_id')::uuid`,
+    ),
+    appliesDepartmentId: uuid("applies_department_id").generatedAlwaysAs(
+      sql`(applies_to ->> 'department_id')::uuid`,
+    ),
+    accrualKind: text("accrual_kind").generatedAlwaysAs(sql`(accrual_rule ->> 'kind')`),
+    accrualHours: text("accrual_hours").generatedAlwaysAs(sql`(accrual_rule ->> 'hours')`),
+    accrualPeriodsPerYear: integer("accrual_periods_per_year").generatedAlwaysAs(
+      sql`(accrual_rule ->> 'periods_per_year')::integer`,
+    ),
+    carryoverKind: text("carryover_kind").generatedAlwaysAs(sql`(carryover_rule ->> 'kind')`),
+    carryoverHours: text("carryover_hours").generatedAlwaysAs(sql`(carryover_rule ->> 'hours')`),
+    carryoverExpiresAfterDays: integer("carryover_expires_after_days").generatedAlwaysAs(
+      sql`(carryover_rule ->> 'expires_after_days')::integer`,
+    ),
     minimumNoticeDays: integer("minimum_notice_days").notNull().default(0),
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
