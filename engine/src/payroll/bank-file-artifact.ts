@@ -646,10 +646,13 @@ export async function generatePayRunBankFile(
     const fileNumber = `${seq.prefix}${String(sequenceValue).padStart(seq.padding, "0")}`;
 
     // CPA-005 carries a 4-digit file creation number (1–9999) unique per
-    // originator; NACHA carries a single-character file ID modifier. Both are
+    // originator; NACHA carries a single-character file ID modifier; SEPA
+    // carries a message identification the bank deduplicates on. All three are
     // derived from the SAME allocation, once, and stored — so a wrap of either
     // alphabet still produces a file the operator can trace to a sequence
-    // value that never repeats.
+    // value that never repeats. Cemtex carries no per-file bank number: its
+    // reel sequence is the literal "01" (multi-file batches, which would
+    // advance it, are refused — a run past 500 details never becomes bytes).
     const fileCreationNumber =
       format === "cpa005" ? ((sequenceValue - 1) % 9999) + 1 : null;
     const fileIdModifier =
@@ -665,6 +668,7 @@ export async function generatePayRunBankFile(
       originator: config,
       fileCreationNumber: fileCreationNumber ?? undefined,
       fileIdModifier: fileIdModifier ?? undefined,
+      messageId: format === "sepa" ? fileNumber : undefined,
       fundsDate: entitlement.payDate,
       createdAt: now,
     });
@@ -679,16 +683,19 @@ export async function generatePayRunBankFile(
       );
     }
 
-    // us-ascii: the byte length must equal the character length, or a name
-    // with an accent has silently shifted every field after it.
+    // us-ascii on the fixed-width rails: the byte length must equal the
+    // character length, or a name with an accent has silently shifted every
+    // field after it. SEPA pain.001 is UTF-8 XML by declaration —
+    // length-delimited by markup, not by offsets — so non-ASCII names are
+    // legal there and this check does not apply.
     const bytes = Buffer.from(rendered.content, "utf8");
-    if (bytes.length !== rendered.content.length) {
+    if (format !== "sepa" && bytes.length !== rendered.content.length) {
       throw new PayrollError(
         "payroll bank file contains non-ASCII characters, which would shift every fixed-width field after them",
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : "NACHA"}-${
+    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : "NACHA"}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

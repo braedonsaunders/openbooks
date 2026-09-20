@@ -21,6 +21,7 @@ export type BuiltInPaymentRail =
   | "cpa005_credit"
   | "nacha_credit"
   | "sepa_credit"
+  | "cemtex_credit"
   | "nacha_debit"
   | "sepa_debit"
   | "positive_pay"
@@ -40,6 +41,8 @@ const BUILTIN_FORMATS: Array<{
   { code: "CPA005", name: "CPA Standard 005 credit", rail: "cpa005_credit", direction: "credit", country: "CA", currency: "CAD", extension: "txt", contentType: "text/plain; charset=us-ascii" },
   { code: "NACHA-CREDIT", name: "NACHA ACH credit", rail: "nacha_credit", direction: "credit", country: "US", currency: "USD", extension: "ach", contentType: "text/plain; charset=us-ascii" },
   { code: "SEPA-CREDIT", name: "SEPA credit transfer", rail: "sepa_credit", direction: "credit", country: null, currency: "EUR", extension: "xml", contentType: "application/xml" },
+  // `cemtex_credit`, never `aba_credit`: ABA already means the US 9-digit routing number in this codebase.
+  { code: "CEMTEX-CREDIT", name: "Cemtex (ABA) credit transfer", rail: "cemtex_credit", direction: "credit", country: "AU", currency: "AUD", extension: "aba", contentType: "text/plain; charset=us-ascii" },
   { code: "NACHA-DEBIT", name: "NACHA ACH debit", rail: "nacha_debit", direction: "debit", country: "US", currency: "USD", extension: "ach", contentType: "text/plain; charset=us-ascii" },
   { code: "SEPA-DEBIT", name: "SEPA direct debit", rail: "sepa_debit", direction: "debit", country: null, currency: "EUR", extension: "xml", contentType: "application/xml" },
   { code: "POSITIVE-PAY", name: "Positive Pay", rail: "positive_pay", direction: "credit", country: null, currency: null, extension: "csv", contentType: "text/csv; charset=utf-8" },
