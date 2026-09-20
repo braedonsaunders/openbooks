@@ -323,7 +323,8 @@
       "reasonPlaceholder": "Por que esta posição existe — registrado com a primeira versão",
       "submit": "Criar posição",
       "failed": "Não foi possível criar a posição."
-    }
+    },
+    "segmentsLabel": "Status"
   },
   "processes": {
     "title": "Listas de processos",
@@ -362,7 +363,8 @@
       "kind": "Tipo",
       "effective": "Vigência",
       "progress": "Progresso",
-      "nextDue": "Próximo vencimento"
+      "nextDue": "Próximo vencimento",
+      "status": "Status"
     },
     "kinds": {
       "onboarding": "Integração",
@@ -384,7 +386,8 @@
       "pending": "Pendente",
       "done": "Concluído",
       "skipped": "Pulado"
-    }
+    },
+    "segmentsLabel": "Mostrar"
   },
   "leave": {
     "title": "Licenças",

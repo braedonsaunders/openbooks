@@ -7,11 +7,11 @@ import {
   HrmUpcomingChanges,
   OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
-import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
+import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
 import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
-import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
+import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
@@ -79,28 +79,6 @@ export const HRM_WIDGETS = {
       truncatedNote={str(props, 'truncatedNote') ?? ''}
     />
   ),
-  /** Status segments: server-side filter pills with per-status counts over
-   *  loader-computed hrefs. A widget, not `filter-chips`: the hrefs carry the
-   *  effective date as well as the status, so they are resolved in the loader
-   *  and passed whole rather than rebuilt from a param key. */
-  'hrm-position-segments': (props) => (
-    <PositionSegments
-      ariaLabel={str(props, 'ariaLabel') ?? ''}
-      segments={(props.segments as ComponentProps<typeof PositionSegments>['segments']) ?? []}
-    />
-  ),
-  /** The funded-establishment vacancy table over loader-resolved rows plus
-   *  loader-resolved strings — the same PositionsTable the native page
-   *  renders, so the two cannot drift. */
-  'hrm-positions-table': (props) => (
-    <PositionsTable
-      columns={(props.columns as ComponentProps<typeof PositionsTable>['columns']) ?? {}}
-      rows={(props.rows as ComponentProps<typeof PositionsTable>['rows']) ?? []}
-      empty={str(props, 'empty') ?? ''}
-      totals={(props.totals as ComponentProps<typeof PositionsTable>['totals']) ?? { plannedFte: '0', fundedFte: '0', filledFte: '0', vacantFte: '0' }}
-      totalLabel={str(props, 'totalLabel') ?? ''}
-    />
-  ),
   /** The position flyout: a URL drawer around the shared PositionDrawerBody
    *  that closes by navigation. Null payload renders nothing — the spec's
    *  `when` gate already omits it, so this is the second half of the same
@@ -110,25 +88,6 @@ export const HRM_WIDGETS = {
     if (!drawer) return null
     return <PositionDrawer drawer={drawer} />
   },
-  /** A widget, not a slot: the loader already resolved vacancy through the
-   *  canonical position read service and passes rows plus loader-resolved
-   *  strings as data, so no org id, user id or Authz crosses the spec. */
-  'hrm-vacancy-table': (props) => (
-    <VacancyTable
-      groups={(props.groups as ComponentProps<typeof VacancyTable>['groups']) ?? []}
-      total={(props.total as ComponentProps<typeof VacancyTable>['total']) ?? { positions: 0, plannedFte: '0.0000', fundedFte: '0.0000', filledFte: '0.0000', vacantFte: '0.0000' }}
-      departmentColumn={str(props, 'departmentColumn') ?? ''}
-      employerColumn={str(props, 'employerColumn') ?? ''}
-      positionsColumn={str(props, 'positionsColumn') ?? ''}
-      plannedColumn={str(props, 'plannedColumn') ?? ''}
-      fundedColumn={str(props, 'fundedColumn') ?? ''}
-      filledColumn={str(props, 'filledColumn') ?? ''}
-      vacantColumn={str(props, 'vacantColumn') ?? ''}
-      empty={str(props, 'empty') ?? ''}
-      totalLabel={str(props, 'totalLabel') ?? ''}
-    />
-  ),
-
   /* --- HR-4 processes and HR-5 leave (rehomed verbatim from widgets.tsx) --- */
   /** The onboarding rail panel: loader-resolved open counts plus the overdue
    *  and upcoming steps with loader-resolved strings — the same widget-not-
@@ -144,26 +103,6 @@ export const HRM_WIDGETS = {
       empty={str(props, 'empty') ?? ''}
       viewAll={str(props, 'viewAll') ?? ''}
       viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
-    />
-  ),
-  /** Segment pills over loader-resolved hrefs: the active segment filters
-   *  server-side through listProcesses, so switching is navigation, not
-   *  state. A widget, not `filter-chips`: the pills carry per-segment
-   *  counts resolved in the loader rather than rebuilt from a param key. */
-  'hrm-process-segments': (props) => (
-    <ProcessSegments
-      ariaLabel={str(props, 'ariaLabel') ?? ''}
-      segments={(props.segments as ComponentProps<typeof ProcessSegments>['segments']) ?? []}
-    />
-  ),
-  /** The checklist table over loader-resolved rows plus loader-resolved
-   *  strings — the same ProcessesTable the native page renders, so the two
-   *  cannot drift. */
-  'hrm-processes-table': (props) => (
-    <ProcessesTable
-      columns={(props.columns as ComponentProps<typeof ProcessesTable>['columns']) ?? {}}
-      rows={(props.rows as ComponentProps<typeof ProcessesTable>['rows']) ?? []}
-      empty={str(props, 'empty') ?? ''}
     />
   ),
   /** The checklist flyout: a URL drawer around the shared client checklist

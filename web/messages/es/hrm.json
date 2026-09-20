@@ -323,7 +323,8 @@
       "reasonPlaceholder": "Por qué existe este puesto; se registra con su primera versión",
       "submit": "Crear puesto",
       "failed": "No se pudo crear el puesto."
-    }
+    },
+    "segmentsLabel": "Estado"
   },
   "processes": {
     "title": "Listas de procesos",
@@ -362,7 +363,8 @@
       "kind": "Tipo",
       "effective": "Vigencia",
       "progress": "Progreso",
-      "nextDue": "Próximo vencimiento"
+      "nextDue": "Próximo vencimiento",
+      "status": "Estado"
     },
     "kinds": {
       "onboarding": "Incorporación",
@@ -384,7 +386,8 @@
       "pending": "Pendiente",
       "done": "Hecho",
       "skipped": "Omitido"
-    }
+    },
+    "segmentsLabel": "Mostrar"
   },
   "leave": {
     "title": "Ausencias",

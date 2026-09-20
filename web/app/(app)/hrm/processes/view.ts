@@ -3,11 +3,17 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import {
+  badge,
+  column,
+  field,
   grid,
+  link,
   page,
   pageHeader,
   panel,
   ref,
+  table,
+  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -20,11 +26,11 @@ import { loadProcessesPage, type ProcessesPageData } from '../../../../lib/hrm/p
  * Process checklists — the /hrm sibling tab for employment starts, ends,
  * and transfers, split into a loader and a spec.
  *
- * Follows the positions list archetype: ViewSpec composes the header and
- * the grid; the segment pills, the checklist table, and the URL drawer
- * stay components shared by the page and the widget registry via
- * ./sections so they cannot drift. Segments filter server-side through
- * listProcesses; a row opens the checklist drawer (owners, due dates,
+ * Follows the positions list archetype: ViewSpec composes the header, the
+ * shared `filter-chips` segment filter, and the `table` block over
+ * loader-resolved rows; the URL drawer stays a component shared by the page
+ * and the widget registry via ./sections so they cannot drift. Segments
+ * filter server-side through listProcesses; a row opens the checklist drawer (owners, due dates,
  * evidence, complete/skip actions) through the URL, so the selection is
  * shareable and the drawer closes by navigation. Renders only when the hrm
  * feature gate is on and the actor holds hrm.process.read — the view 404s
@@ -32,6 +38,7 @@ import { loadProcessesPage, type ProcessesPageData } from '../../../../lib/hrm/p
  */
 
 const f = ref<ProcessesPageData>()
+const item = field
 
 export function processesSpec(data: ProcessesPageData): PageSpec {
   return page({
@@ -48,9 +55,14 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
-        widgetBlock('hrm-process-segments', {
-          ariaLabel: data.title,
-          segments: data.segments,
+        widgetBlock('filter-chips', {
+          basePath: '/hrm/processes',
+          currentParams: data.currentParams,
+          paramKey: 'segment',
+          label: data.segmentsLabel,
+          hideAll: true,
+          defaultValue: 'open',
+          options: data.segmentOptions,
         }),
         panel({
           title: f('listTitle'),
@@ -58,10 +70,32 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
           className: 'min-h-0 flex-1',
           bodyClassName: 'p-0',
           blocks: [
-            widgetBlock('hrm-processes-table', {
-              columns: data.columns,
-              rows: data.rows,
-              empty: data.empty,
+            table({
+              variant: 'app',
+              rows: f('rows'),
+              rowKey: item('id'),
+              empty: { title: f('empty') },
+              columns: [
+                column(data.columns.employee, link(item('workerName'), item('href'))),
+                column(data.columns.kind, text(item('kindLabel'))),
+                column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+                column(data.columns.effective, text(item('effectiveDate')), { className: 'tabular-nums' }),
+                column(
+                  data.columns.progress,
+                  text(item('progressLabel'), {
+                    suffix: {
+                      field: item('overdueBadge'),
+                      className:
+                        'ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                    },
+                  }),
+                  { align: 'right', className: 'tabular-nums' },
+                ),
+                column(data.columns.nextDue, text(item('nextDueOn'), { fallback: '—' }), {
+                  align: 'right',
+                  className: 'tabular-nums',
+                }),
+              ],
             }),
           ],
         }),

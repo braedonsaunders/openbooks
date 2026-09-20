@@ -323,7 +323,8 @@
       "reasonPlaceholder": "このポジションが存在する理由（最初のバージョンとともに記録されます）",
       "submit": "ポジションを作成",
       "failed": "ポジションを作成できませんでした。"
-    }
+    },
+    "segmentsLabel": "ステータス"
   },
   "processes": {
     "title": "プロセスチェックリスト",
@@ -362,7 +363,8 @@
       "kind": "種類",
       "effective": "発効日",
       "progress": "進捗",
-      "nextDue": "次の期限"
+      "nextDue": "次の期限",
+      "status": "ステータス"
     },
     "kinds": {
       "onboarding": "オンボーディング",
@@ -384,7 +386,8 @@
       "pending": "未完了",
       "done": "完了",
       "skipped": "スキップ済み"
-    }
+    },
+    "segmentsLabel": "表示"
   },
   "leave": {
     "title": "休暇",

@@ -323,7 +323,8 @@
       "reasonPlaceholder": "Warum diese Stelle besteht – wird mit der ersten Version erfasst",
       "submit": "Stelle anlegen",
       "failed": "Die Stelle konnte nicht angelegt werden."
-    }
+    },
+    "segmentsLabel": "Status"
   },
   "processes": {
     "title": "Prozess-Checklisten",
@@ -362,7 +363,8 @@
       "kind": "Art",
       "effective": "Wirksam",
       "progress": "Fortschritt",
-      "nextDue": "Nächste Fälligkeit"
+      "nextDue": "Nächste Fälligkeit",
+      "status": "Status"
     },
     "kinds": {
       "onboarding": "Einarbeitung",
@@ -384,7 +386,8 @@
       "pending": "Offen",
       "done": "Erledigt",
       "skipped": "Übersprungen"
-    }
+    },
+    "segmentsLabel": "Anzeigen"
   },
   "leave": {
     "title": "Urlaub",

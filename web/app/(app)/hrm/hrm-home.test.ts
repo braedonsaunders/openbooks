@@ -35,7 +35,9 @@ test("cockpit renders through ModuleView with a loader-owned spec", () => {
   assert.match(view, /hrmSpec/, "view exposes the spec builder");
   assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
   assert.match(view, /statTile\(/, "vitals render as house stat tiles");
-  assert.match(view, /hrm-headcount-table/, "headcount hero renders through the shared widget");
+  assert.match(view, /table\(\{/, "headcount hero composes a table block, not a bespoke component");
+  assert.match(view, /variant: 'app'/, "cockpit tables use the shared app primitives");
+  assert.match(view, /f\('groups'\)/, "headcount hero binds the loader-resolved rows");
   assert.match(view, /directory-section/, "rail reuses the shared directory section, never a copy");
 });
 
@@ -68,16 +70,24 @@ test("the loader's scoped display queries stay org-predicated and scope-filtered
   assert.match(loader, /loadQueueLabels\(/, "name resolution reuses the queue's shared resolver, never a second join");
 });
 
-test("headcount table carries its empty state and never invents copy", () => {
+test("cockpit hero is a table block; the shared headcount widget now serves departments", () => {
+  // The cockpit hero moved onto the shared `table` block. The
+  // hrm-headcount-table widget stays registered because the departments
+  // board (another shard's page) still renders through it — deleting it
+  // here would break a live page, so its shard removes it when it converts.
+  assert.match(view, /table\(\{/, "cockpit hero composes a table block");
+  assert.match(view, /f\('groups'\)/, "hero binds the loader-resolved headcount rows");
+  assert.match(loader, /departmentLabel/, "department display resolves in the loader, never in render");
+  assert.match(loader, /totalValue/, "the totals row resolves formatted strings in the loader");
   assert.match(sections, /groups\.length === 0/, "zero headcount renders the resolved empty state");
   assert.match(sections, /unassigned/, "assignments without a department stay explicitly unattributed");
-  assert.match(widgets, /'hrm-headcount-table'/, "widget renders the shared section, never a second copy");
+  assert.match(widgets, /'hrm-headcount-table'/, "widget renders the shared section departments still use");
   assert.match(contracts, /'hrm-headcount-table': \{ props: \[/, "widget contract pins the prop surface");
   assert.match(names, /'hrm-headcount-table'/, "widget name is registered");
 });
 
 test("the cockpit keeps its hero and adds the workspace panels", () => {
-  for (const widget of ['hrm-headcount-table', 'hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness', 'directory-section']) {
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness', 'directory-section']) {
     assert.match(view, new RegExp(`'${widget}'`), `cockpit composes the ${widget} body`);
   }
   for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness']) {
@@ -98,11 +108,14 @@ test("quick actions stay permission-gated and the readiness panel links migratio
   assert.ok(strings.includes("never list here"), "the upcoming panel states probation ends are not modeled");
 });
 
-test("vacancy rides the same cockpit through the shared vacancy widget", () => {
-  assert.match(view, /hrm-vacancy-table/, "vacancy renders through the shared widget");
-  assert.match(hrmWidgets, /'hrm-vacancy-table'/, "widget renders the shared section, never a second copy");
-  assert.match(contracts, /'hrm-vacancy-table': \{ props: \[/, "widget contract pins the prop surface");
-  assert.match(names, /'hrm-vacancy-table'/, "widget name is registered");
+test("vacancy rides the cockpit as a shared table block", () => {
+  assert.match(view, /table\(\{/, "vacancy renders through the shared table block");
+  assert.match(view, /f\('positions\.groups'\)/, "vacancy binds the loader-resolved by-department rows");
+  assert.match(view, /variant: 'app'/, "vacancy uses the shared app table primitives");
+  assert.ok(!/'hrm-vacancy-table'/.test(view), "no vacancy widget remains in the spec");
+  assert.ok(!/'hrm-vacancy-table'/.test(hrmWidgets), "vacancy widget is deleted, never dead code");
+  assert.ok(!/'hrm-vacancy-table'/.test(contracts), "vacancy widget contract is gone");
+  assert.ok(!/'hrm-vacancy-table'/.test(names), "vacancy widget name is unregistered");
   assert.match(loader, /getVacancyAsOf/, "vacancy resolves through the canonical position read service");
   assert.ok(!/from positions[^_]/.test(loader), "loader issues no direct position table reads");
   assert.ok(!/from position_versions/.test(loader), "loader issues no direct version reads");

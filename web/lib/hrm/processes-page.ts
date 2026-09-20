@@ -35,13 +35,22 @@ export interface ProcessSegmentView {
   count: number
 }
 
+export interface ProcessSegmentOption {
+  value: string
+  label: string
+  count: number
+}
+
 export interface ProcessRow {
   id: string
   kind: string
   kindLabel: string
   effectiveDate: string
   status: string
+  statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   workerName: string
+  progressLabel: string
   doneRequired: number
   required: number
   overdueSteps: number
@@ -56,7 +65,17 @@ export interface ProcessesPageData {
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
   listTitle: string
   segments: ProcessSegmentView[]
-  columns: Record<string, string>
+  segmentsLabel: string
+  segmentOptions: ProcessSegmentOption[]
+  currentParams: Record<string, string | string[] | undefined>
+  columns: {
+    employee: string
+    kind: string
+    status: string
+    effective: string
+    progress: string
+    nextDue: string
+  }
   rows: ProcessRow[]
   empty: string
   detail: ProcessDetail | null
@@ -111,16 +130,17 @@ export async function loadProcessesPage(
         ? t('processes.kinds.offboarding')
         : t('processes.kinds.transfer')
 
+  const segmentLabel = (key: ProcessSegment): string =>
+    key === 'open'
+      ? t('processes.segments.open')
+      : key === 'overdue'
+        ? t('processes.segments.overdue')
+        : key === 'completed'
+          ? t('processes.segments.completed')
+          : t('processes.segments.cancelled')
   const segments: ProcessSegmentView[] = SEGMENTS.map((key) => ({
     key,
-    label:
-      key === 'open'
-        ? t('processes.segments.open')
-        : key === 'overdue'
-          ? t('processes.segments.overdue')
-          : key === 'completed'
-            ? t('processes.segments.completed')
-            : t('processes.segments.cancelled'),
+    label: segmentLabel(key),
     href: hrefFor(key, null),
     active: segment === key,
     count: bySegment[key].length,
@@ -132,7 +152,16 @@ export async function loadProcessesPage(
     kindLabel: kindLabel(row.kind),
     effectiveDate: row.effectiveDate,
     status: row.status,
+    statusLabel:
+      row.status === 'completed'
+        ? t('processes.segments.completed')
+        : row.status === 'cancelled'
+          ? t('processes.segments.cancelled')
+          : t('processes.segments.open'),
+    statusVariant:
+      row.status === 'completed' ? 'default' : row.status === 'cancelled' ? 'outline' : 'success',
     workerName: row.workerName,
+    progressLabel: `${row.doneRequired}/${row.required}`,
     doneRequired: row.doneRequired,
     required: row.required,
     overdueSteps: row.overdueSteps,
@@ -172,9 +201,17 @@ export async function loadProcessesPage(
     tabs: await hrmGroupTabs(authz, '/hrm/processes'),
     listTitle: t('processes.listTitle'),
     segments,
+    segmentsLabel: t('processes.segmentsLabel'),
+    segmentOptions: SEGMENTS.map((key) => ({
+      value: key,
+      label: segmentLabel(key),
+      count: bySegment[key].length,
+    })),
+    currentParams: { segment },
     columns: {
       employee: t('processes.columns.employee'),
       kind: t('processes.columns.kind'),
+      status: t('processes.columns.status'),
       effective: t('processes.columns.effective'),
       progress: t('processes.columns.progress'),
       nextDue: t('processes.columns.nextDue'),
