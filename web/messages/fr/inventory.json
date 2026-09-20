@@ -12,7 +12,8 @@
     "onhand": "En stock",
     "movements": "Mouvements",
     "locations": "Emplacements de stock",
-    "bom": "Nomenclature"
+    "bom": "Nomenclature",
+    "counts": "Comptages"
   },
   "labels": {
     "item": "Article",
@@ -135,6 +136,72 @@
         "expiry": "Expiration"
       },
       "noneYet": "Aucun lot pour l’instant — réceptionnez du stock avec un numéro de lot."
+    }
+  },
+  "counts": {
+    "title": "Comptages cycliques",
+    "description": "Inventaire physique par comptages — photographiez le stock, comptez, contrôlez puis comptabilisez les écarts en ajustements de stock.",
+    "newButton": "Nouveau comptage",
+    "empty": "Aucun comptage pour l’instant. Ouvrez-en un pour photographier le stock et commencer à compter.",
+    "failed": "La demande de comptage a échoué",
+    "created": "Comptage ouvert",
+    "creating": "Ouverture…",
+    "updated": "Comptage mis à jour",
+    "columns": {
+      "date": "Date de comptage",
+      "location": "Emplacement",
+      "status": "Statut",
+      "progress": "Compté",
+      "variance": "Écart",
+      "memo": "Note",
+      "item": "Article",
+      "stockLocation": "Emplacement de stock",
+      "lot": "Lot",
+      "expected": "Quantité attendue",
+      "counted": "Quantité comptée",
+      "movement": "Ajustement"
+    },
+    "statusNames": {
+      "draft": "Brouillon",
+      "counting": "Comptage en cours",
+      "review": "En contrôle",
+      "posted": "Comptabilisé",
+      "cancelled": "Annulé"
+    },
+    "actions": {
+      "start": "Démarrer le comptage",
+      "submit": "Envoyer en contrôle",
+      "post": "Comptabiliser les ajustements",
+      "return": "Retour au comptage",
+      "cancel": "Annuler le comptage",
+      "record": "Saisir le comptage",
+      "save": "Enregistrer",
+      "recount": "Recompter",
+      "recountHint": "Reprendre la quantité attendue depuis le stock actuel et effacer la quantité comptée",
+      "setDate": "Fixer la date",
+      "close": "Fermer"
+    },
+    "create": {
+      "title": "Nouveau comptage cyclique",
+      "submit": "Ouvrir le comptage",
+      "location": "Site de gestion",
+      "subsidiary": "Filiale propriétaire",
+      "selectLocation": "Choisir un emplacement…",
+      "selectSubsidiary": "Choisir une filiale…",
+      "selectItem": "Choisir un article…",
+      "selectStockLocation": "Choisir un emplacement de stock…",
+      "selectLot": "Lot (si suivi)…",
+      "missingFields": "Choisissez un emplacement, une filiale, une date et au moins une ligne.",
+      "lines": "Lignes à compter",
+      "addLine": "Ajouter une ligne",
+      "removeLine": "Retirer"
+    },
+    "detail": {
+      "title": "Comptage de stock",
+      "loading": "Chargement du comptage…",
+      "noLines": "Aucune ligne dans ce comptage.",
+      "postedBadge": "Comptabilisé",
+      "unpostedBadge": "Non comptabilisé"
     }
   }
 }

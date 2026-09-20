@@ -12,7 +12,8 @@
     "onhand": "在库",
     "movements": "变动",
     "locations": "库位",
-    "bom": "物料清单"
+    "bom": "物料清单",
+    "counts": "盘点"
   },
   "labels": {
     "item": "物料",
@@ -135,6 +136,72 @@
         "expiry": "有效期"
       },
       "noneYet": "尚无批次——请收货时填写批号。"
+    }
+  },
+  "counts": {
+    "title": "循环盘点",
+    "description": "基于盘点单的实物盘点——快照库存、计数、复核，然后将差异过账为库存调整。",
+    "newButton": "新建盘点",
+    "empty": "暂无盘点单。新建一张以快照库存并开始计数。",
+    "failed": "盘点请求失败",
+    "created": "盘点单已创建",
+    "creating": "创建中…",
+    "updated": "盘点单已更新",
+    "columns": {
+      "date": "盘点日期",
+      "location": "地点",
+      "status": "状态",
+      "progress": "已计数",
+      "variance": "差异",
+      "memo": "备注",
+      "item": "物料",
+      "stockLocation": "库位",
+      "lot": "批次",
+      "expected": "预期数",
+      "counted": "实盘数",
+      "movement": "调整"
+    },
+    "statusNames": {
+      "draft": "草稿",
+      "counting": "计数中",
+      "review": "复核中",
+      "posted": "已过账",
+      "cancelled": "已取消"
+    },
+    "actions": {
+      "start": "开始计数",
+      "submit": "送复核",
+      "post": "过账调整",
+      "return": "退回计数",
+      "cancel": "取消盘点",
+      "record": "记录实数",
+      "save": "保存",
+      "recount": "重新快照",
+      "recountHint": "从当前库存重新快照预期数并清空已计数值",
+      "setDate": "设置日期",
+      "close": "关闭"
+    },
+    "create": {
+      "title": "新建循环盘点",
+      "submit": "创建盘点单",
+      "location": "业务地点",
+      "subsidiary": "所属子公司",
+      "selectLocation": "选择地点…",
+      "selectSubsidiary": "选择子公司…",
+      "selectItem": "选择物料…",
+      "selectStockLocation": "选择库位…",
+      "selectLot": "批次（如管理）…",
+      "missingFields": "请选择地点、子公司、日期并至少添加一行。",
+      "lines": "待盘点行",
+      "addLine": "添加行",
+      "removeLine": "移除"
+    },
+    "detail": {
+      "title": "盘点单",
+      "loading": "正在加载盘点单…",
+      "noLines": "该盘点单暂无行。",
+      "postedBadge": "已过账",
+      "unpostedBadge": "未过账"
     }
   }
 }

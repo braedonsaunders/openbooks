@@ -12,7 +12,8 @@
     "onhand": "Disponível",
     "movements": "Movimentações",
     "locations": "Locais de estoque",
-    "bom": "Lista de materiais"
+    "bom": "Lista de materiais",
+    "counts": "Contagens"
   },
   "labels": {
     "item": "Item",
@@ -135,6 +136,72 @@
         "expiry": "Validade"
       },
       "noneYet": "Ainda sem lotes — receba estoque com número de lote."
+    }
+  },
+  "counts": {
+    "title": "Contagens cíclicas",
+    "description": "Inventário físico por contagens — fotografe o estoque, conte, revise e contabilize as diferenças como ajustes de estoque.",
+    "newButton": "Nova contagem",
+    "empty": "Ainda não há contagens. Abra uma para fotografar o estoque e começar a contar.",
+    "failed": "A solicitação de contagem falhou",
+    "created": "Contagem aberta",
+    "creating": "Abrindo…",
+    "updated": "Contagem atualizada",
+    "columns": {
+      "date": "Data da contagem",
+      "location": "Local",
+      "status": "Situação",
+      "progress": "Contado",
+      "variance": "Diferença",
+      "memo": "Nota",
+      "item": "Item",
+      "stockLocation": "Local de estoque",
+      "lot": "Lote",
+      "expected": "Previsto",
+      "counted": "Contado",
+      "movement": "Ajuste"
+    },
+    "statusNames": {
+      "draft": "Rascunho",
+      "counting": "Em contagem",
+      "review": "Em revisão",
+      "posted": "Contabilizado",
+      "cancelled": "Cancelado"
+    },
+    "actions": {
+      "start": "Iniciar contagem",
+      "submit": "Enviar para revisão",
+      "post": "Contabilizar ajustes",
+      "return": "Voltar à contagem",
+      "cancel": "Cancelar contagem",
+      "record": "Registrar contagem",
+      "save": "Salvar",
+      "recount": "Recontar",
+      "recountHint": "Refotografar o previsto a partir do estoque atual e apagar o contado",
+      "setDate": "Definir data",
+      "close": "Fechar"
+    },
+    "create": {
+      "title": "Nova contagem cíclica",
+      "submit": "Abrir contagem",
+      "location": "Local de negócio",
+      "subsidiary": "Subsidiária proprietária",
+      "selectLocation": "Escolha o local…",
+      "selectSubsidiary": "Escolha a subsidiária…",
+      "selectItem": "Escolha o item…",
+      "selectStockLocation": "Escolha o local de estoque…",
+      "selectLot": "Lote (quando rastreado)…",
+      "missingFields": "Escolha local, subsidiária, data e pelo menos uma linha.",
+      "lines": "Linhas a contar",
+      "addLine": "Adicionar linha",
+      "removeLine": "Remover"
+    },
+    "detail": {
+      "title": "Contagem de estoque",
+      "loading": "Carregando contagem…",
+      "noLines": "Sem linhas nesta contagem.",
+      "postedBadge": "Contabilizado",
+      "unpostedBadge": "Não contabilizado"
     }
   }
 }

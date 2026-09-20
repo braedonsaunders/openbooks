@@ -12,7 +12,8 @@
     "onhand": "Existencias",
     "movements": "Movimientos",
     "locations": "Ubicaciones",
-    "bom": "Lista de materiales"
+    "bom": "Lista de materiales",
+    "counts": "Conteos"
   },
   "labels": {
     "item": "Artículo",
@@ -135,6 +136,72 @@
         "expiry": "Vencimiento"
       },
       "noneYet": "Aún no hay lotes; reciba stock con número de lote."
+    }
+  },
+  "counts": {
+    "title": "Conteos cíclicos",
+    "description": "Inventario físico mediante conteos — fotografía existencias, cuenta, revisa y contabiliza las diferencias como ajustes de inventario.",
+    "newButton": "Nuevo conteo",
+    "empty": "Aún no hay conteos. Abre uno para fotografiar existencias y empezar a contar.",
+    "failed": "Error en la solicitud de conteo",
+    "created": "Conteo abierto",
+    "creating": "Abriendo…",
+    "updated": "Conteo actualizado",
+    "columns": {
+      "date": "Fecha de conteo",
+      "location": "Ubicación",
+      "status": "Estado",
+      "progress": "Avance",
+      "variance": "Diferencia",
+      "memo": "Nota",
+      "item": "Artículo",
+      "stockLocation": "Ubicación de stock",
+      "lot": "Lote",
+      "expected": "Previsto",
+      "counted": "Contado",
+      "movement": "Ajuste"
+    },
+    "statusNames": {
+      "draft": "Borrador",
+      "counting": "En conteo",
+      "review": "En revisión",
+      "posted": "Contabilizado",
+      "cancelled": "Cancelado"
+    },
+    "actions": {
+      "start": "Iniciar conteo",
+      "submit": "Enviar a revisión",
+      "post": "Contabilizar ajustes",
+      "return": "Volver al conteo",
+      "cancel": "Cancelar conteo",
+      "record": "Registrar conteo",
+      "save": "Guardar",
+      "recount": "Recontar",
+      "recountHint": "Volver a fotografiar lo previsto desde las existencias actuales y borrar lo contado",
+      "setDate": "Fijar fecha",
+      "close": "Cerrar"
+    },
+    "create": {
+      "title": "Nuevo conteo cíclico",
+      "submit": "Abrir conteo",
+      "location": "Ubicación de negocio",
+      "subsidiary": "Filial propietaria",
+      "selectLocation": "Elige ubicación…",
+      "selectSubsidiary": "Elige filial…",
+      "selectItem": "Elige artículo…",
+      "selectStockLocation": "Elige ubicación de stock…",
+      "selectLot": "Lote (si se gestiona)…",
+      "missingFields": "Elige ubicación, filial, fecha y al menos una línea.",
+      "lines": "Líneas a contar",
+      "addLine": "Añadir línea",
+      "removeLine": "Quitar"
+    },
+    "detail": {
+      "title": "Conteo de existencias",
+      "loading": "Cargando conteo…",
+      "noLines": "Sin líneas en este conteo.",
+      "postedBadge": "Contabilizado",
+      "unpostedBadge": "Sin contabilizar"
     }
   }
 }

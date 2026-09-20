@@ -4439,6 +4439,11 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "de:crm.setup.fields.name|Name",
   "de:crm.setup.fields.rulesPlaceholder|[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
   "de:crm.setup.manager|Manager",
+  // Cycle-count cognates (0200): the French inventory lot and the pt-BR
+  // inventory item are the trade terms in those locales, identical to
+  // English by fact rather than by copy.
+  "fr:inventory.counts.columns.lot|Lot",
+  "pt-BR:inventory.counts.columns.item|Item",
   "de:crm.setup.title|CRM",
   "de:crm.stages.lead|Lead",
   "de:customization.designer.forms.kinds.dropdown|Dropdown",
@@ -5103,7 +5108,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
-  "inventory": 104,
+  "inventory": 159,
   "reports": 1290,
   "sync": 172,
   "login": 33,

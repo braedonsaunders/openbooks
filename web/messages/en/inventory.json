@@ -12,7 +12,8 @@
     "onhand": "On hand",
     "movements": "Movements",
     "locations": "Stock locations",
-    "bom": "Bill of materials"
+    "bom": "Bill of materials",
+    "counts": "Counts"
   },
   "labels": {
     "item": "Item",
@@ -135,6 +136,72 @@
         "expiry": "Expiry"
       },
       "noneYet": "No lots yet — receive stock with a lot number."
+    }
+  },
+  "counts": {
+    "title": "Cycle counts",
+    "description": "Physical inventory over stock counts — snapshot, count, review, then post variances through inventory adjustments.",
+    "newButton": "New count",
+    "empty": "No counts yet. Open one to snapshot on-hand and start counting.",
+    "failed": "Stock count request failed",
+    "created": "Count opened",
+    "creating": "Opening…",
+    "updated": "Count updated",
+    "columns": {
+      "date": "Count date",
+      "location": "Location",
+      "status": "Status",
+      "progress": "Counted",
+      "variance": "Variance",
+      "memo": "Memo",
+      "item": "Item",
+      "stockLocation": "Stock location",
+      "lot": "Lot",
+      "expected": "Expected",
+      "counted": "Counted",
+      "movement": "Adjustment"
+    },
+    "statusNames": {
+      "draft": "Draft",
+      "counting": "Counting",
+      "review": "In review",
+      "posted": "Posted",
+      "cancelled": "Cancelled"
+    },
+    "actions": {
+      "start": "Start counting",
+      "submit": "Submit for review",
+      "post": "Post adjustments",
+      "return": "Back to counting",
+      "cancel": "Cancel count",
+      "record": "Record count",
+      "save": "Save",
+      "recount": "Recount",
+      "recountHint": "Re-snapshot expected from live on-hand and clear the counted value",
+      "setDate": "Set date",
+      "close": "Close"
+    },
+    "create": {
+      "title": "New cycle count",
+      "submit": "Open count",
+      "location": "Business location",
+      "subsidiary": "Owning subsidiary",
+      "selectLocation": "Select location…",
+      "selectSubsidiary": "Select subsidiary…",
+      "selectItem": "Select item…",
+      "selectStockLocation": "Select stock location…",
+      "selectLot": "Lot (when tracked)…",
+      "missingFields": "Choose a location, a subsidiary, a date, and at least one line.",
+      "lines": "Lines to count",
+      "addLine": "Add line",
+      "removeLine": "Remove"
+    },
+    "detail": {
+      "title": "Stock count",
+      "loading": "Loading count…",
+      "noLines": "No lines on this count.",
+      "postedBadge": "Posted",
+      "unpostedBadge": "Not posted"
     }
   }
 }
