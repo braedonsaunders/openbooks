@@ -32,14 +32,14 @@ function target(path: string, over: Partial<CheckedInTarget> = {}): CheckedInTar
     target: path,
     needsDb: false,
     status: "measured",
-    killed: 8,
-    survived: 15,
+    killed: 12,
+    survived: 11,
     timedOut: 0,
     skipped: 0,
     error: 2,
     total: 25,
     measured: 23,
-    ratio: 0.34782608695652173,
+    ratio: 12 / 23,
     topSurvivors: [],
     ...over,
   };
@@ -165,7 +165,7 @@ test("measured score below the RATIFIED floor refuses and names the remedy", () 
   assert.ok(refusal.includes(MONEY), "refusal names the target");
   assert.ok(refusal.includes("ratified floor"), "refusal cites the floor, not a prior score");
   assert.ok(refusal.includes(`--target ${MONEY}`), "refusal names the re-run remedy");
-  assert.ok(refusal.includes("mutation-floor.json"), "refusal names the explicit ratification path");
+  assert.ok(refusal.includes("mutation-floor.json is raise-only"), "refusal cannot suggest lowering a floor");
 });
 
 test("score at the floor (within tolerance) publishes; dip below refuses", () => {
@@ -228,4 +228,16 @@ test("toCheckedInReport compacts without inventing ratios", () => {
   assert.equal(compact.targets[0]?.ratio, 0.5217391304347826);
   assert.equal(compact.targets[1]?.ratio, null, "unit-run skip stays null — never a manufactured zero");
   assert.equal(compact.targets[1]?.measured, 0);
+});
+
+
+test("invalid measured ratios cannot evade the floor", () => {
+  for (const ratio of [NaN, Infinity, -0.1, 1.1]) {
+    const refusals = checkedInPublishRefusals(
+      fresh([MONEY], { targets: [target(MONEY, { ratio })] }),
+      [configured(MONEY)], FLOORS,
+    );
+    assert.equal(refusals.length, 1);
+    assert.ok(refusals[0]!.includes("invalid ratio"));
+  }
 });
