@@ -193,17 +193,40 @@ async function assertEntityRefused(query: unknown, label: string): Promise<void>
 }
 
 test('guardReportEntity refuses a missing entity the same way canRunReportEntity does', async () => {
-  // requiredPermission is null when the query has no entity. Returning allow
-  // here is the fail-open: export/run/definition writes would execute or
-  // persist a plan the catalog never named.
+  // A query object that never names a catalog entity is the fail-open:
+  // requiredPermission is null, and treating that as allow lets
+  // run/export/definition writes execute a plan the catalog never named.
+  // A null query is different — that is a statement definition, tested below.
   await assertEntityRefused({}, 'empty query')
-  await assertEntityRefused(null, 'null query')
   await assertEntityRefused({ entity: undefined }, 'undefined entity')
 })
 
 test('guardReportEntity refuses an unknown entity the same way canRunReportEntity does', async () => {
   assert.equal(REPORT_ENTITY_MAP['not_a_catalog_entity'], undefined)
   await assertEntityRefused({ entity: 'not_a_catalog_entity' }, 'unknown entity')
+})
+
+test('guardReportEntity does not refuse a statement definition with no entity plan', async () => {
+  // Standard statements are seeded with query=null. The export route passes
+  // that value into this gate unconditionally before the shared
+  // CSV/XLSX/PDF pipeline. Refusing it 403s every P&L, balance sheet, and
+  // trial-balance download. canRunReportEntity(null) stays false — it
+  // answers "may I run this entity plan?" — but this HTTP gate must not
+  // apply when there is no entity plan.
+  const source = read('../app/api/reports/definitions/[id]/export/route.ts')
+  assert.match(
+    source,
+    /guardReportEntity\(\s*gate,\s*def\.query\s*\)/,
+    'export must keep passing the stored query, including statement null',
+  )
+  const authz = reportReader()
+  assert.equal(await canRunReportEntity(authz, null), false)
+  assert.equal(
+    await guardReportEntity(authz, null),
+    null,
+    'null query is a statement plan, not a missing entity — the guard must return allow',
+  )
+  assert.equal(await guardReportEntity(authz, undefined), null)
 })
 
 test('guardReportEntity still allows a catalog entity that declares no extra permission', async () => {
