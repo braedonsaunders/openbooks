@@ -1403,12 +1403,18 @@ export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
  * The key set is passed IN (not imported from the engine pack registry,
  * which pulls the database — the same reason the run-review buckets take
  * their declarations as data): the caller that can see the engine supplies
- * `incomeTaxWithholdingSystemKeys()`. Every other column — in particular
- * the jurisdiction-labelled cpp_fica/ei buckets — is byte-identical.
+ * `incomeTaxWithholdingSystemKeys()`. The social-insurance buckets are owned
+ * by `bindPayStubSocialKeys` below, composed at the same call site;
+ * this binder leaves their static factor expressions untouched.
  *
  * Throws when the entity is not pay_stubs, when it carries no income_tax
  * column, when the key set is empty (an empty set is the silent-0.00 shape;
  * refuse it loudly), or when a key is not a plain system-key literal.
+ *
+ * The join counts only `l.kind = 'deduction'` lines, matching the
+ * predicate's `deduction` half: no income-tax key is shared with an
+ * employer share today, and the filter keeps that a resolution the SQL
+ * cannot drift from.
  */
 export function bindPayStubIncomeTaxKeys(
   entity: ReportEntity,
@@ -1440,12 +1446,134 @@ export function bindPayStubIncomeTaxKeys(
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id and c.org_id = l.org_id
          where l.org_id = s.org_id and l.stub_id = s.id
+           and l.kind = 'deduction'
            and c.system_key in (${literals})
       ) income_tax_lines on true`,
     columns: entity.columns.map((column) =>
       column.key === 'income_tax'
         ? { ...column, expr: 'coalesce(income_tax_lines.tax, 0)' }
         : column,
+    ),
+  }
+}
+
+/**
+ * Rebind the pay_stubs social-insurance columns from engine factor labels
+ * to the pack-declared contribution set — keeping both columns and labels.
+ *
+ * The static catalog reads employee social insurance out of the stub
+ * `factors` JSON as `C + C2 + SS + MED + MED2` (`cpp_fica`) and `EI` (`ei`).
+ * Those trace keys are Canadian and US engine internals, so eleven packs
+ * reported 0.00 employee social insurance beside a net that reflected it —
+ * and Québec parental insurance (QPIP) appeared in NEITHER bucket anywhere
+ * in the register, a silent drop of real withheld money. The payslip YTD and
+ * the income-tax binder above fixed this identical defect by aggregating
+ * `pay_stub_lines` by component `system_key` over the pack-declared set
+ * (`every deduction assessed on earnings, across all registered packs`), so
+ * a new pack is counted on the day it registers — this binder applies that
+ * same derivation to the register, with the same lateral-join shape.
+ *
+ * Both columns and both labels stay exactly as they are (owner ruling: the
+ * label question goes to Braedon separately, and merging the columns would
+ * bundle a third decision into this fix). The declarations support one
+ * social bucket and offer no principled split across two frozen
+ * jurisdiction labels, so the split rule is stated, not derived: `ei`
+ * counts the EI-family pair the caller names (EI for legacy continuity,
+ * QPIP for the mandated fold — see `eiColumnSystemKeys`, which owns that
+ * rule), and `cpp_fica` counts every OTHER key in the derived set by
+ * STRUCTURAL COMPLEMENT, computed here by subtraction, never by
+ * enumeration. Totality is therefore structural: any present or future
+ * pack's earnings-assessed deductions land in exactly one of the two
+ * columns with no per-pack configuration. A future short-term-insurance
+ * contribution defaulting to `cpp_fica` is mislabelled but VISIBLE — the
+ * failure this shape refuses is invisibility, not imperfect taxonomy under
+ * frozen labels.
+ *
+ * Both key sets are passed IN, like the income-tax binder above: the caller
+ * that can see the engine supplies `employeeSocialInsuranceSystemKeys()`
+ * and `eiColumnSystemKeys()`.
+ *
+ * Throws when the entity is not pay_stubs, when it carries no cpp_fica or
+ * ei column, when either key set is empty (an empty set is the silent-0.00
+ * shape; refuse it loudly), when an `ei` key is not inside the derived set
+ * (that would count money the declarations never put in the bucket),
+ * when a key is not a plain system-key literal, or when the entity already
+ * carries the lateral joins (a double bind would stack a second aggregation
+ * over the same lines).
+ *
+ * Both joins count only `l.kind = 'deduction'` lines: several keys are
+ * shared with the employer share (CPP, EI, QPIP, INPS, PRSI …), which
+ * `pushStatutory` posts under the same system_key as an
+ * `employer_contribution` line on the same stub. Summing by key alone
+ * would overstate the employee withholding by the employer's share.
+ */
+export function bindPayStubSocialKeys(
+  entity: ReportEntity,
+  eiSystemKeys: readonly string[],
+  allSocialSystemKeys: readonly string[],
+): ReportEntity {
+  if (entity.key !== 'pay_stubs') {
+    throw new Error(`pay-stub social binding needs the pay_stubs entity, not ${entity.key}`)
+  }
+  if (!entity.columns.some((column) => column.key === 'cpp_fica')) {
+    throw new Error('pay-stub social binding needs a cpp_fica column')
+  }
+  if (!entity.columns.some((column) => column.key === 'ei')) {
+    throw new Error('pay-stub social binding needs an ei column')
+  }
+  if (entity.from.includes('cpp_fica_lines') || entity.from.includes('ei_lines')) {
+    throw new Error('pay-stub social binding is already applied')
+  }
+  if (allSocialSystemKeys.length === 0) {
+    throw new Error('pay-stub social binding needs a non-empty social-insurance key set')
+  }
+  if (eiSystemKeys.length === 0) {
+    throw new Error('pay-stub social binding needs a non-empty EI key set')
+  }
+  const all = new Set(allSocialSystemKeys)
+  for (const key of eiSystemKeys) {
+    if (!all.has(key)) {
+      throw new Error(`pay-stub social binding refuses EI key ${JSON.stringify(key)} outside the derived set`)
+    }
+  }
+  for (const key of allSocialSystemKeys) {
+    // Keys inline into the expression as string literals (column
+    // expressions are verbatim SQL, never bound parameters), so hold them
+    // to the same shape the pay_components_system_key check enforces.
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(key)) {
+      throw new Error(`pay-stub social binding refuses non-literal system key ${JSON.stringify(key)}`)
+    }
+  }
+  // The complement is computed, never enumerated: cpp_fica is the derived
+  // set minus the EI pair, so a key the declarations add later is counted
+  // on the day its pack registers.
+  const cppLiterals = allSocialSystemKeys.filter((key) => !eiSystemKeys.includes(key)).map((key) => `'${key}'`).join(', ')
+  const eiLiterals = eiSystemKeys.map((key) => `'${key}'`).join(', ')
+  return {
+    ...entity,
+    from: `${entity.from}
+      LEFT JOIN LATERAL (
+        select coalesce(sum(l.amount), 0) as total
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+         where l.org_id = s.org_id and l.stub_id = s.id
+           and l.kind = 'deduction'
+           and c.system_key in (${cppLiterals})
+      ) cpp_fica_lines on true
+      LEFT JOIN LATERAL (
+        select coalesce(sum(l.amount), 0) as total
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+         where l.org_id = s.org_id and l.stub_id = s.id
+           and l.kind = 'deduction'
+           and c.system_key in (${eiLiterals})
+      ) ei_lines on true`,
+    columns: entity.columns.map((column) =>
+      column.key === 'cpp_fica'
+        ? { ...column, expr: 'coalesce(cpp_fica_lines.total, 0)' }
+        : column.key === 'ei'
+          ? { ...column, expr: 'coalesce(ei_lines.total, 0)' }
+          : column,
     ),
   }
 }
