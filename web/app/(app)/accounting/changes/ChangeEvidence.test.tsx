@@ -96,6 +96,53 @@ test("ordinary accounting evidence keeps its own labels and exact reference text
   assert.doesNotMatch(markup, /transport-only-request-key/);
 });
 
+test("tax allocation evidence distinguishes received vintages and preserves each exact split", () => {
+  const markup = renderToStaticMarkup(
+    <ChangeEvidence
+      taxBasis
+      value={{
+        vintageAllocations: [
+          {
+            source: "carryover",
+            placedInServiceOn: "2024-03-15",
+            transferOn: "2025-08-20",
+            disposedUnadjustedBasis: "2250.0001",
+            remainingUnadjustedBasis: "6749.9999",
+          },
+          {
+            source: "excess",
+            placedInServiceOn: "2025-08-20",
+            transferOn: "2025-08-20",
+            disposedUnadjustedBasis: "500.0000",
+            remainingUnadjustedBasis: "0.0000",
+          },
+        ],
+        assessment: "carryover_source_2025.pdf",
+      }}
+    />,
+  );
+  assert.match(markup, /Allocation by tax depreciation vintage/);
+  assert.match(markup, /§168\(i\)\(7\) carryover — transferor history/);
+  assert.match(markup, /Nontaxable excess basis — newly placed/);
+  assert.match(markup, /Transfer effective date/);
+  for (const exact of [
+    "2024-03-15",
+    "2025-08-20",
+    "2250.0001",
+    "6749.9999",
+    "500.0000",
+    "0.0000",
+    "carryover_source_2025.pdf",
+  ]) {
+    assert.ok(markup.includes(exact), exact);
+  }
+  assert.doesNotMatch(markup, />carryover<|>excess</);
+  const ordinary = renderToStaticMarkup(
+    <ChangeEvidence value={{ source: "carryover" }} />,
+  );
+  assert.match(ordinary, />carryover</);
+});
+
 test("tax approval evidence distinguishes the monthly allocation from the consolidated-group rule", () => {
   for (const [kind, expected] of [
     ["nonrecognition", /monthly months-held allocation/],

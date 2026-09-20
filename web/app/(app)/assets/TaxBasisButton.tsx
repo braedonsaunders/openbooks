@@ -7,11 +7,8 @@ import { fetchAction } from "@braedonsaunders/appkit-errors";
 import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
 import { Button, Drawer, Label, SearchSelect, Textarea } from "@openbooks/ui";
 import {
-  TAX_BASIS_FIELDS,
   TAX_BASIS_APPLICABLE_SIDE_LABELS,
   attachTaxBasisSource,
-  taxBasisFieldVisible,
-  validateTaxRegimeBasis,
   type TaxAssetBasisSourceChoice,
   type TaxAssetBasisSourcesResponse,
   type TaxBasisDraft,
@@ -19,6 +16,7 @@ import {
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 import { useAppAction } from "@/lib/use-app-action";
 import { TaxBasisFields } from "./TaxBasisFields";
+import { prepareTaxBasisRegime } from "./tax-basis-draft";
 
 /** Same stacked workpaper Drawer as GroupValuationButton; approved facts go
  * through Accounting changes, never the asset's mutable classification JSON. */
@@ -93,17 +91,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
           sourceOperation: source.sourceOperation,
           applicable,
         });
-        // Switching an election discards its now-hidden fields in the POST.
-        // Preserve explicit false and decimal zero; omit unanswered values.
-        const supplied = Object.fromEntries(
-          TAX_BASIS_FIELDS.filter(
-            (field) =>
-              taxBasisFieldVisible(field, draft) &&
-              draft[field.name] !== "" &&
-              draft[field.name] != null,
-          ).map((field) => [field.name, draft[field.name]]),
-        );
-        return validateTaxRegimeBasis(supplied, {
+        return prepareTaxBasisRegime(draft, {
           sourceOperation: source.sourceOperation,
           applicable,
         });

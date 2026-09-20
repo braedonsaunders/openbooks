@@ -14,10 +14,13 @@ import {
 export function TaxBasisFields({
   draft,
   disabled,
+  omitFields = [],
   onChange,
 }: {
   draft: TaxBasisDraft;
   disabled?: boolean;
+  /** Fields supplied by an authoritative source or the nested allocation editor. */
+  omitFields?: readonly string[];
   onChange: (name: string, value: string | boolean) => void;
 }) {
   const prefix = useId();
@@ -25,7 +28,9 @@ export function TaxBasisFields({
     <div className="grid gap-4 sm:grid-cols-2">
       {TAX_BASIS_FIELDS.filter(
         (field) =>
-          field.name !== "regime" && taxBasisFieldVisible(field, draft),
+          field.name !== "regime" &&
+          !omitFields.includes(field.name) &&
+          taxBasisFieldVisible(field, draft),
       ).map((field) => {
         const id = `${prefix}-${field.name}`;
         const required = taxBasisFieldRequired(field, draft);

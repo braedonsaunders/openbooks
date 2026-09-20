@@ -9,6 +9,7 @@ import {
 import {
   TAX_BASIS_FIELDS,
   TAX_BASIS_REGIME_LABELS,
+  MACRS_VINTAGE_SOURCE_LABELS,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
 const taxChoiceFields: Record<string, string> = {
@@ -17,6 +18,11 @@ const taxChoiceFields: Record<string, string> = {
   buyerConvention: "convention",
 };
 const taxComputedLabels: Record<string, string> = {
+  vintageAllocations: "Allocation by tax depreciation vintage",
+  source: "Tax depreciation source",
+  transferOn: "Transfer effective date",
+  unadjustedBasis: "Open unadjusted tax basis",
+  adjustedCarryover: "Adjusted carryover checkpoint",
   buyerPlacedInServiceOn: "Receiving asset placed-in-service date",
   buyerRecoveryPeriodYears: "Receiving asset recovery period (years)",
   buyerMethod: "Receiving asset MACRS method",
@@ -87,6 +93,13 @@ export function ChangeEvidence({
     return (
       <span className="break-words">
         {names[String(value)] ??
+          (taxBasis &&
+          field === "source" &&
+          Object.hasOwn(MACRS_VINTAGE_SOURCE_LABELS, String(value))
+            ? MACRS_VINTAGE_SOURCE_LABELS[
+                String(value) as keyof typeof MACRS_VINTAGE_SOURCE_LABELS
+              ]
+            : undefined) ??
           (taxBasis && field
             ? taxFields
                 .get(taxChoiceFields[field] ?? field)
