@@ -1666,8 +1666,57 @@ export interface PayrollTaxYearProblem {
   region: string | null;
   taxYear: number;
   kind: "missing" | "draft" | "undeclared";
-  /** Ready to show: names the year, the pack, the region, and the fix. */
+  /**
+   * Developer-facing: names the year, the pack, the region, and the
+   * developer remedy (scaffold script, rates module). Read by engine throws
+   * (`assertPayrollTaxYearSupported`) and logs — never by an operator
+   * surface.
+   */
   message: string;
+  /**
+   * Operator-facing: names the pack, the requested year, and the years the
+   * pack does publish (or that it publishes none), and states that no action
+   * in the product loads a year the pack does not publish. Names no script,
+   * file path, or command. Readiness blockers and filing refusals read THIS;
+   * `message` keeps the developer text so no caller silently changes
+   * audience when this string is edited.
+   */
+  operatorMessage: string;
+}
+
+/**
+ * The operator half of a tax-year refusal: what the pack publishes and the
+ * fact that no in-product action loads what it does not. The developer half
+ * (scaffold command, rates module) stays on `message` for engine throws.
+ */
+function payrollTaxYearOperatorMessage(
+  country: string,
+  scope: string,
+  taxYear: number,
+  kind: "missing" | "draft" | "undeclared",
+  loaded: number[],
+): string {
+  const published = loaded.length > 0 ? loaded.join(", ") : "no tax years";
+  if (kind === "undeclared") {
+    return (
+      `No statutory tables are published for ${country || "(unset)"} — no payroll pack declares `
+      + `that country, so ${taxYear} cannot be calculated. No action in the product loads tables `
+      + `for a country with no pack; the packs tab of payroll setup shows which packs are `
+      + `available and the years each publishes.`
+    );
+  }
+  if (kind === "draft") {
+    return (
+      `${taxYear} statutory tables are not available for ${scope}. `
+      + `The ${country} pack publishes ${published}. No action in the product loads a year the `
+      + `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
+    );
+  }
+  return (
+    `${taxYear} statutory tables are not loaded for ${scope} — `
+    + `the ${country} pack publishes ${published}. No action in the product loads a year the `
+    + `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
+  );
 }
 
 export function payrollTaxYearProblem(
@@ -1682,12 +1731,14 @@ export function payrollTaxYearProblem(
     return {
       country, region: region ?? null, taxYear, kind: "undeclared",
       message: error instanceof Error ? error.message : String(error),
+      operatorMessage: payrollTaxYearOperatorMessage(country, country, taxYear, "undeclared", []),
     };
   }
   const scope = region && support.regionsWithOwnTables.includes(region)
     ? `${country} · ${region}`
     : country;
   if (payrollSupportedTaxYears(support, region).includes(taxYear)) return null;
+  const loaded = payrollSupportedTaxYears(support, region);
   if (payrollDraftTaxYears(support, region).includes(taxYear)) {
     return {
       country, region: region ?? null, taxYear, kind: "draft",
@@ -1695,9 +1746,9 @@ export function payrollTaxYearProblem(
         `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — the draft `
         + `edition still carries placeholder values. Transcribe the published figures in `
         + `${support.ratesModule} and make its goldens pass before paying into ${taxYear}.`,
+      operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "draft", loaded),
     };
   }
-  const loaded = payrollSupportedTaxYears(support, region);
   return {
     country, region: region ?? null, taxYear, kind: "missing",
     message:
@@ -1706,6 +1757,7 @@ export function payrollTaxYearProblem(
       + `Scaffold the edition with \`node --import tsx scripts/payroll-new-tax-year.ts --country `
       + `${country} --year ${taxYear}\` and transcribe the published figures into `
       + `${support.ratesModule}.`,
+    operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "missing", loaded),
   };
 }
 
