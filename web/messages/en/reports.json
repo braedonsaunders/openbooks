@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "Compliance findings",
         "description": "Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches."
+      },
+      "hrm_pay_bands": {
+        "label": "Pay bands",
+        "description": "One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures. Requires the HRM compensation permission."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Merit cycle lines",
+        "description": "One row per cycle decision: person, employer, frozen current rate, proposal, and status. Requires the HRM compensation permission."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Headcount plan lines",
+        "description": "One row per planned movement: plan, kind, title, FTE, computed cost, and status. Requires the HRM compensation permission."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Pay gap snapshots",
+        "description": "One row per frozen snapshot per category: level, headcounts, gaps, and the joint-assessment flag. Requires the HRM compensation permission."
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "Day",
         "status": "Status",
         "project_id": "Project (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Level",
+        "family": "Family",
+        "employer": "Employer",
+        "currency": "Currency",
+        "basis": "Basis",
+        "min": "Min",
+        "target": "Target",
+        "max": "Max",
+        "effective_from": "Effective from",
+        "effective_to": "Effective to",
+        "id": "Band (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Cycle",
+        "person": "Person",
+        "employer": "Employer",
+        "current_rate": "Current rate",
+        "currency": "Currency",
+        "compa_ratio": "Compa-ratio",
+        "proposed_pct": "Proposed %",
+        "proposed_rate": "Proposed rate",
+        "status": "Status",
+        "effective_on": "Effective on",
+        "employment_id": "Employment (id)",
+        "id": "Line (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Plan",
+        "kind": "Kind",
+        "title": "Title",
+        "employer": "Employer",
+        "planned_fte": "Planned FTE",
+        "start_on": "Start",
+        "est_annual_cost": "Est. annual cost",
+        "currency": "Currency",
+        "status": "Status",
+        "id": "Line (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "As of",
+        "employer": "Employer",
+        "level": "Level",
+        "count_a": "Headcount A",
+        "count_b": "Headcount B",
+        "mean_gap_pct": "Mean gap %",
+        "median_gap_pct": "Median gap %",
+        "unexplained_gap_pct": "Unexplained gap %",
+        "method": "Method",
+        "joint_assessment_due": "Joint assessment due",
+        "id": "Snapshot (id)"
       }
     },
     "enumValues": {

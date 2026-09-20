@@ -11,7 +11,8 @@
       "recruiting": "Einstellung",
       "performance": "Leistung",
       "benefits": "Leistungen",
-      "compliance": "Compliance"
+      "compliance": "Compliance",
+      "compensation": "Vergütung"
     },
     "recruiting": {
       "title": "Einstellung",
@@ -826,7 +827,8 @@
       "checklists": "Checklisten",
       "reviews": "Beurteilungen",
       "benefits": "Leistungen",
-      "team": "Team"
+      "team": "Team",
+      "compensation": "Vergütung"
     },
     "refusedTitle": "Self-Service ist nicht verfügbar",
     "overview": {
@@ -1194,6 +1196,174 @@
       "format": "Format",
       "generate": "Erstellen",
       "cancel": "Abbrechen"
+    }
+  },
+  "compensation": {
+    "title": "Vergütung",
+    "description": "Was Rollen zahlen sollten, ob Personen im Band liegen und wie Erhöhungen entschieden werden.",
+    "tiles": {
+      "belowMin": "Unter Bandminimum",
+      "openCyclePacing": "Budgetausschöpfung",
+      "awaitingPlans": "Pläne zur Genehmigung",
+      "jointFlags": "Gemeinsame Prüfungen"
+    },
+    "bandsTitle": "Bänder nach Ebene",
+    "bandsEmpty": "Noch keine Bänder — legen Sie ein Band für eine Ebene an.",
+    "cyclesTitle": "Meritrunden",
+    "cyclesEmpty": "Noch keine Runden — eröffnen Sie eine Runde.",
+    "plansTitle": "Personalpläne",
+    "plansEmpty": "Noch keine Pläne — entwerfen Sie ein Szenario.",
+    "architectureTitle": "Stellenarchitektur",
+    "newCycle": "Neue Runde",
+    "newPlan": "Neuer Plan",
+    "equity": "Entgeltgleichheit",
+    "back": "Zurück",
+    "pacing": "Budgetausschöpfung",
+    "pacingNone": "Kein Budgetrahmen gesetzt",
+    "pacingNote": "{pct} % des Rahmens vorgeschlagen",
+    "linesTitle": "Teamraster",
+    "linesEmpty": "Keine Zeilen — öffnen Sie die Runde.",
+    "totalCost": "Kalkulierte Summe",
+    "planLinesTitle": "Planzeilen",
+    "planLinesEmpty": "Noch keine Zeilen.",
+    "approveLine": "Genehmigen",
+    "columns": {
+      "level": "Ebene",
+      "range": "Bandbreite",
+      "headcount": "Köpfe",
+      "placement": "Einordnung",
+      "name": "Bezeichnung",
+      "status": "Stand",
+      "effective": "Wirksam",
+      "cost": "Kosten",
+      "employee": "Person",
+      "current": "Aktuell",
+      "rating": "Bewertung",
+      "guideline": "Leitlinie",
+      "proposed": "Vorgeschlagen",
+      "title": "Titel",
+      "kind": "Art",
+      "fte": "VZÄ",
+      "start": "Beginn"
+    },
+    "placement": {
+      "below_min": "Unter Minimum",
+      "in_range": "Im Band",
+      "above_max": "Über Maximum",
+      "no_band": "Kein Band"
+    },
+    "cycleKind": {
+      "merit": "Leistung",
+      "promotion": "Beförderung",
+      "adjustment": "Anpassung",
+      "cola": "Teuerung"
+    },
+    "cycleStatus": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "in_review": "In Prüfung",
+      "approved": "Genehmigt",
+      "pushed": "Übertragen",
+      "closed": "Geschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "lineStatus": {
+      "pending": "Ausstehend",
+      "proposed": "Vorgeschlagen",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "pushed": "Übertragen"
+    },
+    "planStatus": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "closed": "Geschlossen"
+    },
+    "planLineStatus": {
+      "proposed": "Vorgeschlagen",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "opened": "Eröffnet",
+      "filled": "Besetzt",
+      "cancelled": "Abgebrochen"
+    },
+    "lineKind": {
+      "create": "Neu",
+      "backfill": "Nachbesetzung",
+      "change": "Änderung",
+      "terminate": "Abbau"
+    },
+    "eventKind": {
+      "opened": "Eröffnet",
+      "proposed": "Vorgeschlagen",
+      "reopened": "Wiedereröffnet",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "budget_changed": "Budget geändert",
+      "pushed": "Übertragen",
+      "closed": "Geschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "drawer": {
+      "proposeTitle": "Vorschlagen",
+      "decideTitle": "Entscheiden",
+      "historyTitle": "Verlauf",
+      "pctLabel": "Erhöhung %",
+      "rateLabel": "Neuer Satz",
+      "reasonLabel": "Begründung",
+      "failed": "Die Änderung wurde abgelehnt",
+      "submit": "Speichern",
+      "cancel": "Abbrechen",
+      "approve": "Genehmigen",
+      "reject": "Ablehnen",
+      "reopen": "Wiedereröffnen"
+    },
+    "historyColumns": {
+      "event": "Ereignis",
+      "reason": "Begründung",
+      "at": "Zeitpunkt"
+    },
+    "emptyHistory": "Noch keine Ereignisse."
+  },
+  "equity": {
+    "title": "Entgeltgleichheit",
+    "description": "Eingefrorene Kennzahlen aus der Abrechnungswahrheit, nach gleichwertigen Kategorien.",
+    "meanGap": "Mittlere Lücke",
+    "medianGap": "Mediane Lücke",
+    "variableGap": "Variable Lücke",
+    "jointFlags": "Gemeinsam zu prüfen",
+    "categoriesTitle": "Lücken nach Kategorie",
+    "categoriesEmpty": "Keine Kategorien gemessen.",
+    "columns": {
+      "category": "Kategorie",
+      "counts": "Köpfe A / B",
+      "mean": "Mittlere Lücke",
+      "median": "Mediane Lücke",
+      "unexplained": "Unerklärt",
+      "flag": "Kennzeichen"
+    },
+    "jointDue": "Gemeinsam prüfen",
+    "generate": "Kennzahlen berechnen",
+    "emptyTitle": "Noch keine Kennzahlen",
+    "emptyDescription": "Berechnen Sie Kennzahlen, um Lücken zu messen."
+  },
+  "myComp": {
+    "title": "Meine Vergütung",
+    "description": "Ihre Bandeinordnung, Abrechnungen und Entgeltinformationen.",
+    "placement": "Bandeinordnung",
+    "statementsTitle": "Abrechnungen",
+    "columns": {
+      "period": "Zeitraum",
+      "generated": "Erstellt"
+    },
+    "statementsEmpty": "Noch keine Abrechnungen.",
+    "requestPayInfo": "Entgeltinformation anfordern",
+    "requestFailed": "Die Anfrage wurde abgelehnt",
+    "requestSubmit": "Speichern",
+    "requestCancel": "Abbrechen",
+    "requestStatus": {
+      "open": "Offen"
     }
   }
 }

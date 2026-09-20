@@ -11,7 +11,8 @@
       "recruiting": "招聘",
       "performance": "绩效",
       "benefits": "福利",
-      "compliance": "合规"
+      "compliance": "合规",
+      "compensation": "薪酬"
     },
     "recruiting": {
       "title": "招聘",
@@ -826,7 +827,8 @@
       "checklists": "清单",
       "reviews": "考核",
       "benefits": "福利",
-      "team": "团队"
+      "team": "团队",
+      "compensation": "薪酬"
     },
     "refusedTitle": "自助服务不可用",
     "overview": {
@@ -1194,6 +1196,174 @@
       "format": "格式",
       "generate": "生成",
       "cancel": "取消"
+    }
+  },
+  "compensation": {
+    "title": "薪酬",
+    "description": "岗位应付薪酬、人员是否在带宽内以及加薪如何决定。",
+    "tiles": {
+      "belowMin": "低于带宽下限",
+      "openCyclePacing": "周期进度",
+      "awaitingPlans": "待批计划",
+      "jointFlags": "联合评估"
+    },
+    "bandsTitle": "按级别划分的薪酬带宽",
+    "bandsEmpty": "暂无带宽 — 请为级别设定带宽。",
+    "cyclesTitle": "调薪周期",
+    "cyclesEmpty": "暂无周期 — 请开启一轮调薪。",
+    "plansTitle": "人力规划",
+    "plansEmpty": "暂无规划 — 请起草人力方案。",
+    "architectureTitle": "岗位体系",
+    "newCycle": "新建周期",
+    "newPlan": "新建规划",
+    "equity": "薪酬公平",
+    "back": "返回",
+    "pacing": "预算进度",
+    "pacingNone": "未设定预算额度",
+    "pacingNote": "已提议额度的{pct}%",
+    "linesTitle": "团队表",
+    "linesEmpty": "暂无明细 — 请开启周期以快照团队。",
+    "totalCost": "测算合计",
+    "planLinesTitle": "规划明细",
+    "planLinesEmpty": "暂无明细。",
+    "approveLine": "批准",
+    "columns": {
+      "level": "级别",
+      "range": "带宽",
+      "headcount": "人数",
+      "placement": "位置",
+      "name": "名称",
+      "status": "状态",
+      "effective": "生效日",
+      "cost": "成本",
+      "employee": "员工",
+      "current": "现行",
+      "rating": "考评",
+      "guideline": "指引",
+      "proposed": "提议",
+      "title": "标题",
+      "kind": "类型",
+      "fte": "全职当量",
+      "start": "开始"
+    },
+    "placement": {
+      "below_min": "低于下限",
+      "in_range": "带宽内",
+      "above_max": "高于上限",
+      "no_band": "无带宽"
+    },
+    "cycleKind": {
+      "merit": "绩效调薪",
+      "promotion": "晋升",
+      "adjustment": "调整",
+      "cola": "生活成本"
+    },
+    "cycleStatus": {
+      "draft": "草稿",
+      "open": "进行中",
+      "in_review": "审核中",
+      "approved": "已批准",
+      "pushed": "已推送",
+      "closed": "已关闭",
+      "cancelled": "已取消"
+    },
+    "lineStatus": {
+      "pending": "待处理",
+      "proposed": "已提议",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "pushed": "已推送"
+    },
+    "planStatus": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "closed": "已关闭"
+    },
+    "planLineStatus": {
+      "proposed": "已提议",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "opened": "招聘中",
+      "filled": "已到岗",
+      "cancelled": "已取消"
+    },
+    "lineKind": {
+      "create": "新增",
+      "backfill": "补员",
+      "change": "变更",
+      "terminate": "撤销"
+    },
+    "eventKind": {
+      "opened": "已开启",
+      "proposed": "已提议",
+      "reopened": "已重开",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "budget_changed": "预算已变更",
+      "pushed": "已推送",
+      "closed": "已关闭",
+      "cancelled": "已取消"
+    },
+    "drawer": {
+      "proposeTitle": "提议",
+      "decideTitle": "审批",
+      "historyTitle": "历史",
+      "pctLabel": "涨幅 %",
+      "rateLabel": "新标准",
+      "reasonLabel": "原因",
+      "failed": "变更被拒绝",
+      "submit": "保存",
+      "cancel": "取消",
+      "approve": "批准",
+      "reject": "拒绝",
+      "reopen": "重开"
+    },
+    "historyColumns": {
+      "event": "事件",
+      "reason": "原因",
+      "at": "时间"
+    },
+    "emptyHistory": "暂无事件。"
+  },
+  "equity": {
+    "title": "薪酬公平",
+    "description": "按等值类别、根据薪酬事实计算的冻结差距指标。",
+    "meanGap": "平均差距",
+    "medianGap": "中位差距",
+    "variableGap": "浮动薪酬差距",
+    "jointFlags": "需联合评估",
+    "categoriesTitle": "按类别划分的差距",
+    "categoriesEmpty": "暂无已测类别。",
+    "columns": {
+      "category": "类别",
+      "counts": "人数 A / B",
+      "mean": "平均差距",
+      "median": "中位差距",
+      "unexplained": "未解释部分",
+      "flag": "标记"
+    },
+    "jointDue": "联合评估",
+    "generate": "生成快照",
+    "emptyTitle": "暂无快照",
+    "emptyDescription": "生成快照以衡量差距。"
+  },
+  "myComp": {
+    "title": "我的薪酬",
+    "description": "您的带宽位置、薪酬单和薪酬信息。",
+    "placement": "带宽位置",
+    "statementsTitle": "薪酬单",
+    "columns": {
+      "period": "期间",
+      "generated": "生成时间"
+    },
+    "statementsEmpty": "暂无薪酬单。",
+    "requestPayInfo": "请求薪酬信息",
+    "requestFailed": "请求被拒绝",
+    "requestSubmit": "保存",
+    "requestCancel": "取消",
+    "requestStatus": {
+      "open": "处理中"
     }
   }
 }

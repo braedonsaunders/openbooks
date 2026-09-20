@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "发现项",
         "description": "按种类的追加式运行前标记：比例违规、缺少工资标准、未解决类别。"
+      },
+      "hrm_pay_bands": {
+        "label": "薪酬带宽",
+        "description": "每个有效带宽一行：级别、范围、币种、基准与最小/目标/最大值。"
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "调薪明细",
+        "description": "每个决定一行：人员、雇主、冻结标准、提议与状态。"
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "规划明细",
+        "description": "每个计划变动一行：规划、类型、标题、FTE、测算成本与状态。"
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "差距快照",
+        "description": "每个快照×类别一行：级别、人数、差距与标记。"
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "日期",
         "status": "状态",
         "project_id": "项目 (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "级别",
+        "family": "岗位族",
+        "employer": "雇主",
+        "currency": "币种",
+        "basis": "基准",
+        "min": "下限",
+        "target": "目标",
+        "max": "上限",
+        "effective_from": "生效日",
+        "effective_to": "终止日",
+        "id": "带宽 (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "周期",
+        "person": "人员",
+        "employer": "雇主",
+        "current_rate": "现行标准",
+        "currency": "币种",
+        "compa_ratio": "比较比率",
+        "proposed_pct": "提议 %",
+        "proposed_rate": "提议标准",
+        "status": "状态",
+        "effective_on": "生效日",
+        "employment_id": "雇佣 (id)",
+        "id": "明细 (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "规划",
+        "kind": "类型",
+        "title": "标题",
+        "employer": "雇主",
+        "planned_fte": "计划FTE",
+        "start_on": "开始",
+        "est_annual_cost": "预计年成本",
+        "currency": "币种",
+        "status": "状态",
+        "id": "明细 (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "日期",
+        "employer": "雇主",
+        "level": "级别",
+        "count_a": "人数 A",
+        "count_b": "人数 B",
+        "mean_gap_pct": "平均差距 %",
+        "median_gap_pct": "中位差距 %",
+        "unexplained_gap_pct": "未解释差距 %",
+        "method": "方法",
+        "joint_assessment_due": "联合评估",
+        "id": "快照 (id)"
       }
     },
     "enumValues": {

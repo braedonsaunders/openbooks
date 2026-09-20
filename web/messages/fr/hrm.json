@@ -11,7 +11,8 @@
       "recruiting": "Recrutement",
       "performance": "Évaluations",
       "benefits": "Avantages",
-      "compliance": "Conformité"
+      "compliance": "Conformité",
+      "compensation": "Rémunération"
     },
     "recruiting": {
       "title": "Recrutement",
@@ -826,7 +827,8 @@
       "checklists": "Suivis",
       "reviews": "Évaluations",
       "benefits": "Avantages",
-      "team": "Équipe"
+      "team": "Équipe",
+      "compensation": "Rémunération"
     },
     "refusedTitle": "Le libre-service est indisponible",
     "overview": {
@@ -1194,6 +1196,174 @@
       "format": "Format",
       "generate": "Générer",
       "cancel": "Annuler"
+    }
+  },
+  "compensation": {
+    "title": "Rémunération",
+    "description": "Ce que les rôles devraient payer, si les personnes sont dans la fourchette et comment les augmentations sont décidées.",
+    "tiles": {
+      "belowMin": "Sous le minimum",
+      "openCyclePacing": "Rythme du cycle",
+      "awaitingPlans": "Plans à approuver",
+      "jointFlags": "Examens conjoints"
+    },
+    "bandsTitle": "Fourchettes par niveau",
+    "bandsEmpty": "Aucune fourchette — déclarez une fourchette pour un niveau.",
+    "cyclesTitle": "Cycles de mérite",
+    "cyclesEmpty": "Aucun cycle — ouvrez un tour.",
+    "plansTitle": "Plans d'effectifs",
+    "plansEmpty": "Aucun plan — rédigez un scénario.",
+    "architectureTitle": "Architecture des emplois",
+    "newCycle": "Nouveau cycle",
+    "newPlan": "Nouveau plan",
+    "equity": "Équité salariale",
+    "back": "Retour",
+    "pacing": "Rythme budgétaire",
+    "pacingNone": "Aucune enveloppe fixée",
+    "pacingNote": "{pct} % de l'enveloppe proposé",
+    "linesTitle": "Grille d'équipe",
+    "linesEmpty": "Aucune ligne — ouvrez le cycle.",
+    "totalCost": "Coût chiffré",
+    "planLinesTitle": "Lignes du plan",
+    "planLinesEmpty": "Aucune ligne.",
+    "approveLine": "Approuver",
+    "columns": {
+      "level": "Niveau",
+      "range": "Fourchette",
+      "headcount": "Effectif",
+      "placement": "Position",
+      "name": "Nom",
+      "status": "Statut",
+      "effective": "Effet",
+      "cost": "Coût",
+      "employee": "Personne",
+      "current": "Actuel",
+      "rating": "Évaluation",
+      "guideline": "Barème",
+      "proposed": "Proposé",
+      "title": "Titre",
+      "kind": "Nature",
+      "fte": "ETP",
+      "start": "Début"
+    },
+    "placement": {
+      "below_min": "Sous le minimum",
+      "in_range": "Dans la fourchette",
+      "above_max": "Au-dessus du maximum",
+      "no_band": "Sans fourchette"
+    },
+    "cycleKind": {
+      "merit": "Mérite",
+      "promotion": "Avancement",
+      "adjustment": "Ajustement",
+      "cola": "Vie chère"
+    },
+    "cycleStatus": {
+      "draft": "Brouillon",
+      "open": "Ouvert",
+      "in_review": "En révision",
+      "approved": "Approuvé",
+      "pushed": "Transféré",
+      "closed": "Clôturé",
+      "cancelled": "Annulé"
+    },
+    "lineStatus": {
+      "pending": "En attente",
+      "proposed": "Proposé",
+      "approved": "Approuvé",
+      "rejected": "Rejeté",
+      "pushed": "Transféré"
+    },
+    "planStatus": {
+      "draft": "Brouillon",
+      "submitted": "Soumis",
+      "approved": "Approuvé",
+      "closed": "Clôturé"
+    },
+    "planLineStatus": {
+      "proposed": "Proposé",
+      "approved": "Approuvé",
+      "rejected": "Rejeté",
+      "opened": "Ouvert",
+      "filled": "Pourvu",
+      "cancelled": "Annulé"
+    },
+    "lineKind": {
+      "create": "Création",
+      "backfill": "Remplacement",
+      "change": "Changement",
+      "terminate": "Suppression"
+    },
+    "eventKind": {
+      "opened": "Ouvert",
+      "proposed": "Proposé",
+      "reopened": "Rouvert",
+      "approved": "Approuvé",
+      "rejected": "Rejeté",
+      "budget_changed": "Budget modifié",
+      "pushed": "Transféré",
+      "closed": "Clôturé",
+      "cancelled": "Annulé"
+    },
+    "drawer": {
+      "proposeTitle": "Proposer",
+      "decideTitle": "Décider",
+      "historyTitle": "Historique",
+      "pctLabel": "Hausse %",
+      "rateLabel": "Nouveau taux",
+      "reasonLabel": "Motif",
+      "failed": "La modification a été refusée",
+      "submit": "Enregistrer",
+      "cancel": "Annuler",
+      "approve": "Approuver",
+      "reject": "Rejeter",
+      "reopen": "Rouvrir"
+    },
+    "historyColumns": {
+      "event": "Événement",
+      "reason": "Motif",
+      "at": "Date"
+    },
+    "emptyHistory": "Aucun événement."
+  },
+  "equity": {
+    "title": "Équité salariale",
+    "description": "Métriques figées calculées depuis la vérité de paie, par catégorie de valeur égale.",
+    "meanGap": "Écart moyen",
+    "medianGap": "Écart médian",
+    "variableGap": "Écart variable",
+    "jointFlags": "Examen conjoint",
+    "categoriesTitle": "Écarts par catégorie",
+    "categoriesEmpty": "Aucune catégorie mesurée.",
+    "columns": {
+      "category": "Catégorie",
+      "counts": "Effectifs A / B",
+      "mean": "Écart moyen",
+      "median": "Écart médian",
+      "unexplained": "Inexpliqué",
+      "flag": "Marque"
+    },
+    "jointDue": "Examiner conjointement",
+    "generate": "Générer la mesure",
+    "emptyTitle": "Aucune mesure",
+    "emptyDescription": "Générez une mesure pour mesurer les écarts."
+  },
+  "myComp": {
+    "title": "Ma rémunération",
+    "description": "Votre position en fourchette, relevés et informations salariales.",
+    "placement": "Position en fourchette",
+    "statementsTitle": "Relevés",
+    "columns": {
+      "period": "Période",
+      "generated": "Généré"
+    },
+    "statementsEmpty": "Aucun relevé.",
+    "requestPayInfo": "Demander des informations salariales",
+    "requestFailed": "La demande a été refusée",
+    "requestSubmit": "Enregistrer",
+    "requestCancel": "Annuler",
+    "requestStatus": {
+      "open": "Ouverte"
     }
   }
 }
