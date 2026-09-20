@@ -59,6 +59,25 @@ const SCAFFOLDS_WITH_NO_FILES = new Set(["GB", "DE", "NL", "SG"]);
  */
 const SCAFFOLD_PATHS_IN_MISSING_DIRECTORIES = new Set(["IT"]);
 
+/**
+ * Packs whose declared path carries no `{year}`, so it names ONE fixed file
+ * instead of a per-year module — and the generator "never overwrites an existing
+ * file", so it writes nothing, for every year, forever, and reports success.
+ *
+ * This is the third shape of the same failure and the most quietly durable of
+ * the three, because the path resolves, the directory exists, and a census that
+ * checks either would call it healthy.
+ *
+ * ES declares `es/rates.ts`; BR declares `BR_RATES_MODULE`, which is
+ * `br/tax-year-2026.ts` — the CURRENT year, hardcoded. Both are the pack's
+ * `ratesModule` pointer reused as a scaffold target, which is a category error:
+ * `ratesModule` says where the pack's rates live so a refusal can name it, while
+ * a scaffold path says where next year's module should be WRITTEN. Both packs
+ * were found by shards noticing the dry run created nothing and reporting it
+ * instead of treating the generator as broken.
+ */
+const SCAFFOLD_PATHS_WITHOUT_A_YEAR = new Set(["ES", "BR"]);
+
 test("every pack's rollover scaffold declares at least one file to generate", () => {
   const empty: string[] = [];
   for (const declared of declaredPayrollTaxYears()) {
@@ -110,6 +129,36 @@ test("every declared scaffold path lives in a directory that exists", () => {
     missing.filter((entry) => !SCAFFOLD_PATHS_IN_MISSING_DIRECTORIES.has(entry.country)),
     [],
     "a scaffold path under a directory that does not exist writes a module nothing imports",
+  );
+});
+
+test("every declared scaffold file names a PER-YEAR module, not one fixed file", () => {
+  // The generator never overwrites an existing file. So a path with no `{year}`
+  // names one file that either already exists — in which case the generator
+  // writes nothing, forever, and reports success — or gets written once and then
+  // blocks every later year. The path resolves and its directory exists, so
+  // neither of the other two checks in this file can see it.
+  const yearless: { country: string; path: string }[] = [];
+  for (const declared of declaredPayrollTaxYears()) {
+    for (const file of declared.scaffold?.files ?? []) {
+      if (!file.path.includes("{year}")) {
+        yearless.push({ country: declared.country, path: file.path });
+      }
+    }
+  }
+  const offenders = [...new Set(yearless.map((entry) => entry.country))];
+  for (const country of SCAFFOLD_PATHS_WITHOUT_A_YEAR) {
+    assert.ok(
+      offenders.includes(country),
+      `${country} is allow-listed for a scaffold path with no {year} but all of its paths now carry `
+      + "one — delete it from SCAFFOLD_PATHS_WITHOUT_A_YEAR; the list may only shrink",
+    );
+  }
+  assert.deepEqual(
+    yearless.filter((entry) => !SCAFFOLD_PATHS_WITHOUT_A_YEAR.has(entry.country)),
+    [],
+    "a scaffold path without {year} cannot scaffold a year: the generator refuses to overwrite the "
+    + "one file it names and reports success having written nothing",
   );
 });
 
