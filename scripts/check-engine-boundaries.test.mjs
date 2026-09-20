@@ -65,7 +65,7 @@ test("an undeclared cross-module import names file, line, both modules and the r
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payments\.ts" from module "payments", which it does not declare/);
+    assert.match(problems[0], /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payment-example\.ts" from module "payments", which it does not declare/);
     assert.match(problems[0], /modules\.records\.dependsOn/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -123,7 +123,7 @@ test("engine code importing the web app is refused; tests may", () => {
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /engine\/src\/ledger\/posting\.ts:4: engine code must not import the web app/);
+    assert.match(problems[0], /engine\/src\/ledger\/posting-example\.ts:4: engine code must not import the web app/); // source-path: synthetic
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
