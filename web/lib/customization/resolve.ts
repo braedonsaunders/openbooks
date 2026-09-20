@@ -23,7 +23,7 @@ import type { CustomFieldDef } from "../custom-fields";
  *
  * Precedence (source platform "Preferred Form" + saved-search model):
  *   form layout: user's preferred form → org default → system default
- *   list view:    ?view=<id> → user preference → personal isDefault → org default → system default
+ *   list view:    ?view=<id> → user preference (null viewId skips personal) → unique personal isDefault → org default → system default
  *
  * Custom fields (custom_field_defs) are merged in at resolve time so a field
  * created after a layout was saved still appears: every active def for the
@@ -329,20 +329,27 @@ export const resolveListView = cache(
     // 1. explicit ?view=<id>
     let chosen: (ListViewRow & { config: unknown }) | undefined;
     if (viewId && isUuid(viewId)) chosen = byId(viewId);
-    // 2. user preference (views-menu "set as default" — may point at org or personal)
+    // 2. user preference (views-menu). A present row with view_id NULL is
+    // "use system default": skip the personal isDefault and fall through to
+    // org/system. A missing row is not a refusal — then a unique personal
+    // default still applies.
     if (!chosen) {
       const pref = (await db.execute<{ viewId: string | null }>(sql`
         select view_id as "viewId" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
       `));
-      const pid = pref.rows[0]?.viewId;
-      if (pid && isUuid(pid)) chosen = byId(pid);
+      const prefRow = pref.rows[0];
+      if (prefRow) {
+        const pid = prefRow.viewId;
+        if (pid && isUuid(pid)) chosen = byId(pid);
+      } else {
+        // 3. unique personal default — designer "default for its scope".
+        // Two stored personal defaults are overlapping configuration; do
+        // not guess which one the race meant.
+        const personalDefaults = rows.rows.filter((r) => r.scope === "user" && r.isDefault);
+        if (personalDefaults.length === 1) chosen = personalDefaults[0];
+      }
     }
-    // 3. personal default — the designer "default for its scope" flag on a
-    // user-scope row. The listing query already restricts user-scope to this
-    // owner, so a matching isDefault is theirs. Skipping this step stored a
-    // flag the list could badge but no resolve could observe.
-    if (!chosen) chosen = rows.rows.find((r) => r.scope === "user" && r.isDefault);
     // 4. org default
     if (!chosen) chosen = rows.rows.find((r) => r.scope === "org" && r.isDefault);
     // 5. no saved default wins over the system default: a first-available

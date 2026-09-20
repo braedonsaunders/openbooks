@@ -26,16 +26,21 @@ type Row = Record<string, unknown>
   calls: 0,
   viewRows: [] as Row[],
   prefViewId: null as string | null,
+  // A present row with view_id NULL is "use system default" (schema:
+  // null viewId ⇒ org default). That is not the same as no preference row.
+  prefCleared: false,
   async execute() {
     const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
       calls: number
       viewRows: Row[]
       prefViewId: string | null
+      prefCleared: boolean
     }
     state.calls += 1
     // First query lists the views; the second (when no explicit view) reads
     // the user's default preference.
     if (state.calls === 1) return { rows: state.viewRows }
+    if (state.prefCleared) return { rows: [{ viewId: null }] }
     return { rows: state.prefViewId ? [{ viewId: state.prefViewId }] : [] }
   },
 }
@@ -64,15 +69,20 @@ function seedRow(overrides: Row = {}): Row {
   }
 }
 
-async function resolve(overrides: { viewRows: Row[]; prefViewId?: string | null; viewId?: string | null }, org: string) {
+async function resolve(
+  overrides: { viewRows: Row[]; prefViewId?: string | null; prefCleared?: boolean; viewId?: string | null },
+  org: string,
+) {
   const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
     calls: number
     viewRows: Row[]
     prefViewId: string | null
+    prefCleared: boolean
   }
   state.calls = 0
   state.viewRows = overrides.viewRows
   state.prefViewId = overrides.prefViewId ?? null
+  state.prefCleared = overrides.prefCleared === true
   return resolveListView({
     orgId: org,
     userId: 'user-1',
@@ -292,6 +302,76 @@ test('an explicit view outranks a personal isDefault', async () => {
     'org-case-13',
   )
   assert.equal(resolved.source, 'explicit')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// Views-menu "use system default" writes a preference row with view_id NULL.
+// That is an explicit refusal of every user default, including a personal
+// isDefault — otherwise the clear cannot be observed.
+test('a cleared preference skips the personal isDefault and uses the org default', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], prefCleared: true },
+    'org-case-14',
+  )
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+test('a cleared preference with no org default uses the system default, not a personal isDefault', async () => {
+  const personal = {
+    id: '66666666-6666-4666-8666-666666666666',
+    name: 'Mine only',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 75 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [personal], prefCleared: true }, 'org-case-15')
+  assert.equal(resolved.source, 'system')
+  assert.equal(resolved.row, null)
+})
+
+// Two personal isDefaults are overlapping configuration, not a default.
+// Guessing the first by name would hide the race the write must refuse.
+test('two personal isDefaults are ignored rather than guessed', async () => {
+  const first = {
+    id: '77777777-7777-4777-8777-777777777777',
+    name: 'Alpha',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 10 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const second = {
+    ...first,
+    id: '88888888-8888-4888-8888-888888888888',
+    name: 'Beta',
+    config: { ...seedShape, perPage: 20 },
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve({ viewRows: [orgDefault, first, second] }, 'org-case-16')
+  assert.equal(resolved.source, 'org')
   assert.equal(resolved.row?.id, orgDefault.id)
 })
 

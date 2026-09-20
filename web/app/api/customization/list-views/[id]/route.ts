@@ -8,6 +8,11 @@ import { parseListView, stripSeededDefaultMark } from "@openbooks/customization"
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import {
+  AmbiguousListViewDefaultError,
+  assertSingleListViewDefault,
+  claimListViewDefaultSlot,
+} from "../../../../../lib/customization/list-view-default";
 
 export const runtime = "nodejs";
 
@@ -146,18 +151,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
       const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
       if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
-      if (body.isDefault) {
-        if (locked.scope === "org")
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${locked.recordType} and scope='org'
-               and is_default and id <> ${id}`);
-        else
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${locked.recordType} and scope='user'
-               and owner_id = ${user.id} and is_default and id <> ${id}`);
-      }
+      const defaultScope = {
+        orgId: user.orgId,
+        recordType: locked.recordType,
+        scope: locked.scope === "org" ? "org" as const : "user" as const,
+        ownerId: locked.scope === "user" ? user.id : null,
+        exceptId: id,
+      };
+      if (body.isDefault) await claimListViewDefaultSlot(tx, defaultScope);
       // Next-state default+inactive must match zero rows even if the JS
       // refusal is skipped — refuse by name, never {ok:true}.
       const written = (await tx.execute<{ id: string }>(sql`
@@ -168,6 +169,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!written) {
         return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
       }
+      if (body.isDefault) await assertSingleListViewDefault(tx, defaultScope);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
@@ -178,6 +180,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = (e as Error).message ?? "update failed";
+    if (e instanceof AmbiguousListViewDefaultError)
+      return NextResponse.json({ error: e.message }, { status: 409 });
     if (msg.includes("unique"))
       return NextResponse.json({ error: "A view with that name already exists" }, { status: 409 });
     return NextResponse.json({ error: msg }, { status: 500 });
