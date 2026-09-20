@@ -17,6 +17,44 @@ import { storageIdentityError } from "../_storage-identity";
 
 export const runtime = "nodejs";
 
+const CONNECTOR_URL_REFUSED =
+  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
+
+/** Tenant-supplied connector URL/host. Same refusal set as bank-feed metadata hosts. */
+function connectorUrlRefusal(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return CONNECTOR_URL_REFUSED;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return CONNECTOR_URL_REFUSED;
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const ipv4 = host.startsWith("::ffff:") ? host.slice(7) : host;
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    /^127(?:\.\d{1,3}){3}$/.test(ipv4) ||
+    /^169\.254(?:\.\d{1,3}){2}$/.test(ipv4)
+  ) {
+    return CONNECTOR_URL_REFUSED;
+  }
+  return null;
+}
+
+function connectionConfigUrlRefusal(config: unknown): string | null {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+  const row = config as Record<string, unknown>;
+  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
+}
+
 /**
  * Update a connection: rename, edit config, rotate/add secrets, toggle mirror,
  * pause/resume. Secrets are merged (only provided fields change) then re-sealed;
@@ -42,6 +80,15 @@ export async function PATCH(
     postedChangePolicy?: "review_required" | "append_only_automatic";
     status?: "active" | "paused";
   };
+  if (body.config && typeof body.config === "object") {
+    const urlError = connectionConfigUrlRefusal(body.config);
+    if (urlError) {
+      return NextResponse.json(
+        { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+        { status: 400 },
+      );
+    }
+  }
   const today =
     body.config && typeof body.config === "object"
       ? await businessToday(orgId)

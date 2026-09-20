@@ -19,6 +19,7 @@ type RouteState = {
   blockFirstEnqueue: boolean;
   firstEnqueueStarted?: () => void;
   releaseFirstEnqueue?: () => void;
+  config: Record<string, unknown>;
 };
 
 const stateKey = Symbol.for("openbooks.connection-run-route-test");
@@ -30,6 +31,7 @@ const routeState: RouteState = {
   lockHeld: false,
   lockWaiters: [],
   blockFirstEnqueue: false,
+  config: {},
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -71,7 +73,8 @@ const mockSources = new Map<string, string>([
     "mock:connection",
     `
       export async function getConnection() {
-        return { status: 'connected', source: 'netsuite' }
+        const state = globalThis[Symbol.for('openbooks.connection-run-route-test')]
+        return { status: 'connected', source: 'netsuite', config: state.config }
       }
     `,
   ],
@@ -210,6 +213,7 @@ function reset(): void {
   routeState.blockFirstEnqueue = false;
   routeState.firstEnqueueStarted = undefined;
   routeState.releaseFirstEnqueue = undefined;
+  routeState.config = {};
 }
 
 function request(mode: string): Request {
@@ -277,3 +281,29 @@ test("a terminal queue record can be replaced for a later deliberate run", async
     "migration|conn-1|mirror",
   ]);
 });
+
+const refusedConnectorUrls = [
+  ["loopback IPv4", { url: "http://127.0.0.1/" }],
+  ["localhost", { url: "http://localhost:8069" }],
+  ["metadata", { url: "http://169.254.169.254/latest/meta-data/" }],
+  ["loopback IPv6", { url: "http://[::1]/" }],
+  ["file scheme", { url: "file:///etc/passwd" }],
+  ["NetSuite host loopback", { host: "https://127.0.0.1" }],
+] as const;
+
+for (const [name, config] of refusedConnectorUrls) {
+  test(`run does not enqueue a ${name} connector URL`, async () => {
+    reset();
+    routeState.config = { ...config };
+
+    const response = await POST(request("full_migration"), {
+      params: Promise.resolve({ id: "conn-1" }),
+    });
+
+    assert.equal(response.status, 404);
+    const body = (await response.json()) as { errorCode?: string };
+    assert.equal(body.errorCode, "CONNECTOR_URL_REFUSED");
+    assert.equal(routeState.enqueueAttempts, 0, "must not enqueue a refused connector URL");
+    assert.equal(routeState.createdJobIds.length, 0);
+  });
+}
