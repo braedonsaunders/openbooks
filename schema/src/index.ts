@@ -81,5 +81,6 @@ export * from "./payroll-rules";
 export * from "./leases";
 export * from "./hrm";
 export * from "./hrm-positions";
+export * from "./hrm-benefits";
 
 export * from './extension-drafts';

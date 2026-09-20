@@ -975,7 +975,9 @@
     "hrm_process_manage": "Ouvrir, terminer et annuler les listes de processus",
     "hrm_performance_read": "Voir les cycles et évaluations dans le périmètre de confidentialité",
     "hrm_performance_manage": "Mener les cycles, calibrer et partager les évaluations",
-    "hrm_retention_read": "Voir les fiches de sortie et la rotation"
+    "hrm_retention_read": "Voir les fiches de sortie et la rotation",
+    "hrm_benefits_read": "Consulter les régimes avantages et les adhésions",
+    "hrm_benefits_manage": "Gérer les régimes, les fenêtres et les adhésions"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",

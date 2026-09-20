@@ -975,7 +975,9 @@
     "hrm_process_manage": "创建、完成和取消流程清单",
     "hrm_performance_read": "在隐私范围内查看评审周期和评审",
     "hrm_performance_manage": "运行评审周期、校准和共享评审",
-    "hrm_retention_read": "查看离职记录和流失率"
+    "hrm_retention_read": "查看离职记录和流失率",
+    "hrm_benefits_read": "查看福利计划和参保",
+    "hrm_benefits_manage": "管理福利计划、参保窗口和参保"
   },
   "ai": {
     "metaTitle": "AI 设置",

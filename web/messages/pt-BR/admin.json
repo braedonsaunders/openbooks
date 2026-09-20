@@ -975,7 +975,9 @@
     "hrm_process_manage": "Abrir, concluir e cancelar listas de processos",
     "hrm_performance_read": "Ver ciclos de avaliação e avaliações no escopo de privacidade",
     "hrm_performance_manage": "Conduzir ciclos de avaliação, calibrar e compartilhar avaliações",
-    "hrm_retention_read": "Ver registros de saída e rotatividade"
+    "hrm_retention_read": "Ver registros de saída e rotatividade",
+    "hrm_benefits_read": "Ver planos de benefícios e inscrições",
+    "hrm_benefits_manage": "Gerenciar planos de benefícios, janelas e inscrições"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
