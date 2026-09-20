@@ -22,6 +22,8 @@ import {
   UUID_RE,
 } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
+import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
+import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { saveSetupBook } from './books'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
@@ -868,6 +870,29 @@ export async function validateEntityIntegrity(
     if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
     if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
   }
+  // HRM leave policies (0194): the rule shapes are refused with the engine's
+  // own words before the write, and the applies_to targets must be visible
+  // in this org — a policy that can never apply is refused by field name.
+  if (entity.key === 'leave-policies') {
+    const problem = leavePolicyRuleProblem({
+      appliesTo: body.appliesTo,
+      accrualRule: body.accrualRule,
+      carryoverRule: body.carryoverRule,
+    })
+    if (problem) return problem
+    const applies = (body.appliesTo ?? null) as { employer_subsidiary_id?: unknown; department_id?: unknown } | null
+    if (applies) {
+      const subsidiary = (applies.employer_subsidiary_id ?? null) as string | null
+      const department = (applies.department_id ?? null) as string | null
+      const refs = await executor.execute(sql`
+        select
+          ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+          ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok
+      `)
+      if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
+      if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+    }
+  }
   // HRM process template steps (0193): named owners must be visible parties
   // (named_party needs exactly one, other owners need none), and the parent
   // template must live in this org.
@@ -961,7 +986,7 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))
+  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1029,9 +1054,13 @@ export async function createSetupRecord(
     if (dup.rows.length > 0) return duplicateConflict(entity.key)
   }
 
+  // Rule-slot entities: generated slot columns are never written and the
+  // folded rule objects always are (see hrm-rule-slots.ts).
+  const slotted = applyRuleSlotColumns(entity.key, body, built.cols)
+  if ('error' in slotted) return { status: 400, body: { error: slotted.error } }
   let cols = entity.key === 'fx-rates'
-    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
-    : [...built.cols]
+    ? slotted.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : [...slotted.cols]
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       cols = persistFxRateCols(cols)
@@ -1166,7 +1195,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))
+  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
@@ -1367,9 +1396,11 @@ export async function updateSetupRecord(
     }
   }
 
+  const slottedUpdate = applyRuleSlotColumns(entity.key, body, built.cols)
+  if ('error' in slottedUpdate) return { status: 400, body: { error: slottedUpdate.error } }
   let updateCols = entity.key === 'fx-rates'
-    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
-    : built.cols
+    ? slottedUpdate.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : slottedUpdate.cols
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       updateCols = persistFxRateCols(updateCols)
