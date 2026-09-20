@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("admin.customization.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const row = await loadOwn(gate.user.orgId, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(gate.user.orgId, row.recordType);
@@ -44,7 +44,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
@@ -162,7 +162,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
