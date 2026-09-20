@@ -1,7 +1,14 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/projects/labor-costing.ts'
+import { laborCostingSettings, setPrevailingWageEntryWage, snapshotLaborCostRates } from '@openbooks/engine/src/projects/labor-costing.ts'
+// HR-13: register the prevailing-wage resolver for the snapshot hook —
+// the projects module never imports hrm, so the web approval path wires
+// the HRM implementation here. With the feature off it returns null and
+// every entry keeps the standard wage path.
+import { prevailingWageForTimeEntry } from '@openbooks/engine/src/hrm/construction/labor-hook.ts'
+
+setPrevailingWageEntryWage(prevailingWageForTimeEntry)
 import { applyOverheadForTime } from '@openbooks/engine/src/projects/overhead-apply.ts'
 import { postProjectLaborCost } from '@openbooks/engine/src/projects/recognition.ts'
 import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
@@ -24,7 +31,7 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   if (timeEntryIds.length === 0) return
   if (!(await isFeatureEnabled(orgId, 'projects'))) return
   const settings = await laborCostingSettings(orgId)
-  await snapshotLaborCostRates(orgId, timeEntryIds)
+  await snapshotLaborCostRates(orgId, timeEntryIds, { actorId })
   await snapshotTimeBillRates(orgId, timeEntryIds)
   if (settings.mode === 'post') await postProjectLaborCost(orgId, actorId, timeEntryIds)
   await applyOverheadForTime(orgId, actorId, timeEntryIds)
