@@ -1847,6 +1847,15 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     // inputs. Admin-only like the employment keys above.
     "hrm.benefits.read",
     "hrm.benefits.manage",
+    // HR-9 self-service (migration 0198): self.read/request scope every
+    // read to the party behind the login and every proposal to one's own
+    // employment; team.read/manage resolve structurally by holding direct
+    // reports, never by role grant. Admin-only like the employment keys
+    // above; employee logins receive the self keys by explicit grant.
+    "hrm.self.read",
+    "hrm.self.request",
+    "hrm.team.read",
+    "hrm.team.manage",
   ];
   assert.deepEqual(
     snapshot,
