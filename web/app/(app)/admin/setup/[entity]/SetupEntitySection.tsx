@@ -18,7 +18,6 @@ import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
-import { resolveLocale } from '../../../../../lib/locale'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
@@ -107,7 +106,6 @@ export async function SetupEntitySection({
     gated.key === 'item-rate-books' && !multiCurrency
       ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
       : gated,
-    await resolveLocale(),
   )
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined

@@ -1,6 +1,5 @@
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
-import { countryName } from '../countries'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './registry'
 
 /**
@@ -19,14 +18,17 @@ import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, S
  * surface that renders without resolving.
  */
 
-/**
- * Filing-country labels come from `countryName` (web/lib/countries.ts) — the
- * single place a country code becomes a name — so they render in the
- * operator's UI locale. Stored and validated values stay bare ISO codes, so
- * the accept set is identical in every language (see entityForValidation in
- * write.ts). `countryName`'s own fallback rule applies: an unassigned code
- * renders as itself, and a structurally invalid one comes back as the input.
- */
+/** English region name for a pack country code ('CA' → 'Canada'). */
+const regionName = (() => {
+  const names = new Intl.DisplayNames(['en'], { type: 'region' })
+  return (code: string): string => {
+    try {
+      return names.of(code) ?? code
+    } catch {
+      return code
+    }
+  }
+})()
 
 /** After-tax: the generic member of every pack's treatment list. */
 const AFTER_TAX_OPTION: SetupOption = { value: 'none', labelKey: 'options.payTaxTreatment.none' }
@@ -44,12 +46,12 @@ function packTreatmentOptions(country: string): SetupOption[] {
   ]
 }
 
-function dynamicOptions(source: SetupDynamicOptionsSource, locale: string): SetupOption[] {
+function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
   switch (source) {
     case 'payroll-filing-countries':
       return declaredPayrollFilings().map((pack) => ({
         value: pack.country,
-        label: countryName(pack.country, locale),
+        label: regionName(pack.country),
       }))
     case 'payroll-filing-program-types': {
       const options = new Map<string, SetupOption>()
@@ -94,8 +96,8 @@ function deductionTreatmentsByCountry(): Record<string, SetupOption[]> {
   )
 }
 
-const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T, locale: string): T =>
-  item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource, locale) } : item
+const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T): T =>
+  item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource) } : item
 
 /**
  * A treatment field resolves twice: the flat cross-pack union replaces
@@ -104,8 +106,8 @@ const resolve = <T extends SetupField | SetupColumn | SetupFilter>(item: T, loca
  * `setupFieldOptions`. The scope field comes from the descriptor contract —
  * this module only fills the pack side of it.
  */
-const resolveField = (field: SetupField, locale: string): SetupField => {
-  const resolved = resolve(field, locale)
+const resolveField = (field: SetupField): SetupField => {
+  const resolved = resolve(field)
   if (field.optionsSource !== 'payroll-deduction-treatments') return resolved
   return {
     ...resolved,
@@ -113,16 +115,8 @@ const resolveField = (field: SetupField, locale: string): SetupField => {
   }
 }
 
-/**
- * The entity with every `optionsSource` materialized. Identity when none.
- *
- * `locale` is required (no default): a forgotten locale would silently render
- * English names. Callers pass the request's `resolveLocale()` result — the
- * render path and the write-validation path alike, so both agree on labels
- * while validation (which compares `option.value`, never `label`) stays
- * locale-invariant.
- */
-export function resolveDynamicSetupOptions(entity: SetupEntity, locale: string): SetupEntity {
+/** The entity with every `optionsSource` materialized. Identity when none. */
+export function resolveDynamicSetupOptions(entity: SetupEntity): SetupEntity {
   const needsResolution = [
     ...entity.columns,
     ...entity.fields,
@@ -131,8 +125,8 @@ export function resolveDynamicSetupOptions(entity: SetupEntity, locale: string):
   if (!needsResolution) return entity
   return {
     ...entity,
-    columns: entity.columns.map((item) => resolve(item, locale)),
-    fields: entity.fields.map((field) => resolveField(field, locale)),
-    filters: entity.filters?.map((item) => resolve(item, locale)),
+    columns: entity.columns.map(resolve),
+    fields: entity.fields.map(resolveField),
+    filters: entity.filters?.map(resolve),
   }
 }
