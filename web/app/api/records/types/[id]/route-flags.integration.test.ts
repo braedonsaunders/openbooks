@@ -18,10 +18,15 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { PATCH } = await import('./route')
+const { GET, PATCH } = await import('./route')
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const patchRequest = (id: string, body: unknown) => new Request(`http://flags.local/api/records/types/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+async function openedRevision(id: string): Promise<string> {
+  const opened = await GET(new Request(`http://flags.local/api/records/types/${id}`), params(id))
+  assert.equal(opened.status, 200, await opened.clone().text())
+  return ((await opened.json()) as { type: { updated_at: string } }).type.updated_at
+}
 
 test('record-type PATCH refuses a non-boolean showInNav instead of a storage 500', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -43,7 +48,10 @@ test('record-type PATCH refuses a non-boolean showInNav instead of a storage 500
       }
       const stored = (await db.execute<{ show_in_nav: boolean }>(sql`select show_in_nav from custom_record_types where id=${typeId} and org_id=${org.orgId}`)).rows[0]
       assert.equal(stored?.show_in_nav, false, 'refused writes leave the stored flag unchanged')
-      const ok = await PATCH(patchRequest(typeId, { showInNav: true }), params(typeId))
+      const ok = await PATCH(
+        patchRequest(typeId, { showInNav: true, expectedUpdatedAt: await openedRevision(typeId) }),
+        params(typeId),
+      )
       assert.equal(ok.status, 200, JSON.stringify(await ok.clone().json()))
     })
   } finally {

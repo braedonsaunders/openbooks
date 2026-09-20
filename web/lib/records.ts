@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
 import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
@@ -28,6 +28,12 @@ export type RecordTypeRow = {
   show_in_nav: boolean
   allowed_roles: string[] | null
   sort_order: number
+  /**
+   * Opaque optimistic-concurrency token: the type's canonical updated_at when
+   * read (six-digit UTC wire form). Builder saves must send it back as
+   * expectedUpdatedAt; a stale or missing token fails closed with a 409.
+   */
+  updated_at: string
 }
 
 export type RecordRow = {
@@ -49,7 +55,8 @@ export type RecordRow = {
 }
 
 const TYPE_COLUMNS = sql`id, key, name, plural_name, icon_key, description, fields,
-       status, show_in_nav, allowed_roles, sort_order`
+       status, show_in_nav, allowed_roles, sort_order,
+       ${documentRevisionSql(sql`updated_at`)} as updated_at`
 
 export async function loadRecordTypeByKey(
   orgId: string,

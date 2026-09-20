@@ -54,6 +54,11 @@ export type RecordTypePayload = {
   showInNav: boolean
   allowedRoles: string[] | null
   sortOrder: number
+  /**
+   * Exact persisted revision loaded with this type. Autosave echoes it as
+   * expectedUpdatedAt; a missing or stale token is a 409, not last-write-wins.
+   */
+  updated_at: string
 }
 
 type Issue = { path: Array<string | number>; message: string }
@@ -134,6 +139,12 @@ export function TypeBuilderDrawer({
     }),
     [name, pluralName, key, iconKey, description, showInNav, sortOrder, allowedRoles, sections, isDraft],
   )
+  // Echo the revision this drawer loaded. Keep it off the payload memo so a
+  // successful save can advance the token without retriggering autosave.
+  const loadedUpdatedAt = useRef(type.updated_at)
+  useEffect(() => {
+    loadedUpdatedAt.current = type.updated_at
+  }, [type.updated_at])
   const first = useRef(true)
   useEffect(() => {
     if (first.current) {
@@ -146,17 +157,30 @@ export function TypeBuilderDrawer({
       const res = await fetch(`/api/records/types/${type.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt: loadedUpdatedAt.current,
+        }),
       })
-      const data = await res.json()
-      if (res.ok) {
-        setIssues(data.issues ?? [])
-        setSaveState('saved')
-        router.refresh()
-      } else {
+      if (!res.ok) {
         setSaveState('dirty')
-        toast.error(data.error ?? t('typeBuilder.autosaveFailed'))
+        let message = t('typeBuilder.autosaveFailed')
+        try {
+          const data = (await res.json()) as { error?: string }
+          if (typeof data.error === 'string' && data.error) message = data.error
+        } catch {
+          // A parse failure must not hide the refuse or invent a success.
+        }
+        toast.error(message)
+        return
       }
+      const data = (await res.json()) as { issues?: Issue[]; type?: { updated_at?: string } }
+      if (typeof data.type?.updated_at === 'string') {
+        loadedUpdatedAt.current = data.type.updated_at
+      }
+      setIssues(data.issues ?? [])
+      setSaveState('saved')
+      router.refresh()
     }, 600)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps

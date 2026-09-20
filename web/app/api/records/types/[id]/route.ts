@@ -11,6 +11,7 @@ import {
   lintRecordFields,
   typeKeyError,
 } from '../../../../../lib/record-schema'
+import type { FormSection } from '@openbooks/forms-core'
 
 export const runtime = 'nodejs'
 
@@ -26,15 +27,6 @@ function typeDeclaresSubsidiary(fields: unknown, name: string): boolean {
   return lint.success && hasSubsidiaryField(lint.sections)
 }
 
-async function loadTypeRevision(orgId: string, id: string): Promise<string | null> {
-  const row = (await db.execute<{ updated_at: string }>(sql`
-    select ${TYPE_REVISION_SQL} as updated_at
-      from custom_record_types
-     where id = ${id} and org_id = ${orgId}
-  `)).rows[0]
-  return row?.updated_at ?? null
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
@@ -42,9 +34,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const type = await loadRecordTypeById(gate.user.orgId, id)
   if (!type) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const updatedAt = await loadTypeRevision(gate.user.orgId, id)
-  if (!updatedAt) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json({ type: { ...type, updated_at: updatedAt } })
+  return NextResponse.json({ type })
 }
 
 /**
@@ -140,6 +130,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   let fieldsJson: string | undefined
+  let nextSections: FormSection[] | undefined
   let issues: { path: Array<string | number>; message: string }[] = []
   if (body.fields !== undefined) {
     const lint = lintRecordFields(body.fields, body.name ?? type.name)
@@ -151,43 +142,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     // Persist the validated SECTION structure (not the flattened field list).
     fieldsJson = JSON.stringify(lint.sections)
+    nextSections = lint.sections
     issues = lint.issues
-    const fence = gate.allowedSubsidiaryIds ?? null
-    if (fence !== null && typeDeclaresSubsidiary(type.fields, type.name) && !hasSubsidiaryField(lint.sections)) {
-      return NextResponse.json(
-        {
-          error:
-            'Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope',
-        },
-        { status: 422 },
-      )
-    }
   } else {
     // Re-lint the stored fields so a rename etc. still refreshes the issue list.
     issues = lintRecordFields(type.fields, body.name ?? type.name).issues
   }
 
-  if (body.expectedUpdatedAt !== undefined && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+  // Full-state builder saves must echo the revision they read. Substituting
+  // the live server token would let a later tokenless autosave adopt a newer
+  // revision and overwrite (or drop subsidiary_id from) a concurrent edit.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
     return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
   }
-
-  const openedRevision = await loadTypeRevision(user.orgId, id)
-  if (!openedRevision) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  // Tokenless builder autosaves echo the revision this request just read.
-  // Concurrent builders that opened the same snapshot lose with 409.
-  const expectedRevision = isDocumentRevisionToken(body.expectedUpdatedAt)
-    ? body.expectedUpdatedAt
-    : openedRevision
+  const expectedRevision = body.expectedUpdatedAt
+  const fence = gate.allowedSubsidiaryIds ?? null
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<{ updated_at: string }>(sql`
-      select ${TYPE_REVISION_SQL} as updated_at
+    const locked = (await db.execute<{ updated_at: string; fields: unknown; name: string }>(sql`
+      select ${TYPE_REVISION_SQL} as updated_at, fields, name
         from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
     `)).rows[0]
     if (!locked) return { kind: 'not_found' as const }
     if (locked.updated_at !== expectedRevision) return { kind: 'conflict' as const }
+    if (
+      nextSections !== undefined &&
+      fence !== null &&
+      typeDeclaresSubsidiary(locked.fields, locked.name) &&
+      !hasSubsidiaryField(nextSections)
+    ) {
+      return {
+        kind: 'response' as const,
+        response: NextResponse.json(
+          {
+            error:
+              'Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope',
+          },
+          { status: 422 },
+        ),
+      }
+    }
     const updated = await db.execute(sql`
       update custom_record_types set
         name = coalesce(${body.name ?? null}, name),
@@ -210,11 +206,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   })
   if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (outcome.kind === 'conflict') return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
+  if (outcome.kind === 'response') return outcome.response
 
   const updated = await loadRecordTypeById(user.orgId, id)
-  const updatedAt = updated ? await loadTypeRevision(user.orgId, id) : null
-  if (!updated || !updatedAt) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json({ type: { ...updated, updated_at: updatedAt }, issues })
+  if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json({ type: updated, issues })
 }
 
 /** Delete a type — drafts only, and only before any record exists. */
