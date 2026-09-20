@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Budgets                                                             */
@@ -81,6 +81,7 @@ export function budgetWhere(
     )`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "bs")) continue
     const predicate = budgetFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

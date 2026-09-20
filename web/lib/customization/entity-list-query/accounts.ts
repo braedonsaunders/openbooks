@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Accounts                                                            */
@@ -149,6 +149,7 @@ export function accountWhere(
     parts.push(ids.length ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "a")) continue
     const predicate = accountFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
