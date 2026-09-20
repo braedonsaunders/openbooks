@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { commitPayRun } from "./run.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 import { dropScratchOrg } from "../testing/fixtures.ts";
 

@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  calculatePayRun,
-  createPayRun,
-  seedPayrollComponents,
-} from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 export interface AdoptionFixture {

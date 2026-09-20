@@ -24,6 +24,7 @@ import {
   Select,
   cn,
 } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
@@ -231,13 +232,17 @@ export function ParallelRunView({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ registerId, payRunDocumentId: effectiveRunId }),
       })
+      // The status is checked before the body is parsed: a non-JSON error body
+      // must surface the failure, never a SyntaxError from response.json().
+      if (!response.ok) {
+        toast.error(
+          await readApiErrorMessage(response, text('compareFailed', 'The comparison could not be run.')),
+        )
+        return
+      }
       const body = (await response.json()) as {
         error?: string
         comparison?: { status: string; blockedReason: string | null }
-      }
-      if (!response.ok) {
-        toast.error(body.error ?? text('compareFailed', 'The comparison could not be run.'))
-        return
       }
       const status = body.comparison?.status
       if (status === 'no_comparable_data') {
@@ -265,11 +270,12 @@ export function ParallelRunView({
       const response = await fetch(
         `/api/payroll/parallel-run/comparisons/${comparison.id}${qs}`,
       )
-      const body = (await response.json()) as { findings?: Finding[]; error?: string }
+      // The status is checked before the body is parsed (see compare above).
       if (!response.ok) {
-        toast.error(body.error ?? 'could not load the comparison')
+        toast.error(await readApiErrorMessage(response, 'could not load the comparison'))
         return
       }
+      const body = (await response.json()) as { findings?: Finding[]; error?: string }
       setFindings(body.findings ?? [])
     } finally {
       setLoadingFindings(false)
@@ -1069,11 +1075,12 @@ function ToleranceDrawer({
           reason,
         }),
       })
-      const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
+      // The status is checked before the body is parsed (see compare above).
       if (!response.ok) {
-        toast.error(body.error ?? 'could not save the tolerance')
+        toast.error(await readApiErrorMessage(response, 'could not save the tolerance'))
         return
       }
+      const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
       onChange(body.tolerances ?? [])
       setSlotKey('')
       setAmount('')
@@ -1089,11 +1096,12 @@ function ToleranceDrawer({
       `/api/payroll/parallel-run/tolerances?kind=${tolerance.kind}&slot=${encodeURIComponent(tolerance.slot)}`,
       { method: 'DELETE' },
     )
-    const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
+    // The status is checked before the body is parsed (see compare above).
     if (!response.ok) {
-      toast.error(body.error ?? 'could not remove the tolerance')
+      toast.error(await readApiErrorMessage(response, 'could not remove the tolerance'))
       return
     }
+    const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
     onChange(body.tolerances ?? [])
   }
 

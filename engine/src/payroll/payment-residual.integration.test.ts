@@ -7,9 +7,12 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { add, neg, sum } from "../money/money.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 import { recordPayRunPayment } from "./payment.ts";
-import { commitPayRun } from "./run.ts";
-import { createPaymentDocument, postPaymentWithApplications, reversePaymentForReturn, sameCurrencyAllocation, updateDraftPayment } from "../payments/payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { reversePaymentForReturn } from "../payments/payment-return.ts";
+import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 async function postedRun(mixed = false) {

@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier,context,next) {
 const {sql}=await import('drizzle-orm');
 const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/src/platform/db.ts');
 const {createScratchOrg,dropScratchOrgReporting:dropScratchOrg}=await import('@openbooks/engine/src/testing/fixtures.ts');
-const {postDocument}=await import('@openbooks/engine/src/ledger/posting.ts');
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const {openItems}=await import('./cash/open-items');
 const {agingByParty,agingDetail}=await import('./reports/aging');
 

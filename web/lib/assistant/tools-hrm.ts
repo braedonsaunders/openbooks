@@ -1,5 +1,13 @@
 import "server-only";
 import { z } from "zod";
+import {
+  listLeaveRequests,
+  listLeaveTypes,
+  timeBalanceAsOf,
+} from "@openbooks/engine/src/hrm/leave-read.ts";
+import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
+import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
@@ -10,6 +18,8 @@ import {
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -26,7 +36,8 @@ import {
 /**
  * HRM read/search tools for the agentic assistant. Every tool is
  * feature-gated on the hrm switchboard flag and permission-gated with the
- * same key the HRM routes and pages use (`hrm.employment.read`).
+ * same key the HRM routes and pages use (`hrm.employment.read` for the
+ * employment tools, `hrm.position.read` for the headcount-plan tool).
  *
  * Every read reuses the canonical loaders in
  * engine/src/hrm/employment-read.ts — headcount as-of, episodes, the as-of
@@ -55,6 +66,9 @@ const HRM_FEATURE_OFF = "hrm_feature_disabled";
 export function hrmRefusal(error: unknown): ToolResult {
   if (
     error instanceof EmploymentReadError ||
+    error instanceof HrmPositionError ||
+    error instanceof HrmProcessError ||
+    error instanceof LeaveError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -312,4 +326,301 @@ const hrmChangeRequests: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests];
+const hrmPositionsAsOf: AssistantToolDef = {
+  name: "hrm_positions_as_of",
+  description:
+    "Positions with vacancy as of a date (or preset): planned versus funded versus filled FTE per position, department, and employer subsidiary, with over-filled and under-funded breaches named. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.position.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    asOf: dateInput.optional().describe("Vacancy as of this date; defaults to today"),
+    period: periodPresetInput.optional().describe("Fiscal-calendar preset; the vacancy is taken as of the preset's end date"),
+    status: z
+      .enum(["planned", "open", "filled", "frozen", "closed"])
+      .optional()
+      .describe("Keep only this lifecycle status"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { asOf?: string; period?: string; status?: string };
+    let effectiveDate: string;
+    if (a.period) {
+      const range = await resolveToolRange(authz.user.orgId, { period: a.period });
+      if ("error" in range) return { ok: false, error: range.error };
+      effectiveDate = range.to;
+    } else {
+      effectiveDate = a.asOf ?? (await orgToday(authz.user.orgId));
+    }
+    try {
+      const dto = await getVacancyAsOf({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        effectiveDate,
+        knownAt: new Date().toISOString(),
+        ...(a.status ? { status: a.status } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          asOf: dto.effectiveDate,
+          knownAt: dto.knownAt,
+          totals: dto.totals,
+          byDepartment: dto.byDepartment.map((group) => ({
+            departmentId: group.departmentId,
+            departmentName: group.departmentName,
+            employerSubsidiaryId: group.employerSubsidiaryId,
+            employerSubsidiaryName: group.employerSubsidiaryName,
+            positions: group.positions,
+            plannedFte: group.plannedFte,
+            fundedFte: group.fundedFte,
+            filledFte: group.filledFte,
+            vacantFte: group.vacantFte,
+          })),
+          positions: dto.positions.map((row) => ({
+            id: row.id,
+            positionCode: row.positionCode,
+            title: row.version.title,
+            status: row.version.status,
+            departmentId: row.version.departmentId,
+            employerSubsidiaryId: row.version.employerSubsidiaryId,
+            plannedFte: row.vacancy.plannedFte,
+            fundedFte: row.vacancy.fundedFte,
+            filledFte: row.vacancy.filledFte,
+            vacantFte: row.vacancy.vacantFte,
+            refusal: row.vacancy.refusal,
+            holders: row.holders,
+          })),
+          href: "/hrm/positions",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const processSegments = ["open", "overdue", "completed", "cancelled"] as const;
+
+const hrmProcesses: AssistantToolDef = {
+  name: "hrm_processes",
+  description:
+    "Process checklists with step status, owners, and due dates: one checklist in full, or every visible checklist in a segment with progress and next due. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.process.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    processId: uuidInput.optional().describe("One checklist in full; omit for the segment list"),
+    segment: z.enum(processSegments).optional().describe("List segment (default open)"),
+    employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as {
+      processId?: string;
+      segment?: (typeof processSegments)[number];
+      employmentId?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      // One checklist in full: authorized per record inside the loader, so a
+      // missing, foreign-org, or out-of-scope id refuses uniformly instead
+      // of returning an empty object pretending it does not exist.
+      if (a.processId) {
+        const detail = await getProcess({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          processId: a.processId,
+        });
+        // Explicit projection: evidence actors and skip reasons are audit
+        // facts and stay in the record read, so a future step column cannot
+        // ride this tool silently.
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
+            kind: detail.kind,
+            effectiveDate: detail.effectiveDate,
+            status: detail.status,
+            employmentId: detail.employmentId,
+            workerName: detail.workerName,
+            progress: detail.progress,
+            steps: detail.steps.map((step) => ({
+              id: step.id,
+              position: step.position,
+              title: step.title,
+              ownerKind: step.ownerKind,
+              dueOn: step.dueOn,
+              required: step.required,
+              evidenceKind: step.evidenceKind,
+              status: step.status,
+              overdue: step.overdue,
+            })),
+            href: "/hrm/processes",
+          },
+        };
+      }
+      const processes = await listProcesses({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        segment: a.segment ?? "open",
+      });
+      const kept = (a.employmentId
+        ? processes.filter((process) => process.employmentId === a.employmentId)
+        : processes
+      ).map((process) => ({
+        // Explicit projection: the worker party id stays in the record
+        // read, so a future list column cannot ride this tool silently.
+        id: process.id,
+        kind: process.kind,
+        effectiveDate: process.effectiveDate,
+        status: process.status,
+        employmentId: process.employmentId,
+        workerName: process.workerName,
+        required: process.required,
+        doneRequired: process.doneRequired,
+        overdueSteps: process.overdueSteps,
+        nextDueOn: process.nextDueOn,
+      }));
+      const page = compactRows(kept, { limit });
+      return {
+        ok: true,
+        data: {
+          segment: a.segment ?? "open",
+          employmentId: a.employmentId ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
+          processes: page.items,
+          href: "/hrm/processes",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const leaveRequestStatuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"] as const;
+
+const hrmLeave: AssistantToolDef = {
+  name: "hrm_leave",
+  description:
+    "Leave requests with status and hours for one employment (or every visible employment), plus TIME balances per type as of a date; payroll banks stay in payroll tools. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.leave.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's requests and balances; omit for every visible employment"),
+    status: z.enum(leaveRequestStatuses).optional().describe("Keep only this lifecycle status"),
+    includeBalances: z.boolean().optional().describe("Include TIME balances per leave type (single employment only)"),
+    asOf: dateInput.optional().describe("Balance date; defaults to today"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as {
+      employmentId?: string;
+      status?: (typeof leaveRequestStatuses)[number];
+      includeBalances?: boolean;
+      asOf?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      // A named employment is authorized per record inside the loader, so a
+      // missing, foreign-org, or out-of-scope id refuses uniformly instead
+      // of returning an empty list pretending it does not exist.
+      const scoped = a.employmentId
+        ? { ids: [a.employmentId], truncated: false }
+        : await visibleEmploymentIds(authz.user.orgId, authz.allowedSubsidiaryIds, 200);
+      const collected: {
+        employmentId: string;
+        id: string;
+        status: string;
+        leaveTypeCode: string;
+        startsOn: string;
+        endsOn: string;
+        hours: string;
+      }[] = [];
+      // Sequential, never parallel: one pinned client per loader call, the
+      // same discipline the record boundary keeps inside its transaction.
+      for (const employmentId of scoped.ids) {
+        const requests = await listLeaveRequests({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          employmentId,
+          ...(a.status ? { status: a.status } : {}),
+        });
+        for (const request of requests) {
+          collected.push({
+            employmentId,
+            id: request.id,
+            status: request.status,
+            leaveTypeCode: request.leaveTypeCode,
+            startsOn: request.startsOn,
+            endsOn: request.endsOn,
+            hours: request.hours,
+          });
+        }
+      }
+      // Newest start first across employments (id breaks ties deterministically).
+      collected.sort((x, y) => (y.startsOn < x.startsOn ? -1 : y.startsOn > x.startsOn ? 1 : x.id < y.id ? -1 : 1));
+      const page = compactRows(collected, { limit });
+      // TIME balances are single-employment only: org-wide balances would
+      // sum incommensurable policies into a precise-looking wrong number.
+      // VALUE (payroll banks) is never read here — payroll tools own it.
+      let balances: {
+        leaveTypeCode: string;
+        balance: string | null;
+        unlimited: boolean;
+        earned: string | null;
+        carried: string;
+        taken: string;
+      }[] | null = null;
+      if (a.includeBalances) {
+        if (!a.employmentId) return { ok: false, error: "balances_need_employment" };
+        const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
+        const types = await listLeaveTypes(db, authz.user.orgId);
+        balances = [];
+        for (const type of types) {
+          if (!type.isActive) continue;
+          const read = await timeBalanceAsOf(db, authz.user.orgId, a.employmentId, type.id, asOf);
+          balances.push({
+            leaveTypeCode: type.code,
+            balance: read.balance,
+            unlimited: read.unlimited,
+            earned: read.earned,
+            carried: read.carried,
+            taken: read.taken,
+          });
+        }
+      }
+      return {
+        ok: true,
+        data: {
+          employmentId: a.employmentId ?? null,
+          status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated || scoped.truncated,
+          requests: page.items,
+          balances,
+          href: "/hrm/leave",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave];

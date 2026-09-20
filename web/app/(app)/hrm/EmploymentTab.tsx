@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Label } from '@openbooks/ui'
+import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
@@ -161,30 +161,28 @@ export function EmploymentTab({
         {state.episodes.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.episodes.empty')}</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="py-1.5 pr-3 text-left font-medium">{t('employment.episodes.status')}</th>
-                <th className="py-1.5 pr-3 text-left font-medium">{t('employment.episodes.effective')}</th>
-                <th className="py-1.5 text-left font-medium">{t('employment.episodes.recorded')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('employment.episodes.status')}</TableHead>
+                <TableHead>{t('employment.episodes.effective')}</TableHead>
+                <TableHead>{t('employment.episodes.recorded')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {state.episodes.map((episode) => (
-                <tr key={episode.versionId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="py-1.5 pr-3 font-medium text-slate-700 dark:text-slate-200">
-                    {employmentStatus(episode.status)}
-                  </td>
-                  <td className="py-1.5 pr-3 tabular-nums text-slate-500 dark:text-slate-400">
+                <TableRow key={episode.versionId}>
+                  <TableCell className="font-medium">{employmentStatus(episode.status)}</TableCell>
+                  <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
                     {window(episode.effectiveFrom, episode.effectiveTo)}
-                  </td>
-                  <td className="py-1.5 tabular-nums text-slate-500 dark:text-slate-400">
+                  </TableCell>
+                  <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
                     {window(episode.recordedAt, episode.recordedUntil)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </section>
 
@@ -214,38 +212,34 @@ export function EmploymentTab({
             {state.asOf.assignments.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.assignments.empty')}</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="py-1.5 pr-3 text-left font-medium">{t('employment.assignments.jobTitle')}</th>
-                    <th className="py-1.5 pr-3 text-left font-medium">{t('employment.assignments.primary')}</th>
-                    <th className="py-1.5 pr-3 text-right font-medium">{t('employment.assignments.fte')}</th>
-                    <th className="py-1.5 pr-3 text-left font-medium">{t('employment.assignments.effective')}</th>
-                    <th className="py-1.5 text-left font-medium">{t('employment.assignments.recorded')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('employment.assignments.jobTitle')}</TableHead>
+                    <TableHead>{t('employment.assignments.primary')}</TableHead>
+                    <TableHead className="text-right">{t('employment.assignments.fte')}</TableHead>
+                    <TableHead>{t('employment.assignments.effective')}</TableHead>
+                    <TableHead>{t('employment.assignments.recorded')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {state.asOf.assignments.map((assignment) => (
-                    <tr key={assignment.assignmentKey} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="py-1.5 pr-3 font-medium text-slate-700 dark:text-slate-200">
-                        {assignment.jobTitle ?? '—'}
-                      </td>
-                      <td className="py-1.5 pr-3 text-slate-500 dark:text-slate-400">
+                    <TableRow key={assignment.assignmentKey}>
+                      <TableCell className="font-medium">{assignment.jobTitle ?? '—'}</TableCell>
+                      <TableCell className="text-slate-500 dark:text-slate-400">
                         {assignment.isPrimary ? t('employment.assignments.primaryYes') : ''}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                        {assignment.fte}
-                      </td>
-                      <td className="py-1.5 pr-3 tabular-nums text-slate-500 dark:text-slate-400">
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{assignment.fte}</TableCell>
+                      <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
                         {window(assignment.effectiveFrom, assignment.effectiveTo)}
-                      </td>
-                      <td className="py-1.5 tabular-nums text-slate-500 dark:text-slate-400">
+                      </TableCell>
+                      <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
                         {window(assignment.recordedAt, assignment.recordedUntil)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         ) : state.asOfRefusal ? (

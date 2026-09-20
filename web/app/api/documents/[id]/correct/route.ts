@@ -7,16 +7,10 @@ import {
   requestDocumentVoid,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../../../lib/authz'
-import {
-  createPermission,
-  createPostedCorrectionDraft,
-  runPostedCorrectionDraftFlows,
-  DOC_KINDS,
-  isDocKindEnabled,
-  DocumentEditError,
-  postPermission,
-  type DocumentEditInput,
-} from '../../../../../lib/documents'
+import { createPermission, DOC_KINDS, postPermission } from "../../../../../lib/document-kinds.ts";
+import { createPostedCorrectionDraft, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../../../../../lib/documents.ts";
+import { DocumentEditError } from "../../../../../../engine/src/records/document-edit-policy.ts";
+import { type DocumentEditInput } from "../../../../../../engine/src/ledger/document-input.ts";
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'

@@ -16,7 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createPayRun, seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run.ts");
+const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("../app/api/payroll/runs/[id]/route");
 

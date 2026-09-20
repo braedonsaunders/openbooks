@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { adjustInventory, buildAssembly, issueInventory, postLandedCostVoucher, receiveInventory } from "./inventory.ts";
+import { adjustInventory, issueInventory, receiveInventory } from "./movements.ts";
+import { buildAssembly } from "./assembly.ts";
+import { postLandedCostVoucher } from "./landed-cost.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 

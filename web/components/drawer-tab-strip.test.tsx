@@ -59,8 +59,17 @@ test('selecting a tab notifies the parent with the tab key', async () => {
     })
     const tabs = [...dom.window.document.querySelectorAll('button[role="tab"]')]
     assert.equal(tabs.length, 2)
+    // jsdom's window is typed as the bare DOM `Window`, and constructors live on
+    // `typeof globalThis` rather than on that interface — so `dom.window.MouseEvent`
+    // is a type error under `tsc --noEmit` run from web/ (which is what CI runs).
+    // Keep constructing the event from THIS realm rather than reaching for the
+    // ambient global: an event built in another realm fails jsdom's instanceof
+    // checks and would not dispatch.
+    const { MouseEvent: RealmMouseEvent } = dom.window as unknown as {
+      MouseEvent: typeof globalThis.MouseEvent
+    }
     await act(async () => {
-      tabs[1]!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+      tabs[1]!.dispatchEvent(new RealmMouseEvent('click', { bubbles: true }))
     })
     assert.deepEqual(selected, ['tax'], 'the clicked tab key reaches the parent')
     await act(async () => {

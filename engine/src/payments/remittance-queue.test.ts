@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const paymentsSource = readFileSync(new URL("./payments.ts", import.meta.url), "utf8");
+const paymentsSource = readFileSync(new URL("./run-remittance.ts", import.meta.url), "utf8");
+const postingSource = readFileSync(new URL("./run-posting.ts", import.meta.url), "utf8");
 
 test("automatic remittance stays pending until the email worker confirms delivery", () => {
   assert.match(paymentsSource, /paymentRemittanceId:\s*staged\.remittanceId/);
@@ -16,10 +17,10 @@ test("automatic remittance stays pending until the email worker confirms deliver
 });
 
 test("posting finisher reconciles worker-confirmed remittances under the claim", () => {
-  const finishStart = paymentsSource.indexOf("async function finishPaymentRunPosting");
-  const finishEnd = paymentsSource.indexOf("async function releaseFailedPaymentRunPosting", finishStart);
+  const finishStart = postingSource.indexOf("async function finishPaymentRunPosting");
+  const finishEnd = postingSource.indexOf("async function releaseFailedPaymentRunPosting", finishStart);
   assert.ok(finishStart >= 0 && finishEnd > finishStart, "posting finisher must remain identifiable");
-  const finishSource = paymentsSource.slice(finishStart, finishEnd);
+  const finishSource = postingSource.slice(finishStart, finishEnd);
   assert.match(finishSource, /await assertPostingClaimLive\(runId, orgId, claim\)/);
   assert.match(
     finishSource,

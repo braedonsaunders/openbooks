@@ -32,7 +32,8 @@
       "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率",
       "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
       "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）",
-      "payrollDescription": "給与明細を対象とする組込み給与レポート — 賃金データには給与権限が必要です。"
+      "payrollDescription": "給与明細を対象とする組込み給与レポート — 賃金データには給与権限が必要です。",
+      "hrmDescription": "雇用記録に基づく組み込みの人員レポート。HRM の雇用権限が必要です。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -42,7 +43,8 @@
       "custom": "カスタム・保存済み",
       "projects": "プロジェクト",
       "orders": "販売・受注",
-      "payroll": "給与"
+      "payroll": "給与",
+      "hrm": "人事"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "変更申請",
         "description": "雇用変更申請ごとに1行：ステータス、種類、雇用、申請者、提出・決定のスタンプ、バインドされた承認ラン、リビジョンのバインディング。HRM雇用権限が必要です。"
+      },
+      "hrm_positions": {
+        "label": "ポジション",
+        "description": "レポート日時点で設定済みのポジションごとに1行：コード、タイトル、ステータス、部門、雇用主、計画FTE・財源付きFTE・充足済みFTE。HRMポジション権限が必要です。"
+      },
+      "hrm_processes": {
+        "label": "プロセスチェックリスト",
+        "description": "プロセスチェックリストの手順ごと1行 — プロセス種別とステータス、従業員、テンプレート、手順担当者、期限、証跡種別、手順ステータスとその証跡。HRMプロセス権限が必要です。"
+      },
+      "hrm_leave_absences": {
+        "label": "休暇欠勤",
+        "description": "欠勤日ごとに1行 — 氏名、雇用主、当時の部門、休暇種別、時間。取消は別行のため、合計は相殺されます。休暇権限が必要です。"
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "作成日時",
         "id": "申請（ID）",
         "employment_id": "雇用（ID）"
+      },
+      "hrm_positions": {
+        "code": "コード",
+        "title": "タイトル",
+        "status": "ステータス",
+        "employer": "雇用主",
+        "department": "部門",
+        "planned_fte": "計画FTE",
+        "funded_fte": "財源付きFTE",
+        "filled_fte": "充足済みFTE",
+        "vacant_fte": "欠員FTE",
+        "position_id": "ポジション（ID）"
+      },
+      "hrm_processes": {
+        "process_kind": "プロセス種別",
+        "process_status": "プロセスステータス",
+        "effective_date": "発効日",
+        "employee": "従業員",
+        "employer": "雇用主",
+        "template": "テンプレート",
+        "step": "手順",
+        "step_status": "手順ステータス",
+        "owner": "担当",
+        "due_on": "期限",
+        "evidence": "証跡",
+        "done_at": "完了日時",
+        "skip_reason": "スキップ理由",
+        "process_id": "プロセス（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "hrm_leave_absences": {
+        "on_date": "日付",
+        "person": "氏名",
+        "employer": "雇用主",
+        "department": "部門",
+        "leave_type": "休暇種別",
+        "hours": "時間",
+        "source": "出所",
+        "employment_id": "雇用 (ID)",
+        "id": "欠勤 (ID)"
       }
     },
     "enumValues": {
@@ -1285,7 +1339,12 @@
       "hire": "採用",
       "status_change": "ステータス変更",
       "assignment_change": "配属変更",
-      "termination": "退職手続き"
+      "termination": "退職手続き",
+      "frozen": "凍結済み",
+      "filled": "充足済み",
+      "open": "募集中",
+      "planned": "計画中",
+      "position_assignment": "ポジション割当"
     }
   },
   "operators": {

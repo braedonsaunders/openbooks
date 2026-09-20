@@ -44,6 +44,15 @@ export interface QueueRow {
   requesterName: string | null
   submittedAt: string | null
   createdAt: string
+  /** Display-resolved cells for the shared table block: labels, never ids. */
+  employeeLabel: string
+  employeeHref: string | null
+  kindLabel: string
+  effectiveWindow: string
+  requesterLabel: string
+  submittedLabel: string
+  statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
 }
 
 export interface QueueSegment {
@@ -84,14 +93,17 @@ export interface ChangeRequestQueueData {
   emptyDescription: string
   canManage: boolean
   departmentOptions: { value: string; label: string }[]
-  proposeTitle: string
+  statusHeader: string
+  actionsHeader: string
   proposeButton: string
+  proposeHref: string
+  proposeOpen: boolean
+  dialogCloseHref: string
   proposeEmploymentLabel: string
   proposeEmploymentPlaceholder: string
   proposeEmpty: string
   proposeFailed: string
   queue: {
-    draftBadge: string
     openEmployee: string
     notAvailable: string
   }
@@ -150,6 +162,44 @@ function effectiveWindow(payload: { kind: string } & Record<string, unknown>): {
   return { from: text(payload.effectiveFrom), to: text(payload.effectiveTo) }
 }
 
+type Catalog = {
+  (key: string, params?: Record<string, string | number>): string
+  has: (key: string) => boolean
+}
+
+/** Header/dialog hrefs preserve the active status segment; the dialog closes by navigating the param away. */
+function queueHref(status: string | undefined, propose: boolean): string {
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  if (propose) params.set('propose', '1')
+  const query = params.toString()
+  return query ? `/hrm/change-requests?${query}` : '/hrm/change-requests'
+}
+
+/** The same kind labels the hand-rolled queue rendered, resolved where the rows come from. */
+function kindLabelOf(t: Catalog, kind: string): string {
+  const key =
+    kind === 'hire'
+      ? 'kindHire'
+      : kind === 'status_change'
+        ? 'kindStatusChange'
+        : kind === 'assignment_change'
+          ? 'kindAssignmentChange'
+          : kind === 'termination'
+            ? 'kindTermination'
+            : null
+  return key !== null ? t(`employment.changeRequests.${key}`) : kind
+}
+
+function changeRequestStatusVariant(status: string): QueueRow['statusVariant'] {
+  if (status === 'draft') return 'secondary'
+  if (status === 'pending_approval') return 'warning'
+  if (status === 'approved') return 'success'
+  if (status === 'rejected') return 'destructive'
+  if (status === 'withdrawn') return 'outline'
+  return 'default'
+}
+
 export async function loadChangeRequestQueue(
   authz: Authz,
   sp: Record<string, string | string[] | undefined>,
@@ -180,14 +230,17 @@ export async function loadChangeRequestQueue(
     emptyDescription: t('queue.emptyDescription'),
     canManage: can(authz, 'hrm.employment.manage'),
     departmentOptions: [],
-    proposeTitle: t('queue.proposeTitle'),
+    statusHeader: t('employment.changeRequests.statusLabel'),
+    actionsHeader: t('queue.draftBadge'),
     proposeButton: t('queue.proposeButton'),
+    proposeHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true),
+    proposeOpen: sp.propose === '1',
+    dialogCloseHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, false),
     proposeEmploymentLabel: t('queue.proposeEmploymentLabel'),
     proposeEmploymentPlaceholder: t('queue.proposeEmploymentPlaceholder'),
     proposeEmpty: t('queue.proposeEmpty'),
     proposeFailed: t('queue.proposeFailed'),
     queue: {
-      draftBadge: t('queue.draftBadge'),
       openEmployee: t('queue.openEmployee'),
       notAvailable: t('queue.notAvailable'),
     },
@@ -257,18 +310,34 @@ export async function loadChangeRequestQueue(
     const window = effectiveWindow(row.payload as { kind: string } & Record<string, unknown>)
     const worker = workerByEmployment.get(row.employmentId)
     const requesterId = row.submittedBy ?? row.createdBy
+    const kind = (row.payload as { kind: string }).kind
+    const status = row.status
     return {
       id: row.id,
       employmentId: row.employmentId,
       employeeName: worker?.name ?? null,
       partyId: worker?.partyId ?? null,
-      kind: (row.payload as { kind: string }).kind,
+      kind,
       effectiveFrom: window.from,
       effectiveTo: window.to,
-      status: row.status,
+      status,
       requesterName: requesterId !== null ? (requesterByUser.get(requesterId) ?? null) : null,
       submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
+      employeeLabel: worker?.name ?? t('queue.notAvailable'),
+      employeeHref: worker?.partyId ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}` : null,
+      kindLabel: kindLabelOf(t, kind),
+      effectiveWindow:
+        window.from === null
+          ? t('queue.notAvailable')
+          : `${window.from} → ${window.to ?? t('employment.episodes.present')}`,
+      requesterLabel:
+        requesterId !== null ? (requesterByUser.get(requesterId) ?? t('queue.notAvailable')) : t('queue.notAvailable'),
+      submittedLabel: row.submittedAt ? row.submittedAt.toISOString() : t('queue.notAvailable'),
+      statusLabel: t.has(`employment.changeRequests.statusNames.${status}`)
+        ? t(`employment.changeRequests.statusNames.${status}`)
+        : status,
+      statusVariant: changeRequestStatusVariant(status),
     }
   })
 

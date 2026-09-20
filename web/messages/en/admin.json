@@ -908,6 +908,8 @@
     "hrm_employment_read": "View employment records",
     "hrm_employment_manage": "Author employment changes",
     "hrm_employment_approve": "Decide employment changes",
+    "hrm_position_read": "View positions and the headcount plan",
+    "hrm_position_manage": "Create, revise, fund and close positions",
     "records_read": "View custom records",
     "records_create": "Create and edit custom records",
     "records_manage_types": "Design custom record types",
@@ -962,7 +964,13 @@
     "compliance_manage": "Record certificates, waivers and filings",
     "compliance_verify": "Verify certificates",
     "compliance_waive": "Grant compliance exceptions",
-    "compliance_file": "Finalize and file information returns"
+    "compliance_file": "Finalize and file information returns",
+    "hrm_process_read": "View process checklists",
+    "hrm_process_manage": "Open, complete, and cancel process checklists",
+    "hrm_leave_read": "View leave records",
+    "hrm_leave_request": "Request leave for own employment",
+    "hrm_leave_approve": "Decide leave requests",
+    "hrm_leave_manage": "Configure leave types and policies"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2400,6 +2408,26 @@
       "extension-settings": {
         "title": "App settings",
         "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates."
+      },
+      "leave-types": {
+        "title": "Leave types",
+        "singularTitle": "Leave type",
+        "description": "Time-off kinds your org grants — vacation, sick, unpaid — and which pay-run movement each raises, if any. Payroll banks are not configured here."
+      },
+      "leave-policies": {
+        "title": "Leave policies",
+        "singularTitle": "Leave policy",
+        "description": "How much time each type accrues, who it covers, and how much notice it needs. Entitlement in time; payroll value is computed by the pay run."
+      },
+      "hrm-process-templates": {
+        "title": "Process templates",
+        "singularTitle": "Process template",
+        "description": "Onboarding, offboarding and transfer checklists: the steps, owners, due-date offsets and evidence a process opens with."
+      },
+      "hrm-process-template-steps": {
+        "title": "Process template steps",
+        "singularTitle": "Process template step",
+        "description": "One ordered step of a process template with its owner, due offset and evidence rule."
       }
     },
     "fields": {
@@ -2666,7 +2694,30 @@
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
       "network": "Network",
-      "lastFour": "Last four"
+      "lastFour": "Last four",
+      "templateId": "Template",
+      "position": "Position",
+      "title": "Title",
+      "ownerKind": "Owner",
+      "ownerPartyId": "Owner party",
+      "dueOffsetDays": "Due offset (days)",
+      "required": "Required",
+      "evidenceKind": "Evidence",
+      "appliesEmployerSubsidiaryId": "Applies to subsidiary",
+      "appliesDepartmentId": "Applies to department",
+      "paid": "Paid",
+      "valueCrossing": "Raises in payroll",
+      "requiresAttachment": "Requires attachment",
+      "leaveTypeId": "Leave type",
+      "minimumNoticeDays": "Minimum notice (days)",
+      "accrualRule": "Accrual rule (JSON)",
+      "carryoverRule": "Carryover rule (JSON)",
+      "accrualKind": "Accrual",
+      "accrualHours": "Accrual hours",
+      "accrualPeriodsPerYear": "Accrual periods per year",
+      "carryoverKind": "Carryover",
+      "carryoverHours": "Carryover cap (hours)",
+      "carryoverExpiresAfterDays": "Carryover expires after (days)"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2718,7 +2769,18 @@
       "holidayObservance": "Statutory holidays keep their date and the law grants a substitute day off instead. Choose a shift only for a company holiday you actually move.",
       "equipmentUnitId": "Pay on one named machine only. Leave it empty and use the charge item instead to cover a whole class of equipment with a single rule.",
       "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine.",
-      "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused."
+      "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused.",
+      "hrmProcessAppliesSubsidiary": "Empty means the template applies to every subsidiary.",
+      "hrmProcessAppliesDepartment": "Empty means the template applies to every department.",
+      "leaveValueCrossing": "Which pay-run input an approved absence day raises. None never touches the payroll ledger; payout and bank_in cross as hours the run prices.",
+      "leaveAppliesSubsidiary": "Empty means the policy applies to every subsidiary.",
+      "leaveAppliesDepartment": "Empty means the policy applies to every department.",
+      "leaveAccrualKind": "How time is earned: none, per period, per year, or unlimited.",
+      "leaveAccrualHours": "Hours earned per period or per year (required for those kinds).",
+      "leaveAccrualPeriodsPerYear": "Whole periods in an accrual year (required for per-period accrual).",
+      "leaveCarryoverKind": "What unused time does at year end: nothing, carry all, or carry up to a cap.",
+      "leaveCarryoverHours": "Maximum hours carried forward (required for carry up to).",
+      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not."
     },
     "options": {
       "payFrequency": {
@@ -3055,6 +3117,38 @@
         "none": "Keep the date",
         "nextMonday": "Move to the next working day",
         "nearestWeekday": "Move to the nearest weekday"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Onboarding",
+        "offboarding": "Offboarding",
+        "transfer": "Transfer"
+      },
+      "hrmStepOwner": {
+        "manager": "Manager",
+        "hr": "HR",
+        "employee": "Employee",
+        "namedParty": "Named person"
+      },
+      "hrmStepEvidence": {
+        "none": "None",
+        "acknowledgement": "Acknowledgement",
+        "attachment": "Attachment"
+      },
+      "leaveValueCrossing": {
+        "none": "None — unpaid or salary-paid",
+        "payout": "Payout from the bank",
+        "bankIn": "Bank in lieu"
+      },
+      "leaveAccrualKind": {
+        "none": "None",
+        "per_period": "Per period",
+        "per_year": "Per year",
+        "unlimited": "Unlimited"
+      },
+      "leaveCarryoverKind": {
+        "none": "None",
+        "carry_all": "Carry all",
+        "carry_up_to": "Carry up to a cap"
       }
     },
     "payroll": {

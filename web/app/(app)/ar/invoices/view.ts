@@ -6,16 +6,9 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
-import {
-  AR_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  dimensionOptions,
-  loadDocument,
-  partyOptions,
-  taxCodeOptions,
-  taxGroupOptions,
-} from '../../../../lib/documents'
+import { AR_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
+import { accountOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import type { DocKindConfig } from '../../../../lib/document-kinds'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'

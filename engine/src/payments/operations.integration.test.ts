@@ -5,7 +5,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { recordPaymentSettlement } from "./operations.ts";
-import { PaymentError } from "./payments.ts";
+import { PaymentError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const paymentOperationsSource = readFileSync(new URL("./operations.ts", import.meta.url), "utf8");

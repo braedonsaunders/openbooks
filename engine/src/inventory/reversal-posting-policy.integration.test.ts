@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { receiveInventory, reverseInventoryMovement } from "./inventory.ts";
+import { receiveInventory } from "./movements.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 for (const policy of ["inactive book", "account restriction", "inactive owner"] as const) {

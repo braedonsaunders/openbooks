@@ -36,7 +36,7 @@ const APP_DIR = join(ROOT, 'web', 'app', '(app)')
 const ts: typeof TS = createRequire(join(ROOT, 'web', 'package.json'))('typescript')
 
 test('the contracts still say what the widget registry says', () => {
-  const derived = registryContracts(readFileSync(WIDGETS, 'utf8'), 'WIDGET_REGISTRY') as Record<
+  const derived = registryContracts(readFileSync(WIDGETS, 'utf8'), 'WIDGET_REGISTRY', WIDGETS) as Record<
     string,
     { props: string[]; open: boolean }
   >

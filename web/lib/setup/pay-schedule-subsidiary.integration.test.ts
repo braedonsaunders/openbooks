@@ -36,7 +36,7 @@ const {
   dropScratchOrgReporting,
   seedFlowActors,
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { createPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
+const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
 const {
   createSetupRecord,
   updateSetupRecord,

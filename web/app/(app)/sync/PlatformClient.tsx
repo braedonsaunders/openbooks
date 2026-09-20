@@ -19,6 +19,7 @@ import {
   Calculator,
 } from "lucide-react";
 import Link from "next/link";
+import { readApiErrorMessage } from "../../../lib/api-error";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
 import {
   Badge,
@@ -484,11 +485,14 @@ export function PlatformClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
-      const body = await res.json();
+      // The status is checked before the body is parsed: the error branch
+      // parses best-effort (a non-JSON body keeps the generic failure), never
+      // letting a SyntaxError from res.json() hide the failure.
       if (!res.ok) {
+        const errorBody = (await res.json().catch(() => null)) as { errorCode?: unknown } | null;
         const key =
-          typeof body.errorCode === "string"
-            ? `toast.runErrors.${body.errorCode}`
+          typeof errorBody?.errorCode === "string"
+            ? `toast.runErrors.${errorBody.errorCode}`
             : "";
         throw new Error(
           key && t.has(key)
@@ -554,8 +558,9 @@ export function PlatformClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mirrorEnabled: !conn.mirrorEnabled }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      // The status is checked before the body is parsed: a non-JSON error body
+      // must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `HTTP ${res.status}`));
       await load();
     } catch (error) {
       toast.error((error as Error).message);
@@ -572,8 +577,8 @@ export function PlatformClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mirrorSchedule }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      // The status is checked before the body is parsed (see run above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `HTTP ${res.status}`));
       await load();
     } catch (error) {
       toast.error((error as Error).message);
@@ -602,8 +607,8 @@ export function PlatformClient() {
           body: JSON.stringify({ action }),
         },
       );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      // The status is checked before the body is parsed (see run above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `HTTP ${res.status}`));
       toast.success(
         t(
           action === "void" ? "toast.deletionVoided" : "toast.deletionRetained",
@@ -624,8 +629,8 @@ export function PlatformClient() {
       const res = await fetch(`/api/platform/connections/${conn.id}`, {
         method: "DELETE",
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      // The status is checked before the body is parsed (see run above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `HTTP ${res.status}`));
       await load();
       toast.success(t("toast.removed"));
     } catch (error) {

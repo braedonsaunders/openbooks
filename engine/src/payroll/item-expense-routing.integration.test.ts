@@ -4,7 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { seedAdoption } from "./filing-test-fixtures.ts";
-import { calculatePayRun, commitPayRun, createPayRun } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
 import { payRunStaleness } from "./readiness.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 

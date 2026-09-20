@@ -85,6 +85,7 @@ export function TrendChart({
   area = false,
   pctAxis = false,
   maxTicks,
+  format = 'money',
 }: {
   labels: string[]
   series: { name: string; data: number[]; color?: string; pct?: boolean }[]
@@ -93,19 +94,24 @@ export function TrendChart({
   pctAxis?: boolean
   /** Cap x-axis ticks to a data-fixed stride (F-t05-010); unset keeps ECharts auto. */
   maxTicks?: number
+  /** What the values are: money (the default, formatted in the org's
+   *  currency) or a plain count (headcount, requests) with no currency sign. */
+  format?: 'money' | 'count'
 }) {
   const money = useChartMoney()
+  const count = (value: number | string) => Number(value).toLocaleString()
+  const plain = (value: number | string) => (format === 'count' ? count(value) : money(value))
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: {
       ...tooltip,
       valueFormatter: undefined,
       formatter: (params: ChartParam[]) =>
-        [params[0]?.axisValue, ...params.map((p) => `${p.marker} ${p.seriesName}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : money(p.value)}`)].join('<br/>'),
+        [params[0]?.axisValue, ...params.map((p) => `${p.marker} ${p.seriesName}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
     xAxis: catAxis(labels, maxTicks),
-    yAxis: valAxis(money, pctAxis ? 'pct' : 'money'),
+    yAxis: valAxis(money, pctAxis ? 'pct' : format === 'count' ? 'raw' : 'money'),
     series: series.map((s, i) => ({
       name: s.name,
       type: 'line',

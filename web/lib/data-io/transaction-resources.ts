@@ -4,9 +4,10 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { postDocument } from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { loadEntryRuleByKey } from '@openbooks/engine/src/allocations/entry.ts'
-import { controlDeps, nextDocumentNumber } from '../documents'
+import { controlDeps } from "../../../engine/src/ledger/document-service.ts";
+import { nextDocumentNumber } from "../bills.ts";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
 import {

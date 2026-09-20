@@ -9,7 +9,7 @@ import test from "node:test";
 // lists and install flow with raw primitives.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("./view.ts");
-const widgets = read("../../../../../../components/viewspec/widgets.tsx");
+const widgets = read("../../../../../../components/viewspec/widgets-agents.tsx");
 
 test("the library spec places a card grid bound to one pack-card widget", () => {
   assert.match(view, /repeat\(\{/);

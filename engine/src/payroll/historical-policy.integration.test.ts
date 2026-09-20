@@ -6,7 +6,10 @@ import { db, env } from "../platform/db.ts";
 import pg from "pg";
 import { rl1Slips } from "./rl1.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
-import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 interface AdoptionFixture {

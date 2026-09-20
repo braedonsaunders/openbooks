@@ -40,18 +40,29 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave"];
+
+const TOOL_PERMS: Record<string, string> = {
+  hrm_headcount: "hrm.employment.read",
+  hrm_employment_as_of: "hrm.employment.read",
+  hrm_change_requests: "hrm.employment.read",
+  hrm_positions_as_of: "hrm.position.read",
+  // The checklist tool carries the process gate, not the employment one:
+  // checklist state is governed by hrm.process.read at every surface.
+  hrm_processes: "hrm.process.read",
+  hrm_leave: "hrm.leave.read",
+};
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the three HRM read tools", () => {
+test("the module exports exactly the six HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
 for (const name of TOOL_NAMES) {
-  test(`${name} carries the slice gate: hrm.employment.read, hrm feature, module tier`, () => {
+  test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["hrm.employment.read"] });
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
     assert.equal(tool.feature, "hrm");
     assert.equal(tool.tier, "module");
     assert.ok(
@@ -87,16 +98,37 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_change_requests")!.inputSchema.parse({ status: "approved", limit: 10 });
   assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ status: "posted_draft" }));
   assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({});
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "2026-06-15", status: "open" });
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({ period: "this_fiscal_year_to_date" });
+  assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ status: "recruiting" }));
+  assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "tomorrow" }));
+  byName.get("hrm_processes")!.inputSchema.parse({});
+  byName.get("hrm_processes")!.inputSchema.parse({ processId: UUID });
+  byName.get("hrm_processes")!.inputSchema.parse({ segment: "overdue", employmentId: UUID, limit: 10 });
+  assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ segment: "someday" }));
+  assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ processId: "nope" }));
+  byName.get("hrm_leave")!.inputSchema.parse({});
+  byName.get("hrm_leave")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("hrm_leave")!.inputSchema.parse({ status: "cancelled", includeBalances: true, limit: 10 });
+  byName.get("hrm_leave")!.inputSchema.parse({ employmentId: UUID, asOf: "2026-06-15" });
+  assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ status: "taken" }));
+  assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ limit: 0 }));
 });
 
-// Every tool reuses the canonical read loaders the Employment tab reads
+// Every tool reuses the canonical read loaders the HRM tabs read
 // through — never a parallel SQL path to versions or requests.
-test("HRM reads reuse the employment read service", () => {
+test("HRM reads reuse the canonical HRM read services", () => {
   for (const service of [
     "getHeadcountAsOf(",
     "getEmploymentAsOf(",
     "findEmploymentsByParty(",
     "loadEmploymentChangeRequests(",
+    "getVacancyAsOf(",
+    "getProcess(",
+    "listProcesses(",
+    "listLeaveRequests(",
+    "listLeaveTypes(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",
@@ -107,6 +139,9 @@ test("HRM reads reuse the employment read service", () => {
 
 test("no parallel SQL path to versions or requests and no writes", () => {
   assert.doesNotMatch(tools, /from worker_employment_versions/);
+  assert.doesNotMatch(tools, /from hrm_leave_requests/);
+  assert.doesNotMatch(tools, /from hrm_leave_types/);
+  assert.doesNotMatch(tools, /from hrm_leave_policies/);
   assert.doesNotMatch(tools, /from employment_assignment_versions/);
   assert.doesNotMatch(tools, /from hrm_employment_change_requests/);
   assert.doesNotMatch(tools, /into worker_/);
@@ -167,23 +202,36 @@ function fakeAuthz(permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-test("the registry gate admits only hrm.employment.read holders while hrm is on", () => {
+test("the registry gate admits only each tool's grant holders while hrm is on", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
-  const reader = fakeAuthz(["assistant.use", "hrm.employment.read"]);
   for (const name of TOOL_NAMES) {
+    const perm = TOOL_PERMS[name];
+    assert.ok(perm, `${name} has a declared permission`);
+    const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
     assert.equal(
       canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, { hrm: true }),
       false,
-      `${name} must refuse without hrm.employment.read`,
+      `${name} must refuse without ${perm}`,
     );
     assert.equal(
-      canRunTool(fakeAuthz(["hrm.employment.read"]), byName.get(name)!, { hrm: true }),
+      canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
       false,
       `${name} still requires assistant.use`,
     );
   }
+  // Position grants are the admin-held establishment boundary: an
+  // employment-only reader sees headcount, never the funded plan behind it.
+  assert.equal(
+    canRunTool(
+      fakeAuthz(["assistant.use", "hrm.employment.read"]),
+      byName.get("hrm_positions_as_of")!,
+      { hrm: true },
+    ),
+    false,
+    "hrm_positions_as_of must refuse an employment-only reader",
+  );
 });
 
 test("registrations: registry spread, scrape lists, matrix entry, playbook, contract harness", () => {

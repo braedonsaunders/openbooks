@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { isDocKindEnabled } from './documents'
+import { isDocKindEnabled } from "./documents.ts";
 import { isIsoCalendarDate } from './crm-dates'
 
 export async function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {

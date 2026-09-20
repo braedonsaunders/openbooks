@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument, regenerateGlImpactTx, type PostingDeps } from "./posting.ts";
-import {
-  createPaymentRun,
-  openItemsForParty,
-} from "../payments/payments.ts";
+import { postDocument } from "./posting-document.ts";
+import { regenerateGlImpactTx } from "./posting-replay.ts";
+import { type PostingDeps } from "./posting-contracts.ts";
+import { createPaymentRun } from "../payments/run-creation.ts";
+import { openItemsForParty } from "../payments/payment-queries.ts";
 import {
   createScratchOrg,
   createScratchUser,

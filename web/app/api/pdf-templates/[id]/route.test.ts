@@ -74,7 +74,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],
-  ['../../../../lib/documents', mockUrl('documents')],
+  ['../../../../lib/documents.ts', mockUrl('documents')],
   ['../../../../lib/pdf-templates/prettify', mockUrl('prettify')],
   ['../../../../lib/pdf-templates/store', mockUrl('store')],
 ])

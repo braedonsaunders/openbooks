@@ -4,12 +4,9 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import {
-  getOnHand,
-  issueInventory,
-  receiveInventory,
-  revalueOpenLayersToStandardCost,
-} from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import {

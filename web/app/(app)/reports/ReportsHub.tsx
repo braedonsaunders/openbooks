@@ -19,6 +19,7 @@ import {
   Search,
   Sparkles,
   Target,
+  Users,
   Wallet,
   Waves,
 } from 'lucide-react'
@@ -26,6 +27,7 @@ import { Input, cn } from '@openbooks/ui'
 import { NewReportButton } from './custom/NewReportButton'
 
 const ICONS: Record<string, typeof FileText> = {
+  Users,
   FileText,
   Scale,
   Waves,

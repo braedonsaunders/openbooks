@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de empleo",
+    "hrm_leave_read": "Ver registros de ausencias",
+    "hrm_leave_request": "Solicitar ausencias para el propio empleo",
+    "hrm_leave_approve": "Decidir solicitudes de ausencias",
+    "hrm_leave_manage": "Configurar tipos y políticas de ausencias",
     "hrm_employment_manage": "Redactar cambios de empleo",
     "hrm_employment_approve": "Decidir cambios de empleo",
+    "hrm_position_read": "Ver puestos y el plan de plantilla",
+    "hrm_position_manage": "Crear, modificar, financiar y cerrar puestos",
     "groups": {
       "hrm": "Recursos humanos",
       "gl": "Libro mayor",
@@ -962,7 +968,9 @@
     "allocations_run": "Obtener vista previa, contabilizar, revertir y repetir distribuciones",
     "payroll_manage": "Configurar la nómina y los perfiles de empleados",
     "payroll_read": "Ver ciclos de nómina y recibos de pago",
-    "payroll_run": "Crear, calcular y confirmar ciclos de nómina"
+    "payroll_run": "Crear, calcular y confirmar ciclos de nómina",
+    "hrm_process_read": "Ver listas de procesos",
+    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2355,6 +2363,26 @@
       "extension-settings": {
         "title": "Configuración de aplicaciones",
         "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia."
+      },
+      "leave-types": {
+        "title": "Tipos de ausencia",
+        "singularTitle": "Tipo de ausencia",
+        "description": "Clases de tiempo libre de su organización — vacaciones, enfermedad, no remuneradas — y qué movimiento de nómina genera cada una. Los bancos de nómina no se configuran aquí."
+      },
+      "leave-policies": {
+        "title": "Políticas de ausencias",
+        "singularTitle": "Política de ausencia",
+        "description": "Cuánto tiempo acumula cada tipo, a quién cubre y cuánta antelación necesita. Derecho en tiempo; el valor lo calcula la nómina."
+      },
+      "hrm-process-templates": {
+        "title": "Plantillas de proceso",
+        "singularTitle": "Plantilla de proceso",
+        "description": "Listas de incorporación, salida y traslado: los pasos, responsables, plazos y evidencias con los que se abre un proceso."
+      },
+      "hrm-process-template-steps": {
+        "title": "Pasos de plantilla de proceso",
+        "singularTitle": "Paso de plantilla de proceso",
+        "description": "Un paso ordenado de una plantilla de proceso con su responsable, plazo y regla de evidencia."
       }
     },
     "fields": {
@@ -2621,7 +2649,30 @@
       "dateBasis": "Base de fecha",
       "unitsTotal": "Unidades totales",
       "network": "Red",
-      "lastFour": "Últimos cuatro"
+      "lastFour": "Últimos cuatro",
+      "templateId": "Plantilla",
+      "position": "Posición",
+      "title": "Título",
+      "ownerKind": "Responsable",
+      "ownerPartyId": "Parte responsable",
+      "dueOffsetDays": "Desplazamiento (días)",
+      "required": "Obligatorio",
+      "evidenceKind": "Evidencia",
+      "appliesEmployerSubsidiaryId": "Filial aplicable",
+      "appliesDepartmentId": "Departamento aplicable",
+      "paid": "Remunerada",
+      "valueCrossing": "Genera en nómina",
+      "requiresAttachment": "Requiere adjunto",
+      "leaveTypeId": "Tipo de ausencia",
+      "minimumNoticeDays": "Antelación mínima (días)",
+      "accrualRule": "Regla de acumulación (JSON)",
+      "carryoverRule": "Regla de arrastre (JSON)",
+      "accrualKind": "Devengo",
+      "accrualHours": "Horas devengadas",
+      "accrualPeriodsPerYear": "Períodos de devengo por año",
+      "carryoverKind": "Arrastre",
+      "carryoverHours": "Tope de arrastre (horas)",
+      "carryoverExpiresAfterDays": "El arrastre vence a los (días)"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2673,7 +2724,18 @@
       "protectionBase": "Contra qué se mide el tope de la deducción. El pago neto es el pago tras cualquier otra deducción. Los ingresos disponibles solo cuentan las percepciones y deducciones marcadas en la base siguiente: así es como una asignación o un beneficio queda fuera de la porción.",
       "protectionMaxPercent": "Lo máximo que esta deducción puede tomar de esa base: 20 % para un embargo ordinario en Ontario, 50 % para manutención familiar, 25 % bajo la CCPA estadounidense. Lo que no quepa se informa como faltante en el ciclo de nómina.",
       "protectionPriority": "Qué orden prevalece cuando varias deducciones protegidas compiten por la misma paga. Primero la menor; las órdenes de manutención normalmente superan a los acreedores ordinarios.",
-      "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta."
+      "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta.",
+      "hrmProcessAppliesSubsidiary": "Vacío: la plantilla se aplica a todas las filiales.",
+      "hrmProcessAppliesDepartment": "Vacío: la plantilla se aplica a todos los departamentos.",
+      "leaveValueCrossing": "Qué insumo de nómina genera un día de ausencia aprobado. Ninguno nunca toca el libro de nómina; pago y acumulación cruzan como horas que el cálculo valora.",
+      "leaveAppliesSubsidiary": "Vacío significa que la política aplica a todas las subsidiarias.",
+      "leaveAppliesDepartment": "Vacío significa que la política aplica a todos los departamentos.",
+      "leaveAccrualKind": "Cómo se devenga el tiempo: ninguno, por período, por año o ilimitado.",
+      "leaveAccrualHours": "Horas devengadas por período o por año (obligatorio para esos tipos).",
+      "leaveAccrualPeriodsPerYear": "Períodos completos en un año de devengo (obligatorio para el devengo por período).",
+      "leaveCarryoverKind": "Qué pasa con el tiempo no usado al cierre del año: nada, arrastrar todo o hasta un tope.",
+      "leaveCarryoverHours": "Máximo de horas arrastradas (obligatorio para «hasta un tope»).",
+      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen."
     },
     "options": {
       "timeClassification": {
@@ -3010,6 +3072,38 @@
         "qst": "QST",
         "salesUse": "Impuesto sobre ventas y uso",
         "vat": "VAT"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Incorporación",
+        "offboarding": "Salida",
+        "transfer": "Transferencia"
+      },
+      "hrmStepOwner": {
+        "manager": "Mánager",
+        "hr": "RR. HH.",
+        "employee": "Empleado",
+        "namedParty": "Persona designada"
+      },
+      "hrmStepEvidence": {
+        "none": "Ninguna",
+        "acknowledgement": "Acuse de recibo",
+        "attachment": "Adjunto"
+      },
+      "leaveValueCrossing": {
+        "none": "Ninguno — no remunerado o en salario",
+        "payout": "Pago desde el banco",
+        "bankIn": "Acumular como tiempo"
+      },
+      "leaveAccrualKind": {
+        "none": "Ninguno",
+        "per_period": "Por período",
+        "per_year": "Por año",
+        "unlimited": "Ilimitado"
+      },
+      "leaveCarryoverKind": {
+        "none": "Ninguno",
+        "carry_all": "Arrastrar todo",
+        "carry_up_to": "Arrastrar hasta un tope"
       }
     },
     "laborCosting": {

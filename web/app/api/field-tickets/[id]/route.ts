@@ -5,10 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
-import {
-  DocumentEditError,
-  requireDocumentEditRevision,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import {
   addTicketLine,
   discardEmptyTicketDraft,

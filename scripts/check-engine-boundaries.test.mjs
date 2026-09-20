@@ -29,9 +29,9 @@ const MANIFEST = {
 const FILES = {
   "platform/db.ts": "export const db = 1;\n",
   "records/numbering.ts": 'import { db } from "../platform/db.ts";\nexport const next = () => db;\n',
-  "ledger/posting.ts": 'import { db } from "@openbooks/engine/src/platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport async function post() { const { pay } = await import("../payments/payments.ts"); return pay(next(), db); }\n',
-  "payments/payments.ts": 'import type { post } from "../ledger/posting.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
-  "ledger/posting.test.ts": 'import { pay } from "../payments/payments.ts";\nimport { x } from "@/lib/anything.ts";\n',
+  "ledger/posting-example.ts": 'import { db } from "@openbooks/engine/src/platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport async function post() { const { pay } = await import("../payments/payment-example.ts"); return pay(next(), db); }\n',
+  "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
+  "ledger/posting.test.ts": 'import { pay } from "../payments/payment-example.ts";\nimport { x } from "@/lib/anything.ts";\n',
 };
 
 test("a clean tree passes: every file in a module, every edge declared and used, cycle pinned", () => {
@@ -60,12 +60,12 @@ test("a file at engine/src root is refused with the remedy", () => {
 test("an undeclared cross-module import names file, line, both modules and the remedy", () => {
   const root = scaffold(MANIFEST, {
     ...FILES,
-    "records/numbering.ts": 'import { db } from "../platform/db.ts";\n\nimport { pay } from "../payments/payments.ts";\nexport const next = () => pay(db, db);\n',
+    "records/numbering.ts": 'import { db } from "../platform/db.ts";\n\nimport { pay } from "../payments/payment-example.ts";\nexport const next = () => pay(db, db);\n',
   });
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payments\.ts" from module "payments", which it does not declare/);
+    assert.match(problems[0], /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payment-example\.ts" from module "payments", which it does not declare/);
     assert.match(problems[0], /modules\.records\.dependsOn/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -91,8 +91,8 @@ test("a declaration that grows a pinned cycle is refused; a pin that no longer e
   grown.modules.payments.dependsOn = ["ledger", "platform", "records"];
   const files = {
     ...FILES,
-    "records/numbering.ts": 'import { db } from "../platform/db.ts";\nimport { pay } from "../payments/payments.ts";\nexport const next = () => pay(db, db);\n',
-    "payments/payments.ts": 'import type { post } from "../ledger/posting.ts";\nimport { db } from "../platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport const pay = (n, d) => n + d + db + next();\n',
+    "records/numbering.ts": 'import { db } from "../platform/db.ts";\nimport { pay } from "../payments/payment-example.ts";\nexport const next = () => pay(db, db);\n',
+    "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport const pay = (n, d) => n + d + db + next();\n',
   };
   const root = scaffold(grown, files);
   try {
@@ -119,11 +119,11 @@ test("a directory that is not a declared module is refused", () => {
 });
 
 test("engine code importing the web app is refused; tests may", () => {
-  const root = scaffold(MANIFEST, { ...FILES, "ledger/posting.ts": FILES["ledger/posting.ts"] + 'import { y } from "@/lib/thing.ts";\n' });
+  const root = scaffold(MANIFEST, { ...FILES, "ledger/posting-example.ts": FILES["ledger/posting-example.ts"] + 'import { y } from "@/lib/thing.ts";\n' });
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /engine\/src\/ledger\/posting\.ts:4: engine code must not import the web app/);
+    assert.match(problems[0], /engine\/src\/ledger\/posting-example\.ts:4: engine code must not import the web app/); // source-path: synthetic
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

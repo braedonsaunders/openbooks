@@ -16,7 +16,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { runScript } from "./scripting.ts";
 import {
   createScratchOrg,

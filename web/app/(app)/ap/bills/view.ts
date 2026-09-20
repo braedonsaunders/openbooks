@@ -12,16 +12,9 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
-import {
-  AP_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  dimensionOptions,
-  loadDocument,
-  partyOptions,
-  taxCodeOptions,
-  taxGroupOptions,
-} from '../../../../lib/documents'
+import { AP_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
+import { accountOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'

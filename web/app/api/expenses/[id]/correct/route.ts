@@ -8,11 +8,7 @@ import {
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import {
-  DocumentEditError,
-  requireDocumentEditRevision,
-  validateCorrectionReason,
-} from '../../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReason } from "../../../../../../engine/src/records/document-edit-policy.ts";
 import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../../../../lib/expense-edit'
 import { isUuid } from '../../../../../lib/list-params'
 

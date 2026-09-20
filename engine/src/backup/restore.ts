@@ -440,6 +440,21 @@ async function insertSpoolTable(
   if (expectedRows === 0) return 0;
   if (!TABLE_NAME_RE.test(tableName)) throw new Error(`unsafe backup table name ${tableName}`);
   const path = join(inspection.spoolDir, `${tableName}.ndjson`);
+  // Spooled rows are row_to_json output, so they carry GENERATED ALWAYS
+  // projections as well. Those are recomputed by the target row and can never
+  // be inserted, so the insert names the storable columns explicitly instead
+  // of `select *` from the populated record.
+  const storable = (await client.query<{ column_name: string }>(
+    `select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = $1 and is_generated = 'NEVER'
+      order by ordinal_position`,
+    [tableName],
+  )).rows.map((row) => row.column_name);
+  if (!storable.length) throw new Error(`restore target ${tableName} has no storable columns`);
+  for (const column of storable) {
+    if (!TABLE_NAME_RE.test(column)) throw new Error(`unsafe column name ${column} on ${tableName}`);
+  }
+  const columnList = storable.map((column) => `"${column}"`).join(", ");
   const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
   let batch: string[] = [];
   let batchBytes = 0;
@@ -447,8 +462,8 @@ async function insertSpoolTable(
   const flush = async () => {
     if (!batch.length) return;
     const result = await client.query(
-      `insert into public."${tableName}"
-       select * from jsonb_populate_recordset(null::public."${tableName}", $1::jsonb)`,
+      `insert into public."${tableName}" (${columnList})
+       select ${columnList} from jsonb_populate_recordset(null::public."${tableName}", $1::jsonb)`,
       [`[${batch.join(",")}]`],
     );
     inserted += result.rowCount ?? 0;

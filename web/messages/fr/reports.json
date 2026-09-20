@@ -32,7 +32,8 @@
       "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion",
       "cashFlowIndirectTitle": "Flux de trésorerie (indirect)",
       "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement",
-      "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie."
+      "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie.",
+      "hrmDescription": "Rapport intégré sur les effectifs à partir des dossiers d'emploi — nécessite l'autorisation emploi RH."
     },
     "groups": {
       "financial": "États financiers",
@@ -42,7 +43,8 @@
       "custom": "Personnalisés et enregistrés",
       "projects": "Projets",
       "orders": "Ventes et commandes",
-      "payroll": "Paie"
+      "payroll": "Paie",
+      "hrm": "Ressources humaines"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "Demandes de changement",
         "description": "Une ligne par demande de changement d'emploi : statut, type, emploi, demandeur, horodatages de soumission et de décision, exécution d'approbation liée et liaison de révision. Requiert l'autorisation d'emploi RH."
+      },
+      "hrm_positions": {
+        "label": "Postes",
+        "description": "Une ligne par poste établi à la date du rapport : code, intitulé, statut, service, employeur et ETP prévus, financés et pourvus. Requiert la permission des postes RH."
+      },
+      "hrm_processes": {
+        "label": "Listes de processus",
+        "description": "Une ligne par étape de liste de processus — type et statut du processus, employé, modèle, responsable de l’étape, échéance, type de preuve, et statut de l’étape avec sa preuve. Requiert la permission de processus RH."
+      },
+      "hrm_leave_absences": {
+        "label": "Absences",
+        "description": "Une ligne par jour d'absence — personne, employeur, service d'alors, type de congé et heures. Les contre-passations sont des lignes propres ; les totaux sont nets. Requiert la permission congés."
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "Créé le",
         "id": "Demande (id)",
         "employment_id": "Emploi (id)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Titre",
+        "status": "Statut",
+        "employer": "Employeur",
+        "department": "Service",
+        "planned_fte": "ETP prévus",
+        "funded_fte": "ETP financés",
+        "filled_fte": "ETP pourvus",
+        "vacant_fte": "ETP vacants",
+        "position_id": "Poste (id)"
+      },
+      "hrm_processes": {
+        "process_kind": "Type de processus",
+        "process_status": "Statut du processus",
+        "effective_date": "Date d’effet",
+        "employee": "Employé",
+        "employer": "Employeur",
+        "template": "Modèle",
+        "step": "Étape",
+        "step_status": "Statut de l’étape",
+        "owner": "Responsable",
+        "due_on": "Échéance",
+        "evidence": "Preuve",
+        "done_at": "Terminé le",
+        "skip_reason": "Motif",
+        "process_id": "Processus (id)",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Date",
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "leave_type": "Type de congé",
+        "hours": "Heures",
+        "source": "Source",
+        "employment_id": "Emploi (id)",
+        "id": "Absence (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1339,12 @@
       "hire": "Embauche",
       "status_change": "Changement de statut",
       "assignment_change": "Changement d'affectation",
-      "termination": "Fin d'emploi"
+      "termination": "Fin d'emploi",
+      "frozen": "Gelé",
+      "filled": "Pourvu",
+      "open": "Ouvert",
+      "planned": "Prévu",
+      "position_assignment": "Affectation à un poste"
     }
   },
   "operators": {

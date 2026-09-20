@@ -4,7 +4,9 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createPayRun, PayrollError, type PayRunType } from '@openbooks/engine/src/payroll/run.ts'
+import { createPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
+import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { type PayRunType } from "@openbooks/engine/src/payroll/run-contracts.ts";
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

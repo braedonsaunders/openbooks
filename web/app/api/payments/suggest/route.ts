@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { suggestApplications } from '@openbooks/engine/src/payments/payments.ts'
+import { suggestApplications } from "@openbooks/engine/src/payments/payment-queries.ts";
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { exactMoney, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'

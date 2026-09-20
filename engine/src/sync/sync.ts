@@ -2,12 +2,10 @@ import { desc, sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, schema, withOrg } from "../platform/db.ts";
 import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/money.ts";
-import {
-  postDocument,
-  regenerateGlImpactTx,
-  runPostDocumentEffects,
-  type PostingDeps,
-} from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { regenerateGlImpactTx } from "../ledger/posting-replay.ts";
+import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
+import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import {
   buildNativeContext,
   type NativeContext,

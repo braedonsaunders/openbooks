@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,

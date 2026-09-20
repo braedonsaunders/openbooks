@@ -32,7 +32,8 @@
       "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
       "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
       "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo",
-      "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina."
+      "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina.",
+      "hrmDescription": "Informe integrado de plantilla sobre los registros de empleo; requiere el permiso de empleo de RR. HH."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -42,7 +43,8 @@
       "custom": "Personalizados y guardados",
       "projects": "Proyectos",
       "orders": "Ventas y pedidos",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "hrm": "Recursos humanos"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "Solicitudes de cambio",
         "description": "Una fila por solicitud de cambio de empleo: estado, tipo, empleo, solicitante, sellos de envío y decisión, ejecución de aprobación vinculada y vinculación de revisión. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_positions": {
+        "label": "Puestos",
+        "description": "Una fila por puesto establecido a la fecha del informe: código, título, estado, departamento, empleador y FTE planificados, financiados y cubiertos. Requiere el permiso de puestos de RR. HH."
+      },
+      "hrm_processes": {
+        "label": "Listas de procesos",
+        "description": "Una fila por paso de lista de procesos: tipo y estado del proceso, empleado, plantilla, responsable del paso, vencimiento, tipo de evidencia y estado del paso con su evidencia. Requiere el permiso de procesos de RR. HH."
+      },
+      "hrm_leave_absences": {
+        "label": "Ausencias",
+        "description": "Una fila por día de ausencia — persona, empleador, departamento de entonces, tipo y horas. Las reversiones son filas propias; las sumas netean. Requiere el permiso de ausencias."
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "Creado el",
         "id": "Solicitud (id)",
         "employment_id": "Empleo (id)"
+      },
+      "hrm_positions": {
+        "code": "Código",
+        "title": "Título",
+        "status": "Estado",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "planned_fte": "FTE planificados",
+        "funded_fte": "FTE financiados",
+        "filled_fte": "FTE cubiertos",
+        "vacant_fte": "FTE vacantes",
+        "position_id": "Puesto (id)"
+      },
+      "hrm_processes": {
+        "process_kind": "Tipo de proceso",
+        "process_status": "Estado del proceso",
+        "effective_date": "Fecha de vigencia",
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "template": "Plantilla",
+        "step": "Paso",
+        "step_status": "Estado del paso",
+        "owner": "Responsable",
+        "due_on": "Vencimiento",
+        "evidence": "Evidencia",
+        "done_at": "Completado el",
+        "skip_reason": "Motivo de omisión",
+        "process_id": "Proceso (id)",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Fecha",
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "leave_type": "Tipo de ausencia",
+        "hours": "Horas",
+        "source": "Origen",
+        "employment_id": "Empleo (id)",
+        "id": "Ausencia (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1339,12 @@
       "hire": "Contratación",
       "status_change": "Cambio de estado",
       "assignment_change": "Cambio de asignación",
-      "termination": "Finalización"
+      "termination": "Finalización",
+      "frozen": "Congelado",
+      "filled": "Cubierto",
+      "open": "Abierto",
+      "planned": "Planificado",
+      "position_assignment": "Asignación de puesto"
     }
   },
   "operators": {

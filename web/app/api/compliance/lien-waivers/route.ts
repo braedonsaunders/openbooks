@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { nextNumber } from '@openbooks/engine/src/payments/payments.ts'
+import { nextNumber } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { guardPermission } from '@/lib/authz'
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { isUuid, pickString } from '@/lib/list-params'

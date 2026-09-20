@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { nextPeriodAfter } from '@openbooks/engine/src/payroll/run.ts'
+import { nextPeriodAfter } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll/scope.ts'
 import { uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'

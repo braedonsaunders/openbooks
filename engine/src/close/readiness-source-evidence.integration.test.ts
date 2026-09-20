@@ -7,7 +7,9 @@ import {
   refreshSourceReconciliationState,
   signOffFromSourceEvidence,
 } from "../banking/banking.ts";
-import { ensureCloseDefaults, refreshCloseRun, startCloseRun } from "./close.ts";
+import { ensureCloseDefaults } from "./defaults.ts";
+import { refreshCloseRun } from "./run-automation.ts";
+import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 

@@ -4,13 +4,10 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import {
-  InventoryOwnershipError,
-  issueInventory,
-  receiveInventory,
-  reverseInventoryMovement,
-  transferInventory,
-} from "./inventory.ts";
+import { InventoryOwnershipError } from "./contracts.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
 import {
   createScratchOrg,
   createScratchUser,

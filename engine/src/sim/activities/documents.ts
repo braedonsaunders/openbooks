@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "../../platform/db.ts";
-import { postDocument, type PostingDeps } from "../../ledger/posting.ts";
+import { postDocument } from "../../ledger/posting-document.ts";
+import { type PostingDeps } from "../../ledger/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../../flows/submit.ts";
 import { sum } from "../../money/money.ts";
 import type { SimOrg } from "../world.ts";

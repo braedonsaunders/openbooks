@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { InventoryError, issueInventory, receiveInventory } from "./inventory.ts";
+import { InventoryError } from "./contracts.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 for (const policy of ["inactive receipt offset", "inactive asset account", "inactive issue offset"] as const) {

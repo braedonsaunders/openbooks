@@ -5,7 +5,10 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add } from "../money/money.ts";
 import { setPackSlotAccount } from "./packs.ts";
-import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -3,11 +3,7 @@ import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import {
-  assertPeriodModulesOpen,
-  CloseError,
-  closeModuleForDocument,
-} from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
@@ -20,7 +16,8 @@ import {
 import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
-import { InventoryError, reverseInventoryMovement } from "../inventory/inventory.ts";
+import { InventoryError } from "../inventory/contracts.ts";
+import { reverseInventoryMovement } from "../inventory/reversal.ts";
 
 /**
  * Machine-readable void refusal reasons (F-t06-021). The human message

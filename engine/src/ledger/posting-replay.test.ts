@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { glProjectionScopeUnchanged } from "./posting.ts";
+import { glProjectionScopeUnchanged } from "./posting-projection.ts";
 
 test("GL replay scope depends on period and posting date, not memo metadata", () => {
   const original = { periodId: "period-1", postingDate: "2026-07-01" };

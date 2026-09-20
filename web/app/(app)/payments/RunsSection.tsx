@@ -7,7 +7,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { paymentRunReadiness } from '@openbooks/engine/src/payments/payments.ts'
+import { paymentRunReadiness } from "@openbooks/engine/src/payments/run-readiness.ts";
 import { Alert, AlertDescription, AlertTitle, Badge, Table, TableBody, TableCell, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'

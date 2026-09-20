@@ -5,8 +5,10 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { revaluationReadiness, runRevaluation } from "./fx-revaluation.ts";
 import { neg } from "../money/money.ts";
-import { createPaymentDocument, postPaymentWithApplications, reversePaymentForReturn, updateDraftPayment } from "../payments/payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { reversePaymentForReturn } from "../payments/payment-return.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-// Match the canonical runner's macOS shutdown mitigation in both generations.
-const runtimeFlags = process.platform === 'darwin' ? ['--no-concurrent-sparkplug', '--no-concurrent-recompilation'] : []
+// Match the canonical runner's cross-platform shutdown mitigation in both generations.
+import { TEST_RUNTIME_FLAGS as runtimeFlags } from './test-suite.mjs'
 
 async function runProbe(t, args, env, timeoutMs = 12_000) {
   const child = spawn(process.execPath, [...runtimeFlags, ...args], {

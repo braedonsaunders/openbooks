@@ -3,19 +3,14 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  addCloseEvidence,
-  CloseError,
-  closeModuleForDocument,
-  decidePeriodReopen,
-  requestPeriodReopen,
-  setPeriodLockState,
-  periodLockBlocksPosting,
-  startCloseRun,
-} from "./close.ts";
+import { addCloseEvidence } from "./tasks.ts";
+import { CloseError, closeModuleForDocument, periodLockBlocksPosting } from "./period-policy.ts";
+import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
+import { setPeriodLockState } from "./period-locks.ts";
+import { startCloseRun } from "./run-start.ts";
 import { db, withBypass, withOrgTransaction } from "../platform/db.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -828,7 +823,8 @@ test(
 );
 
 test("close automation claims carry lease fencing, stale takeover, and stage checkpoints", () => {
-  const engine = readFileSync(new URL("./close.ts", import.meta.url), "utf8");
+  const engine = ["./automations.ts", "./run-automation.ts"].map((file) =>
+    readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
 
   // The claim books a random fencing token with its lock timestamp and the
   // conflict contract that keeps concurrent schedulers single-fire.

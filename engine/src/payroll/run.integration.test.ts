@@ -9,9 +9,10 @@ import { calculateT4127 } from "./canada/t4127.ts";
 import { calculatePub15T } from "./us/pub15t.ts";
 import { setPackSlotAccount, uninstallPayrollPack } from "./packs.ts";
 import { payRunBankFileEntitlement } from "./bank-file-artifact.ts";
-import {
-  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
-} from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";

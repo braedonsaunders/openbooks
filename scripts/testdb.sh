@@ -50,6 +50,10 @@ RUNTIME_PASS=openbooks-runtime-test-password
 psql_super() { PGPASSWORD=$SUPERPASS psql -h 127.0.0.1 -p "$PORT" -U "$SUPER" -d postgres -v ON_ERROR_STOP=1 "$@"; }
 url_for() { echo "postgres://${SUPER}:${SUPERPASS}@127.0.0.1:${PORT}/$1"; }
 runtime_url_for() { echo "postgres://${RUNTIME_ROLE}:${RUNTIME_PASS}@127.0.0.1:${PORT}/$1"; }
+# The superuser login to the SAME database: what CI exposes as
+# OPENBOOKS_TEST_ADMIN_DB_URL (.github/workflows/test.yml) for the few suites
+# that replay migrations or provision a throwaway database.
+admin_url_for() { echo "postgres://${SUPER}:${SUPERPASS}@127.0.0.1:${PORT}/$1"; }
 
 require_docker() {
   command -v docker >/dev/null 2>&1 || { echo "testdb: docker is not on PATH" >&2; exit 1; }
@@ -253,6 +257,12 @@ print_env() {
   # superuser password): psql -U openbooks -h 127.0.0.1 -p "$PORT" "$db".
   echo "export OPENBOOKS_DB_URL='$(runtime_url_for "$db")'"
   echo "export OPENBOOKS_RUNTIME_DB_URL='$(runtime_url_for "$db")'"
+  # Migration-replay and self-provisioning suites (bank-statement-source-
+  # evidence, order-quantity-progress-migration, recognition-event-tenant-
+  # integrity, hrm migration-cli-gate) need the privileged login and refuse
+  # by name without it. Emitting it here is what keeps a local run from
+  # ever reaching their refusal.
+  echo "export OPENBOOKS_TEST_ADMIN_DB_URL='$(admin_url_for "$db")'"
   echo "export OPENBOOKS_DB_PASSWORD='${RUNTIME_PASS}'"
   echo "export PGPASSWORD='${SUPERPASS}'"
   echo "export NODE_ENV=test"
@@ -342,7 +352,10 @@ case "$cmd" in
 
   env)
     [ $# -ge 2 ] || { echo "testdb: env needs a database name" >&2; exit 1; }
-    print_env "$2"
+    # Resolve the name exactly as `new` and `drop` do: `env hr45` must print
+    # the exports for ob_hr45, the database `new hr45` created — a raw name
+    # printed a URL to a database that does not exist (3D000 at first use).
+    print_env "$(test_db_name "$2")"
     ;;
 
   drop)

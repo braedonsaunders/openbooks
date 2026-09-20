@@ -4,21 +4,24 @@
     "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。",
     "tabs": {
       "overview": "概览",
-      "changeRequests": "变更申请",
-      "departments": "部门",
-      "reports": "报表"
+      "positions": "职位",
+      "processes": "流程",
+      "leave": "休假",
+      "myLeave": "我的休假"
     },
     "vitals": {
       "headcount": "人员数量",
       "headcountSub": "截至 {date}",
-      "employers": "雇主",
-      "employersSub": "{count, plural, other {# 家子公司}}",
-      "departments": "部门",
-      "departmentsSub": "{count, plural, other {# 个部门}}"
+      "openPositions": "开放职位",
+      "openPositionsSub": "空缺FTE {fte}",
+      "startingSoon": "即将入职",
+      "startingSoonSub": "{count, plural, other {未来30天内 # 人离职}}",
+      "onLeave": "今日休假",
+      "onLeaveSub": "{count, plural, other {# 项待审批}}"
     },
     "groups": {
-      "title": "按雇主和部门统计的人员数量",
-      "employer": "雇主",
+      "title": "按部门统计人员",
+      "employer": "子公司",
       "department": "部门",
       "headcount": "人员数量",
       "unassigned": "未分配",
@@ -26,7 +29,45 @@
       "total": "合计"
     },
     "directory": {
-      "title": "名录"
+      "title": "名录",
+      "employeesHint": "今日在职",
+      "positionsHint": "开放中",
+      "processesHint": "{count, plural, other {# 步已逾期}}",
+      "leaveHint": "{count, plural, other {# 项待审批}}"
+    },
+    "vacancy": {
+      "title": "按部门统计的空缺",
+      "department": "部门",
+      "employer": "子公司",
+      "positions": "职位",
+      "planned": "计划 FTE",
+      "funded": "已拨款 FTE",
+      "filled": "已填补 FTE",
+      "vacant": "空缺 FTE",
+      "unassignedDepartment": "无部门",
+      "empty": "截至 {date} 没有已设立的职位。",
+      "total": "合计"
+    },
+    "onboarding": {
+      "title": "入职",
+      "openLabel": "进行中的清单",
+      "overdueLabel": "逾期",
+      "upcomingLabel": "即将到期",
+      "empty": "暂无进行中的清单。",
+      "viewAll": "查看所有流程"
+    },
+    "trend": {
+      "title": "人员数量（近12个月）",
+      "hint": "截至各月末的在职人数，直到今天。",
+      "series": "人员数量"
+    },
+    "attention": {
+      "title": "需要处理",
+      "allClear": "没有需要处理的事项。",
+      "pending": "{count, plural, other {# 项变更申请待决定}}",
+      "overdueSteps": "{count, plural, other {# 项清单步骤已逾期}}",
+      "leavePending": "{count, plural, other {# 项休假申请待审批}}",
+      "unfunded": "{fte} 个已填补FTE缺少预算"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "提议变更",
       "manageDepartments": "管理部门",
       "openReports": "打开报表"
+    },
+    "leave": {
+      "title": "休假",
+      "onLeaveEmpty": "今日无人休假。",
+      "pendingSub": "等待审批"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "操作",
     "openEmployee": "打开员工档案",
     "notAvailable": "不可用"
-  },
-  "departments": {
-    "title": "部门",
-    "description": "今日各部门人数，含雇主子公司明细 — 通过人数统计服务解析。",
-    "listTitle": "各部门人数",
-    "listNote": "员工列表没有部门筛选，因此下钻将打开完整列表。",
-    "linksTitle": "链接",
-    "employeesLink": "员工列表",
-    "setupLink": "管理部门"
-  },
-  "reports": {
-    "title": "报表",
-    "description": "人员报表：人数报表预设和雇佣实体，在报表构建器中打开。",
-    "presetTitle": "人数报表",
-    "presetHint": "预设打开组织已保存的方案 — 若从未执行过种子数据，则打开构建器目录。",
-    "entitiesTitle": "人员实体",
-    "entitiesHint": "从某个雇佣实体开始新建人员报表。",
-    "hubTitle": "所有报表",
-    "hubDescription": "打开报表中心。"
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "草稿已更新。",
       "submittedToast": "已提交审批。",
       "withdrawnToast": "申请已撤回。",
-      "requestFailed": "无法保存变更申请。"
+      "requestFailed": "无法保存变更申请。",
+      "kindPositionAssignment": "职位任命",
+      "positionLabel": "职位",
+      "positionUnset": "无职位",
+      "positionHint": "此任命所占据的拨款编制。任命保留其自身的职务、部门和地点。",
+      "positionRequired": "请选择一个职位，或将该任命标记为未任命。",
+      "unassignLabel": "解除职位任命",
+      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。"
     }
   },
   "directory": {
     "employmentStatus": "雇佣状态",
     "serviceStart": "服务开始日期",
     "noEmployment": "无雇佣关系"
+  },
+  "positions": {
+    "title": "职位",
+    "description": "人员编制计划背后的拨款编制：每个职位的计划 FTE、已拨款 FTE 和已填补 FTE，含版本、按期间的拨款和当前任职者。",
+    "statusAll": "全部状态",
+    "statusPlanned": "已规划",
+    "statusOpen": "开放中",
+    "statusFilled": "已填补",
+    "statusFrozen": "已冻结",
+    "statusClosed": "已关闭",
+    "columns": {
+      "code": "编码",
+      "title": "标题",
+      "status": "状态",
+      "department": "部门",
+      "planned": "计划 FTE",
+      "funded": "已拨款 FTE",
+      "filled": "已填补 FTE",
+      "vacant": "空缺 FTE",
+      "holder": "任职者",
+      "unassignedHolder": "空缺"
+    },
+    "holdersCount": "{count, plural, other {# 名任职者}}",
+    "empty": "没有职位符合此筛选条件。",
+    "total": "合计",
+    "drawer": {
+      "title": "职位 {code}",
+      "versions": "版本",
+      "versionNo": "版本 {no}",
+      "effective": "自 {from} 至 {to} 有效",
+      "effectiveOpen": "自 {from} 起有效，无结束日期",
+      "recorded": "记录于 {at}",
+      "funding": "按期间拨款",
+      "period": "期间 {from} 至 {to}",
+      "funded": "已拨款 {fte} FTE",
+      "costPlan": "成本计划 {amount} {currency}",
+      "unfunded": "无拨款记录",
+      "holder": "当前任职者",
+      "holderEmployment": "雇用 {id}",
+      "noHolder": "截至 {date} 无任职者",
+      "warnings": "警告",
+      "refusal": "需要注意",
+      "missing": "此职位不再可见。"
+    },
+    "add": "添加职位",
+    "create": {
+      "title": "新建职位",
+      "code": "职位代码",
+      "titleField": "职位名称",
+      "employer": "雇佣子公司",
+      "department": "部门",
+      "noDepartment": "无部门",
+      "plannedFte": "计划FTE",
+      "status": "状态",
+      "effectiveFrom": "生效日期",
+      "reason": "原因",
+      "reasonPlaceholder": "设立此职位的原因（随首个版本一并记录）",
+      "submit": "创建职位",
+      "failed": "无法创建职位。"
+    },
+    "segmentsLabel": "状态"
+  },
+  "processes": {
+    "title": "流程清单",
+    "description": "包含负责人、到期日和凭证的入职、离职和调动清单。",
+    "listTitle": "清单",
+    "listFailed": "无法加载流程。",
+    "detailTitle": "清单",
+    "detailFailed": "无法加载清单。",
+    "actionFailed": "无法完成操作。",
+    "loading": "加载中…",
+    "empty": "此分组中暂无清单。",
+    "overdueBadge": "逾期 {count} 项",
+    "progressLine": "必需步骤 {required} 项中已完成 {done} 项 · 生效日期 {effective}",
+    "dueOn": "到期 {date}",
+    "required": "必需",
+    "completeStep": "完成步骤",
+    "skipStep": "跳过步骤",
+    "completeProcess": "完成清单",
+    "cancelProcess": "取消清单",
+    "attachmentLabel": "凭证文件",
+    "attachmentUnset": "输入以搜索文件",
+    "skipReasonLabel": "跳过原因",
+    "skipReasonPlaceholder": "跳过此步骤的原因",
+    "cancelReasonLabel": "取消原因",
+    "cancelReasonPlaceholder": "取消此清单的原因",
+    "confirmReason": "确认",
+    "cancelReasonAbort": "返回",
+    "segments": {
+      "open": "进行中",
+      "overdue": "逾期",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "columns": {
+      "employee": "员工",
+      "kind": "类型",
+      "effective": "生效日期",
+      "progress": "进度",
+      "nextDue": "下个到期日",
+      "status": "状态"
+    },
+    "kinds": {
+      "onboarding": "入职",
+      "offboarding": "离职",
+      "transfer": "调动"
+    },
+    "owners": {
+      "manager": "经理",
+      "hr": "人力资源",
+      "employee": "员工",
+      "named_party": "指定人员"
+    },
+    "evidence": {
+      "none": "无",
+      "acknowledgement": "确认",
+      "attachment": "附件"
+    },
+    "stepStatus": {
+      "pending": "待处理",
+      "done": "已完成",
+      "skipped": "已跳过"
+    },
+    "segmentsLabel": "显示"
+  },
+  "leave": {
+    "title": "休假",
+    "description": "申请、审批与缺勤记录——显示时间余额，有余额时同时显示金额。",
+    "listTitle": "休假申请",
+    "segmentsLabel": "显示",
+    "allLabel": "全部",
+    "segments": {
+      "pending": "待审批",
+      "upcoming": "即将到来",
+      "today": "今日休假",
+      "history": "历史"
+    },
+    "columns": {
+      "employee": "人员",
+      "type": "类型",
+      "range": "期间",
+      "hours": "小时",
+      "status": "状态"
+    },
+    "emptyTitle": "此处暂无",
+    "emptyDescription": "此分组中还没有内容。",
+    "truncatedNote": "仅显示前{limit}条申请。",
+    "unknownSegmentTitle": "未知分组",
+    "unknownSegment": "没有名为{segment}的分组。",
+    "refusedTitle": "休假被拒绝",
+    "fileTitle": "申请休假",
+    "fileButton": "新建申请",
+    "recordTitle": "补记缺勤",
+    "recordButton": "补记缺勤",
+    "calendarTitle": "按部门查看日历",
+    "calendarDepartmentLabel": "部门",
+    "calendarFromLabel": "从",
+    "calendarToLabel": "至",
+    "calendarShowLabel": "显示",
+    "calendarEmpty": "该时间范围内无缺勤。请选择一个部门。",
+    "openRequest": "打开",
+    "drawerTitle": "休假申请",
+    "detailLoading": "正在加载申请…",
+    "detailFailed": "无法加载该申请。",
+    "actionFailed": "操作失败。",
+    "submitButton": "提交审批",
+    "withdrawButton": "撤回",
+    "cancelButton": "取消申请",
+    "withdrawReasonTitle": "撤回此申请的原因？",
+    "cancelReasonTitle": "取消此申请的原因？",
+    "fileFailed": "无法提交申请。",
+    "fileEmploymentLabel": "雇佣",
+    "fileEmploymentPlaceholder": "雇佣ID",
+    "fileTypeLabel": "休假类型",
+    "fileTypePlaceholder": "选择休假类型",
+    "fileHoursLabel": "小时",
+    "fileReasonLabel": "原因",
+    "timeBalanceTitle": "截至{date}的时间余额",
+    "timeBalanceValue": "{balance}小时（累积{earned}、结转{carried}、已用{taken}）",
+    "unlimitedBalance": "无限制——无余额数字。",
+    "noPolicyBalance": "没有适用于此雇佣的政策。",
+    "valueBalanceTitle": "截至{date}的工资余额",
+    "statusNames": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "withdrawn": "已撤回",
+      "cancelled": "已取消"
+    }
+  },
+  "myLeave": {
+    "title": "我的休假",
+    "description": "仅显示本人的申请与余额。",
+    "emptyTitle": "暂无申请",
+    "emptyDescription": "提交第一条申请吧。",
+    "balancesTitle": "余额",
+    "balancesEmpty": "没有启用的休假类型。",
+    "timeKind": "时间",
+    "valueKind": "金额",
+    "unlimited": "无限制"
   }
 }

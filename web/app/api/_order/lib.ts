@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, mul, normalizeDecimal, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
-import { taxProfileMap, type TaxProfiles } from '../../../lib/bills'
+import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
 import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { OrderKind } from '../../../lib/order-cycle'

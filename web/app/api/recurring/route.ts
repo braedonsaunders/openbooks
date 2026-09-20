@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, guardPermission } from "../../../lib/authz";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
+import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
 
 export const runtime = "nodejs";
 

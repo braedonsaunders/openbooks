@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
-import { seedPayrollComponents } from "./run.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

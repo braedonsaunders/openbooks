@@ -6,7 +6,7 @@ import { defaultContinuousCloseDetectors } from "../agents/continuous-close-conf
 import { runContinuousCloseAgent } from "./continuous-close.ts";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
 import { taxFindings } from "../agents/tax.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 /**

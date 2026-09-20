@@ -1351,7 +1351,9 @@ export async function orgYearEndFilings(
       // mapping) becomes THAT filing's named refusal, not a page-wide crash:
       // the CA pack's 2025 refusal must not hide the US pack's 2025 data.
       let data: PayrollFilingData = { rowKey: "rowId", columns: [], rows: [] };
-      let populationRefusal: string | null = yearProblem?.message ?? null;
+      // Operator surface (rendered in place of the rows): the developer
+      // remedy on `message` names a scaffold script no operator can run.
+      let populationRefusal: string | null = yearProblem?.operatorMessage ?? null;
       try {
         if (!yearProblem) data = await filing.population(orgId, taxYear);
       } catch (error) {

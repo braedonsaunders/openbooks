@@ -50,7 +50,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   const orgId = authz?.user.orgId
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
   const emptyDefs = Promise.resolve({ rows: [] as { id: string; name: string; kind: string; entity: string | null }[] })
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities, hrmEnabled] = await Promise.all([
     orgId
       ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
           rows: { id: string; name: string; path: string; params: Record<string, string> }[]
@@ -68,6 +68,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'orders') : Promise.resolve(false),
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
+    authz ? isFeatureEnabled(authz.user.orgId, 'hrm') : Promise.resolve(false),
   ])
 
   // Hide definitions over permission-gated or feature-off entities from
@@ -83,8 +84,14 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   const payrollDefinitions = payrollEnabled
     ? visibleDefinitions.filter((row) => row.kind === 'built_in' && entityCategory(row) === 'payroll')
     : []
+  // Workforce reports are the HR module's reports — the Reports module is
+  // their ONE home (by review: no HR-side reports page), so the built-ins
+  // over the employment entities get a group of their own here.
+  const hrmDefinitions = hrmEnabled
+    ? visibleDefinitions.filter((row) => row.kind === 'built_in' && entityCategory(row) === 'hrm')
+    : []
   const otherDefinitions = visibleDefinitions.filter(
-    (row) => !payrollDefinitions.some((p) => p.id === row.id),
+    (row) => !payrollDefinitions.some((p) => p.id === row.id) && !hrmDefinitions.some((h) => h.id === row.id),
   )
 
   const card = (key: string, href: string, icon: string) => ({
@@ -163,6 +170,17 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
         title: c.name,
         desc: t('hub.cards.payrollDescription'),
         icon: 'HandCoins',
+      })),
+    } satisfies HubGroup] : []),
+    ...(hrmDefinitions.length > 0 ? [{
+      key: 'hrm',
+      label: t('hub.groups.hrm'),
+      accent: 'teal',
+      cards: hrmDefinitions.map((c) => ({
+        href: `/reports/custom/run/${c.id}`,
+        title: c.name,
+        desc: t('hub.cards.hrmDescription'),
+        icon: 'Users',
       })),
     } satisfies HubGroup] : []),
     {

@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
 import test from 'node:test'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { isUuid } from '../../../../../lib/list-params'
@@ -36,16 +34,8 @@ const routeState: RouteState = { ownedSubsidiaryId: 'sub-1', adjustmentCalls: []
 // canonicalAdjustmentHours wired to the real canonicalDecimal (pure, no
 // imports of its own). The copy is deliberate: the mock must refuse exactly
 // what the engine refuses.
-const exactDecimalUrl = pathToFileURL(resolve(process.cwd(), 'engine/src/money/exact-decimal.ts')).href
 
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(req) { return { ok: true, data: await req.json() } }
-    `,
-  ],
   [
     'mock:db',
     `
@@ -82,7 +72,6 @@ const mockSources = new Map<string, string>([
   [
     'mock:payroll-run',
     `
-      export class PayrollError extends Error {}
       export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
@@ -105,17 +94,8 @@ const mockSources = new Map<string, string>([
   ['mock:payroll-scope', `export async function lockAndCheckPayrollRunPopulation() { throw new Error('not under test') }`],
   [
     'mock:payroll-run-adjustments',
-    'import { canonicalDecimal } from ' +
-      JSON.stringify(exactDecimalUrl) +
-      '\n' +
-      `
-      export function canonicalAdjustmentHours(value) {
-        if (value == null || value === "") return null
-        const exact = canonicalDecimal(value, 2)
-        if (exact === null || exact.startsWith("-")) return null
-        if (exact.replace(/^[+]/, "").split(".")[0].replace(/^0+/, "").length > 10) return null
-        return exact
-      }
+    `
+      export { canonicalAdjustmentHours } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/payroll/run-adjustments.ts'))}
       const state = globalThis[Symbol.for('openbooks.payroll-run-id-refusals-test')]
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { changed: true } }
     `,
@@ -131,9 +111,8 @@ const hooks = registerHooks({
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
-    if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/run.ts') return { url: 'mock:payroll-run', shortCircuit: true }
+    if (['@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/payroll/payment.ts') return { url: 'mock:payroll-payment', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/payroll/readiness.ts') return { url: 'mock:payroll-readiness', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/payroll/approval.ts') return { url: 'mock:payroll-approval', shortCircuit: true }

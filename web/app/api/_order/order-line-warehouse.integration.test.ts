@@ -23,7 +23,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
 const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/testing/database-bypass.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
-const { receiveInventory } = await import("@openbooks/engine/src/inventory/inventory.ts");
+const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
 const {
   assignOrderLineWarehouse,
   createOrderDraft,

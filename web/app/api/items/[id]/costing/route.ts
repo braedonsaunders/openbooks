@@ -5,16 +5,10 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import {
-  InventoryError,
-  inventoryOffsetAccountProblem,
-  assertCostingPolicyChangeAllowed,
-  CostingPolicyChangeBlockedError,
-  lockItemInventoryProfile,
-  parseCostingMethod,
-  parseTrackingMode,
-  revalueOpenLayersToStandardCost,
-} from '@openbooks/engine/src/inventory/inventory.ts'
+import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
+import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode } from "@openbooks/engine/src/inventory/profile-policy.ts";
+import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'

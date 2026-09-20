@@ -22,6 +22,8 @@
  * those would trade a silent typo for a confident false refusal.
  */
 import { createRequire } from 'node:module'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 
 const requireFromWeb = createRequire(new URL('../web/package.json', import.meta.url))
 const ts = requireFromWeb('typescript')
@@ -106,48 +108,99 @@ export function entryContract(node) {
   return { props: [...props].sort(), open }
 }
 
-/** Every `'name': (props) => …` entry in a registry object literal. */
-export function registryContracts(source, declaration) {
-  const file = ts.createSourceFile('widgets.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-  let literal = null
-  const find = (node) => {
-    if (literal) return
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === declaration &&
-      node.initializer
-    ) {
-      // `X: Record<…> = { … }` — the initializer may be wrapped in `as`.
-      let init = node.initializer
-      while (ts.isAsExpression(init) || ts.isSatisfiesExpression(init)) init = init.expression
-      if (ts.isObjectLiteralExpression(init)) literal = init
-    }
-    ts.forEachChild(node, find)
-  }
-  ts.forEachChild(file, find)
-  if (!literal) throw new Error(`could not find the ${declaration} object literal`)
+/**
+ * Read a closed registry, following only statically named local registries.
+ * `filename` is required for imported adapters; no component is evaluated.
+ * Unknown references, duplicates and cycles refuse instead of silently making
+ * an extracted renderer's prop contract open.
+ */
+export function registryContracts(source, declaration, filename) {
+  const files = new Map()
+  const active = new Set()
+  const cache = new Map()
 
-  const contracts = {}
-  for (const property of literal.properties) {
-    if (!ts.isPropertyAssignment(property)) {
-      // A shorthand or spread inside the registry itself would mean entries
-      // this cannot see; refuse rather than silently under-report.
-      throw new Error('the widget registry must be a literal of `name: renderer` pairs')
+  const parse = (text, name) => {
+    const file = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const declarations = new Map()
+    const imports = new Map()
+    for (const statement of file.statements) {
+      if (ts.isVariableStatement(statement)) {
+        for (const item of statement.declarationList.declarations) {
+          if (ts.isIdentifier(item.name)) declarations.set(item.name.text, item.initializer)
+        }
+      }
+      if (ts.isImportDeclaration(statement) && statement.importClause?.namedBindings &&
+          ts.isNamedImports(statement.importClause.namedBindings)) {
+        for (const item of statement.importClause.namedBindings.elements) {
+          imports.set(item.name.text, {
+            name: (item.propertyName ?? item.name).text,
+            path: statement.moduleSpecifier.text,
+          })
+        }
+      }
     }
-    const key = ts.isStringLiteralLike(property.name) || ts.isIdentifier(property.name)
-      ? property.name.text
-      : null
-    if (key === null) throw new Error('a widget entry has a computed name')
-    const fn = property.initializer
-    if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) {
-      // Not a function literal — its props cannot be read here.
-      contracts[key] = { props: [], open: true }
-      continue
-    }
-    contracts[key] = entryContract(fn)
+    const context = { filename: name, declarations, imports }
+    files.set(name, context)
+    return context
   }
-  return contracts
+
+  const root = parse(source, filename ? resolve(filename) : 'widgets.tsx')
+  const unwrap = (node) => {
+    while (node && (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node))) node = node.expression
+    return node
+  }
+  const namedRegistry = (context, name) => {
+    if (context.declarations.has(name)) return readRegistry(context, name)
+    const imported = context.imports.get(name)
+    if (!imported || !filename || !imported.path.startsWith('.')) {
+      throw new Error(`cannot resolve widget registry ${name} in ${context.filename}`)
+    }
+    const base = resolve(dirname(context.filename), imported.path)
+    const target = [base + '.tsx', base + '.ts', base].find((candidate) => existsSync(candidate))
+    if (!target) throw new Error(`cannot find widget registry module ${imported.path}`)
+    const next = files.get(target) ?? parse(readFileSync(target, 'utf8'), target)
+    return readRegistry(next, imported.name)
+  }
+  const rendererContract = (context, value) => {
+    const node = unwrap(value)
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return entryContract(node)
+    if ((ts.isElementAccessExpression(node) || ts.isPropertyAccessExpression(node)) && ts.isIdentifier(node.expression)) {
+      const key = ts.isPropertyAccessExpression(node) ? node.name.text
+        : ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null
+      if (key === null) throw new Error('a widget adapter has a computed name')
+      const entries = namedRegistry(context, node.expression.text)
+      if (!Object.hasOwn(entries, key)) throw new Error(`missing widget adapter ${node.expression.text}['${key}']`)
+      return entries[key]
+    }
+    throw new Error(`cannot statically read widget renderer in ${context.filename}: ${node.getText()}`)
+  }
+  const readRegistry = (context, name) => {
+    const id = `${context.filename}#${name}`
+    if (active.has(id)) throw new Error(`circular widget registry reference: ${id}`)
+    if (cache.has(id)) return cache.get(id)
+    const literal = unwrap(context.declarations.get(name))
+    if (!literal || !ts.isObjectLiteralExpression(literal)) throw new Error(`could not find the ${name} object literal in ${context.filename}`)
+    active.add(id)
+    const contracts = {}
+    const add = (key, contract) => {
+      if (Object.hasOwn(contracts, key)) throw new Error(`duplicate widget registry key: ${key} in ${id}`)
+      Object.defineProperty(contracts, key, { value: contract, enumerable: true })
+    }
+    for (const property of literal.properties) {
+      if (ts.isSpreadAssignment(property) && ts.isIdentifier(property.expression)) {
+        for (const [key, contract] of Object.entries(namedRegistry(context, property.expression.text))) add(key, contract)
+        continue
+      }
+      if (!ts.isPropertyAssignment(property)) throw new Error('the widget registry must use named renderers or statically named registry spreads')
+      const key = ts.isStringLiteralLike(property.name) || ts.isIdentifier(property.name) ? property.name.text : null
+      if (key === null) throw new Error('a widget entry has a computed name')
+      add(key, rendererContract(context, property.initializer))
+    }
+    active.delete(id)
+    cache.set(id, contracts)
+    return contracts
+  }
+  return readRegistry(root, declaration)
 }
 
 export function generate(contracts) {

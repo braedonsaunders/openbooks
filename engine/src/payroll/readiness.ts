@@ -12,15 +12,9 @@ import {
   type ResolvedPaymentMethod,
 } from "./payment-method.ts";
 import { hasUsablePayRateSql } from "./rate.ts";
-import {
-  parsePayRunCalculationSource,
-  payRunCalculationSource,
-  payRunCalculationSourceChanges,
-  payRunCalculationSourceDigest,
-  payrollSettings,
-  payrollSubsidiaryScopeFilter,
-  type PayrollSubsidiaryScope,
-} from "./run.ts";
+import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
+import { payrollSettings } from "./run-setup.ts";
+import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
   jurisdictionKey,
   labourJurisdictionProblem,
@@ -46,7 +40,13 @@ import {
   type StatutoryRatePoint,
   type UnconfiguredStatutoryRate,
 } from "./statutory-rates.ts";
-import { packRates, payrollTaxYearForDate, payrollTaxYearProblem } from "./packs.ts";
+import {
+  packRates,
+  PayrollJurisdictionError,
+  payrollTaxYearForDate,
+  payrollTaxYearOperatorMessage,
+  payrollTaxYearProblem,
+} from "./packs.ts";
 import {
   employeeFactsFor,
   missingEmployeeFacts,
@@ -306,6 +306,45 @@ export interface PayrollSetupState {
  * installedPayrollCountries, the pack vendor declarations) is the same one
  * the run pre-flight reads, so the two surfaces cannot disagree.
  */
+/**
+ * One installed pack's statutory-table setup check: the CHECK the setup
+ * surface reads (code, verdict, detail, href as one object), so tests can
+ * assert on what the operator sees rather than on the composer's fields.
+ * Pure in (country, today) — no database — which is what makes that
+ * assertion possible outside the DB partition.
+ */
+export function setupTaxYearCheck(
+  country: string,
+  today: string,
+  setupHref: string,
+): PayrollSetupCheck {
+  // Operator text: the packs tab shows each pack's published coverage but
+  // offers no action that loads an unpublished year, so the detail must
+  // not prescribe the developer's scaffold script. The developer remedy
+  // stays on `problem.message` for engine throws and logs.
+  try {
+    const { taxYear, problem } = payrollTaxYearForDate(country, today);
+    return {
+      severity: "blocker", code: "setup.taxYear", ok: problem === null,
+      detail: problem ? problem.operatorMessage : `${country} · ${taxYear}`,
+      href: `${setupHref}?tab=packs`,
+    };
+  } catch (error) {
+    // No pack ⇒ the year lookup throws out of the pack registry before the
+    // composer (and its undeclared branch) is reached. That throw is a
+    // jurisdiction error, not the refusal the setup surface must show:
+    // return the undeclared blocker instead, in the year-free form (no pack
+    // ⇒ no year arithmetic). Anything else rethrows — only the unknown-pack
+    // case converts. A crash becomes a refusal; nothing payable widens.
+    if (!(error instanceof PayrollJurisdictionError)) throw error;
+    return {
+      severity: "blocker", code: "setup.taxYear", ok: false,
+      detail: payrollTaxYearOperatorMessage(country, country, null, "undeclared", []),
+      href: `${setupHref}?tab=packs`,
+    };
+  }
+}
+
 export async function payrollSetupState(
   orgId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
@@ -397,12 +436,7 @@ export async function payrollSetupState(
   // and January is exactly when nobody wants to discover that mid-payroll.
   const today = await businessToday(orgId);
   for (const country of installed) {
-    const { taxYear, problem } = payrollTaxYearForDate(country, today);
-    checks.push({
-      severity: "blocker", code: "setup.taxYear", ok: problem === null,
-      detail: problem ? problem.message : `${country} · ${taxYear}`,
-      href: `${setupHref}?tab=packs`,
-    });
+    checks.push(setupTaxYearCheck(country, today, setupHref));
   }
 
   // Destination remittance schedules: the frequency each scheduled
@@ -580,12 +614,20 @@ export async function payRunReadiness(
     const taxYearFailures = new Set<string>();
     for (const { country, region } of jurisdictionsInRun.values()) {
       const problem = payrollTaxYearProblem(country, run.tax_year, region);
-      if (!problem || taxYearFailures.has(problem.message)) continue;
-      taxYearFailures.add(problem.message);
+      // Dedup on the DISPLAYED string: entries rendering identical operator
+      // text are one blocker to the operator even when the developer strings
+      // differ (the undeclared message names no year, so two years of it
+      // would otherwise collapse callers that do pass a year along).
+      if (!problem || taxYearFailures.has(problem.operatorMessage)) continue;
+      taxYearFailures.add(problem.operatorMessage);
       flag(
         "blocker", "statutory.taxYear",
         people.filter((p) => p.country === country && (region === null || p.province === region)),
-        { detail: problem.message, href: `${setupHref}?tab=packs` },
+        // Operator text: the packs tab shows each pack's published coverage
+        // but offers no action that loads an unpublished year, so the detail
+        // must not prescribe the developer's scaffold script. The developer
+        // remedy stays on `problem.message` for engine throws and logs.
+        { detail: problem.operatorMessage, href: `${setupHref}?tab=packs` },
       );
     }
 

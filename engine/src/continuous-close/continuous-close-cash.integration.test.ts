@@ -6,7 +6,7 @@ import { defaultContinuousCloseDetectors } from "../agents/continuous-close-conf
 import { businessToday } from "../platform/business-date.ts";
 import { db, withBypassContext } from "../platform/db.ts";
 import { cashFindings } from "../agents/cash.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**

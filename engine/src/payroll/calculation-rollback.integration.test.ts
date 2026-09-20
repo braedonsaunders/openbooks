@@ -3,7 +3,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool, withOrgTransaction } from "../platform/db.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
-import { calculatePayRun, commitPayRun } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { cmp } from "../money/money.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 

@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "Beschäftigungsdaten anzeigen",
+    "hrm_leave_read": "Urlaubsdaten anzeigen",
+    "hrm_leave_request": "Urlaub für das eigene Beschäftigungsverhältnis beantragen",
+    "hrm_leave_approve": "Urlaubsanträge entscheiden",
+    "hrm_leave_manage": "Urlaubsarten und -richtlinien konfigurieren",
     "hrm_employment_manage": "Beschäftigungsänderungen erfassen",
     "hrm_employment_approve": "Beschäftigungsänderungen entscheiden",
+    "hrm_position_read": "Positionen und Personalplan anzeigen",
+    "hrm_position_manage": "Positionen anlegen, ändern, finanzieren und schließen",
     "groups": {
       "hrm": "Personalwesen",
       "gl": "Hauptbuch",
@@ -962,7 +968,9 @@
     "compliance_waive": "Compliance-Ausnahmen gewähren",
     "payroll_manage": "Lohnabrechnung und Mitarbeiterprofile konfigurieren",
     "payroll_read": "Lohnläufe und Abrechnungen anzeigen",
-    "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben"
+    "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben",
+    "hrm_process_read": "Prozess-Checklisten anzeigen",
+    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2468,6 +2476,26 @@
       "extension-settings": {
         "title": "App-Einstellungen",
         "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten."
+      },
+      "leave-types": {
+        "title": "Urlaubsarten",
+        "singularTitle": "Urlaubsart",
+        "description": "Freistellungsarten Ihres Unternehmens — Urlaub, Krankheit, unbezahlt — und welche Abrechnung jede auslöst. Gehaltskonten werden nicht hier konfiguriert."
+      },
+      "leave-policies": {
+        "title": "Urlaubsrichtlinien",
+        "singularTitle": "Urlaubsrichtlinie",
+        "description": "Wie viel Zeit jede Art ansammelt, für wen sie gilt und wie viel Vorlauf sie braucht. Anspruch in Zeit; der Geldwert wird vom Lohnlauf berechnet."
+      },
+      "hrm-process-templates": {
+        "title": "Prozessvorlagen",
+        "singularTitle": "Prozessvorlage",
+        "description": "Checklisten für Eintritt, Austritt und Versetzung: Schritte, Verantwortliche, Fälligkeitsversatz und Nachweise, mit denen ein Prozess startet."
+      },
+      "hrm-process-template-steps": {
+        "title": "Prozessvorlagen-Schritte",
+        "singularTitle": "Prozessvorlagen-Schritt",
+        "description": "Ein geordneter Schritt einer Prozessvorlage mit Verantwortlichem, Fälligkeitsversatz und Nachweisregel."
       }
     },
     "fields": {
@@ -2734,7 +2762,30 @@
       "dateBasis": "Datumsbasis",
       "unitsTotal": "Gesamteinheiten",
       "network": "Netzwerk",
-      "lastFour": "Letzte vier"
+      "lastFour": "Letzte vier",
+      "templateId": "Vorlage",
+      "position": "Reihenfolge",
+      "title": "Titel",
+      "ownerKind": "Verantwortlich",
+      "ownerPartyId": "Verantwortliche Partei",
+      "dueOffsetDays": "Fälligkeitsversatz (Tage)",
+      "required": "Erforderlich",
+      "evidenceKind": "Nachweis",
+      "appliesEmployerSubsidiaryId": "Gilt für Tochtergesellschaft",
+      "appliesDepartmentId": "Gilt für Abteilung",
+      "paid": "Bezahlt",
+      "valueCrossing": "Abrechnung löst aus",
+      "requiresAttachment": "Nachweis erforderlich",
+      "leaveTypeId": "Urlaubsart",
+      "minimumNoticeDays": "Mindestvorlauf (Tage)",
+      "accrualRule": "Ansammlungsregel (JSON)",
+      "carryoverRule": "Übertragsregel (JSON)",
+      "accrualKind": "Ansammlung",
+      "accrualHours": "Ansammlungsstunden",
+      "accrualPeriodsPerYear": "Ansammlungsperioden pro Jahr",
+      "carryoverKind": "Übertrag",
+      "carryoverHours": "Übertragsgrenze (Stunden)",
+      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2786,7 +2837,18 @@
       "protectionPriority": "Welche Reihenfolge gewinnt, wenn mehrere geschützte Abzüge um denselben Lohn konkurrieren. Niedrigste zuerst; Unterhaltstitel haben normalerweise Vorrang vor gewöhnlichen Gläubigern.",
       "requiresExpiry": "Ein für Versicherungen; aus für ein W-9, das nicht abläuft.",
       "requiresVerification": "Wer ein Zertifikat erfasst, darf niemals derjenige sein, der es verifiziert.",
-      "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft."
+      "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft.",
+      "hrmProcessAppliesSubsidiary": "Leer bedeutet: Die Vorlage gilt für alle Tochtergesellschaften.",
+      "hrmProcessAppliesDepartment": "Leer bedeutet: Die Vorlage gilt für alle Abteilungen.",
+      "leaveValueCrossing": "Welchen Lohnlauf-Input ein genehmigter Fehltag erzeugt. „Keine“ berührt nie die Lohnkonten; Auszahlung und Gutschrift werden als Stunden übergeben, die der Lauf bepreist.",
+      "leaveAppliesSubsidiary": "Leer bedeutet, die Richtlinie gilt für jede Tochtergesellschaft.",
+      "leaveAppliesDepartment": "Leer bedeutet, die Richtlinie gilt für jede Abteilung.",
+      "leaveAccrualKind": "Wie Zeit verdient wird: keine, pro Periode, pro Jahr oder unbegrenzt.",
+      "leaveAccrualHours": "Verdiente Stunden pro Periode oder pro Jahr (für diese Arten erforderlich).",
+      "leaveAccrualPeriodsPerYear": "Ganze Perioden in einem Ansammlungsjahr (für Ansammlung pro Periode erforderlich).",
+      "leaveCarryoverKind": "Was mit ungenutzter Zeit zum Jahresende geschieht: nichts, alles übertragen oder bis zu einer Grenze.",
+      "leaveCarryoverHours": "Höchstens übertragene Stunden (für „bis zu einer Grenze“ erforderlich).",
+      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall."
     },
     "options": {
       "timeClassification": {
@@ -3123,6 +3185,38 @@
         "accelerated2": "Beschleunigt – Schwelle 2",
         "quarterly": "Quartalsweise",
         "regular": "Regulär (monatlich)"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Einarbeitung",
+        "offboarding": "Austritt",
+        "transfer": "Versetzung"
+      },
+      "hrmStepOwner": {
+        "manager": "Vorgesetzte(r)",
+        "hr": "Personal",
+        "employee": "Mitarbeiter",
+        "namedParty": "Benannte Person"
+      },
+      "hrmStepEvidence": {
+        "none": "Keine",
+        "acknowledgement": "Bestätigung",
+        "attachment": "Anhang"
+      },
+      "leaveValueCrossing": {
+        "none": "Keine — unbezahlt oder gehaltsbasiert",
+        "payout": "Auszahlung aus dem Konto",
+        "bankIn": "Gutschrift als Ersatzzeit"
+      },
+      "leaveAccrualKind": {
+        "none": "Keine",
+        "per_period": "Pro Periode",
+        "per_year": "Pro Jahr",
+        "unlimited": "Unbegrenzt"
+      },
+      "leaveCarryoverKind": {
+        "none": "Keiner",
+        "carry_all": "Alles übertragen",
+        "carry_up_to": "Bis zu einer Grenze übertragen"
       }
     },
     "bankFeeds": {

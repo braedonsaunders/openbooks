@@ -13,7 +13,8 @@ const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../lib/hrm/home.ts", import.meta.url), "utf8");
-const widgets = readFileSync(new URL("../../../components/viewspec/widgets.tsx", import.meta.url), "utf8");
+const widgets = readFileSync(new URL("../../../components/viewspec/widgets-home.tsx", import.meta.url), "utf8");
+const hrmWidgets = readFileSync(new URL("../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
 const contracts = readFileSync(new URL("../../../components/viewspec/widget-contracts.ts", import.meta.url), "utf8");
 const names = readFileSync(new URL("../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
 const groupTabs = readFileSync(new URL("../../../components/module-home/group-tabs.ts", import.meta.url), "utf8");
@@ -34,7 +35,9 @@ test("cockpit renders through ModuleView with a loader-owned spec", () => {
   assert.match(view, /hrmSpec/, "view exposes the spec builder");
   assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
   assert.match(view, /statTile\(/, "vitals render as house stat tiles");
-  assert.match(view, /hrm-headcount-table/, "headcount hero renders through the shared widget");
+  assert.match(view, /table\(\{/, "headcount hero composes a table block, not a bespoke component");
+  assert.match(view, /variant: 'app'/, "cockpit tables use the shared app primitives");
+  assert.match(view, /f\('groups'\)/, "headcount hero binds the loader-resolved rows");
   assert.match(view, /directory-section/, "rail reuses the shared directory section, never a copy");
 });
 
@@ -67,20 +70,27 @@ test("the loader's scoped display queries stay org-predicated and scope-filtered
   assert.match(loader, /loadQueueLabels\(/, "name resolution reuses the queue's shared resolver, never a second join");
 });
 
-test("headcount table carries its empty state and never invents copy", () => {
-  assert.match(sections, /groups\.length === 0/, "zero headcount renders the resolved empty state");
-  assert.match(sections, /unassigned/, "assignments without a department stay explicitly unattributed");
-  assert.match(widgets, /'hrm-headcount-table'/, "widget renders the shared section, never a second copy");
-  assert.match(contracts, /'hrm-headcount-table': \{ props: \[/, "widget contract pins the prop surface");
-  assert.match(names, /'hrm-headcount-table'/, "widget name is registered");
+test("cockpit hero is a table block; the bespoke headcount table is gone with the departments page", () => {
+  // The cockpit hero renders through the shared `table` block over
+  // loader-resolved rows; the hand-rolled HrmHeadcountTable and its widget
+  // left with the Departments page (departments live in Company setup).
+  assert.match(view, /table\(\{/, "cockpit hero composes a table block");
+  assert.match(view, /f\('groups'\)/, "hero binds the loader-resolved headcount rows");
+  assert.match(view, /empty: \{ title: f\('groupsEmpty'\) \}/, "zero headcount renders the resolved empty state");
+  assert.match(loader, /departmentLabel/, "department display resolves in the loader, never in render");
+  assert.match(loader, /totalValue/, "the totals row resolves formatted strings in the loader");
+  assert.match(loader, /unassigned/, "assignments without a department stay explicitly unattributed");
+  assert.doesNotMatch(widgets, /'hrm-headcount-table'/, "no bespoke headcount widget remains");
+  assert.doesNotMatch(contracts, /'hrm-headcount-table'/, "no contract for a widget nobody renders");
+  assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the cockpit sections");
 });
 
 test("the cockpit keeps its hero and adds the workspace panels", () => {
-  for (const widget of ['hrm-headcount-table', 'hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness', 'directory-section']) {
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'attention-list', 'trend-chart', 'directory-section']) {
     assert.match(view, new RegExp(`'${widget}'`), `cockpit composes the ${widget} body`);
   }
-  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness']) {
-    assert.match(widgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes']) {
+    assert.match(hrmWidgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
     assert.match(contracts, new RegExp(`'${widget}': \\{ props: \\[`), `${widget} contract pins the prop surface`);
     assert.match(names, new RegExp(`'${widget}'`), `${widget} name is registered`);
   }
@@ -97,6 +107,20 @@ test("quick actions stay permission-gated and the readiness panel links migratio
   assert.ok(strings.includes("never list here"), "the upcoming panel states probation ends are not modeled");
 });
 
+test("vacancy rides the cockpit as a shared table block", () => {
+  assert.match(view, /table\(\{/, "vacancy renders through the shared table block");
+  assert.match(view, /f\('positions\.groups'\)/, "vacancy binds the loader-resolved by-department rows");
+  assert.match(view, /variant: 'app'/, "vacancy uses the shared app table primitives");
+  assert.ok(!/'hrm-vacancy-table'/.test(view), "no vacancy widget remains in the spec");
+  assert.ok(!/'hrm-vacancy-table'/.test(hrmWidgets), "vacancy widget is deleted, never dead code");
+  assert.ok(!/'hrm-vacancy-table'/.test(contracts), "vacancy widget contract is gone");
+  assert.ok(!/'hrm-vacancy-table'/.test(names), "vacancy widget name is unregistered");
+  assert.match(loader, /getVacancyAsOf/, "vacancy resolves through the canonical position read service");
+  assert.ok(!/from positions[^_]/.test(loader), "loader issues no direct position table reads");
+  assert.ok(!/from position_versions/.test(loader), "loader issues no direct version reads");
+  assert.ok(!/from position_funding/.test(loader), "loader issues no direct funding reads");
+});
+
 test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrm: \[/, "the HRM strip is defined once per nav group");
   assert.match(groupTabs, /href: '\/hrm'/, "strip lands on the cockpit");
@@ -105,27 +129,39 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrmGroupTabs/, "permission exclusions stay at one call site");
 });
 
-test("hrm route tabs cover the whole workspace, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/change-requests', '/hrm/departments', '/hrm/reports']) {
+test("hrm route tabs are the five working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
-  for (const href of ['/hrm/change-requests', '/hrm/departments', '/hrm/reports']) {
-    assert.match(groupTabs, new RegExp(`'${href.replace(/\//g, '\\/')}': 'hrm'`), `${href} tab hides while the feature switch is off`);
+  // Demoted by review: the queue is reached from the cockpit and the employee
+  // drawer, self-service leave is a quick action, departments are configured
+  // in Company setup, and workforce reports live in the Reports module.
+  for (const href of ['/hrm/change-requests', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
+    assert.doesNotMatch(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `${href} is not a tab`);
   }
-  assert.match(groupTabs, /'\/hrm\/change-requests': 'hrm\.employment\.read'/, "queue tab hides without the employment read grant");
-  assert.match(groupTabs, /'\/hrm\/departments': 'hrm\.employment\.read'/, "departments tab hides without the employment read grant");
-  assert.match(groupTabs, /'\/hrm\/reports': 'reports\.read'/, "reports tab hides without the reports grant");
+  assert.match(groupTabs, /'\/hrm\/positions': 'hrm\.position\.read'/, "positions tab hides without the headcount-plan read grant");
+  assert.match(groupTabs, /'\/hrm\/processes': 'hrm\.process\.read'/, "processes tab hides without the process read grant");
+  assert.match(groupTabs, /'\/hrm\/leave': 'hrm\.leave\.read'/, "leave desk tab hides without the leave read grant");
+  assert.match(groupTabs, /'\/entities\/employees': 'parties\.read'/, "employees tab hides without the parties grant");
 });
 
-test("hrm is registered as a default-off feature with its nav module", () => {
+test("the employees list carries the same HRM strip", () => {
+  const employees = readFileSync(new URL("../entities/[role]/view.ts", import.meta.url), "utf8");
+  assert.match(employees, /slug === 'employees' && canReadHrm[\s\S]*?hrmGroupTabs\(authz, '\/entities\/employees'\)/, "the native employee list renders the HRM strip when the workspace exists for the viewer");
+});
+
+test("hrm is registered as a default-off feature with ONE nav module", () => {
   assert.match(featureRegistry, /key: 'hrm', defaultEnabled: false/, "hrm defaults off on the Features switchboard");
+  assert.match(featureRegistry, /navModules: \['hrm'\]/, "the feature owns exactly the cockpit module");
   assert.match(navRegistry, /key: 'hrm',\n    href: '\/hrm'/, "nav module opens the cockpit");
   assert.match(navRegistry, /requiredPermission: 'hrm\.employment\.read'/, "nav module carries the read boundary");
   assert.match(navRegistry, /featureKey: 'hrm'/, "nav module hides while the feature is off");
+  // Working surfaces are tabs on the cockpit, not sidebar modules of their
+  // own: a second Departments entry beside Company setup's and a second
+  // Reports entry beside the Reports module were the confusion under review.
   for (const key of ['hrm-change-requests', 'hrm-departments', 'hrm-reports']) {
-    assert.match(navRegistry, new RegExp(`key: '${key}'`), `${key} is a nav module like banking-cash`);
+    assert.doesNotMatch(navRegistry, new RegExp(`key: '${key}'`), `${key} is not a nav module`);
   }
-  assert.match(navRegistry, /key: 'hrm-reports',[\s\S]*?requiredPermission: 'reports\.read'/, "the reports surface carries the builder's grant");
   assert.ok(navStrings.includes('"hrm": "Human Resources"'), "sidebar label resolves from the catalog");
 });
 
@@ -133,9 +169,14 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
   for (const key of [
     "home.title",
     "home.vitals.headcount",
+    "home.vitals.openPositions",
+    "home.trend.title",
+    "home.attention.title",
     "home.groups.title",
     "home.groups.unassigned",
     "home.groups.empty",
+    "home.vacancy.title",
+    "home.vacancy.empty",
     "home.directory.title",
   ]) {
     assert.ok(strings.includes(`"${key.split(".").pop()}"`), `en/hrm carries ${key}`);

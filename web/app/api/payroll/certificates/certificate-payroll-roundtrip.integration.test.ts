@@ -24,9 +24,7 @@ registerHooks({
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
-const {
-  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
-} = await import('@openbooks/engine/src/payroll/run.ts')
+const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
 const DB = !!process.env.OPENBOOKS_DB_URL

@@ -36,7 +36,7 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { isDocumentRevisionToken } = await import('@openbooks/engine/src/records/revision.ts')
-const { encryptAccountNumber } = await import('@openbooks/engine/src/payments/payments.ts')
+const { encryptAccountNumber } = await import("@openbooks/engine/src/payments/rail-settings.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors, seedApprovalFlow } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
 const { decideGate } = await import('@openbooks/engine/src/flows/gates.ts')

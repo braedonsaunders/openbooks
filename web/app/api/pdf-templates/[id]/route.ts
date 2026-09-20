@@ -5,7 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
-import { isDocKindEnabled } from "../../../../lib/documents";
+import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
 import { getPdfTemplate } from "../../../../lib/pdf-templates/store";

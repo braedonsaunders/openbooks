@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync(new URL("./posting.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("./posting-subsidiaries.ts", import.meta.url), "utf8");
 
 // The posting engine's spot lookup unions the direct quote with the inverted
 // quote. Provider syncs write every directed pair for one as_of, so ties are

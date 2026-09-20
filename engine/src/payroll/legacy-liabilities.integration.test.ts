@@ -5,7 +5,7 @@ import {sql} from 'drizzle-orm';
 import {db} from '../platform/db.ts';
 import {seedAdoption,calculatedRun} from './filing-test-fixtures.ts';
 import {dropScratchOrgReporting} from '../testing/fixtures.ts';
-import {commitPayRun} from './run.ts';
+import { commitPayRun } from "./run-commit.ts";
 import {createRemittanceBill,payrollRemittanceSummary} from './remittance.ts';
 
 test('unknown legacy liability accounts cannot follow setup changes or generate remittance bills',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{

@@ -9,8 +9,8 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
-const { createPaymentDocument, updateDraftPayment, postPaymentWithApplications } = await import('@openbooks/engine/src/payments/payments.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { createPaymentDocument, updateDraftPayment } = await import("@openbooks/engine/src/payments/payment-documents.ts"), { postPaymentWithApplications } = await import("@openbooks/engine/src/payments/payment-posting.ts");
 const { partnerStatement } = await import('./reports/registers.ts')
 const { exportDataToCsv, partnerStatementExportData } = await import('./report-pdf.ts')
 

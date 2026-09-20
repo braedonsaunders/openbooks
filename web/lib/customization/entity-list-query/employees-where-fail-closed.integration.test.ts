@@ -19,13 +19,16 @@ registerHooks({
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { employeeWhere } = await import("./employment-directory.ts");
+const { employeeBaseJoins, employeeWhere } = await import("./employment-directory.ts");
 const { defaultListView } = await import("@openbooks/customization");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+const TODAY = "2026-09-20";
 
 type Filter = { key: string; operator: string; value?: string | string[] | null };
 
+// The real page shape: the employment joins AND hrmEnabled: true, both from
+// the same caller decision (entity-list-view passes hrmOn to each).
 async function employeeCount(
   orgId: string,
   viewFilters: Filter[] = [],
@@ -33,7 +36,34 @@ async function employeeCount(
 ): Promise<number> {
   const rows = (
     await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
-      where ${employeeWhere({ ...defaultListView("employee"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`)
+      ${employeeBaseJoins(true, TODAY, null)}
+      where ${employeeWhere(
+        { ...defaultListView("employee"), filters: viewFilters as never },
+        { filters: adhocFilters, hrmEnabled: true },
+        orgId,
+        null,
+      )}`)
+  ).rows;
+  return rows[0]!.n;
+}
+
+// A caller that emits NO joins and says nothing about HRM (hrmEnabled
+// undefined): the builder must fail closed to matching nothing, never emit
+// emp.* into a query whose FROM never made that table.
+async function employeeCountWithoutJoins(
+  orgId: string,
+  viewFilters: Filter[] = [],
+  adhocFilters: Record<string, string> = {},
+  hrmEnabled?: boolean,
+): Promise<number> {
+  const rows = (
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+      where ${employeeWhere(
+        { ...defaultListView("employee"), filters: viewFilters as never },
+        { filters: adhocFilters, hrmEnabled },
+        orgId,
+        null,
+      )}`)
   ).rows;
   return rows[0]!.n;
 }
@@ -74,6 +104,39 @@ test("malformed employee-directory filters match nothing instead of throwing", {
       ),
       0,
       "well-formed unknown department stays empty without throwing",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+test("directory filters without the joins fail closed to nothing instead of a SQL error", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    assert.ok((await employeeCountWithoutJoins(org.orgId)) >= 0, "no filter, no joins: the base list still counts");
+    // The caller said nothing: undefined must read as off.
+    // Annotated: an array of differing object literals infers a UNION whose
+    // members carry optional-undefined siblings, and `undefined` is not
+    // assignable to a Record<string, string> index signature.
+    const unstated: Record<string, string>[] = [
+      { department: "unassigned" },
+      { employment_status: "active" },
+      { employer: org.orgId },
+    ];
+    for (const adhoc of unstated) {
+      assert.equal(await employeeCountWithoutJoins(org.orgId, [], adhoc), 0, `${JSON.stringify(adhoc)} matches nothing without the joins`);
+    }
+    // The caller said off: same answer, by the same predicate.
+    assert.equal(
+      await employeeCountWithoutJoins(org.orgId, [{ key: "department", operator: "eq", value: "unassigned" }], {}, false),
+      0,
+      "a stale saved-view filter with HRM off matches nothing",
+    );
+    assert.equal(
+      await employeeCountWithoutJoins(org.orgId, [], { employment_status: "no_employment" }, false),
+      0,
+      "an HRM-off quick filter matches nothing",
     );
   } finally {
     await dropScratchOrg(org.orgId);

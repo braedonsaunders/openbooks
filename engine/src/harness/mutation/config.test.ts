@@ -9,11 +9,16 @@ const REPO_ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/
 // The assignment's curated scope: every one of these areas must be covered.
 const REQUIRED_COVERAGE = [
   "engine/src/money/money.ts",
-  "engine/src/ledger/posting.ts",
+  "engine/src/ledger/posting-prepare.ts",
+  "engine/src/ledger/posting-commit.ts",
+  "engine/src/ledger/posting-replay.ts",
   "engine/src/ledger/posting-effects.ts",
   "engine/src/sync/applications.ts",
-  "engine/src/payments/payments.ts",
-  "engine/src/payroll/run.ts",
+  "engine/src/payments/payment-documents.ts",
+  "engine/src/payments/payment-queries.ts",
+  "engine/src/payments/settlement-policy.ts",
+  "engine/src/payroll/run-calculation.ts",
+  "engine/src/payroll/run-earning-lines.ts",
   "engine/src/tax/tax.ts",
   "engine/src/tax-returns/return.ts",
   "engine/src/consolidation/consolidation.ts",
@@ -45,10 +50,10 @@ test("checked-in config covers the curated scope and every referenced file exist
 
 test("scoped targets carry line ranges (allocation math, stub assembly)", () => {
   const config = loadMutationConfig();
-  const payments = config.targets.find((t) => t.path === "engine/src/payments/payments.ts");
-  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run.ts");
-  assert.ok(payments?.lineRanges && payments.lineRanges.length > 0, "payments.ts scoped to allocation/application math");
-  assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "payroll-run.ts scoped to stub assembly + employer accruals");
+  const payments = config.targets.find((t) => t.path === "engine/src/payments/settlement-policy.ts");
+  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run-earning-lines.ts");
+  assert.ok(payments?.lineRanges && payments.lineRanges.length > 0, "settlement-policy.ts scoped to allocation/application math");
+  assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "run-earning-lines.ts scoped to earning assembly + employer accruals");
 });
 
 test("parseMutationConfig rejects malformed configs", () => {
@@ -88,4 +93,14 @@ test("unmapped targets fall back to same-directory tests, never the harness itse
   assert.ok(!fallback.some((f) => f.includes("mutation-") || f.includes("harness-selfcheck")));
   // Curated entries win over the fallback.
   assert.deepEqual(resolveTargetTests(config, "engine/src/money/money.ts", REPO_ROOT), ["engine/src/money/money.test.ts"]);
+});
+
+
+test("database requirements need a code-grounded reason, never a bare exemption", () => {
+  for (const reason of [undefined, "", "   "]) {
+    assert.throws(() => parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] })), /needsDbReason/);
+  }
+  const reason = "Coordinates journal writes and locked persisted source rows";
+  const config = parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] }));
+  assert.equal(config.targets[0]?.needsDbReason, reason);
 });

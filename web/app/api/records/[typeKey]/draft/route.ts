@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { resolveDefaultValue, type FieldValueMap } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
-import { nextDocumentNumber } from '../../../../../lib/bills'
+import { nextDocumentNumber } from "../../../../../lib/bills.ts";
 import { buildSearchText, hasSubsidiaryField, inTypeAudience, loadRecordTypeByKey } from '../../../../../lib/records'
 import {
   lintRecordFields,

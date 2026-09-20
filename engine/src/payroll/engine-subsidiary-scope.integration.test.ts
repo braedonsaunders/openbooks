@@ -5,13 +5,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { openingBalancesForYear } from "./opening-balances.ts";
-import {
-  payrollSettings,
-  seedPayrollComponents,
-  statutoryHolidayLinesForStub,
-  statutoryHolidayPayEnabled,
-  payrollSubsidiaryInScope,
-} from "./run.ts";
+import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "./run-setup.ts";
+import { statutoryHolidayLinesForStub } from "./run-stub-records.ts";
+import { payrollSubsidiaryInScope } from "./scope.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -45,7 +41,9 @@ test("every shared payroll engine entry point carries the caller scope to its bo
     "retro-store.ts",
     "payment.ts",
     "readiness.ts",
-    "run.ts",
+    "run-lifecycle.ts",
+    "run-calculation.ts",
+    "run-commit.ts",
   ];
   for (const file of files) {
     const text = source(file);

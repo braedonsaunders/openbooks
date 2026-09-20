@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createRemittanceBill, payrollRemittanceSummary } from "./remittance.ts";
-import { commitPayRun } from "./run.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 

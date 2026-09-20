@@ -57,7 +57,7 @@ hooks.deregister();
 
 const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );

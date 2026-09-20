@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { setPeriodLockState } from "../close/close.ts";
+import { setPeriodLockState } from "../close/period-locks.ts";
 import { commenceLease, createLeaseAgreement, LeaseError, postDueLeaseSchedules } from "./leases.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 

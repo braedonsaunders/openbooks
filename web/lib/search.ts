@@ -3,7 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { Authz } from './authz'
 import { can } from './authz'
-import { disabledDocKinds } from './documents'
+import { disabledDocKinds } from "./documents.ts";
 import { isFeatureEnabled } from './features'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { JOURNAL_GL_NATIVE_ORIGINS } from './customization/entity-list-query/journal-entries'

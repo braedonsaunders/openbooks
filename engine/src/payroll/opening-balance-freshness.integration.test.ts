@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { saveOpeningBalances } from "./opening-balances.ts";
 import { payRunStaleness } from "./readiness.ts";
-import { calculatePayRun, commitPayRun } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { InventoryError, receiveInventory } from "./inventory.ts";
+import { InventoryError } from "./contracts.ts";
+import { receiveInventory } from "./movements.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

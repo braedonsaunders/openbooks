@@ -212,6 +212,65 @@ test("comparison-flip spares generic angle brackets but keeps spaced comparisons
   assert.deepEqual(descriptions(mutants), ["comparison '>' -> '>='", "comparison '<' -> '<='"]);
 });
 
+test("comparison-flip tells generic brackets from runtime comparisons, spaced or not", () => {
+  const source = [
+    "import { db } from \"./db.ts\";",
+    "type LedgerRow = Pick<typeof db, \"execute\">;",
+    "type FirstLimit = Parameters<typeof fetchLimit>[0];",
+    "export function settle(balance: bigint, cap: bigint, ledger: Map<string, bigint>): boolean {",
+    "  if(balance<cap) return true;",
+    "  return ledger.size>0;",
+    "}",
+    "",
+  ].join("\n");
+  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "comparison-flip");
+  // Generic openers/closers and the type-only `[0]` emit nothing; the two
+  // runtime comparisons mutate — including the unspaced `balance<cap`.
+  assert.deepEqual(descriptions(mutants), ["comparison '<' -> '<='", "comparison '>' -> '>='"]);
+  assert.ok(mutants[0]!.mutatedSource.includes("if(balance<=cap) return true;"));
+});
+
+test("arith-sign-flip keeps unary financial signs and unspaced runtime math", () => {
+  const source = [
+    "export function post(amount: bigint, fee: bigint): bigint {",
+    "  const debit = -amount;",
+    "  const credit = +fee;",
+    "  return debit+credit;",
+    "}",
+    "",
+  ].join("\n");
+  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "arith-sign-flip");
+  assert.deepEqual(descriptions(mutants), [
+    "arith '-' -> '+'",
+    "arith '+' -> '-'",
+    "arith '+' -> '-'",
+  ]);
+  assert.ok(mutants[0]!.mutatedSource.includes("const debit = +amount;"));
+  assert.ok(mutants[2]!.mutatedSource.includes("return debit-credit;"));
+});
+
+test("boundary-shift ignores type-only literal indices but keeps runtime limits", () => {
+  const source = [
+    "type FetchLimit = Parameters<typeof fetchLimit>[0];",
+    "export function take(items: string[]): string[] {",
+    "  const out: string[] = [];",
+    "  for (let i = 0; i < 10; i++) {",
+    "    out.push(items[i]!);",
+    "  }",
+    "  return out;",
+    "}",
+    "",
+  ].join("\n");
+  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "boundary-shift");
+  const desc = descriptions(mutants);
+  assert.ok(desc.includes("boundary '10' -> '11'"));
+  assert.ok(desc.includes("boundary '10' -> '9'"));
+  // The type-only `[0]` sits on a line the limit scan visits (via `<`), yet
+  // yields no probe: every surviving mutant is the runtime loop bound.
+  assert.equal(mutants.length, 4);
+  assert.ok(mutants.every((m) => m.line === 4));
+});
+
 test("early-return-before-write fires only under a provable void return type", () => {
   const source = [
     "export async function persist(db: { insert(x: number): void }): Promise<void> {",
@@ -274,4 +333,13 @@ test("maxPerOperator caps prolific operators deterministically", () => {
   assert.ok(byOperator(capped, "arith-sign-flip").length <= 5);
   const recapped = generateMutants("engine/src/probe.ts", source, { maxPerOperator: 5 });
   assert.deepEqual(capped.map((m) => m.key), recapped.map((m) => m.key));
+});
+
+
+test("negative literal types never become financial sign mutants", () => {
+  const source = "type Direction = -1 | 1;\nconst signed = -amount;\n";
+  const mutants = generateMutants("sign.ts", source).filter(m => m.operator === "arith-sign-flip");
+  assert.equal(mutants.length, 1);
+  assert.equal(mutants[0]?.line, 2);
+  assert.match(mutants[0]!.mutatedSource, /signed = \+amount/);
 });

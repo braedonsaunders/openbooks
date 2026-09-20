@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
-import { isDocKindEnabled } from '../../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 

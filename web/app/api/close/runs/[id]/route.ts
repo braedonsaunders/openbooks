@@ -1,14 +1,10 @@
 import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import {
-  attestOwnerManagedClose,
-  closeApprovedRun,
-  CloseError,
-  publishCloseRun,
-  requestCloseApproval,
-  refreshCloseRun,
-} from "@openbooks/engine/src/close/close.ts";
+import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
+import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
+import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

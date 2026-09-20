@@ -19,7 +19,7 @@ import { createRecord, deleteRecord, updateRecord, type WriteResult } from '@/li
 import {
   documentRevisionProjection,
   normalizeDocumentRecordRevisions,
-} from '@/lib/documents'
+} from '@openbooks/engine/src/records/document-edit-policy.ts'
 import { isUuid } from '@/lib/list-params'
 import { inTypeAudience, loadRecordTypeByKey } from '@/lib/records'
 

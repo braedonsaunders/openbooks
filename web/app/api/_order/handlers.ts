@@ -11,7 +11,7 @@ import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, exactOrderUnit
 import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
-import { persistLineTaxComponents } from '../../../lib/bills'
+import { persistLineTaxComponents } from "../../../lib/bills.ts";
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'

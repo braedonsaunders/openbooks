@@ -1,7 +1,8 @@
 import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { CloseError, updateCloseTask } from "@openbooks/engine/src/close/close.ts";
+import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
+import { updateCloseTask } from "@openbooks/engine/src/close/tasks.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
 import { isUuid } from "../../../../../../../lib/list-params";
 

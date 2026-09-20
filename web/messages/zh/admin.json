@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "查看雇用记录",
+    "hrm_leave_read": "查看休假记录",
+    "hrm_leave_request": "为本人雇佣关系申请休假",
+    "hrm_leave_approve": "审批休假申请",
+    "hrm_leave_manage": "配置休假类型和政策",
     "hrm_employment_manage": "编写雇用变更",
     "hrm_employment_approve": "决定雇用变更",
+    "hrm_position_read": "查看职位和人员编制计划",
+    "hrm_position_manage": "创建、修改、拨款和关闭职位",
     "groups": {
       "hrm": "人力资源",
       "gl": "总账",
@@ -962,7 +968,9 @@
     "compliance_manage": "记录证书、豁免与申报",
     "compliance_verify": "核验证书",
     "compliance_waive": "授予合规例外",
-    "compliance_file": "定稿并报送信息申报表"
+    "compliance_file": "定稿并报送信息申报表",
+    "hrm_process_read": "查看流程清单",
+    "hrm_process_manage": "创建、完成和取消流程清单"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2400,6 +2408,26 @@
       "extension-settings": {
         "title": "应用设置",
         "description": "配置已安装应用声明的设置。更改会保留原值及其生效日期。"
+      },
+      "leave-types": {
+        "title": "休假类型",
+        "singularTitle": "休假类型",
+        "description": "贵组织授予的休假种类——年假、病假、无薪假——以及每种触发的工资核算变动。工资余额不在此处配置。"
+      },
+      "leave-policies": {
+        "title": "休假政策",
+        "singularTitle": "休假政策",
+        "description": "每种休假累积多少时间、覆盖谁、需要多少提前通知。以时间为单位的权利；金额由工资核算计算。"
+      },
+      "hrm-process-templates": {
+        "title": "流程模板",
+        "singularTitle": "流程模板",
+        "description": "入职、离职和调动清单：流程开启时的步骤、负责人、到期偏移和证据要求。"
+      },
+      "hrm-process-template-steps": {
+        "title": "流程模板步骤",
+        "singularTitle": "流程模板步骤",
+        "description": "流程模板中的一个有序步骤，含负责人、到期偏移和证据规则。"
       }
     },
     "fields": {
@@ -2666,7 +2694,30 @@
       "dateBasis": "日期基准",
       "unitsTotal": "总单位数",
       "network": "卡组织",
-      "lastFour": "后四位"
+      "lastFour": "后四位",
+      "templateId": "模板",
+      "position": "顺序",
+      "title": "标题",
+      "ownerKind": "负责人",
+      "ownerPartyId": "负责人（方）",
+      "dueOffsetDays": "到期偏移（天）",
+      "required": "必需",
+      "evidenceKind": "凭证",
+      "appliesEmployerSubsidiaryId": "适用子公司",
+      "appliesDepartmentId": "适用部门",
+      "paid": "带薪",
+      "valueCrossing": "工资核算联动",
+      "requiresAttachment": "需要附件",
+      "leaveTypeId": "休假类型",
+      "minimumNoticeDays": "最短提前通知（天）",
+      "accrualRule": "累积规则 (JSON)",
+      "carryoverRule": "结转规则 (JSON)",
+      "accrualKind": "累计方式",
+      "accrualHours": "累计小时数",
+      "accrualPeriodsPerYear": "每年累计期数",
+      "carryoverKind": "结转",
+      "carryoverHours": "结转上限（小时）",
+      "carryoverExpiresAfterDays": "结转到期（天数）"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2718,7 +2769,18 @@
       "holidayObservance": "法定假日保留原日期，法律另给补休。只有真正调休的公司假日才需选择调班。",
       "equipmentUnitId": "仅对一台具名机械计薪。留空并改用收费项目，一条规则即可覆盖整类设备。",
       "itemId": "对经由此目录项目收费的所有单元计薪——“所有挖掘机”一条规则，而非一机一条。",
-      "payScheduleAnchor": "任一期间的截止日期；其余期间由此推导。半月薪按月中日期读取：20 日表示截止 5 日和 20 日的期间，15 日（或 30/31 天月份的末日）表示 15 日和月末。14 日与 2 月末日不对应任何日历，会被拒绝。"
+      "payScheduleAnchor": "任一期间的截止日期；其余期间由此推导。半月薪按月中日期读取：20 日表示截止 5 日和 20 日的期间，15 日（或 30/31 天月份的末日）表示 15 日和月末。14 日与 2 月末日不对应任何日历，会被拒绝。",
+      "hrmProcessAppliesSubsidiary": "留空表示模板适用于所有子公司。",
+      "hrmProcessAppliesDepartment": "留空表示模板适用于所有部门。",
+      "leaveValueCrossing": "已批准休假日生成的工资核算输入。“无”永不触及工资台账；支付和累积以小时形式传递，由核算计价。",
+      "leaveAppliesSubsidiary": "留空表示该政策适用于所有子公司。",
+      "leaveAppliesDepartment": "留空表示该政策适用于所有部门。",
+      "leaveAccrualKind": "时间的累计方式：无、按期、按年或不限。",
+      "leaveAccrualHours": "每期或每年累计的小时数（这些方式必填）。",
+      "leaveAccrualPeriodsPerYear": "一个累计年度内的完整期数（按期累计必填）。",
+      "leaveCarryoverKind": "年末未使用时间的处理：不结转、全部结转或结转至上限。",
+      "leaveCarryoverHours": "最多可结转的小时数（“结转至上限”必填）。",
+      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。"
     },
     "options": {
       "payFrequency": {
@@ -3055,6 +3117,38 @@
         "none": "保留原日期",
         "nextMonday": "顺延至下一工作日",
         "nearestWeekday": "调至最近的工作日"
+      },
+      "hrmProcessKind": {
+        "onboarding": "入职",
+        "offboarding": "离职",
+        "transfer": "调动"
+      },
+      "hrmStepOwner": {
+        "manager": "经理",
+        "hr": "人力资源",
+        "employee": "员工",
+        "namedParty": "指定人员"
+      },
+      "hrmStepEvidence": {
+        "none": "无",
+        "acknowledgement": "确认",
+        "attachment": "附件"
+      },
+      "leaveValueCrossing": {
+        "none": "无——无薪或按工资",
+        "payout": "从余额支付",
+        "bankIn": "累积为调休时间"
+      },
+      "leaveAccrualKind": {
+        "none": "无",
+        "per_period": "按期",
+        "per_year": "按年",
+        "unlimited": "不限"
+      },
+      "leaveCarryoverKind": {
+        "none": "不结转",
+        "carry_all": "全部结转",
+        "carry_up_to": "结转至上限"
       }
     },
     "payroll": {

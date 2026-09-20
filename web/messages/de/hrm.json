@@ -4,21 +4,24 @@
     "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen.",
     "tabs": {
       "overview": "Übersicht",
-      "changeRequests": "Änderungsanträge",
-      "departments": "Abteilungen",
-      "reports": "Berichte"
+      "positions": "Positionen",
+      "processes": "Vorgänge",
+      "leave": "Urlaub",
+      "myLeave": "Mein Urlaub"
     },
     "vitals": {
       "headcount": "Personalbestand",
       "headcountSub": "Stand {date}",
-      "employers": "Arbeitgeber",
-      "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
-      "departments": "Abteilungen",
-      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}"
+      "openPositions": "Offene Positionen",
+      "openPositionsSub": "{fte} VZÄ unbesetzt",
+      "startingSoon": "Beginnen bald",
+      "startingSoonSub": "{count, plural, one {# endet in den nächsten 30 Tagen} other {# enden in den nächsten 30 Tagen}}",
+      "onLeave": "Heute abwesend",
+      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}"
     },
     "groups": {
-      "title": "Personalbestand nach Arbeitgeber und Abteilung",
-      "employer": "Arbeitgeber",
+      "title": "Personalstand nach Abteilung",
+      "employer": "Gesellschaft",
       "department": "Abteilung",
       "headcount": "Personalbestand",
       "unassigned": "Nicht zugeordnet",
@@ -26,7 +29,45 @@
       "total": "Gesamt"
     },
     "directory": {
-      "title": "Verzeichnis"
+      "title": "Verzeichnis",
+      "employeesHint": "heute im Dienst",
+      "positionsHint": "offen",
+      "processesHint": "{count, plural, one {# Schritt überfällig} other {# Schritte überfällig}}",
+      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}"
+    },
+    "vacancy": {
+      "title": "Vakanzen nach Abteilung",
+      "department": "Abteilung",
+      "employer": "Gesellschaft",
+      "positions": "Positionen",
+      "planned": "Geplante FTE",
+      "funded": "Finanzierte FTE",
+      "filled": "Besetzte FTE",
+      "vacant": "Offene FTE",
+      "unassignedDepartment": "Keine Abteilung",
+      "empty": "Zum {date} sind keine Positionen eingerichtet.",
+      "total": "Gesamt"
+    },
+    "onboarding": {
+      "title": "Einarbeitung",
+      "openLabel": "Offene Checklisten",
+      "overdueLabel": "Überfällig",
+      "upcomingLabel": "Bald fällig",
+      "empty": "Keine offenen Checklisten.",
+      "viewAll": "Alle Vorgänge anzeigen"
+    },
+    "trend": {
+      "title": "Personalstand, letzte 12 Monate",
+      "hint": "Im Dienst zum jeweiligen Monatsende, bis heute.",
+      "series": "Personalstand"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Nichts erfordert Aufmerksamkeit.",
+      "pending": "{count, plural, one {# Änderungsantrag wartet auf Entscheidung} other {# Änderungsanträge warten auf Entscheidung}}",
+      "overdueSteps": "{count, plural, one {# Checklistenschritt überfällig} other {# Checklistenschritte überfällig}}",
+      "leavePending": "{count, plural, one {# Urlaubsantrag wartet auf Genehmigung} other {# Urlaubsanträge warten auf Genehmigung}}",
+      "unfunded": "{fte} besetzte VZÄ ohne Finanzierung"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "Änderung beantragen",
       "manageDepartments": "Abteilungen verwalten",
       "openReports": "Berichte öffnen"
+    },
+    "leave": {
+      "title": "Urlaub",
+      "onLeaveEmpty": "Heute niemand abwesend.",
+      "pendingSub": "warten auf Genehmigung"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "Aktionen",
     "openEmployee": "Personalakte öffnen",
     "notAvailable": "Nicht verfügbar"
-  },
-  "departments": {
-    "title": "Abteilungen",
-    "description": "Personalbestand heute je Abteilung, mit Arbeitgeber-Aufschlüsselung — gelesen über den Headcount-Service.",
-    "listTitle": "Personalbestand nach Abteilung",
-    "listNote": "Die Mitarbeiterliste hat keinen Abteilungsfilter, daher öffnet der Absprung die vollständige Liste.",
-    "linksTitle": "Links",
-    "employeesLink": "Mitarbeiterliste",
-    "setupLink": "Abteilungen verwalten"
-  },
-  "reports": {
-    "title": "Berichte",
-    "description": "Workforce-Berichte: die Headcount-Vorlage und die Beschäftigungs-Entitäten, geöffnet im Berichts-Builder.",
-    "presetTitle": "Headcount-Vorlage",
-    "presetHint": "Die Vorlage öffnet den gespeicherten Plan der Organisation — oder den Builder-Katalog, falls der Seed nie gelaufen ist.",
-    "entitiesTitle": "Workforce-Entitäten",
-    "entitiesHint": "Starten Sie einen neuen Workforce-Bericht aus einer der Beschäftigungs-Entitäten.",
-    "hubTitle": "Alle Berichte",
-    "hubDescription": "Den Berichts-Hub öffnen."
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "Entwurf aktualisiert.",
       "submittedToast": "Zur Genehmigung eingereicht.",
       "withdrawnToast": "Antrag zurückgezogen.",
-      "requestFailed": "Der Änderungsantrag konnte nicht gespeichert werden."
+      "requestFailed": "Der Änderungsantrag konnte nicht gespeichert werden.",
+      "kindPositionAssignment": "Positionszuordnung",
+      "positionLabel": "Position",
+      "positionUnset": "Keine Position",
+      "positionHint": "Der finanzierte Bestand, den diese Zuordnung besetzt. Die Zuordnung behält eigenen Titel, Abteilung und Standort.",
+      "positionRequired": "Wählen Sie eine Position oder markieren Sie die Zuordnung als nicht zugeordnet.",
+      "unassignLabel": "Von der Position lösen",
+      "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand."
     }
   },
   "directory": {
     "employmentStatus": "Beschäftigungsstatus",
     "serviceStart": "Dienstbeginn",
     "noEmployment": "Keine Beschäftigung"
+  },
+  "positions": {
+    "title": "Positionen",
+    "description": "Der finanzierte Stellenbestand hinter dem Personalplan: geplante, finanzierte und besetzte FTE je Position mit ihren Versionen, Finanzierung je Periode und aktuellem Inhaber.",
+    "statusAll": "Alle Status",
+    "statusPlanned": "Geplant",
+    "statusOpen": "Offen",
+    "statusFilled": "Besetzt",
+    "statusFrozen": "Eingefroren",
+    "statusClosed": "Geschlossen",
+    "columns": {
+      "code": "Code",
+      "title": "Titel",
+      "status": "Status",
+      "department": "Abteilung",
+      "planned": "Geplante FTE",
+      "funded": "Finanzierte FTE",
+      "filled": "Besetzte FTE",
+      "vacant": "Offene FTE",
+      "holder": "Inhaber",
+      "unassignedHolder": "Offen"
+    },
+    "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}",
+    "empty": "Keine Positionen entsprechen diesem Filter.",
+    "total": "Gesamt",
+    "drawer": {
+      "title": "Position {code}",
+      "versions": "Versionen",
+      "versionNo": "Version {no}",
+      "effective": "Gültig von {from} bis {to}",
+      "effectiveOpen": "Gültig ab {from}, unbefristet",
+      "recorded": "Erfasst {at}",
+      "funding": "Finanzierung nach Periode",
+      "period": "Periode {from} bis {to}",
+      "funded": "{fte} FTE finanziert",
+      "costPlan": "Kostenplan {amount} {currency}",
+      "unfunded": "Keine Finanzierung erfasst",
+      "holder": "Aktueller Inhaber",
+      "holderEmployment": "Beschäftigung {id}",
+      "noHolder": "Kein Inhaber zum {date}",
+      "warnings": "Warnungen",
+      "refusal": "Erfordert Aufmerksamkeit",
+      "missing": "Diese Position ist nicht mehr sichtbar."
+    },
+    "add": "Stelle hinzufügen",
+    "create": {
+      "title": "Neue Stelle",
+      "code": "Stellencode",
+      "titleField": "Bezeichnung",
+      "employer": "Anstellende Gesellschaft",
+      "department": "Abteilung",
+      "noDepartment": "Keine Abteilung",
+      "plannedFte": "Geplante VZÄ",
+      "status": "Status",
+      "effectiveFrom": "Gültig ab",
+      "reason": "Begründung",
+      "reasonPlaceholder": "Warum diese Stelle besteht – wird mit der ersten Version erfasst",
+      "submit": "Stelle anlegen",
+      "failed": "Die Stelle konnte nicht angelegt werden."
+    },
+    "segmentsLabel": "Status"
+  },
+  "processes": {
+    "title": "Prozess-Checklisten",
+    "description": "Onboarding-, Offboarding- und Versetzungs-Checklisten mit Verantwortlichen, Fälligkeiten und Nachweisen.",
+    "listTitle": "Checklisten",
+    "listFailed": "Vorgänge konnten nicht geladen werden.",
+    "detailTitle": "Checkliste",
+    "detailFailed": "Checkliste konnte nicht geladen werden.",
+    "actionFailed": "Aktion konnte nicht ausgeführt werden.",
+    "loading": "Wird geladen…",
+    "empty": "Keine Checklisten in diesem Bereich.",
+    "overdueBadge": "{count} überfällig",
+    "progressLine": "{done} von {required} erforderlichen Schritten · wirksam {effective}",
+    "dueOn": "Fällig {date}",
+    "required": "Erforderlich",
+    "completeStep": "Schritt abschließen",
+    "skipStep": "Schritt überspringen",
+    "completeProcess": "Checkliste abschließen",
+    "cancelProcess": "Checkliste abbrechen",
+    "attachmentLabel": "Nachweisdatei",
+    "attachmentUnset": "Zum Suchen tippen",
+    "skipReasonLabel": "Grund für das Überspringen",
+    "skipReasonPlaceholder": "Warum wird dieser Schritt übersprungen?",
+    "cancelReasonLabel": "Grund für den Abbruch",
+    "cancelReasonPlaceholder": "Warum wird diese Checkliste abgebrochen?",
+    "confirmReason": "Bestätigen",
+    "cancelReasonAbort": "Zurück",
+    "segments": {
+      "open": "Offen",
+      "overdue": "Überfällig",
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "kind": "Art",
+      "effective": "Wirksam",
+      "progress": "Fortschritt",
+      "nextDue": "Nächste Fälligkeit",
+      "status": "Status"
+    },
+    "kinds": {
+      "onboarding": "Einarbeitung",
+      "offboarding": "Austritt",
+      "transfer": "Versetzung"
+    },
+    "owners": {
+      "manager": "Vorgesetzte(r)",
+      "hr": "Personal",
+      "employee": "Mitarbeiter",
+      "named_party": "Benannte Person"
+    },
+    "evidence": {
+      "none": "Keine",
+      "acknowledgement": "Bestätigung",
+      "attachment": "Anhang"
+    },
+    "stepStatus": {
+      "pending": "Offen",
+      "done": "Erledigt",
+      "skipped": "Übersprungen"
+    },
+    "segmentsLabel": "Anzeigen"
+  },
+  "leave": {
+    "title": "Urlaub",
+    "description": "Anträge, Genehmigungen und Fehltage — mit Salden in Zeit und, wo ein Konto besteht, in Geld.",
+    "listTitle": "Urlaubsanträge",
+    "segmentsLabel": "Anzeigen",
+    "allLabel": "Alle",
+    "segments": {
+      "pending": "Zur Genehmigung",
+      "upcoming": "Bevorstehend",
+      "today": "Heute abwesend",
+      "history": "Verlauf"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "type": "Art",
+      "range": "Zeitraum",
+      "hours": "Stunden",
+      "status": "Status"
+    },
+    "emptyTitle": "Keine Urlaubsanträge hier",
+    "emptyDescription": "Noch nichts in diesem Bereich.",
+    "truncatedNote": "Die ersten {limit} Anträge werden angezeigt.",
+    "unknownSegmentTitle": "Unbekannter Bereich",
+    "unknownSegment": "Es gibt keinen Urlaubsbereich {segment}.",
+    "refusedTitle": "Urlaub abgelehnt",
+    "fileTitle": "Urlaubsantrag stellen",
+    "fileButton": "Neuer Antrag",
+    "recordTitle": "Fehltag erfassen",
+    "recordButton": "Fehltag erfassen",
+    "calendarTitle": "Kalender nach Abteilung",
+    "calendarDepartmentLabel": "Abteilung",
+    "calendarFromLabel": "Von",
+    "calendarToLabel": "Bis",
+    "calendarShowLabel": "Anzeigen",
+    "calendarEmpty": "Keine Fehltage in diesem Zeitraum. Wählen Sie eine Abteilung.",
+    "openRequest": "Öffnen",
+    "drawerTitle": "Urlaubsantrag",
+    "detailLoading": "Antrag wird geladen…",
+    "detailFailed": "Der Antrag konnte nicht geladen werden.",
+    "actionFailed": "Die Aktion ist fehlgeschlagen.",
+    "submitButton": "Zur Genehmigung einreichen",
+    "withdrawButton": "Zurückziehen",
+    "cancelButton": "Antrag stornieren",
+    "withdrawReasonTitle": "Warum wird dieser Antrag zurückgezogen?",
+    "cancelReasonTitle": "Warum wird dieser Antrag storniert?",
+    "fileFailed": "Der Antrag konnte nicht gestellt werden.",
+    "fileEmploymentLabel": "Beschäftigung",
+    "fileEmploymentPlaceholder": "Beschäftigungs-ID",
+    "fileTypeLabel": "Urlaubsart",
+    "fileTypePlaceholder": "Urlaubsart wählen",
+    "fileHoursLabel": "Stunden",
+    "fileReasonLabel": "Grund",
+    "timeBalanceTitle": "Zeitsaldo zum {date}",
+    "timeBalanceValue": "{balance} Stunden (angesammelt {earned}, übertragen {carried}, genommen {taken})",
+    "unlimitedBalance": "Unbegrenzt — keine Saldozahl.",
+    "noPolicyBalance": "Keine Richtlinie gilt für diese Beschäftigung.",
+    "valueBalanceTitle": "Lohnkontostand zum {date}",
+    "statusNames": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "withdrawn": "Zurückgezogen",
+      "cancelled": "Storniert"
+    }
+  },
+  "myLeave": {
+    "title": "Mein Urlaub",
+    "description": "Ihre Anträge und Salden — sonst nichts.",
+    "emptyTitle": "Noch keine Anträge",
+    "emptyDescription": "Stellen Sie Ihren ersten Antrag.",
+    "balancesTitle": "Salden",
+    "balancesEmpty": "Keine aktiven Urlaubsarten.",
+    "timeKind": "Zeit",
+    "valueKind": "Geldwert",
+    "unlimited": "Unbegrenzt"
   }
 }

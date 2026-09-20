@@ -12,8 +12,8 @@ import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
  *  - Standard: every movement is at the item's standard cost; the difference
  *    to actual on receipt is a purchase price variance.
  *
- * The DB engine (engine/src/inventory/inventory.ts) turns these results into cost-layer
- * rows and balanced journal entries through the kernel.
+ * The DB engine (the operation modules in engine/src/inventory/) turns these
+ * results into cost-layer rows and balanced journal entries through the kernel.
  */
 
 const SCALE = 10_000n;
@@ -238,4 +238,21 @@ export function receiveStandard(quantity: string, actualUnitCost: string, standa
 /** Issue at standard cost. */
 export function issueStandard(quantity: string, standardCost: string): string {
   return fromUnits(mulUnits(toUnits(quantity), toUnits(standardCost)));
+}
+
+/**
+ * value ÷ quantity as a 4-decimal unit cost, half-up and sign-preserving.
+ *
+ * BigInt `/` truncates, which quietly rounded every non-terminating average
+ * DOWN and drifted the subledger below the GL, so this rounds. `roundDiv`
+ * refuses a non-positive denominator, and quantity is legitimately negative on
+ * reversal and consumption paths, so the sign is taken out and put back rather
+ * than handed to it. A zero quantity has no unit cost to state; callers choose
+ * the fallback that fits their context.
+ */
+export function unitCostPerQuantity(value: string, quantity: string): string | null {
+  const q = toUnits(quantity);
+  if (q === 0n) return null;
+  const v = toUnits(value) * 10_000n;
+  return fromUnits(q < 0n ? roundDiv(-v, -q) : roundDiv(v, q));
 }

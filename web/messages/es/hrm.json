@@ -4,21 +4,24 @@
     "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio.",
     "tabs": {
       "overview": "Resumen",
-      "changeRequests": "Solicitudes de cambio",
-      "departments": "Departamentos",
-      "reports": "Informes"
+      "positions": "Puestos",
+      "processes": "Procesos",
+      "leave": "Ausencias",
+      "myLeave": "Mis ausencias"
     },
     "vitals": {
       "headcount": "Plantilla",
       "headcountSub": "A {date}",
-      "employers": "Empleadores",
-      "employersSub": "{count, plural, one {# filial} other {# filiales}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+      "openPositions": "Puestos abiertos",
+      "openPositionsSub": "{fte} ETC vacantes",
+      "startingSoon": "Empiezan pronto",
+      "startingSoonSub": "{count, plural, one {# termina en los próximos 30 días} other {# terminan en los próximos 30 días}}",
+      "onLeave": "De permiso hoy",
+      "onLeaveSub": "{count, plural, one {# solicitud pendiente de aprobación} other {# solicitudes pendientes de aprobación}}"
     },
     "groups": {
-      "title": "Plantilla por empleador y departamento",
-      "employer": "Empleador",
+      "title": "Plantilla por departamento",
+      "employer": "Filial",
       "department": "Departamento",
       "headcount": "Plantilla",
       "unassigned": "Sin asignar",
@@ -26,7 +29,45 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Directorio"
+      "title": "Directorio",
+      "employeesHint": "en servicio hoy",
+      "positionsHint": "abiertos",
+      "processesHint": "{count, plural, one {# paso vencido} other {# pasos vencidos}}",
+      "leaveHint": "{count, plural, one {# pendiente de aprobación} other {# pendientes de aprobación}}"
+    },
+    "vacancy": {
+      "title": "Vacantes por departamento",
+      "department": "Departamento",
+      "employer": "Filial",
+      "positions": "Puestos",
+      "planned": "FTE planificados",
+      "funded": "FTE financiados",
+      "filled": "FTE cubiertos",
+      "vacant": "FTE vacantes",
+      "unassignedDepartment": "Sin departamento",
+      "empty": "No hay puestos establecidos a {date}.",
+      "total": "Total"
+    },
+    "onboarding": {
+      "title": "Incorporación",
+      "openLabel": "Listas abiertas",
+      "overdueLabel": "Vencido",
+      "upcomingLabel": "Próximo",
+      "empty": "No hay listas abiertas.",
+      "viewAll": "Ver todos los procesos"
+    },
+    "trend": {
+      "title": "Plantilla, últimos 12 meses",
+      "hint": "En servicio al cierre de cada mes, hasta hoy.",
+      "series": "Plantilla"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "allClear": "Nada requiere atención.",
+      "pending": "{count, plural, one {# solicitud de cambio pendiente de decisión} other {# solicitudes de cambio pendientes de decisión}}",
+      "overdueSteps": "{count, plural, one {# paso de lista vencido} other {# pasos de lista vencidos}}",
+      "leavePending": "{count, plural, one {# solicitud de permiso pendiente de aprobación} other {# solicitudes de permiso pendientes de aprobación}}",
+      "unfunded": "{fte} ETC cubiertos sin financiación"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "Proponer cambio",
       "manageDepartments": "Gestionar departamentos",
       "openReports": "Abrir informes"
+    },
+    "leave": {
+      "title": "Ausencias",
+      "onLeaveEmpty": "Nadie ausente hoy.",
+      "pendingSub": "por aprobar"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "Acciones",
     "openEmployee": "Abrir el registro del empleado",
     "notAvailable": "No disponible"
-  },
-  "departments": {
-    "title": "Departamentos",
-    "description": "Plantilla de hoy por departamento, con desglose por empresa empleadora — resuelta a través del servicio de plantilla.",
-    "listTitle": "Plantilla por departamento",
-    "listNote": "La lista de empleados no tiene filtro por departamento, por lo que el enlace abre la lista completa.",
-    "linksTitle": "Enlaces",
-    "employeesLink": "Lista de empleados",
-    "setupLink": "Gestionar departamentos"
-  },
-  "reports": {
-    "title": "Informes",
-    "description": "Informes de personal: la declaración de plantilla y las entidades de empleo, abiertas en el generador de informes.",
-    "presetTitle": "Declaración de plantilla",
-    "presetHint": "La plantilla abre el plan guardado de la organización — o el catálogo del generador si la semilla nunca se ha materializado.",
-    "entitiesTitle": "Entidades de personal",
-    "entitiesHint": "Cree un informe de personal desde una de las entidades de empleo.",
-    "hubTitle": "Todos los informes",
-    "hubDescription": "Abrir el centro de informes."
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "Borrador actualizado.",
       "submittedToast": "Enviado para aprobación.",
       "withdrawnToast": "Solicitud retirada.",
-      "requestFailed": "No se pudo guardar la solicitud de cambio."
+      "requestFailed": "No se pudo guardar la solicitud de cambio.",
+      "kindPositionAssignment": "Asignación de puesto",
+      "positionLabel": "Puesto",
+      "positionUnset": "Sin puesto",
+      "positionHint": "La plantilla financiada que ocupa esta asignación. La asignación conserva su propio título, departamento y ubicación.",
+      "positionRequired": "Elija un puesto o marque la asignación como sin asignar.",
+      "unassignLabel": "Desasignar del puesto",
+      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla."
     }
   },
   "directory": {
     "employmentStatus": "Situación laboral",
     "serviceStart": "Inicio del servicio",
     "noEmployment": "Sin empleo"
+  },
+  "positions": {
+    "title": "Puestos",
+    "description": "La plantilla financiada detrás del plan de personal: FTE planificados, financiados y cubiertos por puesto, con sus versiones, financiación por período y titular actual.",
+    "statusAll": "Todos los estados",
+    "statusPlanned": "Planificado",
+    "statusOpen": "Abierto",
+    "statusFilled": "Cubierto",
+    "statusFrozen": "Congelado",
+    "statusClosed": "Cerrado",
+    "columns": {
+      "code": "Código",
+      "title": "Título",
+      "status": "Estado",
+      "department": "Departamento",
+      "planned": "FTE planificados",
+      "funded": "FTE financiados",
+      "filled": "FTE cubiertos",
+      "vacant": "FTE vacantes",
+      "holder": "Titular",
+      "unassignedHolder": "Vacante"
+    },
+    "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
+    "empty": "Ningún puesto coincide con este filtro.",
+    "total": "Total",
+    "drawer": {
+      "title": "Puesto {code}",
+      "versions": "Versiones",
+      "versionNo": "Versión {no}",
+      "effective": "Vigente de {from} a {to}",
+      "effectiveOpen": "Vigente desde {from}, sin fecha de fin",
+      "recorded": "Registrado {at}",
+      "funding": "Financiación por período",
+      "period": "Período de {from} a {to}",
+      "funded": "{fte} FTE financiados",
+      "costPlan": "Plan de costos {amount} {currency}",
+      "unfunded": "Sin financiación registrada",
+      "holder": "Titular actual",
+      "holderEmployment": "Empleo {id}",
+      "noHolder": "Sin titular a {date}",
+      "warnings": "Advertencias",
+      "refusal": "Requiere atención",
+      "missing": "Este puesto ya no está visible."
+    },
+    "add": "Añadir puesto",
+    "create": {
+      "title": "Nuevo puesto",
+      "code": "Código del puesto",
+      "titleField": "Título",
+      "employer": "Filial empleadora",
+      "department": "Departamento",
+      "noDepartment": "Sin departamento",
+      "plannedFte": "ETC planificado",
+      "status": "Estado",
+      "effectiveFrom": "Vigente desde",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por qué existe este puesto; se registra con su primera versión",
+      "submit": "Crear puesto",
+      "failed": "No se pudo crear el puesto."
+    },
+    "segmentsLabel": "Estado"
+  },
+  "processes": {
+    "title": "Listas de procesos",
+    "description": "Listas de incorporación, salida y transferencia con responsables, vencimientos y evidencia.",
+    "listTitle": "Listas",
+    "listFailed": "No se pudieron cargar los procesos.",
+    "detailTitle": "Lista",
+    "detailFailed": "No se pudo cargar la lista.",
+    "actionFailed": "No se pudo completar la acción.",
+    "loading": "Cargando…",
+    "empty": "No hay listas en este segmento.",
+    "overdueBadge": "{count} vencido",
+    "progressLine": "{done} de {required} pasos obligatorios · vigencia {effective}",
+    "dueOn": "Vence {date}",
+    "required": "Obligatorio",
+    "completeStep": "Completar paso",
+    "skipStep": "Omitir paso",
+    "completeProcess": "Completar lista",
+    "cancelProcess": "Cancelar lista",
+    "attachmentLabel": "Archivo de evidencia",
+    "attachmentUnset": "Escriba para buscar",
+    "skipReasonLabel": "Motivo de omisión",
+    "skipReasonPlaceholder": "¿Por qué se omite este paso?",
+    "cancelReasonLabel": "Motivo de cancelación",
+    "cancelReasonPlaceholder": "¿Por qué se cancela esta lista?",
+    "confirmReason": "Confirmar",
+    "cancelReasonAbort": "Atrás",
+    "segments": {
+      "open": "Abiertas",
+      "overdue": "Vencidas",
+      "completed": "Completadas",
+      "cancelled": "Canceladas"
+    },
+    "columns": {
+      "employee": "Empleado",
+      "kind": "Tipo",
+      "effective": "Vigencia",
+      "progress": "Progreso",
+      "nextDue": "Próximo vencimiento",
+      "status": "Estado"
+    },
+    "kinds": {
+      "onboarding": "Incorporación",
+      "offboarding": "Salida",
+      "transfer": "Transferencia"
+    },
+    "owners": {
+      "manager": "Mánager",
+      "hr": "RR. HH.",
+      "employee": "Empleado",
+      "named_party": "Persona designada"
+    },
+    "evidence": {
+      "none": "Ninguna",
+      "acknowledgement": "Acuse de recibo",
+      "attachment": "Adjunto"
+    },
+    "stepStatus": {
+      "pending": "Pendiente",
+      "done": "Hecho",
+      "skipped": "Omitido"
+    },
+    "segmentsLabel": "Mostrar"
+  },
+  "leave": {
+    "title": "Ausencias",
+    "description": "Solicitudes, aprobaciones y registro de ausencias — con saldos en tiempo y, donde haya banco, en valor.",
+    "listTitle": "Solicitudes de ausencia",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "pending": "Por aprobar",
+      "upcoming": "Próximas",
+      "today": "Ausentes hoy",
+      "history": "Historial"
+    },
+    "columns": {
+      "employee": "Empleado",
+      "type": "Tipo",
+      "range": "Periodo",
+      "hours": "Horas",
+      "status": "Estado"
+    },
+    "emptyTitle": "Nada aquí",
+    "emptyDescription": "Aún nada en este segmento.",
+    "truncatedNote": "Mostrando las primeras {limit} solicitudes.",
+    "unknownSegmentTitle": "Segmento desconocido",
+    "unknownSegment": "No existe el segmento {segment}.",
+    "refusedTitle": "Ausencia denegada",
+    "fileTitle": "Solicitar una ausencia",
+    "fileButton": "Nueva solicitud",
+    "recordTitle": "Registrar una ausencia",
+    "recordButton": "Registrar ausencia",
+    "calendarTitle": "Calendario por departamento",
+    "calendarDepartmentLabel": "Departamento",
+    "calendarFromLabel": "Desde",
+    "calendarToLabel": "Hasta",
+    "calendarShowLabel": "Mostrar",
+    "calendarEmpty": "Sin ausencias en este periodo. Elija un departamento.",
+    "openRequest": "Abrir",
+    "drawerTitle": "Solicitud de ausencia",
+    "detailLoading": "Cargando la solicitud…",
+    "detailFailed": "No se pudo cargar la solicitud.",
+    "actionFailed": "La acción falló.",
+    "submitButton": "Enviar a aprobación",
+    "withdrawButton": "Retirar",
+    "cancelButton": "Cancelar solicitud",
+    "withdrawReasonTitle": "¿Por qué se retira esta solicitud?",
+    "cancelReasonTitle": "¿Por qué se cancela esta solicitud?",
+    "fileFailed": "No se pudo registrar la solicitud.",
+    "fileEmploymentLabel": "Empleo",
+    "fileEmploymentPlaceholder": "ID de empleo",
+    "fileTypeLabel": "Tipo de ausencia",
+    "fileTypePlaceholder": "Elija un tipo",
+    "fileHoursLabel": "Horas",
+    "fileReasonLabel": "Motivo",
+    "timeBalanceTitle": "Saldo de tiempo al {date}",
+    "timeBalanceValue": "{balance} horas (acumuladas {earned}, arrastradas {carried}, tomadas {taken})",
+    "unlimitedBalance": "Ilimitado — sin cifra de saldo.",
+    "noPolicyBalance": "Ninguna política cubre este empleo.",
+    "valueBalanceTitle": "Valor bancario al {date}",
+    "statusNames": {
+      "draft": "Borrador",
+      "submitted": "Enviada",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "withdrawn": "Retirada",
+      "cancelled": "Cancelada"
+    }
+  },
+  "myLeave": {
+    "title": "Mis ausencias",
+    "description": "Sus solicitudes y saldos — nada más.",
+    "emptyTitle": "Sin solicitudes",
+    "emptyDescription": "Registre su primera solicitud.",
+    "balancesTitle": "Saldos",
+    "balancesEmpty": "Sin tipos de ausencia activos.",
+    "timeKind": "tiempo",
+    "valueKind": "valor",
+    "unlimited": "Ilimitado"
   }
 }
