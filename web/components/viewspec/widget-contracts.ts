@@ -182,6 +182,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-process-drawer': { props: ['drawer'] },
   'hrm-propose-change-dialog': { props: ['closeHref', 'departmentOptions', 'employmentLabel', 'employmentPlaceholder', 'emptyLabel', 'requestFailed'] },
   'hrm-recent-changes': { props: ['empty', 'items', 'notAvailable'] },
+  'hrm-recruiting-drawer': { props: ['drawer'] },
+  'hrm-recruiting-panel': { props: ['empty', 'figures', 'viewAll', 'viewAllHref'] },
   'hrm-upcoming-changes': { props: ['ends', 'endsEmpty', 'endsTitle', 'notAvailable', 'starts', 'startsEmpty', 'startsTitle', 'truncated', 'truncatedNote'] },
   'identity-cell': { props: ['detail', 'name'] },
   'identity-record-card': { props: ['facts', 'title'] },

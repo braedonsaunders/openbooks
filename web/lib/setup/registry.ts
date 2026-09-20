@@ -2187,6 +2187,66 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       },
     ],
   },
+  // HRM pipeline funnels (0195): the org's own hiring funnel, managed
+  // here; deactivation preserves history, and a template that opened
+  // requisitions cannot be deleted (retire with isActive instead).
+  {
+    key: 'hrm-pipeline-templates',
+    table: 'hrm_pipeline_templates',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-pipeline-stages',
+    table: 'hrm_pipeline_stages',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-pipeline-templates' },
+      { key: 'position', kind: 'number' },
+      { key: 'name', kind: 'text' },
+      { key: 'kind', kind: 'badge' },
+    ],
+    fields: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-pipeline-templates', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'key', kind: 'text', required: true },
+      { key: 'name', kind: 'text', required: true },
+      {
+        key: 'kind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'screening', labelKey: 'options.hrmPipelineStageKind.screening' },
+          { value: 'interview', labelKey: 'options.hrmPipelineStageKind.interview' },
+          { value: 'assessment', labelKey: 'options.hrmPipelineStageKind.assessment' },
+          { value: 'offer', labelKey: 'options.hrmPipelineStageKind.offer' },
+          { value: 'hired', labelKey: 'options.hrmPipelineStageKind.hired' },
+          { value: 'rejected', labelKey: 'options.hrmPipelineStageKind.rejected' },
+        ],
+      },
+    ],
+  },
   // --- Assets --------------------------------------------------------------
   {
     key: 'asset-categories',

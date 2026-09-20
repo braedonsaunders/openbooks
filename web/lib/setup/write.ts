@@ -922,6 +922,28 @@ export async function validateEntityIntegrity(
     if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
     if (!refs.rows[0]?.party_ok) return 'The owner party is not visible in this organization'
   }
+  // HRM pipeline stages (0195): the parent funnel must live in this org
+  // and the kind must name the fixed vocabulary — terminality derives
+  // from kind in storage, so an unknown kind is refused before the write.
+  if (entity.key === 'hrm-pipeline-stages') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select template_id as "templateId", kind from hrm_pipeline_stages
+         where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Pipeline stage not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.kind !== undefined && !['screening', 'interview', 'assessment', 'offer', 'hired', 'rejected'].includes(String(values.kind))) {
+      return 'The stage kind must be screening, interview, assessment, offer, hired, or rejected'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${values.templateId ? sql`exists(select 1 from hrm_pipeline_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
+    `)
+    if (!refs.rows[0]?.template_ok) return 'The parent funnel is not visible in this organization'
+  }
   return null
 }
 
