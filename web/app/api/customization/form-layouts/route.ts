@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -58,6 +59,21 @@ export async function POST(req: Request) {
   // silently. An explicit value outside the domain is refused instead.
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
+  // resolveFormLayout calls allowedRoles.some after a length check. A
+  // truthy non-array jsonb value has no .some, so resolving any form for
+  // that record type throws and every user of that type is formless.
+  // Persist only UUID role ids or null; refuse anything else by name.
+  if (
+    body.allowedRoles !== undefined &&
+    body.allowedRoles !== null &&
+    (!Array.isArray(body.allowedRoles) ||
+      body.allowedRoles.some((r) => typeof r !== "string" || !isUuid(r)))
+  ) {
+    return NextResponse.json(
+      { error: "allowedRoles must be a list of UUID role ids" },
+      { status: 400 },
+    );
   }
   const parsed = parseFormLayout(body.layout ?? { schemaVersion: 1, recordType: body.recordType });
   if (!parsed.success)

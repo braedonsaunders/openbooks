@@ -66,6 +66,8 @@ const { createScratchOrg, createScratchUser } = await import(
 );
 
 const LAYOUT_ID = "00000000-0000-4000-8000-000000000041";
+const DEFAULT_ID = "00000000-0000-4000-8000-000000000042";
+const ROLE_ID = "00000000-0000-4000-8000-000000000099";
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   const org = await createScratchOrg();
@@ -135,5 +137,92 @@ test(
     });
     assert.equal(res.status, 200);
     assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: false });
+  },
+);
+
+async function storedRoles(orgId: string): Promise<unknown> {
+  const r = await db.execute<{ allowedRoles: unknown }>(sql`
+    select allowed_roles as "allowedRoles"
+      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`);
+  return r.rows[0]?.allowedRoles ?? null;
+}
+
+test(
+  "PATCH refuses a truthy non-array allowedRoles and does not persist it",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PATCH(patchRequest({ allowedRoles: { admin: true } }), {
+      params: Promise.resolve({ id: LAYOUT_ID }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await storedRoles(f.orgId), null);
+  },
+);
+
+test(
+  "PATCH refuses a non-UUID allowedRoles string and does not persist it",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PATCH(patchRequest({ allowedRoles: ["admin"] }), {
+      params: Promise.resolve({ id: LAYOUT_ID }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await storedRoles(f.orgId), null);
+  },
+);
+
+test(
+  "PATCH persists a UUID allowedRoles list",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PATCH(patchRequest({ allowedRoles: [ROLE_ID] }), {
+      params: Promise.resolve({ id: LAYOUT_ID }),
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await storedRoles(f.orgId), [ROLE_ID]);
+  },
+);
+
+test(
+  "PATCH {isDefault:true} on a row that vanishes after loadOwn 404s and keeps the org default",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    await db.execute(sql`
+      insert into form_layouts (id, org_id, record_type, name, is_default, layout, created_by, updated_by)
+      values (${DEFAULT_ID}, ${f.orgId}, 'vendor_bill', 'Org Default', true,
+              '{"schemaVersion": 1, "recordType": "vendor_bill"}'::jsonb, ${f.actorId}, ${f.actorId})
+      on conflict (id) do update
+        set org_id = excluded.org_id, is_default = true, is_active = true`);
+    const original = db.execute.bind(db);
+    let deleted = false;
+    db.execute = (async (query: Parameters<typeof original>[0]) => {
+      const result = await original(query);
+      const row = result.rows[0] as { id?: string } | undefined;
+      if (!deleted && row?.id === LAYOUT_ID) {
+        deleted = true;
+        await original(sql`delete from form_layouts where id = ${LAYOUT_ID} and org_id = ${f.orgId}`);
+      }
+      return result;
+    }) as typeof db.execute;
+    try {
+      const res = await PATCH(patchRequest({ isDefault: true }), {
+        params: Promise.resolve({ id: LAYOUT_ID }),
+      });
+      const body = await res.json();
+      assert.equal(res.status, 404, `expected 404, got ${res.status}: ${JSON.stringify(body)}`);
+      assert.notEqual((body as { ok?: unknown }).ok, true);
+      const def = await db.execute<{ isDefault: boolean }>(sql`
+        select is_default as "isDefault"
+          from form_layouts where id = ${DEFAULT_ID} and org_id = ${f.orgId}`);
+      assert.equal(def.rows[0]?.isDefault, true, "org default must survive a zero-row PATCH");
+    } finally {
+      db.execute = original;
+    }
   },
 );

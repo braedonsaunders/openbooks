@@ -108,6 +108,68 @@ test(
 );
 
 test(
+  "POST refuses a truthy non-array allowedRoles and stores no row",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Gated",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: { admin: true },
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
+
+test(
+  "POST refuses a non-UUID allowedRoles string and stores no row",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Keyed",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: ["admin"],
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
+
+const ROLE_ID = "00000000-0000-4000-8000-000000000099";
+
+test(
+  "POST persists a UUID allowedRoles list",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Role Gated",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: [ROLE_ID],
+      }),
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { id?: string };
+    const stored = await db.execute<{ allowedRoles: unknown }>(sql`
+      select allowed_roles as "allowedRoles"
+        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`);
+    assert.deepEqual(stored.rows[0]?.allowedRoles, [ROLE_ID]);
+  },
+);
+
+test(
   "POST still accepts an omitted or real-boolean isActive",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {

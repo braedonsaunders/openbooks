@@ -1,4 +1,5 @@
 import { parseJsonBody } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -69,6 +70,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     changes.description = body.description;
   }
   if (body.allowedRoles !== undefined) {
+    // resolveFormLayout calls allowedRoles.some after a length check. A
+    // truthy non-array jsonb value (object, number, or string) has no
+    // .some, so resolving any form for that record type throws and every
+    // user of that type is formless. Persist only UUID role ids or null.
+    if (
+      body.allowedRoles !== null &&
+      (!Array.isArray(body.allowedRoles) ||
+        body.allowedRoles.some((r) => typeof r !== "string" || !isUuid(r)))
+    ) {
+      return NextResponse.json(
+        { error: "allowedRoles must be a list of UUID role ids" },
+        { status: 400 },
+      );
+    }
     // JSON.stringify: pg serializes JS arrays as Postgres array literals, which
     // are invalid input for the jsonb column.
     sets.push(sql`allowed_roles = ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}`);
@@ -105,19 +120,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
-    await db.transaction(async (tx) => {
+    // UPDATE the named row first and refuse a zero-row match *before*
+    // clearing other defaults. The previous order unset every default for
+    // the record type, then updated without returning; a miss (RLS,
+    // concurrent delete) still reported {ok:true} and left the org with
+    // no default for resolveFormLayout to read. Same returning check as DELETE.
+    const updated = await db.transaction(async (tx) => {
+      const result = await tx.execute<{ id: string }>(sql`
+        update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
+         where id = ${id} and org_id = ${user.orgId}
+         returning id`);
+      const row = result.rows[0];
+      if (!row) return null;
       if (body.isDefault)
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${existing.recordType}
              and is_default and id <> ${id}`);
       await tx.execute(sql`
-        update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}`);
-      await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
+      return row;
     });
+    if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = (e as Error).message ?? "update failed";
