@@ -38,17 +38,36 @@ export function normalizeCountryCode(value: unknown): CountryCode | null {
 }
 
 /**
+ * Locale-aware country name for a two-letter region code ("JP" → "Japan" in
+ * en, "Japon" in fr), via Intl.DisplayNames — never a hardcoded map, so a
+ * newly installed pack needs no edit here.
+ *
+ * `locale` is required (no default): a forgotten locale would silently render
+ * English names. The parameter stays an arbitrary string rather than
+ * CountryCode, because the whole point is that an unrecognised code renders
+ * as itself — a type that forbids the bad input would push the failure to
+ * the call site, where pack-registry codes arrive as plain strings.
+ *
+ * Fail visible, not fail fatal: Intl throws RangeError on a structurally
+ * invalid code ("" or "1A") and returns the input for a valid but unassigned
+ * one ("XX"), so an unrenderable code comes back as itself rather than
+ * taking the page down or inventing a name.
+ */
+export function countryName(code: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'region', fallback: 'code' }).of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
+/**
  * Country options for a SearchSelect, labelled in the given UI locale and
  * sorted by localized name. The stored value stays the uppercase ISO code.
+ * Labels come from countryName, the single place a code becomes a name.
  */
 export function countryOptions(locale: string): { value: string; label: string }[] {
-  let names: Intl.DisplayNames | undefined
-  try {
-    names = new Intl.DisplayNames([locale], { type: 'region' })
-  } catch {
-    names = undefined
-  }
-  return COUNTRY_CODES.map((code) => ({ value: code, label: names?.of(code) ?? code })).sort((a, b) =>
+  return COUNTRY_CODES.map((code) => ({ value: code, label: countryName(code, locale) })).sort((a, b) =>
     a.label.localeCompare(b.label, locale),
   )
 }
