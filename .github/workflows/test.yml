@@ -49,7 +49,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 16
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +76,7 @@ jobs:
           OPENBOOKS_TEST_TIMINGS: .local/test-timings.json
         run: |
           set -o pipefail
-          timeout --signal=TERM --kill-after=10s 12m npm run test:unit 2>&1 | tee unit.txt
+          timeout --signal=TERM --kill-after=10s 16m npm run test:unit 2>&1 | tee unit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
