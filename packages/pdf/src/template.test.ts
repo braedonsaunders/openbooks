@@ -191,6 +191,15 @@ test('tokenized header/footer fragments drop network resource URLs and keep inli
   assert.doesNotMatch(css, /internal\.example|https?:\/\//i)
   assert.match(css, />x</)
 
+  const imageSet = sanitizeTokenizedFragment(
+    '<div style="background-image:image-set(&quot;https://static.example/logo.png&quot; 1x)">x</div>',
+  )
+  const escapedUrl = sanitizeTokenizedFragment(
+    '<div style="background:\\75rl(https://static.example/logo.png)">x</div>',
+  )
+  assert.doesNotMatch(imageSet, /static\.example|https?:\/\//i)
+  assert.doesNotMatch(escapedUrl, /static\.example|https?:\/\//i)
+
   const inline = sanitizeTokenizedFragment('<img src="data:image/png;base64,AAAA" alt="logo">')
   assert.match(inline, /data:image\/png;base64,AAAA/)
 

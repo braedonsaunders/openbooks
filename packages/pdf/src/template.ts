@@ -1023,24 +1023,169 @@ function decodeHtmlAttrValue(value: string): string {
   return out
 }
 
-function cssImportIsInlineOnly(statement: string): boolean {
+function decodeCssEscapes(input: string): string {
+  let out = ''
+  let cursor = 0
+  while (cursor < input.length) {
+    if (input[cursor] !== '\\') {
+      out += input[cursor]
+      cursor += 1
+      continue
+    }
+    if (cursor + 1 >= input.length) break
+    const next = input[cursor + 1]!
+    if (next === '\n' || next === '\f') {
+      cursor += 2
+      continue
+    }
+    if (next === '\r') {
+      cursor += input[cursor + 2] === '\n' ? 3 : 2
+      continue
+    }
+    let hex = ''
+    let hexEnd = cursor + 1
+    while (hexEnd < input.length && hex.length < 6 && /[0-9a-fA-F]/.test(input[hexEnd]!)) {
+      hex += input[hexEnd]
+      hexEnd += 1
+    }
+    if (hex) {
+      const code = Number.parseInt(hex, 16)
+      out +=
+        code === 0 || (code >= 0xd800 && code <= 0xdfff) || code > 0x10ffff
+          ? '\uFFFD'
+          : String.fromCodePoint(code)
+      if (input[hexEnd] === '\r' && input[hexEnd + 1] === '\n') hexEnd += 2
+      else if (
+        input[hexEnd] === ' ' ||
+        input[hexEnd] === '\t' ||
+        input[hexEnd] === '\n' ||
+        input[hexEnd] === '\f' ||
+        input[hexEnd] === '\r'
+      ) {
+        hexEnd += 1
+      }
+      cursor = hexEnd
+      continue
+    }
+    out += next
+    cursor += 2
+  }
+  return out
+}
+
+function extractCssResourceUrls(fragment: string): string[] {
   const urls: string[] = []
-  const pattern = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)|'([^']*)'|"([^"]*)"/gi
+  const urlFn = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi
   let match: RegExpExecArray | null
-  while ((match = pattern.exec(statement)) !== null) {
-    const url = (match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? '').trim()
+  while ((match = urlFn.exec(fragment)) !== null) {
+    const url = (match[1] ?? match[2] ?? match[3] ?? '').trim()
     if (url) urls.push(url)
   }
+  const quoted = /["']([^"']*)["']/g
+  while ((match = quoted.exec(fragment)) !== null) {
+    const url = match[1]!.trim()
+    if (url) urls.push(url)
+  }
+  const bare = /(?:https?:)?\/\/[^\s,)"']+/gi
+  while ((match = bare.exec(fragment)) !== null) {
+    urls.push(match[0])
+  }
+  return urls
+}
+
+function cssImportIsInlineOnly(statement: string): boolean {
+  const urls = extractCssResourceUrls(statement)
   return urls.length > 0 && urls.every(isInlinePdfResourceUrl)
 }
 
+function findMatchingParen(source: string, openIndex: number): number {
+  let depth = 0
+  let quote = 0
+  for (let i = openIndex; i < source.length; i++) {
+    const code = source.charCodeAt(i)
+    if (quote) {
+      if (code === 92) {
+        i += 1
+        continue
+      }
+      if (code === quote) quote = 0
+      continue
+    }
+    if (code === 34 || code === 39) {
+      quote = code
+      continue
+    }
+    if (code === 40) depth += 1
+    else if (code === 41) {
+      depth -= 1
+      if (depth === 0) return i
+    }
+  }
+  return -1
+}
+
+const CSS_IMAGE_FUNCTIONS = ['-webkit-image-set', 'image-set', 'cross-fade', 'image'] as const
+
+function cssFunctionArgsAreInlineOnly(args: string): boolean {
+  const urls = extractCssResourceUrls(args)
+  if (urls.length === 0) return !/(?:https?:|url\s*\(|\/\/)/i.test(args)
+  return urls.every(isInlinePdfResourceUrl)
+}
+
+function rewriteCssImageFunctions(css: string): string {
+  let out = ''
+  let cursor = 0
+  const lower = css.toLowerCase()
+  while (cursor < css.length) {
+    let found = -1
+    let foundName = ''
+    for (const name of CSS_IMAGE_FUNCTIONS) {
+      const idx = lower.indexOf(`${name}(`, cursor)
+      if (idx === -1) continue
+      if (name === 'image' && lower.startsWith('image-set(', idx)) continue
+      if (found === -1 || idx < found) {
+        found = idx
+        foundName = name
+      }
+    }
+    if (found === -1) {
+      out += css.slice(cursor)
+      break
+    }
+    const open = found + foundName.length
+    const close = findMatchingParen(css, open)
+    out += css.slice(cursor, found)
+    if (close === -1) {
+      out += 'none'
+      break
+    }
+    const args = css.slice(open + 1, close)
+    out += cssFunctionArgsAreInlineOnly(args) ? css.slice(found, close + 1) : 'none'
+    cursor = close + 1
+  }
+  return out
+}
+
 function neutralizeCssFetches(css: string): string {
-  return css
-    .replace(/@import\b[^;]*;?/gi, (statement) => (cssImportIsInlineOnly(statement) ? statement : ''))
-    .replace(/url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi, (full, quotedSingle, quotedDouble, bare) => {
-      const inner = String(quotedSingle ?? quotedDouble ?? bare ?? '').trim()
-      return isInlinePdfResourceUrl(inner) ? full : 'none'
-    })
+  // Decode first so `\75rl(...)` and `url(\68ttps://...)` become a visible
+  // url() that isAllowedPdfRequest can refuse. image-set() can take a quoted
+  // URL with no url() wrapper — those are rewritten as a whole function.
+  const decoded = decodeCssEscapes(css)
+  let out = decoded.replace(/@import\b[^;]*;?/gi, (statement) =>
+    cssImportIsInlineOnly(statement) ? statement : '',
+  )
+  out = rewriteCssImageFunctions(out)
+  out = out.replace(/url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi, (full, quotedSingle, quotedDouble, bare) => {
+    const inner = String(quotedSingle ?? quotedDouble ?? bare ?? '').trim()
+    return isInlinePdfResourceUrl(inner) ? full : 'none'
+  })
+  // Quoted http(s) left outside url() — image-set("https://…") is handled
+  // above; this is the fail-closed remainder and must not touch a data: URL.
+  return out.replace(/["']https?:\/\/[^"']+["']/gi, (quoted, offset: number, source: string) => {
+    if (source.slice(Math.max(0, offset - 320), offset).includes('data:')) return quoted
+    const inner = quoted.slice(1, -1)
+    return isInlinePdfResourceUrl(inner) ? quoted : 'none'
+  })
 }
 
 function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
@@ -1173,23 +1318,17 @@ export function rewriteNetworkPdfResources(html: string): string {
 export type PdfChromeSubresourceRequest = { resourceType: string; url: string }
 
 function collectCssSubresourceRequests(css: string): PdfChromeSubresourceRequest[] {
+  const decoded = decodeCssEscapes(css)
   const requests: PdfChromeSubresourceRequest[] = []
   const importPattern = /@import\b[^;]*;?/gi
   let importMatch: RegExpExecArray | null
-  while ((importMatch = importPattern.exec(css)) !== null) {
-    const statement = importMatch[0]
-    const urlPattern = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)|'([^']*)'|"([^"]*)"/gi
-    let urlMatch: RegExpExecArray | null
-    while ((urlMatch = urlPattern.exec(statement)) !== null) {
-      const url = (urlMatch[1] ?? urlMatch[2] ?? urlMatch[3] ?? urlMatch[4] ?? urlMatch[5] ?? '').trim()
-      if (url) requests.push({ resourceType: 'stylesheet', url })
+  while ((importMatch = importPattern.exec(decoded)) !== null) {
+    for (const url of extractCssResourceUrls(importMatch[0])) {
+      requests.push({ resourceType: 'stylesheet', url })
     }
   }
-  const urlPattern = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi
-  let urlMatch: RegExpExecArray | null
-  while ((urlMatch = urlPattern.exec(css)) !== null) {
-    const url = (urlMatch[1] ?? urlMatch[2] ?? urlMatch[3] ?? '').trim()
-    if (url) requests.push({ resourceType: 'image', url })
+  for (const url of extractCssResourceUrls(decoded)) {
+    requests.push({ resourceType: 'image', url })
   }
   return requests
 }
