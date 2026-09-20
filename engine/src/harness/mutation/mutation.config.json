@@ -203,7 +203,8 @@
       "path": "engine/src/payroll/canada/employer-levies.ts",
       "needsDb": true,
       "tests": [
-        "engine/src/payroll/employer-taxes.integration.test.ts"
+        "engine/src/payroll/employer-taxes.integration.test.ts",
+        "engine/src/payroll/quebec.integration.test.ts"
       ],
       "needsDbReason": "Employer levy calculation resolves organization rates and year-to-date remuneration from persisted payroll state."
     },
@@ -224,7 +225,8 @@
       "needsDb": true,
       "tests": [
         "engine/src/payroll/controls.test.ts",
-        "engine/src/payroll/us-state-withholding.integration.test.ts"
+        "engine/src/payroll/us-state-withholding.integration.test.ts",
+        "engine/src/payroll/run.integration.test.ts"
       ],
       "needsDbReason": "Statutory computation resolves employee withholding certificates and year-to-date payroll state from the database."
     },
