@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { dateTime } from '@/lib/format'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 type EvidenceRow = {
   id: string
@@ -56,9 +57,15 @@ export function AppHistory({
       { signal: controller.signal },
     )
       .then(async (response) => {
+        // Status before parsing: a non-JSON 401/403/5xx must surface the
+        // management refusal, never a SyntaxError from response.json().
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, t('failed')))
         const body = await response.json()
-        if (!response.ok) throw new Error(body.error ?? t('failed'))
-        if (!controller.signal.aborted) setResult(body)
+        if (!controller.signal.aborted) {
+          setError('')
+          setResult(body)
+        }
       })
       .catch((error) => {
         if (!controller.signal.aborted)
