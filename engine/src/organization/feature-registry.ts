@@ -74,6 +74,15 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmManagerNudges', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
   { key: 'homeAnnouncements', defaultEnabled: true, category: 'platform' },
   // HR-15 end
+  // HR-12 begin: compensation — job architecture and bands ride the
+  // parent; merit cycles, headcount plans and pay transparency are
+  // opt-in sub-features. Merit cycles push to payroll and read pay
+  // truth, so hrmMeritCycles additionally requires payroll.
+  { key: 'hrmCompensation', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmMeritCycles', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation', requiresAll: ['payroll'] },
+  { key: 'hrmHeadcountPlans', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
+  { key: 'hrmPayTransparency', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
+  // HR-12 end
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,
