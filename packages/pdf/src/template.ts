@@ -977,6 +977,26 @@ export function isInlinePdfResourceUrl(value: string): boolean {
 
 const RESOURCE_URI_ATTRS = new Set(['src', 'srcset', 'poster', 'background', 'xlink:href'])
 
+/** SVG/CSS presentation attributes whose value is a paint or filter and may be `url(...)`. */
+const CSS_URL_PRESENTATION_ATTRS = new Set([
+  'filter',
+  'clip-path',
+  'mask',
+  'mask-image',
+  'fill',
+  'stroke',
+  'marker',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'cursor',
+])
+
+function attributeCarriesCssResourceUrl(attrName: string, decodedValue: string): boolean {
+  if (attrName === 'style' || CSS_URL_PRESENTATION_ATTRS.has(attrName)) return true
+  return /url\s*\(/i.test(decodeCssEscapes(decodedValue))
+}
+
 function isFetchUriAttr(tagName: string, attrName: string): boolean {
   if (RESOURCE_URI_ATTRS.has(attrName)) return true
   // <a>/<area> hrefs become PDF link annotations; they are not subresource
@@ -1254,7 +1274,7 @@ function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
       }
     }
 
-    if (attrNameLower === 'style' && value != null) {
+    if (value != null && attributeCarriesCssResourceUrl(attrNameLower, decodeHtmlAttrValue(value))) {
       const decoded = decodeHtmlAttrValue(value)
       const nextCss = neutralizeCssFetches(decoded)
       if (nextCss === decoded) {
@@ -1387,7 +1407,7 @@ function collectTagSubresourceRequests(openTag: string, tagName: string): PdfChr
     }
     if (value == null) continue
     const decoded = decodeHtmlAttrValue(value)
-    if (attrNameLower === 'style') {
+    if (attributeCarriesCssResourceUrl(attrNameLower, decoded)) {
       requests.push(...collectCssSubresourceRequests(decoded))
     } else if (isFetchUriAttr(tagName, attrNameLower)) {
       if (attrNameLower === 'srcset') {

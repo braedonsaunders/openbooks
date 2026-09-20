@@ -114,3 +114,38 @@ test('header chrome CSS image-set and escaped url() cannot produce a network req
     ),
   )
 })
+
+test('SVG presentation attributes in chrome HTML cannot produce a network request', () => {
+  // These attributes take CSS url() paints/filters. They are not `style` or
+  // `src`, so a rewriter that only walks those leaves Chromium a fetch.
+  const attrs = [
+    'filter',
+    'clip-path',
+    'mask',
+    'fill',
+    'stroke',
+    'marker-start',
+    'marker-mid',
+    'marker-end',
+  ]
+  for (const attr of attrs) {
+    const authored = `<svg><rect ${attr}="url(https://static.example/paint)" /></svg>Acme`
+    const authoredRequests = pdfChromeSubresourceRequests(authored)
+    assert.ok(
+      authoredRequests.some((request) => !isAllowedPdfRequest(request.resourceType, request.url)),
+      `${attr} must be visible to the request helper`,
+    )
+    const prepared = preparePdfChromeHtml(authored)
+    assert.match(prepared, /Acme/)
+    assert.doesNotMatch(prepared, /static\.example/i)
+    assert.doesNotMatch(prepared, /https?:\/\//i)
+    const after = pdfChromeSubresourceRequests(prepared)
+    assert.equal(after.filter((request) => /^https?:/i.test(request.url)).length, 0)
+    assert.ok(after.every((request) => isAllowedPdfRequest(request.resourceType, request.url)))
+  }
+
+  const escaped = preparePdfChromeHtml(
+    '<svg><rect filter="\\75rl(https://static.example/paint)" /></svg>Acme',
+  )
+  assert.doesNotMatch(escaped, /static\.example|https?:\/\//i)
+})

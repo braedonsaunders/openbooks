@@ -197,8 +197,12 @@ test('tokenized header/footer fragments drop network resource URLs and keep inli
   const escapedUrl = sanitizeTokenizedFragment(
     '<div style="background:\\75rl(https://static.example/logo.png)">x</div>',
   )
+  const svgPaint = sanitizeTokenizedFragment(
+    '<svg><rect filter="url(https://static.example/paint)" fill="url(https://static.example/paint)" /></svg>',
+  )
   assert.doesNotMatch(imageSet, /static\.example|https?:\/\//i)
   assert.doesNotMatch(escapedUrl, /static\.example|https?:\/\//i)
+  assert.doesNotMatch(svgPaint, /static\.example|https?:\/\//i)
 
   const inline = sanitizeTokenizedFragment('<img src="data:image/png;base64,AAAA" alt="logo">')
   assert.match(inline, /data:image\/png;base64,AAAA/)
