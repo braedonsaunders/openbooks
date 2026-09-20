@@ -59,4 +59,3 @@ test('pay run operation modules form no static import cycle', () => {
   }
   for (const file of sources) visit(file, [])
 })
-
