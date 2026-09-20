@@ -151,8 +151,10 @@ if (!isVitest) {
       return nextLoad(url);
     },
   });
-  collectionRoute = (await import("./route.ts?hrm-recruiting-requisitions-collection")) as typeof import("./route.ts");
-  itemRoute = (await import("./[id]/route.ts?hrm-recruiting-requisitions-item")) as typeof import("./[id]/route.ts");
+  const collectionUrl = "./route.ts?hrm-recruiting-requisitions-collection";
+  collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
+  const itemUrl = "./[id]/route.ts?hrm-recruiting-requisitions-item";
+  itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
   hooks.deregister();
 }
 
@@ -162,7 +164,7 @@ const REQUISITION_ID = "00000000-0000-4000-8000-000000000022";
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.featureOn = true;
-  routeState.calls = [];
+  routeState.calls = [] as RouteState["calls"];
   routeState.serviceThrow = null;
   routeState.mapped = [];
 }
@@ -280,7 +282,7 @@ if (isVitest) {
       ["resume", { reason: "lifted" }, "resume"],
       ["cancel", { reason: "cut" }, "cancel"],
     ] as const) {
-      routeState.calls = [];
+      routeState.calls = [] as RouteState["calls"];
       const response = await itemRoute!.PATCH(
         jsonRequest("http://openbooks.test/x", "PATCH", { action, ...extra }),
         paramsOf(REQUISITION_ID),

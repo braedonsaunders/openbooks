@@ -426,7 +426,7 @@ async function assertPositionOpenable(
     );
   }
   if (row.vacancy.refusal) {
-    throw new RecruitingError("REFUSED", row.vacancy.refusal);
+    throw new RecruitingError("REFUSED", row.vacancy.refusal.message);
   }
   if (!isPositiveDecimal(row.vacancy.vacantFte) && !overEstablishment) {
     throw new RecruitingError(

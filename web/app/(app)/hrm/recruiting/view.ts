@@ -327,8 +327,8 @@ export async function loadRecruitingPage(
           offerWithdraw: t('recruiting.offerActions.withdraw'),
           offerReason: t('recruiting.offerActions.reason'),
           offerActionFailed: t('recruiting.offerActions.failed'),
-          candidateOptions: [],
-          employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
+        },
+        employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
           kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map((value) => ({
             value,
             label: t(`recruiting.interviewKind.${value}`),
@@ -338,8 +338,8 @@ export async function loadRecruitingPage(
             label: t(`recruiting.interviewOutcome.${value}`),
           })),
           basisOptions: ['hourly', 'annual'].map((value) => ({ value, label: t(`recruiting.basis.${value}`) })),
-        },
-      }
+          candidateOptions: [],
+        }
     } catch {
       missingDetail = t('recruiting.drawer.missing')
     }

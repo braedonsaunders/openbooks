@@ -375,7 +375,7 @@ export async function declineOffer(query: DeclineOfferQuery): Promise<OfferDTO> 
       kind: "offer_declined",
       reason,
     });
-    return toDTO(updated, today);
+    return toDTO(updated, await businessToday(orgId));
   });
 }
 

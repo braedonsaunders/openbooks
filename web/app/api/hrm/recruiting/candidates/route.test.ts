@@ -131,8 +131,10 @@ if (!isVitest) {
       return nextLoad(url);
     },
   });
-  collectionRoute = (await import("./route.ts?hrm-recruiting-candidates-collection")) as typeof import("./route.ts");
-  itemRoute = (await import("./[id]/route.ts?hrm-recruiting-candidates-item")) as typeof import("./[id]/route.ts");
+  const collectionUrl = "./route.ts?hrm-recruiting-candidates-collection";
+  collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
+  const itemUrl = "./[id]/route.ts?hrm-recruiting-candidates-item";
+  itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
   hooks.deregister();
 }
 
@@ -141,7 +143,7 @@ const CANDIDATE_ID = "00000000-0000-4000-8000-000000000031";
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.featureOn = true;
-  routeState.calls = [];
+  routeState.calls = [] as RouteState["calls"];
   routeState.serviceThrow = null;
   routeState.mapped = [];
 }

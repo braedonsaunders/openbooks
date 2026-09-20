@@ -11,7 +11,6 @@ import { isUuid } from "../../../../../lib/list-params";
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
 const decimal4 = z.string().regex(/^\d+(\.\d{1,4})?$/, "must be a decimal with up to 4 fraction digits");
-const text255 = z.string().trim().min(1).max(255);
 const reason = z.string().trim().min(1, "reason required").max(2000);
 
 const compensation = z

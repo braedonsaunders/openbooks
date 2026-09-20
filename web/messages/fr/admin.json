@@ -2532,6 +2532,7 @@
       "customerId": "Client",
       "projectId": "Projet",
       "isDefault": "Par défaut",
+      "isTerminal": "Terminale",
       "billMultiplier": "Multiplicateur de facturation",
       "lienWaiverEnforcement": "Contrôle des renonciations",
       "defaultLienWaiverType": "Formulaire par défaut",

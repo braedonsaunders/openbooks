@@ -296,7 +296,7 @@ async function assertPositionVacantForHire(
     );
   }
   if (row.vacancy.refusal) {
-    throw new RecruitingError("REFUSED", row.vacancy.refusal);
+    throw new RecruitingError("REFUSED", row.vacancy.refusal.message);
   }
   if (!isPositiveDecimal(row.vacancy.vacantFte)) {
     throw new RecruitingError(

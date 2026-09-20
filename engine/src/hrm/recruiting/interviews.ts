@@ -237,7 +237,7 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
     throw new RecruitingError("INVALID_INPUT", `interview outcome must be one of ${INTERVIEW_OUTCOMES.join(", ")} — check the outcome`);
   }
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<(InterviewRow & { requisitionId: string }) | undefined>(sql`
+    const row = (await db.execute<InterviewRow & { requisitionId: string }>(sql`
       select i.id, i.application_id as "applicationId", i.kind,
              i.scheduled_at as "scheduledAt", i.duration_minutes as "durationMinutes",
              i.location, i.status, i.outcome, i.feedback, i.scorecard,
@@ -245,7 +245,7 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `)).rows[0] as (InterviewRow & { requisitionId: string }) | undefined;
+    `)).rows[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -284,7 +284,7 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<(InterviewRow & { requisitionId: string }) | undefined>(sql`
+    const row = (await db.execute<InterviewRow & { requisitionId: string }>(sql`
       select i.id, i.application_id as "applicationId", i.kind,
              i.scheduled_at as "scheduledAt", i.duration_minutes as "durationMinutes",
              i.location, i.status, i.outcome, i.feedback, i.scorecard,
@@ -292,7 +292,7 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `)).rows[0] as (InterviewRow & { requisitionId: string }) | undefined;
+    `)).rows[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }

@@ -2620,6 +2620,7 @@
       "customerId": "客户",
       "projectId": "项目",
       "isDefault": "默认",
+      "isTerminal": "终点",
       "billMultiplier": "开票乘数",
       "lienWaiverEnforcement": "留置权弃权管控",
       "defaultLienWaiverType": "默认弃权表格",

@@ -94,9 +94,9 @@ export interface RequisitionDrawerData {
   targetStartOn: string | null
   compensation: string | null
   description: string | null
-  stages: { id: string; key: string; name: string; kind: string }[]
-  funnel: { stageKey: string; stageName: string; count: number }[]
-  applications: {
+  stages: readonly { id: string; key: string; name: string; kind: string }[]
+  funnel: readonly { stageKey: string; stageName: string; count: number }[]
+  applications: readonly {
     id: string
     candidate: { id: string; displayName: string; email: string | null; phone: string | null; href: string }
     stageId: string
@@ -127,8 +127,16 @@ export interface CandidateDrawerData {
   email: string | null
   phone: string | null
   source: string | null
-  applications: { requisitionId: string; requisitionNumber: string; requisitionTitle: string; applicationId: string; stageName: string; status: string; appliedOn: string }[]
-  interviews: { id: string; applicationId: string; kind: string; scheduledAt: string; status: string; outcome: string | null }[]
+  applications: readonly {
+    requisitionId: string;
+    requisitionNumber: string;
+    requisitionTitle: string;
+    applicationId: string;
+    stageName: string;
+    status: string;
+    appliedOn: string;
+  }[]
+  interviews: readonly { id: string; applicationId: string; kind: string; scheduledAt: string; status: string; outcome: string | null }[]
   closeHref: string
   labels: { applications: string; interviews: string; email: string; phone: string; source: string }
   outcomeOptions: Option[]

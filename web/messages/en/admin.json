@@ -2620,6 +2620,7 @@
       "customerId": "Customer",
       "projectId": "Project",
       "isDefault": "Default",
+      "isTerminal": "Terminal",
       "billMultiplier": "Bill multiplier",
       "lienWaiverEnforcement": "Lien waiver control",
       "defaultLienWaiverType": "Default waiver form",

@@ -2620,6 +2620,7 @@
       "customerId": "Cliente",
       "projectId": "Projeto",
       "isDefault": "Padrão",
+      "isTerminal": "Final",
       "billMultiplier": "Multiplicador de faturamento",
       "lienWaiverEnforcement": "Controle de quitações",
       "defaultLienWaiverType": "Modelo de quitação padrão",
