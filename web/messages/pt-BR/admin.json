@@ -1460,6 +1460,7 @@
         "regimes": "Regimes fiscais",
         "classes": "Classes fiscais",
         "firstYear": "Regras do primeiro ano",
+        "cessation": "Atividade qualificante",
         "methods": "Métodos",
         "books": "Políticas por livro"
       },
@@ -1495,6 +1496,10 @@
         "firstYear": {
           "title": "Regras do primeiro ano",
           "description": "Aceleração e elegibilidade do primeiro ano com data de vigência."
+        },
+        "cessation": {
+          "title": "Cessação CAA 55(4)",
+          "description": "Registre quando uma atividade qualificadora do Reino Unido cessa para que exista uma balancing allowance. Alienar o último ativo não é uma cessação."
         },
         "assignments": {
           "title": "Atribuições por categoria de ativo",
@@ -2091,6 +2096,11 @@
         "title": "Regras do primeiro ano",
         "singularTitle": "Regra de primeiro ano",
         "description": "Regras de primeiro ano datadas por regime/classe (regra de meio ano, incentivo de investimento acelerado, despesa imediata)."
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Cessações de atividade qualificadora",
+        "singularTitle": "Cessação de atividade qualificadora",
+        "description": "Cessação com data de vigência de uma atividade qualificadora do Reino Unido por entidade jurídica, segundo o CAA 55(4). A balancing allowance só existe após esta data; esvaziar o grupo não basta."
       },
       "classes": {
         "title": "Classes",

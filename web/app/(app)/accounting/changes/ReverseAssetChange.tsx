@@ -8,10 +8,12 @@ export function ReverseAssetChange({
   id,
   domain = "asset",
   effectiveOn,
+  taxBasis = false,
 }: {
   id: string;
   domain?: "asset" | "consolidation";
   effectiveOn?: string;
+  taxBasis?: boolean;
 }) {
   const router = useRouter(),
     today = useBusinessToday();
@@ -31,7 +33,7 @@ export function ReverseAssetChange({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(domain === "asset" ? { effectiveOn: date } : {}),
+            ...(domain === "asset" && !taxBasis ? { effectiveOn: date } : {}),
             reason,
             idempotencyKey: key,
           }),
@@ -63,10 +65,16 @@ export function ReverseAssetChange({
         onClose={() => setOpen(false)}
         title={
           domain === "asset"
-            ? "Reverse asset change"
+            ? taxBasis
+              ? "Reverse tax basis workpaper"
+              : "Reverse asset change"
             : "Correct loss of control"
         }
-        description="The original journals remain intact. Reversal requires a new independent approval."
+        description={
+          taxBasis
+            ? "The original workpaper remains in the audit history. Reversal requires a new independent approval."
+            : "The original journals remain intact. Reversal requires a new independent approval."
+        }
         footer={
           <Button disabled={busy} onClick={propose}>
             Prepare reversal
@@ -74,7 +82,7 @@ export function ReverseAssetChange({
         }
       >
         <div className="space-y-4">
-          {domain === "asset" ? (
+          {domain === "asset" && !taxBasis ? (
             <div>
               <Label>Reversal date</Label>
               <Input
@@ -86,6 +94,12 @@ export function ReverseAssetChange({
                 }}
               />
             </div>
+          ) : taxBasis ? (
+            <p>
+              The correction uses the original workpaper date ({effectiveOn}).
+              Any affected tax depreciation runs must be recomputed through the
+              tax workflow after approval.
+            </p>
           ) : (
             <p>
               The correction uses the original disposal date. Its accounting

@@ -1460,6 +1460,7 @@
         "regimes": "税制",
         "classes": "税类",
         "firstYear": "首年规则",
+        "cessation": "合格活动",
         "methods": "方法",
         "books": "账簿政策"
       },
@@ -1495,6 +1496,10 @@
         "firstYear": {
           "title": "首年规则",
           "description": "按生效日期管理的加速和首年资格。"
+        },
+        "cessation": {
+          "title": "CAA 55(4) 终止",
+          "description": "记录英国合格活动终止的日期，balancing allowance 仅在该日之后才存在。处置最后一项资产并不构成终止。"
         },
         "assignments": {
           "title": "资产类别分配",
@@ -2091,6 +2096,11 @@
         "title": "首年规则",
         "singularTitle": "首年规则",
         "description": "按制度/类别区分的带日期首年规则（半年规则、加速投资激励、即时费用化）。"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "合格活动终止",
+        "singularTitle": "合格活动终止",
+        "description": "按 CAA 55(4) 记录每个法律实体的英国合格活动生效终止日。balancing allowance 仅在该日之后才存在；清空池本身不够。"
       },
       "classes": {
         "title": "类别",

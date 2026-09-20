@@ -1415,6 +1415,7 @@
         "regimes": "Regímenes fiscales",
         "classes": "Clases fiscales",
         "firstYear": "Reglas del primer año",
+        "cessation": "Actividad calificadora",
         "methods": "Métodos",
         "books": "Políticas por libro"
       },
@@ -1450,6 +1451,10 @@
         "firstYear": {
           "title": "Reglas del primer año",
           "description": "Aceleración y elegibilidad del primer año con fecha de vigencia."
+        },
+        "cessation": {
+          "title": "Cese según CAA 55(4)",
+          "description": "Registre cuándo cesa una actividad calificadora del Reino Unido para que exista una balancing allowance. Enajenar el último activo no es un cese."
         },
         "assignments": {
           "title": "Asignaciones por categoría de activos",
@@ -2295,6 +2300,11 @@
         "title": "Reglas del primer año",
         "description": "Reglas datadas de primer año por régimen y clase (regla del medio año, incentivo a la inversión acelerada, gasto inmediato).",
         "singularTitle": "Regla de primer año"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Ceses de actividad calificadora",
+        "singularTitle": "Cese de actividad calificadora",
+        "description": "Cese con fecha de vigencia de una actividad calificadora del Reino Unido por entidad jurídica según CAA 55(4). La balancing allowance solo existe después de esta fecha; vaciar el grupo no basta."
       },
       "pay-schedules": {
         "title": "Calendarios de nómina",

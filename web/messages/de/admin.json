@@ -1732,6 +1732,7 @@
         "regimes": "Steuerregime",
         "classes": "Steuerklassen",
         "firstYear": "Erstjahresregeln",
+        "cessation": "Qualifizierende Tätigkeit",
         "methods": "Methoden",
         "books": "Buchrichtlinien"
       },
@@ -1767,6 +1768,10 @@
         "firstYear": {
           "title": "Erstjahresregeln",
           "description": "Datumsbezogene Beschleunigung und Berechtigung für das erste Jahr."
+        },
+        "cessation": {
+          "title": "Einstellung nach CAA 55(4)",
+          "description": "Erfassen Sie, wann eine britische qualifizierende Tätigkeit endet, damit ein Balancing Allowance möglich ist. Die Veräußerung des letzten Wirtschaftsguts ist keine Einstellung."
         },
         "assignments": {
           "title": "Zuordnungen für Anlagekategorien",
@@ -2285,6 +2290,11 @@
         "title": "Erstjahresregeln",
         "description": "Datierte Erstjahresregeln je Regime/Klasse (Halbjahresregel, beschleunigte Investitionsanreize, sofortige Aufwandsverrechnung).",
         "singularTitle": "Erstjahresregel"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Einstellungen qualifizierender Tätigkeiten",
+        "singularTitle": "Einstellung qualifizierender Tätigkeit",
+        "description": "Stichtagsbezogene Einstellung einer britischen qualifizierenden Tätigkeit je Rechtsträger nach CAA 55(4). Ein Balancing Allowance gibt es erst nach diesem Datum; ein leerer Pool reicht nicht."
       },
       "pay-schedules": {
         "title": "Lohnpläne",

@@ -993,12 +993,42 @@ function requireMoney(draft: TaxBasisDraft, name: string): string {
   if (draft[name] == null || draft[name] === "") {
     throw new TaxBasisPolicyError(`${name} is required for this ${String(draft.regime)} treatment`);
   }
-  return moneyExact(draft[name], name);
+  return validateDeclaredDecimal(name, draft[name]);
 }
 
 function optionalMoney(draft: TaxBasisDraft, name: string): string | undefined {
   if (draft[name] == null || draft[name] === "") return undefined;
-  return moneyExact(draft[name], name);
+  return validateDeclaredDecimal(name, draft[name]);
+}
+
+/** Declared cost, basis, proceeds and rates are nonnegative. A signed NZ
+ *  pool reduction is computed from consideration − disposal expenditure. */
+export function validateDeclaredDecimal(name: string, value: unknown): string {
+  const amount = moneyExact(value, name);
+  if (name === "allocationFraction") {
+    if (cmp(amount, "0") <= 0 || cmp(amount, "1") > 0) {
+      throw new TaxBasisPolicyError("allocationFraction must be greater than 0 and at most 1");
+    }
+    return amount;
+  }
+  if (name === "taxableUsePercent") {
+    if (cmp(amount, "0") < 0 || cmp(amount, "100") > 0) {
+      throw new TaxBasisPolicyError("taxableUsePercent must be between 0 and 100");
+    }
+    return amount;
+  }
+  if (name === "recoveryPeriodYears" || name === "associatedPersonEquivalentRate") {
+    if (cmp(amount, "0") <= 0) {
+      throw new TaxBasisPolicyError(`${name} must be greater than 0`);
+    }
+    return amount;
+  }
+  if (cmp(amount, "0") < 0) {
+    throw new TaxBasisPolicyError(
+      `${name} must be nonnegative; a signed net is computed from declared facts (for example NZ consideration less disposal expenditure), not entered as a negative cost, basis, proceeds or rate`,
+    );
+  }
+  return amount;
 }
 
 const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable"]);
@@ -1077,11 +1107,12 @@ export function validateTaxRegimeBasis(
     applicable: resolveApplicable(raw, context, sourceOperation),
   };
   for (const field of TAX_BASIS_FIELDS) {
-    if (!taxBasisFieldRequired(field, draft)) continue;
-    if (draft[field.name] == null || draft[field.name] === "") {
+    const supplied = draft[field.name] != null && draft[field.name] !== "";
+    if (!taxBasisFieldRequired(field, draft) && !supplied) continue;
+    if (!supplied) {
       throw new TaxBasisPolicyError(`${field.name} is required for this ${regime} treatment — ${field.label.toLowerCase()}`);
     }
-    if (field.kind === "decimal") moneyExact(draft[field.name], field.name);
+    if (field.kind === "decimal") validateDeclaredDecimal(field.name, draft[field.name]);
     if (field.kind === "boolean" && typeof draft[field.name] !== "boolean") {
       throw new TaxBasisPolicyError(`${field.name} must be true or false`);
     }
@@ -1101,11 +1132,15 @@ export function validateTaxRegimeBasis(
 
 function validateCa(draft: TaxBasisDraft): CaCcaRegimeBasis {
   if (taxBasisSideApplies(draft.applicable, "seller")) {
-    const allocationMethod = draft.allocationMethod as CaAllocationMethod;
-    if (allocationMethod === "ascertainable_fraction") {
-      const fraction = moneyExact(draft.allocationFraction, "allocationFraction");
-      if (cmp(fraction, "0") <= 0 || cmp(fraction, "1") > 0) {
-        throw new TaxBasisPolicyError("allocationFraction must be greater than 0 and at most 1");
+    if (draft.originalCapitalCost != null && draft.originalCapitalCost !== "") {
+      const original = validateDeclaredDecimal("originalCapitalCost", draft.originalCapitalCost);
+      if (draft.allocatedCapitalCost != null && draft.allocatedCapitalCost !== "") {
+        const allocated = validateDeclaredDecimal("allocatedCapitalCost", draft.allocatedCapitalCost);
+        if (cmp(allocated, original) > 0) {
+          throw new TaxBasisPolicyError(
+            `allocatedCapitalCost ${allocated} cannot exceed originalCapitalCost ${original}`,
+          );
+        }
       }
     }
     if (draft.relationship === "non_arms_length" && draft.rolloverElection === "none") {
@@ -1440,10 +1475,9 @@ export function auPoolReduction(row: AuPoolRegimeBasis): string {
 }
 
 export function nzPoolReduction(row: NzPoolRegimeBasis): string {
-  const consideration = moneyExact(row.consideration, "consideration");
-  const expenditure = moneyExact(row.disposalExpenditure, "disposalExpenditure");
-  const excess = add(consideration, neg(expenditure));
-  return formatMoney(cmp(excess, "0") < 0 ? "0" : excess, 2);
+  const consideration = validateDeclaredDecimal("consideration", row.consideration);
+  const expenditure = validateDeclaredDecimal("disposalExpenditure", row.disposalExpenditure);
+  return formatMoney(add(consideration, neg(expenditure)), 2);
 }
 
 /** IR260 p.24: lower of buyer price and associate original cost (or first-use FMV). */

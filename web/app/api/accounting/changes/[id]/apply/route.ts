@@ -7,6 +7,10 @@ import { NextResponse } from "next/server";
 import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
 import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
+import {
+  applyTaxAssetBasis,
+  applyTaxAssetBasisReversal,
+} from "@openbooks/engine/src/tax-returns/asset-basis-workpaper.ts";
 import { authorizeChange } from "../../_authorization";
 export const runtime = "nodejs";
 export async function POST(
@@ -30,7 +34,11 @@ export async function POST(
         await (
           gate.operation === "group_valuation"
             ? applyAssetGroupValuation
-            : applyAssetChange
+            : gate.operation === "tax_basis"
+              ? applyTaxAssetBasis
+              : gate.operation === "tax_basis_reversal"
+                ? applyTaxAssetBasisReversal
+                : applyAssetChange
         )(gate.auth.user.orgId, id, gate.auth.user.id),
       );
     if (gate.domain === "revenue")
