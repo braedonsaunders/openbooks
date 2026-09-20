@@ -31,6 +31,7 @@ import {
   CONSTRUCTION_RATIO_RULES_ENTITY,
 } from './hrm-construction'
 // HR-13 end
+import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
 
 export type SetupFieldKind =
   | 'text'
@@ -1794,6 +1795,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
   CONSTRUCTION_RATIO_RULES_ENTITY,
   // HR-13 end
+  // HRM compensation architecture (0221, HR-12): job families, levels
+  // and versioned pay bands behind the hrmCompensation switch, rehomed
+  // as sections onto the Compensation page.
+  // HR-12 begin
+  JOB_FAMILIES_ENTITY,
+  JOB_LEVELS_ENTITY,
+  PAY_BANDS_ENTITY,
+  // HR-12 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

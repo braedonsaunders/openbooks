@@ -27,6 +27,7 @@ import { benefitsEnrollment } from './articles/benefits-enrollment'
 // HR-13 begin: construction-compliance article.
 import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payroll-prevailing-wage-per-diem'
 // HR-13 end
+import { compensationAndTransparency } from './articles/compensation-transparency'
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -263,6 +264,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end
   fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, compensationAndTransparency, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

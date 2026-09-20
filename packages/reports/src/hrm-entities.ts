@@ -35,6 +35,8 @@ export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
 export const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
 export const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
 export const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
+export const HRM_COMPENSATION_READ_PERMISSION = 'hrm.compensation.read'
+export const HRM_COMPENSATION_FEATURE_KEY = 'hrmCompensation'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -72,6 +74,11 @@ const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 
+// HR-12 begin
+const HRM_COMP_LINE_STATUSES = ['pending', 'proposed', 'approved', 'rejected', 'pushed'] as const
+const HRM_PLAN_LINE_KINDS = ['create', 'backfill', 'change', 'terminate'] as const
+const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'filled', 'cancelled'] as const
+// HR-12 end
 const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
 const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
 const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
@@ -856,4 +863,109 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'worked_on', direction: 'desc' },
   },
   // HR-13 end
+  // HR-12 begin: compensation report entities — bands, cycle lines,
+  // plan lines, and gap snapshots. All four sit behind the
+  // compensation read grant and the hrmCompensation switch; gap
+  // snapshots expose category aggregates only, never per-person pay.
+    key: 'hrm_pay_bands',
+    label: 'Pay bands',
+      'One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures with their effective window. Requires the HRM compensation permission.',
+    from: `hrm_pay_bands b
+  JOIN hrm_job_levels lvl ON lvl.id = b.level_id AND lvl.org_id = b.org_id
+  LEFT JOIN hrm_job_families fam ON fam.id = b.family_id AND fam.org_id = b.org_id
+  LEFT JOIN subsidiaries sub ON sub.id = b.employer_subsidiary_id AND sub.org_id = b.org_id`,
+    orgColumn: 'b.org_id',
+    subsidiaryScope: { column: 'b.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+      { key: 'level', label: 'Level', kind: 'text', expr: 'lvl.code' },
+      { key: 'family', label: 'Family', kind: 'text', expr: 'fam.code' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'b.currency' },
+      { key: 'basis', label: 'Basis', kind: 'text', expr: 'b.basis' },
+      { key: 'min', label: 'Min', kind: 'number', expr: 'b.min' },
+      { key: 'target', label: 'Target', kind: 'number', expr: 'b.target' },
+      { key: 'max', label: 'Max', kind: 'number', expr: 'b.max' },
+      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'b.effective_from' },
+      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'b.effective_to' },
+      { key: 'id', label: 'Band (id)', kind: 'uuid', expr: 'b.id' },
+    defaultSort: { column: 'level', direction: 'asc' },
+    key: 'hrm_comp_cycle_lines',
+    label: 'Merit cycle lines',
+      'One row per cycle decision: person, employer, snapshotted current rate, stored compa-ratio, guideline range, proposal, and status. Rates here are the frozen snapshot at open, never live payroll. Requires the HRM compensation permission.',
+    from: `hrm_comp_cycle_lines l
+      JOIN hrm_comp_cycles c ON c.id = l.cycle_id AND c.org_id = l.org_id
+      JOIN worker_employments emp ON emp.id = l.employment_id AND emp.org_id = l.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = l.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = l.org_id`,
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+      { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'current_rate', label: 'Current rate', kind: 'number', expr: 'l.current_rate' },
+      { key: 'compa_ratio', label: 'Compa-ratio', kind: 'number', expr: 'l.compa_ratio' },
+      { key: 'proposed_pct', label: 'Proposed %', kind: 'number', expr: 'l.proposed_pct' },
+      { key: 'proposed_rate', label: 'Proposed rate', kind: 'number', expr: 'l.proposed_rate' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_COMP_LINE_STATUSES },
+      { key: 'effective_on', label: 'Effective on', kind: 'date', expr: 'c.effective_on' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'l.employment_id' },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+    defaultSort: { column: 'cycle', direction: 'asc' },
+    key: 'hrm_headcount_plan_lines',
+    label: 'Headcount plan lines',
+      'One row per planned movement: plan, kind, title, employer, planned FTE, start, computed annual cost with its basis, and status. Costs are computed at save, never typed. Requires the HRM compensation permission.',
+    from: `hrm_headcount_plan_lines l
+      JOIN hrm_headcount_plans p ON p.id = l.plan_id AND p.org_id = l.org_id
+      JOIN subsidiaries sub ON sub.id = l.employer_subsidiary_id AND sub.org_id = l.org_id`,
+    subsidiaryScope: { column: 'l.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'l.kind', options: HRM_PLAN_LINE_KINDS },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'l.title' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'l.planned_fte' },
+      { key: 'start_on', label: 'Start', kind: 'date', expr: 'l.start_on' },
+      { key: 'est_annual_cost', label: 'Est. annual cost', kind: 'number', expr: 'l.est_annual_cost' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_PLAN_LINE_STATUSES },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+    defaultSort: { column: 'plan', direction: 'asc' },
+    key: 'hrm_pay_gap_snapshots',
+    label: 'Pay gap snapshots',
+      'One row per frozen snapshot per equal-value category: as-of date, level, headcounts, mean/median gaps, the OLS unexplained gap, and the joint-assessment flag. Category aggregates only — no per-person pay ever leaves through reports. Requires the HRM compensation permission.',
+    // One row per snapshot × category: the categories jsonb expands in
+    // a lateral (skipped by the join-pin rule, which only governs table
+    // joins); the level join resolves the code and the subsidiary join
+    // names a subsidiary-scoped population. Every table leg carries the
+    // org pin.
+    from: `hrm_pay_gap_snapshots s
+      CROSS JOIN LATERAL jsonb_to_recordset(s.categories)
+        AS c(level_id uuid, level_code text, count_a integer, count_b integer,
+              mean_gap_pct numeric, median_gap_pct numeric, unexplained_gap_pct numeric,
+              method text, joint_assessment_due boolean)
+      LEFT JOIN hrm_job_levels lvl ON lvl.id = c.level_id AND lvl.org_id = s.org_id
+      LEFT JOIN subsidiaries sub ON sub.id = (s.scope->>'employer_subsidiary_id')::uuid AND sub.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    // Snapshots are measured populations, optionally subsidiary-scoped:
+    // org-wide snapshots stay visible to every permitted reader
+    // (sharedNull), subsidiary ones only to that subsidiary's holders.
+    subsidiaryScope: { column: `(s.scope->>'employer_subsidiary_id')::uuid`, sharedNull: true },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+    defaultPeriodField: 'as_of',
+      { key: 'as_of', label: 'As of', kind: 'date', expr: 's.as_of' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'level', label: 'Level', kind: 'text', expr: 'coalesce(lvl.code, c.level_code)' },
+      { key: 'count_a', label: 'Headcount A', kind: 'number', expr: 'c.count_a' },
+      { key: 'count_b', label: 'Headcount B', kind: 'number', expr: 'c.count_b' },
+      { key: 'mean_gap_pct', label: 'Mean gap %', kind: 'number', expr: 'c.mean_gap_pct' },
+      { key: 'median_gap_pct', label: 'Median gap %', kind: 'number', expr: 'c.median_gap_pct' },
+      { key: 'unexplained_gap_pct', label: 'Unexplained gap %', kind: 'number', expr: 'c.unexplained_gap_pct' },
+      { key: 'method', label: 'Method', kind: 'text', expr: 'c.method' },
+      { key: 'joint_assessment_due', label: 'Joint assessment due', kind: 'boolean', expr: 'c.joint_assessment_due' },
+      { key: 'id', label: 'Snapshot (id)', kind: 'uuid', expr: 's.id' },
+    defaultSort: { column: 'as_of', direction: 'desc' },
+  // HR-12 end
 ]

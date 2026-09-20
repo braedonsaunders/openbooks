@@ -3009,6 +3009,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
   assert.equal(wanted.length, 3607, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3571, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3368,6 +3369,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   const ADMIN_I2_SOURCE_COUNT = 3607
   const ADMIN_I2_SOURCE_HASH = '43ccc1a2bf0f35e7b60bd58aaf97553c2d4ee9dc59adf6a90bd2f68044cde6d1'
+  const ADMIN_I2_SOURCE_COUNT = 3571
+  const ADMIN_I2_SOURCE_HASH = '0c6ad8b9e5ab45bcdb035d2e049963202bb3e709f72093f1b7b7f68f40023579'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5155,6 +5158,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "inventory": 159,
   "inventory": 104,
   "reports": 1395,
+  "reports": 1415,
   "sync": 172,
   "login": 33,
   "accounts": 82,
