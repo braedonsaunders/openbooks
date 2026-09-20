@@ -532,7 +532,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // grant exactly the positions entity hides, and the employment ones stay.
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
-      const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_'))
+      const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
       assert.deepEqual(hiddenHrm, ['hrm_positions', 'hrm_processes'], 'only the entities whose grants are missing hide')
     })
 
