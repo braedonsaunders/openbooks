@@ -92,3 +92,46 @@ test("malformed saved-view structured filters match nothing instead of throwing"
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("saved custom-field filters restrict the document list instead of dropping", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const west = randomUUID();
+    const east = randomUUID();
+    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+      values
+        (${west}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-W', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"west"}'}::jsonb),
+        (${east}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-E', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"east"}'}::jsonb)`);
+    const run = async (filters: { key: string; operator: string; value?: string | string[] | null }[]): Promise<number> => {
+      const rows = (
+        await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          where ${documentWhere([...KINDS], { ...view, filters: filters as never }, {}, org.orgId, null)}`)
+      ).rows;
+      return rows[0]!.n;
+    };
+    assert.equal(await run([]), 2, "unfiltered list sees both bills");
+    assert.equal(
+      await run([{ key: "cf_region", operator: "eq", value: "west" }]),
+      1,
+      "eq on a custom field must AND, not drop",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "eq", value: "south" }]),
+      0,
+      "a non-matching custom-field filter must empty the list, not return the tenant",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "in", value: ["west", "east"] }]),
+      2,
+      "in on a custom field keeps matching rows",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "between", value: "east", to: "west" }]),
+      0,
+      "an untyped range operator fails closed to empty, never drops",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
