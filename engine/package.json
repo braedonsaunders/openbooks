@@ -11,6 +11,7 @@
     "@openbooks/emails": "*",
     "@openbooks/forms-core": "*",
     "@openbooks/jobs": "*",
+    "@openbooks/pdf": "*",
     "@openbooks/reports": "*",
     "@openbooks/schema": "*",
     "@opentelemetry/api": "1.9.1",

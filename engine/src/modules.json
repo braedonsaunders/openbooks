@@ -223,7 +223,8 @@
         "money",
         "organization",
         "payroll",
-        "platform"
+        "platform",
+        "projects"
       ]
     },
     "inventory": {

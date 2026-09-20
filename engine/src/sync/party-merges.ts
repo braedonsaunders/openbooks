@@ -149,6 +149,13 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // same reason (entry-keyed uniqueness, no party merge collision).
   ["hrm_allowance_payroll_inputs", "employee_party_id"],
   // HR-13 end
+  // HR-12 begin: the cycle budget holder and the line decider follow the
+  // merge wholesale. SIMPLE, not GUARDED: no uniqueness on either table
+  // involves those party columns, so re-pointing cannot duplicate.
+  // proposed_by/actor/generated_by name users, never parties: no entry.
+  ["hrm_comp_cycle_budgets", "manager_party_id"],
+  ["hrm_comp_cycle_lines", "approver_party_id"],
+  // HR-12 end
 ];
 
 /**
