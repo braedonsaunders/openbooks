@@ -352,7 +352,10 @@ case "$cmd" in
 
   env)
     [ $# -ge 2 ] || { echo "testdb: env needs a database name" >&2; exit 1; }
-    print_env "$2"
+    # Resolve the name exactly as `new` and `drop` do: `env hr45` must print
+    # the exports for ob_hr45, the database `new hr45` created — a raw name
+    # printed a URL to a database that does not exist (3D000 at first use).
+    print_env "$(test_db_name "$2")"
     ;;
 
   drop)
