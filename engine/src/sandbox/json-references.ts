@@ -22,12 +22,49 @@ export function remapRoleRestriction(value: unknown, ids: ReadonlyMap<string, st
 }
 
 export async function sandboxSubsidiaryMap(productionOrgId: string, sandboxOrgId: string, seed: string): Promise<Map<string, string>> {
+  return sandboxCounterpartMap("subsidiaries", productionOrgId, sandboxOrgId, seed);
+}
+
+/** production id → sandbox id for every row of `table` whose deterministic
+ * rebase actually exists in the sandbox organization. A production id with no
+ * proven counterpart is deliberately absent, so callers refuse rather than
+ * guess. */
+async function sandboxCounterpartMap(table: "subsidiaries" | "departments", productionOrgId: string, sandboxOrgId: string, seed: string): Promise<Map<string, string>> {
   const rows = (await db.execute<{ source_id: string; target_id: string }>(sql`
     select source.id as source_id, target.id as target_id
-      from subsidiaries source join subsidiaries target
+      from ${sql.identifier(table)} source join ${sql.identifier(table)} target
         on target.id = ob_rebase(source.id, ${seed}::uuid) and target.org_id = ${sandboxOrgId}
      where source.org_id = ${productionOrgId}`)).rows;
   return new Map(rows.map(row => [row.source_id, row.target_id]));
+}
+
+/** HRM scope filters: `applies_to` on process templates and leave policies is
+ * `{ employer_subsidiary_id?: uuid|null, department_id?: uuid|null }` (the
+ * shape CHECK on each table is the authority). Both keys are tenant identities
+ * that the scalar FK rebase never sees, so a verbatim copy would pin a sandbox
+ * rule to a PRODUCTION entity or department. The sibling rule columns
+ * (accrual_rule, carryover_rule) carry kinds, decimal strings and day counts —
+ * no identities — and copy verbatim on purpose. */
+export const SCOPE_FILTER_TABLES = ["hrm_process_templates", "hrm_leave_policies"] as const;
+export type ScopeFilterTable = (typeof SCOPE_FILTER_TABLES)[number];
+
+export function remapScopeFilter(
+  value: unknown,
+  ids: { subsidiaries: ReadonlyMap<string, string>; departments: ReadonlyMap<string, string> },
+  label: string,
+): Record<string, string | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}: invalid scope filter`);
+  const filter = value as Record<string, unknown>;
+  const after: Record<string, string | null> = {};
+  for (const [key, raw] of Object.entries(filter)) {
+    const counterparts = key === "employer_subsidiary_id" ? ids.subsidiaries : key === "department_id" ? ids.departments : null;
+    if (!counterparts) throw new Error(`${label}: scope filter carries an unknown key ${key}`);
+    if (raw === null) { after[key] = null; continue; }
+    const target = typeof raw === "string" ? counterparts.get(raw.toLowerCase()) : undefined;
+    if (!target) throw new Error(`${label}: scope filter ${key} has no counterpart in the target organization`);
+    after[key] = target;
+  }
+  return after;
 }
 
 /** Run inside the clone's transaction after every referenced table was copied.
@@ -76,6 +113,26 @@ export async function rebaseClonedJsonReferences(args: {
       if (JSON.stringify(before) === JSON.stringify(after)) continue;
       await db.execute(sql`update subsidiaries set control_accounts=${JSON.stringify(after)}::jsonb where org_id=${args.sandboxOrgId} and id=${subsidiary.id}`);
       await recordRebase(args.sandboxOrgId, "subsidiaries", subsidiary.id, "control_accounts", before, after);
+    }
+  }
+  const scoped = SCOPE_FILTER_TABLES.filter((table) => args.copiedTables.has(table));
+  if (scoped.length) {
+    // A refresh that re-copies the HRM rules always re-copies the entity tree
+    // and departments with them (neither is a preserved customization), so the
+    // counterparts are the freshly rebased rows, never a stale sandbox guess.
+    const ids = {
+      subsidiaries: await sandboxCounterpartMap("subsidiaries", args.productionOrgId, args.sandboxOrgId, args.seed),
+      departments: await sandboxCounterpartMap("departments", args.productionOrgId, args.sandboxOrgId, args.seed),
+    };
+    for (const table of scoped) {
+      const rows = (await db.execute<{ id: string; applies_to: unknown }>(sql`
+        select id, applies_to from ${sql.identifier(table)} where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
+      for (const row of rows) {
+        const after = remapScopeFilter(row.applies_to, ids, `sandbox ${table} ${row.id}`);
+        if (JSON.stringify(after) === JSON.stringify(row.applies_to)) continue;
+        await db.execute(sql`update ${sql.identifier(table)} set applies_to=${JSON.stringify(after)}::jsonb where org_id=${args.sandboxOrgId} and id=${row.id}`);
+        await recordRebase(args.sandboxOrgId, table, row.id, "applies_to", row.applies_to, after);
+      }
     }
   }
 }

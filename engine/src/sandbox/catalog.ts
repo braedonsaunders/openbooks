@@ -139,6 +139,12 @@ export function assertUuid(v: string): string {
 
 export async function loadCatalog(): Promise<Catalog> {
   // Columns for every base table in public, flagged as uuid or not.
+  // GENERATED ALWAYS columns are readable projections, never insertable: the
+  // clone names every column it copies (`insert into t (cols) select ...`), so
+  // naming one makes PostgreSQL refuse the whole table with "cannot insert a
+  // non-DEFAULT value into column". They are recomputed by the target row from
+  // the columns that are copied. Every enumeration that feeds a write must
+  // declare this stance (engine/src/testing/column-enumerations.ts).
   const colsRes = await db.execute<{
     table_name: string; column_name: string; udt_name: string; is_nullable: string;
   }>(sql`
@@ -147,6 +153,7 @@ export async function loadCatalog(): Promise<Catalog> {
       join information_schema.tables t
         on t.table_name = c.table_name and t.table_schema = c.table_schema
      where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
+       and c.is_generated = 'NEVER'
      order by c.table_name, c.ordinal_position`);
 
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
