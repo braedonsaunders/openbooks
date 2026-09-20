@@ -28,6 +28,14 @@
  * - The observation instant is the latest anchor civil date at UTC midnight
  *   (stored data only — never now(), so re-collection is byte-identical).
  *   Status is terminated when a termination event is recorded, else active.
+ *   With NO anchor at all, a recorded employee_roles.terminated_on anchors a
+ *   TERMINATED observation on its own (Braedon's ruling, 2026-09-21: "the
+ *   others are old inactive employees" — the org already records when they
+ *   left). The rule is one-directional by design: an absent terminated_on
+ *   never implies active, and an active status still needs a pay stub,
+ *   timesheet or entitlement anchor. Do not "finish" this into a symmetric
+ *   rule: it would let an org with no payroll history migrate its whole
+ *   roster as active on no evidence at all.
  *   Activity dated AFTER the recorded termination is a genuine conflict this
  *   module cannot resolve: it is reported with status unknown and a
  *   provenance naming both facts plus a structured conflict, so the
@@ -71,7 +79,10 @@ import type {
 export const LEGACY_EMPLOYMENT_SOURCE_NAMESPACE = "legacy-extract";
 
 /** Collector contract version: a collector change drifts every binding. */
-export const COLLECTOR_SOURCE_VERSION = "collect-v1";
+/** Bumped when the collector's derivation rules change meaning (v2: a
+ * recorded terminated_on anchors a terminated observation when nothing else
+ * does), so a pinned collection names the rules it was collected under. */
+export const COLLECTOR_SOURCE_VERSION = "collect-v2";
 
 const EVIDENCE_HASH_VERSION = "openbooks/hrm-migration-collect/evidence/v1";
 
@@ -487,6 +498,26 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
         provenance: anchorProvenance,
       };
     }
+  } else if (role.terminated_on !== null) {
+    // No pay stub, timesheet or entitlement movement anchors this person, but
+    // the org recorded when they left. Braedon's ruling (2026-09-21): a
+    // recorded employee_roles.terminated_on ANCHORS a terminated observation
+    // ("the others are old inactive employees"); the strict rule was refusing
+    // to state something the org actually knows.
+    //
+    // ONE DIRECTION ONLY. An absent terminated_on never implies active — the
+    // branch above still requires an activity anchor for that — because a
+    // symmetric rule would migrate an org's whole roster as active on no
+    // evidence at all, which is the failure the anchor rule exists to
+    // prevent. And this branch is reached only when NO activity anchor
+    // exists: activity dated after the termination stays the
+    // post_termination_activity conflict above — a declaration never settles
+    // a conflict with observed activity.
+    observation = {
+      status: "terminated",
+      observedAt: `${role.terminated_on}T00:00:00Z`,
+      provenance: "employee_roles.terminated_on",
+    };
   }
 
   const historicSubsidiaryIds = [

@@ -185,7 +185,7 @@ test("clean employees collect to ready rows with observation candidates", { skip
     const activeRow = rowByParty(collected.rows, active.partyId);
     assert.ok(activeRow.role, "collected rows always carry the role inventory");
     assert.equal(activeRow.sourceId, active.roleId);
-    assert.equal(activeRow.sourceVersion, "collect-v1");
+    assert.equal(activeRow.sourceVersion, "collect-v2");
     assert.equal(activeRow.party.kind, "employee");
     assert.equal(activeRow.employer.assertedSubsidiaryId, org.subsidiaryId);
     assert.ok(
@@ -294,6 +294,10 @@ test("schedule subsidiary versus party subsidiary collects a conflict the classi
   }
 });
 
+// A recorded terminated_on anchors a terminated observation only when NOTHING
+// else does (see the anchorless test below): with activity dated after it the
+// conflict still wins, because a declaration never settles a conflict with
+// observed activity.
 test("post-termination activity is reported as a conflict, never preferred", { skip }, async () => {
   const org = await createScratchOrg();
   try {
@@ -389,12 +393,16 @@ test("every anchor source maps to an observation", { skip }, async () => {
   }
 });
 
-test("no anchor collects a null observation the executor refuses", { skip }, async () => {
+test("no anchor and no termination collects a null observation the executor refuses", { skip }, async () => {
   const org = await createScratchOrg();
   try {
     const scheduleId = await seedSchedule(org.orgId, "Unanchored biweekly", org.subsidiaryId);
     const person = await seedEmployee(
       org, "Collector Unanchored", { hiredOn: "2024-01-10" }, { scheduleId });
+    // An active flag on the role is not evidence either: absent terminated_on
+    // never implies active (the ruling is one-directional).
+    await withOrg(org.orgId, () =>
+      db.execute(sql`update employee_roles set is_active = true where id = ${person.roleId}`));
 
     const collected = await collectLegacyEmployments(org.orgId);
     assert.equal(collected.rows.length, 1);
@@ -417,6 +425,51 @@ test("no anchor collects a null observation the executor refuses", { skip }, asy
         (issue) => issue.code === "missing_current_observation",
       ),
       "refusal names the missing observation",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a recorded terminated_on alone anchors a terminated observation that migrates", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scheduleId = await seedSchedule(org.orgId, "Departed biweekly", org.subsidiaryId);
+    const departed = await seedEmployee(
+      org, "Collector Old Departed", { hiredOn: "2015-06-01", terminatedOn: "2019-11-30" }, { scheduleId });
+    const undated = await seedEmployee(
+      org, "Collector Undated", { hiredOn: "2016-02-01" }, { scheduleId });
+
+    const collected = await collectLegacyEmployments(org.orgId);
+    assert.equal(collected.rows.length, 2);
+    const departedRow = rowByParty(collected.rows, departed.partyId);
+    assert.deepEqual(departedRow.observation, {
+      status: "terminated",
+      observedAt: "2019-11-30T00:00:00Z",
+      provenance: "employee_roles.terminated_on",
+    });
+    assert.equal(departedRow.sourceVersion, "collect-v2");
+    // The asymmetry: the same absence of anchors with no termination date
+    // yields nothing, never active.
+    assert.equal(rowByParty(collected.rows, undated.partyId).observation, null);
+
+    const preflight = preflightEmploymentMigration(collected.rows);
+    const byParty = new Map(preflight.rows.map((evaluated) => [evaluated.nativePartyId, evaluated]));
+    assert.equal(byParty.get(departed.partyId)?.classification, "ready");
+    assert.equal(byParty.get(departed.partyId)?.candidate?.status, "terminated");
+    assert.equal(byParty.get(departed.partyId)?.candidate?.effectiveFrom, "2019-11-30");
+    assert.equal(byParty.get(departed.partyId)?.serviceStart, "2015-06-01");
+    assert.equal(byParty.get(undated.partyId)?.candidate, null);
+
+    const report = await withOrg(org.orgId, () =>
+      executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows, dryRun: true, allowPartial: true }),
+    );
+    const outcomes = new Map(report.persons.map((person) => [person.nativePartyId, person]));
+    assert.equal(outcomes.get(departed.partyId)?.outcome, "would_migrate");
+    assert.equal(outcomes.get(undated.partyId)?.outcome, "refused");
+    assert.ok(
+      outcomes.get(undated.partyId)?.issues.some((issue) => issue.code === "missing_current_observation"),
+      "the undated person is still refused for want of an observation",
     );
   } finally {
     await dropScratchOrg(org.orgId);
