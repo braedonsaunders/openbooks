@@ -241,6 +241,7 @@ async function freezeRegimes(
   effectiveOn: string,
   applicableByRegime: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>,
   receivingAssetId: string | null,
+  replay?: { computed: Record<string, unknown> },
 ): Promise<{ facts: TaxRegimeBasis; computed: Record<string, unknown>; applicable: TaxBasisApplicableSide }[]> {
   const needsBuyerSchedule = regimes.some(
     (row) =>
@@ -255,7 +256,27 @@ async function freezeRegimes(
         "a US receiving tax asset is required to freeze the buyer MACRS schedule; this intercompany transfer has no receiving asset",
       );
     }
-    buyerSchedule = await loadUsBuyerMacrsSchedule(tx, orgId, receivingAssetId);
+    if (replay) {
+      // Replay checks the NEW operator facts against the ORIGINAL derived
+      // schedule. Reloading today's class/date would reject an unchanged
+      // request after the asset has legitimately advanced. The outcome policy
+      // below validates these stored fields before they are compared.
+      const computed = replay.computed.us_macrs;
+      if (!computed || typeof computed !== "object" || Array.isArray(computed)) {
+        throw new TaxAssetBasisError(
+          "the original US workpaper is missing its frozen buyer schedule; inspect the original approval and correct it through a new workpaper",
+        );
+      }
+      const stored = computed as Record<string, unknown>;
+      buyerSchedule = {
+        placedInServiceOn: stored.buyerPlacedInServiceOn as string,
+        recoveryPeriodYears: stored.buyerRecoveryPeriodYears as string,
+        method: stored.buyerMethod as UsBuyerMacrsSchedule["method"],
+        convention: stored.buyerConvention as UsBuyerMacrsSchedule["convention"],
+      };
+    } else {
+      buyerSchedule = await loadUsBuyerMacrsSchedule(tx, orgId, receivingAssetId);
+    }
   }
   return regimes.map((row) => {
     const applicable = applicableByRegime[row.regime];
@@ -710,6 +731,7 @@ export async function proposeTaxAssetBasis(
           String(replay.payload.effectiveOn ?? ""),
           applicable,
           (replay.payload.receivingAssetId as string | null) ?? null,
+          { computed: (replay.payload.computed ?? {}) as Record<string, unknown> },
         );
         const payload = workpaperPayload(
           validated,
@@ -1053,4 +1075,3 @@ export async function applyTaxAssetBasisReversal(
     }),
   );
 }
-
