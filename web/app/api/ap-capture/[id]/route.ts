@@ -27,6 +27,32 @@ function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
              ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
 }
 
+/** Write-side twin: the associations the UPDATE will persist, not the pre-update row. */
+function resolvedAssociationsInScope(
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+  vendorId: string | null,
+  purchaseOrderId: string | null,
+) {
+  if (allowed === null) return sql`true`
+  if (allowed.size === 0) return sql`false`
+  const vendorOk = !vendorId
+    ? sql`true`
+    : sql`exists (
+        select 1 from parties vendor
+         where vendor.org_id = ${orgId} and vendor.id = ${vendorId}
+         ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
+      )`
+  const purchaseOrderOk = !purchaseOrderId
+    ? sql`true`
+    : sql`exists (
+        select 1 from documents po
+         where po.org_id = ${orgId} and po.id = ${purchaseOrderId}
+         ${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
+      )`
+  return sql`${vendorOk} and ${purchaseOrderOk}`
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -239,12 +265,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
     })
     // Omitted vendorId/purchaseOrderId lets resolveAndValidateCapture pick
-    // org-wide. The pre-update exists() fence cannot see those new ids, so
-    // the associations that will be written must pass the inbox rule here.
+    // org-wide. Lock those target rows before the gate so a concurrent
+    // subsidiary reassignment cannot change the answer under the UPDATE.
     if (resolved.vendorId) {
       const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from parties
          where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
+         for update
       `)).rows[0]
       if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
         throw new Error('capture_not_found')
@@ -254,6 +281,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from documents
          where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
+         for update
       `)).rows[0]
       if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
         throw new Error('capture_not_found')
@@ -313,6 +341,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
            where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
            ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
          )
+         and ${resolvedAssociationsInScope(gate.user.orgId, gate.allowedSubsidiaryIds, resolved.vendorId, resolved.purchaseOrderId)}
        returning id
     `))
     if (!savedRow.rows[0]) throw new Error('capture_not_found')
