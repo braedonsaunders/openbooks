@@ -48,7 +48,6 @@ objects-list.txt
 
 # local agent/editor instructions and launch state
 .claude/
-AGENTS.md
 
 # design-stage simulation notes and persona prompts; the maintained public
 # harness documentation lives at engine/src/sim/README.md
