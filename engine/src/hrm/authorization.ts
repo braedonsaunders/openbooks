@@ -785,32 +785,6 @@ export async function requireRecruitingManageForEmployer(
  * (null = unrestricted) for the caller to filter by, never a boolean.
  */
 export async function requireAggregateRecruitingRead(
-/** Performance and retention duties (HR-7, 0196). Confidential like employment. */
-export const HRM_PERFORMANCE_PERMISSIONS = [
-  "hrm.performance.read",
-  "hrm.performance.manage",
-] as const;
-
-export type HrmPerformancePermission = (typeof HRM_PERFORMANCE_PERMISSIONS)[number];
-
-/** Retention duties (HR-7, 0196): HR-only read of exit records and turnover. */
-export const HRM_RETENTION_PERMISSIONS = ["hrm.retention.read"] as const;
-
-export type HrmRetentionPermission = (typeof HRM_RETENTION_PERMISSIONS)[number];
-
-async function requireHrmPerformanceGrant(
-  permission: HrmPerformancePermission,
-): Promise<void> {
-  // Same hardwiring as every HRM gate: the live grant set decides, never a
-  // caller-supplied boolean. Cycles and reviews name no single employment,
-  // so there is no trusted subject here — the aggregate subsidiary scope
-  // below is what list-shaped callers filter by.
-      `Performance access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-
- * The aggregate half of performance authority for cycle-scoped writes and
- * list-shaped reads: the grant, then the allowed employer set (null =
- * unrestricted) for the caller to filter by, never a boolean.
-export async function requireAggregatePerformanceRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -820,7 +794,6 @@ export async function requireAggregatePerformanceRead(
       "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
     );
   }
-  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.read");
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -904,26 +877,6 @@ export async function actorOnInterviewPanel(
  * runner so this check and the subsequent write are atomic.
  */
 export async function requireHrmRecruitingManageOrg(
- * Run cycles, calibrate and share reviews. The caller MUST pass its write
- * transaction's runner so this check and the subsequent write are atomic.
-export async function requireAggregatePerformanceManage(
-): Promise<Set<string> | null> {
-  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.manage");
-  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
-
- * Employment-scoped performance gate for goal and exit writes against one
- * employment: the live grant plus the trusted subject plus employer scope,
- * exactly like the employment gates.
-export async function requireHrmPerformanceOnEmployment(
-  employmentId: string,
-  permission: HrmPerformancePermission,
-): Promise<TrustedEmploymentSubject> {
-  await requireHrmPerformanceGrant(exec, orgId, actorId, permission);
-  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
-  await assertEmployerScope(exec, orgId, actorId, subject);
-
-/** See exit records and turnover. HR-only: no structural scope exists here. */
-export async function requireHrmRetentionRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -934,8 +887,95 @@ export async function requireHrmRetentionRead(
     );
   }
 }
+
+
+/** Performance and retention duties (HR-7, 0196). Confidential like employment. */
+export const HRM_PERFORMANCE_PERMISSIONS = [
+  "hrm.performance.read",
+  "hrm.performance.manage",
+] as const;
+
+export type HrmPerformancePermission = (typeof HRM_PERFORMANCE_PERMISSIONS)[number];
+
+/** Retention duties (HR-7, 0196): HR-only read of exit records and turnover. */
+export const HRM_RETENTION_PERMISSIONS = ["hrm.retention.read"] as const;
+
+export type HrmRetentionPermission = (typeof HRM_RETENTION_PERMISSIONS)[number];
+
+async function requireHrmPerformanceGrant(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  permission: HrmPerformancePermission,
+): Promise<void> {
+  // Same hardwiring as every HRM gate: the live grant set decides, never a
+  // caller-supplied boolean. Cycles and reviews name no single employment,
+  // so there is no trusted subject here — the aggregate subsidiary scope
+  // below is what list-shaped callers filter by.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Performance access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+}
+
+/**
+ * The aggregate half of performance authority for cycle-scoped writes and
+ * list-shaped reads: the grant, then the allowed employer set (null =
+ * unrestricted) for the caller to filter by, never a boolean.
+ */
+export async function requireAggregatePerformanceRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.read");
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
+ * Run cycles, calibrate and share reviews. The caller MUST pass its write
+ * transaction's runner so this check and the subsequent write are atomic.
+ */
+export async function requireAggregatePerformanceManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.manage");
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
+ * Employment-scoped performance gate for goal and exit writes against one
+ * employment: the live grant plus the trusted subject plus employer scope,
+ * exactly like the employment gates.
+ */
+export async function requireHrmPerformanceOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmPerformancePermission,
+): Promise<TrustedEmploymentSubject> {
+  await requireHrmPerformanceGrant(exec, orgId, actorId, permission);
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** See exit records and turnover. HR-only: no structural scope exists here. */
+export async function requireHrmRetentionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
+    throw new HrmAuthorizationError(
       "Retention access requires the hrm.retention.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
 
 /**
  * Employments reporting to the actor through the live line relationship:
@@ -972,3 +1012,4 @@ export async function loadManagedEmploymentIds(
        and (r.effective_to is null or r.effective_to > ${asOf}::date)
   `)).rows;
   return rows.map((row) => row.employmentId);
+}

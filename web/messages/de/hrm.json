@@ -26,13 +26,7 @@
       "startingSoon": "Beginnen bald",
       "startingSoonSub": "{count, plural, one {# endet in den nächsten 30 Tagen} other {# enden in den nächsten 30 Tagen}}",
       "onLeave": "Heute abwesend",
-      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}",
-      "employers": "Arbeitgeber",
-      "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
-      "departments": "Abteilungen",
-      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}",
-      "unfundedFte": "Ungedeckt besetzte FTE",
-      "unfundedFteSub": "Besetzt ohne dahinterstehende Finanzierung"
+      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}"
     },
     "groups": {
       "title": "Personalstand nach Abteilung",

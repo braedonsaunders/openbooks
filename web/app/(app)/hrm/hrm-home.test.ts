@@ -130,8 +130,7 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
 });
 
 test("hrm route tabs are the six working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting']) {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/performance']) {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee

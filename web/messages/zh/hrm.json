@@ -26,13 +26,7 @@
       "startingSoon": "即将入职",
       "startingSoonSub": "{count, plural, other {未来30天内 # 人离职}}",
       "onLeave": "今日休假",
-      "onLeaveSub": "{count, plural, other {# 项待审批}}",
-      "employers": "雇主",
-      "employersSub": "{count, plural, other {# 家子公司}}",
-      "departments": "部门",
-      "departmentsSub": "{count, plural, other {# 个部门}}",
-      "unfundedFte": "无资金来源的已填补 FTE",
-      "unfundedFteSub": "已填补但没有对应资金"
+      "onLeaveSub": "{count, plural, other {# 项待审批}}"
     },
     "groups": {
       "title": "按部门统计人员",
