@@ -40,6 +40,12 @@ export async function GET(
   if (!owned) return NextResponse.json({ error: "record not found" }, { status: 404 });
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
   if (denied) return denied;
+  // A supplied template id that is not a UUID is the same 404 a missing
+  // template gets, settled before resolvePdfTemplate can bind it to
+  // pdf_templates.id (a database cast error would otherwise surface as 500).
+  if (templateId && !isUuid(templateId)) {
+    return NextResponse.json({ error: "template not found" }, { status: 404 });
+  }
   const [tpl, record] = await Promise.all([
     resolvePdfTemplate(user.orgId, recordType, templateId),
     loadPdfRecordValues(recordType, user.orgId, id),

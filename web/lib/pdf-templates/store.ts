@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { compileTemplateHtml } from '@openbooks/pdf'
+import { isUuid } from '../list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { starterTemplate } from './starters'
 
@@ -42,6 +43,9 @@ export async function listPdfTemplates(orgId: string, recordType?: string): Prom
 }
 
 export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
+  // pdf_templates.id is a uuid PK. A malformed id is the same miss as a
+  // foreign row and must never be bound — a driver cast error is not a 404.
+  if (!isUuid(id)) return null
   const r = (await db.execute<PdfTemplateRow>(sql`
     select ${COLS} from pdf_templates where org_id = ${orgId} and id = ${id}
   `))
@@ -72,6 +76,7 @@ export async function resolvePdfTemplate(
   if (!meta) return null
 
   if (templateId) {
+    if (!isUuid(templateId)) return null
     const tpl = await getPdfTemplate(orgId, templateId)
     if (tpl && tpl.recordType === recordType && tpl.isActive) return tpl
     return null
