@@ -2373,6 +2373,16 @@
         "title": "Políticas de ausencias",
         "singularTitle": "Política de ausencia",
         "description": "Cuánto tiempo acumula cada tipo, a quién cubre y cuánta antelación necesita. Derecho en tiempo; el valor lo calcula la nómina."
+      },
+      "hrm-process-templates": {
+        "title": "Plantillas de proceso",
+        "singularTitle": "Plantilla de proceso",
+        "description": "Listas de incorporación, salida y traslado: los pasos, responsables, plazos y evidencias con los que se abre un proceso."
+      },
+      "hrm-process-template-steps": {
+        "title": "Pasos de plantilla de proceso",
+        "singularTitle": "Paso de plantilla de proceso",
+        "description": "Un paso ordenado de una plantilla de proceso con su responsable, plazo y regla de evidencia."
       }
     },
     "fields": {

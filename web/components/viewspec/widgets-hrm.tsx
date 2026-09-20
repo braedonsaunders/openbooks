@@ -2,7 +2,6 @@ import type { ComponentProps } from 'react'
 import {
   HrmLeavePanel,
   HrmPendingRequests,
-  HrmReadiness,
   HrmRecentChanges,
   HrmUpcomingChanges,
   OnboardingPanel,
@@ -49,14 +48,6 @@ export const HRM_WIDGETS = {
       viewAllLabel={str(props, 'viewAllLabel') ?? ''}
       refusal={str(props, 'refusal') ?? null}
       notAvailable={str(props, 'notAvailable') ?? ''}
-    />
-  ),
-  'hrm-readiness': (props) => (
-    <HrmReadiness
-      message={str(props, 'message') ?? ''}
-      docHref={str(props, 'docHref') ?? ''}
-      docLabel={str(props, 'docLabel') ?? ''}
-      tone={props.tone === 'warning' ? 'warning' : 'positive'}
     />
   ),
   'hrm-recent-changes': (props) => (

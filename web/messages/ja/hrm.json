@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "人員数",
       "headcountSub": "{date} 時点",
-      "employers": "雇用主",
-      "employersSub": "{count, plural, other {# 子会社}}",
-      "departments": "部門",
-      "departmentsSub": "{count, plural, other {# 部門}}",
       "openPositions": "募集中のポジション",
-      "openPositionsSub": "{count, plural, other {# 募集中の編制}}",
-      "unfundedFte": "財源のない充足済みFTE",
-      "unfundedFteSub": "充足済みだが財源の割り当てがない"
+      "openPositionsSub": "空席FTE {fte}",
+      "startingSoon": "まもなく入社",
+      "startingSoonSub": "{count, plural, other {今後30日以内に # 名が退社}}",
+      "onLeave": "本日休暇中",
+      "onLeaveSub": "{count, plural, other {承認待ち # 件}}"
     },
     "groups": {
-      "title": "雇用主・部門別の人員数",
-      "employer": "雇用主",
+      "title": "部門別人員数",
+      "employer": "子会社",
       "department": "部門",
       "headcount": "人員数",
       "unassigned": "未割り当て",
@@ -31,12 +29,16 @@
       "total": "合計"
     },
     "directory": {
-      "title": "名簿"
+      "title": "名簿",
+      "employeesHint": "本日在籍",
+      "positionsHint": "募集中",
+      "processesHint": "{count, plural, other {期限超過 # 件}}",
+      "leaveHint": "{count, plural, other {承認待ち # 件}}"
     },
     "vacancy": {
       "title": "部門別の欠員",
       "department": "部門",
-      "employer": "雇用主",
+      "employer": "子会社",
       "positions": "ポジション",
       "planned": "計画FTE",
       "funded": "財源付きFTE",
@@ -53,6 +55,19 @@
       "upcomingLabel": "期限間近",
       "empty": "未完了のチェックリストはありません。",
       "viewAll": "すべてのプロセスを表示"
+    },
+    "trend": {
+      "title": "人員数（過去12か月）",
+      "hint": "各月末時点の在籍者数（本日まで）。",
+      "series": "人員数"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "対応が必要な項目はありません。",
+      "pending": "{count, plural, other {決定待ちの変更申請 # 件}}",
+      "overdueSteps": "{count, plural, other {期限超過のチェックリスト項目 # 件}}",
+      "leavePending": "{count, plural, other {承認待ちの休暇申請 # 件}}",
+      "unfunded": "予算裏付けのない充足FTE {fte}"
     }
   },
   "overview": {
@@ -313,7 +328,7 @@
       "title": "新しいポジション",
       "code": "ポジションコード",
       "titleField": "役職名",
-      "employer": "雇用主",
+      "employer": "雇用主となる子会社",
       "department": "部門",
       "noDepartment": "部門なし",
       "plannedFte": "計画FTE",

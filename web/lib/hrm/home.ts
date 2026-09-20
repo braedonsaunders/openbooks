@@ -9,8 +9,9 @@ import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.t
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
+import { getLocale } from 'next-intl/server'
 import { can, type Authz } from '../authz'
-import { subsidiaryVisibleFilter } from '../subsidiaries'
+import { isMultiSubsidiary, subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
@@ -78,9 +79,8 @@ export interface HrmPositionsSummary {
   openPositionsLabel: string
   openPositionsValue: string
   openPositionsSub: string
-  unfundedFteLabel: string
+  /** Filled FTE with no funding behind it; surfaces in the attention list, never as a tile. */
   unfundedFteValue: string
-  unfundedFteSub: string
   vacancyTitle: string
   departmentColumn: string
   employerColumn: string
@@ -117,18 +117,31 @@ export interface HrmHomeData {
   newEmployee: { basePath: string; role: 'employee'; label: string }
   /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
   onboarding: HrmOnboardingPanelData | null
+  /** Whether the org runs more than one subsidiary; the subsidiary column
+   *  and grouping render only then — a single-entity org sees departments. */
+  multiSubsidiary: boolean
   headcountLabel: string
   headcountValue: string
   headcountSub: string
-  employersLabel: string
-  employersValue: string
-  employersSub: string
-  departmentsLabel: string
-  departmentsValue: string
-  departmentsSub: string
   pendingLabel: string
   pendingValue: string
   pendingSub: string
+  pendingAccent: 'amber' | 'emerald'
+  startingLabel: string
+  startingValue: string
+  startingSub: string
+  /** On leave today; null without the leave grant (the tile is omitted). */
+  onLeaveLabel: string | null
+  onLeaveValue: string
+  onLeaveSub: string
+  trendTitle: string
+  trendHint: string
+  trendSeriesName: string
+  trendLabels: string[]
+  trendData: number[]
+  attentionTitle: string
+  attentionAllClear: string
+  attention: { tone: 'negative' | 'warning'; text: string; href: string }[]
   groupsTitle: string
   employerColumn: string
   departmentColumn: string
@@ -162,11 +175,6 @@ export interface HrmHomeData {
   recentEmpty: string
   recent: RecentChangeItem[]
   queueNotAvailable: string
-  readinessTitle: string
-  readinessMessage: string
-  readinessDocHref: string
-  readinessDocLabel: string
-  readinessTone: 'warning' | 'positive'
   actionsTitle: string
   actions: DirectoryItem[]
   /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
@@ -185,6 +193,18 @@ const HOME_PENDING_SHOWN = 5
 const HOME_WINDOW_DAYS = 30
 const HOME_WINDOW_LIMIT = 100
 const HOME_RECENT_LIMIT = 10
+
+/** The last civil day of each of the `count` months before the month of `date`, oldest first. */
+export function monthEndsBefore(date: string, count: number): string[] {
+  const [year, month] = date.split('-').map(Number) as [number, number, number]
+  const out: string[] = []
+  for (let back = count; back >= 1; back -= 1) {
+    // Day 0 of month m is the last day of month m-1 (UTC arithmetic only).
+    const end = new Date(Date.UTC(year, month - 1 - back + 1, 0))
+    out.push(end.toISOString().slice(0, 10))
+  }
+  return out
+}
 
 function requestKindLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, kind: string): string {
   if (kind === 'hire') return t('employment.changeRequests.kindHire')
@@ -216,10 +236,25 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   const knownAt = new Date().toISOString()
   const headcount = await getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt })
 
-  const employers = new Set(headcount.groups.map((group) => group.employerSubsidiaryId)).size
-  const departments = new Set(
-    headcount.groups.map((group) => group.departmentId).filter((id): id is string => id !== null),
-  ).size
+  const multiSubsidiary = await isMultiSubsidiary(orgId)
+
+  // Twelve month-end headcounts through the same canonical read, ending on
+  // today: the cockpit's trend is the read service twelve times, never a
+  // row count, so it agrees with the hero to the person.
+  const locale = await getLocale()
+  const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate])
+  const trendData: number[] = []
+  for (const date of trendDates) {
+    if (date === effectiveDate) {
+      trendData.push(headcount.total)
+    } else {
+      const point = await getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate: date, knownAt })
+      trendData.push(point.total)
+    }
+  }
+  const trendLabels = trendDates.map((date) =>
+    new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' }),
+  )
 
   // The headcount plan rides the same cockpit when the viewer holds the
   // position read grant: open establishments, unfunded filled FTE, and the
@@ -239,10 +274,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     positions = {
       openPositionsLabel: t('home.vitals.openPositions'),
       openPositionsValue: String(openCount),
-      openPositionsSub: t('home.vitals.openPositionsSub', { count: openCount }),
-      unfundedFteLabel: t('home.vitals.unfundedFte'),
+      openPositionsSub: t('home.vitals.openPositionsSub', { fte: vacancy.totals.vacantFte }),
       unfundedFteValue: vacancy.totals.unfundedFilledFte,
-      unfundedFteSub: t('home.vitals.unfundedFteSub'),
       vacancyTitle: t('home.vacancy.title'),
       departmentColumn: t('home.vacancy.department'),
       employerColumn: t('home.vacancy.employer'),
@@ -281,24 +314,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // destination here: it is reached from the pending panel below and from
   // the employee drawer, by review. Departments are configured in Company
   // setup and workforce reports live in the Reports module (quick actions).
-  const directory: DirectoryItem[] = []
-  if (can(authz, 'parties.read')) {
-    directory.push({
-      href: '/entities/employees',
-      label: tNav('modules.employees'),
-      iconKey: 'clipboard-check',
-      badge: { value: String(headcount.total), tone: 'neutral' },
-    })
-  }
-  if (can(authz, 'hrm.position.read')) {
-    directory.push({ href: '/hrm/positions', label: t('home.tabs.positions'), iconKey: 'layers' })
-  }
-  if (can(authz, 'hrm.process.read')) {
-    directory.push({ href: '/hrm/processes', label: t('home.tabs.processes'), iconKey: 'list-checks' })
-  }
-  if (can(authz, 'hrm.leave.read')) {
-    directory.push({ href: '/hrm/leave', label: t('home.tabs.leave'), iconKey: 'timer' })
-  }
+  const canReadPositions = can(authz, 'hrm.position.read')
+  const canReadProcesses = can(authz, 'hrm.process.read')
+  const canReadLeave = can(authz, 'hrm.leave.read')
 
   // Pending change requests through the existing service (newest first,
   // per-row scope inside). A mixed-scope actor is refused rather than
@@ -489,25 +507,104 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       }))
     : null
 
+  const leavePanel = await loadLeavePanel(authz)
+  const leavePending = leavePanel?.pendingCount ?? 0
+  const overdueSteps = onboarding?.overdue.length ?? 0
+  const openPositions = positions ? Number(positions.openPositionsValue) : 0
+  const unfundedFte = positions ? Number(positions.unfundedFteValue) : 0
+
+  // The live directory: the workspace's pages as a work queue, each badge a
+  // figure the loader already resolved through the canonical reads.
+  const directory: DirectoryItem[] = []
+  if (can(authz, 'parties.read')) {
+    directory.push({
+      href: '/entities/employees',
+      label: tNav('modules.employees'),
+      iconKey: 'clipboard-check',
+      badge: { value: String(headcount.total), hint: t('home.directory.employeesHint'), tone: 'neutral' },
+    })
+  }
+  if (canReadPositions) {
+    directory.push({
+      href: '/hrm/positions',
+      label: t('home.tabs.positions'),
+      iconKey: 'layers',
+      badge: { value: String(openPositions), hint: t('home.directory.positionsHint'), tone: openPositions > 0 ? 'warning' : 'neutral' },
+    })
+  }
+  if (canReadProcesses) {
+    directory.push({
+      href: '/hrm/processes',
+      label: t('home.tabs.processes'),
+      iconKey: 'list-checks',
+      badge: {
+        value: String(onboarding?.openCount ?? 0),
+        hint: t('home.directory.processesHint', { count: overdueSteps }),
+        tone: overdueSteps > 0 ? 'negative' : 'neutral',
+      },
+    })
+  }
+  if (canReadLeave) {
+    directory.push({
+      href: '/hrm/leave',
+      label: t('home.tabs.leave'),
+      iconKey: 'timer',
+      badge: {
+        value: String(leavePanel?.onLeaveToday.length ?? 0),
+        hint: t('home.directory.leaveHint', { count: leavePending }),
+        tone: leavePending > 0 ? 'warning' : 'neutral',
+      },
+    })
+  }
+
+  // Needs attention: every figure that asks someone to act, with the page
+  // that acts on it. Empty renders the all-clear sentence, never a blank.
+  const attention: HrmHomeData['attention'] = []
+  if (pendingRefusal === null && pendingCount > 0) {
+    attention.push({ tone: 'warning', text: t('home.attention.pending', { count: pendingCount }), href: '/hrm/change-requests?status=submitted' })
+  }
+  if (overdueSteps > 0) {
+    attention.push({ tone: 'negative', text: t('home.attention.overdueSteps', { count: overdueSteps }), href: '/hrm/processes?segment=overdue' })
+  }
+  if (leavePending > 0) {
+    attention.push({ tone: 'warning', text: t('home.attention.leavePending', { count: leavePending }), href: '/hrm/leave?segment=pending' })
+  }
+  if (positions && unfundedFte > 0) {
+    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: positions.unfundedFteValue }), href: '/hrm/positions' })
+  }
+  if (unmigrated > 0) {
+    attention.push({ tone: 'warning', text: t('overview.readiness.unmigrated', { count: unmigrated }), href: '/docs/employment-migration' })
+  }
+
   return {
     title: t('home.title'),
     description: t('home.description'),
     tabs: await hrmGroupTabs(authz, '/hrm'),
+    multiSubsidiary,
     canCreateEmployee: can(authz, 'parties.manage'),
     newEmployee: { basePath: '/entities/employees', role: 'employee', label: t('overview.actions.newEmployee') },
     onboarding,
     headcountLabel: t('home.vitals.headcount'),
     headcountValue: String(headcount.total),
     headcountSub: t('home.vitals.headcountSub', { date: headcount.effectiveDate }),
-    employersLabel: t('home.vitals.employers'),
-    employersValue: String(employers),
-    employersSub: t('home.vitals.employersSub', { count: employers }),
-    departmentsLabel: t('home.vitals.departments'),
-    departmentsValue: String(departments),
-    departmentsSub: t('home.vitals.departmentsSub', { count: departments }),
     pendingLabel: t('overview.pending.label'),
     pendingValue: pendingRefusal !== null ? '—' : String(pendingCount),
     pendingSub: t('overview.pending.sub'),
+    pendingAccent: pendingCount > 0 ? 'amber' : 'emerald',
+    startingLabel: t('home.vitals.startingSoon'),
+    startingValue: String(starts.length),
+    startingSub: t('home.vitals.startingSoonSub', { count: ends.length }),
+    onLeaveLabel: leavePanel ? t('home.vitals.onLeave') : null,
+    onLeaveValue: String(leavePanel?.onLeaveToday.length ?? 0),
+    onLeaveSub: t('home.vitals.onLeaveSub', { count: leavePending }),
+    trendTitle: t('home.trend.title'),
+    trendHint: t('home.trend.hint'),
+    trendSeriesName: t('home.trend.series'),
+    trendLabels,
+    trendData,
+    attentionTitle: t('home.attention.title'),
+    attentionAllClear: t('home.attention.allClear'),
+    attention,
     groupsTitle: t('home.groups.title'),
     employerColumn: t('home.groups.employer'),
     departmentColumn: t('home.groups.department'),
@@ -547,19 +644,11 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     recentEmpty: t('overview.recent.empty'),
     recent,
     queueNotAvailable: t('queue.notAvailable'),
-    readinessTitle: t('overview.readiness.title'),
-    readinessMessage:
-      unmigrated === 0
-        ? t('overview.readiness.healthy')
-        : t('overview.readiness.unmigrated', { count: unmigrated }),
-    readinessDocHref: '/docs/employment-migration',
-    readinessDocLabel: t('overview.readiness.docLabel'),
-    readinessTone: unmigrated === 0 ? 'positive' : 'warning',
     actionsTitle: t('overview.actions.title'),
     actions,
     positions,
     // Leave panel: on leave today plus pending approvals, for viewers who
     // may open the Leave tab. Null (no panel) without the leave grant.
-    leavePanel: await loadLeavePanel(authz),
+    leavePanel,
   }
 }

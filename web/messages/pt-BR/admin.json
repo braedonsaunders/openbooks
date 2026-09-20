@@ -2418,6 +2418,16 @@
         "title": "Políticas de licença",
         "singularTitle": "Política de licença",
         "description": "Quanto tempo cada tipo acumula, quem cobre e quanta antecedência exige. Direito em tempo; o valor é calculado pela folha."
+      },
+      "hrm-process-templates": {
+        "title": "Modelos de processo",
+        "singularTitle": "Modelo de processo",
+        "description": "Checklists de admissão, desligamento e transferência: etapas, responsáveis, prazos e evidências com que um processo é aberto."
+      },
+      "hrm-process-template-steps": {
+        "title": "Etapas de modelo de processo",
+        "singularTitle": "Etapa de modelo de processo",
+        "description": "Uma etapa ordenada de um modelo de processo com responsável, prazo e regra de evidência."
       }
     },
     "fields": {

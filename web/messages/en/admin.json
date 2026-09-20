@@ -2418,6 +2418,16 @@
         "title": "Leave policies",
         "singularTitle": "Leave policy",
         "description": "How much time each type accrues, who it covers, and how much notice it needs. Entitlement in time; payroll value is computed by the pay run."
+      },
+      "hrm-process-templates": {
+        "title": "Process templates",
+        "singularTitle": "Process template",
+        "description": "Onboarding, offboarding and transfer checklists: the steps, owners, due-date offsets and evidence a process opens with."
+      },
+      "hrm-process-template-steps": {
+        "title": "Process template steps",
+        "singularTitle": "Process template step",
+        "description": "One ordered step of a process template with its owner, due offset and evidence rule."
       }
     },
     "fields": {
