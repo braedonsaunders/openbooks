@@ -29,6 +29,52 @@
       "title": "名录"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "待处理申请",
+      "sub": "等待决定",
+      "title": "待处理的变更申请",
+      "empty": "没有等待决定的变更申请。",
+      "viewAll": "打开队列"
+    },
+    "upcoming": {
+      "title": "近期开始与结束",
+      "hint": "今后30天内生效的开始与结束。试用期未在雇佣档案中建模，因此试用期结束从不在此处列出。",
+      "startsTitle": "开始",
+      "startsEmpty": "今后30天内无人开始。",
+      "endsTitle": "结束",
+      "endsEmpty": "今后30天内无人结束。",
+      "truncatedNote": "仅显示前{limit}个近期变更。"
+    },
+    "recent": {
+      "title": "最近的雇佣变更",
+      "empty": "尚未记录任何雇佣变更。"
+    },
+    "changes": {
+      "kinds": {
+        "created": "已创建",
+        "status_changed": "状态变更",
+        "assignment_issued": "工作分配已下达",
+        "assignment_superseded": "工作分配已取代",
+        "corrected": "已更正",
+        "terminated": "已终止",
+        "rehired_reference": "重新雇用参考"
+      }
+    },
+    "readiness": {
+      "title": "就绪情况",
+      "healthy": "每个在职员工方都有雇佣档案。",
+      "unmigrated": "{count}个在职员工方没有雇佣档案 — 尚未迁移到雇佣档案，人数统计将其排除。",
+      "docLabel": "雇佣迁移如何运作"
+    },
+    "actions": {
+      "title": "快捷操作",
+      "newEmployee": "新增员工",
+      "proposeChange": "提议变更",
+      "manageDepartments": "管理部门",
+      "openReports": "打开报表"
+    }
+  },
   "queue": {
     "title": "变更申请",
     "description": "所有雇佣变更提案集中在一个队列中 — 草稿、已提交和已决定的申请 — 均通过变更申请服务解析。",

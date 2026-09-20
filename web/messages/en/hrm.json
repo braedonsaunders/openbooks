@@ -29,6 +29,52 @@
       "title": "Directory"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "Pending requests",
+      "sub": "Awaiting decision",
+      "title": "Pending change requests",
+      "empty": "No change requests are awaiting decision.",
+      "viewAll": "Open the queue"
+    },
+    "upcoming": {
+      "title": "Starting and ending soon",
+      "hint": "Effective starts and ends in the next 30 days. Probation periods are not modeled on the employment record, so probation ends never list here.",
+      "startsTitle": "Starting",
+      "startsEmpty": "Nobody starts in the next 30 days.",
+      "endsTitle": "Ending",
+      "endsEmpty": "Nobody ends in the next 30 days.",
+      "truncatedNote": "Showing the first {limit} upcoming changes."
+    },
+    "recent": {
+      "title": "Recent employment changes",
+      "empty": "No employment changes have been recorded yet."
+    },
+    "changes": {
+      "kinds": {
+        "created": "Created",
+        "status_changed": "Status changed",
+        "assignment_issued": "Assignment issued",
+        "assignment_superseded": "Assignment superseded",
+        "corrected": "Corrected",
+        "terminated": "Terminated",
+        "rehired_reference": "Rehire reference"
+      }
+    },
+    "readiness": {
+      "title": "Readiness",
+      "healthy": "Every active employee party has an employment record.",
+      "unmigrated": "{count} active employee parties have no employment record — they are not yet migrated to employment records and headcount excludes them.",
+      "docLabel": "How employment migration works"
+    },
+    "actions": {
+      "title": "Quick actions",
+      "newEmployee": "New employee",
+      "proposeChange": "Propose change",
+      "manageDepartments": "Manage departments",
+      "openReports": "Open reports"
+    }
+  },
   "queue": {
     "title": "Change requests",
     "description": "Every employment change proposal in one queue — drafts, submissions, and decisions — resolved through the change-request service.",

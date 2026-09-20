@@ -29,6 +29,52 @@
       "title": "Directorio"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "Solicitudes pendientes",
+      "sub": "En espera de decisión",
+      "title": "Solicitudes de cambio pendientes",
+      "empty": "Ninguna solicitud de cambio espera decisión.",
+      "viewAll": "Abrir la lista"
+    },
+    "upcoming": {
+      "title": "Próximos inicios y salidas",
+      "hint": "Inicios y salidas efectivas en los próximos 30 días. Los períodos de prueba no están modelados en el registro de empleo, por lo que sus fines nunca aparecen aquí.",
+      "startsTitle": "Inicios",
+      "startsEmpty": "Nadie inicia en los próximos 30 días.",
+      "endsTitle": "Salidas",
+      "endsEmpty": "Nadie sale en los próximos 30 días.",
+      "truncatedNote": "Se muestran los primeros {limit} cambios próximos."
+    },
+    "recent": {
+      "title": "Cambios de empleo recientes",
+      "empty": "Aún no se ha registrado ningún cambio de empleo."
+    },
+    "changes": {
+      "kinds": {
+        "created": "Creado",
+        "status_changed": "Estado cambiado",
+        "assignment_issued": "Asignación emitida",
+        "assignment_superseded": "Asignación reemplazada",
+        "corrected": "Corregido",
+        "terminated": "Terminado",
+        "rehired_reference": "Referencia de recontratación"
+      }
+    },
+    "readiness": {
+      "title": "Preparación",
+      "healthy": "Cada parte empleada activa tiene un registro de empleo.",
+      "unmigrated": "{count} partes empleadas activas no tienen registro de empleo — aún no se han migrado a registros de empleo y la plantilla las excluye.",
+      "docLabel": "Cómo funciona la migración de empleos"
+    },
+    "actions": {
+      "title": "Acciones rápidas",
+      "newEmployee": "Nuevo empleado",
+      "proposeChange": "Proponer cambio",
+      "manageDepartments": "Gestionar departamentos",
+      "openReports": "Abrir informes"
+    }
+  },
   "queue": {
     "title": "Solicitudes de cambio",
     "description": "Cada propuesta de cambio de empleo en una sola lista — borradores, envíos y decisiones — resuelta a través del servicio de solicitudes de cambio.",

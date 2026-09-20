@@ -29,6 +29,52 @@
       "title": "Annuaire"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "Demandes en attente",
+      "sub": "En attente de décision",
+      "title": "Demandes de changement en attente",
+      "empty": "Aucune demande de changement n'attend de décision.",
+      "viewAll": "Ouvrir la file"
+    },
+    "upcoming": {
+      "title": "Arrivées et départs proches",
+      "hint": "Arrivées et départs effectifs dans les 30 prochains jours. Les périodes d'essai ne sont pas modélisées sur le dossier d'emploi : leurs fins n'apparaissent donc jamais ici.",
+      "startsTitle": "Arrivées",
+      "startsEmpty": "Personne n'arrive dans les 30 prochains jours.",
+      "endsTitle": "Départs",
+      "endsEmpty": "Personne ne part dans les 30 prochains jours.",
+      "truncatedNote": "Les {limit} premiers changements à venir sont affichés."
+    },
+    "recent": {
+      "title": "Changements d'emploi récents",
+      "empty": "Aucun changement d'emploi n'a encore été enregistré."
+    },
+    "changes": {
+      "kinds": {
+        "created": "Créé",
+        "status_changed": "Statut changé",
+        "assignment_issued": "Affectation émise",
+        "assignment_superseded": "Affectation remplacée",
+        "corrected": "Corrigé",
+        "terminated": "Terminé",
+        "rehired_reference": "Référence de réembauche"
+      }
+    },
+    "readiness": {
+      "title": "État de préparation",
+      "healthy": "Chaque partie employée active a un dossier d'emploi.",
+      "unmigrated": "{count} parties employées actives n'ont pas de dossier d'emploi — elles ne sont pas encore migrées vers des dossiers d'emploi et l'effectif les exclut.",
+      "docLabel": "Comment fonctionne la migration des emplois"
+    },
+    "actions": {
+      "title": "Actions rapides",
+      "newEmployee": "Nouvel employé",
+      "proposeChange": "Proposer un changement",
+      "manageDepartments": "Gérer les services",
+      "openReports": "Ouvrir les rapports"
+    }
+  },
   "queue": {
     "title": "Demandes de changement",
     "description": "Chaque proposition de changement d'emploi dans une seule file — brouillons, soumissions et décisions — résolue par le service des demandes de changement.",

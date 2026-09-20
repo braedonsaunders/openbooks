@@ -29,6 +29,52 @@
       "title": "Verzeichnis"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "Offene Anträge",
+      "sub": "Warten auf Entscheidung",
+      "title": "Offene Änderungsanträge",
+      "empty": "Keine Änderungsanträge warten auf Entscheidung.",
+      "viewAll": "Liste öffnen"
+    },
+    "upcoming": {
+      "title": "Beginnt und endet bald",
+      "hint": "Wirksame Beginne und Enden in den nächsten 30 Tagen. Probezeiten sind auf der Beschäftigungsakte nicht modelliert, daher erscheinen Probezeit-Enden hier nie.",
+      "startsTitle": "Beginnend",
+      "startsEmpty": "Niemand beginnt in den nächsten 30 Tagen.",
+      "endsTitle": "Endend",
+      "endsEmpty": "Niemand endet in den nächsten 30 Tagen.",
+      "truncatedNote": "Die ersten {limit} anstehenden Änderungen werden gezeigt."
+    },
+    "recent": {
+      "title": "Aktuelle Beschäftigungsänderungen",
+      "empty": "Es wurden noch keine Beschäftigungsänderungen erfasst."
+    },
+    "changes": {
+      "kinds": {
+        "created": "Angelegt",
+        "status_changed": "Status geändert",
+        "assignment_issued": "Zuordnung erteilt",
+        "assignment_superseded": "Zuordnung abgelöst",
+        "corrected": "Korrigiert",
+        "terminated": "Beendet",
+        "rehired_reference": "Wiedereinstellungsreferenz"
+      }
+    },
+    "readiness": {
+      "title": "Bereitschaft",
+      "healthy": "Jede aktive Mitarbeiterpartei hat eine Beschäftigungsakte.",
+      "unmigrated": "{count} aktive Mitarbeiterparteien haben keine Beschäftigungsakte — sie sind noch nicht zu Beschäftigungsakten migriert und der Personalbestand schließt sie aus.",
+      "docLabel": "So funktioniert die Beschäftigungsmigration"
+    },
+    "actions": {
+      "title": "Schnellaktionen",
+      "newEmployee": "Neuer Mitarbeiter",
+      "proposeChange": "Änderung beantragen",
+      "manageDepartments": "Abteilungen verwalten",
+      "openReports": "Berichte öffnen"
+    }
+  },
   "queue": {
     "title": "Änderungsanträge",
     "description": "Jeder beantragte Beschäftigungswechsel in einer Liste — Entwürfe, Einreichungen und Entscheidungen — gelesen über den Änderungsantrags-Service.",

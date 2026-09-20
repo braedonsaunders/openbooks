@@ -99,6 +99,46 @@ export interface ChangeRequestQueueData {
 
 type ServiceRow = Awaited<ReturnType<typeof listChangeRequests>>[number]
 
+export interface QueueLabels {
+  workerByEmployment: Map<string, { name: string | null; partyId: string | null }>
+  requesterByUser: Map<string, string>
+}
+
+/**
+ * Display labels for queue-shaped rows, shared by the queue page and the
+ * overview cockpit so the two cannot resolve names differently. Keyed
+ * strictly by ids the change-request service already authorized, with the
+ * org predicate on every leg. Bare JS arrays are never interpolated into
+ * ANY() (they bind as row constructors); each id is its own parameter.
+ */
+export async function loadQueueLabels(
+  orgId: string,
+  employmentIds: readonly string[],
+  userIds: readonly string[],
+): Promise<QueueLabels> {
+  const workerByEmployment = new Map<string, { name: string | null; partyId: string | null }>()
+  if (employmentIds.length > 0) {
+    const ids = employmentIds.map((id) => sql`${id}::uuid`)
+    const rows = (await db.execute<{ employmentId: string; workerName: string | null; partyId: string | null }>(sql`
+      select w.id::text as "employmentId", p.display_name as "workerName", p.id::text as "partyId"
+        from worker_employments w
+        join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
+       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`)).rows
+    for (const row of rows) workerByEmployment.set(row.employmentId, { name: row.workerName, partyId: row.partyId })
+  }
+  const requesterByUser = new Map<string, string>()
+  if (userIds.length > 0) {
+    const ids = userIds.map((id) => sql`${id}::uuid`)
+    const rows = (await db.execute<{ userId: string; workerName: string | null; userName: string }>(sql`
+      select u.id::text as "userId", p.display_name as "workerName", u.name as "userName"
+        from users u
+        left join parties p on p.id = u.party_id and p.org_id = u.org_id
+       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`)).rows
+    for (const row of rows) requesterByUser.set(row.userId, row.workerName ?? row.userName)
+  }
+  return { workerByEmployment, requesterByUser }
+}
+
 function effectiveWindow(payload: { kind: string } & Record<string, unknown>): {
   from: string | null
   to: string | null
@@ -203,33 +243,11 @@ export async function loadChangeRequestQueue(
     ? serviceRows
     : serviceRows.filter((row) => row.status === resolved.serviceStatus)
 
-  // Display labels only, keyed by ids the service authorized above: the
-  // worker behind each employment, and the user behind each submitter or
-  // author stamp. Bare JS arrays are never interpolated into ANY()
-  // (they bind as row constructors); each id is its own parameter.
+  // Display labels only, through the shared resolver the overview
+  // cockpit reuses so the two surfaces cannot resolve names differently.
   const employmentIds = [...new Set(visible.map((row) => row.employmentId))]
   const userIds = [...new Set(visible.flatMap((row) => [row.submittedBy, row.createdBy]).filter((id): id is string => id !== null))]
-
-  const workerByEmployment = new Map<string, { name: string | null; partyId: string | null }>()
-  if (employmentIds.length > 0) {
-    const ids = employmentIds.map((id) => sql`${id}::uuid`)
-    const rows = (await db.execute<{ employmentId: string; workerName: string | null; partyId: string | null }>(sql`
-      select w.id::text as "employmentId", p.display_name as "workerName", p.id::text as "partyId"
-        from worker_employments w
-        join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`)).rows
-    for (const row of rows) workerByEmployment.set(row.employmentId, { name: row.workerName, partyId: row.partyId })
-  }
-  const requesterByUser = new Map<string, string>()
-  if (userIds.length > 0) {
-    const ids = userIds.map((id) => sql`${id}::uuid`)
-    const rows = (await db.execute<{ userId: string; workerName: string | null; userName: string }>(sql`
-      select u.id::text as "userId", p.display_name as "workerName", u.name as "userName"
-        from users u
-        left join parties p on p.id = u.party_id and p.org_id = u.org_id
-       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`)).rows
-    for (const row of rows) requesterByUser.set(row.userId, row.workerName ?? row.userName)
-  }
+  const { workerByEmployment, requesterByUser } = await loadQueueLabels(orgId, employmentIds, userIds)
   // Departments feed the propose/edit drawer, exactly like the employee
   // drawer's own picker: active names, org-scoped, never ids alone.
   const departments = (await db.execute<{ id: string; name: string }>(sql`
