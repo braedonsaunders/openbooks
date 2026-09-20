@@ -6,7 +6,7 @@ import {
   matchAutomationRules,
   ConditionRefusal,
 } from "./evaluate.ts";
-import { parseAutomationRules } from "./triggers.ts";
+import { parseAutomationRules, type ConditionNode } from "./triggers.ts";
 
 const snapshot = {
   entity: "leave_request",
@@ -37,14 +37,14 @@ test("in/contains/is_null", () => {
 });
 
 test("all/any trees nest", () => {
-  const node = {
+  const node: ConditionNode = {
     all: [
       { field: "status", op: "eq", value: "submitted" },
       { any: [{ field: "days", op: "gt", value: 10 }, { field: "days", op: "lt", value: 5 }] },
     ],
-  } as const;
+  };
   assert.equal(evaluateConditionNode(node, snapshot), true);
-  const no = { all: [{ field: "status", op: "eq", value: "submitted" }, { field: "days", op: "gt", value: 10 }] } as const;
+  const no: ConditionNode = { all: [{ field: "status", op: "eq", value: "submitted" }, { field: "days", op: "gt", value: 10 }] };
   assert.equal(evaluateConditionNode(no, snapshot), false);
 });
 

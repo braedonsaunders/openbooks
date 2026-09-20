@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, schema, withOrg } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
@@ -175,11 +175,18 @@ async function runActionLive(
     case "send_notification": {
       const users = await resolveActionRecipients(orgId, action.to, subject, initiatorUserId);
       if (users.length === 0) return "skipped: no recipients resolved";
-      await db.execute(sql`
-        insert into notifications (org_id, user_id, kind, title, body, href)
-        select ${orgId}, unnest(${users}::uuid[]), 'automation', ${action.body.slice(0, 200)},
-               ${action.body}, ${subject ? `/admin/automations` : null}
-      `);
+      // The existing notifications insert path (same table, same drizzle
+      // insert flows/execute.ts uses) — no new channel.
+      await db.insert(schema.notifications).values(
+        users.map((userId) => ({
+          orgId,
+          userId,
+          kind: "automation",
+          title: action.body.slice(0, 200),
+          body: action.body,
+          href: "/admin/automations",
+        })),
+      );
       return `notify→${users.length}`;
     }
     case "create_task": {
@@ -197,11 +204,16 @@ async function runActionLive(
       const due = action.dueOffsetDays > 0
         ? ` Due in ${action.dueOffsetDays} day${action.dueOffsetDays === 1 ? "" : "s"}.`
         : "";
-      await db.execute(sql`
-        insert into notifications (org_id, user_id, kind, title, body, href)
-        select ${orgId}, unnest(${users}::uuid[]), 'automation_task', ${action.title.slice(0, 200)},
-               ${`${action.title}.${due}`}, '/admin/automations'
-      `);
+      await db.insert(schema.notifications).values(
+        users.map((userId) => ({
+          orgId,
+          userId,
+          kind: "automation_task",
+          title: action.title.slice(0, 200),
+          body: `${action.title}.${due}`,
+          href: "/admin/automations",
+        })),
+      );
       // Tasks surface as actionable inbox notifications (the HR-15 inbox
       // shows the automation run log and these task notifications) until a
       // native task entity exists — never a parallel task table.
@@ -304,12 +316,13 @@ async function runDeferredAction(
         subject: `Webhook deferred: ${action.endpointKey}`,
         html: `<p>Signed webhook to ${endpoint.url} deferred.</p>`,
         text: `Signed webhook to ${endpoint.url} deferred.`,
-        meta: { category: "automation_webhook", url: endpoint.url },
+        meta: { category: "automation_webhook" },
       },
     });
     return `webhook→${action.endpointKey} deferred`;
   }
-  return `start_flow ${action.subject} recorded`;
+  if (action.kind === "start_flow") return `start_flow ${action.subject} recorded`;
+  throw new AutomationExecuteError(`action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`);
 }
 
 /**
@@ -441,12 +454,16 @@ export async function executeAutomation(input: {
          where id = ${input.automationId}
       `);
       // Owner visibility: a run row the inbox shows (HR-15 automation_error
-      // adapter) plus a notification to the actor who fired it.
-      await db.execute(sql`
-        insert into notifications (org_id, user_id, kind, title, body, href)
-        values (${input.orgId}, ${input.actorId}, 'automation_error',
-                ${`Automation '${automation.name}' failed`}, ${message}, '/admin/automations')
-      `);
+      // adapter) plus a notification to the actor who fired it — same table,
+      // same insert path as every other notification.
+      await db.insert(schema.notifications).values({
+        orgId: input.orgId,
+        userId: input.actorId,
+        kind: "automation_error",
+        title: `Automation '${automation.name}' failed`,
+        body: message,
+        href: "/admin/automations",
+      });
       return {
         runId,
         status: "failed",

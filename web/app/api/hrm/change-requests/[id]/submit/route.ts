@@ -22,11 +22,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
   try {
+    // HR-16: when hrmActionReasons is on, submit requires both action and
+    // an active reason code; when off, classification is ignored entirely.
+    const { validateSubmitActionReason } = await import(
+      "@openbooks/engine/src/automations/action-reasons.ts"
+    );
+    const { automationErrorResponse } = await import("../../../automations/_lib");
+    try {
+      await validateSubmitActionReason({
+        orgId: gate.user.orgId,
+        featureOn: await isFeatureEnabled(gate.user.orgId, "hrmActionReasons"),
+        ...(body.action ? { action: body.action } : {}),
+        ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
+        ...(body.reason ? { reason: body.reason } : {}),
+      });
+    } catch (e) {
+      return automationErrorResponse(e);
+    }
     const request = await submitChangeRequest({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       requestId: id,
       reason: body.reason,
+      ...(body.action ? { action: body.action } : {}),
+      ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
     });
     return NextResponse.json({ request });
   } catch (e) {

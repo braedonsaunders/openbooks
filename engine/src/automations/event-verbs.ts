@@ -268,7 +268,13 @@ export async function rescindEmploymentChange(input: {
     parseCivilDate(effectiveFrom);
     await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
 
-    const priorSnapshot = await getEmploymentAsOf({ orgId: input.orgId, actorId: input.actorId, employmentId: target.employmentId }).catch(() => null);
+    const priorSnapshot = await getEmploymentAsOf({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      employmentId: target.employmentId,
+      effectiveDate: new Date().toISOString().slice(0, 10),
+      knownAt: new Date().toISOString(),
+    }).catch(() => null);
     const changeId = await appendVerbEvent(db, {
       orgId: input.orgId,
       actorId: input.actorId,
