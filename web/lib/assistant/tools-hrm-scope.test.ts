@@ -36,11 +36,13 @@ const { canRunTool } = await import("./gate.ts");
 const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
+const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
 const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_performance_cycles", "hrm_turnover"];
 
 const TOOL_PERMS: Record<string, string> = {
   hrm_headcount: "hrm.employment.read",
@@ -55,11 +57,16 @@ const TOOL_PERMS: Record<string, string> = {
   // interviews and offers are governed by hrm.recruiting.read at every
   // surface, and contact PII never leaves through it.
   hrm_recruiting: "hrm.recruiting.read",
+  // Cycle reads reuse the privacy-scoped read service; turnover is HR-only
+  // through the retention read gate at every surface.
+  hrm_performance_cycles: "hrm.performance.read",
+  hrm_turnover: "hrm.retention.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
 test("the module exports exactly the seven HRM read tools", () => {
+test("the module exports exactly the eight HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
@@ -124,6 +131,16 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "archived" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: "nope" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_performance_cycles")!.inputSchema.parse({});
+  byName.get("hrm_performance_cycles")!.inputSchema.parse({ cycleId: UUID });
+  byName.get("hrm_performance_cycles")!.inputSchema.parse({ status: "calibrating", limit: 10 });
+  assert.throws(() => byName.get("hrm_performance_cycles")!.inputSchema.parse({ status: "archived" }));
+  assert.throws(() => byName.get("hrm_performance_cycles")!.inputSchema.parse({ cycleId: "nope" }));
+  byName.get("hrm_turnover")!.inputSchema.parse({});
+  byName.get("hrm_turnover")!.inputSchema.parse({ departmentId: UUID });
+  byName.get("hrm_turnover")!.inputSchema.parse({ periods: [{ start: "2026-01-01", end: "2026-01-31" }] });
+  assert.throws(() => byName.get("hrm_turnover")!.inputSchema.parse({ periods: [] }));
+  assert.throws(() => byName.get("hrm_turnover")!.inputSchema.parse({ departmentId: "nope" }));
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -141,6 +158,10 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listLeaveTypes(",
     "listRequisitions(",
     "getRequisitionDetail(",
+    "listCycleProgress(",
+    "getCycleDetail(",
+    "getTurnover(",
+    "getRetentionOverview(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",
@@ -186,6 +207,10 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     hrmRefusal(new HrmAuthorizationError("Employment is not visible in this organization and legal-entity scope.")),
     { ok: false, error: "Employment is not visible in this organization and legal-entity scope." },
   );
+  assert.deepEqual(hrmRefusal(new HrmPerformanceError("REFUSED", "review cycle has no required question")), {
+    ok: false,
+    error: "review cycle has no required question",
+  });
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);
