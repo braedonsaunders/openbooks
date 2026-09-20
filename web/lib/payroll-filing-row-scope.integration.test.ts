@@ -98,7 +98,11 @@ test(
               2026,
             ))
           )?.status,
-          404,
+          // Item 34: a row id that fails the filing's grammar is MALFORMED
+          // INPUT, refused for every caller (422) before the actor's scope is
+          // consulted — not a scope 404, which stays reserved for rows that
+          // exist outside the caller's subsidiaries.
+          422,
         );
       }
       const employee = (
