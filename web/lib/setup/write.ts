@@ -25,6 +25,7 @@ import {
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
+import { benefitPlanShapeProblem } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
@@ -903,28 +904,29 @@ export async function validateEntityIntegrity(
   // prorationBasis carries no drawer default, so a missing rule is refused
   // here with its remedy, never stored as a guess.
   if (entity.key === 'benefit-plans') {
-    const proration = (body.prorationBasis ?? null) as string | null
-    if (proration !== 'full_month' && proration !== 'daily') {
-      return 'Declare how partial months pay: full_month carries the whole month, daily scales by covered days — the plan cannot save without it'
+    // Edits arrive partial: merge the stored row first so an edit that
+    // touches only the name is not refused for a rule it never changed
+    // (0193 steps precedent).
+    let values: Record<string, unknown> = body as Record<string, unknown>
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select proration_basis as "prorationBasis",
+               employee_cost_basis as "employeeCostBasis", employer_cost_basis as "employerCostBasis",
+               currency, waiting_period_days as "waitingPeriodDays",
+               employee_pay_component_id as "employeePayComponentId",
+               employer_pay_component_id as "employerPayComponentId",
+               provider_party_id as "providerPartyId", employer_subsidiary_id as "employerSubsidiaryId"
+          from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit plan not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...values }
     }
-    for (const side of ['employeeCostBasis', 'employerCostBasis'] as const) {
-      const basis = (body[side] ?? null) as string | null
-      if (basis !== 'per_period' && basis !== 'per_month' && basis !== 'per_year' && basis !== 'percent_of_pay') {
-        return 'Price each side as per_period, per_month, per_year, or percent_of_pay'
-      }
-    }
-    const currency = (body.currency ?? null) as string | null
-    if (currency !== null && !/^[A-Z]{3}$/.test(currency)) {
-      return 'Currency is a 3-letter ISO code in capitals — HR never converts it, the run refuses a mismatch'
-    }
-    const waiting = (body.waitingPeriodDays ?? null) as number | null
-    if (waiting !== null && (!Number.isInteger(waiting) || waiting < 0)) {
-      return 'The waiting period is a non-negative whole number of days'
-    }
-    const employeeComponent = (body.employeePayComponentId ?? null) as string | null
-    const employerComponent = (body.employerPayComponentId ?? null) as string | null
-    const provider = (body.providerPartyId ?? null) as string | null
-    const subsidiary = (body.employerSubsidiaryId ?? null) as string | null
+    const shape = benefitPlanShapeProblem(values)
+    if (shape) return shape
+    const employeeComponent = (values.employeePayComponentId ?? null) as string | null
+    const employerComponent = (values.employerPayComponentId ?? null) as string | null
+    const provider = (values.providerPartyId ?? null) as string | null
+    const subsidiary = (values.employerSubsidiaryId ?? null) as string | null
     const refs = await executor.execute(sql`
       select
         ${provider ? sql`exists(select 1 from parties where id = ${provider} and org_id = ${orgId})` : sql`true`} as provider_ok,
