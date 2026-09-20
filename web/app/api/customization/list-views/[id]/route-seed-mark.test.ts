@@ -60,7 +60,7 @@ registerHooks({
       )
     }
     const parent = context.parentURL ?? ''
-    if (specifier === '@openbooks/engine/src/db.ts' && parent.includes('customization/list-views')) {
+    if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the
       // test installs its doubles, so the stub forwards on every call.
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-mark-strip-patch-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-mark-strip-patch-test")].db.transaction(...a) }' }
