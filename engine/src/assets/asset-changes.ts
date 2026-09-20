@@ -388,7 +388,20 @@ async function snapshot(
       sql`select l.id,s.book_id,l.source,l.planned_amount::text,l.posted_amount::text,p.starts_on::text,p.ends_on::text,l.journal_entry_id from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id where l.org_id=${orgId} and s.asset_id=${assetId} order by s.book_id,p.starts_on,l.sequence,l.id for update of l`,
     )
   ).rows;
-  const previews = [];
+  type AssetChangePreview = ReturnType<typeof measurePartialDisposal> & {
+    bookId: string;
+    calendarId: string;
+    bookName: string;
+    postsGl: boolean;
+    stub: string;
+    unitsBefore: string | null;
+    unitsRemaining: string | null;
+    depreciableBefore: string;
+    groupPlan: { startsOn: string; date: string; amount: string }[];
+    impairmentReleased: string;
+    lines: ReturnType<typeof computeDisposal>["lines"];
+  };
+  const previews: AssetChangePreview[] = [];
   for (const book of books) {
     if (!book.is_active)
       throw new Error(
