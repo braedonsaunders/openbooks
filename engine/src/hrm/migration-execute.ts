@@ -597,7 +597,10 @@ export async function executeEmploymentMigration(
           remedy:
             "Supply collector evidence with an operator-asserted current " +
             "observation (canonical status, UTC instant, provenance) for " +
-            "observation-date migration.",
+            "observation-date migration. A recorded employee_roles.terminated_on " +
+            "anchors a terminated observation by itself; an absent one never " +
+            "implies active, so an active status still needs a pay stub, " +
+            "timesheet or entitlement anchor.",
         };
         return {
           ...base,
