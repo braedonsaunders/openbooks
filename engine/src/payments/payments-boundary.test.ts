@@ -21,8 +21,8 @@ const LINE_BOUND = 800;
  *
  * A hand-maintained list standing in for a derivation is the failure shape, and
  * it fails in the direction that reads as healthy — the list only ever omits, and
- * an omission is silence. Deriving also means a module SPLIT (rail-formatters is
- * about to become one file per rail) needs no edit here: the new modules are
+ * an omission is silence. Deriving also means a module SPLIT (rail-formatters has
+ * become one file per rail) needs no edit here: the new modules are
  * guarded the moment they exist, which is the opposite of today, where they would
  * be unguarded until someone remembered.
  */

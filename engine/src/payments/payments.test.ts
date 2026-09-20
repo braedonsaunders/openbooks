@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCpa005File, buildNachaFile, buildSepaFile, type Cpa005Run } from "./rail-formatters.ts";
+import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
+import { buildNachaFile } from "./rail-nacha.ts";
+import { buildSepaFile } from "./rail-sepa.ts";
 import { carryingAmountForSettlement, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
-import { type EftSettings, type NachaSettings } from "./rail-settings.ts";
+import { type EftSettings } from "./rail-settings.ts";
+import { type NachaSettings } from "./rail-nacha.ts";
 import { PaymentError } from "./payment-errors.ts";
 
 test("partial settlement allocates carrying value exactly beyond Number's safe range", () => {
