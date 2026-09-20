@@ -645,8 +645,10 @@ test("HR-12 pay information requests need a window and answer from snapshots", {
   await withHarness(async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const empParty = (await db.execute<{ party_id: string }>(sql`
-      select party_id from users where id = ${h.employeeId} and org_id = ${org.orgId}`)).rows[0]?.party_id!;
+    const empPartyRow = (await db.execute<{ party_id: string }>(sql`
+      select party_id from users where id = ${h.employeeId} and org_id = ${org.orgId}`)).rows[0];
+    assert.ok(empPartyRow?.party_id);
+    const empParty = empPartyRow.party_id;
     const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: empParty, levelId: level.id });
     await seedWage(org.orgId, h.hrId, empParty, "90000");
     // No response window: refused by name before the first request.

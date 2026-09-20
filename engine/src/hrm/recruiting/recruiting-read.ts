@@ -72,6 +72,10 @@ export interface RequisitionDetail extends RequisitionListRow {
   readonly employerSubsidiaryId: string;
   readonly targetStartOn: string | null;
   readonly compensation: string | null;
+  /** Band range for the opening's level scope, or null when pay
+   * transparency is off, the reader lacks comp.read, or no band
+   * covers the scope. Additive: never replaces the typed range. */
+  readonly bandRange: string | null;
   readonly description: string | null;
   readonly stages: readonly { id: string; key: string; name: string; kind: string }[];
   readonly funnel: readonly { stageKey: string; stageName: string; count: number }[];
@@ -377,12 +381,63 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
     employerSubsidiaryId: row.employerSubsidiaryId,
     targetStartOn: row.targetStartOn,
     compensation: compensationLabel(row),
+    bandRange: await requisitionBandRange(db, orgId, actorId, row),
     description: row.description,
     stages: stages.map((stage) => ({ id: stage.id, key: stage.key, name: stage.name, kind: stage.kind })),
     funnel,
     applications: funnelRows,
     timeToFillDays: timeToFill,
   };
+}
+
+/**
+ * Band range for a requisition drawer (HR-12, additive): the narrowest
+ * live annual band covering the opening's position level, employer,
+ * and department. Returns null (renders nothing) when the
+ * hrmPayTransparency switch is off, the reader lacks
+ * hrm.compensation.read, the opening names no architected position, or
+ * no band covers the scope — never a zero, never a guess.
+ */
+async function requisitionBandRange(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  row: RequisitionRow,
+): Promise<string | null> {
+  const { actorHasPermission } = await import("../../organization/actor-permissions.ts");
+  const { featureEnabled } = await import("../../organization/feature-registry.ts");
+  const { resolveBandForScope } = await import("../compensation/bands.ts");
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.compensation.read"))) return null;
+  const settings = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
+    select settings->'features' as features from orgs where id = ${orgId}`)).rows[0]?.features ?? {};
+  if (!featureEnabled(settings, "hrmPayTransparency")) return null;
+  if (!row.positionId) return null;
+  const position = (await exec.execute<{ level_id: string | null; location_id: string | null }>(sql`
+    select job_level_id as level_id, location_id
+      from position_versions
+     where org_id = ${orgId} and position_id = ${row.positionId}
+       and recorded_until is null
+     order by effective_from desc
+     limit 1`)).rows[0];
+  if (!position?.level_id) return null;
+  const level = (await exec.execute<{ family_id: string | null; code: string }>(sql`
+    select family_id, code from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`)).rows[0];
+  if (!level) return null;
+  const today = await businessToday(orgId);
+  const band = await resolveBandForScope(
+    orgId,
+    {
+      familyId: level.family_id,
+      levelId: position.level_id,
+      employerSubsidiaryId: row.employerSubsidiaryId,
+      locationId: position.location_id,
+      currency: row.compensationCurrency ?? "CAD",
+      basis: "annual",
+    },
+    today,
+  );
+  if (!band) return null;
+  return `${band.min} – ${band.max} ${band.currency} (${level.code})`;
 }
 
 export interface GetCandidateQuery {

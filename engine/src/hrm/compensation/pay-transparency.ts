@@ -80,22 +80,22 @@ function toStoredMetrics(metrics: GapMetrics): Record<string, unknown> {
 }
 
 function fromStoredMetrics(stored: Record<string, unknown>): GapMetrics {
-  const s = stored as Record<string, any>;
+  const s = stored as Record<string, unknown>;
   return {
-    comparisonAttributeKey: s.comparison_attribute_key,
-    thresholdPct: s.threshold_pct,
-    groupA: s.group_a,
-    groupB: s.group_b,
-    meanGapPct: s.mean_gap_pct,
-    medianGapPct: s.median_gap_pct,
-    variablePayGapPct: s.variable_pay_gap_pct,
-    quartileProportions: (s.quartile_proportions as Array<any>).map((q) => ({
-      quartile: q.quartile,
-      shareA: q.share_a,
-      shareB: q.share_b,
+    comparisonAttributeKey: s.comparison_attribute_key as string,
+    thresholdPct: s.threshold_pct as number,
+    groupA: s.group_a as string,
+    groupB: s.group_b as string,
+    meanGapPct: (s.mean_gap_pct ?? null) as number | null,
+    medianGapPct: (s.median_gap_pct ?? null) as number | null,
+    variablePayGapPct: (s.variable_pay_gap_pct ?? null) as number | null,
+    quartileProportions: (s.quartile_proportions as Array<Record<string, unknown>>).map((q) => ({
+      quartile: q.quartile as string,
+      shareA: q.share_a as number,
+      shareB: q.share_b as number,
     })),
-    headcountA: s.headcount_a,
-    headcountB: s.headcount_b,
+    headcountA: s.headcount_a as number,
+    headcountB: s.headcount_b as number,
   };
 }
 
@@ -116,17 +116,17 @@ function toStoredCategories(categories: readonly GapCategory[]): Record<string, 
 }
 
 function fromStoredCategories(stored: unknown): GapCategory[] {
-  return (stored as Array<Record<string, any>>).map((c) => ({
-    levelId: c.level_id,
-    levelCode: c.level_code,
-    familyId: c.family_id,
-    countA: c.count_a,
-    countB: c.count_b,
-    meanGapPct: c.mean_gap_pct,
-    medianGapPct: c.median_gap_pct,
-    unexplainedGapPct: c.unexplained_gap_pct,
-    method: c.method,
-    jointAssessmentDue: c.joint_assessment_due,
+  return (stored as Array<Record<string, unknown>>).map((c) => ({
+    levelId: c.level_id as string,
+    levelCode: c.level_code as string,
+    familyId: (c.family_id ?? null) as string | null,
+    countA: c.count_a as number,
+    countB: c.count_b as number,
+    meanGapPct: (c.mean_gap_pct ?? null) as number | null,
+    medianGapPct: (c.median_gap_pct ?? null) as number | null,
+    unexplainedGapPct: (c.unexplained_gap_pct ?? null) as number | null,
+    method: c.method as string,
+    jointAssessmentDue: c.joint_assessment_due === true,
   }));
 }
 

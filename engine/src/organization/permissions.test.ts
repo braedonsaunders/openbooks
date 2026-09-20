@@ -101,6 +101,11 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
     "hrm.retention.read",
     "hrm.benefits.read",
     "hrm.benefits.manage",
+    // HR-12 begin
+    "hrm.compensation.read",
+    "hrm.compensation.manage",
+    "hrm.compensation.approve",
+    // HR-12 end
     "hrm.team.read",
     "hrm.team.manage",
     // HR-13 begin: construction read/manage stay admin-only like the
