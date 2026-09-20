@@ -189,3 +189,25 @@ test('the bank panel hides mutations in read mode but keeps history', () => {
   assert.match(drawerSource, /onClick=\{\(\) => setHistoryAccount\(account\)\}>/)
   assert.match(drawerSource, /\{tab === 'accounting' && \(!role \|\| role === 'vendor'\) \? \(\n          <BankAccountsPanel partyId=\{String\(p\.id\)\} initialAccounts=\{payload\.bankAccounts\} canManage=\{canManage\} multiCurrency=\{multiCurrency\} \/>\n        \) : null\}/)
 })
+
+test('the employee drawer gates every confidential tab on its own grant', () => {
+  // HR-9 self-service: a manager opening a report's drawer sees the
+  // Employment tab through the structural team fallback, while payroll,
+  // wages, and compliance stay hidden unless their own grants hold — the
+  // team read selects no pay data, so there is nothing to leak.
+  assert.match(
+    drawerSource,
+    /\.\.\.\(role === 'employee' && canManageWages \? \[\{ key: 'wages' as const/,
+    'wages tab needs the setup grant',
+  )
+  assert.match(
+    drawerSource,
+    /\.\.\.\(role === 'employee' && canManagePayroll \? \[\{ key: 'payroll' as const/,
+    'payroll tab needs the payroll grant',
+  )
+  assert.match(
+    drawerSource,
+    /showEmploymentTab \? \[\{ key: 'employment' as const/,
+    'employment tab renders whenever the view resolves scoped employments',
+  )
+})
