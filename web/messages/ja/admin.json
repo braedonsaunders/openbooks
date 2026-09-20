@@ -964,7 +964,9 @@
     "compliance_waive": "コンプライアンス例外を認めます",
     "payroll_manage": "給与計算と従業員プロフィールを設定します",
     "payroll_read": "給与計算と明細を表示します",
-    "payroll_run": "給与計算を作成・計算・確定します"
+    "payroll_run": "給与計算を作成・計算・確定します",
+    "hrm_process_read": "プロセスチェックリストを表示",
+    "hrm_process_manage": "プロセスチェックリストを開く、完了する、キャンセルする"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2736,7 +2738,17 @@
       "dateBasis": "日付基準",
       "unitsTotal": "総単位数",
       "network": "ネットワーク",
-      "lastFour": "下4桁"
+      "lastFour": "下4桁",
+      "templateId": "テンプレート",
+      "position": "順序",
+      "title": "タイトル",
+      "ownerKind": "担当",
+      "ownerPartyId": "担当者",
+      "dueOffsetDays": "期限オフセット（日）",
+      "required": "必須",
+      "evidenceKind": "証跡",
+      "appliesEmployerSubsidiaryId": "対象子会社",
+      "appliesDepartmentId": "対象部門"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2788,7 +2800,9 @@
       "protectionPriority": "複数の保護対象控除が同じ給与を奪い合う場合の優先順位です。数値の小さい順。扶養命令は通常の債権者に優先します。",
       "requiresExpiry": "保険はオン、期限のないW-9はオフです。",
       "requiresVerification": "証明書を記録した本人が検証することはできません。",
-      "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。"
+      "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。",
+      "hrmProcessAppliesSubsidiary": "空欄はすべての子会社に適用されます。",
+      "hrmProcessAppliesDepartment": "空欄はすべての部門に適用されます。"
     },
     "options": {
       "timeClassification": {
@@ -3125,6 +3139,22 @@
         "accelerated2": "加速 — 基準2",
         "quarterly": "四半期",
         "regular": "通常（月次）"
+      },
+      "hrmProcessKind": {
+        "onboarding": "オンボーディング",
+        "offboarding": "オフボーディング",
+        "transfer": "異動"
+      },
+      "hrmStepOwner": {
+        "manager": "マネージャー",
+        "hr": "人事",
+        "employee": "従業員",
+        "namedParty": "指定者"
+      },
+      "hrmStepEvidence": {
+        "none": "なし",
+        "acknowledgement": "確認",
+        "attachment": "添付ファイル"
       }
     },
     "invoicing": {
