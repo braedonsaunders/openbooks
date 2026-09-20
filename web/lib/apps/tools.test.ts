@@ -99,6 +99,20 @@ test('the application-command route delegates app_ tools to the shared committer
   assert.match(route, /return NextResponse\.json\(\{ error: "unsupported_command" \}, \{ status: 400 \}\)/)
 })
 
+test('platform schema/list/get mint a fresh readInvocation nonce like query', () => {
+  const start = store.indexOf("if (opts.method.startsWith('platform.'))")
+  assert.notEqual(start, -1, 'platform bridge dispatch must remain defined')
+  const body = store.slice(start, store.indexOf("if (opts.method === 'records.list'"))
+  // All four reads mint a nonce so a later identical fetch is not a stale replay.
+  assert.match(body, /opts\.method === 'platform\.query'/)
+  assert.match(body, /opts\.method === 'platform\.schema'/)
+  assert.match(body, /opts\.method === 'platform\.list'/)
+  assert.match(body, /opts\.method === 'platform\.get'/)
+  assert.match(body, /platformRead \? \{ readInvocation: crypto\.randomUUID\(\) \}/)
+  // Writes keep a derived key so byte-identical retries still collapse.
+  assert.doesNotMatch(body, /opts\.method === 'platform\.query' \? \{ readInvocation/)
+})
+
 test('the bridge callBackend path keeps its exact derivation through the shared invoker', () => {
   const start = store.indexOf('export async function invokeAppEndpointHandler')
   assert.notEqual(start, -1, 'invokeAppEndpointHandler must remain defined')

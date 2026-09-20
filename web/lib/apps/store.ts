@@ -900,6 +900,14 @@ export async function runBridgeMethod(opts: {
       }
     }
     try {
+      // Reads mint a nonce so a later identical fetch is a new claim, not a
+      // stale replay of the first committed page/schema/record. Writes keep
+      // the derived key so a byte-identical retry collapses.
+      const platformRead =
+        opts.method === 'platform.query' ||
+        opts.method === 'platform.schema' ||
+        opts.method === 'platform.list' ||
+        opts.method === 'platform.get'
       const outcome = await executeAppInvocation({
         orgId: opts.orgId,
         actorId: opts.user.id,
@@ -912,7 +920,7 @@ export async function runBridgeMethod(opts: {
           typeKey,
           id,
           payload: payload.body ?? payload.options ?? payload.plan ?? null,
-          ...(opts.method === 'platform.query' ? { readInvocation: crypto.randomUUID() } : {}),
+          ...(platformRead ? { readInvocation: crypto.randomUUID() } : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
         run: attemptDispatch,
