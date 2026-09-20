@@ -1539,13 +1539,28 @@ export async function autoOpenProcessForChange(
       : args.trigger.trigger === "termination"
         ? "offboarding"
         : "transfer";
-  return openProcessInTx(exec, {
-    orgId: args.orgId,
-    actorId: args.actorId,
-    employmentId: args.employmentId,
-    kind,
-    effectiveDate: args.trigger.effectiveDate,
-    templateId: null,
-    openedByChangeId: args.changeId,
-  });
+  try {
+    return await openProcessInTx(exec, {
+      orgId: args.orgId,
+      actorId: args.actorId,
+      employmentId: args.employmentId,
+      kind,
+      effectiveDate: args.trigger.effectiveDate,
+      templateId: null,
+      openedByChangeId: args.changeId,
+    });
+  } catch (error) {
+    // The automatic opening is a side effect of an employment event, never a
+    // condition on it: an org with no checklist template covering this
+    // employment, or one whose checklist of this kind is already open, still
+    // gets its hire, termination or transfer applied — nothing is owed here,
+    // so nothing opens. Both cases stay REFUSALS on the explicit path
+    // (openProcess), where the operator asked for a checklist by name and
+    // must hear why there is none. Every other failure still rolls the whole
+    // application back.
+    if (error instanceof HrmProcessError && (error.code === "NO_TEMPLATE" || error.code === "DUPLICATE_OPEN")) {
+      return null;
+    }
+    throw error;
+  }
 }
