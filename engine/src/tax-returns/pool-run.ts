@@ -102,6 +102,11 @@ type LiveWorkpaper = {
   buyer_recovery_period_years: string | null;
   buyer_method: string | null;
   buyer_convention: string | null;
+  original_unadjusted_basis: string | null;
+  section_179: string | null;
+  bonus_percent: string | null;
+  business_use_percent: string | null;
+  prior_depreciation: string | null;
 };
 
 function classifiedClassSql(
@@ -222,7 +227,13 @@ async function liveWorkpapers(
              w.computed->>'buyerPlacedInServiceOn' as buyer_placed_in_service_on,
              w.computed->>'buyerRecoveryPeriodYears' as buyer_recovery_period_years,
              w.computed->>'buyerMethod' as buyer_method,
-             w.computed->>'buyerConvention' as buyer_convention
+             w.computed->>'buyerConvention' as buyer_convention,
+             coalesce(w.computed->>'originalUnadjustedBasis', w.facts->>'originalUnadjustedBasis')
+               as original_unadjusted_basis,
+             w.computed->>'section179' as section_179,
+             w.computed->>'bonusPercent' as bonus_percent,
+             w.computed->>'businessUsePercent' as business_use_percent,
+             w.computed->>'priorDepreciation' as prior_depreciation
         from tax_asset_basis_workpapers w
         join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
         join asset_categories seller_c on seller_c.org_id=seller.org_id and seller_c.id=seller.category_id
@@ -762,6 +773,11 @@ function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
     buyer_recovery_period_years: paper.buyer_recovery_period_years,
     buyer_method: paper.buyer_method,
     buyer_convention: paper.buyer_convention,
+    original_unadjusted_basis: paper.original_unadjusted_basis,
+    section_179: paper.section_179,
+    bonus_percent: paper.bonus_percent,
+    business_use_percent: paper.business_use_percent,
+    prior_depreciation: paper.prior_depreciation,
   }));
 }
 
@@ -930,6 +946,8 @@ async function runMacrs(
           businessUsePercent: vintage.businessUsePercent,
           shortYearFactor: run.shortYearFactor,
           shortYearMethod: vintage.shortYearMethod,
+          adjustedCarryover: vintage.adjustedCarryover ?? undefined,
+          carryoverOn: vintage.transferOn && vintage.adjustedCarryover ? vintage.transferOn : undefined,
         }, windows);
         let current = walked.current;
         if (
@@ -956,6 +974,7 @@ async function runMacrs(
             businessUsePercent: vintage.businessUsePercent,
             shortYearFactor: run.shortYearFactor,
             shortYearMethod: vintage.shortYearMethod,
+            recoveryYearIndex: walked.currentRecoveryYearIndex ?? undefined,
           });
           const residual = formatMoney(add(current.allowance, neg(sellerShare.allowance)), 2);
           if (cmp(residual, "0") < 0) {
@@ -963,13 +982,33 @@ async function runMacrs(
               `nontaxable MACRS transfer-year allocation for asset ${asset.id} produced a negative buyer residual; reverse and re-propose the workpaper — do not invent a split`,
             );
           }
-          current = { ...current, allowance: residual, macrs: residual };
+          const closingAfterResidual = vintage.adjustedCarryover
+            ? formatMoney(add(current.remainingBasis, sellerShare.allowance), 2)
+            : current.remainingBasis;
+          current = { ...current, allowance: residual, macrs: residual, remainingBasis: closingAfterResidual };
         }
+        const transferredThisYear = !!(
+          vintage.role === "buyer" &&
+          vintage.adjustedCarryover &&
+          vintage.transferOn &&
+          vintage.transferOn >= run.yearStart &&
+          vintage.transferOn <= run.yearEnd
+        );
+        const transferredBeforeYear = !!(
+          vintage.role === "buyer" &&
+          vintage.adjustedCarryover &&
+          vintage.transferOn &&
+          vintage.transferOn < run.yearStart
+        );
         const vintagePlacedThisYear =
           vintage.placedInServiceOn >= run.yearStart && vintage.placedInServiceOn <= run.yearEnd;
         const vintagePlacedBeforeYear = vintage.placedInServiceOn < run.yearStart;
-        if (vintagePlacedBeforeYear) opening += toUnits(walked.prior.remainingBasis);
-        if (vintagePlacedThisYear && vintage.role === "buyer") {
+        if (transferredThisYear) {
+          additions += toUnits(vintage.adjustedCarryover!);
+        } else if (transferredBeforeYear || (!vintage.adjustedCarryover && vintagePlacedBeforeYear)) {
+          opening += toUnits(walked.prior.remainingBasis);
+        }
+        if (!vintage.adjustedCarryover && vintagePlacedThisYear && vintage.role === "buyer") {
           additions += toUnits(vintage.basis);
         } else if (vintagePlacedThisYear && vintage.role === "seller" && !receivers.has(asset.id)) {
           additions += toUnits(asset.acquisition_cost);

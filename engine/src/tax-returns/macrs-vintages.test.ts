@@ -34,6 +34,11 @@ const bothSidedTaxable: MacrsWorkpaperEvent = {
   buyer_recovery_period_years: "7",
   buyer_method: "200_db",
   buyer_convention: "half_year",
+  original_unadjusted_basis: "10000.00",
+  section_179: null,
+  bonus_percent: null,
+  business_use_percent: null,
+  prior_depreciation: null,
 };
 
 test("a same-regime both-sided taxable transfer starts the buyer on the receiving placed date and class, not seller age", () => {
@@ -123,6 +128,12 @@ test("nontaxable carryover keeps transferor history; excess is newly placed on t
     carryover_basis: "6400.00",
     excess_basis: "400.00",
     related_person: "false",
+    original_unadjusted_basis: "10000.00",
+    disposed_unadjusted_basis: "10000.00",
+    section_179: "0",
+    bonus_percent: "0",
+    business_use_percent: "100",
+    prior_depreciation: "3600.00",
   };
   const buyer = resolveMacrsVintages({
     assetId: "buyer",
@@ -134,9 +145,12 @@ test("nontaxable carryover keeps transferor history; excess is newly placed on t
     defaults: { ...defaults, recoveryPeriodYears: "39", method: "straight_line", convention: "mid_month" },
   });
   assert.equal(buyer.length, 2);
+  assert.equal(buyer[0]!.basis, "10000.00");
+  assert.equal(buyer[0]!.adjustedCarryover, "6400.00");
   assert.equal(buyer[0]!.placedInServiceOn, "2023-03-15");
   assert.equal(buyer[0]!.recoveryPeriodYears, "5");
-  assert.equal(buyer[0]!.section179, "1000");
+  assert.equal(buyer[0]!.section179, "0");
+  assert.equal(buyer[0]!.priorDepreciation, "3600.00");
   assert.equal(buyer[1]!.placedInServiceOn, "2025-08-01");
   assert.equal(buyer[1]!.recoveryPeriodYears, "7");
   assert.equal(buyer[1]!.method, "200_db");
@@ -177,10 +191,34 @@ test("two partial disposals in one year keep both disposed portions and the rema
   assert.equal(open[0]!.basis, "5000.0000");
 });
 
+test("nontaxable carryover refuses missing allocated transferor elections instead of treating JSON absence as zero", () => {
+  assert.throws(
+    () =>
+      resolveMacrsVintages({
+        assetId: "buyer",
+        subsidiaryId: "sub-b",
+        placedOn: "2025-08-01",
+        acquisitionCost: "6400.00",
+        disposedOn: null,
+        papers: [{
+          ...bothSidedTaxable,
+          recognition: "nontaxable",
+          buyer_cost: null,
+          carryover_basis: "6400.00",
+          original_unadjusted_basis: "10000.00",
+        }],
+        defaults,
+      }),
+    (error: unknown) =>
+      error instanceof Error && /missing priorDepreciation/.test(error.message),
+  );
+});
+
 test("a received asset later disposed does not keep depreciating as acquired", () => {
   const receive: MacrsWorkpaperEvent = {
     ...bothSidedTaxable,
     effective_on: "2024-06-01",
+    buyer_placed_in_service_on: "2024-06-01",
   };
   const onward: MacrsWorkpaperEvent = {
     ...bothSidedTaxable,
@@ -197,7 +235,7 @@ test("a received asset later disposed does not keep depreciating as acquired", (
   const vintages = resolveMacrsVintages({
     assetId: "buyer",
     subsidiaryId: "sub-b",
-    placedOn: "2024-06-01",
+    placedOn: "2026-01-01",
     acquisitionCost: "8500.00",
     disposedOn: null,
     papers: [receive, onward],

@@ -18,7 +18,7 @@
  *   asset's FMV; a §482 or other deemed-value adjustment must be evidenced.
  */
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "../money/money.ts";
 
 export class TaxBasisPolicyError extends Error {
   readonly name = "TaxBasisPolicyError";
@@ -343,15 +343,15 @@ export interface NzPoolRegimeBasis extends TaxRegimeBasisBase {
 
 export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   regime: "us_macrs";
-  dispositionTrigger: UsDispositionTrigger;
+  dispositionTrigger?: UsDispositionTrigger;
   partialDispositionElection?: boolean;
-  originalUnadjustedBasis: string;
-  remainingUnadjustedBasis: string;
-  disposedUnadjustedBasis: string;
-  placedInServiceOn: string;
-  recoveryPeriodYears: string;
-  method: MacrsMethod;
-  convention: MacrsConvention;
+  originalUnadjustedBasis?: string;
+  remainingUnadjustedBasis?: string;
+  disposedUnadjustedBasis?: string;
+  placedInServiceOn?: string;
+  recoveryPeriodYears?: string;
+  method?: MacrsMethod;
+  convention?: MacrsConvention;
   recognition: UsRecognition;
   relatedPerson: boolean;
   statutoryProceeds?: string;
@@ -362,6 +362,11 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   carryoverBasis?: string;
   excessBasis?: string;
   shortYearMethod?: UsShortYearMethod;
+  /** Allocated to this transferred slice — not the whole source-asset election. */
+  section179?: string;
+  bonusPercent?: string;
+  businessUsePercent?: string;
+  priorDepreciation?: string;
 }
 
 export type TaxBasisFieldKind = "decimal" | "boolean" | "enum" | "text" | "date";
@@ -393,6 +398,17 @@ const BUYER: TaxBasisFieldPredicate = {
   all: [{ sourceOperation: "intercompany_transfer" }, { side: "buyer" }],
 };
 const SELLER: TaxBasisFieldPredicate = { side: "seller" };
+/** Seller vintage, or buyer nontaxable carryover that continues that vintage. */
+const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
+  any: [
+    SELLER,
+    { all: [BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+  ],
+};
+/** Historical elections allocated to the carried-over slice. Missing JSON is not zero. */
+const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
+  all: [BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }],
+};
 
 function labeledChoices<T extends string>(
   values: readonly T[],
@@ -756,8 +772,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "originalUnadjustedBasis",
     label: "Original unadjusted depreciable basis",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
   },
   {
     name: "remainingUnadjustedBasis",
@@ -778,15 +794,15 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "placedInServiceOn",
     label: "Original placed-in-service date",
     kind: "date",
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
   },
   {
     name: "recoveryPeriodYears",
     label: "Recovery period (years)",
     kind: "decimal",
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
   },
   {
     name: "method",
@@ -797,8 +813,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       "150_db": "150% declining balance",
       straight_line: "Straight line",
     }),
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
   },
   {
     name: "convention",
@@ -809,8 +825,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       mid_quarter: "Mid-quarter",
       mid_month: "Mid-month",
     }),
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
   },
   {
     name: "recognition",
@@ -874,6 +890,37 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     requiredWhen: { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
   },
   {
+    name: "section179",
+    label: "Section 179 (allocated historical election)",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    help: "Declare the transferor's §179 allocated to this slice. Missing receiving or foreign tax-depreciation JSON is not a zero election — do not copy the whole source-asset election onto a partial.",
+  },
+  {
+    name: "bonusPercent",
+    label: "Bonus depreciation percent (allocated historical election)",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    help: "Declare the transferor's bonus percent for this slice. Absence must be supplied; it is not zero.",
+  },
+  {
+    name: "businessUsePercent",
+    label: "Business-use percent (allocated historical election)",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+  },
+  {
+    name: "priorDepreciation",
+    label: "Prior MACRS depreciation (this slice)",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    help: "MACRS already taken on this slice before the transfer. The declared carryover is the buyer opening checkpoint; do not re-subtract this amount from it.",
+  },
+  {
     name: "shortYearMethod",
     label: "Short-year method (Pub 946 / Rev. Proc. 89-15)",
     kind: "enum",
@@ -915,6 +962,10 @@ export const TAX_BASIS_BUYER_FIELD_NAMES = [
   "associatedPersonAtv",
   "carryoverBasis",
   "excessBasis",
+  "section179",
+  "bonusPercent",
+  "businessUsePercent",
+  "priorDepreciation",
 ] as const;
 
 export function attachTaxBasisSource(
@@ -975,6 +1026,7 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "placedInServiceOn", "recoveryPeriodYears", "method", "convention", "recognition",
     "relatedPerson", "statutoryProceeds", "amountRealizedRule", "adjustedAmountRealized",
     "deemedValueAdjustmentEvidence", "buyerCost", "carryoverBasis", "excessBasis",
+    "section179", "bonusPercent", "businessUsePercent", "priorDepreciation",
     "shortYearMethod",
   ],
 };
@@ -1011,9 +1063,9 @@ export function validateDeclaredDecimal(name: string, value: unknown): string {
     }
     return amount;
   }
-  if (name === "taxableUsePercent") {
+  if (name === "taxableUsePercent" || name === "bonusPercent" || name === "businessUsePercent") {
     if (cmp(amount, "0") < 0 || cmp(amount, "100") > 0) {
-      throw new TaxBasisPolicyError("taxableUsePercent must be between 0 and 100");
+      throw new TaxBasisPolicyError(`${name} must be between 0 and 100`);
     }
     return amount;
   }
@@ -1208,6 +1260,39 @@ function validateNz(draft: TaxBasisDraft): NzPoolRegimeBasis {
   return stripDraftContext(draft) as unknown as NzPoolRegimeBasis;
 }
 
+function requireCarryoverElection(draft: TaxBasisDraft, name: string): string {
+  if (draft[name] == null || draft[name] === "") {
+    throw new TaxBasisPolicyError(
+      `${name} is required for nontaxable MACRS carryover; declare the transferor's historical fact allocated to this slice — missing receiving or foreign tax-depreciation JSON is not a zero ${name}`,
+    );
+  }
+  return validateDeclaredDecimal(name, draft[name]);
+}
+
+/** Declared carryover is the buyer opening. Original + allocated elections +
+ *  prior depreciation must reconstruct it; a re-walked schedule must not. */
+function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
+  const original = requireCarryoverElection(draft, "originalUnadjustedBasis");
+  const section179 = requireCarryoverElection(draft, "section179");
+  const bonusPercent = requireCarryoverElection(draft, "bonusPercent");
+  const businessUsePercent = requireCarryoverElection(draft, "businessUsePercent");
+  const priorDepreciation = requireCarryoverElection(draft, "priorDepreciation");
+  const carryover = requireCarryoverElection(draft, "carryoverBasis");
+  const slice = taxBasisSideApplies(draft.applicable, "seller") && draft.disposedUnadjustedBasis != null && draft.disposedUnadjustedBasis !== ""
+    ? validateDeclaredDecimal("disposedUnadjustedBasis", draft.disposedUnadjustedBasis)
+    : original;
+  const originalBasis = mulPercent(slice, businessUsePercent);
+  const elected179 = cmp(section179, originalBasis) < 0 ? section179 : originalBasis;
+  const after179 = add(originalBasis, neg(elected179));
+  const bonus = mulPercent(after179, bonusPercent);
+  const reconstructed = formatMoney(sum([elected179, bonus, priorDepreciation, carryover]), 4);
+  if (cmp(reconstructed, formatMoney(originalBasis, 4)) !== 0) {
+    throw new TaxBasisPolicyError(
+      `nontaxable MACRS carryover ${carryover} plus allocated section179 ${elected179}, bonus ${bonus} and priorDepreciation ${priorDepreciation} must equal original unadjusted basis ${originalBasis} after business use; declare the slice elections and the adjusted checkpoint — do not copy the whole source-asset election or treat missing JSON as zero`,
+    );
+  }
+}
+
 function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
   if (taxBasisSideApplies(draft.applicable, "seller")) {
     const trigger = draft.dispositionTrigger as UsDispositionTrigger;
@@ -1230,8 +1315,11 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
       );
     }
   }
-  if (!isTaxBasisCalendarDate(draft.placedInServiceOn)) {
-    throw new TaxBasisPolicyError("placedInServiceOn must be a calendar date (YYYY-MM-DD)");
+  if (
+    taxBasisSideApplies(draft.applicable, "buyer") &&
+    draft.recognition === "nontaxable"
+  ) {
+    assertUsCarryoverCheckpoint(draft);
   }
   if (draft.recognition === "nontaxable" && draft.sourceOperation !== "intercompany_transfer") {
     throw new TaxBasisPolicyError(
@@ -1568,6 +1656,47 @@ function freezeUsBuyerMacrsSchedule(schedule: UsBuyerMacrsSchedule | null | unde
   };
 }
 
+function freezeUsCarryoverElections(row: UsMacrsRegimeBasis): {
+  originalUnadjustedBasis: string;
+  section179: string;
+  bonusPercent: string;
+  businessUsePercent: string;
+  priorDepreciation: string;
+} {
+  if (row.originalUnadjustedBasis == null || row.originalUnadjustedBasis === "") {
+    throw new TaxBasisPolicyError(
+      "originalUnadjustedBasis is required for nontaxable MACRS carryover; declare the transferor original tax basis for this slice — do not relabel carryoverBasis as original unadjusted basis",
+    );
+  }
+  if (row.section179 == null || row.section179 === "") {
+    throw new TaxBasisPolicyError(
+      "section179 is required for nontaxable MACRS carryover; declare the transferor's historical election allocated to this slice — missing receiving or foreign tax-depreciation JSON is not a zero election",
+    );
+  }
+  if (row.bonusPercent == null || row.bonusPercent === "") {
+    throw new TaxBasisPolicyError(
+      "bonusPercent is required for nontaxable MACRS carryover; declare the transferor's historical bonus allocated to this slice — missing tax-depreciation JSON is not a zero bonus",
+    );
+  }
+  if (row.businessUsePercent == null || row.businessUsePercent === "") {
+    throw new TaxBasisPolicyError(
+      "businessUsePercent is required for nontaxable MACRS carryover; declare the transferor's historical business-use percent allocated to this slice — missing tax-depreciation JSON is not 100% or zero",
+    );
+  }
+  if (row.priorDepreciation == null || row.priorDepreciation === "") {
+    throw new TaxBasisPolicyError(
+      "priorDepreciation is required for nontaxable MACRS carryover; declare MACRS already taken on this slice — do not re-walk a nominal schedule to invent it",
+    );
+  }
+  return {
+    originalUnadjustedBasis: moneyExact(row.originalUnadjustedBasis, "originalUnadjustedBasis"),
+    section179: moneyExact(row.section179, "section179"),
+    bonusPercent: normalizeDecimal(row.bonusPercent, 10),
+    businessUsePercent: normalizeDecimal(row.businessUsePercent, 10),
+    priorDepreciation: moneyExact(row.priorDepreciation, "priorDepreciation"),
+  };
+}
+
 /** Frozen MACRS workpaper outcome. Nontaxable carryover has no Pub 544
  *  amount realized and must not call usDispositionProceeds. */
 export function usRegimeWorkpaperOutcome(
@@ -1579,19 +1708,30 @@ export function usRegimeWorkpaperOutcome(
   const seller = taxBasisSideApplies(applicable, "seller");
   const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
   const taxable = row.recognition === "taxable";
+  const transferorHistory = seller || (buyer && !taxable);
+  const carryoverElections = buyer && !taxable
+    ? freezeUsCarryoverElections(row)
+    : {
+        originalUnadjustedBasis: seller ? row.originalUnadjustedBasis ?? null : null,
+        section179: null,
+        bonusPercent: null,
+        businessUsePercent: null,
+        priorDepreciation: null,
+      };
   return {
     amountRealized: seller && taxable ? usDispositionProceeds(row) : null,
     remainingUnadjustedBasis: seller ? row.remainingUnadjustedBasis : null,
     disposedUnadjustedBasis: seller ? row.disposedUnadjustedBasis : null,
-    placedInServiceOn: row.placedInServiceOn,
-    recoveryPeriodYears: row.recoveryPeriodYears,
-    method: row.method,
-    convention: row.convention,
+    placedInServiceOn: transferorHistory ? row.placedInServiceOn ?? null : null,
+    recoveryPeriodYears: transferorHistory ? row.recoveryPeriodYears ?? null : null,
+    method: transferorHistory ? row.method ?? null : null,
+    convention: transferorHistory ? row.convention ?? null : null,
     recognition: row.recognition,
     carryoverBasis: buyer && !taxable ? row.carryoverBasis ?? null : null,
     excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
     buyerCost: buyer && taxable ? row.buyerCost ?? null : null,
     shortYearMethod: row.shortYearMethod ?? null,
+    ...carryoverElections,
     ...(buyer
       ? freezeUsBuyerMacrsSchedule(buyerSchedule)
       : {

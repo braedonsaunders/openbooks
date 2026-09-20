@@ -304,6 +304,93 @@ test("a placement after the tax-year window takes no deemed first-year service",
   assert.equal(future.remainingBasis, "10000.00");
 });
 
+test("a full July–June fiscal year is recovery year 1 for an August placement, not calendar year 2", () => {
+  const first = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2025-08-11",
+    taxYear: 2026,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, [
+    { taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+  ]);
+  assert.equal(first.current.allowance, "2000.00");
+  const second = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2025-08-11",
+    taxYear: 2027,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, [
+    { taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+    { taxYear: 2027, yearStart: "2026-07-01", yearEnd: "2027-06-30" },
+  ]);
+  assert.equal(second.current.allowance, "3200.00");
+  assert.equal(second.prior.allowance, "2000.00");
+});
+
+test("the first short year after full service years continues walked remaining, not a new first-year asset", () => {
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2023-03-15",
+    taxYear: 2025,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-06-30" },
+  ]);
+  // Full years: 2000 then 3200, remaining 4800. Six-month subsequent DB is 960,
+  // not 2000 (new first-year 6/12 of original) or 1920 (full year 3).
+  assert.equal(walked.prior.allowance, "3200.00");
+  assert.equal(walked.current.allowance, "960.00");
+  assert.equal(walked.current.section179, "0.00");
+});
+
+test("a short year before this vintage existed does not skip its first-year convention or section 179", () => {
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2024-08-11",
+    taxYear: 2024,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    section179: "1000",
+  }, [
+    { taxYear: 2022, yearStart: "2022-01-01", yearEnd: "2022-06-30" },
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+  ]);
+  assert.equal(walked.current.section179, "1000.00");
+  assert.equal(walked.current.macrs, "1800.00");
+  assert.equal(walked.current.allowance, "2800.00");
+});
+
+test("declared adjusted carryover is the buyer checkpoint; pre-transfer years do not re-subtract from it", () => {
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2025,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    adjustedCarryover: "6400.00",
+    carryoverOn: "2025-01-01",
+  }, [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+  ]);
+  // Year 3 of original 10000 is 1920. Checkpoint 6400 is not the walked 4800.
+  assert.equal(walked.prior.remainingBasis, "6400.00");
+  assert.equal(walked.current.allowance, "1920.00");
+  assert.equal(walked.current.remainingBasis, "4480.00");
+});
+
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {
   const r = run({ openingBalance: "1000", dispositions: "5000", allowRecapture: false });
   assert.equal(r.recapture, "0.00");

@@ -398,6 +398,10 @@ test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () =
     relatedPerson: true,
     carryoverBasis: "4000.00",
     excessBasis: "250.00",
+    section179: "0",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    priorDepreciation: "0",
   };
   const computed = usRegimeWorkpaperOutcome(carryover, "intercompany_transfer", "both", {
     placedInServiceOn: "2025-08-01",
@@ -408,6 +412,9 @@ test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () =
   assert.equal(computed.amountRealized, null);
   assert.equal(computed.recognition, "nontaxable");
   assert.equal(computed.carryoverBasis, "4000.00");
+  assert.equal(computed.originalUnadjustedBasis, "10000.0000");
+  assert.equal(computed.section179, "0.0000");
+  assert.equal(computed.priorDepreciation, "0.0000");
   assert.equal(computed.placedInServiceOn, "2024-03-15");
   assert.equal(computed.recoveryPeriodYears, "5");
   assert.equal(computed.buyerPlacedInServiceOn, "2025-08-01");
@@ -495,7 +502,11 @@ test("buyer-only US hides seller proceeds; seller-only CA hides buyer payment", 
   assert.equal(taxBasisFieldVisible(field("statutoryProceeds"), buyerOnlyUs), false);
   assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), buyerOnlyUs), false);
   assert.equal(taxBasisFieldRequired(field("buyerCost"), buyerOnlyUs), true);
-  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), buyerOnlyUs), true);
+  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldRequired(field("recoveryPeriodYears"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldRequired(field("method"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldRequired(field("convention"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldVisible(field("placedInServiceOn"), buyerOnlyUs), false);
 
   const sellerOnlyCa = attachTaxBasisSource(
     { regime: "ca_cca", relationship: "non_arms_length", rolloverElection: "none" },
@@ -532,10 +543,6 @@ test("validateTaxRegimeBasis accepts buyer-only US taxable cost without seller v
       relationship: "arms_length",
       recognition: "taxable",
       relatedPerson: false,
-      placedInServiceOn: "2026-03-15",
-      recoveryPeriodYears: "5",
-      method: "200_db",
-      convention: "half_year",
       buyerCost: "4000.00",
     },
     { sourceOperation: "intercompany_transfer", applicable: "buyer" },
@@ -543,6 +550,63 @@ test("validateTaxRegimeBasis accepts buyer-only US taxable cost without seller v
   assert.equal(row.regime, "us_macrs");
   assert.equal("applicable" in row, false);
   assert.equal("originalUnadjustedBasis" in row, false);
+  assert.equal("placedInServiceOn" in row, false);
+});
+
+test("buyer-only nontaxable carryover requires transferor history and allocated elections", () => {
+  const draft = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "non_arms_length", recognition: "nontaxable" },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("section179"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("priorDepreciation"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("carryoverBasis"), draft), true);
+  assert.equal(taxBasisFieldVisible(field("disposedUnadjustedBasis"), draft), false);
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "non_arms_length",
+          recognition: "nontaxable",
+          relatedPerson: true,
+          placedInServiceOn: "2023-03-15",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          originalUnadjustedBasis: "10000.00",
+          carryoverBasis: "6400.00",
+          excessBasis: "400.00",
+        },
+        { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+      ),
+    /section179 is required for nontaxable MACRS carryover/,
+    "missing allocated section179",
+  );
+  const row = validateTaxRegimeBasis(
+    {
+      regime: "us_macrs",
+      relationship: "non_arms_length",
+      recognition: "nontaxable",
+      relatedPerson: true,
+      placedInServiceOn: "2023-03-15",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+      originalUnadjustedBasis: "10000.00",
+      carryoverBasis: "6400.00",
+      excessBasis: "400.00",
+      section179: "0",
+      bonusPercent: "0",
+      businessUsePercent: "100",
+      priorDepreciation: "3600.00",
+    },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(row.carryoverBasis, "6400.0000");
+  assert.equal(row.section179, "0.0000");
 });
 
 test("validateTaxRegimeBasis refuses a negative declared CA original capital cost", () => {

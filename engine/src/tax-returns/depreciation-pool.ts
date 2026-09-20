@@ -247,6 +247,12 @@ export interface MacrsYearInput {
   allocationFollowYear?: boolean;
   /** Recovery months already treated as in service before this tax year. */
   elapsedRecoveryMonths?: number;
+  /** 0-based service year of THIS vintage. Fiscal windows are not calendar years. */
+  recoveryYearIndex?: number;
+  /** Declared transferor adjusted basis — buyer opening/closing checkpoint. */
+  adjustedCarryover?: string;
+  /** Transfer date that starts the carryover checkpoint (pre-transfer years are history only). */
+  carryoverOn?: string;
   /**
    * Taxable MACRS dispositions (default when disposedOn is set) are Pub 946
    * excepted property if placed and disposed in the same tax-year window.
@@ -443,25 +449,30 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   }
 
   const disposedThisYear = disposedInTaxYear(input, disposed);
-  const scheduleDisposed = !disposed
-    ? null
-    : disposedThisYear
-      ? { year: input.taxYear, month: disposed.month }
-      : disposed;
+  const recoveryYearIndex = input.recoveryYearIndex ?? (
+    input.yearStart && input.yearEnd
+      && input.placedInServiceOn >= input.yearStart
+      && input.placedInServiceOn <= input.yearEnd
+      ? 0
+      : input.taxYear - placed.year
+  );
+  const placedMonth = monthInTaxYear(input.placedInServiceOn, input.yearStart);
+  const disposedMonth = input.disposedOn ? monthInTaxYear(input.disposedOn, input.yearStart) : null;
   const schedule = macrsSchedule({
     basis: macrsBasis,
-    placed,
-    disposed: scheduleDisposed,
+    placedMonth,
+    disposedRecoveryYear: disposedThisYear ? recoveryYearIndex : null,
+    disposedMonth,
     recoveryPeriodYears: input.recoveryPeriodYears,
     method: input.method,
     convention: input.convention,
   });
-  let macrs = schedule.get(input.taxYear) ?? "0.0000";
+  let macrs = schedule.get(recoveryYearIndex) ?? "0.0000";
   const priorBeforeThisYear = sum(
-    [...schedule.entries()].filter(([year]) => year < input.taxYear).map(([, amount]) => amount),
+    [...schedule.entries()].filter(([year]) => year < recoveryYearIndex).map(([, amount]) => amount),
   );
-  const used179 = input.taxYear >= placed.year ? section179Cap : "0.0000";
-  const usedBonus = input.taxYear >= placed.year ? mulPercent(after179, bonusPercent) : "0.0000";
+  const used179 = firstYear || recoveryYearIndex > 0 ? section179Cap : "0.0000";
+  const usedBonus = firstYear || recoveryYearIndex > 0 ? mulPercent(after179, bonusPercent) : "0.0000";
   return {
     section179: formatMoney(elected179, 2), bonus: formatMoney(bonus, 2), macrs: formatMoney(macrs, 2),
     allowance: formatMoney(sum([elected179, bonus, macrs]), 2),
@@ -541,7 +552,9 @@ export interface MacrsYearWindow {
   yearEnd: string;
 }
 
-/** Walk statutory windows so a later partial disposal cannot reprice a prior opening. */
+/** Walk statutory windows so a later partial disposal cannot reprice a prior opening.
+ *  Windows track THIS vintage's service — a subsidiary short year before placement
+ *  is not this asset's first short year. */
 export function computeMacrsThroughYear(
   input: MacrsYearInput,
   windows: MacrsYearWindow[],
@@ -551,40 +564,54 @@ export function computeMacrsThroughYear(
   deemedPlacedOn: string | null;
   firstYearMonthsInService: number | null;
   allocationFollowYear: boolean;
+  currentRecoveryYearIndex: number | null;
 } {
   const ordered = [...windows].sort((left, right) => left.taxYear - right.taxYear);
-  let shortSeen = false;
-  let yearsSinceShort = 0;
+  const checkpoint = input.adjustedCarryover ? persistMacrsBasis(input.adjustedCarryover) : null;
+  const carryoverOn = input.carryoverOn ?? null;
+  let vintageShortSeen = false;
+  let yearsSinceVintageShort = 0;
   let deemedPlacedOn: string | null = null;
   let firstYearMonthsInService: number | null = null;
   let elapsedRecoveryMonths = 0;
   let allocationFollowYear = false;
+  let serviceYears = 0;
+  let postTransferTaken = "0";
   let adjusted = persistMacrsBasis(input.basis);
-  let prior = zeroMacrs(adjusted);
-  let current = zeroMacrs(adjusted);
+  let prior = zeroMacrs(checkpoint ?? adjusted);
+  let current = zeroMacrs(checkpoint ?? adjusted);
+  let currentRecoveryYearIndex: number | null = null;
   for (const window of ordered) {
     if (window.taxYear > input.taxYear) break;
-    if (shortSeen) yearsSinceShort += 1;
-    const afterShortYear = shortSeen;
-    const followYear = yearsSinceShort === 1;
+    if (input.placedInServiceOn > window.yearEnd) continue;
+    if (input.disposedOn && input.disposedOn < window.yearStart) continue;
+    const firstServiceYear = serviceYears === 0;
+    if (vintageShortSeen) yearsSinceVintageShort += 1;
     const short = isShortTaxYear(window.yearStart, window.yearEnd);
+    const afterShortYear = vintageShortSeen || (short && !firstServiceYear);
+    const followYear = yearsSinceVintageShort === 1;
+    const preTransfer = !!(checkpoint && carryoverOn && window.yearEnd < carryoverOn);
     const windowFactor = impliedShortYearFactor(window.yearStart, window.yearEnd);
+    const openingCheckpoint = checkpoint && !preTransfer
+      ? persistMacrsBasis(add(checkpoint, neg(postTransferTaken)))
+      : undefined;
     const result = computeMacrsYear({
       ...input,
       taxYear: window.taxYear,
       yearStart: window.yearStart,
       yearEnd: window.yearEnd,
+      recoveryYearIndex: serviceYears,
       afterShortYear,
       allocationFollowYear: followYear,
       firstYearMonthsInService: firstYearMonthsInService ?? undefined,
       elapsedRecoveryMonths,
-      adjustedBasisAtYearStart: afterShortYear ? adjusted : undefined,
+      adjustedBasisAtYearStart: afterShortYear ? (openingCheckpoint ?? adjusted) : undefined,
       deemedPlacedOn: deemedPlacedOn ?? undefined,
       shortYearFactor: window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
       disposedOn: input.disposedOn,
       dispositionRecognition: input.dispositionRecognition,
     });
-    if (!shortSeen && short) {
+    if (firstServiceYear && short) {
       deemedPlacedOn = formatCalendarDay(
         deemedPlacedInServiceOn(input.convention, window.yearStart, window.yearEnd, input.placedInServiceOn),
       );
@@ -597,25 +624,72 @@ export function computeMacrsThroughYear(
         window.yearEnd,
       );
       elapsedRecoveryMonths = firstYearMonthsInService;
-      shortSeen = true;
-      yearsSinceShort = 0;
-    } else if (shortSeen) {
+      vintageShortSeen = true;
+      yearsSinceVintageShort = 0;
+    } else if (short && !firstServiceYear) {
+      vintageShortSeen = true;
+      elapsedRecoveryMonths += shortTaxYearMonths(window.yearStart, window.yearEnd);
+    } else if (vintageShortSeen) {
       elapsedRecoveryMonths += short ? shortTaxYearMonths(window.yearStart, window.yearEnd) : 12;
+    } else {
+      elapsedRecoveryMonths += firstServiceYear
+        ? Number(taxConventionHalfMonths(input.convention, monthInTaxYear(input.placedInServiceOn, window.yearStart), "placed")) / 2
+        : 12;
     }
-    adjusted = persistMacrsBasis(result.remainingBasis);
-    if (window.taxYear === input.taxYear - 1) prior = result;
+    if (preTransfer) {
+      if (window.taxYear === input.taxYear - 1) prior = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
+      if (window.taxYear === input.taxYear) {
+        current = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
+        allocationFollowYear = followYear;
+        currentRecoveryYearIndex = serviceYears;
+      }
+      serviceYears += 1;
+      continue;
+    }
+    let applied = result;
+    if (checkpoint) {
+      const opening = persistMacrsBasis(add(checkpoint, neg(postTransferTaken)));
+      const take = firstServiceYear ? result.allowance : result.macrs;
+      const remaining = input.disposedOn
+        && input.disposedOn >= window.yearStart
+        && input.disposedOn <= window.yearEnd
+        ? "0.00"
+        : remainingAfter(opening, take);
+      applied = {
+        section179: firstServiceYear ? result.section179 : "0.00",
+        bonus: firstServiceYear ? result.bonus : "0.00",
+        macrs: result.macrs,
+        allowance: firstServiceYear ? result.allowance : result.macrs,
+        remainingBasis: remaining,
+      };
+      postTransferTaken = formatMoney(add(postTransferTaken, take), 2);
+    }
+    adjusted = persistMacrsBasis(applied.remainingBasis);
+    if (window.taxYear === input.taxYear - 1) prior = applied;
     if (window.taxYear === input.taxYear) {
-      current = result;
+      current = applied;
       allocationFollowYear = followYear;
+      currentRecoveryYearIndex = serviceYears;
     }
+    serviceYears += 1;
   }
-  return { current, prior, deemedPlacedOn, firstYearMonthsInService, allocationFollowYear };
+  return { current, prior, deemedPlacedOn, firstYearMonthsInService, allocationFollowYear, currentRecoveryYearIndex };
+}
+
+function monthInTaxYear(date: string, yearStart?: string): number {
+  const day = parseIsoDate(date);
+  if (!day) return 1;
+  if (!yearStart) return day.month;
+  const start = parseIsoDate(yearStart);
+  if (!start) return day.month;
+  return Math.min(12, Math.max(1, (day.year - start.year) * 12 + (day.month - start.month) + 1));
 }
 
 function macrsSchedule(args: {
   basis: string;
-  placed: { year: number; month: number };
-  disposed: { year: number; month: number } | null;
+  placedMonth: number;
+  disposedRecoveryYear: number | null;
+  disposedMonth: number | null;
   recoveryPeriodYears: ExactDecimal;
   method: "200_db" | "150_db" | "straight_line";
   convention: "half_year" | "mid_quarter" | "mid_month";
@@ -625,16 +699,17 @@ function macrsSchedule(args: {
   const originalBasis = remaining;
   const recoveryPeriods = exactPeriods(args.recoveryPeriodYears);
   let elapsedPeriods = 0n;
-  const first = conventionFraction(args.convention, args.placed.month, "placed");
+  const first = conventionFraction(args.convention, args.placedMonth, "placed");
   const yearsAfterPlacement = (recoveryPeriods - first + 23n) / 24n;
-  const lastRecoveryYear = args.placed.year + Number(yearsAfterPlacement);
-  const lastYear = args.disposed ? Math.min(lastRecoveryYear, args.disposed.year) : lastRecoveryYear;
+  const lastRecoveryYear = Number(yearsAfterPlacement);
   const factorNumerator = args.method === "200_db" ? 2n : args.method === "150_db" ? 3n : 1n;
   const factorDenominator = args.method === "150_db" ? 2n : 1n;
 
-  for (let year = args.placed.year; year <= lastYear && remaining > 0n; year++) {
-    let fraction = year === args.placed.year ? first : year === lastRecoveryYear ? maxBigInt(0n, recoveryPeriods - elapsedPeriods) : 24n;
-    if (args.disposed?.year === year) fraction = minBigInt(fraction, conventionFraction(args.convention, args.disposed.month, "disposed"));
+  for (let year = 0; year <= lastRecoveryYear && remaining > 0n; year++) {
+    let fraction = year === 0 ? first : year === lastRecoveryYear ? maxBigInt(0n, recoveryPeriods - elapsedPeriods) : 24n;
+    if (args.disposedRecoveryYear === year && args.disposedMonth != null) {
+      fraction = minBigInt(fraction, conventionFraction(args.convention, args.disposedMonth, "disposed"));
+    }
     const lifeRemaining = maxBigInt(1n, recoveryPeriods - elapsedPeriods);
     const straight = args.method === "straight_line"
       ? { numerator: originalBasis * 24n, denominator: recoveryPeriods }

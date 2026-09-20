@@ -28,6 +28,9 @@ export type MacrsVintage = {
   role: "seller" | "buyer";
   transferOn: string | null;
   recognition: "taxable" | "nontaxable" | null;
+  /** Declared transferor adjusted basis — buyer opening/closing checkpoint. */
+  adjustedCarryover: string | null;
+  priorDepreciation: string | null;
 };
 
 export type MacrsWorkpaperEvent = {
@@ -52,6 +55,11 @@ export type MacrsWorkpaperEvent = {
   buyer_recovery_period_years: string | null;
   buyer_method: string | null;
   buyer_convention: string | null;
+  original_unadjusted_basis: string | null;
+  section_179: string | null;
+  bonus_percent: string | null;
+  business_use_percent: string | null;
+  prior_depreciation: string | null;
 };
 
 export type MacrsVintageDefaults = {
@@ -130,6 +138,8 @@ function seedAcquisition(
     role: "seller",
     transferOn: null,
     recognition: disposedOn ? "taxable" : null,
+    adjustedCarryover: null,
+    priorDepreciation: null,
   }];
 }
 
@@ -164,7 +174,7 @@ function receiverVintages(
 ): MacrsVintage[] {
   if (paper.buyer_subsidiary_id !== runSubsidiaryId) return [];
   const related = paper.related_person === "true";
-  const section179 = related ? "0" : defaults.section179;
+  const newVintageSection179 = related ? "0" : defaults.section179;
   const transferorRecovery = paper.recovery_period_years || defaults.recoveryPeriodYears;
   const transferorMethod = asMethod(paper.macrs_method, defaults.method);
   const transferorConvention = asConvention(paper.macrs_convention, defaults.convention);
@@ -173,28 +183,29 @@ function receiverVintages(
   const transferorPlaced = paper.placed_in_service_on ?? paper.effective_on;
   const shared = {
     ...defaults,
-    section179,
     shortYearMethod,
     role: "buyer" as const,
     transferOn: paper.effective_on,
     recognition,
     disposedOn: null as string | null,
+    adjustedCarryover: null as string | null,
+    priorDepreciation: null as string | null,
   };
   const vintages: MacrsVintage[] = [];
   if (paper.recognition === "nontaxable" && paper.carryover_basis) {
-    vintages.push({
+    vintages.push(carryoverVintage(paper, {
       ...shared,
-      basis: paper.carryover_basis,
       placedInServiceOn: transferorPlaced,
       recoveryPeriodYears: transferorRecovery,
       method: transferorMethod,
       convention: transferorConvention,
-    });
+    }));
   }
   if (paper.recognition === "nontaxable" && positive(paper.excess_basis)) {
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,
+      section179: newVintageSection179,
       basis: paper.excess_basis!,
       placedInServiceOn: paper.effective_on,
       recoveryPeriodYears: buyer.recoveryPeriodYears,
@@ -206,6 +217,7 @@ function receiverVintages(
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,
+      section179: newVintageSection179,
       basis: paper.buyer_cost,
       placedInServiceOn: buyer.placedInServiceOn,
       recoveryPeriodYears: buyer.recoveryPeriodYears,
@@ -214,6 +226,37 @@ function receiverVintages(
     });
   }
   return vintages;
+}
+
+function requireFrozenElection(paper: MacrsWorkpaperEvent, field: keyof MacrsWorkpaperEvent, name: string): string {
+  const value = paper[field];
+  if (value == null || value === "") {
+    throw new MacrsVintageError(
+      `frozen US workpaper is missing ${name} for nontaxable carryover; reverse and re-propose it — missing receiving or foreign tax-depreciation JSON is not a zero ${name}, and the whole source-asset election must not be copied onto this slice`,
+    );
+  }
+  return String(value);
+}
+
+function carryoverVintage(
+  paper: MacrsWorkpaperEvent,
+  shared: Omit<MacrsVintage, "basis" | "section179" | "bonusPercent" | "businessUsePercent">,
+): MacrsVintage {
+  const original = paper.disposed_unadjusted_basis || paper.original_unadjusted_basis;
+  if (!original) {
+    throw new MacrsVintageError(
+      "frozen US workpaper is missing the transferor original tax basis for nontaxable carryover; reverse and re-propose it — do not treat carryoverBasis as original unadjusted basis",
+    );
+  }
+  return {
+    ...shared,
+    basis: original,
+    adjustedCarryover: paper.carryover_basis,
+    priorDepreciation: requireFrozenElection(paper, "prior_depreciation", "priorDepreciation"),
+    section179: requireFrozenElection(paper, "section_179", "section179"),
+    bonusPercent: requireFrozenElection(paper, "bonus_percent", "bonusPercent"),
+    businessUsePercent: requireFrozenElection(paper, "business_use_percent", "businessUsePercent"),
+  };
 }
 
 export function resolveMacrsVintages(args: {
