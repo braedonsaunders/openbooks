@@ -100,7 +100,13 @@ test("all 47 prefectures are known, all supported, withholding implemented", () 
 
 test("the certificate carries the 甲欄 inputs; absence means 乙欄", () => {
   assert.equal(JP_CERTIFICATES.country, "JP");
-  assert.equal(JP_CERTIFICATES.certificates.length, 1);
+  // Since 0191 a second, column-backed declaration carries the payer-held
+  // 標準報酬 grade and kaigo status (`jp_hyojun`) — the 扶養控除等申告書
+  // itself is unchanged, still first, still the only row-backed form.
+  assert.deepEqual(
+    JP_CERTIFICATES.certificates.map((certificate) => [certificate.key, certificate.storage]),
+    [["jp_fuyo", "certificate_rows"], ["jp_hyojun", "profile_columns"]],
+  );
   const cert = JP_CERTIFICATES.certificates[0]!;
   assert.equal(cert.key, "jp_fuyo");
   const fields = new Map(cert.fields.map((field) => [field.key, field]));

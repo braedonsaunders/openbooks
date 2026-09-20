@@ -672,6 +672,54 @@ test(
 );
 
 test(
+  "readiness names a blank PL birth year per employee once the pack is payable",
+  { skip: !DB },
+  async () => {
+    // 0191 gave every required fact a producer, so the pack-level
+    // `pack.notPayable` stays silent for PL — and the gap moves per
+    // employee, where the operator can still fix it before calculation.
+    // A blank birth year must refuse HERE, naming the fact's
+    // operator-facing label (never the engine key) and pointing at the
+    // employee's Payroll tab — not at calculation time.
+    const run = await seedPayRun({ country: "PL" });
+    try {
+      const before = await payRunReadiness(run.orgId, run.documentId);
+      assert.equal(
+        before.items.some((i) => i.code === "pack.notPayable"),
+        false,
+        "PL has producers for every required fact: no pack-level refusal",
+      );
+      const missing = before.items.find((i) => i.code === "employee.missingFact");
+      assert.ok(missing, "a blank birth year blocks its employee before calculation");
+      assert.equal(missing.severity, "blocker");
+      assert.match(missing.detail ?? "", /Birth year \(rok urodzenia\)/);
+      assert.doesNotMatch(missing.detail ?? "", /pl_rok_urodzenia/);
+      assert.deepEqual(
+        missing.employees.map((e) => e.partyId),
+        [run.employeeId],
+      );
+      // Answering the fact clears the blocker — and fires nothing else.
+      await db.execute(sql`
+        update employee_payroll_profiles set pl_rok_urodzenia = 1990
+         where org_id = ${run.orgId} and employee_party_id = ${run.employeeId}`);
+      const after = await payRunReadiness(run.orgId, run.documentId);
+      assert.equal(
+        after.items.some((i) => i.code === "employee.missingFact"),
+        false,
+        "an answered birth year leaves no per-employee fact gap",
+      );
+      assert.equal(
+        after.items.some((i) => i.code === "pack.notPayable"),
+        false,
+        "an answered birth year leaves no pack-level gap either",
+      );
+    } finally {
+      await dropScratchOrgReporting(run.orgId);
+    }
+  },
+);
+
+test(
   "readiness scopes to the pay schedule's subsidiary, exactly as the run does",
   { skip: !DB },
   async () => {
