@@ -30,8 +30,8 @@ for (const [name, source, refusal] of [
   test(`deterministic scripts refuse ${name} by name`, async () => {
     const result = await runScript(source, context, 2_000, deterministic);
     assert.equal(result.status, "error");
-    assert.ok(result.abortReason?.includes(`${refusal} is not available`), result.abortReason);
-    assert.ok(result.abortReason?.includes("use values supplied in ctx"), result.abortReason);
+    assert.ok(result.abortReason?.includes(`${refusal} is not available`), result.abortReason ?? "(no abort reason)");
+    assert.ok(result.abortReason?.includes("use values supplied in ctx"), result.abortReason ?? "(no abort reason)");
     assert.equal(result.returned, undefined);
   });
 }
@@ -83,8 +83,8 @@ test("deterministic scripts keep ordinary math and supplied document values", as
   }`;
   const first = await runScript(source, context, 2_000, deterministic);
   const second = await runScript(source, context, 2_000, deterministic);
-  assert.equal(first.status, "ok", first.abortReason);
-  assert.equal(second.status, "ok", second.abortReason);
+  assert.equal(first.status, "ok", first.abortReason ?? "(no abort reason)");
+  assert.equal(second.status, "ok", second.abortReason ?? "(no abort reason)");
   assert.deepEqual(first.returned, { date: "2026-09-20", lines: context.kernelLines, value: 5 });
   assert.deepEqual(second.returned, first.returned);
 });
@@ -97,6 +97,6 @@ test("restrictions do not leak into subsequent non-deterministic script contexts
     const random = Math.random;
     function main() { return { clock: typeof clock(), random: typeof random() }; }
   `, { ...context, trigger: "scheduled" }, 2_000);
-  assert.equal(ordinary.status, "ok", ordinary.abortReason);
+  assert.equal(ordinary.status, "ok", ordinary.abortReason ?? "(no abort reason)");
   assert.deepEqual(ordinary.returned, { clock: "number", random: "number" });
 });
