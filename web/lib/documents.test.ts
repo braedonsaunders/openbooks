@@ -1562,3 +1562,13 @@ test('provider failure during API document create leaves no document or dependen
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+// The compatibility facade must retain constructor identity: application domain
+// failure handling uses instanceof against the engine class after extraction.
+test('web document facade preserves the engine refusal constructor identity', async () => {
+  const engine = await import('@openbooks/engine/src/records/document-edit-policy.ts')
+  assert.equal(DocumentEditError, engine.DocumentEditError)
+  const refusal = new engine.DocumentEditError(409, 'reload and review', { revision: 'stale' })
+  assert.ok(refusal instanceof DocumentEditError)
+  assert.deepEqual(refusal.fieldErrors, { revision: 'stale' })
+})

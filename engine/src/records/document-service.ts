@@ -9,11 +9,19 @@ import { documentBalanceDueLateral } from '../balance-due.ts'
 import { documentRevisionCounterSql } from '../document-revision.ts'
 import { loadRequiredControlAccounts } from '../control-accounts.ts'
 import type { DocumentEditCurrent } from './document-input.ts'
+import { DocumentEditError } from './document-edit-policy.ts'
+
+function requireOrganization(orgId: string): void {
+  if (typeof orgId !== 'string' || !orgId.trim()) {
+    throw new DocumentEditError(422, 'organization id is required; supply the document organization explicitly')
+  }
+}
 
 /** Posting deps for the shared document machinery. Fails closed: throws
  * ControlAccountsIncompleteError unless ar/ap/bank are configured, so a
  * half-configured org can never hand undefined account ids to the kernel. */
 export async function controlDeps(orgId: string) {
+  requireOrganization(orgId)
   return { control: await loadRequiredControlAccounts(orgId) }
 }
 
@@ -25,6 +33,7 @@ export async function controlDeps(orgId: string) {
  * construction. Both stay NULL until the document posts.
  */
 export async function loadDocument(id: string, orgId: string) {
+  requireOrganization(orgId)
   const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
            ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",
@@ -67,6 +76,7 @@ export async function loadDocumentEditCurrent(
   id: string,
   orgId: string,
 ): Promise<DocumentEditCurrent | null> {
+  requireOrganization(orgId)
   const result = await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
