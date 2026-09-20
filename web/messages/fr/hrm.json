@@ -4,9 +4,6 @@
     "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement.",
     "tabs": {
       "overview": "Vue d'ensemble",
-      "changeRequests": "Demandes de changement",
-      "departments": "Services",
-      "reports": "Rapports",
       "positions": "Postes",
       "processes": "Processus",
       "leave": "Congés",
@@ -143,25 +140,6 @@
     "draftBadge": "Actions",
     "openEmployee": "Ouvrir le dossier de l'employé",
     "notAvailable": "Non disponible"
-  },
-  "departments": {
-    "title": "Services",
-    "description": "Effectif du jour par service, avec la répartition par employeur — résolu par le service des effectifs.",
-    "listTitle": "Effectif par service",
-    "listNote": "La liste des employés n'a pas de filtre par service : le lien ouvre donc la liste complète.",
-    "linksTitle": "Liens",
-    "employeesLink": "Liste des employés",
-    "setupLink": "Gérer les services"
-  },
-  "reports": {
-    "title": "Rapports",
-    "description": "Rapports d'effectif : le modèle de déclaration d'effectif et les entités d'emploi, ouverts dans le générateur de rapports.",
-    "presetTitle": "Déclaration d'effectif",
-    "presetHint": "Le modèle ouvre le plan enregistré de l'organisation — ou le catalogue du générateur si l'initialisation ne s'est jamais matérialisée.",
-    "entitiesTitle": "Entités d'effectif",
-    "entitiesHint": "Créez un rapport d'effectif à partir d'une des entités d'emploi.",
-    "hubTitle": "Tous les rapports",
-    "hubDescription": "Ouvrir le centre de rapports."
   },
   "employment": {
     "episodes": {
@@ -329,6 +307,22 @@
       "warnings": "Avertissements",
       "refusal": "Nécessite une attention",
       "missing": "Ce poste n'est plus visible."
+    },
+    "add": "Ajouter un poste",
+    "create": {
+      "title": "Nouveau poste",
+      "code": "Code du poste",
+      "titleField": "Intitulé",
+      "employer": "Employeur",
+      "department": "Service",
+      "noDepartment": "Aucun service",
+      "plannedFte": "ETP prévu",
+      "status": "Statut",
+      "effectiveFrom": "En vigueur à partir du",
+      "reason": "Motif",
+      "reasonPlaceholder": "Pourquoi ce poste existe — enregistré avec sa première version",
+      "submit": "Créer le poste",
+      "failed": "Le poste n'a pas pu être créé."
     }
   },
   "processes": {

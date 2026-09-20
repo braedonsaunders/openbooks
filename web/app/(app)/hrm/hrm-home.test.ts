@@ -117,29 +117,39 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrmGroupTabs/, "permission exclusions stay at one call site");
 });
 
-test("hrm route tabs cover the whole workspace, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/change-requests', '/hrm/leave', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
+test("hrm route tabs are the five working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
-  for (const href of ['/hrm/change-requests', '/hrm/leave', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
-    assert.match(groupTabs, new RegExp(`'${href.replace(/\//g, '\\/')}': 'hrm'`), `${href} tab hides while the feature switch is off`);
+  // Demoted by review: the queue is reached from the cockpit and the employee
+  // drawer, self-service leave is a quick action, departments are configured
+  // in Company setup, and workforce reports live in the Reports module.
+  for (const href of ['/hrm/change-requests', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
+    assert.doesNotMatch(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `${href} is not a tab`);
   }
-  assert.match(groupTabs, /'\/hrm\/change-requests': 'hrm\.employment\.read'/, "queue tab hides without the employment read grant");
+  assert.match(groupTabs, /'\/hrm\/positions': 'hrm\.position\.read'/, "positions tab hides without the headcount-plan read grant");
+  assert.match(groupTabs, /'\/hrm\/processes': 'hrm\.process\.read'/, "processes tab hides without the process read grant");
   assert.match(groupTabs, /'\/hrm\/leave': 'hrm\.leave\.read'/, "leave desk tab hides without the leave read grant");
-  assert.match(groupTabs, /'\/hrm\/my-leave': 'hrm\.leave\.request'/, "self-service tab hides without the file-a-request grant, matching the page gate");
-  assert.match(groupTabs, /'\/hrm\/departments': 'hrm\.employment\.read'/, "departments tab hides without the employment read grant");
-  assert.match(groupTabs, /'\/hrm\/reports': 'reports\.read'/, "reports tab hides without the reports grant");
+  assert.match(groupTabs, /'\/entities\/employees': 'parties\.read'/, "employees tab hides without the parties grant");
 });
 
-test("hrm is registered as a default-off feature with its nav module", () => {
+test("the employees list carries the same HRM strip", () => {
+  const employees = readFileSync(new URL("../entities/[role]/view.ts", import.meta.url), "utf8");
+  assert.match(employees, /slug === 'employees' && canReadHrm[\s\S]*?hrmGroupTabs\(authz, '\/entities\/employees'\)/, "the native employee list renders the HRM strip when the workspace exists for the viewer");
+});
+
+test("hrm is registered as a default-off feature with ONE nav module", () => {
   assert.match(featureRegistry, /key: 'hrm', defaultEnabled: false/, "hrm defaults off on the Features switchboard");
+  assert.match(featureRegistry, /navModules: \['hrm'\]/, "the feature owns exactly the cockpit module");
   assert.match(navRegistry, /key: 'hrm',\n    href: '\/hrm'/, "nav module opens the cockpit");
   assert.match(navRegistry, /requiredPermission: 'hrm\.employment\.read'/, "nav module carries the read boundary");
   assert.match(navRegistry, /featureKey: 'hrm'/, "nav module hides while the feature is off");
+  // Working surfaces are tabs on the cockpit, not sidebar modules of their
+  // own: a second Departments entry beside Company setup's and a second
+  // Reports entry beside the Reports module were the confusion under review.
   for (const key of ['hrm-change-requests', 'hrm-departments', 'hrm-reports']) {
-    assert.match(navRegistry, new RegExp(`key: '${key}'`), `${key} is a nav module like banking-cash`);
+    assert.doesNotMatch(navRegistry, new RegExp(`key: '${key}'`), `${key} is not a nav module`);
   }
-  assert.match(navRegistry, /key: 'hrm-reports',[\s\S]*?requiredPermission: 'reports\.read'/, "the reports surface carries the builder's grant");
   assert.ok(navStrings.includes('"hrm": "Human Resources"'), "sidebar label resolves from the catalog");
 });
 

@@ -266,7 +266,10 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // The home reflects the org's own surface: the directory names the native
   // employee list (the module's record home) exactly when the viewer may
   // open it, annotated with the live headcount figure — plus the sibling
-  // workspace tabs the viewer may open.
+  // workspace tabs the viewer may open. The change-request queue is NOT a
+  // destination here: it is reached from the pending panel below and from
+  // the employee drawer, by review. Departments are configured in Company
+  // setup and workforce reports live in the Reports module (quick actions).
   const directory: DirectoryItem[] = []
   if (can(authz, 'parties.read')) {
     directory.push({
@@ -276,29 +279,14 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       badge: { value: String(headcount.total), tone: 'neutral' },
     })
   }
-  directory.push({
-    href: '/hrm/change-requests',
-    label: t('home.tabs.changeRequests'),
-    iconKey: 'scroll-text',
-  })
-  if (can(authz, 'hrm.leave.read')) {
-    directory.push({
-      href: '/hrm/leave',
-      label: t('home.tabs.leave'),
-      iconKey: 'calendar',
-    })
+  if (can(authz, 'hrm.position.read')) {
+    directory.push({ href: '/hrm/positions', label: t('home.tabs.positions'), iconKey: 'layers' })
   }
-  directory.push({
-    href: '/hrm/departments',
-    label: t('home.tabs.departments'),
-    iconKey: 'building',
-  })
-  if (can(authz, 'reports.read')) {
-    directory.push({
-      href: '/hrm/reports',
-      label: t('home.tabs.reports'),
-      iconKey: 'file',
-    })
+  if (can(authz, 'hrm.process.read')) {
+    directory.push({ href: '/hrm/processes', label: t('home.tabs.processes'), iconKey: 'list-checks' })
+  }
+  if (can(authz, 'hrm.leave.read')) {
+    directory.push({ href: '/hrm/leave', label: t('home.tabs.leave'), iconKey: 'timer' })
   }
 
   // Pending change requests through the existing service (newest first,
@@ -448,15 +436,20 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
 
   // Quick actions, each gated by the permission its target enforces: the
   // New button in the header owns employee creation, this rail owns the
-  // propose entry point plus the management surfaces.
+  // propose entry point, self-service leave, and the two surfaces that live
+  // in other modules on purpose (departments in Company setup, workforce
+  // reports in the Reports module — never a second page of either here).
   const canManageHrm = can(authz, 'hrm.employment.manage')
   const actions: DirectoryItem[] = []
   if (canManageHrm) {
-    actions.push({ href: '/hrm/change-requests', label: t('overview.actions.proposeChange'), iconKey: 'scroll-text' })
+    actions.push({ href: '/hrm/change-requests', label: t('overview.actions.proposeChange'), iconKey: 'scroll' })
+  }
+  if (can(authz, 'hrm.leave.request')) {
+    actions.push({ href: '/hrm/my-leave', label: t('home.tabs.myLeave'), iconKey: 'timer' })
   }
   actions.push({ href: '/admin/setup/departments', label: t('overview.actions.manageDepartments'), iconKey: 'building' })
   if (can(authz, 'reports.read')) {
-    actions.push({ href: '/hrm/reports', label: t('overview.actions.openReports'), iconKey: 'file' })
+    actions.push({ href: '/reports', label: t('overview.actions.openReports'), iconKey: 'file' })
   }
 
   // The onboarding panel is additive: employment.read viewers without

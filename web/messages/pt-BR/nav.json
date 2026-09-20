@@ -1,9 +1,6 @@
 {
   "modules": {
     "hrm": "Recursos humanos",
-    "hrm-change-requests": "Solicitações de alteração",
-    "hrm-departments": "Departamentos",
-    "hrm-reports": "Relatórios de RH",
     "dashboard": "Painel",
     "assistant": "Assistente de IA",
     "continuous-close": "Monitor de Fechamento",

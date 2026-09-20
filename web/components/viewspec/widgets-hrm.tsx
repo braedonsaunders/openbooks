@@ -8,6 +8,7 @@ import {
   OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
+import { AddPositionButton } from '../../app/(app)/hrm/positions/AddPositionButton'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
@@ -74,6 +75,15 @@ export const HRM_WIDGETS = {
       notAvailable={str(props, 'notAvailable') ?? ''}
       truncated={props.truncated === true}
       truncatedNote={str(props, 'truncatedNote') ?? ''}
+    />
+  ),
+  /** The positions page's header primary action: the house Button opening
+   *  the create form through `?position=new`. Placement grants nothing — the
+   *  spec's `when` is the manage ref and POST /api/hrm/positions re-checks it. */
+  'hrm-add-position-button': (props) => (
+    <AddPositionButton
+      basePath={str(props, 'basePath') ?? '/hrm/positions'}
+      label={str(props, 'label') ?? ''}
     />
   ),
   /** Status segments: server-side filter pills with per-status counts over

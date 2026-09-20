@@ -1372,18 +1372,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/hrm/departments': {
-    route: '/hrm/departments',
-    segments: [],
-    searchParams: false,
-    module: async () => {
-      const m = await import('../app/(app)/hrm/departments/view')
-      return {
-        load: () => m.loadHrmDepartmentsPage(),
-        spec: (data) => m.hrmDepartmentsSpec(data as never),
-      }
-    },
-  },
   '/hrm/leave': {
     route: '/hrm/leave',
     segments: [],
@@ -1429,18 +1417,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadProcessesRoute(input.searchParams ?? {}),
         spec: (data) => m.processesSpec(data as never),
-      }
-    },
-  },
-  '/hrm/reports': {
-    route: '/hrm/reports',
-    segments: [],
-    searchParams: false,
-    module: async () => {
-      const m = await import('../app/(app)/hrm/reports/view')
-      return {
-        load: () => m.loadHrmReportsPage(),
-        spec: (data) => m.hrmReportsSpec(data as never),
       }
     },
   },

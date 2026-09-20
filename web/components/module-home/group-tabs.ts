@@ -60,23 +60,22 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   ],
   hrm: [
     { href: '/hrm', ns: 'hrm', key: 'home.tabs.overview' },
-    // Employment start/end/transfer checklists — the HR-4 recorded
-    // companion to the change-request queue.
-    { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes' },
     // The NATIVE employee entity list — HRM deliberately has no second
     // roster; the employment record is a tab on the employee drawer.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
-    // The org-wide change-request queue, the department headcount board,
-    // and the workforce reports launch pad — each its own route with its
-    // own page gate, so every tab lands on a surface the viewer may open.
-    { href: '/hrm/change-requests', ns: 'hrm', key: 'home.tabs.changeRequests' },
-    { href: '/hrm/leave', ns: 'hrm', key: 'home.tabs.leave' },
-    { href: '/hrm/my-leave', ns: 'hrm', key: 'home.tabs.myLeave' },
-    { href: '/hrm/departments', ns: 'hrm', key: 'home.tabs.departments' },
-    { href: '/hrm/reports', ns: 'hrm', key: 'home.tabs.reports' },
     // The funded establishment behind the headcount plan — list, vacancy,
     // and the position drawer — behind hrm.position.read (HRM_TAB_PERMISSION).
     { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions' },
+    // Employment start/end/transfer checklists — the HR-4 recorded
+    // companion to the change-request queue.
+    { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes' },
+    { href: '/hrm/leave', ns: 'hrm', key: 'home.tabs.leave' },
+    // NOT tabs, by review: the change-request queue is a working surface
+    // reached from the cockpit's pending panel and the employee drawer, not
+    // a top-level destination; self-service leave is a quick action on the
+    // cockpit; departments are configured in Company setup (one departments
+    // page, never two); workforce reports live in the Reports module with
+    // every other report.
   ],
 }
 
@@ -98,11 +97,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',
   '/hrm': 'hrm',
-  '/hrm/change-requests': 'hrm',
   '/hrm/leave': 'hrm',
-  '/hrm/my-leave': 'hrm',
-  '/hrm/departments': 'hrm',
-  '/hrm/reports': 'hrm',
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -172,28 +167,23 @@ export async function customerGroupTabs(
 }
 
 /** The permission each HRM-strip destination enforces. The cockpit tab needs
- * nothing beyond the page's own hrm.employment.read gate; the queue and
- * departments tabs sit behind the same grant, the reports tab behind the
- * reports grant the builder uses, the positions tab behind the headcount-plan
- * read grant, and the processes tab behind its own hrm.process.read gate. A
- * tab present in the list but absent here would render a destination the
+ * nothing beyond the page's own hrm.employment.read gate; the positions tab
+ * sits behind the headcount-plan read grant, the processes tab behind its
+ * own hrm.process.read gate, and the leave desk behind hrm.leave.read. A tab
+ * present in the list but absent here would render a destination the
  * viewer cannot open. */
 const HRM_TAB_PERMISSION: Record<string, string> = {
-  '/hrm/processes': 'hrm.process.read',
   '/entities/employees': 'parties.read',
-  '/hrm/change-requests': 'hrm.employment.read',
-  '/hrm/leave': 'hrm.leave.read',
-  '/hrm/my-leave': 'hrm.leave.request',
-  '/hrm/departments': 'hrm.employment.read',
-  '/hrm/reports': 'reports.read',
   '/hrm/positions': 'hrm.position.read',
+  '/hrm/processes': 'hrm.process.read',
+  '/hrm/leave': 'hrm.leave.read',
 }
 
 /**
  * The HRM strip with the permission exclusions applied, so a viewer is
  * never offered a tab that access-denies — no Employees tab without
- * parties.read, no workspace tabs without the employment read grant, and
- * no Reports tab without the reports grant.
+ * parties.read, no Positions tab without the headcount-plan read grant, no
+ * Processes or Leave tab without their read grants.
  */
 export async function hrmGroupTabs(
   authz: Authz,

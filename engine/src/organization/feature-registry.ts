@@ -67,7 +67,7 @@ export const FEATURES: FeatureDef[] = [
   // enabling HRM is a deliberate adoption decision (employment records must
   // exist before the cockpit says anything true). Stands alone: it reads
   // the HRM foundation but never drives payroll.
-  { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm', 'hrm-change-requests', 'hrm-departments', 'hrm-reports'] },
+  { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,
