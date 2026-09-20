@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "Fluktuation",
         "description": "Eine Zeile pro Abgang — Person, Beendigungsdatum, Betriebszugehörigkeit in Tagen, Austrittsgrund sowie Freiwilligkeits- und Bedauerns-Kennzeichen aus dem Austrittsdatensatz. Gruppieren nach Beendigungsmonat und Abteilung für die Abgangstabelle; Quoten kommen aus dem Bindungs-Panel."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Leistungsanmeldungen",
+        "description": "Eine Zeile je Leistungsanmeldung — Person, Arbeitgeber, Abteilung bei Anmeldung, Plan und Deckungsstufe, Status und gespeicherte Beträge je Periode. Erfordert die Leistungsberechtigung."
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "Freiwillig",
         "regrettable": "Bedauerlich",
         "employment_id": "Anstellung (ID)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Beginn",
+        "person": "Person",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "plan": "Plan",
+        "plan_name": "Planname",
+        "coverage": "Stufe",
+        "status": "Status",
+        "employee_amount": "Arbeitnehmerbetrag",
+        "employer_amount": "Arbeitgeberbetrag",
+        "currency": "Währung",
+        "effective_to": "Ende",
+        "employment_id": "Beschäftigung (ID)",
+        "id": "Anmeldung (ID)"
       }
     },
     "enumValues": {

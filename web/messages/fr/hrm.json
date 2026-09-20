@@ -9,7 +9,8 @@
       "leave": "Congés",
       "myLeave": "Mes congés",
       "recruiting": "Recrutement",
-      "performance": "Évaluations"
+      "performance": "Évaluations",
+      "benefits": "Avantages"
     },
     "recruiting": {
       "title": "Recrutement",
@@ -26,7 +27,13 @@
       "startingSoon": "Arrivées prochaines",
       "startingSoonSub": "{count, plural, one {# départ dans les 30 prochains jours} other {# départs dans les 30 prochains jours}}",
       "onLeave": "En congé aujourd'hui",
-      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}"
+      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}",
+      "employers": "Employeurs",
+      "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
+      "departments": "Services",
+      "departmentsSub": "{count, plural, one {# service} other {# services}}",
+      "unfundedFte": "ETP pourvus non financés",
+      "unfundedFteSub": "Pourvu sans financement associé"
     },
     "groups": {
       "title": "Effectif par service",
@@ -129,6 +136,13 @@
       "title": "Congés",
       "onLeaveEmpty": "Personne absent aujourd'hui.",
       "pendingSub": "en attente d'approbation"
+    },
+    "benefits": {
+      "title": "Avantages",
+      "openWindows": "Ouverte",
+      "noOpenWindow": "Aucune fenêtre d'adhésion n'est ouverte.",
+      "pendingSub": "Approbations en attente",
+      "missingSub": "Adhésions sans entrées"
     }
   },
   "queue": {
@@ -287,6 +301,12 @@
     "exit": {
       "title": "Fiche de sortie",
       "empty": "Pas encore de fiche de sortie."
+    },
+    "benefits": {
+      "title": "Avantages",
+      "empty": "Aucune adhésion ni personne à charge pour l'instant.",
+      "viewAll": "Avantages",
+      "dependents": "{count, plural, one {# personne à charge : {names}} other {# personnes à charge : {names}}}"
     }
   },
   "directory": {
@@ -710,5 +730,77 @@
     "noMissingExits": "Chaque fin de contrat a sa fiche de sortie.",
     "noInterviewTitle": "Fiches de sortie sans entretien",
     "noInterviewEmpty": "Chaque fiche de sortie a son entretien."
+  },
+  "benefits": {
+    "title": "Avantages",
+    "description": "Régimes, fenêtres d'adhésion, adhésions et montants mensuels pour la paie.",
+    "windowsTitle": "Fenêtres d'adhésion",
+    "enrolmentsTitle": "Adhésions",
+    "segmentsLabel": "Afficher",
+    "allLabel": "Toutes",
+    "segments": {
+      "open": "Ouverte",
+      "draft": "Brouillon",
+      "closed": "Fermée",
+      "enrolments": "Adhésions"
+    },
+    "columns": {
+      "window": "Fenêtre",
+      "kind": "Nature",
+      "range": "Dates",
+      "elections": "Adhésions",
+      "pending": "En attente",
+      "status": "Statut",
+      "employee": "Employé",
+      "plan": "Régime",
+      "coverage": "Niveau",
+      "employeeAmount": "Salarié",
+      "employerAmount": "Employeur"
+    },
+    "windowsEmptyTitle": "Aucune fenêtre ici",
+    "windowsEmpty": "Rien dans ce segment pour l'instant.",
+    "enrolmentsEmptyTitle": "Aucune adhésion ici",
+    "enrolmentsEmpty": "Rien d'adhéré pour l'instant.",
+    "unknownSegmentTitle": "Segment inconnu",
+    "unknownSegment": "Il n'existe pas de segment avantages {segment}.",
+    "newWindow": "Nouvelle fenêtre",
+    "newWindowTitle": "Nouvelle fenêtre d'adhésion",
+    "windowName": "Nom",
+    "windowKind": "Nature",
+    "windowOpens": "Ouvre le",
+    "windowCloses": "Ferme le",
+    "windowPlanYear": "L'année du régime commence le",
+    "windowSubsidiary": "Filiale employeuse",
+    "windowDepartment": "Service",
+    "windowAll": "Tous",
+    "windowRequired": "Nommez la fenêtre et fixez les trois dates avant d'enregistrer.",
+    "windowFailed": "La fenêtre n'a pas pu être enregistrée.",
+    "createWindow": "Créer la fenêtre",
+    "cancel": "Annuler",
+    "openAction": "Ouvrir la fenêtre",
+    "closeAction": "Fermer la fenêtre",
+    "closeReasonPlaceholder": "Pourquoi cette fenêtre ferme-t-elle ? Les adhésions en attente sont refusées avec ce motif.",
+    "openWindow": "Ouvrir",
+    "openEnrollment": "Ouvrir",
+    "approve": "Approuver",
+    "drawerProgress": "Progression des adhésions",
+    "drawerEnrolments": "Adhésions de cette fenêtre",
+    "drawerNoEnrolments": "Aucune adhésion dans cette fenêtre pour l'instant.",
+    "windowKinds": {
+      "open_enrollment": "Adhésion ouverte",
+      "new_hire": "Embauche",
+      "life_event": "Événement de vie"
+    },
+    "statusNames": {
+      "draft": "Brouillon",
+      "open": "Ouverte",
+      "closed": "Fermée",
+      "elected": "Adhéré",
+      "waived": "Refusé",
+      "pending_approval": "En approbation",
+      "active": "Active",
+      "ended": "Terminée",
+      "cancelled": "Annulée"
+    }
   }
 }

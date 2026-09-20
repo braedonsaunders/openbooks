@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "Rotation",
         "description": "Une ligne par départ — personne, date de fin, ancienneté en jours, motif de sortie et indicateurs volontaire et regretté issus de la fiche de sortie. Regroupez par mois de fin et service pour le tableau des départs ; les taux viennent du panneau de rétention."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Adhésions avantages",
+        "description": "Une ligne par adhésion — personne, employeur, service à l'adhésion, régime et niveau de couverture, statut et montants enregistrés par période. Exige la permission avantages."
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "Volontaire",
         "regrettable": "Regretté",
         "employment_id": "Emploi (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "En vigueur depuis",
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "plan": "Régime",
+        "plan_name": "Nom du régime",
+        "coverage": "Couverture",
+        "status": "Statut",
+        "employee_amount": "Montant salarié",
+        "employer_amount": "Montant employeur",
+        "currency": "Devise",
+        "effective_to": "En vigueur jusqu'au",
+        "employment_id": "Emploi (id)",
+        "id": "Adhésion (id)"
       }
     },
     "enumValues": {

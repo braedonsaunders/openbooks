@@ -1359,6 +1359,22 @@
         "voluntary": "Voluntary",
         "regrettable": "Regrettable",
         "employment_id": "Employment (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Effective from",
+        "person": "Person",
+        "employer": "Employer",
+        "department": "Department",
+        "plan": "Plan",
+        "plan_name": "Plan name",
+        "coverage": "Coverage",
+        "status": "Status",
+        "employee_amount": "Employee amount",
+        "employer_amount": "Employer amount",
+        "currency": "Currency",
+        "effective_to": "Effective to",
+        "employment_id": "Employment (id)",
+        "id": "Enrolment (id)"
       }
     },
     "enumValues": {

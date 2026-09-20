@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "Rotatividade",
         "description": "Uma linha por saída — pessoa, data de desligamento, tempo de casa em dias, motivo de saída e os indicadores voluntário e lamentado do registro de saída. Agrupe por mês de desligamento e departamento para a tabela de saídas; as taxas vêm do painel de retenção."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Inscrições de benefícios",
+        "description": "Uma linha por inscrição de benefícios — pessoa, empregador, departamento na inscrição, plano e nível de cobertura, estado e valores guardados por período. Requer a permissão de benefícios."
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "Voluntária",
         "regrettable": "Lamentada",
         "employment_id": "Vínculo (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Vigente desde",
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "plan": "Plano",
+        "plan_name": "Nome do plano",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "employee_amount": "Valor do empregado",
+        "employer_amount": "Valor do empregador",
+        "currency": "Moeda",
+        "effective_to": "Vigente até",
+        "employment_id": "Emprego (id)",
+        "id": "Inscrição (id)"
       }
     },
     "enumValues": {

@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "Rotación",
         "description": "Una fila por salida — persona, fecha de terminación, antigüedad en días, motivo de salida y los indicadores voluntario y lamentado del registro de salida. Agrupe por mes de terminación y departamento para la tabla de salidas; las tasas vienen del panel de retención."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Inscripciones de beneficios",
+        "description": "Una fila por inscripción de beneficios — persona, empleador, departamento al inscribirse, plan y nivel de cobertura, estado e importes guardados por período. Requiere el permiso de beneficios."
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "Voluntaria",
         "regrettable": "Lamentada",
         "employment_id": "Empleo (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Vigente desde",
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "plan": "Plan",
+        "plan_name": "Nombre del plan",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "employee_amount": "Importe del empleado",
+        "employer_amount": "Importe del empleador",
+        "currency": "Moneda",
+        "effective_to": "Vigente hasta",
+        "employment_id": "Empleo (id)",
+        "id": "Inscripción (id)"
       }
     },
     "enumValues": {

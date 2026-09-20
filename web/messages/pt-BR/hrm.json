@@ -9,7 +9,8 @@
       "leave": "Licenças",
       "myLeave": "Minhas licenças",
       "recruiting": "Recrutamento",
-      "performance": "Desempenho"
+      "performance": "Desempenho",
+      "benefits": "Benefícios"
     },
     "recruiting": {
       "title": "Recrutamento",
@@ -26,7 +27,13 @@
       "startingSoon": "Começam em breve",
       "startingSoonSub": "{count, plural, one {# termina nos próximos 30 dias} other {# terminam nos próximos 30 dias}}",
       "onLeave": "De licença hoje",
-      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}"
+      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}",
+      "employers": "Empregadores",
+      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
+      "departments": "Departamentos",
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
+      "unfundedFte": "FTE preenchido sem financiamento",
+      "unfundedFteSub": "Preenchido sem financiamento vinculado"
     },
     "groups": {
       "title": "Quadro de pessoal por departamento",
@@ -129,6 +136,13 @@
       "title": "Licenças",
       "onLeaveEmpty": "Ninguém ausente hoje.",
       "pendingSub": "aguardando aprovação"
+    },
+    "benefits": {
+      "title": "Benefícios",
+      "openWindows": "Aberta",
+      "noOpenWindow": "Nenhuma janela de inscrição está aberta.",
+      "pendingSub": "Aprovações pendentes",
+      "missingSub": "Inscrições sem entradas"
     }
   },
   "queue": {
@@ -287,6 +301,12 @@
     "exit": {
       "title": "Registro de saída",
       "empty": "Ainda não há registro de saída."
+    },
+    "benefits": {
+      "title": "Benefícios",
+      "empty": "Ainda não há inscrições de benefícios nem dependentes.",
+      "viewAll": "Benefícios",
+      "dependents": "{count, plural, one {# dependente: {names}} other {# dependentes: {names}}}"
     }
   },
   "directory": {
@@ -710,5 +730,77 @@
     "noMissingExits": "Cada desligamento tem seu registro de saída.",
     "noInterviewTitle": "Registros de saída sem entrevista",
     "noInterviewEmpty": "Cada registro de saída tem sua entrevista."
+  },
+  "benefits": {
+    "title": "Benefícios",
+    "description": "Planos, janelas de inscrição, inscrições e os valores mensais para a folha.",
+    "windowsTitle": "Janelas de inscrição",
+    "enrolmentsTitle": "Inscrições",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "open": "Aberta",
+      "draft": "Rascunho",
+      "closed": "Fechada",
+      "enrolments": "Inscrições"
+    },
+    "columns": {
+      "window": "Janela",
+      "kind": "Tipo",
+      "range": "Datas",
+      "elections": "Inscrições",
+      "pending": "Pendentes",
+      "status": "Estado",
+      "employee": "Empregado",
+      "plan": "Plano",
+      "coverage": "Nível",
+      "employeeAmount": "Empregado",
+      "employerAmount": "Empregador"
+    },
+    "windowsEmptyTitle": "Sem janelas aqui",
+    "windowsEmpty": "Nada neste segmento ainda.",
+    "enrolmentsEmptyTitle": "Sem inscrições aqui",
+    "enrolmentsEmpty": "Nada inscrito ainda.",
+    "unknownSegmentTitle": "Segmento desconhecido",
+    "unknownSegment": "Não existe o segmento de benefícios {segment}.",
+    "newWindow": "Nova janela",
+    "newWindowTitle": "Nova janela de inscrição",
+    "windowName": "Nome",
+    "windowKind": "Tipo",
+    "windowOpens": "Abre em",
+    "windowCloses": "Fecha em",
+    "windowPlanYear": "O ano do plano começa em",
+    "windowSubsidiary": "Subsidiária empregadora",
+    "windowDepartment": "Departamento",
+    "windowAll": "Todos",
+    "windowRequired": "Nomeie a janela e defina as três datas antes de salvar.",
+    "windowFailed": "A janela não pôde ser salva.",
+    "createWindow": "Criar janela",
+    "cancel": "Cancelar",
+    "openAction": "Abrir janela",
+    "closeAction": "Fechar janela",
+    "closeReasonPlaceholder": "Por que esta janela está fechando? As inscrições pendentes são recusadas com este motivo.",
+    "openWindow": "Abrir",
+    "openEnrollment": "Abrir",
+    "approve": "Aprovar",
+    "drawerProgress": "Progresso das inscrições",
+    "drawerEnrolments": "Inscrições nesta janela",
+    "drawerNoEnrolments": "Ainda não há inscrições nesta janela.",
+    "windowKinds": {
+      "open_enrollment": "Inscrição aberta",
+      "new_hire": "Nova contratação",
+      "life_event": "Evento de vida"
+    },
+    "statusNames": {
+      "draft": "Rascunho",
+      "open": "Aberta",
+      "closed": "Fechada",
+      "elected": "Inscrito",
+      "waived": "Dispensado",
+      "pending_approval": "Aprovação pendente",
+      "active": "Ativa",
+      "ended": "Encerrada",
+      "cancelled": "Cancelada"
+    }
   }
 }

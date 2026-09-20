@@ -2405,6 +2405,16 @@
         "title": "Questions d’évaluation",
         "singularTitle": "Question d’évaluation",
         "description": "Questions d’une section du modèle : note, texte ou les deux. Les questions obligatoires doivent être renseignées avant l’envoi."
+      },
+      "benefit-plans": {
+        "title": "Régimes avantages",
+        "singularTitle": "Régime avantages",
+        "description": "Ce que l'organisation offre au-delà du salaire — santé, dentaire, retraite — avec chiffres, règle de prorata et composantes."
+      },
+      "benefit-plan-levels": {
+        "title": "Niveaux de régime",
+        "singularTitle": "Niveau de régime",
+        "description": "Niveaux de couverture par régime — employé seul, famille — avec les coûts du niveau."
       }
     },
     "fields": {
@@ -2702,7 +2712,20 @@
       "answerKind": "Type de réponse",
       "ratingScaleMin": "Minimum de l’échelle",
       "ratingScaleMax": "Maximum de l’échelle",
-      "ratingScaleLabels": "Libellés de l’échelle"
+      "ratingScaleLabels": "Libellés de l’échelle",
+      "providerPartyId": "Fournisseur",
+      "employerSubsidiaryId": "Filiale employeuse",
+      "employeeCostBasis": "Base du coût salarié",
+      "employeeCost": "Coût salarié",
+      "employerCostBasis": "Base du coût employeur",
+      "employerCost": "Coût employeur",
+      "pretax": "Pré-impôt",
+      "prorationBasis": "Prorata",
+      "employeePayComponentId": "Composante du salarié",
+      "employerPayComponentId": "Composante de l'employeur",
+      "waitingPeriodDays": "Attente (jours)",
+      "requiresApproval": "Approbation requise",
+      "levelKey": "Clé du niveau"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2768,7 +2791,20 @@
       "leaveCarryoverExpiresAfterDays": "Jours après le début de la nouvelle année avant l'expiration des heures reportées ; vide signifie sans expiration.",
       "hrmReviewScaleMin": "Note la plus basse acceptée par l’échelle, par exemple 1.",
       "hrmReviewScaleMax": "Note la plus haute acceptée par l’échelle, par exemple 5.",
-      "hrmReviewScaleLabels": "Libellés d’extrémité optionnels, le plus bas d’abord."
+      "hrmReviewScaleLabels": "Libellés d’extrémité optionnels, le plus bas d’abord.",
+      "benefitKind": "Nature déclarée par l'organisation — santé, dentaire, vision, vie, retraite, bien-être, autre. Texte libre, jamais de liste fermée.",
+      "benefitProvider": "Fournisseur ou assureur derrière le régime, le cas échéant.",
+      "benefitSubsidiary": "Filiale employeuse à qui le régime est offert ; vide signifie toutes.",
+      "benefitCurrency": "Devise du régime, trois lettres. Enregistrée sur chaque adhésion et jamais convertie.",
+      "benefitCostBasis": "Lecture du chiffre : par période, par mois, par an, ou pourcentage du salaire.",
+      "benefitCost": "Chiffre dans la devise du régime. Les chiffres en pourcentage sont des pourcentages.",
+      "benefitPretax": "La propre déclaration pré-impôt de l'organisation ; les packs l'interprètent.",
+      "benefitProrationBasis": "Obligatoire : comment paie un mois partiel. Mois complet porte tout le mois ; quotidien échelonne selon les jours couverts.",
+      "benefitEmployeeComponent": "Composante de déduction tarifant les lignes du salarié. Obligatoire si le régime tarife un coût salarié.",
+      "benefitEmployerComponent": "Composante de contribution employeur tarifant ses lignes. Obligatoire si le régime tarife un coût employeur.",
+      "benefitWaitingPeriod": "Jours de service avant de pouvoir adhérer au régime.",
+      "benefitRequiresApproval": "Les adhésions attendent l'approbation d'un gestionnaire.",
+      "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications."
     },
     "options": {
       "timeClassification": {
@@ -3155,6 +3191,16 @@
         "rating": "Note",
         "text": "Texte",
         "ratingAndText": "Note et texte"
+      },
+      "benefitCostBasis": {
+        "per_period": "Par période de paie",
+        "per_month": "Par mois",
+        "per_year": "Par an",
+        "percent_of_pay": "Pourcentage du salaire"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Mois complet — tout le mois quelles que soient les dates",
+        "daily": "Quotidien — au prorata des jours couverts"
       }
     },
     "laborCosting": {
@@ -4017,7 +4063,9 @@
       "basisCaps": "Plafonds d’assiette",
       "deductionProtection": "Protection des retenues",
       "holidayCompanyDay": "Jour férié d’entreprise",
-      "holidayElection": "Option sur un jour férié légal"
+      "holidayElection": "Option sur un jour férié légal",
+      "benefitCosts": "Coûts et prorata",
+      "benefitComponents": "Composantes de paie"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
