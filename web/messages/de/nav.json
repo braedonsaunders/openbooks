@@ -1,9 +1,6 @@
 {
   "modules": {
     "hrm": "Personalwesen",
-    "hrm-change-requests": "Änderungsanträge",
-    "hrm-departments": "Abteilungen",
-    "hrm-reports": "HR-Berichte",
     "dashboard": "Dashboard",
     "assistant": "KI-Assistent",
     "continuous-close": "Abschlussmonitor",

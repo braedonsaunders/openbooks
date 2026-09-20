@@ -4,9 +4,6 @@
     "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio.",
     "tabs": {
       "overview": "Resumen",
-      "changeRequests": "Solicitudes de cambio",
-      "departments": "Departamentos",
-      "reports": "Informes",
       "positions": "Puestos",
       "processes": "Procesos",
       "leave": "Ausencias",
@@ -143,25 +140,6 @@
     "draftBadge": "Acciones",
     "openEmployee": "Abrir el registro del empleado",
     "notAvailable": "No disponible"
-  },
-  "departments": {
-    "title": "Departamentos",
-    "description": "Plantilla de hoy por departamento, con desglose por empresa empleadora — resuelta a través del servicio de plantilla.",
-    "listTitle": "Plantilla por departamento",
-    "listNote": "La lista de empleados no tiene filtro por departamento, por lo que el enlace abre la lista completa.",
-    "linksTitle": "Enlaces",
-    "employeesLink": "Lista de empleados",
-    "setupLink": "Gestionar departamentos"
-  },
-  "reports": {
-    "title": "Informes",
-    "description": "Informes de personal: la declaración de plantilla y las entidades de empleo, abiertas en el generador de informes.",
-    "presetTitle": "Declaración de plantilla",
-    "presetHint": "La plantilla abre el plan guardado de la organización — o el catálogo del generador si la semilla nunca se ha materializado.",
-    "entitiesTitle": "Entidades de personal",
-    "entitiesHint": "Cree un informe de personal desde una de las entidades de empleo.",
-    "hubTitle": "Todos los informes",
-    "hubDescription": "Abrir el centro de informes."
   },
   "employment": {
     "episodes": {
@@ -329,6 +307,22 @@
       "warnings": "Advertencias",
       "refusal": "Requiere atención",
       "missing": "Este puesto ya no está visible."
+    },
+    "add": "Añadir puesto",
+    "create": {
+      "title": "Nuevo puesto",
+      "code": "Código del puesto",
+      "titleField": "Título",
+      "employer": "Empleador",
+      "department": "Departamento",
+      "noDepartment": "Sin departamento",
+      "plannedFte": "ETC planificado",
+      "status": "Estado",
+      "effectiveFrom": "Vigente desde",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por qué existe este puesto; se registra con su primera versión",
+      "submit": "Crear puesto",
+      "failed": "No se pudo crear el puesto."
     }
   },
   "processes": {

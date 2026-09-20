@@ -4,9 +4,6 @@
     "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。",
     "tabs": {
       "overview": "概要",
-      "changeRequests": "変更申請",
-      "departments": "部門",
-      "reports": "レポート",
       "positions": "ポジション",
       "processes": "プロセス",
       "leave": "休暇",
@@ -143,25 +140,6 @@
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
     "notAvailable": "利用不可"
-  },
-  "departments": {
-    "title": "部門",
-    "description": "今日時点の部門別人員を、雇用主子会社別の内訳付きで — ヘッドカウントサービス経由で解決します。",
-    "listTitle": "部門別人員",
-    "listNote": "従業員リストには部門フィルターがないため、ドリルスルーは全リストを開きます。",
-    "linksTitle": "リンク",
-    "employeesLink": "従業員リスト",
-    "setupLink": "部門を管理"
-  },
-  "reports": {
-    "title": "レポート",
-    "description": "人員レポート：ヘッドカウントステートメントのプリセットと雇用エンティティを、レポートビルダーで開きます。",
-    "presetTitle": "ヘッドカウントステートメント",
-    "presetHint": "プリセットは組織の保存済みプランを開きます — シードが未実行の場合はビルダーカタログを開きます。",
-    "entitiesTitle": "人員エンティティ",
-    "entitiesHint": "雇用エンティティのいずれかから新しい人員レポートを開始します。",
-    "hubTitle": "すべてのレポート",
-    "hubDescription": "レポートハブを開く。"
   },
   "employment": {
     "episodes": {
@@ -329,6 +307,22 @@
       "warnings": "警告",
       "refusal": "要対応",
       "missing": "このポジションは表示できなくなりました。"
+    },
+    "add": "ポジションを追加",
+    "create": {
+      "title": "新しいポジション",
+      "code": "ポジションコード",
+      "titleField": "役職名",
+      "employer": "雇用主",
+      "department": "部門",
+      "noDepartment": "部門なし",
+      "plannedFte": "計画FTE",
+      "status": "ステータス",
+      "effectiveFrom": "有効開始日",
+      "reason": "理由",
+      "reasonPlaceholder": "このポジションが存在する理由（最初のバージョンとともに記録されます）",
+      "submit": "ポジションを作成",
+      "failed": "ポジションを作成できませんでした。"
     }
   },
   "processes": {

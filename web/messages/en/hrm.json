@@ -4,9 +4,6 @@
     "description": "Employment records with as-of history, headcount, and change-request tracking.",
     "tabs": {
       "overview": "Overview",
-      "changeRequests": "Change requests",
-      "departments": "Departments",
-      "reports": "Reports",
       "positions": "Positions",
       "processes": "Processes",
       "leave": "Leave",
@@ -143,25 +140,6 @@
     "draftBadge": "Actions",
     "openEmployee": "Open the employee record",
     "notAvailable": "Not available"
-  },
-  "departments": {
-    "title": "Departments",
-    "description": "Headcount as of today per department, with the employer subsidiary breakdown — resolved through the headcount service.",
-    "listTitle": "Headcount by department",
-    "listNote": "The employees list has no department filter, so drill-through opens the full list.",
-    "linksTitle": "Links",
-    "employeesLink": "Employees list",
-    "setupLink": "Manage departments"
-  },
-  "reports": {
-    "title": "Reports",
-    "description": "Workforce reports: the headcount statement preset and the employment entities, opened in the report builder.",
-    "presetTitle": "Headcount statement",
-    "presetHint": "The preset opens the org's saved plan — or the builder catalog while the seed has never materialized.",
-    "entitiesTitle": "Workforce entities",
-    "entitiesHint": "Start a new workforce report from one of the employment entities.",
-    "hubTitle": "All reports",
-    "hubDescription": "Open the reports hub."
   },
   "employment": {
     "episodes": {
@@ -330,6 +308,22 @@
       "warnings": "Warnings",
       "refusal": "Needs attention",
       "missing": "This position is no longer visible."
+    },
+    "add": "Add position",
+    "create": {
+      "title": "New position",
+      "code": "Position code",
+      "titleField": "Title",
+      "employer": "Employer",
+      "department": "Department",
+      "noDepartment": "No department",
+      "plannedFte": "Planned FTE",
+      "status": "Status",
+      "effectiveFrom": "Effective from",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why this position exists — recorded with its first version",
+      "submit": "Create position",
+      "failed": "The position could not be created."
     }
   },
   "processes": {

@@ -1,9 +1,6 @@
 {
   "modules": {
     "hrm": "人事",
-    "hrm-change-requests": "変更申請",
-    "hrm-departments": "部門",
-    "hrm-reports": "人事レポート",
     "dashboard": "ダッシュボード",
     "assistant": "AI アシスタント",
     "continuous-close": "決算モニター",

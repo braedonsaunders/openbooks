@@ -4,9 +4,6 @@
     "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração.",
     "tabs": {
       "overview": "Visão geral",
-      "changeRequests": "Solicitações de alteração",
-      "departments": "Departamentos",
-      "reports": "Relatórios",
       "positions": "Posições",
       "processes": "Processos",
       "leave": "Licenças",
@@ -143,25 +140,6 @@
     "draftBadge": "Ações",
     "openEmployee": "Abrir o registro do funcionário",
     "notAvailable": "Indisponível"
-  },
-  "departments": {
-    "title": "Departamentos",
-    "description": "Quadro de hoje por departamento, com detalhamento por empregador — resolvido pelo serviço de headcount.",
-    "listTitle": "Quadro por departamento",
-    "listNote": "A lista de funcionários não tem filtro por departamento, por isso o link abre a lista completa.",
-    "linksTitle": "Links",
-    "employeesLink": "Lista de funcionários",
-    "setupLink": "Gerenciar departamentos"
-  },
-  "reports": {
-    "title": "Relatórios",
-    "description": "Relatórios de pessoal: o modelo de quadro de pessoal e as entidades de emprego, abertos no construtor de relatórios.",
-    "presetTitle": "Quadro de pessoal",
-    "presetHint": "O modelo abre o plano salvo da organização — ou o catálogo do construtor caso a semeadura nunca tenha se materializado.",
-    "entitiesTitle": "Entidades de pessoal",
-    "entitiesHint": "Crie um relatório de pessoal a partir de uma das entidades de emprego.",
-    "hubTitle": "Todos os relatórios",
-    "hubDescription": "Abrir o centro de relatórios."
   },
   "employment": {
     "episodes": {
@@ -329,6 +307,22 @@
       "warnings": "Avisos",
       "refusal": "Requer atenção",
       "missing": "Esta posição não está mais visível."
+    },
+    "add": "Adicionar posição",
+    "create": {
+      "title": "Nova posição",
+      "code": "Código da posição",
+      "titleField": "Título",
+      "employer": "Empregador",
+      "department": "Departamento",
+      "noDepartment": "Sem departamento",
+      "plannedFte": "FTE planejado",
+      "status": "Status",
+      "effectiveFrom": "Vigente a partir de",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por que esta posição existe — registrado com a primeira versão",
+      "submit": "Criar posição",
+      "failed": "Não foi possível criar a posição."
     }
   },
   "processes": {

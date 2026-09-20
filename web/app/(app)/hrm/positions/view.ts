@@ -14,10 +14,14 @@ import {
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { HrmPositionError } from '@openbooks/engine/src/hrm/positions.ts'
 import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
+import type { PositionCreateProps } from './PositionCreateForm'
 
 /**
  * Positions tab, split into a loader and a spec.
@@ -63,6 +67,10 @@ export interface PositionsPageData {
   title: string
   description: string
   tabs: { href: string; label: string; active?: boolean }[]
+  /** hrm.position.manage: the header's Add position button and the create form. */
+  canManage: boolean
+  addLabel: string
+  basePath: string
   effectiveDate: string
   segments: PositionSegment[]
   columns: Record<string, string>
@@ -90,6 +98,8 @@ export interface PositionsPageData {
     closeHref: string
   } | null
   missingDetail: string | null
+  /** The create form's loader-resolved inputs when the URL asks for `position=new`. */
+  create: PositionCreateProps | null
   drawerOpen: boolean
   drawer: {
     closeHref: string
@@ -97,6 +107,7 @@ export interface PositionsPageData {
     description: string | null
     detail: PositionsPageData['detail']
     missingDetail: string | null
+    create?: PositionCreateProps | null
   } | null
 }
 
@@ -112,7 +123,12 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          // The primary action first, the strip last — the house order on
+          // every list page, so the switcher never moves between siblings.
+          widget('hrm-add-position-button', { basePath: data.basePath, label: data.addLabel }, f('canManage')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [
@@ -167,7 +183,9 @@ export async function loadPositionsPage(
   const effectiveDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
     ? rawDate
     : await businessToday(authz.user.orgId)
-  const positionId = typeof sp.position === 'string' && sp.position.length > 0
+  const canManage = can(authz, 'hrm.position.manage')
+  const creating = sp.position === 'new' && canManage
+  const positionId = typeof sp.position === 'string' && sp.position.length > 0 && sp.position !== 'new'
     ? sp.position
     : null
 
@@ -278,12 +296,54 @@ export async function loadPositionsPage(
     }
   }
 
+  // The create form's inputs, resolved here so nothing but strings and ids
+  // cross into the client: the employers the viewer may see (one fixed value
+  // when the org runs a single entity), the active departments, and the
+  // statuses a new position may open in (filled needs a holder, closed is
+  // an end, so neither is offered on create).
+  let create: PositionCreateProps | null = null
+  if (creating) {
+    const visible = await subsidiaryUiOptions(authz.user.orgId)
+    const scoped = visible.filter((option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id))
+    const employers = scoped.length > 0
+      ? scoped.map((option) => ({ value: option.id, label: option.name }))
+      : [{ value: await rootSubsidiaryId(), label: '' }]
+    const departmentRows = (await db.execute<{ id: string; name: string }>(sql`
+      select id::text as id, name from departments
+       where org_id = ${authz.user.orgId}::uuid and is_active
+       order by name`)).rows
+    create = {
+      basePath: '/hrm/positions',
+      effectiveDate,
+      employers,
+      departments: departmentRows.map((row) => ({ value: row.id, label: row.name })),
+      statuses: (['planned', 'open', 'frozen'] as const).map((value) => ({ value, label: statusLabel(value) })),
+      labels: {
+        code: t('positions.create.code'),
+        title: t('positions.create.titleField'),
+        employer: t('positions.create.employer'),
+        department: t('positions.create.department'),
+        noDepartment: t('positions.create.noDepartment'),
+        plannedFte: t('positions.create.plannedFte'),
+        status: t('positions.create.status'),
+        effectiveFrom: t('positions.create.effectiveFrom'),
+        reason: t('positions.create.reason'),
+        reasonPlaceholder: t('positions.create.reasonPlaceholder'),
+        submit: t('positions.create.submit'),
+        failed: t('positions.create.failed'),
+      },
+    }
+  }
+
   const title = t('positions.title')
-  const drawerOpen = detail !== null || missingDetail !== null
+  const drawerOpen = detail !== null || missingDetail !== null || create !== null
   return {
     title,
     description: t('positions.description'),
     tabs,
+    canManage,
+    addLabel: t('positions.add'),
+    basePath: '/hrm/positions',
     effectiveDate,
     segments,
     columns: {
@@ -308,14 +368,16 @@ export async function loadPositionsPage(
     },
     detail,
     missingDetail,
+    create,
     drawerOpen,
     drawer: drawerOpen
       ? {
-          closeHref: detail?.closeHref ?? '/hrm/positions',
-          title: detail ? detail.code : title,
+          closeHref: detail?.closeHref ?? hrefFor(effectiveDate, status, null),
+          title: create ? t('positions.create.title') : detail ? detail.code : title,
           description: detail ? detail.title : null,
           detail,
           missingDetail,
+          create,
         }
       : null,
   }

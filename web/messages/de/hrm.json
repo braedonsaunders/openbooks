@@ -4,9 +4,6 @@
     "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen.",
     "tabs": {
       "overview": "Übersicht",
-      "changeRequests": "Änderungsanträge",
-      "departments": "Abteilungen",
-      "reports": "Berichte",
       "positions": "Positionen",
       "processes": "Vorgänge",
       "leave": "Urlaub",
@@ -143,25 +140,6 @@
     "draftBadge": "Aktionen",
     "openEmployee": "Personalakte öffnen",
     "notAvailable": "Nicht verfügbar"
-  },
-  "departments": {
-    "title": "Abteilungen",
-    "description": "Personalbestand heute je Abteilung, mit Arbeitgeber-Aufschlüsselung — gelesen über den Headcount-Service.",
-    "listTitle": "Personalbestand nach Abteilung",
-    "listNote": "Die Mitarbeiterliste hat keinen Abteilungsfilter, daher öffnet der Absprung die vollständige Liste.",
-    "linksTitle": "Links",
-    "employeesLink": "Mitarbeiterliste",
-    "setupLink": "Abteilungen verwalten"
-  },
-  "reports": {
-    "title": "Berichte",
-    "description": "Workforce-Berichte: die Headcount-Vorlage und die Beschäftigungs-Entitäten, geöffnet im Berichts-Builder.",
-    "presetTitle": "Headcount-Vorlage",
-    "presetHint": "Die Vorlage öffnet den gespeicherten Plan der Organisation — oder den Builder-Katalog, falls der Seed nie gelaufen ist.",
-    "entitiesTitle": "Workforce-Entitäten",
-    "entitiesHint": "Starten Sie einen neuen Workforce-Bericht aus einer der Beschäftigungs-Entitäten.",
-    "hubTitle": "Alle Berichte",
-    "hubDescription": "Den Berichts-Hub öffnen."
   },
   "employment": {
     "episodes": {
@@ -329,6 +307,22 @@
       "warnings": "Warnungen",
       "refusal": "Erfordert Aufmerksamkeit",
       "missing": "Diese Position ist nicht mehr sichtbar."
+    },
+    "add": "Stelle hinzufügen",
+    "create": {
+      "title": "Neue Stelle",
+      "code": "Stellencode",
+      "titleField": "Bezeichnung",
+      "employer": "Arbeitgeber",
+      "department": "Abteilung",
+      "noDepartment": "Keine Abteilung",
+      "plannedFte": "Geplante VZÄ",
+      "status": "Status",
+      "effectiveFrom": "Gültig ab",
+      "reason": "Begründung",
+      "reasonPlaceholder": "Warum diese Stelle besteht – wird mit der ersten Version erfasst",
+      "submit": "Stelle anlegen",
+      "failed": "Die Stelle konnte nicht angelegt werden."
     }
   },
   "processes": {

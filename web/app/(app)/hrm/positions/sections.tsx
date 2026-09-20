@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { UrlDrawer } from '@openbooks/ui'
+import { PositionCreateForm } from './PositionCreateForm'
 import type { PositionRow, PositionSegment, PositionsPageData } from './view'
 
 /**
@@ -295,6 +296,8 @@ export function PositionDrawer({
     description: string | null
     detail: PositionsPageData['detail']
     missingDetail: string | null
+    /** The create form's inputs when the URL asks for a new position. */
+    create?: PositionsPageData['create']
   } | null
 }) {
   if (!drawer) return null
@@ -305,7 +308,9 @@ export function PositionDrawer({
       title={drawer.title}
       description={drawer.description ?? undefined}
     >
-      {drawer.detail ? (
+      {drawer.create ? (
+        <PositionCreateForm {...drawer.create} />
+      ) : drawer.detail ? (
         <PositionDrawerBody detail={drawer.detail} />
       ) : drawer.missingDetail ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>

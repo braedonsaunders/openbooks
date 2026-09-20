@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
-import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
+import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -64,7 +64,7 @@ export interface EntityRoleData {
    * group — vendors and employees are Purchasing and Operations records that
    * happen to share this renderer, so they get no strip.
    */
-  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
+  tabs: Awaited<ReturnType<typeof customerGroupTabs | typeof hrmGroupTabs>>
   /**
    * On a lead or prospect segment, New mints a relationship draft at that
    * stage instead of a customer with an AR role. Null when the segment is
@@ -191,7 +191,14 @@ export async function loadEntityRole(
     canManage,
     currentParams: sp,
     newParty: { basePath, role, label: newLabel },
-    tabs: slug === 'customers' ? await customerGroupTabs(authz, '/entities/customers') : [],
+    // The employees list is a sibling tab of the Human Resources workspace
+    // whenever the workspace exists for this viewer (feature on plus the
+    // employment read grant), so the strip looks identical from either side.
+    tabs: slug === 'customers'
+      ? await customerGroupTabs(authz, '/entities/customers')
+      : slug === 'employees' && canReadHrm
+        ? await hrmGroupTabs(authz, '/entities/employees')
+        : [],
     newAccount: (segment === 'lead' || segment === 'prospect') && can(authz, 'crm.accounts.create')
       ? { label: tCrm(`accounts.${segment}.new`), failed: tCrm('feedback.createFailed'), lifecycleStage: segment }
       : null,
