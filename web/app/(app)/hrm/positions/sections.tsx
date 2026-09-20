@@ -1,14 +1,44 @@
 import Link from 'next/link'
-import type { PositionRow } from './view'
+import { UrlDrawer } from '@openbooks/ui'
+import type { PositionRow, PositionSegment, PositionsPageData } from './view'
 
 /**
- * Positions list sections (server components): the vacancy table the
- * loader resolved through the canonical position read service, the drawer
- * body with versions, funding by period, and the current holder, and the
- * by-department vacancy table the HR overview embeds as the
- * hrm-vacancy-table widget. Every string arrives loader-resolved as props —
- * no org id, user id, or Authz crosses into render.
+ * Positions list sections (server components): the status segment nav, the
+ * vacancy table the loader resolved through the canonical position read
+ * service, the URL drawer shell around the drawer body with versions,
+ * funding by period, and the current holder, and the by-department vacancy
+ * table the HR overview embeds as the hrm-vacancy-table widget. Every
+ * string arrives loader-resolved as props — no org id, user id, or Authz
+ * crosses into render.
  */
+
+/** Status segments: server-side filter pills with per-status counts. */
+export function PositionSegments({
+  ariaLabel,
+  segments,
+}: {
+  ariaLabel: string
+  segments: PositionSegment[]
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="flex flex-wrap gap-2">
+      {segments.map((segment) => (
+        <Link
+          key={segment.key}
+          href={segment.href}
+          aria-current={segment.active ? 'page' : undefined}
+          className={
+            segment.active
+              ? 'rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white dark:bg-slate-100 dark:text-slate-900'
+              : 'rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300'
+          }
+        >
+          {segment.label} · {segment.count}
+        </Link>
+      ))}
+    </nav>
+  )
+}
 
 export function PositionsTable({
   columns,
@@ -247,5 +277,39 @@ export function PositionDrawerBody({ detail }: { detail: PositionDetail }) {
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The position flyout shell: a URL drawer around PositionDrawerBody that
+ * closes by navigation, or the named absence for a bookmarked id that no
+ * longer resolves. Null payload renders nothing — the spec's `when` gate
+ * already omits it, so this is the second half of the same guard.
+ */
+export function PositionDrawer({
+  drawer,
+}: {
+  drawer: {
+    closeHref: string
+    title: string
+    description: string | null
+    detail: PositionsPageData['detail']
+    missingDetail: string | null
+  } | null
+}) {
+  if (!drawer) return null
+  return (
+    <UrlDrawer
+      open
+      closeHref={drawer.closeHref}
+      title={drawer.title}
+      description={drawer.description ?? undefined}
+    >
+      {drawer.detail ? (
+        <PositionDrawerBody detail={drawer.detail} />
+      ) : drawer.missingDetail ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
+      ) : null}
+    </UrlDrawer>
   )
 }
