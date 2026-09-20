@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  isHostVmUnfreeableSignal,
   runAppEndpoint,
   type AppHostAdapters,
   type AppRequest,
@@ -366,6 +367,17 @@ test("guest-controlled error text does not rewrite or skip runtime dispose", asy
     assert.equal(r.status, "error");
     assert.equal(r.error, text);
   }
+});
+
+test("a renamed Error is not a WebAssembly abort", () => {
+  assert.equal(
+    isHostVmUnfreeableSignal(new WebAssembly.RuntimeError("Aborted()")),
+    true,
+  );
+  const renamed = new Error("Aborted()");
+  renamed.name = "RuntimeError";
+  assert.equal(isHostVmUnfreeableSignal(renamed), false);
+  assert.equal(renamed instanceof WebAssembly.RuntimeError, false);
 });
 
 test('platform query plans round-trip through QuickJS without exposing SQL', async () => {

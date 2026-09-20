@@ -1264,8 +1264,12 @@ export async function unpublishApp(orgId: string, userId: string, key: string): 
   await db.transaction(async tx => {
     const listing = (await tx.execute<{ id: string; is_active: boolean; version: string }>(sql`select id,is_active,version from app_listings where key=${key} and publisher_org_id=${orgId} for update`)).rows[0]
     if (!listing) throw new AppError('No app listing owned by this organization', 404)
-    if (!listing.is_active) return
-    await tx.execute(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId}`)
+    // A silent return here is a no-op: no UPDATE, no audit. Callers then
+    // report {ok:true} for work no later read can observe. FOR UPDATE
+    // serializes concurrent withdraws so the loser hits this refusal.
+    if (!listing.is_active) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
+    const withdrawn = (await tx.execute<{ id: string }>(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId} and is_active=true returning id`)).rows[0]
+    if (!withdrawn) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${listing.id},'update',${JSON.stringify({ event:'app_listing_withdrawn',before:{isActive:true,version:listing.version},after:{isActive:false,version:listing.version} })}::jsonb,${userId})`)
   })
 }

@@ -264,7 +264,7 @@ test('library publication and withdrawal preserve package evidence and reject an
   const foreign = await fixture()
   try {
     const { createAppStarter } = await import('../apps/starter')
-    const { publishApp, unpublishApp, isAppPublished } = await import('../apps/store')
+    const { publishApp, unpublishApp, isAppPublished, AppError } = await import('../apps/store')
     const source=createAppStarter('sandbox')
     const key=`library-${randomUUID()}`
     const bundle={...source,manifest:{...source.manifest as Record<string,unknown>,key}}
@@ -277,6 +277,16 @@ test('library publication and withdrawal preserve package evidence and reject an
     await unpublishApp(org.orgId,context.authz.user.id,key)
     assert.equal(await isAppPublished(key,org.orgId),false)
     assert.equal((await getAppByKey(org.orgId,key))?.status,'installed')
+    await assert.rejects(
+      () => unpublishApp(org.orgId, context.authz.user.id, key),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError)
+        assert.equal(error.status, 409)
+        assert.match(error.message, /already unpublished/)
+        assert.match(error.message, /Publish it again/)
+        return true
+      },
+    )
     const evidence=(await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id} order by at,id`)).rows
     assert.equal(evidence.length,2)
     assert.ok(evidence.every(row=>row.actor_id===context.authz.user.id))
@@ -284,4 +294,38 @@ test('library publication and withdrawal preserve package evidence and reject an
     assert.equal(evidence[1]!.changes.event,'app_listing_withdrawn')
     assert.equal(((evidence[0]!.changes.after as {files:unknown[]}).files).length,bundle.files.length)
   } finally { await dropScratchOrg(foreign.org.orgId); await dropScratchOrg(org.orgId) }
+}))
+
+test('concurrent library withdrawals serialize to one withdraw and one 409', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  try {
+    const { createAppStarter } = await import('../apps/starter')
+    const { publishApp, unpublishApp, isAppPublished, AppError } = await import('../apps/store')
+    const source = createAppStarter('sandbox')
+    const key = `library-race-${randomUUID()}`
+    const bundle = { ...source, manifest: { ...source.manifest as Record<string, unknown>, key } }
+    const draft = await draftExtension(context, { bundle, reason: 'Concurrent withdrawal serialization' })
+    await activateExtensionDraft(context, draft)
+    const listing = await publishApp(org.orgId, context.authz.user.id, key)
+    const attempts = await Promise.allSettled([
+      unpublishApp(org.orgId, context.authz.user.id, key),
+      unpublishApp(org.orgId, context.authz.user.id, key),
+    ])
+    const accepted = attempts.filter((row) => row.status === 'fulfilled')
+    const refused = attempts.filter((row): row is PromiseRejectedResult => row.status === 'rejected')
+    assert.equal(accepted.length, 1)
+    assert.equal(refused.length, 1)
+    const reason = refused[0]!.reason
+    assert.ok(reason instanceof AppError)
+    assert.equal(reason.status, 409)
+    assert.match(reason.message, /already unpublished/)
+    assert.equal(await isAppPublished(key, org.orgId), false)
+    const withdrawn = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from audit_log
+       where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id}
+         and changes->>'event'='app_listing_withdrawn'`)).rows[0]
+    assert.equal(withdrawn?.n, '1')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
 }))
