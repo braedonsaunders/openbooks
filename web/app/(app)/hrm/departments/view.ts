@@ -12,9 +12,9 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { loadHrmDepartments, type HrmDepartmentsData } from '../../../lib/hrm/departments'
+import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { loadHrmDepartments, type HrmDepartmentsData } from '../../../../lib/hrm/departments'
 
 /**
  * The department headcount board, split into a loader and a spec.

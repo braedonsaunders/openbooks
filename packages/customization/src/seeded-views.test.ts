@@ -99,7 +99,7 @@ test('registry drift in the column set is not an edit', () => {
 // re-saved row is never mistaken for untouched: the later updated_at decides.
 test('a re-saved marked row loses its untouched status via timestamps', () => {
   const saved = stripSeededDefaultMark(markSeededDefaultView(staleDescSeed))
-  assert.equal((saved as Record<string, unknown>)[SEEDED_DEFAULT_MARK], undefined)
+  assert.equal((saved as unknown as Record<string, unknown>)[SEEDED_DEFAULT_MARK], undefined)
   assert.equal(
     isUntouchedSeededView(
       row({ config: saved, updatedAt: new Date('2025-02-01T00:00:00Z') }),

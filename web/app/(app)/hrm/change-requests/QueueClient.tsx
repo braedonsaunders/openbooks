@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, SearchSelect } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { ChangeRequestActions } from './ChangeRequestActions'
-import { ChangeRequestDrawer } from './ChangeRequestDrawer'
-import type { QueueRow } from '../../../lib/hrm/change-requests'
+import { readApiErrorMessage } from '../../../../lib/api-error'
+import { ChangeRequestActions } from '../ChangeRequestActions'
+import { ChangeRequestDrawer } from '../ChangeRequestDrawer'
+import type { QueueRow } from '../../../../lib/hrm/change-requests'
 
 /**
  * The org-wide change-request queue body. Rows arrive loader-resolved
@@ -34,6 +34,8 @@ export function ChangeRequestQueue({
   notAvailable,
   emptyTitle,
   emptyDescription,
+  truncated,
+  truncatedNote,
 }: {
   rows: QueueRow[]
   columns: { employee: string; kind: string; effective: string; requester: string; submitted: string }

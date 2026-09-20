@@ -158,13 +158,14 @@ test("employer quick filter resolves to the employment's subsidiary", () => {
 });
 
 test("directory filters fail closed while HRM is off", () => {
-  for (const adhoc of [
+  const adhocs: Record<string, string>[] = [
     { department: DEPT },
     { department: "unassigned" },
     { employment_status: "active" },
     { employment_status: "no_employment" },
     { employer: SUB },
-  ]) {
+  ];
+  for (const adhoc of adhocs) {
     assert.match(
       whereText([], adhoc, false),
       /false/,
