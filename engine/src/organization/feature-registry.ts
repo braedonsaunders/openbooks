@@ -142,6 +142,23 @@ export const FEATURES: FeatureDef[] = [
   { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   // Platform
   { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows', 'approvals'] },
+  // HR-16 automations on Flows (0226): trigger/rule/condition/action recipes
+  // over the existing Flows gates. The builder is platform-nav under Flows;
+  // exception-only approval is a per-flow SETTING, not a feature.
+  // HR-16 begin
+  { key: 'automations', defaultEnabled: false, category: 'platform', parentKey: 'flows' },
+  { key: 'automationDateTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationFieldTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationSimulator', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  // HR-16 end
+  // HR-16 action/reason codes (0227): cheap, every enterprise suite has
+  // them — default ON. Event verbs (cancel/rescind/correct) on completed
+  // employment changes.
+  // HR-16 begin
+  { key: 'hrmActionReasons', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmEventVerbs', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  // HR-16 end
   { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
   { key: 'scripts', defaultEnabled: false, category: 'platform', navModules: ['admin-scripts'] },
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },

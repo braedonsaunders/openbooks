@@ -205,6 +205,15 @@ export const PERMISSION_CATALOGUE = [
   // (assignees can always act on their OWN gates regardless of this key).
   "flows.manage",
   "flows.approve",
+  // HR-16 automations on Flows (0226) — the trigger side. read sees recipes
+  // and the run log; manage authors/enables recipes and tunes approval
+  // settings; run fires a recipe now. Built-in admin roles, not HR roles:
+  // recipes can start processes, write fields and call webhooks.
+  // HR-16 begin
+  "automations.read",
+  "automations.manage",
+  "automations.run",
+  // HR-16 end
   // Apps — installable packages (sandboxed frontend + governed backend).
   // `apps.use` runs an installed App; `apps.manage` installs/upgrades/removes.
   "apps.use",
@@ -491,6 +500,11 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "flows.manage", labelKey: permissionLabelKey("flows.manage") },
       { key: "flows.approve", labelKey: permissionLabelKey("flows.approve") },
+      // HR-16 begin
+      { key: "automations.read", labelKey: permissionLabelKey("automations.read") },
+      { key: "automations.manage", labelKey: permissionLabelKey("automations.manage") },
+      { key: "automations.run", labelKey: permissionLabelKey("automations.run") },
+      // HR-16 end
     ],
   },
   {

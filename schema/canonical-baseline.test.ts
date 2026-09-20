@@ -1859,6 +1859,15 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.self.request",
     "hrm.team.read",
     "hrm.team.manage",
+    // HR-16 automations on Flows (migration 0226): read sees recipes and
+    // the run log, manage authors recipes and tunes approval settings, run
+    // fires a recipe. Admin-only via the catalogue spread (recipes can
+    // start processes, write fields and call webhooks — never an HR key).
+    // HR-16 begin
+    "automations.read",
+    "automations.manage",
+    "automations.run",
+    // HR-16 end
   ];
   assert.deepEqual(
     snapshot,

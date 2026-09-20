@@ -327,6 +327,10 @@ type RequestRow = {
   payload_digest: string;
   payload_schema_version: string;
   reason: string | null;
+  /** Generic HR action (0227, hrmActionReasons). Null = unclassified. */
+  action: string | null;
+  /** Reason code from hrm_action_reasons (0227). */
+  reason_code: string | null;
   status: string;
   submitted_by: string | null;
   submitted_at: Date | null;
@@ -352,6 +356,10 @@ export interface ChangeRequestDTO {
   readonly payloadDigest: string;
   readonly payloadSchemaVersion: string;
   readonly reason: string | null;
+  /** Generic HR action (0227). */
+  readonly action: string | null;
+  /** Reason code (0227). */
+  readonly reasonCode: string | null;
   readonly status: string;
   readonly submittedBy: string | null;
   readonly submittedAt: Date | null;
@@ -378,6 +386,8 @@ function toDTO(row: RequestRow): ChangeRequestDTO {
     payloadDigest: row.payload_digest,
     payloadSchemaVersion: row.payload_schema_version,
     reason: row.reason,
+    action: row.action ?? null,
+    reasonCode: row.reason_code ?? null,
     status: row.status,
     submittedBy: row.submitted_by,
     submittedAt: row.submitted_at,
@@ -396,7 +406,7 @@ function toDTO(row: RequestRow): ChangeRequestDTO {
 
 const REQUEST_COLUMNS = sql`
   id, org_id, employment_id, request_revision, expected_employment_revision,
-  payload, payload_digest, payload_schema_version, reason, status,
+  payload, payload_digest, payload_schema_version, reason, action, reason_code, status,
   submitted_by, submitted_at, flow_run_id, decision_snapshot,
   applied_at, applied_by, applied_employment_revision, applied_employment_change_id,
   created_at, created_by, updated_at, updated_by
@@ -610,6 +620,9 @@ export interface CreateChangeRequestQuery {
   readonly actorId: string;
   readonly employmentId: string;
   readonly payload: unknown;
+  /** Carried classification (0227, e.g. the correct-with-reapproval path). */
+  readonly action?: string | null;
+  readonly reasonCode?: string | null;
 }
 
 /**
@@ -634,10 +647,12 @@ export async function createChangeRequestDraft(query: CreateChangeRequestQuery):
     const inserted = (await db.execute<RequestRow>(sql`
       insert into hrm_employment_change_requests
         (org_id, employment_id, expected_employment_revision, payload,
-         payload_digest, payload_schema_version, created_by, updated_by)
+         payload_digest, payload_schema_version, action, reason_code, created_by, updated_by)
       values (${orgId}, ${employmentId}, ${subject.revision},
               ${JSON.stringify(payload)}::jsonb,
-              ${"0".repeat(64)}, ${PAYLOAD_SCHEMA_VERSION}, ${actorId}, ${actorId})
+              ${"0".repeat(64)}, ${PAYLOAD_SCHEMA_VERSION},
+              ${query.action ?? null}::text, ${query.reasonCode ?? null}::text,
+              ${actorId}, ${actorId})
       returning ${REQUEST_COLUMNS}
     `)).rows[0];
     if (!inserted) {
@@ -711,6 +726,12 @@ export interface SubmitChangeRequestQuery {
   readonly actorId: string;
   readonly requestId: string;
   readonly reason: unknown;
+  /** Generic HR action (0227). Persisted, never validated here: the
+   *  feature-gated require/both validation lives in the web boundary
+   *  (automations action-reasons) so this module never depends on the
+   *  automations engine module. */
+  readonly action?: string | null;
+  readonly reasonCode?: string | null;
 }
 
 /**
@@ -783,11 +804,14 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
 
     // Submission stamps land atomically with the run anchor; the 0185 guard
     // verifies the run is in this org, of the governed kind, and opened for
-    // this request id.
+    // this request id. action/reason_code ride the same statement so the
+    // classification and the submission commit together or not at all.
     const submitted = (await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = 'pending_approval',
              reason = ${reason},
+             action = coalesce(${query.action ?? null}::text, action),
+             reason_code = coalesce(${query.reasonCode ?? null}::text, reason_code),
              submitted_by = ${actorId}, submitted_at = now(),
              flow_run_id = ${gatedRun.runId},
              updated_by = ${actorId}, updated_at = now()
@@ -1387,6 +1411,8 @@ async function applyProfileChange(
     },
     closedVersions: [],
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
@@ -1433,6 +1459,8 @@ async function applyHire(
     priorSnapshot: {},
     closedVersions: [],
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   // The hire owes its onboarding checklist in this same transaction: a throw
@@ -1522,6 +1550,8 @@ async function applyEmploymentVersionChange(
       before: version.before,
     })),
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   for (const version of overlapping) {
@@ -1726,6 +1756,8 @@ async function applyAssignmentChange(
     },
     closedVersions,
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   for (const version of overlapping) {
@@ -1893,6 +1925,8 @@ async function applyPositionAssignment(
       },
       closedVersions: [],
       reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
       actorId,
     });
     await recordPositionAssignmentEvent(exec, {
@@ -2002,6 +2036,8 @@ async function applyPositionAssignment(
       before: version.before,
     })),
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   for (const version of overlapping) {
@@ -2208,6 +2244,8 @@ async function issueAssignmentSlot(
     priorSnapshot: { slot: payload.assignmentKey, issued: true },
     closedVersions: reporting.change ? reporting.elements : [],
     reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
     actorId,
   });
   await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
@@ -2483,6 +2521,8 @@ async function insertEmploymentChange(
     closedVersions: ClosureElement[];
     reason: string;
     actorId: string;
+    action?: string | null;
+    reasonCode?: string | null;
   },
 ): Promise<string> {
   if (args.reason.trim().length === 0) {
@@ -2495,11 +2535,12 @@ async function insertEmploymentChange(
     insert into employment_changes
       (org_id, employment_id, assignment_id, revision, change_kind,
        prior_snapshot, reason, recorded_source, recorded_by, closed_versions,
-       created_by, updated_by)
+       action, reason_code, created_by, updated_by)
     values (${args.orgId}, ${args.employmentId}, ${args.assignmentId}, ${args.revision},
             ${args.changeKind}, ${JSON.stringify(args.priorSnapshot)}::jsonb,
             ${args.reason}, 'user', ${args.actorId},
-            ${JSON.stringify(args.closedVersions)}::jsonb, ${args.actorId}, ${args.actorId})
+            ${JSON.stringify(args.closedVersions)}::jsonb,
+            ${args.action ?? null}, ${args.reasonCode ?? null}, ${args.actorId}, ${args.actorId})
     returning id
   `)).rows[0];
   if (!inserted) {
