@@ -144,11 +144,14 @@ function storedAllowedRoles(allowedRoles: unknown): string[] | null | "malformed
   return allowedRoles;
 }
 
-function rowIsAccessible(row: { allowedRoles: unknown }, userRoles: string[]): boolean {
+function rowIsAccessible(row: { allowedRoles: unknown }, heldRoleIds: ReadonlySet<string>): boolean {
   const roles = storedAllowedRoles(row.allowedRoles);
   if (roles === "malformed") return false;
   if (!roles || roles.length === 0) return true;
-  return roles.some((r) => userRoles.includes(r));
+  // Persist writes UUID app_roles.id values; callers pass role keys
+  // (authz.user.roles[].key). Compare against the user's assigned role
+  // ids — never the key list, which cannot match a UUID gate.
+  return roles.some((r) => heldRoleIds.has(r.toLowerCase()));
 }
 
 /**
@@ -176,11 +179,19 @@ export const resolveFormLayout = cache(
        order by is_default desc, name
     `));
 
+    const held = (await db.execute<{ id: string }>(sql`
+      select r.id
+        from role_assignments a
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+       where a.org_id = ${orgId} and a.user_id = ${userId}
+    `));
+    const heldRoleIds = new Set(held.rows.map((r) => r.id.toLowerCase()));
+
     const accessible = rows.rows.filter((r) => {
       // Admin still sees every well-formed form; a malformed gate is
       // inaccessible to everyone — that is the value that used to throw.
       if (storedAllowedRoles(r.allowedRoles) === "malformed") return false;
-      return rowIsAccessible(r, userRoles) || userRoles.includes("admin");
+      return rowIsAccessible(r, heldRoleIds) || userRoles.includes("admin");
     });
     const available: FormLayoutRow[] = accessible.map((r) => ({
       id: r.id,
