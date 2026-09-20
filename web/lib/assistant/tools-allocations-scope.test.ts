@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import type { SessionUser } from "../auth";
+import type { Authz } from "../authz";
 
 // Same module-graph shim as tool-schema-lint: the tool module is
 // server-only and transitively imports the `@/` alias.
@@ -28,6 +30,7 @@ registerHooks({
 });
 
 const { ALLOCATIONS_TOOLS } = await import("./tools-allocations.ts");
+const { canRunTool } = await import("./gate.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-allocations.ts");
@@ -42,13 +45,33 @@ const TOOL_NAMES = [
   "explain_allocation",
 ];
 
+const READ_TOOL_NAMES = TOOL_NAMES.filter((name) => name !== "preview_allocation");
+
 const UUID = "11111111-1111-4111-8111-111111111111";
+
+function fakeAuthz(permissions: string[]): Authz {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const orgId = "00000000-0000-4000-8000-000000000002";
+  const user: SessionUser = {
+    id: userId,
+    orgId,
+    name: "Allocation gate prober",
+    email: "alloc-gate@scratch.test",
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: userId,
+  };
+  return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
+}
 
 test("the module exports exactly the seven allocation tools", () => {
   assert.deepEqual(ALLOCATIONS_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
-for (const name of TOOL_NAMES) {
+for (const name of READ_TOOL_NAMES) {
   test(`${name} carries the slice gate: allocations.read, allocations feature, module tier`, () => {
     const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["allocations.read"] });
@@ -64,6 +87,49 @@ for (const name of TOOL_NAMES) {
     );
   });
 }
+
+test("preview_allocation persists a run under the HTTP allocations.run write gate", () => {
+  const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === "preview_allocation")!;
+  assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["allocations.run"] });
+  assert.equal(tool.category, "write");
+  assert.equal(tool.feature, "allocations");
+  assert.equal(tool.tier, "module");
+  assert.ok(
+    tool.description.length > 0 && tool.description.length <= 220,
+    `preview_allocation description is ${tool.description.length} chars (slice ceiling is 220)`,
+  );
+  assert.match(tools, /can\(authz, "allocations\.run"\)/);
+});
+
+test("preview_allocation refuses allocations.read without allocations.run or assistant.write", async () => {
+  const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === "preview_allocation")!;
+  const reader = fakeAuthz(["assistant.use", "allocations.read"]);
+  assert.equal(
+    canRunTool(reader, tool, { allocations: true }),
+    false,
+    "allocations.read must not expose a persist",
+  );
+  assert.deepEqual(await tool.execute({ ruleKey: "sweep", periodId: UUID }, reader), {
+    ok: false,
+    error: "forbidden",
+  });
+  assert.equal(
+    canRunTool(fakeAuthz(["assistant.use", "allocations.read", "assistant.write"]), tool, { allocations: true }),
+    false,
+    "assistant.write without allocations.run must not expose a persist",
+  );
+  const runner = fakeAuthz(["assistant.use", "allocations.run", "assistant.write"]);
+  assert.equal(
+    canRunTool(runner, tool, { allocations: true }),
+    true,
+    "allocations.run plus assistant.write must still reach preview",
+  );
+  assert.equal(
+    canRunTool(fakeAuthz(["assistant.use", "allocations.run"]), tool, { allocations: true }),
+    false,
+    "write-category persist still requires assistant.write",
+  );
+});
 
 test("minimal valid inputs parse; addressing is runtime-enforced with stable codes", () => {
   // Schemas stay all-optional on purpose: a half-addressed call returns a
