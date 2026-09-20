@@ -94,8 +94,9 @@ async function seedEmployee(
     if (profile !== null) {
       await db.execute(sql`
         insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id,
+                                               country,
                                                province, labour_jurisdiction)
-        values (${org.orgId}, ${partyId}, ${profile.scheduleId}, ${profile.province ?? "ON"},
+        values (${org.orgId}, ${partyId}, ${profile.scheduleId}, 'CA', ${profile.province ?? "ON"},
                 ${profile.labourJurisdiction ?? null})`);
     }
   });

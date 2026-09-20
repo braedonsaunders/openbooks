@@ -110,11 +110,11 @@ async function employee(fx: Fixture, name: string, opts: EmployeeOptions = {}): 
             ${opts.basis ?? "hour"}, ${opts.annualHours ?? "2080"}, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            vacation_percent, vacation_method, is_active,
                                            created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${opts.scheduleId ?? fx.scheduleId}, 'ON',
+    values (${fx.orgId}, ${id}, ${opts.scheduleId ?? fx.scheduleId}, 'CA', 'ON',
             ${opts.payBasis ?? "hourly"}, 1, 1,
             ${opts.vacationPercent === undefined ? "4" : opts.vacationPercent}, 'accrue', true,
             ${fx.actorId}, ${fx.actorId})`);

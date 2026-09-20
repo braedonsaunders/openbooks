@@ -62,11 +62,11 @@ async function scopeFixture(): Promise<ScopeFixture> {
   `);
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, province, pay_basis,
+      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
        federal_claim_code, provincial_claim_code, is_active, created_by, updated_by)
     values
-      (${org.orgId}, ${activeId}, ${scheduleId}, 'ON', 'salary', 1, 1, true, ${actorId}, ${actorId}),
-      (${org.orgId}, ${deactivatedId}, ${scheduleId}, 'ON', 'salary', 1, 1, true, ${actorId}, ${actorId})
+      (${org.orgId}, ${activeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true, ${actorId}, ${actorId}),
+      (${org.orgId}, ${deactivatedId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true, ${actorId}, ${actorId})
   `);
   const run = await createPayRun({
     orgId: org.orgId,

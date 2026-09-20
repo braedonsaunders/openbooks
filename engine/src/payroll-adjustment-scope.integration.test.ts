@@ -24,8 +24,8 @@ for (const scenario of ["authorized", "hidden snapshot", "concurrent transfer"] 
         targetId = randomUUID();
         await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active)
           values(${targetId},${fx.orgId},'person','Visible adjustment target',${fx.subsidiaryId},true)`);
-        await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,province,pay_basis,is_active,created_by,updated_by)
-          values(${fx.orgId},${targetId},${fx.scheduleId},'ON','hourly',true,${fx.actorId},${fx.actorId})`);
+        await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,is_active,created_by,updated_by)
+          values(${fx.orgId},${targetId},${fx.scheduleId},'CA', 'ON','hourly',true,${fx.actorId},${fx.actorId})`);
       }
       const snapshot = async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
         'run',(select to_jsonb(r) from pay_runs r where org_id=${fx.orgId} and document_id=${input.documentId}),

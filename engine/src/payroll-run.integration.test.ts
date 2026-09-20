@@ -74,11 +74,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // 80 approved hours inside the period 2026-07-05..07-18
@@ -259,11 +259,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Union weekly', 'weekly', 52, '2026-07-18', 5, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                union_agreement_id, union_classification_id, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 ${agreementId}, ${classificationId}, true, ${actorId}, ${actorId})`);
 
       const projectA = randomUUID();
@@ -418,11 +418,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Union weekly', 'weekly', 52, '2026-07-18', 5, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                union_agreement_id, union_classification_id, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 ${agreementId}, ${classificationId}, true, ${actorId}, ${actorId})`);
 
       const projects = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
@@ -771,12 +771,15 @@ test(
                                    pay_date_offset_days, subsidiary_id, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'US biweekly', 'biweekly', 26, '2026-07-18', 3,
                 ${usSubId}, true, ${actorId}, ${actorId})`);
+      // Both profiles say Canada explicitly: Sam's 'CA' is the deliberate
+      // misconfiguration the refusal below asserts on ("their profile still
+      // says Canada while the entity paying them is American").
       for (const [employee, province] of [[rootEmployee, "ON"], [usEmployee, "ON"]] as const) {
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                  pay_basis, federal_claim_code, provincial_claim_code,
                                                  is_active, created_by, updated_by)
-          values (${org.orgId}, ${employee}, ${scheduleId}, ${province}, 'hourly', 1, 1, true,
+          values (${org.orgId}, ${employee}, ${scheduleId}, 'CA', ${province}, 'hourly', 1, 1, true,
                   ${actorId}, ${actorId})`);
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -880,10 +883,10 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'salary', 1, 1, true,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true,
                 ${actorId}, ${actorId})`);
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -1007,11 +1010,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       for (const workedOn of ["2026-07-06", "2026-07-08"]) {
         await db.execute(sql`
@@ -1153,11 +1156,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       const addHours = async (workedOn: string) => {
         await db.execute(sql`
@@ -1464,11 +1467,11 @@ async function seedFencedRaceOrg(): Promise<{
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            vacation_percent, vacation_method, is_active,
                                            created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             '4', 'accrue', true, ${actorId}, ${actorId})`);
   // Two approved entries inside EACH period: every run in these tests must
   // have real time to price AND real rows the source selection must lock.

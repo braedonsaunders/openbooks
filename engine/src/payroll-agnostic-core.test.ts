@@ -717,11 +717,13 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                     is_active, created_by, updated_by)
       values (${orgId}, ${id}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+    // Every row is Canadian, including 'ZZ': that is the extra-provincial
+    // withholding code, not another country — the CA pack prices all four.
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                              pay_basis, federal_claim_code, provincial_claim_code,
                                              vacation_method, is_active, created_by, updated_by)
-      values (${orgId}, ${id}, ${scheduleId}, ${province}, 'hourly', 1, 1,
+      values (${orgId}, ${id}, ${scheduleId}, 'CA', ${province}, 'hourly', 1, 1,
               'accrue', true, ${actorId}, ${actorId})`);
     return id;
   };

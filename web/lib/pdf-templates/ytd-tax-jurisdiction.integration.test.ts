@@ -140,11 +140,11 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
     values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`)
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            vacation_percent, vacation_method, is_active,
                                            created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, ${province},
+    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'CA', ${province},
             'hourly', 1, 1, '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`)
   for (const day of ['2026-07-06', '2026-07-08', '2026-07-10', '2026-07-14', '2026-07-20', '2026-07-22', '2026-07-24', '2026-07-28']) {
     await db.execute(sql`

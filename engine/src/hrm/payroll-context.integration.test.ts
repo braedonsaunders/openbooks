@@ -118,8 +118,8 @@ async function seedPersonRow(
   switch (table) {
     case "employee_payroll_profiles":
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province, created_by, updated_by)
-        values (${ctx.orgId}, ${personId}, ${employmentId}, ${ctx.scheduleId}, 'BC', ${ctx.actorId}, ${ctx.actorId})`);
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, created_by, updated_by)
+        values (${ctx.orgId}, ${personId}, ${employmentId}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`);
       break;
     case "employee_pay_components":
       await db.execute(sql`
@@ -291,8 +291,8 @@ test("profiles carry a partial unique on employment; the legacy per-person uniqu
   // Legacy unique still holds on unstamped rows.
   await assert.rejects(
     db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province, created_by, updated_by)
-      values (${ctx.orgId}, ${worker}, ${ctx.scheduleId}, 'BC', ${ctx.actorId}, ${ctx.actorId})`),
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
+      values (${ctx.orgId}, ${worker}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`),
     (error: unknown) => {
       assert.match(refusalText(error), /employee_payroll_profiles_employee/);
       return true;
@@ -305,8 +305,8 @@ test("profiles carry a partial unique on employment; the legacy per-person uniqu
   // rolled-back transaction — the committed schema is never touched.
   const twin = await mkPerson(ctx, "Twin worker");
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province, created_by, updated_by)
-    values (${ctx.orgId}, ${twin}, ${ctx.scheduleId}, 'BC', ${ctx.actorId}, ${ctx.actorId})`);
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
+    values (${ctx.orgId}, ${twin}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`);
   class ProbeRollback extends Error {}
   await assert.rejects(
     db.transaction(async (tx) => {
