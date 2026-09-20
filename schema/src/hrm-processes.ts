@@ -13,12 +13,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { departments, orgs } from "./core";
+import { orgs } from "./core";
 import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
-import { subsidiaries } from "./subsidiaries";
-import { users } from "./extension";
 import { employmentChanges, workerEmployments } from "./hrm";
 
 /**

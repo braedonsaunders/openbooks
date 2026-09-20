@@ -89,26 +89,6 @@ async function mkVersion(orgId: string, employmentId: string, from: string, stat
     values (${orgId}, ${employmentId}, 1, ${status}, ${from}::date) returning id`)).rows[0]!.id;
 }
 
-async function mkDepartment(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkAssignment(
-  orgId: string,
-  employmentId: string,
-  departmentId: string | null,
-  from: string,
-): Promise<void> {
-  const slot = (await db.execute<{ id: string }>(sql`
-    insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into employment_assignment_versions
-      (org_id, assignment_id, employment_id, version_no, department_id, is_primary, effective_from)
-    values (${orgId}, ${slot}, ${employmentId}, 1, ${departmentId}, true, ${from}::date)`);
-}
-
 async function mkFolder(orgId: string, name: string, ownerId: string | null, isPrivate: boolean): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, name, owner_id, is_private)
