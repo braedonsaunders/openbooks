@@ -272,9 +272,24 @@ const connectWithOrgContext = async (
   callback?: PoolConnectCallback,
 ): Promise<pg.PoolClient | void> => {
   const client = await rawConnect();
-  await applyGuc(client, activeOrgCtx());
+  // The client is checked out before either step below can fail, and on the
+  // SUCCESS path the caller owns it — so only the failure paths release here.
+  // Without these, a throw from applyGuc (or from a callback that throws
+  // synchronously) escaped with the connection still checked out, leaking it
+  // out of the pool for the life of the process.
+  try {
+    await applyGuc(client, activeOrgCtx());
+  } catch (error) {
+    client.release(error as Error);
+    throw error;
+  }
   if (callback) {
-    callback(undefined, client, client.release.bind(client));
+    try {
+      callback(undefined, client, client.release.bind(client));
+    } catch (error) {
+      client.release(error as Error);
+      throw error;
+    }
     return;
   }
   return client;
@@ -377,13 +392,19 @@ export async function withMaintenanceTransaction<T>(
   }
   const client = await rawLongConnect();
   const bypass = orgId === null;
-  // Session lock first, in autocommit: a waiter blocks here holding no
-  // snapshot, so it begins (below) only after the holder commits or rolls
-  // back and therefore sees the holder's outcome.
-  if (opts.advisoryLockKey !== undefined) {
-    await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
-  }
   try {
+    // Session lock first, in autocommit: a waiter blocks here holding no
+    // snapshot, so it begins (below) only after the holder commits or rolls
+    // back and therefore sees the holder's outcome.
+    //
+    // Inside the try, not before it: the client is already checked out, and a
+    // throw from the lock query above this block escaped before reaching the
+    // `finally` that releases, leaking that connection out of longPool for the
+    // life of the process. Acquiring it here keeps the same autocommit
+    // ordering — still before `begin` — under the release.
+    if (opts.advisoryLockKey !== undefined) {
+      await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
+    }
     await client.query("begin");
     if (opts.isolationLevel !== undefined) {
       if (opts.isolationLevel !== "REPEATABLE READ" && opts.isolationLevel !== "SERIALIZABLE") {

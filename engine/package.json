@@ -34,12 +34,12 @@
   },
   "scripts": {
     "sync": "tsx src/sync/cli.ts",
-    "demo": "tsx src/demo-e2e.ts",
+    "demo": "tsx src/provisioning/demo-e2e.ts",
     "conformance": "tsx src/conformance/cli.ts",
     "harness": "tsx src/harness/cli.ts",
     "harness:differential": "tsx src/harness/differential/cli.ts",
     "harness:replay": "tsx src/harness/replay/cli.ts",
-    "posting-effects:ops": "tsx src/posting-effects-cli.ts",
+    "posting-effects:ops": "tsx src/ledger/posting-effects-cli.ts",
     "sim": "tsx src/sim/cli.ts",
     "samples": "tsx src/sample-companies/cli.ts",
     "typecheck": "tsc --noEmit"
