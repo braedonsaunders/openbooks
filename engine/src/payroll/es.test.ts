@@ -16,10 +16,13 @@ import { esPackFilings } from "./es/filings.ts";
 import { computeEsStatutory } from "./es/compute-statutory.ts";
 import {
   PayrollPackError,
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
   payrollTaxYearProblem,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
 } from "./packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 
 test("ES pack exists as an installable 2026 pack in euro on a calendar year", () => {
   assert.equal(ES_PAYROLL_PACK.country, "ES");
@@ -70,6 +73,31 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
   for (const key of [...assessed.keys()].filter((k) => k !== "irpf|deduction")) {
     assert.equal(assessed.get(key), "earnings", key);
   }
+});
+
+test("ES profile jurisdictions resolve to declared employment calendars", () => {
+  // Every profile names its community, so the engine resolves
+  // jurisdictionKey("ES", "<code>") = "ES-<code>". A bare "ES" key
+  // declares a calendar no employee reaches, and the
+  // undeclared-jurisdiction gate then refuses every period containing a
+  // mandatory holiday (proven: a January 2026 Madrid run refused both stubs
+  // over Año Nuevo). One entry per community sharing the national fiestas.
+  const byKey = new Map(ES_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
+  assert.equal(ES_PAYROLL_PACK.jurisdictions.length, 19);
+  for (const code of ES_PAYROLL_PACK.regions.known) {
+    assert.equal(jurisdictionKey("ES", code), `ES-${code}`);
+    assert.equal(payrollJurisdictionDeclared(`ES-${code}`), true, code);
+    assert.equal(byKey.get(`ES-${code}`)?.holidays.length, 9, code);
+  }
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "ES",
+      jurisdiction: "ES-MD",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
+  );
 });
 
 test("ES regions list all 19 communities and support the 17 AEAT ones", () => {
