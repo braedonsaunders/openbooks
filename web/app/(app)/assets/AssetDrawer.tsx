@@ -35,6 +35,8 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { confirmDialog } from '../../../lib/confirm'
+import { GroupValuationButton } from './GroupValuationButton'
+import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
@@ -440,14 +442,14 @@ export function AssetDrawer({
         {canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
         {canManage && status === 'in_service' ? payload.books.filter((book) => book.postsGl).map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
         {canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
-        {canManage && status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}
+        {canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
         {canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}
         {canCustomize ? <Button asChild variant="ghost"><Link href="/admin/customization?recordType=fixed_asset&tab=forms">{tCommon('actions.customize')}</Link></Button> : null}
         {canManage && isDraft && !hasAccountingEvidence ? <><div className="my-1 border-t border-slate-200 dark:border-slate-800" /><Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 dark:text-red-400">{tCommon('actions.delete')}</Button></> : null}
       </div>
       </Popover>
     </div> : undefined}
-    footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{t('labels.cost')} {money(a.acquisition_cost)} · {t('labels.accumulated')} {money(payload.totals.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {money(payload.totals.netBookValue)}</strong></span></div>}
+    footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{t('labels.cost')} {money(payload.totals.remainingCost)} · {t('labels.accumulated')} {money(payload.totals.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {money(payload.totals.netBookValue)}</strong></span></div>}
   >
     {tab === 'details' ? <div className="p-1"><HeaderFields layout={effectiveLayout} editable={editable} renderField={renderAssetField} /></div> : null}
     {tab === 'tax' ? <div className="space-y-5 p-1">{taxConfigurations.map((config) => {

@@ -95,10 +95,17 @@ export async function resolveSubsidiaryScope(
   const root = all.find((s) => s.parentId === null);
   const node =
     (subsidiaryId && pickerOptions.find((s) => s.id === subsidiaryId)) ||
-    (allowed ? pickerOptions[0] : root && pickerOptions.find((s) => s.id === root.id)) ||
+    (allowed
+      ? pickerOptions[0]
+      : root && pickerOptions.find((s) => s.id === root.id)) ||
     pickerOptions[0];
   if (!node)
-    return { consolidated: false, options: pickerOptions, subsidiary: { ids: [], includeNullSubsidiary: false }, ratesError: null };
+    return {
+      consolidated: false,
+      options: pickerOptions,
+      subsidiary: { ids: [], includeNullSubsidiary: false },
+      ratesError: null,
+    };
 
   const subtree = subtreeIds(all, node.id);
   const members = all.filter(
@@ -109,14 +116,43 @@ export async function resolveSubsidiaryScope(
   // Standalone leaf: just that entity. Consolidated: subtree + eliminations.
   let inView = consolidated ? members : [node];
   let weights: StatementSubsidiaryContext["weights"];
+  let controlLosses: StatementSubsidiaryContext["controlLosses"];
   if (consolidated) {
-    const ownership = (await db.execute<{ id: string; factor: string }>(sql`
+    const losses = (
+      await db.execute<{
+        subsidiary_id: string;
+        effective_on: string;
+        excluded_subsidiary_ids: string[];
+        measurement: {
+          closingRates: { subsidiaryId: string; rate: string }[];
+          factors: Record<string, string>;
+        };
+      }>(
+        sql`select subsidiary_id,effective_on::text,excluded_subsidiary_ids,measurement from consolidation_control_losses where reversed_by_change_id is null and parent_subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(members.map((m) => m.id))}::jsonb)::uuid) order by effective_on`,
+      )
+    ).rows;
+    controlLosses = losses.flatMap((l) =>
+      l.excluded_subsidiary_ids
+        .filter((id) => members.some((m) => m.id === id))
+        .map((subsidiaryId) => ({
+          subsidiaryId,
+          through: l.effective_on,
+          closingRate: l.measurement.closingRates.find(
+            (r) => r.subsidiaryId === subsidiaryId,
+          )!.rate,
+          factor: l.measurement.factors[subsidiaryId] ?? "0",
+        })),
+    );
+  }
+  if (consolidated) {
+    const ownership = await db.execute<{ id: string; factor: string }>(sql`
       with recursive ownership_scope as (
         select s.id, s.org_id, 1::numeric as factor
           from subsidiaries s where s.id=${node.id}
         union all
         select child.id, parent.org_id,
                parent.factor * case
+                 when exists(select 1 from consolidation_control_losses loss where loss.org_id=child.org_id and loss.reversed_by_change_id is null and loss.subsidiary_id=child.id and loss.effective_on<${periodTo}) then 1::numeric
                  when interest.method='equity' then 0::numeric
                  when interest.method='proportionate' then interest.ownership_percent / 100::numeric
                  else 1::numeric
@@ -134,15 +170,29 @@ export async function resolveSubsidiaryScope(
           ) interest on true
       )
       select id,factor::text from ownership_scope
-    `));
-    const factorById = new Map(ownership.rows.map((row) => [row.id, row.factor]));
+    `);
+    const factorById = new Map(
+      ownership.rows.map((row) => [row.id, row.factor]),
+    );
+    for (const loss of controlLosses ?? [])
+      if (loss.through <= periodTo)
+        factorById.set(loss.subsidiaryId, loss.factor);
     inView = inView.filter((member) => factorById.get(member.id) !== "0");
     weights = inView
-      .map((member) => ({ subsidiaryId: member.id, factor: factorById.get(member.id) ?? "1" }))
+      .map((member) => ({
+        subsidiaryId: member.id,
+        factor: factorById.get(member.id) ?? "1",
+      }))
       .filter((weight) => weight.factor !== "1");
   }
 
-  const foreign = [...new Set(inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency))];
+  const foreign = [
+    ...new Set(
+      inView
+        .filter((s) => s.baseCurrency !== node.baseCurrency)
+        .map((s) => s.baseCurrency),
+    ),
+  ];
   let rates: StatementSubsidiaryContext["rates"];
   let ratesError: MissingRatesError | null = null;
   if (consolidated && foreign.length > 0) {
@@ -157,10 +207,20 @@ export async function resolveSubsidiaryScope(
     // calendar: an adjustment period shares its final regular period's
     // dates and is excluded — activity dated on that day translates through
     // the regular period's rates, whichever period_id the journal carries.
-    const scope = (await db.execute<{ org_id: string }>(sql`
-      select org_id from subsidiaries where id = ${node.id}`));
-    if (!scope.rows[0]) throw new Error(`subsidiary ${node.id} not found while resolving consolidated rates`);
-    const r = (await db.execute<{ from: string; pFrom: string; pTo: string; avg: string; cur: string; hist: string }>(sql`
+    const scope = await db.execute<{ org_id: string }>(sql`
+      select org_id from subsidiaries where id = ${node.id}`);
+    if (!scope.rows[0])
+      throw new Error(
+        `subsidiary ${node.id} not found while resolving consolidated rates`,
+      );
+    const r = await db.execute<{
+      from: string;
+      pFrom: string;
+      pTo: string;
+      avg: string;
+      cur: string;
+      hist: string;
+    }>(sql`
       select cf.from_currency as "from", p.starts_on as "pFrom", p.ends_on as "pTo",
              cf.average_rate as "avg", cf.current_rate as "cur", cf.historical_rate as "hist"
         from consolidated_fx_rates cf
@@ -168,17 +228,27 @@ export async function resolveSubsidiaryScope(
        where cf.org_id = ${scope.rows[0].org_id} and p.org_id = ${scope.rows[0].org_id}
          and cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
-         and p.ends_on <= ${periodTo}
+         and p.starts_on <= ${periodTo}
          and not p.is_adjustment
-       order by p.ends_on`));
+       order by p.ends_on`);
     const byCcy = new Map<string, typeof r.rows>();
     for (const row of r.rows) {
       const list = byCcy.get(row.from);
       if (list) list.push(row);
       else byCcy.set(row.from, [row]);
     }
-    const missing = foreign.filter(
-      (c) => !(byCcy.get(c) ?? []).some((x) => x.pFrom <= periodTo && periodTo <= x.pTo),
+    const missing = foreign.filter((currency) =>
+      inView.some((entity) => {
+        if (entity.baseCurrency !== currency) return false;
+        const loss = controlLosses?.find(
+          (value) => value.subsidiaryId === entity.id,
+        );
+        const through =
+          loss && loss.through < periodTo ? loss.through : periodTo;
+        return !(byCcy.get(currency) ?? []).some(
+          (row) => row.pFrom <= through && through <= row.pTo,
+        );
+      }),
     );
     // Never throw here: the refusal rides along for the caller to convert
     // into a banner (F-t06-001) or throw (formal statements).
@@ -191,7 +261,7 @@ export async function resolveSubsidiaryScope(
       rates = inView
         .filter((s) => s.baseCurrency !== node.baseCurrency)
         .flatMap((s) =>
-          byCcy.get(s.baseCurrency)!.map((row) => ({
+          (byCcy.get(s.baseCurrency) ?? []).map((row) => ({
             subsidiaryId: s.id,
             currency: s.baseCurrency,
             periodFrom: row.pFrom,
@@ -210,7 +280,13 @@ export async function resolveSubsidiaryScope(
     inView.map((s) => s.id),
   );
   return {
-    subsidiary: { ids: inView.map((s) => s.id), rates, weights, includeNullSubsidiary },
+    subsidiary: {
+      ids: inView.map((s) => s.id),
+      rates,
+      weights,
+      controlLosses,
+      includeNullSubsidiary,
+    },
     currency: node.baseCurrency,
     label: consolidated ? `${node.name} (consolidated)` : node.name,
     consolidated,

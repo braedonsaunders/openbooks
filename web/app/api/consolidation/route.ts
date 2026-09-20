@@ -68,8 +68,8 @@ export async function POST(req: Request) {
       const { ratesWritten, ownership, elimination } = await runCombinedConsolidation(user.orgId, periodId, user.id)
       return NextResponse.json({ ok: true, ratesWritten, ownership, elimination })
     }
-    const { entryId, lineCount } = await runAutoElimination(user.orgId, periodId, user.id)
-    return NextResponse.json({ ok: true, entryId, lineCount })
+    const result = await runAutoElimination(user.orgId, periodId, user.id)
+    return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     if (e instanceof ConsolidationError) {
       // Typed refusal (F-t06-026): the close task persists the message

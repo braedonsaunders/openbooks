@@ -24,16 +24,10 @@ function assetGate(): AssistantToolDef["gate"] {
   return { mode: "anyOf", perms: ["assets.read"] };
 }
 
-/** Posted depreciation on the org's primary book — the same basis the
- *  drawer's primary-book totals use. */
+/** Same primary-book carrying view used by the native register/report. */
 const primaryAccumJoin = sql`
-  left join lateral (
-    select coalesce(sum(l.posted_amount), 0) as accum
-      from depreciation_schedules s
-      join accounting_books b on b.id = s.book_id and b.org_id = s.org_id and b.is_primary
-      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-     where s.asset_id = f.id and s.org_id = f.org_id
-  ) dep on true`;
+  left join asset_book_carrying_values dep on dep.org_id=f.org_id and dep.asset_id=f.id
+    and dep.book_id=(select id from accounting_books where org_id=f.org_id and is_primary)`;
 
 const searchAssets: AssistantToolDef = {
   name: "search_assets",
@@ -66,9 +60,8 @@ const searchAssets: AssistantToolDef = {
       select f.id, f.asset_number as "assetNumber", f.name, f.status,
              f.acquired_on as "acquiredOn", f.in_service_on as "inServiceOn",
              f.acquisition_cost as "acquisitionCost", c.name as category,
-             dep.accum as accumulated,
-             case when f.status in ('disposed', 'written_off') then 0
-                  else f.acquisition_cost - dep.accum end as "netBookValue"
+             dep.accumulated as accumulated, dep.cost as "remainingCost",
+             dep.carrying_value as "netBookValue"
         from fixed_assets f
         left join asset_categories c on c.id = f.category_id and c.org_id = f.org_id
         ${primaryAccumJoin}
@@ -78,8 +71,7 @@ const searchAssets: AssistantToolDef = {
     `)).rows;
     const totals = (await db.execute<{ n: string; cost: string; nbv: string }>(sql`
       select count(*) as n, coalesce(sum(f.acquisition_cost), 0) as cost,
-             coalesce(sum(case when f.status in ('disposed', 'written_off') then 0
-                               else f.acquisition_cost - dep.accum end), 0) as nbv
+             coalesce(sum(dep.carrying_value), 0) as nbv
         from fixed_assets f
         ${primaryAccumJoin}
        where ${where}
@@ -97,6 +89,7 @@ const searchAssets: AssistantToolDef = {
           ...r,
           acquisitionCost: money(r.acquisitionCost),
           accumulated: money(r.accumulated),
+          remainingCost: money(r.remainingCost),
           netBookValue: money(r.netBookValue),
         })),
         href: "/assets",

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { assetBasisDelta } from "./asset-basis.ts";import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -41,6 +41,9 @@ export interface DisposalAccounts {
 export interface DisposalLine {
   accountId: string;
   amount: string;
+  currency?: string;
+  txnAmount?: string;
+  fxRate?: string;
 }
 
 const sub = (a: string, b: string) => add(a, neg(b));
@@ -54,14 +57,20 @@ const sub = (a: string, b: string) => add(a, neg(b));
  * actually stops disposals, remeasurements, and reversals. GL is always
  * implied.
  */
-async function assertAssetPeriodOpen(
+export async function assertAssetPeriodOpen(
   tx: SqlExecutor,
-  args: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[] },
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds: string[];
+  },
 ): Promise<void> {
   try {
     await assertPeriodModulesOpen(tx, { ...args, modules: ["assets"] });
   } catch (error) {
-    if (error instanceof CloseError) throw new AssetLifecycleError(error.message);
+    if (error instanceof CloseError)
+      throw new AssetLifecycleError(error.message);
     throw error;
   }
 }
@@ -159,18 +168,24 @@ async function primaryBookId(orgId: string, exec: SqlExecutor = db): Promise<str
  * be the first statement in the remeasurement transaction so a contender waits
  * before reading carrying-value inputs and then re-reads the committed state.
  */
-async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string, allowedSubsidiaryIds?: readonly string[] | null): Promise<void> {
-  const locked = (await exec.execute<{ id: string; category_id: string }>(sql`
+export async function lockAssetRow(
+  exec: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  allowedSubsidiaryIds?: readonly string[] | null,
+): Promise<void> {
+  const locked = await exec.execute<{ id: string; category_id: string }>(sql`
     select id, category_id from fixed_assets where org_id = ${orgId} and id = ${assetId}
       ${allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-      for update`));
+      for update`);
   if (!locked.rows[0]) throw new AssetLifecycleError("asset not found");
   // Match depreciation's asset-then-category order. Category policy writes must
   // finish before we read defaults, or wait until our financial history commits.
   const category = await exec.execute(sql`
     select id from asset_categories
      where org_id = ${orgId} and id = ${locked.rows[0].category_id} for update`);
-  if (!category.rows[0]) throw new AssetLifecycleError("asset category not found");
+  if (!category.rows[0])
+    throw new AssetLifecycleError("asset category not found");
 }
 
 /**
@@ -182,13 +197,13 @@ async function lockAssetRow(exec: SqlExecutor, orgId: string, assetId: string, a
  * measure off an overstated carrying amount, and a disposal would strand the
  * impairment credit on the accumulated-depreciation account.
  */
-async function netRemeasurementDelta(
+export async function netRemeasurementDelta(
   orgId: string,
   assetId: string,
   bookId: string,
   exec: SqlExecutor = db,
 ): Promise<string> {
-  const r = (await exec.execute<{ delta: string }>(sql`
+  const r = await exec.execute<{ delta: string }>(sql`
     select coalesce(sum(event.amount), 0)::text as delta
       from asset_events event
       join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
@@ -198,7 +213,7 @@ async function netRemeasurementDelta(
        and not exists (
          select 1 from asset_events reversal
           where reversal.org_id = event.org_id
-            and reversal.reverses_event_id = event.id)`));
+            and reversal.reverses_event_id = event.id)`);
   return r.rows[0]?.delta ?? "0";
 }
 
@@ -281,18 +296,19 @@ function assertLifecycleDate(date: string): void {
 }
 
 /** Current carrying value cannot be used to post before the history it includes. */
-async function assertAssetPostingDate(
+export async function assertAssetPostingDate(
   tx: SqlExecutor,
   orgId: string,
   assetId: string,
   bookId: string,
   date: string,
 ): Promise<void> {
-  const history = (await tx.execute<{
-    acquired_on: string | null;
-    depreciation_date: string | null;
-    lifecycle_date: string | null;
-  }>(sql`
+  const history = (
+    await tx.execute<{
+      acquired_on: string | null;
+      depreciation_date: string | null;
+      lifecycle_date: string | null;
+    }>(sql`
     select asset.acquired_on::text,
            (select max(coalesce(entry.posting_date, period.ends_on))::text
               from depreciation_schedule_lines line
@@ -307,36 +323,63 @@ async function assertAssetPostingDate(
              where event.asset_id = asset.id and event.org_id = asset.org_id
                and entry.status in ('posted', 'reversed')) as lifecycle_date
       from fixed_assets asset where asset.id = ${assetId} and asset.org_id = ${orgId}
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!history) throw new AssetLifecycleError("asset not found");
+  const changedBasis = (
+    await tx.execute<{ date: string }>(
+      sql`select max(effective_on)::text as date from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${bookId}`,
+    )
+  ).rows[0]?.date;
+  if (changedBasis && date < changedBasis)
+    throw new AssetLifecycleError(
+      `posting date cannot precede the approved asset basis change (${changedBasis})`,
+    );
   for (const [source, boundary] of Object.entries(history)) {
     if (boundary !== null && date < boundary) {
-      throw new AssetLifecycleError(`posting date cannot precede ${source.replaceAll("_", " ")} (${boundary})`);
+      throw new AssetLifecycleError(
+        `posting date cannot precede ${source.replaceAll("_", " ")} (${boundary})`,
+      );
     }
   }
 }
 
 /** Validate new lifecycle legs under the same entity policy as native posting. */
-async function assertLifecyclePostingPolicy(
+export async function assertLifecyclePostingPolicy(
   tx: SqlExecutor,
   orgId: string,
-  asset: { subsidiary_id: string; department_id: string | null; project_id: string | null; location_id: string | null },
+  asset: {
+    subsidiary_id: string;
+    department_id: string | null;
+    project_id: string | null;
+    location_id: string | null;
+  },
   lines: DisposalLine[],
 ): Promise<void> {
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
   if (accountIds.length) {
-    const accounts = (await tx.execute<{ id: string; is_active: boolean; is_summary: boolean }>(sql`
+    const accounts = (
+      await tx.execute<{
+        id: string;
+        is_active: boolean;
+        is_summary: boolean;
+      }>(sql`
       select id, is_active, is_summary
         from accounts
        where org_id=${orgId}
          and id=any(${uuidArray(accountIds)}::uuid[])
-       for share`)).rows;
+       for share`)
+    ).rows;
     const byId = new Map(accounts.map((account) => [account.id, account]));
-    if (accountIds.some((id) => {
-      const account = byId.get(id);
-      return !account || !account.is_active || account.is_summary;
-    })) {
-      throw new AssetLifecycleError("asset posting requires active, non-summary accounts");
+    if (
+      accountIds.some((id) => {
+        const account = byId.get(id);
+        return !account || !account.is_active || account.is_summary;
+      })
+    ) {
+      throw new AssetLifecycleError(
+        "asset posting requires active, non-summary accounts",
+      );
     }
   }
   const dimensions = [
@@ -351,12 +394,20 @@ async function assertLifecyclePostingPolicy(
   }
   try {
     await validateSubsidiaryRestrictions(tx, {
-      orgId, ctx: await loadSubsidiaryContext(tx, orgId), docSubsidiaryId: asset.subsidiary_id,
-      lines: lines.map((line) => ({ ...line, subsidiaryId: asset.subsidiary_id,
-        departmentId: asset.department_id, projectId: asset.project_id, locationId: asset.location_id })),
+      orgId,
+      ctx: await loadSubsidiaryContext(tx, orgId),
+      docSubsidiaryId: asset.subsidiary_id,
+      lines: lines.map((line) => ({
+        ...line,
+        subsidiaryId: asset.subsidiary_id,
+        departmentId: asset.department_id,
+        projectId: asset.project_id,
+        locationId: asset.location_id,
+      })),
     });
   } catch (error) {
-    if (error instanceof SubsidiaryError) throw new AssetLifecycleError(error.message);
+    if (error instanceof SubsidiaryError)
+      throw new AssetLifecycleError(error.message);
     throw error;
   }
 }
@@ -377,7 +428,14 @@ export interface DisposeResult {
 export async function disposeAsset(
   orgId: string,
   assetId: string,
-  opts: { proceeds?: string; proceedsAccountId?: string | null; date: string; actorId: string | null; writeOff?: boolean; allowedSubsidiaryIds?: readonly string[] | null },
+  opts: {
+    proceeds?: string;
+    proceedsAccountId?: string | null;
+    date: string;
+    actorId: string | null;
+    writeOff?: boolean;
+    allowedSubsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<DisposeResult> {
   assertLifecycleDate(opts.date);
   // Fail closed on contradictory or impossible sale economics before touching
@@ -391,7 +449,9 @@ export async function disposeAsset(
     throw new AssetLifecycleError("proceeds must be an exact decimal");
   }
   if (opts.writeOff && !isZero(add(rawProceeds, "0"))) {
-    throw new AssetLifecycleError("a write-off takes no proceeds — omit proceeds or record a sale disposal");
+    throw new AssetLifecycleError(
+      "a write-off takes no proceeds — omit proceeds or record a sale disposal",
+    );
   }
   if (cmp(rawProceeds, "0") < 0) {
     throw new AssetLifecycleError("proceeds must be a non-negative amount");
@@ -404,16 +464,29 @@ export async function disposeAsset(
     // prior mutation and then sees its committed schedule/event state.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
-    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    await tx.execute(
+      sql`select id from subsidiaries where org_id=${orgId} order by id for share`,
+    );
     await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
-    const assetRes = (await tx.execute<AssetAccountRow & {
-        id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
-        department_id: string | null; project_id: string | null;
-        location_id: string | null; base_currency: string; asset_account_id: string;
-        accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
+    const assetRes = await tx.execute<
+      AssetAccountRow & {
+        id: string;
+        asset_number: string;
+        status: string;
+        subsidiary_id: string;
+        acquisition_cost: string;
+        department_id: string | null;
+        project_id: string | null;
+        location_id: string | null;
+        base_currency: string;
+        asset_account_id: string;
+        accumulated_depreciation_account_id: string;
+        gain_loss_account_id: string | null;
+        accumulated: string;
         opening_accumulated_depreciation: string | null;
-      }>(sql`
+      }
+    >(sql`
       select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
              a.asset_account_id as native_asset_account_id,
@@ -428,14 +501,18 @@ export async function disposeAsset(
         from fixed_assets a
         join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
         join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-       where a.org_id = ${orgId} and a.id = ${assetId}`));
+       where a.org_id = ${orgId} and a.id = ${assetId}`);
     const asset = assetRes.rows[0];
     if (!asset) throw new AssetLifecycleError("asset not found");
     if (asset.status === "disposed" || asset.status === "written_off") {
-      throw new AssetLifecycleError(`asset ${asset.asset_number} is already ${asset.status}`);
+      throw new AssetLifecycleError(
+        `asset ${asset.asset_number} is already ${asset.status}`,
+      );
     }
     if (!asset.gain_loss_account_id) {
-      throw new AssetLifecycleError("configure a gain/loss on disposal account on the asset category first");
+      throw new AssetLifecycleError(
+        "configure a gain/loss on disposal account on the asset category first",
+      );
     }
 
     // SCHEDULE TIE — once depreciation posting has begun, the schedule is the
@@ -449,7 +526,7 @@ export async function disposeAsset(
     // in it, so the boundary itself stays open; and before anything is posted
     // there is no posted trail to leapfrog — NBV is cost plus explicit
     // remeasurements.
-    const stub = (await tx.execute<{ period_name: string }>(sql`
+    const stub = await tx.execute<{ period_name: string }>(sql`
       select p.name as period_name
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
@@ -462,17 +539,21 @@ export async function disposeAsset(
             where posted.org_id = ${orgId} and ps.asset_id = ${assetId} and ps.book_id = ${bookId}
               and posted.posted_amount is not null
          )
-       order by p.starts_on limit 1`));
+       order by p.starts_on limit 1`);
     if (stub.rows[0]) {
       throw new AssetLifecycleError(
         `asset ${asset.asset_number} has unposted depreciation for period ${stub.rows[0].period_name} covering the disposal date — post the stub period's depreciation before disposing so the gain or loss ties to the schedule`,
       );
     }
 
+    const basisChange = await assetBasisDelta(tx, orgId, assetId, bookId);
+    asset.acquisition_cost = add(asset.acquisition_cost, basisChange.cost);
+    asset.accumulated = add(asset.accumulated, basisChange.accumulated);
     const resolvedAccounts = lifecycleAccounts(asset);
     const accounts: DisposalAccounts = {
       assetAccountId: resolvedAccounts.assetAccountId,
-      accumulatedDepreciationAccountId: resolvedAccounts.accumulatedDepreciationAccountId,
+      accumulatedDepreciationAccountId:
+        resolvedAccounts.accumulatedDepreciationAccountId,
       gainLossAccountId: asset.gain_loss_account_id,
       proceedsAccountId: opts.proceedsAccountId,
     };
@@ -483,25 +564,35 @@ export async function disposeAsset(
     // pre-cutover depreciation on that same account — without it a mid-life
     // disposal would under-clear accumulated depreciation and misstate the
     // gain or loss by exactly the opening amount.
-    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
+    const remeasureDelta = await netRemeasurementDelta(
+      orgId,
+      assetId,
+      bookId,
+      tx,
+    );
     const effectiveAccumulated = sub(
       add(asset.accumulated, asset.opening_accumulated_depreciation ?? "0"),
       remeasureDelta,
     );
     const { nbv, gainLoss, lines } = computeDisposal({
-      cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
+      cost: asset.acquisition_cost,
+      accumulated: effectiveAccumulated,
+      proceeds,
+      accounts,
     });
 
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
-    const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
+    const status: "disposed" | "written_off" =
+      opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
 
     // A disposal dated into a GL-closed period must refuse here — resolving
     // the period once also turns a dateless insert (null period_id) into a
     // named error instead of a raw constraint failure.
-    const period = (await tx.execute<{ id: string }>(sql`
+    const period = await tx.execute<{ id: string }>(sql`
       select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`));
-    if (!period.rows[0]) throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
+       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`);
+    if (!period.rows[0])
+      throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     await assertAssetPeriodOpen(tx, {
       orgId,
       periodId: period.rows[0].id,
@@ -509,7 +600,7 @@ export async function disposeAsset(
       subsidiaryIds: [asset.subsidiary_id],
     });
 
-    const entryRes = (await tx.execute<{ id: string }>(sql`
+    const entryRes = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
       values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`DISP-${asset.asset_number}-${randomUUID()}`}, ${opts.date},
@@ -517,7 +608,7 @@ export async function disposeAsset(
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
               ${`${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`},
               'draft', 'disposal', ${opts.actorId}, ${opts.actorId})
-      returning id`));
+      returning id`);
     const eid = entryRes.rows[0]!.id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
@@ -529,8 +620,12 @@ export async function disposeAsset(
                 ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
                 ${asset.location_id}, ${`${status} ${asset.asset_number}`})`);
     }
-    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
-    await tx.execute(sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId} and org_id = ${orgId}`);
+    await tx.execute(
+      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`,
+    );
+    await tx.execute(
+      sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId} and org_id = ${orgId}`,
+    );
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
       values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId}, clock_timestamp())`);
@@ -575,34 +670,36 @@ export async function reverseAssetLifecycleEvent(
     );
   }
   if (!isIsoCalendarDate(opts.date)) {
-    throw new AssetLifecycleError("reversal date must be a valid calendar date in YYYY-MM-DD format");
+    throw new AssetLifecycleError(
+      "reversal date must be a valid calendar date in YYYY-MM-DD format",
+    );
   }
   if (!opts.actorId) {
     throw new AssetLifecycleError("an attributable reversal actor is required");
   }
 
   return db.transaction(async (tx) => {
-    const sourceResult = (await tx.execute<{
-        id: string;
-        asset_id: string;
-        kind: string;
-        journal_entry_id: string;
-        created_at: string;
-        asset_number: string;
-        status: string;
-        subsidiary_id: string;
-        department_id: string | null;
-        project_id: string | null;
-        location_id: string | null;
-        acquisition_cost: string;
-        salvage_value: string;
-        book_id: string;
-        entry_number: string;
-        origin: "disposal" | "revaluation";
-        entry_status: string;
-        occurred_on: string;
-        posting_date: string;
-      }>(sql`
+    const sourceResult = await tx.execute<{
+      id: string;
+      asset_id: string;
+      kind: string;
+      journal_entry_id: string;
+      created_at: string;
+      asset_number: string;
+      status: string;
+      subsidiary_id: string;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+      acquisition_cost: string;
+      salvage_value: string;
+      book_id: string;
+      entry_number: string;
+      origin: "disposal" | "revaluation";
+      entry_status: string;
+      occurred_on: string;
+      posting_date: string;
+    }>(sql`
       select event.id, event.asset_id, event.kind, event.journal_entry_id,
              event.created_at::text as created_at, asset.asset_number, asset.status,
              asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
@@ -616,15 +713,16 @@ export async function reverseAssetLifecycleEvent(
           on entry.id = event.journal_entry_id and entry.org_id = event.org_id
        where event.id = ${eventId} and event.org_id = ${orgId}
        for update of event, asset, entry
-    `));
+    `);
     const source = sourceResult.rows[0];
-    if (!source) throw new AssetLifecycleError("asset lifecycle event not found");
+    if (!source)
+      throw new AssetLifecycleError("asset lifecycle event not found");
 
-    const prior = (await tx.execute<{
-        id: string;
-        journal_entry_id: string;
-        restored_status: "in_service" | "fully_depreciated" | null;
-      }>(sql`
+    const prior = await tx.execute<{
+      id: string;
+      journal_entry_id: string;
+      restored_status: "in_service" | "fully_depreciated" | null;
+    }>(sql`
       select event.id, event.journal_entry_id,
              case
                when asset.status = 'fully_depreciated' then 'fully_depreciated'
@@ -636,7 +734,7 @@ export async function reverseAssetLifecycleEvent(
        where event.org_id = ${orgId}
          and event.reverses_event_id = ${source.id}
        limit 1
-    `));
+    `);
     if (prior.rows[0]) {
       return {
         assetId: source.asset_id,
@@ -649,14 +747,22 @@ export async function reverseAssetLifecycleEvent(
     }
 
     if (
-      !["revalued", "impaired", "disposed", "written_off"].includes(
-        source.kind,
-      )
+      !["revalued", "impaired", "disposed", "written_off"].includes(source.kind)
     ) {
       throw new AssetLifecycleError(
         `${source.kind} asset events do not have a financial reversal workflow`,
       );
     }
+    const basisBoundary = await assetBasisDelta(
+      tx,
+      orgId,
+      source.asset_id,
+      source.book_id,
+    );
+    if (basisBoundary.cutoff && basisBoundary.cutoff >= source.occurred_on)
+      throw new AssetLifecycleError(
+        "this event predates an approved asset basis change; record a new remeasurement against the remaining asset instead of restoring a disposed portion",
+      );
     if (source.entry_status !== "posted") {
       throw new AssetLifecycleError(
         "the source asset journal is not an unreversed posted entry",
@@ -669,7 +775,7 @@ export async function reverseAssetLifecycleEvent(
     }
     // Preserve full PostgreSQL timestamp precision. Legacy equal-time sources
     // have ambiguous order and must not authorize an out-of-order reversal.
-    const later = (await tx.execute<{ kind: string }>(sql`
+    const later = await tx.execute<{ kind: string }>(sql`
       select later.kind
         from asset_events later
        where later.org_id = ${orgId}
@@ -683,50 +789,61 @@ export async function reverseAssetLifecycleEvent(
          )
        order by later.created_at
        limit 1
-    `));
+    `);
     if (later.rows[0]) {
       throw new AssetLifecycleError(
         `reverse the later ${later.rows[0].kind} asset event first`,
       );
     }
-    const period = (await tx.execute<{ id: string }>(sql`
+    const period = await tx.execute<{ id: string }>(sql`
       select id from accounting_periods
        where org_id = ${orgId} and not is_adjustment
          and starts_on <= ${opts.date} and ends_on >= ${opts.date}
        limit 1
-    `));
+    `);
     if (!period.rows[0]) {
-      throw new AssetLifecycleError(
-        `no accounting period covers ${opts.date}`,
-      );
+      throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     }
 
-    const book = (await tx.execute<{ id: string }>(sql`
+    const book = (
+      await tx.execute<{ id: string }>(sql`
       select id
         from accounting_books
        where org_id = ${orgId} and id = ${source.book_id}
          and is_active and posts_gl
        for share
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!book) {
-      throw new AssetLifecycleError("the source journal book is not active for posting");
+      throw new AssetLifecycleError(
+        "the source journal book is not active for posting",
+      );
     }
 
     // A reversal is a new posting, not a privileged copy of historical
     // lines. Recheck the current legal-entity/account/dimension policy before
     // creating the compensating entry; setup may have been restricted since
     // the source event was posted.
-    const sourceLines = (await tx.execute<{ account_id: string; amount: string; subsidiary_id: string }>(sql`
+    const sourceLines = (
+      await tx.execute<{
+        account_id: string;
+        amount: string;
+        subsidiary_id: string;
+      }>(sql`
       select account_id, amount::text as amount, subsidiary_id
         from journal_lines
        where org_id = ${orgId} and entry_id = ${source.journal_entry_id}
        order by line_number
-    `)).rows;
+    `)
+    ).rows;
     await assertLifecyclePostingPolicy(
       tx,
       orgId,
       source,
-      sourceLines.map((line) => ({ accountId: line.account_id, amount: line.amount })),
+      sourceLines.map((line) => ({
+        accountId: line.account_id,
+        amount: line.amount,
+      })),
     );
 
     // The reversal posts into the reversal date's period: judge every leg the
@@ -735,10 +852,15 @@ export async function reverseAssetLifecycleEvent(
       orgId,
       periodId: period.rows[0].id,
       bookId: source.book_id,
-      subsidiaryIds: [...new Set([source.subsidiary_id, ...sourceLines.map((line) => line.subsidiary_id)])],
+      subsidiaryIds: [
+        ...new Set([
+          source.subsidiary_id,
+          ...sourceLines.map((line) => line.subsidiary_id),
+        ]),
+      ],
     });
 
-    const reversalEntry = (await tx.execute<{ id: string }>(sql`
+    const reversalEntry = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
          memo, status, origin, reverses_entry_id, created_by, updated_by)
@@ -748,7 +870,7 @@ export async function reverseAssetLifecycleEvent(
          ${`Reversal — ${reason}`}, 'draft', ${source.origin},
          ${source.journal_entry_id}, ${opts.actorId}, ${opts.actorId})
       returning id
-    `));
+    `);
     const reversalEntryId = reversalEntry.rows[0]!.id;
     await tx.execute(sql`
       insert into journal_lines
@@ -785,7 +907,10 @@ export async function reverseAssetLifecycleEvent(
       // Continue-from-accumulated (migration 0156): the restore threshold
       // compares TOTAL recognised depreciation — posted plus the pre-cutover
       // opening figure — against the depreciable basis.
-      const depreciation = (await tx.execute<{ accumulated: string; opening: string }>(sql`
+      const depreciation = await tx.execute<{
+        accumulated: string;
+        opening: string;
+      }>(sql`
         select coalesce(sum(line.posted_amount), 0)::text as accumulated,
                coalesce((select asset.opening_accumulated_depreciation
                            from fixed_assets asset
@@ -796,9 +921,10 @@ export async function reverseAssetLifecycleEvent(
          where schedule.org_id = ${orgId}
            and schedule.asset_id = ${source.asset_id}
            and schedule.book_id = ${source.book_id}
-      `));
+      `);
       restoredStatus =
-        toUnits(depreciation.rows[0]?.accumulated ?? "0") + toUnits(depreciation.rows[0]?.opening ?? "0") >=
+        toUnits(depreciation.rows[0]?.accumulated ?? "0") +
+          toUnits(depreciation.rows[0]?.opening ?? "0") >=
         toUnits(source.acquisition_cost) - toUnits(source.salvage_value)
           ? "fully_depreciated"
           : "in_service";
@@ -810,7 +936,7 @@ export async function reverseAssetLifecycleEvent(
       `);
     }
 
-    const reversalEvent = (await tx.execute<{ id: string }>(sql`
+    const reversalEvent = await tx.execute<{ id: string }>(sql`
       insert into asset_events
         (org_id, asset_id, kind, occurred_on, amount, journal_entry_id,
          reverses_event_id, reversal_reason, memo, created_by, updated_by, created_at)
@@ -820,7 +946,7 @@ export async function reverseAssetLifecycleEvent(
          ${`Reversal of ${source.kind} for ${source.asset_number}`},
          ${opts.actorId}, ${opts.actorId}, clock_timestamp())
       returning id
-    `));
+    `);
 
     if (source.kind === "revalued" || source.kind === "impaired") {
       await buildScheduleWithRunner(
@@ -831,10 +957,17 @@ export async function reverseAssetLifecycleEvent(
         source.book_id,
       );
     }
-    await reconcileAssetDepreciationStatusWithRunner(tx, orgId, opts.actorId, source.asset_id);
+    await reconcileAssetDepreciationStatusWithRunner(
+      tx,
+      orgId,
+      opts.actorId,
+      source.asset_id,
+    );
     if (restoredStatus !== null) {
-      restoredStatus = (await tx.execute<{ status: "in_service" | "fully_depreciated" }>(sql`
-        select status from fixed_assets where org_id = ${orgId} and id = ${source.asset_id}`)).rows[0]!.status;
+      restoredStatus = (
+        await tx.execute<{ status: "in_service" | "fully_depreciated" }>(sql`
+        select status from fixed_assets where org_id = ${orgId} and id = ${source.asset_id}`)
+      ).rows[0]!.status;
     }
     return {
       assetId: source.asset_id,
@@ -859,7 +992,12 @@ export async function reverseAssetLifecycleEvent(
 export async function remeasureAsset(
   orgId: string,
   assetId: string,
-  opts: { newCarryingValue: string; date: string; actorId: string | null; allowedSubsidiaryIds?: readonly string[] | null },
+  opts: {
+    newCarryingValue: string;
+    date: string;
+    actorId: string | null;
+    allowedSubsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<RemeasureResult> {
   assertLifecycleDate(opts.date);
   // A recoverable amount is never negative — fail closed before touching the
@@ -868,10 +1006,14 @@ export async function remeasureAsset(
   // pasted 20-digit value would die at the journal insert with a storage
   // overflow; both refuse here as the domain error.
   if (canonicalDecimal(opts.newCarryingValue, 4) === null) {
-    throw new AssetLifecycleError("new carrying value must be an exact decimal");
+    throw new AssetLifecycleError(
+      "new carrying value must be an exact decimal",
+    );
   }
   if (cmp(add(opts.newCarryingValue, "0"), "0") < 0) {
-    throw new AssetLifecycleError("new carrying value must be a non-negative amount");
+    throw new AssetLifecycleError(
+      "new carrying value must be a non-negative amount",
+    );
   }
   assertLedgerMagnitude(add(opts.newCarryingValue, "0"), "new carrying value");
   return db.transaction(async (tx) => {
@@ -880,16 +1022,28 @@ export async function remeasureAsset(
     // event and schedule state from the transaction ahead of it.
     await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds);
     const bookId = await primaryBookId(orgId, tx);
-    await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    await tx.execute(
+      sql`select id from subsidiaries where org_id=${orgId} order by id for share`,
+    );
     await assertAssetPostingDate(tx, orgId, assetId, bookId, opts.date);
 
-    const res = (await tx.execute<AssetAccountRow & {
-        asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
-        department_id: string | null; project_id: string | null;
-        location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
-        gain_loss_account_id: string | null; accumulated: string;
+    const res = await tx.execute<
+      AssetAccountRow & {
+        asset_number: string;
+        status: string;
+        subsidiary_id: string;
+        acquisition_cost: string;
+        salvage_value: string;
+        department_id: string | null;
+        project_id: string | null;
+        location_id: string | null;
+        base_currency: string;
+        accumulated_depreciation_account_id: string;
+        gain_loss_account_id: string | null;
+        accumulated: string;
         opening_accumulated_depreciation: string | null;
-      }>(sql`
+      }
+    >(sql`
       select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
              a.asset_account_id as native_asset_account_id,
@@ -904,22 +1058,34 @@ export async function remeasureAsset(
         from fixed_assets a
         join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
         join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-       where a.org_id = ${orgId} and a.id = ${assetId}`));
+       where a.org_id = ${orgId} and a.id = ${assetId}`);
     const asset = res.rows[0];
     if (!asset) throw new AssetLifecycleError("asset not found");
     if (asset.status === "disposed" || asset.status === "written_off") {
-      throw new AssetLifecycleError(`asset ${asset.asset_number} is ${asset.status}`);
+      throw new AssetLifecycleError(
+        `asset ${asset.asset_number} is ${asset.status}`,
+      );
     }
     if (!asset.gain_loss_account_id) {
-      throw new AssetLifecycleError("configure a gain/loss (adjustment) account on the asset category first");
+      throw new AssetLifecycleError(
+        "configure a gain/loss (adjustment) account on the asset category first",
+      );
     }
+    const basisChange = await assetBasisDelta(tx, orgId, assetId, bookId);
+    asset.acquisition_cost = add(asset.acquisition_cost, basisChange.cost);
+    asset.accumulated = add(asset.accumulated, basisChange.accumulated);
     const resolvedAccounts = lifecycleAccounts(asset);
     // Fold prior remeasurement events into the carrying amount: they credit
     // accumulated depreciation without schedule lines, so the schedule sum alone
     // overstates NBV the moment an asset has been impaired.
     // Continue-from-accumulated (migration 0156): same treatment for the
     // opening figure — an impairment must measure off the continued NBV.
-    const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
+    const remeasureDelta = await netRemeasurementDelta(
+      orgId,
+      assetId,
+      bookId,
+      tx,
+    );
     const effectiveAccumulated = sub(
       add(asset.accumulated, asset.opening_accumulated_depreciation ?? "0"),
       remeasureDelta,
@@ -928,19 +1094,42 @@ export async function remeasureAsset(
       cost: asset.acquisition_cost,
       accumulated: effectiveAccumulated,
       newCarryingValue: opts.newCarryingValue,
-      accumulatedDepreciationAccountId: resolvedAccounts.accumulatedDepreciationAccountId,
+      accumulatedDepreciationAccountId:
+        resolvedAccounts.accumulatedDepreciationAccountId,
       adjustmentAccountId: asset.gain_loss_account_id,
     });
-    if (isZero(delta)) throw new AssetLifecycleError("new carrying value equals current net book value");
+    if (isZero(delta))
+      throw new AssetLifecycleError(
+        "new carrying value equals current net book value",
+      );
 
     // Framework gate: restoration of an impairment is prohibited under US GAAP
     // and capped under IAS 36. The rule reads the org's configured framework.
-    const unreversedImpairment = cmp(remeasureDelta, "0") < 0 ? neg(remeasureDelta) : "0";
+    const netImpairment = add(
+      neg(remeasureDelta),
+      neg(basisChange.impairmentReleased),
+    );
+    const unreversedImpairment =
+      cmp(netImpairment, "0") > 0 ? netImpairment : "0";
     const framework = await orgReportingFramework(orgId);
-    const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
+    const policy = remeasurementPolicy({
+      framework,
+      delta,
+      unreversedImpairment,
+    });
     if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
-    if (framework === "ifrs" && cmp(delta, "0") > 0 && cmp(unreversedImpairment, "0") > 0) {
-      const ceiling = await unimpairedAssetCarryingValue(tx, assetId, orgId, bookId, opts.date);
+    if (
+      framework === "ifrs" &&
+      cmp(delta, "0") > 0 &&
+      cmp(unreversedImpairment, "0") > 0
+    ) {
+      const ceiling = await unimpairedAssetCarryingValue(
+        tx,
+        assetId,
+        orgId,
+        bookId,
+        opts.date,
+      );
       if (cmp(opts.newCarryingValue, ceiling) > 0) {
         throw new AssetLifecycleError(
           `IAS 36 caps an impairment reversal at the carrying amount without impairment, net of depreciation (${ceiling} as of ${opts.date})`,
@@ -951,22 +1140,24 @@ export async function remeasureAsset(
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     // Same companion as disposals: a remeasurement dated into a GL-closed
     // period refuses here, and a dateless insert becomes a named error.
-    const remeasurePeriod = (await tx.execute<{ id: string }>(sql`
+    const remeasurePeriod = await tx.execute<{ id: string }>(sql`
       select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`));
-    if (!remeasurePeriod.rows[0]) throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
+       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`);
+    if (!remeasurePeriod.rows[0])
+      throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
     await assertAssetPeriodOpen(tx, {
       orgId,
       periodId: remeasurePeriod.rows[0].id,
       bookId,
       subsidiaryIds: [asset.subsidiary_id],
     });
-    const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
+    const kind: "revalued" | "impaired" =
+      cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
     // An asset can be remeasured repeatedly; the entry number must be unique
     // per physical journal under journal_entries_org_number.
     const entryNumber = `${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}-${randomUUID().slice(0, 8)}`;
-    const entryRes = (await tx.execute<{ id: string }>(sql`
+    const entryRes = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
       values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${entryNumber},
@@ -975,7 +1166,7 @@ export async function remeasureAsset(
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
               ${`${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`},
               'draft', 'revaluation', ${opts.actorId}, ${opts.actorId})
-      returning id`));
+      returning id`);
     const eid = entryRes.rows[0]!.id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
@@ -987,7 +1178,9 @@ export async function remeasureAsset(
                 ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
                 ${asset.location_id}, ${`${kind} ${asset.asset_number}`})`);
     }
-    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
+    await tx.execute(
+      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`,
+    );
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId}, clock_timestamp())`);
@@ -995,8 +1188,88 @@ export async function remeasureAsset(
     // Use the same full-lifetime, effective-date plan as explicit rebuilds and
     // reversals, inside this journal/event transaction. Manual and usage input
     // evidence remains unchanged; only formula projections are recalculated.
-    const rebuilt = await buildScheduleWithRunner(tx, assetId, orgId, opts.actorId, bookId);
-    await reconcileAssetDepreciationStatusWithRunner(tx, orgId, opts.actorId, assetId);
-    return { assetId, entryId: eid, delta, kind, rebuiltLines: rebuilt.lineCount };
+    const rebuilt = await buildScheduleWithRunner(
+      tx,
+      assetId,
+      orgId,
+      opts.actorId,
+      bookId,
+    );
+    await reconcileAssetDepreciationStatusWithRunner(
+      tx,
+      orgId,
+      opts.actorId,
+      assetId,
+    );
+    return {
+      assetId,
+      entryId: eid,
+      delta,
+      kind,
+      rebuiltLines: rebuilt.lineCount,
+    };
   });
+}
+
+/** One controlled kernel entry for an approved asset change. The caller owns
+ * the asset/category locks and savepoint covering both entities and all books. */
+export async function postAssetLifecycleEntry(
+  tx: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    bookId: string;
+    calendarId?: string;
+    periodId?: string;
+    date: string;
+    number: string;
+    memo: string;
+    asset: {
+      subsidiary_id: string;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+    };
+    currency: string;
+    lines: DisposalLine[];
+    origin?: "disposal" | "depreciation" | "intercompany" | "revaluation";
+    reversesEntryId?: string;
+  },
+): Promise<string | null> {
+  const lines = args.lines.filter((l) => !isZero(l.amount));
+  if (!lines.length) return null;
+  if (!isZero(lines.reduce((a, l) => add(a, l.amount), "0")))
+    throw new AssetLifecycleError("asset change journal is unbalanced");
+  await assertLifecyclePostingPolicy(tx, args.orgId, args.asset, lines);
+  const periods = (
+    await tx.execute<{ id: string }>(
+      sql`select p.id from accounting_periods p join fiscal_calendars c on c.org_id=p.org_id and c.id=p.fiscal_calendar_id where p.org_id=${args.orgId} and c.is_active ${args.periodId ? sql`and p.id=${args.periodId}` : args.calendarId ? sql`and c.id=${args.calendarId}` : sql`and c.is_default`} and not p.is_adjustment and p.starts_on<=${args.date} and p.ends_on>=${args.date} for share of p,c`,
+    )
+  ).rows;
+  if (periods.length !== 1)
+    throw new AssetLifecycleError(
+      `configure one accounting period in the asset book calendar covering ${args.date}`,
+    );
+  await assertAssetPeriodOpen(tx, {
+    orgId: args.orgId,
+    bookId: args.bookId,
+    periodId: periods[0]!.id,
+    subsidiaryIds: [args.asset.subsidiary_id],
+  });
+  const inserted = await tx.execute<{ id: string }>(
+    sql`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by,updated_by) values(${args.orgId},${args.bookId},${args.asset.subsidiary_id},${args.number},${args.date},${periods[0]!.id},${args.memo},'draft',${args.origin ?? "disposal"},${args.reversesEntryId ?? null},${args.actorId},${args.actorId}) returning id`,
+  );
+  if (inserted.rows.length !== 1)
+    throw new AssetLifecycleError("asset change journal was not created");
+  const id = inserted.rows[0]!.id;
+  for (const [i, line] of lines.entries())
+    await tx.execute(
+      sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,department_id,project_id,location_id,memo) values(${args.orgId},${id},${i + 1},${line.accountId},${args.asset.subsidiary_id},${line.amount},${line.currency ?? args.currency},${line.txnAmount ?? line.amount},${line.fxRate ?? "1"},${args.asset.department_id},${args.asset.project_id},${args.asset.location_id},${args.memo})`,
+    );
+  const posted = await tx.execute(
+    sql`update journal_entries set status='posted',posted_at=now(),posted_by=${args.actorId},updated_by=${args.actorId},updated_at=now() where org_id=${args.orgId} and id=${id} and status='draft' returning id`,
+  );
+  if (posted.rows.length !== 1)
+    throw new AssetLifecycleError("asset change journal was not posted");
+  return id;
 }

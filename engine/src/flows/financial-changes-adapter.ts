@@ -1,3 +1,4 @@
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
@@ -97,6 +98,17 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
     if (row.status !== "pending") return;
     if (!ctx.userId || row.submitted_by === ctx.userId)
       throw new Error("an independent signed-in approver is required");
+    const allowed = await actorAllowedSubsidiaryIds(db, ctx.orgId, ctx.userId);
+    const required = Array.isArray(row.payload.requiredSubsidiaryIds)
+      ? row.payload.requiredSubsidiaryIds
+      : [row.subsidiary_id];
+    if (
+      allowed &&
+      required.some((id) => typeof id !== "string" || !allowed.has(id))
+    )
+      throw new Error(
+        "this approval includes a legal entity outside your authorization",
+      );
     const updated = await db.execute(sql`
       update financial_changes set status=${outcome},approved_by=${ctx.userId},approved_at=now(),
         updated_by=${ctx.userId},updated_at=now()

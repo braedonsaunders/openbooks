@@ -19,15 +19,19 @@ export async function authorizeChange(id: string) {
   const row = (
     await db.execute<{
       domain: keyof typeof changeAuthority;
+      operation: string;
       subsidiary_id: string;
+      required_subsidiary_ids: string[] | null;
     }>(
-      sql`select domain,subsidiary_id from financial_changes where org_id=${auth.user.orgId} and id=${id}`,
+      sql`select domain,operation,subsidiary_id,payload->'requiredSubsidiaryIds' as required_subsidiary_ids from financial_changes where org_id=${auth.user.orgId} and id=${id}`,
     )
   ).rows[0];
   if (
     !row ||
     (auth.allowedSubsidiaryIds &&
-      !auth.allowedSubsidiaryIds.has(row.subsidiary_id))
+      [row.subsidiary_id, ...(row.required_subsidiary_ids ?? [])].some(
+        (id) => !auth.allowedSubsidiaryIds!.has(id),
+      ))
   )
     return NextResponse.json({ error: "change not found" }, { status: 404 });
   const policy = changeAuthority[row.domain];
@@ -44,5 +48,5 @@ export async function authorizeChange(id: string) {
       },
       { status: 422 },
     );
-  return { auth, domain: row.domain };
+  return { auth, domain: row.domain, operation: row.operation };
 }
