@@ -9,6 +9,13 @@
  * Carryover keeps transferor history.
  */
 import { add, cmp, formatMoney, mulRatio, neg, toUnits } from "../money/money.ts";
+import {
+  TaxBasisPolicyError,
+  macrsVintageKey,
+  parseMacrsVintageAllocations,
+  type MacrsVintageAllocationInput,
+  type MacrsVintageSource,
+} from "./asset-basis-policy.ts";
 
 export class MacrsVintageError extends Error {
   readonly name = "MacrsVintageError";
@@ -32,6 +39,8 @@ export type MacrsVintage = {
   /** Declared transferor adjusted basis — buyer opening/closing checkpoint. */
   adjustedCarryover: string | null;
   priorDepreciation: string | null;
+  /** Stable source for vintageAllocations. Retained splits keep this key. */
+  source: MacrsVintageSource;
 };
 
 export type MacrsWorkpaperEvent = {
@@ -62,6 +71,7 @@ export type MacrsWorkpaperEvent = {
   bonus_percent: string | null;
   business_use_percent: string | null;
   prior_depreciation: string | null;
+  vintage_allocations: MacrsVintageAllocationInput[] | null;
 };
 
 export type MacrsVintageDefaults = {
@@ -101,27 +111,51 @@ function as168i7Kind(value: string | null): MacrsVintage["section168i7Kind"] {
     : null;
 }
 
-function allocateAmount(amount: string | null, take: string, total: string): string | null {
-  if (amount == null) return null;
-  if (cmp(total, "0") <= 0) return formatMoney(amount, 4);
-  return formatMoney(mulRatio(amount, toUnits(take), toUnits(total)), 4);
+function splitAmount(amount: string | null, take: string, total: string): { take: string | null; keep: string | null } {
+  if (amount == null) return { take: null, keep: null };
+  if (cmp(total, "0") <= 0) return { take: formatMoney(amount, 4), keep: formatMoney("0", 4) };
+  const taken = formatMoney(mulRatio(amount, toUnits(take), toUnits(total)), 4);
+  return { take: taken, keep: formatMoney(add(amount, neg(taken)), 4) };
 }
 
-function sliceVintage(
+function splitOneVintage(
   vintage: MacrsVintage,
-  take: string,
-  disposedOn: string | null,
+  disposedBasis: string,
+  remainingBasis: string,
+  disposedOn: string,
   recognition: MacrsVintage["recognition"],
-): MacrsVintage {
-  return {
-    ...vintage,
-    basis: formatMoney(take, 4),
-    disposedOn,
-    recognition: recognition ?? vintage.recognition,
-    section179: allocateAmount(vintage.section179, take, vintage.basis) ?? vintage.section179,
-    priorDepreciation: allocateAmount(vintage.priorDepreciation, take, vintage.basis),
-    adjustedCarryover: allocateAmount(vintage.adjustedCarryover, take, vintage.basis),
-  };
+): MacrsVintage[] {
+  if (cmp(add(disposedBasis, remainingBasis), vintage.basis) !== 0) {
+    throw new MacrsVintageError(
+      `vintage ${macrsVintageKey(vintage)} disposed ${disposedBasis} plus remaining ${remainingBasis} must equal that vintage's unadjusted basis ${vintage.basis}; do not overwrite a retained vintage to hide a conflicting split`,
+    );
+  }
+  const section179 = splitAmount(vintage.section179, disposedBasis, vintage.basis);
+  const priorDepreciation = splitAmount(vintage.priorDepreciation, disposedBasis, vintage.basis);
+  const adjustedCarryover = splitAmount(vintage.adjustedCarryover, disposedBasis, vintage.basis);
+  const out: MacrsVintage[] = [];
+  if (positive(disposedBasis)) {
+    out.push({
+      ...vintage,
+      basis: formatMoney(disposedBasis, 4),
+      disposedOn,
+      recognition: recognition ?? vintage.recognition,
+      section179: section179.take ?? vintage.section179,
+      priorDepreciation: priorDepreciation.take,
+      adjustedCarryover: adjustedCarryover.take,
+    });
+  }
+  if (positive(remainingBasis)) {
+    out.push({
+      ...vintage,
+      basis: formatMoney(remainingBasis, 4),
+      disposedOn: null,
+      section179: section179.keep ?? vintage.section179,
+      priorDepreciation: priorDepreciation.keep,
+      adjustedCarryover: adjustedCarryover.keep,
+    });
+  }
+  return out;
 }
 
 function splitOpenVintages(
@@ -130,6 +164,7 @@ function splitOpenVintages(
   remainingBasis: string,
   disposedOn: string,
   recognition: MacrsVintage["recognition"],
+  allocations?: MacrsVintageAllocationInput[],
 ): MacrsVintage[] {
   const total = open.reduce((sum, vintage) => add(sum, vintage.basis), "0");
   if (cmp(total, "0") <= 0) {
@@ -142,30 +177,75 @@ function splitOpenVintages(
       `disposedUnadjustedBasis ${disposedBasis} plus remaining basis ${remainingBasis} must equal open MACRS basis ${total}; do not overwrite a retained vintage to hide a conflicting split`,
     );
   }
-  if (open.length === 1) {
-    const vintage = open[0]!;
-    const take = disposedBasis;
-    const keep = remainingBasis;
+  if (allocations && allocations.length > 0) {
+    const byKey = new Map(open.map((vintage) => [macrsVintageKey(vintage), vintage]));
+    if (allocations.length !== open.length) {
+      throw new MacrsVintageError(
+        `vintageAllocations must declare every open MACRS vintage exactly once (${open.map((vintage) => macrsVintageKey(vintage)).join(", ")}); do not infer a leftover vintage from header remaining`,
+      );
+    }
+    const used = new Set<string>();
     const out: MacrsVintage[] = [];
-    if (positive(take)) out.push(sliceVintage(vintage, take, disposedOn, recognition));
-    if (positive(keep)) out.push(sliceVintage(vintage, keep, null, vintage.recognition));
+    for (const row of allocations) {
+      const key = macrsVintageKey(row);
+      const vintage = byKey.get(key);
+      if (!vintage) {
+        throw new MacrsVintageError(
+          `vintageAllocations names ${key} but the open vintages are ${[...byKey.keys()].join(", ")}; record the source, placedInServiceOn and transferOn of an open vintage — do not invent a key`,
+        );
+      }
+      if (used.has(key)) {
+        throw new MacrsVintageError(
+          `vintageAllocations declares ${key} more than once; each open vintage is allocated exactly once`,
+        );
+      }
+      used.add(key);
+      out.push(...splitOneVintage(
+        vintage,
+        row.disposedUnadjustedBasis,
+        row.remainingUnadjustedBasis,
+        disposedOn,
+        recognition,
+      ));
+    }
     return out;
   }
-  const exact = open.filter((vintage) => cmp(vintage.basis, disposedBasis) === 0);
-  const others = open.filter((vintage) => cmp(vintage.basis, disposedBasis) !== 0);
-  const othersTotal = others.reduce((sum, vintage) => add(sum, vintage.basis), "0");
-  if (exact.length === 1 && cmp(remainingBasis, othersTotal) === 0) {
-    return [
-      sliceVintage(exact[0]!, exact[0]!.basis, disposedOn, recognition),
-      ...others,
-    ];
+  if (open.length === 1) {
+    return splitOneVintage(open[0]!, disposedBasis, remainingBasis, disposedOn, recognition);
   }
   if (cmp(disposedBasis, total) === 0 && !positive(remainingBasis)) {
-    return open.map((vintage) => sliceVintage(vintage, vintage.basis, disposedOn, recognition));
+    return open.flatMap((vintage) =>
+      splitOneVintage(vintage, vintage.basis, "0", disposedOn, recognition),
+    );
   }
   throw new MacrsVintageError(
-    "this workpaper's disposed/remaining split does not identify which MACRS vintage is transferred; record a disposal that matches a whole vintage or the entire remaining basis — do not FIFO-allocate carryover and excess",
+    `this workpaper's disposed/remaining split does not identify which MACRS vintage is transferred; declare vintageAllocations for each open vintage (${open.map((vintage) => macrsVintageKey(vintage)).join(", ")}) — do not FIFO-allocate carryover and excess`,
   );
+}
+
+/** Open vintages the native editor must present as allocation rows. */
+export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): {
+  key: string;
+  source: MacrsVintageSource;
+  placedInServiceOn: string;
+  transferOn: string | null;
+  unadjustedBasis: string;
+  adjustedCarryover: string | null;
+  section179: string;
+  priorDepreciation: string | null;
+}[] {
+  return vintages
+    .filter((vintage) => vintage.disposedOn == null)
+    .map((vintage) => ({
+      key: macrsVintageKey(vintage),
+      source: vintage.source,
+      placedInServiceOn: vintage.placedInServiceOn,
+      transferOn: vintage.transferOn,
+      unadjustedBasis: vintage.basis,
+      adjustedCarryover: vintage.adjustedCarryover,
+      section179: vintage.section179,
+      priorDepreciation: vintage.priorDepreciation,
+    }));
 }
 
 function seedSellerPaper(paper: MacrsWorkpaperEvent, defaults: MacrsVintageDefaults): MacrsVintage[] {
@@ -219,6 +299,7 @@ function seedSellerPaper(paper: MacrsWorkpaperEvent, defaults: MacrsVintageDefau
     section168i7Kind: as168i7Kind(paper.section_168i7_kind),
     adjustedCarryover: null,
     priorDepreciation: paper.prior_depreciation,
+    source: "original",
   }];
 }
 
@@ -239,6 +320,7 @@ function seedAcquisition(
     section168i7Kind: null,
     adjustedCarryover: null,
     priorDepreciation: null,
+    source: "original",
   }];
 }
 
@@ -295,6 +377,7 @@ function receiverVintages(
   if (paper.recognition === "nontaxable" && paper.carryover_basis) {
     vintages.push(carryoverVintage(paper, {
       ...shared,
+      source: "carryover",
       placedInServiceOn: transferorPlaced,
       recoveryPeriodYears: transferorRecovery,
       method: transferorMethod,
@@ -305,6 +388,7 @@ function receiverVintages(
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,
+      source: "excess",
       section179: newVintageSection179,
       basis: paper.excess_basis!,
       placedInServiceOn: buyer.placedInServiceOn,
@@ -317,6 +401,7 @@ function receiverVintages(
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,
+      source: "taxable_cost",
       section179: newVintageSection179,
       basis: paper.buyer_cost,
       placedInServiceOn: buyer.placedInServiceOn,
@@ -388,6 +473,14 @@ export function resolveMacrsVintages(args: {
     const closed = vintages.filter((vintage) => vintage.disposedOn != null);
     const recognition = asRecognition(paper.recognition) ?? "taxable";
     if (positive(paper.disposed_unadjusted_basis) && paper.remaining_basis != null) {
+      let allocations: MacrsVintageAllocationInput[] | undefined;
+      if (paper.vintage_allocations != null) {
+        try {
+          allocations = parseMacrsVintageAllocations(paper.vintage_allocations);
+        } catch (error) {
+          throw error instanceof TaxBasisPolicyError ? new MacrsVintageError(error.message) : error;
+        }
+      }
       vintages = [
         ...closed,
         ...splitOpenVintages(
@@ -396,6 +489,7 @@ export function resolveMacrsVintages(args: {
           paper.remaining_basis,
           paper.effective_on,
           recognition,
+          allocations,
         ),
       ];
       continue;

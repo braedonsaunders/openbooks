@@ -471,7 +471,7 @@ test("declared adjusted carryover is the buyer checkpoint; pre-transfer years do
     { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
   ]);
   // Year 3 of original 10000 is 1920. Checkpoint 6400 is not the walked 4800.
-  assert.equal(walked.prior.remainingBasis, "6400.00");
+  assert.equal(walked.prior.remainingBasis, "6400.0000");
   assert.equal(walked.current.allowance, "1920.00");
   assert.equal(walked.current.remainingBasis, "4480.00");
 });
@@ -623,7 +623,7 @@ test("a consolidated-group placement-year transfer does not monthly-split the ye
   }, [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }]);
   assert.equal(buyer.current.allowance, "0.00");
   assert.equal(buyer.current.bonus, "0.00");
-  assert.equal(buyer.current.remainingBasis, "3750.00");
+  assert.equal(buyer.current.remainingBasis, "3750.0000");
 });
 
 test("a §721 prior-partner depreciable interest keeps bonus with the transferor", () => {

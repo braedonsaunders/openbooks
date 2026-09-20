@@ -112,6 +112,38 @@ export const US_SECTION_168I7_KINDS = [
 ] as const;
 export type UsSection168i7Kind = (typeof US_SECTION_168I7_KINDS)[number];
 
+/** Stable identity for one open MACRS vintage. `original` is the seller
+ *  statutory vintage; buyer-created vintages include transferOn so two
+ *  carryovers placed on the same day do not collapse. */
+export const MACRS_VINTAGE_SOURCES = ["original", "carryover", "excess", "taxable_cost"] as const;
+export type MacrsVintageSource = (typeof MACRS_VINTAGE_SOURCES)[number];
+
+export const MACRS_VINTAGE_SOURCE_LABELS: Record<MacrsVintageSource, string> = {
+  original: "Original seller vintage — frozen statutory basis and recovery",
+  carryover: "§168(i)(7) carryover — transferor history and declared adjusted checkpoint",
+  excess: "Nontaxable excess basis — newly placed on the receiving schedule",
+  taxable_cost: "Taxable buyer cost — newly placed on the receiving schedule",
+};
+
+/** Operator-declared split of one identified vintage. Header
+ *  disposedUnadjustedBasis / remainingUnadjustedBasis are the sums. */
+export interface MacrsVintageAllocationInput {
+  source: MacrsVintageSource;
+  placedInServiceOn: string;
+  transferOn?: string | null;
+  disposedUnadjustedBasis: string;
+  remainingUnadjustedBasis: string;
+}
+
+export function macrsVintageKey(args: {
+  source: MacrsVintageSource;
+  placedInServiceOn: string;
+  transferOn?: string | null;
+}): string {
+  if (args.source === "original") return `original:${args.placedInServiceOn}`;
+  return `${args.source}:${args.placedInServiceOn}:${args.transferOn ?? ""}`;
+}
+
 export const US_SHORT_YEAR_METHODS = ["simplified", "allocation"] as const;
 export type UsShortYearMethod = (typeof US_SHORT_YEAR_METHODS)[number];
 
@@ -377,6 +409,9 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   bonusPercent?: string;
   businessUsePercent?: string;
   priorDepreciation?: string;
+  /** Required when more than one vintage is open. Each row is one vintage;
+   *  header disposed/remaining are the sums. Do not match a vintage by amount. */
+  vintageAllocations?: MacrsVintageAllocationInput[];
 }
 
 export type TaxBasisFieldKind = "decimal" | "boolean" | "enum" | "text" | "date";
@@ -791,7 +826,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
     requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    help: "Continues the original placed-in-service date, method and convention. Do not restart the schedule.",
+    help: "Continues the original placed-in-service date, method and convention. When more than one vintage is open, this is the sum of vintageAllocations.remainingUnadjustedBasis — identify each vintage by source, placedInServiceOn and transferOn; do not match a vintage by amount.",
   },
   {
     name: "disposedUnadjustedBasis",
@@ -799,6 +834,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
     requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    help: "When more than one vintage is open, this is the sum of vintageAllocations.disposedUnadjustedBasis. Record one allocation row per open vintage; do not FIFO-allocate carryover and excess.",
   },
   {
     name: "placedInServiceOn",
@@ -1051,7 +1087,7 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "relatedPerson", "statutoryProceeds", "amountRealizedRule", "adjustedAmountRealized",
     "deemedValueAdjustmentEvidence", "buyerCost", "carryoverBasis", "excessBasis",
     "section179", "bonusPercent", "businessUsePercent", "priorDepreciation",
-    "shortYearMethod",
+    "shortYearMethod", "vintageAllocations",
   ],
 };
 
@@ -1114,6 +1150,105 @@ export function isTaxBasisCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+const VINTAGE_ALLOCATION_KEYS = [
+  "source",
+  "placedInServiceOn",
+  "transferOn",
+  "disposedUnadjustedBasis",
+  "remainingUnadjustedBasis",
+] as const;
+
+/** Parse operator-declared per-vintage splits. An empty array is not a
+ *  silent whole-vintage match. */
+export function parseMacrsVintageAllocations(value: unknown): MacrsVintageAllocationInput[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TaxBasisPolicyError(
+      "vintageAllocations must identify each open MACRS vintage; do not infer a split by matching disposed basis to a vintage amount",
+    );
+  }
+  const seen = new Set<string>();
+  return value.map((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new TaxBasisPolicyError(`vintageAllocations[${index}] must be an object`);
+    }
+    const raw = row as Record<string, unknown>;
+    const unknown = Object.keys(raw).filter(
+      (key) => !(VINTAGE_ALLOCATION_KEYS as readonly string[]).includes(key),
+    );
+    if (unknown.length > 0) {
+      throw new TaxBasisPolicyError(
+        `unknown vintageAllocations[${index}] field(s): ${unknown.sort().join(", ")}`,
+      );
+    }
+    if (!(MACRS_VINTAGE_SOURCES as readonly string[]).includes(String(raw.source ?? ""))) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations[${index}].source must be one of ${MACRS_VINTAGE_SOURCES.join(", ")}`,
+      );
+    }
+    const source = raw.source as MacrsVintageSource;
+    if (!isTaxBasisCalendarDate(raw.placedInServiceOn)) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations[${index}].placedInServiceOn must be a calendar date (YYYY-MM-DD)`,
+      );
+    }
+    if (source !== "original") {
+      if (raw.transferOn == null || raw.transferOn === "") {
+        throw new TaxBasisPolicyError(
+          `vintageAllocations[${index}].transferOn is required for a ${source} vintage so two buyer vintages placed on the same day are not collapsed`,
+        );
+      }
+      if (!isTaxBasisCalendarDate(raw.transferOn)) {
+        throw new TaxBasisPolicyError(
+          `vintageAllocations[${index}].transferOn must be a calendar date (YYYY-MM-DD)`,
+        );
+      }
+    } else if (raw.transferOn != null && raw.transferOn !== "" && !isTaxBasisCalendarDate(raw.transferOn)) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations[${index}].transferOn must be a calendar date (YYYY-MM-DD)`,
+      );
+    }
+    const disposed = validateDeclaredDecimal(
+      `vintageAllocations[${index}].disposedUnadjustedBasis`,
+      raw.disposedUnadjustedBasis,
+    );
+    const remaining = validateDeclaredDecimal(
+      `vintageAllocations[${index}].remainingUnadjustedBasis`,
+      raw.remainingUnadjustedBasis,
+    );
+    const transferOn = source === "original"
+      ? (isTaxBasisCalendarDate(raw.transferOn) ? raw.transferOn : null)
+      : String(raw.transferOn);
+    const key = macrsVintageKey({ source, placedInServiceOn: raw.placedInServiceOn, transferOn });
+    if (seen.has(key)) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations declares ${key} more than once; each open vintage is allocated exactly once`,
+      );
+    }
+    seen.add(key);
+    return {
+      source,
+      placedInServiceOn: raw.placedInServiceOn,
+      transferOn,
+      disposedUnadjustedBasis: disposed,
+      remainingUnadjustedBasis: remaining,
+    };
+  });
+}
+
+export function assertMacrsVintageAllocationTotals(
+  allocations: readonly MacrsVintageAllocationInput[],
+  disposedTotal: string,
+  remainingTotal: string,
+): void {
+  const disposed = allocations.reduce((sum, row) => add(sum, row.disposedUnadjustedBasis), "0");
+  const remaining = allocations.reduce((sum, row) => add(sum, row.remainingUnadjustedBasis), "0");
+  if (cmp(disposed, disposedTotal) !== 0 || cmp(remaining, remainingTotal) !== 0) {
+    throw new TaxBasisPolicyError(
+      `vintageAllocations disposed ${formatMoney(disposed, 4)} and remaining ${formatMoney(remaining, 4)} must equal disposedUnadjustedBasis ${disposedTotal} and remainingUnadjustedBasis ${remainingTotal}; the header amounts are the sums, not a second vintage`,
+    );
+  }
 }
 
 function resolveSourceOperation(
@@ -1338,6 +1473,15 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
         `remainingUnadjustedBasis ${remaining} plus disposedUnadjustedBasis ${disposed} must equal originalUnadjustedBasis ${original}; the vintage is split, not restarted`,
       );
     }
+    if (draft.vintageAllocations != null && draft.vintageAllocations !== "") {
+      const allocations = parseMacrsVintageAllocations(draft.vintageAllocations);
+      assertMacrsVintageAllocationTotals(allocations, disposed, remaining);
+      draft.vintageAllocations = allocations;
+    }
+  } else if (draft.vintageAllocations != null && draft.vintageAllocations !== "") {
+    throw new TaxBasisPolicyError(
+      "vintageAllocations identify the seller's open vintages; a buyer-only workpaper does not split them — do not declare seller allocations on the receiving side",
+    );
   }
   if (
     taxBasisSideApplies(draft.applicable, "buyer") &&
@@ -1782,6 +1926,9 @@ export function usRegimeWorkpaperOutcome(
     amountRealized: seller && taxable ? usDispositionProceeds(row) : null,
     remainingUnadjustedBasis: seller ? row.remainingUnadjustedBasis : null,
     disposedUnadjustedBasis: seller ? row.disposedUnadjustedBasis : null,
+    vintageAllocations: seller && row.vintageAllocations
+      ? parseMacrsVintageAllocations(row.vintageAllocations)
+      : null,
     placedInServiceOn: transferorHistory ? row.placedInServiceOn ?? null : null,
     recoveryPeriodYears: transferorHistory ? row.recoveryPeriodYears ?? null : null,
     method: transferorHistory ? row.method ?? null : null,

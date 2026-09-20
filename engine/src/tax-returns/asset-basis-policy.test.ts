@@ -8,7 +8,11 @@ import {
   TAX_BASIS_REGIMES,
   TAX_BASIS_RELATIONSHIPS,
   TAX_BASIS_SOURCE_KINDS,
+  MACRS_VINTAGE_SOURCES,
+  MACRS_VINTAGE_SOURCE_LABELS,
   TaxBasisPolicyError,
+  macrsVintageKey,
+  parseMacrsVintageAllocations,
   attachTaxBasisSource,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
@@ -254,6 +258,7 @@ test("validateTaxRegimeBasis refuses a nontaxable MACRS carryover on a customer 
         method: "200_db",
         convention: "half_year",
         recognition: "nontaxable",
+        section168i7Kind: "nonrecognition",
         relatedPerson: false,
         statutoryProceeds: "3500.00",
       }),
@@ -583,10 +588,11 @@ test("buyer-only nontaxable carryover requires transferor history and allocated 
           originalUnadjustedBasis: "10000.00",
           carryoverBasis: "6400.00",
           excessBasis: "400.00",
+          section168i7Kind: "nonrecognition",
         },
         { sourceOperation: "intercompany_transfer", applicable: "buyer" },
       ),
-    /section179 is required for nontaxable MACRS carryover/,
+    /section179 is required/,
     "missing allocated section179",
   );
   const row = validateTaxRegimeBasis(
@@ -610,8 +616,8 @@ test("buyer-only nontaxable carryover requires transferor history and allocated 
     },
     { sourceOperation: "intercompany_transfer", applicable: "buyer" },
   );
-  assert.equal(row.carryoverBasis, "6400.0000");
-  assert.equal(row.section179, "0.0000");
+  assert.equal(row.carryoverBasis, "6400.00");
+  assert.equal(row.section179, "0");
 });
 
 test("validateTaxRegimeBasis refuses a negative declared CA original capital cost", () => {
@@ -693,6 +699,106 @@ test("NZ associated-person equivalent rate caps the pool and refuses a missing d
     (error: unknown) =>
       error instanceof TaxBasisPolicyError && /associatedPersonEquivalentRate is required/.test(error.message),
   );
+});
+
+test("MACRS vintage sources have human labels and a stable key", () => {
+  for (const source of MACRS_VINTAGE_SOURCES) {
+    assert.notEqual(MACRS_VINTAGE_SOURCE_LABELS[source], source);
+    assert.match(MACRS_VINTAGE_SOURCE_LABELS[source], /[A-Za-z]/);
+  }
+  assert.equal(
+    macrsVintageKey({ source: "original", placedInServiceOn: "2023-03-15" }),
+    "original:2023-03-15",
+  );
+  assert.equal(
+    macrsVintageKey({
+      source: "carryover",
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2025-08-01",
+    }),
+    "carryover:2023-03-15:2025-08-01",
+  );
+});
+
+test("vintageAllocations must name each vintage and sum to the header split", () => {
+  const seller = {
+    regime: "us_macrs",
+    relationship: "arms_length",
+    dispositionTrigger: "sale",
+    originalUnadjustedBasis: "10400.00",
+    remainingUnadjustedBasis: "8400.00",
+    disposedUnadjustedBasis: "2000.00",
+    placedInServiceOn: "2023-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    recognition: "taxable",
+    relatedPerson: false,
+    statutoryProceeds: "2000.00",
+    amountRealizedRule: "amount_realized",
+  };
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          ...seller,
+          vintageAllocations: [
+            {
+              source: "carryover",
+              placedInServiceOn: "2023-03-15",
+              transferOn: "2025-08-01",
+              disposedUnadjustedBasis: "2000.00",
+              remainingUnadjustedBasis: "8000.00",
+            },
+          ],
+        },
+        { sourceOperation: "partial_disposal", applicable: "seller" },
+      ),
+    /must equal disposedUnadjustedBasis/,
+    "allocation remaining short of the header",
+  );
+  throwsPolicy(
+    () => parseMacrsVintageAllocations([]),
+    /must identify each open MACRS vintage/,
+    "empty allocations are not a silent match",
+  );
+  throwsPolicy(
+    () =>
+      parseMacrsVintageAllocations([
+        {
+          source: "carryover",
+          placedInServiceOn: "2023-03-15",
+          disposedUnadjustedBasis: "2000.00",
+          remainingUnadjustedBasis: "8000.00",
+        },
+      ]),
+    /transferOn is required for a carryover vintage/,
+    "buyer vintages require transferOn",
+  );
+  const row = validateTaxRegimeBasis(
+    {
+      ...seller,
+      vintageAllocations: [
+        {
+          source: "carryover",
+          placedInServiceOn: "2023-03-15",
+          transferOn: "2025-08-01",
+          disposedUnadjustedBasis: "2000.00",
+          remainingUnadjustedBasis: "8000.00",
+        },
+        {
+          source: "excess",
+          placedInServiceOn: "2025-08-01",
+          transferOn: "2025-08-01",
+          disposedUnadjustedBasis: "0.00",
+          remainingUnadjustedBasis: "400.00",
+        },
+      ],
+    },
+    { sourceOperation: "partial_disposal", applicable: "seller" },
+  ) as UsMacrsRegimeBasis;
+  assert.equal(row.vintageAllocations?.length, 2);
+  assert.equal(row.vintageAllocations?.[0]!.disposedUnadjustedBasis, "2000.0000");
 });
 
 test("NZ associated-person rate cap continues after the transfer year", () => {

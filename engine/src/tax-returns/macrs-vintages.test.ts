@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveMacrsVintages, type MacrsWorkpaperEvent, type MacrsVintageDefaults } from "./macrs-vintages.ts";
+import { listOpenMacrsVintages, resolveMacrsVintages, type MacrsWorkpaperEvent, type MacrsVintageDefaults } from "./macrs-vintages.ts";
 
 const defaults: MacrsVintageDefaults = {
   recoveryPeriodYears: "7",
@@ -40,6 +40,7 @@ const bothSidedTaxable: MacrsWorkpaperEvent = {
   bonus_percent: null,
   business_use_percent: null,
   prior_depreciation: null,
+  vintage_allocations: null,
 };
 
 test("a same-regime both-sided taxable transfer starts the buyer on the receiving placed date and class, not seller age", () => {
@@ -239,7 +240,7 @@ test("seller seed consumes frozen statutory basis and vintage, not book cost or 
     }],
     defaults: { ...defaults, recoveryPeriodYears: "39", method: "straight_line", convention: "mid_month" },
   });
-  assert.equal(vintages[0]!.basis, "10000.00");
+  assert.equal(vintages[0]!.basis, "10000.0000");
   assert.equal(vintages[0]!.placedInServiceOn, "2023-03-15");
   assert.equal(vintages[0]!.recoveryPeriodYears, "5");
   assert.equal(vintages[0]!.method, "200_db");
@@ -293,6 +294,7 @@ test("a partial across carryover and excess vintages is refused instead of FIFO 
     seller_subsidiary_id: "sub-b",
     buyer_subsidiary_id: null,
     buyer_cost: null,
+    effective_on: "2025-09-01",
     original_unadjusted_basis: "10400.00",
     placed_in_service_on: "2025-08-01",
     recovery_period_years: "7",
@@ -361,6 +363,78 @@ test("nontaxable carryover refuses missing allocated transferor elections instea
     (error: unknown) =>
       error instanceof Error && /missing priorDepreciation/.test(error.message),
   );
+});
+
+test("an explicit vintage allocation splits carryover and excess without FIFO", () => {
+  const receive: MacrsWorkpaperEvent = {
+    ...bothSidedTaxable,
+    recognition: "nontaxable",
+    section_168i7_kind: "nonrecognition",
+    buyer_cost: null,
+    carryover_basis: "6400.00",
+    excess_basis: "400.00",
+    related_person: "false",
+    original_unadjusted_basis: "10000.00",
+    disposed_unadjusted_basis: "10000.00",
+    section_179: "200.00",
+    bonus_percent: "0",
+    business_use_percent: "100",
+    prior_depreciation: "3600.00",
+  };
+  const onward: MacrsWorkpaperEvent = {
+    ...bothSidedTaxable,
+    asset_id: "buyer",
+    receiving_asset_id: null,
+    seller_subsidiary_id: "sub-b",
+    buyer_subsidiary_id: null,
+    buyer_cost: null,
+    effective_on: "2025-09-01",
+    original_unadjusted_basis: "10400.00",
+    placed_in_service_on: "2025-08-01",
+    recovery_period_years: "7",
+    disposed_unadjusted_basis: "2000.00",
+    remaining_basis: "8400.00",
+    vintage_allocations: [
+      {
+        source: "carryover",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2025-08-01",
+        disposedUnadjustedBasis: "2000.00",
+        remainingUnadjustedBasis: "8000.00",
+      },
+      {
+        source: "excess",
+        placedInServiceOn: "2025-08-01",
+        transferOn: "2025-08-01",
+        disposedUnadjustedBasis: "0.00",
+        remainingUnadjustedBasis: "400.00",
+      },
+    ],
+  };
+  const vintages = resolveMacrsVintages({
+    assetId: "buyer",
+    subsidiaryId: "sub-b",
+    placedOn: "2025-08-01",
+    acquisitionCost: "6800.00",
+    disposedOn: null,
+    papers: [receive, onward],
+    defaults,
+  });
+  const open = listOpenMacrsVintages(vintages);
+  const disposed = vintages.filter((vintage) => vintage.disposedOn != null);
+  assert.equal(disposed.length, 1);
+  assert.equal(disposed[0]!.source, "carryover");
+  assert.equal(disposed[0]!.basis, "2000.0000");
+  assert.equal(disposed[0]!.section179, "40.0000");
+  assert.equal(disposed[0]!.priorDepreciation, "720.0000");
+  assert.deepEqual(open.map((row) => row.key), [
+    "carryover:2023-03-15:2025-08-01",
+    "excess:2025-08-01:2025-08-01",
+  ]);
+  assert.equal(open[0]!.unadjustedBasis, "8000.0000");
+  assert.equal(open[0]!.section179, "160.0000");
+  assert.equal(open[0]!.priorDepreciation, "2880.0000");
+  assert.equal(open[1]!.unadjustedBasis, "400.0000");
 });
 
 test("a received asset later disposed does not keep depreciating as acquired", () => {

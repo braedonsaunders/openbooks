@@ -396,8 +396,11 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
     try {
       assertShortYearFactorAgrees(
         input.yearStart,
-        shortYearMathEnd(input.yearEnd, input.excludedTerminalMonth),
+        input.yearEnd,
         input.shortYearFactor,
+        input.convention === "half_year" && input.excludedTerminalMonth
+          ? { excludedTerminalMonth: true }
+          : undefined,
       );
     } catch (error) {
       throw error instanceof MacrsShortYearError ? new Error(error.message) : error;
@@ -505,15 +508,17 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
   placedYear: number;
 }): MacrsYearResult {
   const rate = decliningBalanceRate(input.method, String(input.recoveryPeriodYears));
-  const mathEnd = shortYearMathEnd(input.yearEnd, input.excludedTerminalMonth);
+  const hyContext = input.convention === "half_year" && input.excludedTerminalMonth
+    ? { excludedTerminalMonth: true }
+    : undefined;
   const disposedThisYear = !!input.disposedOn && input.disposedOn >= input.yearStart && input.disposedOn <= input.yearEnd;
   if (input.afterShortYear) {
     const opening = persistMacrsBasis(input.adjustedBasisAtYearStart ?? input.macrsBasis);
-    const months = input.shortYearMonths ?? shortTaxYearMonths(input.yearStart, mathEnd);
+    const months = input.shortYearMonths ?? shortTaxYearMonths(input.yearStart, input.yearEnd, hyContext);
     let serviceMonths = months;
     if (disposedThisYear && input.disposedOn) {
-      const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.disposedOn);
-      const held = monthsTreatedInService(deemedEnd, mathEnd);
+      const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn, hyContext);
+      const held = monthsTreatedInService(deemedEnd, input.yearEnd, hyContext);
       serviceMonths = Math.max(0, months - held);
     }
     if ((input.shortYearMethod ?? "simplified") === "allocation" && input.firstYearMonthsInService == null && input.elapsedRecoveryMonths == null) {
@@ -539,11 +544,11 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
       remainingBasis: remaining,
     };
   }
-  const deemed = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.placedInServiceOn);
-  let months = monthsTreatedInService(deemed, mathEnd);
+  const deemed = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.placedInServiceOn, hyContext);
+  let months = monthsTreatedInService(deemed, input.yearEnd, hyContext);
   if (disposedThisYear && input.disposedOn && input.dispositionRecognition === "nontaxable") {
-    const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.disposedOn);
-    months = Math.min(months, Math.max(0, monthsTreatedInService(deemed, mathEnd) - monthsTreatedInService(deemedEnd, mathEnd)));
+    const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn, hyContext);
+    months = Math.min(months, Math.max(0, monthsTreatedInService(deemed, input.yearEnd, hyContext) - monthsTreatedInService(deemedEnd, input.yearEnd, hyContext)));
   }
   const macrs = shortYearPlacementDeduction({ basis: input.macrsBasis, rate, monthsInService: months });
   const used179 = input.taxYear >= input.placedYear ? input.section179Cap : "0.0000";
@@ -604,10 +609,9 @@ export function exclusiveShortYearMonths(
   if (!window) {
     throw new Error("MACRS exclusive short-year months require an adjacent-window index");
   }
-  return shortTaxYearMonths(
-    window.yearStart,
-    shortYearMathEnd(window.yearEnd, adjacentShortYearExclusion(windows, index)),
-  );
+  return shortTaxYearMonths(window.yearStart, window.yearEnd, {
+    excludedTerminalMonth: adjacentShortYearExclusion(windows, index),
+  });
 }
 
 /** Inclusive first day of the tax year's final three months. July–June ends
@@ -690,9 +694,8 @@ export function eligibleMacrsMidQuarterPlacements(
 export function macrsMidQuarterApplies(
   window: MacrsYearWindow,
   placements: readonly { placedOn: string; basis: string }[],
-  excludedTerminalMonth = false,
 ): boolean {
-  if (shortTaxYearMonths(window.yearStart, shortYearMathEnd(window.yearEnd, excludedTerminalMonth)) <= 3) {
+  if (shortTaxYearMonths(window.yearStart, window.yearEnd) <= 3) {
     return placements.length > 0;
   }
   let total = 0n;
@@ -711,14 +714,10 @@ export function macrsMidQuarterByTaxYear(
   vintages: readonly MacrsMidQuarterVintage[],
 ): Map<number, boolean> {
   const out = new Map<number, boolean>();
-  windows.forEach((window, index) => {
+  windows.forEach((window) => {
     out.set(
       window.taxYear,
-      macrsMidQuarterApplies(
-        window,
-        eligibleMacrsMidQuarterPlacements(vintages, window),
-        adjacentShortYearExclusion(windows, index),
-      ),
+      macrsMidQuarterApplies(window, eligibleMacrsMidQuarterPlacements(vintages, window)),
     );
   });
   return out;
@@ -878,10 +877,10 @@ export function computeMacrsThroughYear(
     const afterShortYear = vintageShortSeen || (short && !firstServiceYear);
     const followYear = yearsSinceVintageShort === 1;
     const preTransfer = !!(checkpoint && carryoverOn && window.yearEnd < carryoverOn);
-    const excludedTerminalMonth = adjacentShortYearExclusion(ordered, index);
-    const mathEnd = shortYearMathEnd(window.yearEnd, excludedTerminalMonth);
-    const windowFactor = impliedShortYearFactor(window.yearStart, mathEnd);
-    const exclusiveMonths = exclusiveShortYearMonths(ordered, index);
+    const excludedTerminalMonth = input.convention === "half_year" && adjacentShortYearExclusion(ordered, index);
+    const hyContext = excludedTerminalMonth ? { excludedTerminalMonth: true } : undefined;
+    const windowFactor = impliedShortYearFactor(window.yearStart, window.yearEnd, hyContext);
+    const exclusiveMonths = shortTaxYearMonths(window.yearStart, window.yearEnd, hyContext);
     const openingCheckpoint = checkpoint && !preTransfer
       ? persistMacrsBasis(add(checkpoint, neg(postTransferTaken)))
       : undefined;
@@ -935,7 +934,13 @@ export function computeMacrsThroughYear(
       : null;
     if (firstServiceYear && short) {
       deemedPlacedOn = formatCalendarDay(
-        deemedPlacedInServiceOn(input.convention, window.yearStart, mathEnd, input.placedInServiceOn),
+        deemedPlacedInServiceOn(
+          input.convention,
+          window.yearStart,
+          window.yearEnd,
+          input.placedInServiceOn,
+          hyContext,
+        ),
       );
       firstYearMonthsInService = monthsTreatedInService(
         {
@@ -943,7 +948,8 @@ export function computeMacrsThroughYear(
           month: Number(deemedPlacedOn.slice(5, 7)),
           day: Number(deemedPlacedOn.slice(8, 10)),
         },
-        mathEnd,
+        window.yearEnd,
+        hyContext,
       );
       elapsedRecoveryMonths = firstYearMonthsInService;
       vintageShortSeen = true;
