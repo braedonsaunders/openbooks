@@ -31,7 +31,9 @@ import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
 
 const f = ref<LeaveQueueData>()
 
-export function leaveQueueSpec(data: LeaveQueueData, basePath: string): PageSpec {
+// The registry builds every spec from its data alone (scripts/page-registry-source.mjs),
+// so the base path defaults to the literal route the spec declares.
+export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/leave'): PageSpec {
   return page({
     route: '/hrm/leave',
     layout: 'list',
