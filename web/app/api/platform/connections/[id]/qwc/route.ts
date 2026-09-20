@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
+import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -9,7 +10,7 @@ export const runtime = 'nodejs'
 
 const OWNER_ID = '{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}'
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -20,7 +21,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!connection) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (connection.source !== 'qbd') return NextResponse.json({ error: 'not a QuickBooks Desktop connection' }, { status: 400 })
 
-  const origin = new URL(req.url).origin
+  const origin = appBaseUrl()
   if (!origin.startsWith('https://') && !/^http:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origin)) {
     return NextResponse.json({ error: 'QuickBooks Web Connector requires an HTTPS deployment URL' }, { status: 400 })
   }

@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server'
 import { authorizeUrl, type XeroApp } from '@openbooks/engine/src/connectors/xero.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
+import { unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import {
+  attachConnectionOauthCookie,
+  connectionOauthRedirectUri,
+  mintConnectionOauthState,
+} from '../../_flow'
 
 export const runtime = 'nodejs'
 
 /**
  * Begin the Xero consent flow for one connection. The Xero app creds live on
- * that connection (entered in the UI, sealed); {orgId, connectionId} rides
- * through Xero in an encrypted `state` (doubling as the CSRF nonce).
+ * that connection (entered in the UI, sealed). A one-time nonce rides in the
+ * sealed `state` and in an HttpOnly cookie — the org/connection pair alone
+ * is not a CSRF nonce.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
@@ -26,8 +32,10 @@ export async function GET(req: Request) {
   const app: XeroApp = {
     clientId: secret.clientId,
     clientSecret: '',
-    redirectUri: `${new URL(req.url).origin}/api/platform/connections/oauth/xero/callback`,
+    redirectUri: connectionOauthRedirectUri('xero'),
   }
-  const state = sealJson({ orgId: gate.user.orgId, connectionId })
-  return NextResponse.redirect(authorizeUrl(app, state))
+  const { state, nonce } = mintConnectionOauthState(gate.user.orgId, connectionId)
+  const response = NextResponse.redirect(authorizeUrl(app, state))
+  attachConnectionOauthCookie(response, nonce)
+  return response
 }

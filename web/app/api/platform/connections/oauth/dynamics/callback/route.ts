@@ -7,47 +7,56 @@ import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import {
+  acceptConnectionOauthState,
+  connectionOauthBounce,
+  connectionOauthCookieValue,
+  connectionOauthRedirectUri,
+  pinProviderChoice,
+} from '../../_flow'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
- * Dynamics BC OAuth callback: decrypt `state` for {orgId, connectionId},
- * exchange the code with THAT connection's Entra app creds, resolve the first
- * company in the BC environment, and merge tokens + companyId back onto the row.
+ * Dynamics BC OAuth callback: consume the one-time cookie nonce, decrypt
+ * `state` for {orgId, connectionId}, exchange the code with THAT connection's
+ * Entra app creds, pin the company (prior stored id, or the only company —
+ * never the first row of a longer list), and merge tokens + companyId back
+ * onto the row.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
-  const back = (status: string) => NextResponse.redirect(new URL(`/sync?oauth=${status}`, req.url))
 
-  if (url.searchParams.get('error')) return back('denied')
+  if (url.searchParams.get('error')) return connectionOauthBounce('denied')
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
-  if (!code || !state) return back('invalid')
+  if (!code || !state) return connectionOauthBounce('invalid')
 
-  const st = unsealJson<{ orgId: string; connectionId: string }>(state)
-  if (!st?.orgId || !st?.connectionId) return back('badstate')
-  if (st.orgId !== gate.user.orgId) return back('badstate')
+  const st = acceptConnectionOauthState(state, connectionOauthCookieValue(req))
+  if (!st) return connectionOauthBounce('badstate')
+  if (st.orgId !== gate.user.orgId) return connectionOauthBounce('badstate')
   const conn = await getConnection(st.orgId, st.connectionId)
-  if (!conn || conn.source !== 'dynamics') return back('notfound')
+  if (!conn || conn.source !== 'dynamics') return connectionOauthBounce('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
-  const cfg = conn.config as { aadTenantId?: string; environment?: string }
-  if (!secret?.clientId || !secret?.clientSecret) return back('nocreds')
-  if (!cfg.aadTenantId || !cfg.environment) return back('nocreds')
+  const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string }
+  if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
+  if (!cfg.aadTenantId || !cfg.environment) return connectionOauthBounce('nocreds')
 
   const app: DynamicsApp = {
     clientId: secret.clientId,
     clientSecret: secret.clientSecret,
-    redirectUri: `${url.origin}/api/platform/connections/oauth/dynamics/callback`,
+    redirectUri: connectionOauthRedirectUri('dynamics'),
     aadTenantId: cfg.aadTenantId,
   }
   try {
     const tokens = await exchangeCode(app, code)
     const companies = await listCompanies(tokens.accessToken, cfg.aadTenantId, cfg.environment)
-    const company = companies[0]
-    if (!company) return back('nocompany')
+    const pinned = pinProviderChoice(companies, cfg.companyId, (company) => company.id, 'nocompany')
+    if (!pinned.ok) return connectionOauthBounce(pinned.status)
+    const company = pinned.item
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const displayName = `${company.displayName ?? company.name} (Business Central)`
@@ -98,9 +107,9 @@ export async function GET(req: Request) {
       })
       return true
     })
-    if (!connected) return back('error')
-    return back('connected')
+    if (!connected) return connectionOauthBounce('error')
+    return connectionOauthBounce('connected')
   } catch {
-    return back('error')
+    return connectionOauthBounce('error')
   }
 }
