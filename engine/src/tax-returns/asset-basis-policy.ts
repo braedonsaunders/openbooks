@@ -9,9 +9,13 @@
  * - Treas. Reg. 1.168(i)-8(d)(1) / Pub 544: sale of a portion is a REQUIRED
  *   partial disposition — native partial_disposal does not need an election.
  * - CRA NAL worksheets: transferor CHARACTER (individual/partnership vs
- *   corporation/nonresident), payment vs SELLER COST, not FMV. s.69 deemed
- *   proceeds is a separate rule and is mandatory on non-arm's-length transfers
- *   that are not a declared rollover.
+ *   corporation/nonresident), payment vs SELLER COST, not FMV.
+ * - ITA 69(1)(b)(i) lifts seller proceeds to FMV only when proceeds are nil
+ *   or below FMV; above-FMV actual proceeds are not reduced. ITA 69(1)(a)
+ *   separately caps the buyer's excessive acquisition price at FMV.
+ * - Pub 544 amount realized is money + FMV of other property/services +
+ *   assumed liabilities. Related status does not substitute the transferred
+ *   asset's FMV; a §482 or other deemed-value adjustment must be evidenced.
  */
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
@@ -88,6 +92,9 @@ export type UsRecognition = (typeof US_RECOGNITIONS)[number];
 
 export const US_SHORT_YEAR_METHODS = ["simplified", "allocation"] as const;
 export type UsShortYearMethod = (typeof US_SHORT_YEAR_METHODS)[number];
+
+export const US_AMOUNT_REALIZED_RULES = ["amount_realized", "section_482", "other_evidenced"] as const;
+export type UsAmountRealizedRule = (typeof US_AMOUNT_REALIZED_RULES)[number];
 
 export const NZ_ASSOCIATE_COST_BASES = ["original_cost", "first_business_use_fmv"] as const;
 export type NzAssociateCostBasis = (typeof NZ_ASSOCIATE_COST_BASES)[number];
@@ -265,7 +272,9 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   recognition: UsRecognition;
   relatedPerson: boolean;
   statutoryProceeds?: string;
-  fairMarketValue?: string;
+  amountRealizedRule?: UsAmountRealizedRule;
+  adjustedAmountRealized?: string;
+  deemedValueAdjustmentEvidence?: string;
   buyerCost?: string;
   carryoverBasis?: string;
   excessBasis?: string;
@@ -384,19 +393,32 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
   },
   {
     name: "statutoryProceeds",
-    label: "Actual proceeds of disposition",
+    label: "Actual proceeds / amount realized",
     kind: "decimal",
     visibleWhen: { any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] },
-    requiredWhen: { all: [{ any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] }, { relationship: "arms_length" }] },
-    help: "Not used as the seller UCC reduction on a non-arm's-length transfer unless a rollover is declared. ITA 69 deems proceeds at FMV.",
+    requiredWhen: { any: [
+      { all: [{ regime: "ca_cca" }, { not: { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } } }] },
+      { all: [{ regime: "uk_wda" }, { relationship: "arms_length" }] },
+      { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    ] },
+    help: "Enter the actual proceeds. ITA 69(1)(b)(i) substitutes FMV only when CA non-arm's-length proceeds are nil or below FMV; above-FMV proceeds are not reduced. US Pub 544 amount realized is money plus FMV of other property or services plus assumed liabilities — not the FMV of the transferred asset merely because related.",
   },
   {
     name: "fairMarketValue",
     label: "Fair market value",
     kind: "decimal",
-    visibleWhen: { any: [{ relationship: "non_arms_length" }, { all: [{ regime: "uk_wda" }, { fieldTrue: "saleBelowMarket" }] }, { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] }] },
-    requiredWhen: { any: [{ all: [{ relationship: "non_arms_length" }, { not: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } }] } }] }, { all: [{ regime: "uk_wda" }, { fieldTrue: "saleBelowMarket" }, { not: { fieldTrue: "buyerCanClaimPma" } }] }] },
-    help: "ITA 69 / CAA 2001 s.61 item 2 / ITAA 1997 s.40-300 item 6. Separate from the CRA payment-versus-seller-cost capital-cost rule.",
+    visibleWhen: { any: [
+      { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }] },
+      { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
+      { all: [{ regime: "uk_wda" }, { fieldTrue: "saleBelowMarket" }] },
+      { all: [{ regime: "au_pool" }, { relationship: "non_arms_length" }] },
+    ] },
+    requiredWhen: { any: [
+      { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, { not: { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } } }] },
+      { all: [{ regime: "uk_wda" }, { fieldTrue: "saleBelowMarket" }, { not: { fieldTrue: "buyerCanClaimPma" } }] },
+      { all: [{ regime: "au_pool" }, { relationship: "non_arms_length" }] },
+    ] },
+    help: "ITA 69(1) comparison value / CAA 2001 s.61 item 2 / ITAA 1997 s.40-300 item 6. Separate from the CRA 13(7)(e) payment-versus-seller-cost rule. Not the US amount realized.",
   },
   {
     name: "payment",
@@ -404,7 +426,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
     requiredWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
-    help: "Compared to the seller's original cost under ITA 13(7)(e) / the CRA non-arm's-length page. Not compared to FMV. Buyer capital cost — not collected on a sale to a customer.",
+    help: "ITA 69(1)(a) first caps an excessive purchase at FMV. 13(7)(e) then compares that deemed payment to the seller's original cost, not to FMV. Buyer capital cost — not collected on a sale to a customer.",
   },
   {
     name: "sellerOriginalCapitalCost",
@@ -728,6 +750,34 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     requiredWhen: { regime: "us_macrs" },
   },
   {
+    name: "amountRealizedRule",
+    label: "Amount realized rule",
+    kind: "enum",
+    choices: labeledChoices(US_AMOUNT_REALIZED_RULES, {
+      amount_realized: "Pub 544 amount realized (money + FMV of other property or services + assumed liabilities)",
+      section_482: "Section 482 deemed-value adjustment (evidenced)",
+      other_evidenced: "Other independently evidenced deemed-value adjustment",
+    }),
+    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    help: "Related-person status does not replace amount realized with the FMV of the transferred asset. A §482 or other deemed-value adjustment must be independently evidenced.",
+  },
+  {
+    name: "adjustedAmountRealized",
+    label: "Adjusted amount realized",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "amountRealizedRule", values: ["section_482", "other_evidenced"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "amountRealizedRule", values: ["section_482", "other_evidenced"] } }] },
+  },
+  {
+    name: "deemedValueAdjustmentEvidence",
+    label: "Deemed-value adjustment evidence",
+    kind: "text",
+    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "amountRealizedRule", values: ["section_482", "other_evidenced"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "amountRealizedRule", values: ["section_482", "other_evidenced"] } }] },
+    help: "Related-person status alone is not this evidence.",
+  },
+  {
     name: "carryoverBasis",
     label: "Carryover basis",
     kind: "decimal",
@@ -839,8 +889,9 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "regime", "relationship", "dispositionTrigger", "partialDispositionElection",
     "originalUnadjustedBasis", "remainingUnadjustedBasis", "disposedUnadjustedBasis",
     "placedInServiceOn", "recoveryPeriodYears", "method", "convention", "recognition",
-    "relatedPerson", "statutoryProceeds", "fairMarketValue", "buyerCost", "carryoverBasis",
-    "excessBasis", "shortYearMethod",
+    "relatedPerson", "statutoryProceeds", "amountRealizedRule", "adjustedAmountRealized",
+    "deemedValueAdjustmentEvidence", "buyerCost", "carryoverBasis", "excessBasis",
+    "shortYearMethod",
   ],
 };
 
@@ -943,10 +994,17 @@ function validateCa(draft: TaxBasisDraft): CaCcaRegimeBasis {
       throw new TaxBasisPolicyError("allocationFraction must be greater than 0 and at most 1");
     }
   }
-  if (draft.relationship === "non_arms_length" && draft.rolloverElection === "none" && draft.fairMarketValue == null) {
-    throw new TaxBasisPolicyError(
-      "a non-arm's-length CCA transfer without a rollover must declare fairMarketValue so ITA 69 deemed proceeds are not silently replaced by actual proceeds",
-    );
+  if (draft.relationship === "non_arms_length" && draft.rolloverElection === "none") {
+    if (draft.fairMarketValue == null || draft.fairMarketValue === "") {
+      throw new TaxBasisPolicyError(
+        "a non-arm's-length CCA transfer without a rollover must declare fairMarketValue so ITA 69(1)(b)(i) can lift nil or below-FMV proceeds; above-FMV actual proceeds are not reduced",
+      );
+    }
+    if (draft.statutoryProceeds == null || draft.statutoryProceeds === "") {
+      throw new TaxBasisPolicyError(
+        "a non-arm's-length CCA transfer without a rollover must declare actual statutoryProceeds (0.00 if none) so ITA 69(1)(b)(i) does not silently replace above-FMV proceeds with FMV",
+      );
+    }
   }
   if (draft.relationship === "non_arms_length" && draft.sourceOperation === "intercompany_transfer") {
     const inclusion = moneyExact(draft.capitalGainsInclusionRate, "capitalGainsInclusionRate");
@@ -1016,6 +1074,15 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
   if (draft.recognition === "nontaxable" && draft.sourceOperation !== "intercompany_transfer") {
     throw new TaxBasisPolicyError(
       "a nontaxable MACRS carryover belongs on the receiving asset of an intercompany_transfer; a sale to a customer is a taxable disposition — do not record buyer carryover on a partial_disposal",
+    );
+  }
+  if (
+    draft.recognition === "taxable" &&
+    (draft.amountRealizedRule === "section_482" || draft.amountRealizedRule === "other_evidenced") &&
+    String(draft.deemedValueAdjustmentEvidence ?? "").trim().length < 8
+  ) {
+    throw new TaxBasisPolicyError(
+      "a §482 or other deemed-value adjustment requires independent evidence; related-person status is not that evidence and does not substitute the transferred asset's FMV for Pub 544 amount realized",
     );
   }
   return stripDraftContext(draft) as unknown as UsMacrsRegimeBasis;
@@ -1112,14 +1179,27 @@ export function allocatedCaCapitalCost(row: CaCcaRegimeBasis): string {
   return formatMoney(mulRatio(original, toUnits(part), toUnits(whole)), 2);
 }
 
+/** ITA 69(1)(b)(i): nil or below-FMV NAL proceeds become FMV; above-FMV actual
+ *  proceeds are not reduced. https://laws-lois.justice.gc.ca/eng/acts/I-3.3/section-69.html */
 export function caStatutoryProceeds(row: CaCcaRegimeBasis): string {
   if (row.rolloverElection !== "none") {
     return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "electedAmount"), 2);
   }
-  if (row.relationship === "non_arms_length") {
-    return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "fairMarketValue"), 2);
+  const actual = requireMoney(row as unknown as TaxBasisDraft, "statutoryProceeds");
+  if (row.relationship !== "non_arms_length") return formatMoney(actual, 2);
+  const market = requireMoney(row as unknown as TaxBasisDraft, "fairMarketValue");
+  return formatMoney(cmp(actual, market) < 0 ? market : actual, 2);
+}
+
+/** ITA 69(1)(a): buyer who paid more than FMV is deemed to have acquired at
+ *  FMV. Payment at or below FMV is not increased. */
+export function caDeemedAcquisitionPayment(row: CaCcaRegimeBasis): string {
+  const payment = requireMoney(row as unknown as TaxBasisDraft, "payment");
+  if (row.relationship !== "non_arms_length" || row.rolloverElection !== "none") {
+    return formatMoney(payment, 2);
   }
-  return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "statutoryProceeds"), 2);
+  const market = requireMoney(row as unknown as TaxBasisDraft, "fairMarketValue");
+  return formatMoney(cmp(payment, market) > 0 ? market : payment, 2);
 }
 
 export function caDispositionAmount(row: CaCcaRegimeBasis): string {
@@ -1134,7 +1214,7 @@ export function caBuyerAddition(row: CaCcaRegimeBasis): string | null {
     return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "electedAmount"), 2);
   }
   return computeCaNalCapitalCost({
-    payment: row.payment!,
+    payment: caDeemedAcquisitionPayment(row),
     sellerOriginalCapitalCost: row.sellerOriginalCapitalCost!,
     transferorCharacter: row.transferorCharacter!,
     capitalGainsInclusionRate: row.capitalGainsInclusionRate!,
@@ -1191,9 +1271,18 @@ export function nzBuyerDepreciationCost(row: NzPoolRegimeBasis): string {
   return formatMoney(cmp(price, cap) <= 0 ? price : cap, 2);
 }
 
+/** Pub 544 amount realized: money + FMV of other property/services + assumed
+ *  liabilities. Related status does not substitute the transferred asset's FMV.
+ *  https://www.irs.gov/publications/p544 */
 export function usDispositionProceeds(row: UsMacrsRegimeBasis): string {
-  if (row.relationship === "non_arms_length") {
-    return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "fairMarketValue"), 2);
+  const rule = row.amountRealizedRule ?? "amount_realized";
+  if (rule !== "amount_realized") {
+    if (String(row.deemedValueAdjustmentEvidence ?? "").trim().length < 8) {
+      throw new TaxBasisPolicyError(
+        "a §482 or other deemed-value adjustment requires independent evidence; related-person status is not that evidence and does not substitute the transferred asset's FMV for Pub 544 amount realized",
+      );
+    }
+    return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "adjustedAmountRealized"), 2);
   }
   return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "statutoryProceeds"), 2);
 }

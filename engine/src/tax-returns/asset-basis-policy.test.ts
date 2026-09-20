@@ -6,12 +6,17 @@ import {
   TAX_BASIS_REGIMES,
   TAX_BASIS_RELATIONSHIPS,
   TaxBasisPolicyError,
+  caDeemedAcquisitionPayment,
+  caStatutoryProceeds,
   isTaxBasisCalendarDate,
   taxBasisFieldRequired,
   taxBasisFieldVisible,
+  usDispositionProceeds,
   validateTaxRegimeBasis,
+  type CaCcaRegimeBasis,
   type TaxBasisDraft,
   type TaxBasisFieldPredicate,
+  type UsMacrsRegimeBasis,
 } from "./asset-basis-policy.ts";
 
 function field(name: string) {
@@ -106,8 +111,24 @@ test("seller ITA 69 fair market value stays required on a CA non-arm's-length sa
     rolloverElection: "none",
   };
   assert.equal(taxBasisFieldRequired(field("fairMarketValue"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("statutoryProceeds"), draft), true);
   assert.equal(taxBasisFieldRequired(field("payment"), draft), false);
   assert.equal(taxBasisFieldRequired(field("originalCapitalCost"), draft), true);
+});
+
+test("US related status does not require the transferred asset's FMV as amount realized", () => {
+  const draft: TaxBasisDraft = {
+    regime: "us_macrs",
+    relationship: "non_arms_length",
+    sourceOperation: "partial_disposal",
+    recognition: "taxable",
+    amountRealizedRule: "amount_realized",
+  };
+  assert.equal(taxBasisFieldRequired(field("statutoryProceeds"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("amountRealizedRule"), draft), true);
+  assert.equal(taxBasisFieldVisible(field("fairMarketValue"), draft), false);
+  assert.equal(taxBasisFieldRequired(field("fairMarketValue"), draft), false);
+  assert.equal(taxBasisFieldRequired(field("adjustedAmountRealized"), draft), false);
 });
 
 test("CA buyer capital-cost facts become required on an intercompany non-arm's-length transfer", () => {
@@ -163,6 +184,7 @@ test("validateTaxRegimeBasis accepts a CA non-arm's-length partial disposal with
     allocationMethod: "ascertainable_amount",
     allocatedCapitalCost: "4000.00",
     fairMarketValue: "5000.00",
+    statutoryProceeds: "5000.00",
     rolloverElection: "none",
   });
   assert.equal(row.regime, "ca_cca");
@@ -181,6 +203,7 @@ test("validateTaxRegimeBasis refuses a CA intercompany non-arm's-length transfer
         allocationMethod: "ascertainable_amount",
         allocatedCapitalCost: "4000.00",
         fairMarketValue: "5000.00",
+        statutoryProceeds: "5000.00",
         rolloverElection: "none",
       }),
     /payment is required/,
@@ -232,8 +255,76 @@ test("placedInServiceOn rejects a non-calendar day and accepts a real one", () =
         recognition: "taxable",
         relatedPerson: false,
         statutoryProceeds: "3500.00",
+        amountRealizedRule: "amount_realized",
       }),
     /placedInServiceOn must be a calendar date/,
     "impossible calendar day",
+  );
+});
+
+const caNal = (over: Partial<CaCcaRegimeBasis>): CaCcaRegimeBasis => ({
+  regime: "ca_cca",
+  relationship: "non_arms_length",
+  originalCapitalCost: "800.00",
+  allocationMethod: "ascertainable_amount",
+  allocatedCapitalCost: "800.00",
+  rolloverElection: "none",
+  statutoryProceeds: "1200.00",
+  fairMarketValue: "1000.00",
+  payment: "1200.00",
+  sellerOriginalCapitalCost: "800.00",
+  transferorCharacter: "corporation",
+  capitalGainsInclusionRate: "0.5",
+  ...over,
+});
+
+test("ITA 69(1)(b)(i) keeps above-FMV actual proceeds and lifts only nil or below-FMV proceeds", () => {
+  assert.equal(caStatutoryProceeds(caNal({ statutoryProceeds: "1200.00", fairMarketValue: "1000.00" })), "1200.00");
+  assert.equal(caStatutoryProceeds(caNal({ statutoryProceeds: "800.00", fairMarketValue: "1000.00" })), "1000.00");
+  assert.equal(caStatutoryProceeds(caNal({ statutoryProceeds: "0.00", fairMarketValue: "1000.00" })), "1000.00");
+  assert.equal(caStatutoryProceeds(caNal({ statutoryProceeds: "1000.00", fairMarketValue: "1000.00" })), "1000.00");
+});
+
+test("ITA 69(1)(a) caps only the buyer's excessive acquisition price", () => {
+  assert.equal(caDeemedAcquisitionPayment(caNal({ payment: "1200.00", fairMarketValue: "1000.00" })), "1000.00");
+  assert.equal(caDeemedAcquisitionPayment(caNal({ payment: "800.00", fairMarketValue: "1000.00" })), "800.00");
+});
+
+test("Pub 544 amount realized is not replaced by the transferred asset's FMV merely because related", () => {
+  const related: UsMacrsRegimeBasis = {
+    regime: "us_macrs",
+    relationship: "non_arms_length",
+    dispositionTrigger: "sale",
+    originalUnadjustedBasis: "10000.00",
+    remainingUnadjustedBasis: "6000.00",
+    disposedUnadjustedBasis: "4000.00",
+    placedInServiceOn: "2024-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    recognition: "taxable",
+    relatedPerson: true,
+    statutoryProceeds: "1200.00",
+    amountRealizedRule: "amount_realized",
+  };
+  assert.equal(usDispositionProceeds(related), "1200.00");
+  throwsPolicy(
+    () =>
+      usDispositionProceeds({
+        ...related,
+        amountRealizedRule: "section_482",
+        adjustedAmountRealized: "1000.00",
+      }),
+    /related-person status is not that evidence/,
+    "§482 without evidence",
+  );
+  assert.equal(
+    usDispositionProceeds({
+      ...related,
+      amountRealizedRule: "section_482",
+      adjustedAmountRealized: "1000.00",
+      deemedValueAdjustmentEvidence: "Form 5472 contemporaneous 482 study ref A-19",
+    }),
+    "1000.00",
   );
 });
