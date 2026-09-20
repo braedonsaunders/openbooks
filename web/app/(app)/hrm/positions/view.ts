@@ -3,9 +3,9 @@ import { notFound } from 'next/navigation'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { HrmPositionError } from '@openbooks/engine/src/hrm/positions.ts'
 import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
-import { hrmGroupTabs } from '../../../components/module-home/group-tabs'
-import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
+import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 
 /**

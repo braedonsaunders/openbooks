@@ -184,6 +184,7 @@ test("the registry gate admits only each tool's grant holders while hrm is on", 
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
   for (const name of TOOL_NAMES) {
     const perm = TOOL_PERMS[name];
+    assert.ok(perm, `${name} has a declared permission`);
     const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);

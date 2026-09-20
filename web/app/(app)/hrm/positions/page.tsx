@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PageHeader, UrlDrawer } from '@openbooks/ui'
-import { ModuleHomeTabs } from '../../../components/module-home/ui'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { loadPositionsPage, positionsTitle } from './view'
 import { PositionDrawerBody, PositionsTable } from './sections'
 
