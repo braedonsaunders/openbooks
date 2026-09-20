@@ -5,7 +5,7 @@ import { formatInZone } from "../platform/business-date.ts";
 import { now, withSimClock } from "../platform/clock.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { payRunReadiness, payrollSetupState } from "./readiness.ts";
+import { payRunReadiness, payrollSetupState, setupTaxYearCheck } from "./readiness.ts";
 import { orgYearEndFilings } from "./yearend.ts";
 import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
 import { qcRatesForPayDate } from "./canada/quebec/rates.ts";
@@ -122,6 +122,37 @@ test("a draft year tells the operator it is not available, with no developer rem
   assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
   // The developer remedy is unchanged for engine throws and logs.
   assert.match(problem!.message, /placeholder values/);
+});
+
+test("the setup check reports an unpublished year in operator text", () => {
+  // Asserts on the CHECK the setup surface reads — code, verdict, detail,
+  // href as one object — not on the composer. A call site reading the wrong
+  // field passes a composer-level test and fails here, which is exactly the
+  // defect this guards: setup.taxYear once shipped problem.message.
+  // REALISTIC: in 2025 the ES pack (2026 only) blocks setup, naming ES, the
+  // requested year, and the published year, with no developer remedy.
+  const check = setupTaxYearCheck("ES", "2025-06-15", "/admin/setup/payroll");
+  assert.equal(check.code, "setup.taxYear");
+  assert.equal(check.severity, "blocker");
+  assert.equal(check.ok, false);
+  assert.equal(check.href, "/admin/setup/payroll?tab=packs");
+  const detail = check.detail ?? "";
+  assert.match(detail, /ES/);
+  assert.match(detail, /2025/);
+  assert.match(detail, /2026/);
+  assert.match(detail, /No action in the product/);
+  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(
+    !detail.includes(payrollTaxYearSupport("ES").ratesModule),
+    `setup detail must not name the rates module:\n${detail}`,
+  );
+  assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
+  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+  // And a loaded year stays a passing check naming the pack and the year.
+  const okCheck = setupTaxYearCheck("ES", "2026-06-15", "/admin/setup/payroll");
+  assert.equal(okCheck.ok, true);
+  assert.equal(okCheck.detail, "ES · 2026");
+  assert.equal(okCheck.href, "/admin/setup/payroll?tab=packs");
 });
 
 test("a country with no pack tells the operator there is nothing to load", () => {
