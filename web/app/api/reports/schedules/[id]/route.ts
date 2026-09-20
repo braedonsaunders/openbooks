@@ -8,7 +8,7 @@ import {
   validateCadenceInput,
 } from '@openbooks/reports'
 import { loadReportDefinition } from '../../../../../lib/custom-reports'
-import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../../lib/report-execution-context'
+import { canAccessReportArtifact, canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -99,13 +99,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'At least one recipient is required for an active schedule' }, { status: 422 })
     }
     const nextRunAt = computeNextRunAt(cadence)
+    // Cadence, recipients, and active are editable. authorization_snapshot is
+    // the original pin (principal + allowedSubsidiaryIds; null = every legal
+    // entity). scheduledReportAuthz reuses that pin; later grants cannot
+    // widen it. An editor who canAccessReportArtifact of a narrower pin must
+    // not replace it with snapshotReportAuthorization of their current
+    // allowlist — that is how an org-unrestricted reports.schedule editor
+    // would persist allowedSubsidiaryIds: null over a restricted schedule.
     const updated = (await db.execute<ScheduleRow>(sql`
       update report_schedules set
         cadence = ${cadence.cadence}, day_of_week = ${cadence.dayOfWeek}, day_of_month = ${cadence.dayOfMonth},
         hour = ${cadence.hour}, minute = ${cadence.minute}, timezone = ${cadence.timezone},
         recipient_emails = ${JSON.stringify(recipients)}::jsonb,
         next_run_at = ${nextRunAt.toISOString()}, active = ${active},
-        authorization_snapshot = ${JSON.stringify(snapshotReportAuthorization(gate, def))}::jsonb,
         updated_at = now(), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
       returning *
