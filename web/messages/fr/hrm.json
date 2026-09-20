@@ -7,7 +7,15 @@
       "positions": "Postes",
       "processes": "Processus",
       "leave": "Congés",
-      "myLeave": "Mes congés"
+      "myLeave": "Mes congés",
+      "recruiting": "Recrutement"
+    },
+    "recruiting": {
+      "title": "Recrutement",
+      "open": "Réquisitions ouvertes",
+      "awaiting": "Offres en attente de réponse",
+      "interviews": "Entretiens cette semaine",
+      "viewAll": "Ouvrir le recrutement"
     },
     "vitals": {
       "headcount": "Effectif",
@@ -480,5 +488,128 @@
     "timeKind": "temps",
     "valueKind": "valeur",
     "unlimited": "Illimité"
+  },
+  "recruiting": {
+    "title": "Recrutement",
+    "description": "Du besoin à l'embauche : réquisitions du plan d'effectifs, candidats dans le parcours, entretiens, offres et embauche.",
+    "add": "Nouvelle réquisition",
+    "empty": "Aucune réquisition pour ce filtre.",
+    "total": "Totaux",
+    "segmentsLabel": "Statut",
+    "statusAll": "Tous les statuts",
+    "status": {
+      "draft": "Brouillon",
+      "open": "Ouverte",
+      "on_hold": "En pause",
+      "filled": "Pourvue",
+      "cancelled": "Annulée"
+    },
+    "columns": {
+      "number": "Numéro",
+      "title": "Titre",
+      "position": "Poste",
+      "department": "Département",
+      "headcount": "Pourvues / plan",
+      "hiringManager": "Responsable d'embauche",
+      "opened": "Ouverture",
+      "status": "Statut"
+    },
+    "drawer": {
+      "title": "Réquisition {number}",
+      "pipeline": "Parcours",
+      "applications": "Candidatures",
+      "noApplications": "Aucun candidat rattaché pour l'instant.",
+      "candidate": "Candidat",
+      "stage": "Étape",
+      "applied": "Candidature",
+      "lastEvent": "Dernier événement",
+      "interviews": "Entretiens",
+      "offer": "Offre",
+      "timeToFill": "Délai de pourvoi",
+      "days": "jours",
+      "missing": "Ce dossier n'est plus visible."
+    },
+    "create": {
+      "titleField": "Titre",
+      "employer": "Employeur",
+      "department": "Département",
+      "noDepartment": "Sans département",
+      "headcount": "Postes",
+      "targetStart": "Début visé",
+      "submit": "Créer la réquisition",
+      "failed": "La réquisition n'a pas pu être créée."
+    },
+    "attach": {
+      "title": "Rattacher un candidat",
+      "name": "Nom",
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "submit": "Rattacher le candidat",
+      "failed": "Le candidat n'a pas pu être rattaché.",
+      "rejectTitle": "Refuser",
+      "rejectReason": "Motif"
+    },
+    "move": {
+      "title": "Changer d'étape",
+      "submit": "Déplacer",
+      "failed": "La candidature n'a pas pu être déplacée.",
+      "reject": "Refuser",
+      "withdraw": "Retirer"
+    },
+    "interview": {
+      "title": "Planifier un entretien",
+      "kind": "Type",
+      "when": "Quand",
+      "duration": "Durée en minutes",
+      "location": "Lieu",
+      "panel": "Jury",
+      "submit": "Planifier l'entretien",
+      "failed": "L'entretien n'a pas pu être planifié.",
+      "completeTitle": "Clore",
+      "outcome": "Issue",
+      "feedback": "Retour",
+      "completeSubmit": "Clore l'entretien",
+      "cancel": "Annuler l'entretien"
+    },
+    "interviewKind": {
+      "phone": "Téléphone",
+      "video": "Vidéo",
+      "onsite": "Sur site",
+      "panel": "Jury",
+      "assessment": "Évaluation"
+    },
+    "interviewOutcome": {
+      "advance": "Avancer",
+      "hold": "En attente",
+      "reject": "Refuser"
+    },
+    "offerCard": {
+      "title": "Rédiger les conditions",
+      "job": "Intitulé",
+      "start": "Date de début",
+      "amount": "Montant",
+      "currency": "Devise",
+      "basis": "Base",
+      "expires": "Expire",
+      "submit": "Rédiger l'offre",
+      "failed": "L'offre n'a pas pu être rédigée."
+    },
+    "offerActions": {
+      "send": "Envoyer",
+      "accept": "Accepter et embaucher",
+      "decline": "Refuser",
+      "withdraw": "Retirer",
+      "reason": "Motif",
+      "failed": "L'action sur l'offre a échoué."
+    },
+    "basis": {
+      "hourly": "Horaire",
+      "annual": "Annuelle"
+    },
+    "candidate": {
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "source": "Origine"
+    }
   }
 }

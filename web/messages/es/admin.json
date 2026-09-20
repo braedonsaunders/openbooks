@@ -837,6 +837,8 @@
     "hrm_leave_request": "Solicitar ausencias para el propio empleo",
     "hrm_leave_approve": "Decidir solicitudes de ausencias",
     "hrm_leave_manage": "Configurar tipos y políticas de ausencias",
+    "hrm_recruiting_read": "Ver el proceso de contratación",
+    "hrm_recruiting_manage": "Gestionar requisiciones, candidatos, entrevistas y ofertas",
     "hrm_employment_manage": "Redactar cambios de empleo",
     "hrm_employment_approve": "Decidir cambios de empleo",
     "hrm_position_read": "Ver puestos y el plan de plantilla",
@@ -3104,6 +3106,14 @@
         "none": "Ninguno",
         "carry_all": "Arrastrar todo",
         "carry_up_to": "Arrastrar hasta un tope"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Preselección",
+        "interview": "Entrevista",
+        "assessment": "Prueba",
+        "offer": "Oferta",
+        "hired": "Contratado",
+        "rejected": "Rechazado"
       }
     },
     "laborCosting": {

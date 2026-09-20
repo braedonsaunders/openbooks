@@ -7,7 +7,15 @@
       "positions": "职位",
       "processes": "流程",
       "leave": "休假",
-      "myLeave": "我的休假"
+      "myLeave": "我的休假",
+      "recruiting": "招聘"
+    },
+    "recruiting": {
+      "title": "招聘",
+      "open": "进行中的需求",
+      "awaiting": "待回复的录用通知",
+      "interviews": "本周面试",
+      "viewAll": "打开招聘"
     },
     "vitals": {
       "headcount": "人员数量",
@@ -480,5 +488,128 @@
     "timeKind": "时间",
     "valueKind": "金额",
     "unlimited": "无限制"
+  },
+  "recruiting": {
+    "title": "招聘",
+    "description": "从空缺到入职: 针对编制计划的招聘需求、选拔漏斗中的候选人、面试、录用通知及入职。",
+    "add": "新建需求",
+    "empty": "没有符合此筛选的需求。",
+    "total": "合计",
+    "segmentsLabel": "状态",
+    "statusAll": "全部状态",
+    "status": {
+      "draft": "草稿",
+      "open": "进行中",
+      "on_hold": "已暂停",
+      "filled": "已满额",
+      "cancelled": "已取消"
+    },
+    "columns": {
+      "number": "编号",
+      "title": "标题",
+      "position": "岗位",
+      "department": "部门",
+      "headcount": "已入职 / 计划",
+      "hiringManager": "招聘负责人",
+      "opened": "开启",
+      "status": "状态"
+    },
+    "drawer": {
+      "title": "需求 {number}",
+      "pipeline": "流程",
+      "applications": "应聘",
+      "noApplications": "暂无关联候选人。",
+      "candidate": "候选人",
+      "stage": "阶段",
+      "applied": "应聘日期",
+      "lastEvent": "最近事件",
+      "interviews": "面试",
+      "offer": "录用通知",
+      "timeToFill": "填补用时",
+      "days": "天",
+      "missing": "此记录已不可见。"
+    },
+    "create": {
+      "titleField": "标题",
+      "employer": "雇主",
+      "department": "部门",
+      "noDepartment": "无部门",
+      "headcount": "人数",
+      "targetStart": "目标到岗",
+      "submit": "创建需求",
+      "failed": "无法创建需求。"
+    },
+    "attach": {
+      "title": "关联候选人",
+      "name": "姓名",
+      "email": "邮箱",
+      "phone": "电话",
+      "submit": "关联候选人",
+      "failed": "无法关联候选人。",
+      "rejectTitle": "拒绝",
+      "rejectReason": "原因"
+    },
+    "move": {
+      "title": "移动阶段",
+      "submit": "移动",
+      "failed": "无法移动应聘。",
+      "reject": "拒绝",
+      "withdraw": "撤回"
+    },
+    "interview": {
+      "title": "安排面试",
+      "kind": "类型",
+      "when": "时间",
+      "duration": "分钟",
+      "location": "地点",
+      "panel": "面试官",
+      "submit": "安排面试",
+      "failed": "无法安排面试。",
+      "completeTitle": "完成",
+      "outcome": "结果",
+      "feedback": "反馈",
+      "completeSubmit": "完成面试",
+      "cancel": "取消面试"
+    },
+    "interviewKind": {
+      "phone": "电话",
+      "video": "视频",
+      "onsite": "现场",
+      "panel": "面试组",
+      "assessment": "测评"
+    },
+    "interviewOutcome": {
+      "advance": "晋级",
+      "hold": "待定",
+      "reject": "拒绝"
+    },
+    "offerCard": {
+      "title": "拟定条件",
+      "job": "岗位名称",
+      "start": "开始日期",
+      "amount": "金额",
+      "currency": "币种",
+      "basis": "基准",
+      "expires": "到期",
+      "submit": "拟定通知",
+      "failed": "无法拟定录用通知。"
+    },
+    "offerActions": {
+      "send": "发送",
+      "accept": "接受并入职",
+      "decline": "拒绝",
+      "withdraw": "撤回",
+      "reason": "原因",
+      "failed": "录用通知操作失败。"
+    },
+    "basis": {
+      "hourly": "按小时",
+      "annual": "按年"
+    },
+    "candidate": {
+      "email": "邮箱",
+      "phone": "电话",
+      "source": "来源"
+    }
   }
 }

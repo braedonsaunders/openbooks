@@ -837,6 +837,8 @@
     "hrm_leave_request": "Solicitar licença para o próprio emprego",
     "hrm_leave_approve": "Decidir solicitações de licença",
     "hrm_leave_manage": "Configurar tipos e políticas de licença",
+    "hrm_recruiting_read": "Ver o funil de recrutamento",
+    "hrm_recruiting_manage": "Gerenciar requisições, candidatos, entrevistas e ofertas",
     "hrm_employment_manage": "Redigir alterações de emprego",
     "hrm_employment_approve": "Decidir alterações de emprego",
     "hrm_position_read": "Ver posições e o plano de headcount",
@@ -3149,6 +3151,14 @@
         "none": "Nenhuma",
         "carry_all": "Transferir tudo",
         "carry_up_to": "Transferir até um limite"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Triagem",
+        "interview": "Entrevista",
+        "assessment": "Avaliação",
+        "offer": "Oferta",
+        "hired": "Contratado",
+        "rejected": "Recusado"
       }
     },
     "payroll": {

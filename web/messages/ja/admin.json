@@ -837,6 +837,8 @@
     "hrm_leave_request": "自身の雇用の休暇申請",
     "hrm_leave_approve": "休暇申請の承認",
     "hrm_leave_manage": "休暇種別とポリシーの設定",
+    "hrm_recruiting_read": "採用ファネルを表示",
+    "hrm_recruiting_manage": "求人、候補者、面接、オファーを管理",
     "hrm_employment_manage": "雇用変更の作成",
     "hrm_employment_approve": "雇用変更の決定",
     "hrm_position_read": "ポジションと人員計画の表示",
@@ -3217,6 +3219,14 @@
         "none": "なし",
         "carry_all": "全額繰越",
         "carry_up_to": "上限まで繰越"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "書類選考",
+        "interview": "面接",
+        "assessment": "アセスメント",
+        "offer": "オファー",
+        "hired": "採用",
+        "rejected": "不採用"
       }
     },
     "invoicing": {

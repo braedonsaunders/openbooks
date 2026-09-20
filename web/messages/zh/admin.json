@@ -837,6 +837,8 @@
     "hrm_leave_request": "为本人雇佣关系申请休假",
     "hrm_leave_approve": "审批休假申请",
     "hrm_leave_manage": "配置休假类型和政策",
+    "hrm_recruiting_read": "查看招聘漏斗",
+    "hrm_recruiting_manage": "管理招聘需求、候选人、面试和录用通知",
     "hrm_employment_manage": "编写雇用变更",
     "hrm_employment_approve": "决定雇用变更",
     "hrm_position_read": "查看职位和人员编制计划",
@@ -3149,6 +3151,14 @@
         "none": "不结转",
         "carry_all": "全部结转",
         "carry_up_to": "结转至上限"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "筛选",
+        "interview": "面试",
+        "assessment": "测评",
+        "offer": "录用通知",
+        "hired": "已入职",
+        "rejected": "已拒绝"
       }
     },
     "payroll": {

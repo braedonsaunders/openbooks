@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "休暇欠勤",
         "description": "欠勤日ごとに1行 — 氏名、雇用主、当時の部門、休暇種別、時間。取消は別行のため、合計は相殺されます。休暇権限が必要です。"
+      },
+      "hrm_requisitions": {
+        "label": "求人",
+        "description": "欠員1件につき1行: 番号、タイトル、ステータス、雇用主、部門、ポジション、計画数と充足数。採用権限が必要です。"
+      },
+      "hrm_applications": {
+        "label": "応募",
+        "description": "候補者1件につき1行: ファネルステージと充足日数。連絡先は表示されません(氏名のみ)。採用権限が必要です。"
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "出所",
         "employment_id": "雇用 (ID)",
         "id": "欠勤 (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "番号",
+        "title": "タイトル",
+        "status": "ステータス",
+        "employer": "雇用主",
+        "department": "部門",
+        "position": "ポジション",
+        "headcount": "人数",
+        "filled_count": "充足数",
+        "opened_on": "開始",
+        "closed_on": "終了",
+        "requisition_id": "求人 (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "求人",
+        "candidate": "候補者",
+        "stage": "ステージ",
+        "status": "ステータス",
+        "applied_on": "応募日",
+        "opened_on": "求人開始",
+        "hired_on": "採用日",
+        "days_to_fill": "充足日数",
+        "application_id": "応募 (ID)"
       }
     },
     "enumValues": {

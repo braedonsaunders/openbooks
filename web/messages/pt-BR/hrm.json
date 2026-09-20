@@ -7,7 +7,15 @@
       "positions": "Posições",
       "processes": "Processos",
       "leave": "Licenças",
-      "myLeave": "Minhas licenças"
+      "myLeave": "Minhas licenças",
+      "recruiting": "Recrutamento"
+    },
+    "recruiting": {
+      "title": "Recrutamento",
+      "open": "Requisições abertas",
+      "awaiting": "Ofertas aguardando resposta",
+      "interviews": "Entrevistas esta semana",
+      "viewAll": "Abrir recrutamento"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -480,5 +488,128 @@
     "timeKind": "tempo",
     "valueKind": "valor",
     "unlimited": "Ilimitado"
+  },
+  "recruiting": {
+    "title": "Recrutamento",
+    "description": "Da vaga à contratação: requisições do plano de cargos, candidatos no funil, entrevistas, ofertas e a contratação.",
+    "add": "Nova requisição",
+    "empty": "Nenhuma requisição corresponde a este filtro.",
+    "total": "Totais",
+    "segmentsLabel": "Situação",
+    "statusAll": "Todos os status",
+    "status": {
+      "draft": "Rascunho",
+      "open": "Aberta",
+      "on_hold": "Pausada",
+      "filled": "Preenchida",
+      "cancelled": "Cancelada"
+    },
+    "columns": {
+      "number": "Número",
+      "title": "Título",
+      "position": "Cargo",
+      "department": "Departamento",
+      "headcount": "Preenchidas / plano",
+      "hiringManager": "Gestor contratante",
+      "opened": "Abertura",
+      "status": "Situação"
+    },
+    "drawer": {
+      "title": "Requisição {number}",
+      "pipeline": "Funil",
+      "applications": "Candidaturas",
+      "noApplications": "Nenhum candidato vinculado ainda.",
+      "candidate": "Candidato",
+      "stage": "Etapa",
+      "applied": "Candidatura",
+      "lastEvent": "Último evento",
+      "interviews": "Entrevistas",
+      "offer": "Oferta",
+      "timeToFill": "Tempo de preenchimento",
+      "days": "dias",
+      "missing": "Este registro não está mais visível."
+    },
+    "create": {
+      "titleField": "Título",
+      "employer": "Empregador",
+      "department": "Departamento",
+      "noDepartment": "Sem departamento",
+      "headcount": "Vagas",
+      "targetStart": "Início previsto",
+      "submit": "Criar requisição",
+      "failed": "Não foi possível criar a requisição."
+    },
+    "attach": {
+      "title": "Vincular um candidato",
+      "name": "Nome",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "submit": "Vincular candidato",
+      "failed": "Não foi possível vincular o candidato.",
+      "rejectTitle": "Recusar",
+      "rejectReason": "Motivo"
+    },
+    "move": {
+      "title": "Mover de etapa",
+      "submit": "Mover",
+      "failed": "Não foi possível mover a candidatura.",
+      "reject": "Recusar",
+      "withdraw": "Retirar"
+    },
+    "interview": {
+      "title": "Agendar uma entrevista",
+      "kind": "Tipo",
+      "when": "Quando",
+      "duration": "Minutos",
+      "location": "Local",
+      "panel": "Banca",
+      "submit": "Agendar entrevista",
+      "failed": "Não foi possível agendar a entrevista.",
+      "completeTitle": "Concluir",
+      "outcome": "Resultado",
+      "feedback": "Avaliação",
+      "completeSubmit": "Concluir entrevista",
+      "cancel": "Cancelar entrevista"
+    },
+    "interviewKind": {
+      "phone": "Telefone",
+      "video": "Vídeo",
+      "onsite": "Presencial",
+      "panel": "Banca",
+      "assessment": "Avaliação"
+    },
+    "interviewOutcome": {
+      "advance": "Avançar",
+      "hold": "Aguardar",
+      "reject": "Recusar"
+    },
+    "offerCard": {
+      "title": "Redigir as condições",
+      "job": "Cargo",
+      "start": "Data de início",
+      "amount": "Valor",
+      "currency": "Moeda",
+      "basis": "Base",
+      "expires": "Expira",
+      "submit": "Redigir oferta",
+      "failed": "Não foi possível redigir a oferta."
+    },
+    "offerActions": {
+      "send": "Enviar",
+      "accept": "Aceitar e contratar",
+      "decline": "Recusar",
+      "withdraw": "Retirar",
+      "reason": "Motivo",
+      "failed": "A ação da oferta falhou."
+    },
+    "basis": {
+      "hourly": "Por hora",
+      "annual": "Anual"
+    },
+    "candidate": {
+      "email": "E-mail",
+      "phone": "Telefone",
+      "source": "Origem"
+    }
   }
 }

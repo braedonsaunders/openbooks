@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "Ausências",
         "description": "Uma linha por dia de ausência — pessoa, empregador, departamento da época, tipo e horas. Reversões são linhas próprias; somas liquidam. Requer a permissão de licença."
+      },
+      "hrm_requisitions": {
+        "label": "Requisições",
+        "description": "Uma linha por vaga: número, título, status, empregador, departamento, cargo e vagas frente a preenchidas. Requer a permissão de recrutamento."
+      },
+      "hrm_applications": {
+        "label": "Candidaturas",
+        "description": "Uma linha por candidatura com sua etapa do funil e o tempo de preenchimento. Dados de contato nunca aparecem — só nomes. Requer a permissão de recrutamento."
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "Origem",
         "employment_id": "Emprego (id)",
         "id": "Ausência (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Número",
+        "title": "Título",
+        "status": "Situação",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "position": "Cargo",
+        "headcount": "Vagas",
+        "filled_count": "Preenchidas",
+        "opened_on": "Abertura",
+        "closed_on": "Fechamento",
+        "requisition_id": "Requisição (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Requisição",
+        "candidate": "Candidato",
+        "stage": "Etapa",
+        "status": "Situação",
+        "applied_on": "Candidatura",
+        "opened_on": "Requisição aberta",
+        "hired_on": "Contratado",
+        "days_to_fill": "Dias de preenchimento",
+        "application_id": "Candidatura (id)"
       }
     },
     "enumValues": {

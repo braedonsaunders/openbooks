@@ -147,6 +147,9 @@ export async function ensureDefaultPipelineTemplate(
   if (templateId) {
     // A default row with no stages is a broken funnel, never a second
     // template: repair it in place rather than duplicating the default.
+    // The do-nothing conflict arm is the concurrent-seeder race: two
+    // enablers seeding the same funnel converge on one stage set, and a
+    // conflict means the other writer already placed the row.
     let position = 0;
     for (const stage of DEFAULT_STAGES) {
       await exec.execute(sql`
@@ -161,19 +164,29 @@ export async function ensureDefaultPipelineTemplate(
     }
     return (await loadPipelineTemplate(exec, orgId, templateId))!;
   }
-  const inserted = (await exec.execute<{ id: string }>(sql`
+  // The name conflict arm is the concurrent-enabler race (two writers
+  // seeding the same default converge on one template row); the follow-up
+  // select reads whichever writer won, so no seeder ever duplicates the
+  // default.
+  await exec.execute(sql`
     insert into hrm_pipeline_templates (org_id, name, is_default, is_active, created_by, updated_by)
     values (${orgId}, ${DEFAULT_TEMPLATE_NAME}, true, true, ${actorId}, ${actorId})
-    on conflict on constraint hrm_pipeline_templates_org_name
-    do update set updated_at = now() where false
-    returning id
-  `)).rows[0];
-  const id = inserted?.id ?? (await exec.execute<{ id: string }>(sql`
+    on conflict on constraint hrm_pipeline_templates_org_name do nothing
+  `);
+  const id = (await exec.execute<{ id: string }>(sql`
     select id from hrm_pipeline_templates
      where org_id = ${orgId} and name = ${DEFAULT_TEMPLATE_NAME} limit 1
-  `)).rows[0]!.id;
+  `)).rows[0]?.id;
+  if (!id) {
+    throw new RecruitingError(
+      "REFUSED",
+      "the default hiring pipeline was not seeded — no funnel was written; retry the request",
+    );
+  }
   let position = 0;
   for (const stage of DEFAULT_STAGES) {
+    // Same concurrent-seeder convergence as above: a conflict means the
+    // stage row already stands, so the seed lands exactly one funnel.
     await exec.execute(sql`
       insert into hrm_pipeline_stages
         (org_id, template_id, position, key, name, kind, is_terminal, created_by, updated_by)

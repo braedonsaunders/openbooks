@@ -7,7 +7,15 @@
       "positions": "Positions",
       "processes": "Processes",
       "leave": "Leave",
-      "myLeave": "My leave"
+      "myLeave": "My leave",
+      "recruiting": "Recruiting"
+    },
+    "recruiting": {
+      "title": "Recruiting",
+      "open": "Open requisitions",
+      "awaiting": "Offers awaiting response",
+      "interviews": "Interviews this week",
+      "viewAll": "Open recruiting"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -481,5 +489,128 @@
     "timeKind": "time",
     "valueKind": "value",
     "unlimited": "Unlimited"
+  },
+  "recruiting": {
+    "title": "Recruiting",
+    "description": "Vacancies to hires: requisitions against the headcount plan, candidates through the hiring funnel, interviews, offers, and the hire.",
+    "add": "New requisition",
+    "empty": "No requisitions match this filter.",
+    "total": "Total",
+    "segmentsLabel": "Status",
+    "statusAll": "All statuses",
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "on_hold": "On hold",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    },
+    "columns": {
+      "number": "Number",
+      "title": "Title",
+      "position": "Position",
+      "department": "Department",
+      "headcount": "Filled / headcount",
+      "hiringManager": "Hiring manager",
+      "opened": "Opened",
+      "status": "Status"
+    },
+    "drawer": {
+      "title": "Requisition {number}",
+      "pipeline": "Pipeline",
+      "applications": "Applications",
+      "noApplications": "No candidates attached yet.",
+      "candidate": "Candidate",
+      "stage": "Stage",
+      "applied": "Applied",
+      "lastEvent": "Last event",
+      "interviews": "Interviews",
+      "offer": "Offer",
+      "timeToFill": "Time to fill",
+      "days": "days",
+      "missing": "This record is no longer visible."
+    },
+    "create": {
+      "titleField": "Title",
+      "employer": "Employer",
+      "department": "Department",
+      "noDepartment": "No department",
+      "headcount": "Headcount",
+      "targetStart": "Target start",
+      "submit": "Create requisition",
+      "failed": "The requisition could not be created."
+    },
+    "attach": {
+      "title": "Attach a candidate",
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "submit": "Attach candidate",
+      "failed": "The candidate could not be attached.",
+      "rejectTitle": "Reject",
+      "rejectReason": "Reason"
+    },
+    "move": {
+      "title": "Move stage",
+      "submit": "Move",
+      "failed": "The application could not be moved.",
+      "reject": "Reject",
+      "withdraw": "Withdraw"
+    },
+    "interview": {
+      "title": "Schedule an interview",
+      "kind": "Kind",
+      "when": "When",
+      "duration": "Minutes",
+      "location": "Location",
+      "panel": "Panel",
+      "submit": "Schedule interview",
+      "failed": "The interview could not be scheduled.",
+      "completeTitle": "Complete",
+      "outcome": "Outcome",
+      "feedback": "Feedback",
+      "completeSubmit": "Complete interview",
+      "cancel": "Cancel interview"
+    },
+    "interviewKind": {
+      "phone": "Phone",
+      "video": "Video",
+      "onsite": "On-site",
+      "panel": "Panel",
+      "assessment": "Assessment"
+    },
+    "interviewOutcome": {
+      "advance": "Advance",
+      "hold": "Hold",
+      "reject": "Reject"
+    },
+    "offerCard": {
+      "title": "Draft the terms",
+      "job": "Job title",
+      "start": "Start date",
+      "amount": "Amount",
+      "currency": "Currency",
+      "basis": "Basis",
+      "expires": "Expires",
+      "submit": "Draft offer",
+      "failed": "The offer could not be drafted."
+    },
+    "offerActions": {
+      "send": "Send",
+      "accept": "Accept and hire",
+      "decline": "Decline",
+      "withdraw": "Withdraw",
+      "reason": "Reason",
+      "failed": "The offer action failed."
+    },
+    "basis": {
+      "hourly": "Hourly",
+      "annual": "Annual"
+    },
+    "candidate": {
+      "email": "Email",
+      "phone": "Phone",
+      "source": "Source"
+    }
   }
 }
