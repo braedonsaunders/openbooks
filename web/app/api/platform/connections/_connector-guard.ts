@@ -62,13 +62,17 @@ function parseIpv4(ip: string): number[] | null {
 function isPublicUnicastIpv4(ip: string): boolean {
   const octets = parseIpv4(ip);
   if (!octets) return false;
-  const [a, b] = octets;
+  const [a, b, c] = octets;
   if (a === 0) return false;
   if (a === 10) return false;
   if (a === 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b >= 16 && b <= 31) return false;
   if (a === 192 && b === 168) return false;
+  if (a === 192 && b === 0 && c === 2) return false;
+  if (a === 198 && (b === 18 || b === 19)) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
   if (a === 100 && b >= 64 && b <= 127) return false;
   if (a >= 224) return false;
   return true;
@@ -107,6 +111,7 @@ function isPublicUnicastIpv6(host: string): boolean {
   if (groups.every((group) => group === 0)) return false;
   if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) return false;
   const first = groups[0]!;
+  if (first === 0x2001 && groups[1] === 0xdb8) return false;
   if ((first & 0xffc0) === 0xfe80) return false;
   if ((first & 0xfe00) === 0xfc00) return false;
   if ((first & 0xff00) === 0xff00) return false;
