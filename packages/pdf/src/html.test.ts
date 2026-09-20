@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isAllowedPdfRequest } from './html'
+import { isAllowedPdfRequest, preparePdfChromeHtml } from './html'
+import { pdfChromeSubresourceRequests } from './template'
 
 test('allows the print document and inline visual resources only', () => {
   assert.equal(isAllowedPdfRequest('document', 'about:blank'), true)
@@ -15,4 +16,58 @@ test('blocks template-authored network and non-visual requests', () => {
   assert.equal(isAllowedPdfRequest('document', 'https://example.com/redirect'), false)
   assert.equal(isAllowedPdfRequest('image', 'file:///etc/passwd'), false)
   assert.equal(isAllowedPdfRequest('script', 'data:text/javascript,alert(1)'), false)
+})
+
+test('header and footer chrome HTML cannot produce a network request', () => {
+  // Chromium prints headerTemplate/footerTemplate as their own documents;
+  // page request interception never sees those subresources. Authored
+  // http(s) images and stylesheets must be rewritten so the only remaining
+  // chrome subresources are ones isAllowedPdfRequest would continue.
+  const authoredHeader =
+    '<div>Acme <img src="https://static.example/logo.png" alt="mark"></div>'
+  const authoredFooter =
+    '<link rel="stylesheet" href="https://static.example/sheet.css">' +
+      '<div style="background:url(https://static.example/logo.png)">Page {{page}}</div>'
+
+  const authoredRequests = [
+    ...pdfChromeSubresourceRequests(authoredHeader),
+    ...pdfChromeSubresourceRequests(authoredFooter),
+  ]
+  assert.ok(
+    authoredRequests.some(
+      (request) =>
+        request.resourceType === 'image' &&
+        !isAllowedPdfRequest(request.resourceType, request.url),
+    ),
+  )
+  assert.ok(
+    authoredRequests.some(
+      (request) =>
+        request.resourceType === 'stylesheet' &&
+        !isAllowedPdfRequest(request.resourceType, request.url),
+    ),
+  )
+
+  const header = preparePdfChromeHtml(authoredHeader)
+  const footer = preparePdfChromeHtml(authoredFooter)
+  const chromeRequests = [
+    ...pdfChromeSubresourceRequests(header),
+    ...pdfChromeSubresourceRequests(footer),
+  ]
+  assert.match(header, /Acme/)
+  assert.match(footer, /pageNumber/)
+  assert.equal(
+    chromeRequests.filter((request) => /^https?:/i.test(request.url)).length,
+    0,
+  )
+  assert.ok(
+    chromeRequests.every((request) => isAllowedPdfRequest(request.resourceType, request.url)),
+  )
+
+  const inline = preparePdfChromeHtml('<img src="data:image/png;base64,AAAA" alt="logo">')
+  const inlineRequests = pdfChromeSubresourceRequests(inline)
+  assert.ok(inlineRequests.some((request) => request.url.startsWith('data:image/png')))
+  assert.ok(
+    inlineRequests.every((request) => isAllowedPdfRequest(request.resourceType, request.url)),
+  )
 })
