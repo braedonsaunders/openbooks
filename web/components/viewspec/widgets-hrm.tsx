@@ -1,8 +1,19 @@
 import type { ComponentProps } from 'react'
-import { HrmPendingRequests, HrmReadiness, HrmRecentChanges, HrmUpcomingChanges } from '../../app/(app)/hrm/sections'
+import {
+  HrmLeavePanel,
+  HrmPendingRequests,
+  HrmReadiness,
+  HrmRecentChanges,
+  HrmUpcomingChanges,
+  OnboardingPanel,
+} from '../../app/(app)/hrm/sections'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
-import { str, type WidgetRenderer } from './widget-props'
+import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
+import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
+import { LeaveQueue } from '../../app/(app)/hrm/leave/LeaveQueue'
+import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
+import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
@@ -112,6 +123,114 @@ export const HRM_WIDGETS = {
       vacantColumn={str(props, 'vacantColumn') ?? ''}
       empty={str(props, 'empty') ?? ''}
       totalLabel={str(props, 'totalLabel') ?? ''}
+    />
+  ),
+
+  /* --- HR-4 processes and HR-5 leave (rehomed verbatim from widgets.tsx) --- */
+  /** The onboarding rail panel: loader-resolved open counts plus the overdue
+   *  and upcoming steps with loader-resolved strings — the same widget-not-
+   *  slot division as the headcount hero above. */
+  'hrm-onboarding-panel': (props) => (
+    <OnboardingPanel
+      openCount={num(props, 'openCount') ?? 0}
+      overdue={(props.overdue as ComponentProps<typeof OnboardingPanel>['overdue']) ?? []}
+      upcoming={(props.upcoming as ComponentProps<typeof OnboardingPanel>['upcoming']) ?? []}
+      openLabel={str(props, 'openLabel') ?? ''}
+      overdueLabel={str(props, 'overdueLabel') ?? ''}
+      upcomingLabel={str(props, 'upcomingLabel') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+      viewAll={str(props, 'viewAll') ?? ''}
+      viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
+    />
+  ),
+  /** Segment pills over loader-resolved hrefs: the active segment filters
+   *  server-side through listProcesses, so switching is navigation, not
+   *  state. A widget, not `filter-chips`: the pills carry per-segment
+   *  counts resolved in the loader rather than rebuilt from a param key. */
+  'hrm-process-segments': (props) => (
+    <ProcessSegments
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      segments={(props.segments as ComponentProps<typeof ProcessSegments>['segments']) ?? []}
+    />
+  ),
+  /** The checklist table over loader-resolved rows plus loader-resolved
+   *  strings — the same ProcessesTable the native page renders, so the two
+   *  cannot drift. */
+  'hrm-processes-table': (props) => (
+    <ProcessesTable
+      columns={(props.columns as ComponentProps<typeof ProcessesTable>['columns']) ?? {}}
+      rows={(props.rows as ComponentProps<typeof ProcessesTable>['rows']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  /** The checklist flyout: a URL drawer around the shared client checklist
+   *  body that closes by navigation. Null payload renders nothing — the
+   *  spec's `when` gate already omits it, so this is the second half of the
+   *  same guard. */
+  'hrm-process-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ProcessDrawer>['drawer']
+    if (!drawer) return null
+    return <ProcessDrawer drawer={drawer} />
+  },
+  /** The leave queue body: loader-resolved rows (newest start first) plus
+   *  loader-resolved strings. Withdraw/cancel ride the existing LeaveDrawer
+   *  and API routes inside the island; decisions stay in native Approvals.
+   *  No org id, user id or Authz crosses the spec. */
+  'hrm-leave-queue': (props) => (
+    <LeaveQueue
+      rows={(props.rows as ComponentProps<typeof LeaveQueue>['rows']) ?? []}
+      columns={props.columns as ComponentProps<typeof LeaveQueue>['columns']}
+      canFile={props.canFile === true}
+      canRecord={props.canRecord === true}
+      fileTitle={str(props, 'fileTitle') ?? ''}
+      fileButton={str(props, 'fileButton') ?? ''}
+      recordTitle={str(props, 'recordTitle') ?? ''}
+      recordButton={str(props, 'recordButton') ?? ''}
+      emptyTitle={str(props, 'emptyTitle') ?? ''}
+      emptyDescription={str(props, 'emptyDescription') ?? ''}
+      truncated={props.truncated === true}
+      truncatedNote={str(props, 'truncatedNote') ?? ''}
+      notAvailable={str(props, 'notAvailable') ?? ''}
+      openEmployee={str(props, 'openEmployee') ?? ''}
+    />
+  ),
+  /** Department leave calendar: loader-resolved absence days grouped by
+   *  date over the department/from/to search params. */
+  'hrm-leave-calendar': (props) => (
+    <LeaveCalendar
+      basePath={str(props, 'basePath') ?? '/hrm/leave'}
+      currentParams={(props.currentParams as ComponentProps<typeof LeaveCalendar>['currentParams']) ?? {}}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof LeaveCalendar>['departmentOptions']) ?? []}
+      departmentLabel={str(props, 'departmentLabel') ?? ''}
+      fromLabel={str(props, 'fromLabel') ?? ''}
+      toLabel={str(props, 'toLabel') ?? ''}
+      showLabel={str(props, 'showLabel') ?? ''}
+      days={(props.days as ComponentProps<typeof LeaveCalendar>['days']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      notAvailable={str(props, 'notAvailable') ?? ''}
+    />
+  ),
+  /** Self-service balances: TIME per leave type and VALUE per payroll
+   *  bank, each labelled with its unit. Loader-resolved rows. */
+  'hrm-leave-balances': (props) => (
+    <LeaveBalances
+      balances={(props.balances as ComponentProps<typeof LeaveBalances>['balances']) ?? []}
+      timeKindLabel={str(props, 'timeKindLabel') ?? ''}
+      valueKindLabel={str(props, 'valueKindLabel') ?? ''}
+      unlimitedLabel={str(props, 'unlimitedLabel') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  /** Leave panel: on leave today plus the pending-approval count beside
+   *  the queue link. */
+  'hrm-leave-panel': (props) => (
+    <HrmLeavePanel
+      items={(props.items as ComponentProps<typeof HrmLeavePanel>['items']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      pendingCount={typeof props.pendingCount === 'number' ? props.pendingCount : 0}
+      pendingLabel={str(props, 'pendingLabel') ?? ''}
+      queueHref={str(props, 'queueHref') ?? '/hrm/leave'}
+      viewAllLabel={str(props, 'viewAllLabel') ?? ''}
     />
   ),
 
