@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../lib/authz";
-import { parseListView, RECORD_TYPE_BY_KEY, type ListViewConfig } from "@openbooks/customization";
+import { parseListView, RECORD_TYPE_BY_KEY, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
@@ -55,7 +55,10 @@ export async function POST(req: Request) {
   const parsed = parseListView(body.config ?? { schemaVersion: 1, recordType: body.recordType });
   if (!parsed.success)
     return NextResponse.json({ error: "invalid view config", issues: parsed.issues }, { status: 400 });
-  const config = parsed.data as ListViewConfig;
+  // The seed mark must never be (re)stored through the designer: strip it
+  // explicitly here rather than relying on the parser dropping unknown keys,
+  // so a future parser change cannot resurrect frozen snapshots as untouched.
+  const config = stripSeededDefaultMark(parsed.data as ListViewConfig);
   if (config.recordType !== body.recordType)
     return NextResponse.json({ error: "config.recordType does not match recordType" }, { status: 400 });
   const ownerId = scope === "user" ? user.id : null;
