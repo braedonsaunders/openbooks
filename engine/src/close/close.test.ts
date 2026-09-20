@@ -828,7 +828,7 @@ test(
 );
 
 test("close automation claims carry lease fencing, stale takeover, and stage checkpoints", () => {
-  const engine = ["./automations.ts", "./close.ts"].map((file) =>
+  const engine = ["./automations.ts", "./run-automation.ts"].map((file) =>
     readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
 
   // The claim books a random fencing token with its lock timestamp and the
