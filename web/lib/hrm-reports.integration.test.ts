@@ -533,7 +533,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
-      assert.deepEqual(hiddenHrm, ['hrm_applications', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_goals', 'hrm_reviews', 'hrm_turnover'], 'only the entities whose grants are missing hide')
+      assert.deepEqual(hiddenHrm, ['hrm_applications', 'hrm_goals', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'], 'only the entities whose grants are missing hide')
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
@@ -545,7 +545,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       // names its own permission); the list grows with each HRM entity.
       assert.deepEqual(
         (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
-        ['hrm_applications', 'hrm_change_requests', 'hrm_employment_history', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_goals', 'hrm_reviews', 'hrm_turnover'],
+        ['hrm_applications', 'hrm_change_requests', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
       )
     })
 
@@ -557,7 +557,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       }
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
-        ['hrm_applications', 'hrm_change_requests', 'hrm_employment_history', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_goals', 'hrm_reviews', 'hrm_turnover'],
+        ['hrm_applications', 'hrm_change_requests', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
       )
     })
   } finally {
