@@ -6,8 +6,6 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   cancelStockCount,
   createStockCount,
-  getStockCountDetail,
-  listStockCounts,
   postStockCount,
   recordCountedQuantity,
   recountStockCountLine,
@@ -16,6 +14,7 @@ import {
   startStockCount,
   submitStockCountForReview,
 } from '@openbooks/engine/src/inventory/stock-counts.ts'
+import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
 import {
   InventoryError,

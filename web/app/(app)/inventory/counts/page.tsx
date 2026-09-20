@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listStockCounts } from '@openbooks/engine/src/inventory/stock-counts.ts'
+import { listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { PageHeader } from '@openbooks/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
