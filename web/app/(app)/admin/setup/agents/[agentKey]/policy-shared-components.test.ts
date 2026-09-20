@@ -10,7 +10,7 @@ import test from "node:test";
 // and buttons with local classes.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("./view.ts");
-const widgets = read("../../../../../../components/viewspec/widgets.tsx");
+const widgets = read("../../../../../../components/viewspec/widgets-agents.tsx");
 const form = read("./AgentPolicyForm.tsx");
 
 test("the policy spec binds the shared form island, not the workspace", () => {

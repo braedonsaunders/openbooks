@@ -4,7 +4,7 @@ import test from 'node:test'
 
 const designer = readFileSync(new URL('./FormDesigner.tsx', import.meta.url), 'utf8')
 const view = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
-const widgets = readFileSync(new URL('../../../../components/viewspec/widgets.tsx', import.meta.url), 'utf8')
+const widgets = readFileSync(new URL('../../../../components/viewspec/widgets-setup.tsx', import.meta.url), 'utf8')
 
 /**
  * F-t10-002 — FormDesigner keeps its field state in mount-only useState, and

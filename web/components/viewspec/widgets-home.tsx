@@ -38,7 +38,7 @@ import { str, num, type WidgetRenderer } from './widget-props'
 
 /** Home, discovery and presentation adapters: module home, hubs, dashboards, apps and docs. Compose native components without changing their props or boundaries. */
 export const HOME_WIDGETS = {
-
+  /* --- purchasing cockpit ------------------------------------------------ */
   'subsidiary-switcher': (props) => (
     <SubsidiarySwitcher
       picker={props.picker as ComponentProps<typeof SubsidiarySwitcher>['picker']}
@@ -46,11 +46,9 @@ export const HOME_WIDGETS = {
       label={str(props, 'label') ?? ''}
     />
   ),
-
   'module-home-tabs': (props) => (
     <ModuleHomeTabs tabs={props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']} />
   ),
-
   'commitments-section': (props) => (
     <CommitmentsSection
       rows={props.rows as ComponentProps<typeof CommitmentsSection>['rows']}
@@ -58,7 +56,6 @@ export const HOME_WIDGETS = {
       empty={str(props, 'empty') ?? ''}
     />
   ),
-
   'ap-pulse': (props) => (
     <ApPulse
       outstanding={str(props, 'outstanding') ?? ''}
@@ -69,7 +66,6 @@ export const HOME_WIDGETS = {
       href={str(props, 'href') ?? ''}
     />
   ),
-
   'trend-chart': (props) => (
     <TrendChart
       labels={props.labels as ComponentProps<typeof TrendChart>['labels']}
@@ -79,42 +75,30 @@ export const HOME_WIDGETS = {
       maxTicks={typeof props.maxTicks === 'number' ? props.maxTicks : undefined}
     />
   ),
-
   'directory-section': (props) => (
     <DirectorySection
       items={props.items as ComponentProps<typeof DirectorySection>['items']}
       title={str(props, 'title') ?? ''}
     />
   ),
-
   'attention-list': (props) => (
     <AttentionList
       items={props.items as ComponentProps<typeof AttentionList>['items']}
       allClear={str(props, 'allClear') ?? ''}
     />
   ),
-
   'live-directory': (props) => (
     <LiveDirectory items={props.items as ComponentProps<typeof LiveDirectory>['items']} />
   ),
-
   'insights-tabs': (props) => (
     <InsightsTabs active={(str(props, 'active') ?? '') as ComponentProps<typeof InsightsTabs>['active']} />
   ),
-  /** A pill that renders nothing when the label is empty. The table's
-   *  `badge` cell always emits its wrapper, so optional flags bind through
-   *  here instead of leaving an empty pill behind. */
-
   'new-dashboard': () => <NewDashboardButton />,
-
   'new-card': () => <NewCardButton />,
-
   'new-record-type': () => <NewTypeButton />,
-
   'query-console': () => <QueryConsole />,
 
   /* --- accounting cockpit ---------------------------------------------------- */
-
   'health-hero': (props) => (
     <HealthHero
       gaugeValue={typeof props.gaugeValue === 'number' ? props.gaugeValue : 0}
@@ -128,7 +112,6 @@ export const HOME_WIDGETS = {
   /** A widget, not a slot: the loader already resolved headcount through the
    *  canonical read service and passes rows plus loader-resolved strings as
    *  data, so no org id, user id or Authz crosses the spec. */
-
   'hrm-headcount-table': (props) => (
     <HrmHeadcountTable
       groups={(props.groups as ComponentProps<typeof HrmHeadcountTable>['groups']) ?? []}
@@ -144,7 +127,6 @@ export const HOME_WIDGETS = {
 
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
    *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */
-
   'build-hub-card': (props) => (
     <BuildHubCard
       href={str(props, 'href') ?? '#'}
@@ -157,7 +139,9 @@ export const HOME_WIDGETS = {
       }
     />
   ),
-
+  /* --- app launcher ----------------------------------------------------------- */
+  /** Flat props: widget props resolve one level deep, so the loader
+   *  denormalizes each row and the spec binds per-item fields. */
   'app-launcher-card': (props) => (
     <AppLauncherCard
       href={str(props, 'href') ?? ''}
@@ -169,11 +153,9 @@ export const HOME_WIDGETS = {
       openLabel={str(props, 'openLabel') ?? ''}
     />
   ),
-
   'apps-empty-icon': () => <AppsEmptyIcon />,
   /** One parametric entry for three button shapes this page renders; none of
    *  the existing link buttons match any of them. */
-
   'apps-launcher-button': (props) => (
     <AppsLauncherButton
       href={str(props, 'href') ?? ''}
@@ -185,10 +167,10 @@ export const HOME_WIDGETS = {
     />
   ),
 
+  /* --- platform hub ----------------------------------------------------------- */
   'platform-notice': () => <PlatformNotice />,
   /** Flat props, every value a string — not a single `tile` object. The icon
    *  is an `iconKey` lookup resolved here so the spec carries only data. */
-
   'platform-tile': (props) => (
     <PlatformTile
       href={str(props, 'href') ?? '#'}
@@ -207,13 +189,20 @@ export const HOME_WIDGETS = {
   /* --- docs article ----------------------------------------------------------- */
   /** Conditional pairs throughout (category span, related block, prev/next
    *  with a bare-span placeholder) plus a client Markdown renderer. */
-
   'doc-article': (props) => (
     <DocArticleView content={props.content as ComponentProps<typeof DocArticleView>['content']} />
   ),
 
+  /* --- platform sync ---------------------------------------------------------------- */
+  /** No props. The console holds every fetch and mutation — a 2.5s live poll
+   *  while a run is in flight, run/test/toggle-mirror/schedule/delete with
+   *  busy flags, `window.open` for OAuth and the QWC download. */
   'sync-console': () => <PlatformClient />,
 
+  /* --- installed-app runtime -------------------------------------------------------- */
+  /** ONE entry for BOTH notice branches (not-found and disabled): the markup
+   *  is identical and only the strings differ, so a second entry would be a
+   *  duplicate that drifts. */
   'app-notice': (props) => (
     <AppNotice
       title={str(props, 'title') ?? ''}
@@ -225,9 +214,7 @@ export const HOME_WIDGETS = {
   /** `context` is plain data — app id/key/name plus the caller's id, name and
    *  role KEYS — not an `Authz`. The sandbox that consumes it lives inside
    *  `AppFrame`. */
-
   'native-extension': props => <NativeExtension appKey={str(props, 'appKey') ?? ''} searchParams={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />,
-
   'app-runtime-chrome': (props) => (
     <AppRuntimeChrome
       appKey={str(props, 'appKey') ?? ''}
@@ -238,6 +225,11 @@ export const HOME_WIDGETS = {
     />
   ),
 
+  /* --- insights dashboard builder --------------------------------------------------- */
+  /** Whole: a drag-and-drop board with a card palette, placement state and
+   *  publish/pin mutations. The two decisions that matter — draft-card
+   *  visibility and the palette's `insightVisibilitySql` fence — are made in
+   *  the loader, where they belong. */
   'insights-dashboard-builder': (props) => (
     <DashboardBuilder
       dashboard={props.dashboard as ComponentProps<typeof DashboardBuilder>['dashboard']}
@@ -249,21 +241,19 @@ export const HOME_WIDGETS = {
     />
   ),
 
-  /* --- API console ------------------------------------------------------------------ */
-  /** The schema IS server data — the same plain-data prop the native page
-   *  hands the component — so it travels as a literal widget prop. Nothing
-   *  here is a capability or an org id, so no slot is needed. */
-
+  /* --- home dashboard --------------------------------------------------------------- */
+  /** The greeting row. The loader resolves the greeting string (locale +
+   *  first name, org zone) and passes the name through so the header can
+   *  re-derive the stem in the browser zone on mount; the Customize link
+   *  lives inside the component. */
   'dashboard-header': (props) => <DashboardHeader greeting={str(props, 'greeting') ?? ''} name={str(props, 'name') ?? null} />,
   /** A SLOT, not a props widget. `DashboardGrid` needs rendered tile nodes
    *  and a bound `saveQuickActions` server action — component references and
    *  a capability, neither of which a spec may carry. The slot re-derives
    *  both from the session; the spec names the block and nothing else. */
-
   'dashboard-grid': () => <DashboardGridSlot />,
   /** Not `pageHeader({ back })`: that slot renders UiBackLink, and this page's
    *  back link is a 12px lucide ArrowLeft with different classes again. */
-
   'dashboard-customize-header': (props) => (
     <CustomizeDashboardHeader
       backHref={str(props, 'backHref') ?? '/dashboard'}
@@ -276,16 +266,11 @@ export const HOME_WIDGETS = {
    *  besides the tile nodes and the bound save action it needs
    *  `allowedWidgetIds`, a per-caller PERMISSION decision. That must not be
    *  reachable from a spec. */
-
   'dashboard-edit': () => <DashboardEditSlot />,
 
-  /* --- assistant -------------------------------------------------------------------- */
-  /** Whole: sidebar, streaming thread, composer and every fetch. Serves both
-   *  /assistant and /assistant/[id]: `activeId` and `initialMessages` default
-   *  to the new-conversation values the launcher route passes natively, and
-   *  the deep-link route binds real ones. Hardcoding them here would have made
-   *  this entry a single route's assumption wearing a general name. */
-
+  /* --- app library ---------------------------------------------------------------- */
+  /** Seven FLAT props. The install button is not a separate widget: it is
+   *  the card's footer and never renders without it. */
   'listing-card': (props) => (
     <ListingCard
       listingId={str(props, 'listingId') ?? ''}
@@ -299,13 +284,19 @@ export const HOME_WIDGETS = {
     />
   ),
   /** NOT `apps-empty-icon` — that one renders Boxes; this renders Library. */
-
   'library-empty-icon': () => <LibraryEmptyIcon />,
 
+  /* --- docs home -------------------------------------------------------------- */
+  /** A gradient hero, composite link cards and hover-reveal arrows: generic
+   *  blocks would need new vocabulary to say any of it, so it stays one
+   *  component with a single `content` object. */
   'docs-home': (props) => (
     <DocsHome content={props.content as ComponentProps<typeof DocsHome>['content']} />
   ),
 
+  /* --- admin apps ------------------------------------------------------------ */
+  /** Not `link-button` (solid, no icon) and not `docs-link-button` (BookOpen):
+   *  the library action uses the same default size as the primary New button. */
   'apps-library-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
@@ -317,18 +308,7 @@ export const HOME_WIDGETS = {
       </Button>
     )
   },
-
   'app-key-cell': (props) => <AppKeyCell appKey={str(props, 'appKey') ?? ''} />,
-  /** The whole app flyout stays one widget: its body is three tabs of per-row
-   *  client state (dirty flags, selected file, open dirs) — a workspace, not a
-   *  spec. */
-
-
-  /* --- AP capture ------------------------------------------------------------ */
-  /** Diffed against `plain-link-button` (Link outside Button, no icon) and
-   *  `docs-link-button` (small, 14px icon, no space): neither renders this
-   *  shape, so it keeps its own entry. */
-
   'card-name-cell': (props) => (
     <CardNameCell
       name={str(props, 'name') ?? ''}
@@ -336,17 +316,14 @@ export const HOME_WIDGETS = {
       description={(props.description as string | null) ?? null}
     />
   ),
-
   'viz-cell': (props) => (
     <VizCell vizType={str(props, 'vizType') ?? ''} label={str(props, 'label') ?? ''} />
   ),
-
   'card-studio': (props) => {
     const studio = props.studio as ComponentProps<typeof CardStudio> | null
     if (!studio) return null
     return <CardStudio {...studio} />
   },
-
   'dashboard-name-cell': (props) => (
     <DashboardNameCell
       name={str(props, 'name') ?? ''}
@@ -354,9 +331,7 @@ export const HOME_WIDGETS = {
       description={(props.description as string | null) ?? null}
     />
   ),
-
   'new-saved-view': () => <NewViewButton />,
-
   'view-name-cell': (props) => (
     <ViewNameCell
       name={str(props, 'name') ?? ''}
@@ -364,7 +339,6 @@ export const HOME_WIDGETS = {
       description={(props.description as string | null) ?? null}
     />
   ),
-
   'view-actions-cell': (props) => (
     <ViewActionsCell
       runHref={str(props, 'runHref') ?? ''}
@@ -374,7 +348,6 @@ export const HOME_WIDGETS = {
       canEdit={props.canEdit === true}
     />
   ),
-
   'view-studio': (props) => {
     const studio = props.studio as ComponentProps<typeof ViewStudio> | null
     if (!studio) return null

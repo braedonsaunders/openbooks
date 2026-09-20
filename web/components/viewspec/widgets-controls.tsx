@@ -14,7 +14,7 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** Shared spec controls adapters: links, filters, badges and headings. Compose native components without changing their props or boundaries. */
 export const CONTROLS_WIDGETS = {
-
+  /** A primary action button that navigates — the common page-header action. */
   'link-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
@@ -33,11 +33,9 @@ export const CONTROLS_WIDGETS = {
       </Button>
     )
   },
-
   'resource-cell': (props) => (
     <ResourceCell label={str(props, 'label') ?? ''} fileName={(props.fileName as string | null) ?? null} />
   ),
-
   'row-counts-cell': (props) => (
     <RowCountsCell
       created={Number(props.created ?? 0)}
@@ -45,7 +43,7 @@ export const CONTROLS_WIDGETS = {
       failed={Number(props.failed ?? 0)}
     />
   ),
-
+  /* --- admin lists -------------------------------------------------------- */
   'search-input': (props) => (
     <SearchInput
       placeholder={str(props, 'placeholder')}
@@ -54,7 +52,6 @@ export const CONTROLS_WIDGETS = {
       className={str(props, 'className')}
     />
   ),
-
   'filter-chips': (props) => (
     <FilterChips
       basePath={str(props, 'basePath')}
@@ -69,22 +66,22 @@ export const CONTROLS_WIDGETS = {
     />
   ),
   /** A monospaced inline code cell (key previews, identifiers). */
-
   'code-cell': (props) => (
     <code className="font-mono text-[12px] text-slate-500 dark:text-slate-400">
       {str(props, 'text') ?? ''}
     </code>
   ),
-
+  /** A pill that renders nothing when the label is empty. The table's
+   *  `badge` cell always emits its wrapper, so optional flags bind through
+   *  here instead of leaving an empty pill behind. */
   'optional-badge': (props) => {
     const label = str(props, 'label')
     if (!label) return null
     const variant = str(props, 'variant') as ComponentProps<typeof Badge>['variant']
     return <Badge variant={variant}>{label}</Badge>
   },
-  /** Due-date cell: the formatted date plus a red Overdue pill when past
-   *  due — the house date-plus-flag arrangement, one cell. */
-
+  /** Not `filter-chips`: a different component AND a different contract
+   *  (router.replace + resetParamKeys, no basePath navigation). */
   'search-select-filter': (props) => (
     <SearchSelectFilter
       paramKey={str(props, 'paramKey') ?? ''}
@@ -96,6 +93,7 @@ export const CONTROLS_WIDGETS = {
     />
   ),
 
+  /** The AP capture shortcut: outline button with a scan icon. */
   'ap-capture-link': (props) => (
     <Button asChild variant="outline">
       <Link href={(str(props, 'href') ?? '/ap/capture') as never}>
@@ -104,18 +102,19 @@ export const CONTROLS_WIDGETS = {
       </Link>
     </Button>
   ),
-
-  /* --- platform user record --------------------------------------------------- */
-  //
-  // Every entry here exists because a bound SERVER ACTION is involved. A bound
-  // action is a capability, not data, so the widget takes ids and binds the
-  // action itself — the spec says which user, the host decides what may be
-  // done to them.
-
+  /** The generic KPI strip — every KPI row is the house KpiStrip. */
   'kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
+  /** The whole app flyout stays one widget: its body is three tabs of per-row
+   *  client state (dirty flags, selected file, open dirs) — a workspace, not a
+   *  spec. */
 
+
+  /* --- AP capture ------------------------------------------------------------ */
+  /** Diffed against `plain-link-button` (Link outside Button, no icon) and
+   *  `docs-link-button` (small, 14px icon, no space): neither renders this
+   *  shape, so it keeps its own entry. */
   'back-link-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
@@ -128,7 +127,8 @@ export const CONTROLS_WIDGETS = {
       </Button>
     )
   },
-
+  /** A link wrapped in a Button — the plain form several admin headers use,
+   *  distinct from `link-button` only in that the Link is on the OUTSIDE. */
   'plain-link-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
@@ -139,7 +139,6 @@ export const CONTROLS_WIDGETS = {
       </Link>
     )
   },
-
   'date-range-filter': (props) => (
     <DateRangeFilter
       fromKey={str(props, 'fromKey') ?? 'from'}
@@ -157,7 +156,6 @@ export const CONTROLS_WIDGETS = {
       clearable={props.clearable !== false}
     />
   ),
-
   'forecast-filters': (props) => (
     <ForecastFilters
       fromKey={str(props, 'fromKey') ?? 'from'}
@@ -172,7 +170,6 @@ export const CONTROLS_WIDGETS = {
       teamOptions={(props.teamOptions as ComponentProps<typeof ForecastFilters>['teamOptions']) ?? []}
     />
   ),
-
   'section-heading': (props) => {
     const icons: Record<string, ReactNode> = {
       gauge: <Gauge size={17} />,
@@ -188,16 +185,12 @@ export const CONTROLS_WIDGETS = {
       />
     )
   },
-
-  /* --- custom record modules ----------------------------------------------- */
-
   'show-inactives-toggle': (props) => (
     <ShowInactivesToggle
       basePath={str(props, 'basePath') ?? ''}
       currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-
   'currency-basis': (props) => (
     <CurrencyBasisControl
       currencies={(props.currencies as CurrencyOption[]) ?? []}

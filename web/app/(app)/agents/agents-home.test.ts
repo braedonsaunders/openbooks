@@ -122,7 +122,7 @@ test("ask-about-this deep-links chat with the finding handoff", () => {
   // The viewspec seam must forward the handoff: the spec carries
   // initialFindingId, so the widget entry and its contract must read it —
   // otherwise /assistant?finding= renders with no attached context.
-  const widgets = read("../../../components/viewspec/widgets.tsx");
+  const widgets = read("../../../components/viewspec/widgets-agents.tsx");
   assert.match(widgets, /initialFindingId=\{str\(props, 'initialFindingId'\)\}/);
   const contracts = read("../../../components/viewspec/widget-contracts.ts");
   assert.match(contracts, /'assistant-app': \{ props: \[[^\]]*'initialFindingId'[^\]]*\] \}/);

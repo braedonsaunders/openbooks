@@ -49,3 +49,16 @@ controlled change with custom-field, allocation, audit and flow evidence.
 Changes that alter financial results, refusal conditions, lock ordering or
 posted history require separate behavioral proof. The revenue modification,
 lease remeasurement and lease termination conformance gaps remain open.
+
+## Widget composition
+
+The small `widgets.tsx` registry composes twelve domain families; only the four
+renderers that look up another widget stay beside it. Families do not import
+the registry or its slot consumers. `widget-slot.tsx` owns slot rendering and
+field-reference resolution, and its callers import it directly.
+
+All 403 renderer bodies and key membership are preserved. Enumeration now follows
+family order; runtime consumers use keyed lookup, name validation compares
+membership, and contract generation sorts keys. Generated prop contracts remain
+byte-identical. Boundary tests enforce a 200-line composition limit, 500-line
+family limits and the absence of reverse imports.
