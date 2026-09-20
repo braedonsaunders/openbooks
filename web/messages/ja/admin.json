@@ -835,6 +835,8 @@
     "hrm_employment_read": "雇用記録の表示",
     "hrm_employment_manage": "雇用変更の作成",
     "hrm_employment_approve": "雇用変更の決定",
+    "hrm_position_read": "ポジションと人員計画の表示",
+    "hrm_position_manage": "ポジションの作成・改訂・財源設定・終了",
     "groups": {
       "hrm": "人事",
       "gl": "総勘定元帳",

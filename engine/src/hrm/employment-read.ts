@@ -1118,7 +1118,7 @@ function requireOptionsLimit(limit: number | undefined): number {
 }
 
 /** Escape a free-text fragment for a LIKE pattern: % _ and \ match literally. */
-function likeEscape(fragment: string): string {
+export function likeEscape(fragment: string): string {
   return fragment.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 

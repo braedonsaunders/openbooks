@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "Solicitações de alteração",
         "description": "Uma linha por solicitação de alteração de emprego: status, tipo, emprego, solicitante, carimbos de envio e decisão, execução de aprovação vinculada e vínculo de revisão. Requer a permissão de emprego de RH."
+      },
+      "hrm_positions": {
+        "label": "Posições",
+        "description": "Uma linha por posição estabelecida na data do relatório: código, título, status, departamento, empregador e FTE planejado, financiado e preenchido. Requer a permissão de posições do RH."
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "Criado em",
         "id": "Solicitação (id)",
         "employment_id": "Emprego (id)"
+      },
+      "hrm_positions": {
+        "code": "Código",
+        "title": "Título",
+        "status": "Status",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "planned_fte": "FTE planejado",
+        "funded_fte": "FTE financiado",
+        "filled_fte": "FTE preenchido",
+        "vacant_fte": "FTE vago",
+        "position_id": "Posição (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "Contratação",
       "status_change": "Alteração de status",
       "assignment_change": "Alteração de atribuição",
-      "termination": "Desligamento"
+      "termination": "Desligamento",
+      "frozen": "Congelado",
+      "filled": "Preenchido",
+      "open": "Aberto",
+      "planned": "Planejado",
+      "position_assignment": "Atribuição de posição"
     }
   },
   "operators": {

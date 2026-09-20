@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "Solicitudes de cambio",
         "description": "Una fila por solicitud de cambio de empleo: estado, tipo, empleo, solicitante, sellos de envío y decisión, ejecución de aprobación vinculada y vinculación de revisión. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_positions": {
+        "label": "Puestos",
+        "description": "Una fila por puesto establecido a la fecha del informe: código, título, estado, departamento, empleador y FTE planificados, financiados y cubiertos. Requiere el permiso de puestos de RR. HH."
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "Creado el",
         "id": "Solicitud (id)",
         "employment_id": "Empleo (id)"
+      },
+      "hrm_positions": {
+        "code": "Código",
+        "title": "Título",
+        "status": "Estado",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "planned_fte": "FTE planificados",
+        "funded_fte": "FTE financiados",
+        "filled_fte": "FTE cubiertos",
+        "vacant_fte": "FTE vacantes",
+        "position_id": "Puesto (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "Contratación",
       "status_change": "Cambio de estado",
       "assignment_change": "Cambio de asignación",
-      "termination": "Finalización"
+      "termination": "Finalización",
+      "frozen": "Congelado",
+      "filled": "Cubierto",
+      "open": "Abierto",
+      "planned": "Planificado",
+      "position_assignment": "Asignación de puesto"
     }
   },
   "operators": {

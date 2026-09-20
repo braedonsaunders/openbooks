@@ -835,6 +835,8 @@
     "hrm_employment_read": "Ver registros de emprego",
     "hrm_employment_manage": "Redigir alterações de emprego",
     "hrm_employment_approve": "Decidir alterações de emprego",
+    "hrm_position_read": "Ver posições e o plano de headcount",
+    "hrm_position_manage": "Criar, revisar, financiar e encerrar posições",
     "groups": {
       "hrm": "Recursos humanos",
       "gl": "Livro-razão",

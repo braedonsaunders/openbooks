@@ -835,6 +835,8 @@
     "hrm_employment_read": "Ver registros de empleo",
     "hrm_employment_manage": "Redactar cambios de empleo",
     "hrm_employment_approve": "Decidir cambios de empleo",
+    "hrm_position_read": "Ver puestos y el plan de plantilla",
+    "hrm_position_manage": "Crear, modificar, financiar y cerrar puestos",
     "groups": {
       "hrm": "Recursos humanos",
       "gl": "Libro mayor",

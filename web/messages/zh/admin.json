@@ -835,6 +835,8 @@
     "hrm_employment_read": "查看雇用记录",
     "hrm_employment_manage": "编写雇用变更",
     "hrm_employment_approve": "决定雇用变更",
+    "hrm_position_read": "查看职位和人员编制计划",
+    "hrm_position_manage": "创建、修改、拨款和关闭职位",
     "groups": {
       "hrm": "人力资源",
       "gl": "总账",

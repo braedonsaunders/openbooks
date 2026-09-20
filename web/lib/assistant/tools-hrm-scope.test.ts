@@ -40,18 +40,25 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of"];
+
+const TOOL_PERMS: Record<string, string> = {
+  hrm_headcount: "hrm.employment.read",
+  hrm_employment_as_of: "hrm.employment.read",
+  hrm_change_requests: "hrm.employment.read",
+  hrm_positions_as_of: "hrm.position.read",
+};
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the three HRM read tools", () => {
+test("the module exports exactly the four HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
 for (const name of TOOL_NAMES) {
-  test(`${name} carries the slice gate: hrm.employment.read, hrm feature, module tier`, () => {
+  test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["hrm.employment.read"] });
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
     assert.equal(tool.feature, "hrm");
     assert.equal(tool.tier, "module");
     assert.ok(
@@ -87,16 +94,22 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_change_requests")!.inputSchema.parse({ status: "approved", limit: 10 });
   assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ status: "posted_draft" }));
   assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({});
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "2026-06-15", status: "open" });
+  byName.get("hrm_positions_as_of")!.inputSchema.parse({ period: "this_fiscal_year_to_date" });
+  assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ status: "recruiting" }));
+  assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "tomorrow" }));
 });
 
-// Every tool reuses the canonical read loaders the Employment tab reads
+// Every tool reuses the canonical read loaders the HRM tabs read
 // through — never a parallel SQL path to versions or requests.
-test("HRM reads reuse the employment read service", () => {
+test("HRM reads reuse the canonical HRM read services", () => {
   for (const service of [
     "getHeadcountAsOf(",
     "getEmploymentAsOf(",
     "findEmploymentsByParty(",
     "loadEmploymentChangeRequests(",
+    "getVacancyAsOf(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",
@@ -167,23 +180,35 @@ function fakeAuthz(permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-test("the registry gate admits only hrm.employment.read holders while hrm is on", () => {
+test("the registry gate admits only each tool's grant holders while hrm is on", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
-  const reader = fakeAuthz(["assistant.use", "hrm.employment.read"]);
   for (const name of TOOL_NAMES) {
+    const perm = TOOL_PERMS[name];
+    const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
     assert.equal(
       canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, { hrm: true }),
       false,
-      `${name} must refuse without hrm.employment.read`,
+      `${name} must refuse without ${perm}`,
     );
     assert.equal(
-      canRunTool(fakeAuthz(["hrm.employment.read"]), byName.get(name)!, { hrm: true }),
+      canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
       false,
       `${name} still requires assistant.use`,
     );
   }
+  // Position grants are the admin-held establishment boundary: an
+  // employment-only reader sees headcount, never the funded plan behind it.
+  assert.equal(
+    canRunTool(
+      fakeAuthz(["assistant.use", "hrm.employment.read"]),
+      byName.get("hrm_positions_as_of")!,
+      { hrm: true },
+    ),
+    false,
+    "hrm_positions_as_of must refuse an employment-only reader",
+  );
 });
 
 test("registrations: registry spread, scrape lists, matrix entry, playbook, contract harness", () => {

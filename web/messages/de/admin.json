@@ -835,6 +835,8 @@
     "hrm_employment_read": "Beschäftigungsdaten anzeigen",
     "hrm_employment_manage": "Beschäftigungsänderungen erfassen",
     "hrm_employment_approve": "Beschäftigungsänderungen entscheiden",
+    "hrm_position_read": "Positionen und Personalplan anzeigen",
+    "hrm_position_manage": "Positionen anlegen, ändern, finanzieren und schließen",
     "groups": {
       "hrm": "Personalwesen",
       "gl": "Hauptbuch",

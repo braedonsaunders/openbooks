@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "Demandes de changement",
         "description": "Une ligne par demande de changement d'emploi : statut, type, emploi, demandeur, horodatages de soumission et de décision, exécution d'approbation liée et liaison de révision. Requiert l'autorisation d'emploi RH."
+      },
+      "hrm_positions": {
+        "label": "Postes",
+        "description": "Une ligne par poste établi à la date du rapport : code, intitulé, statut, service, employeur et ETP prévus, financés et pourvus. Requiert la permission des postes RH."
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "Créé le",
         "id": "Demande (id)",
         "employment_id": "Emploi (id)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Titre",
+        "status": "Statut",
+        "employer": "Employeur",
+        "department": "Service",
+        "planned_fte": "ETP prévus",
+        "funded_fte": "ETP financés",
+        "filled_fte": "ETP pourvus",
+        "vacant_fte": "ETP vacants",
+        "position_id": "Poste (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "Embauche",
       "status_change": "Changement de statut",
       "assignment_change": "Changement d'affectation",
-      "termination": "Fin d'emploi"
+      "termination": "Fin d'emploi",
+      "frozen": "Gelé",
+      "filled": "Pourvu",
+      "open": "Ouvert",
+      "planned": "Prévu",
+      "position_assignment": "Affectation à un poste"
     }
   },
   "operators": {

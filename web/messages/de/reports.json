@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "Änderungsanträge",
         "description": "Eine Zeile je Beschäftigungs-Änderungsantrag — Status, Art, Beschäftigung, Antragsteller, Einreichungs- und Entscheidungsstempel, gebundener Genehmigungslauf und Revisionsbindung. Erfordert die HRM-Beschäftigungsberechtigung."
+      },
+      "hrm_positions": {
+        "label": "Positionen",
+        "description": "Eine Zeile je eingerichteter Position zum Berichtsstichtag: Code, Titel, Status, Abteilung, Arbeitgeber sowie geplante, finanzierte und besetzte FTE. Erfordert die HRM-Positionsberechtigung."
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "Erstellt am",
         "id": "Antrag (ID)",
         "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Titel",
+        "status": "Status",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "planned_fte": "Geplante FTE",
+        "funded_fte": "Finanzierte FTE",
+        "filled_fte": "Besetzte FTE",
+        "vacant_fte": "Offene FTE",
+        "position_id": "Position (ID)"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "Einstellung",
       "status_change": "Statusänderung",
       "assignment_change": "Zuordnungsänderung",
-      "termination": "Beendigung"
+      "termination": "Beendigung",
+      "frozen": "Eingefroren",
+      "filled": "Besetzt",
+      "open": "Offen",
+      "planned": "Geplant",
+      "position_assignment": "Positionszuordnung"
     }
   },
   "operators": {

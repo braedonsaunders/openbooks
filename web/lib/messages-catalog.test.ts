@@ -2993,7 +2993,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3392, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3394, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3330,8 +3330,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3392
-  const ADMIN_I2_SOURCE_HASH = '45ded81ac81247bf9c12a1f55cea176badd7379624c3c6a6d02ca02bf116b1e5'
+  const ADMIN_I2_SOURCE_COUNT = 3394
+  const ADMIN_I2_SOURCE_HASH = '20f04046f2524eacd02ff2fb2c89be076030c727ce1fbb2c3d7d34ea71d10e52'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4408,6 +4408,10 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'pt-BR:reports.catalog.columns.hrm_headcount.headcount|Headcount',
     'pt-BR:reports.catalog.columns.hrm_employment_history.status|Status',
     'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
+    'de:reports.catalog.columns.hrm_positions.code|Code',
+    'de:reports.catalog.columns.hrm_positions.status|Status',
+    'fr:reports.catalog.columns.hrm_positions.code|Code',
+    'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -5089,7 +5093,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1243,
+  "reports": 1260,
   "sync": 172,
   "login": 33,
   "accounts": 82,

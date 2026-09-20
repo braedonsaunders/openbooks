@@ -36,7 +36,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.hrm-options-route-test')]
       const NextResponse = globalThis.openbooksHrmOptionsNextResponse
       export async function guardFeaturePermission(permission, feature) {
-        if (permission !== 'hrm.employment.read' || feature !== 'hrm') {
+        if ((permission !== 'hrm.employment.read' && permission !== 'hrm.position.read') || feature !== 'hrm') {
           throw new Error('unexpected gate ' + permission + ' ' + feature)
         }
         if (state.gate && 'status' in state.gate) {
@@ -88,6 +88,11 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return [{ locationId: 'location-1', label: 'HQ · Headquarters' }]
       }
+      export async function listPositionOptions(args) {
+        state.calls.push({ fn: 'positions', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ positionId: 'position-1', label: 'ENG-1042 · Engineer · open' }]
+      }
     `,
   ],
 ]);
@@ -98,6 +103,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["@openbooks/engine/src/hrm/authorization.ts", "mock:authz-engine"],
   ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
+  ["@openbooks/engine/src/hrm/positions-read.ts", "mock:service"],
 ]);
 
 let optionsRoute: typeof import("./route.ts") | undefined;
@@ -234,5 +240,29 @@ if (isVitest) {
     const response = await optionsRoute!.GET(getRequest("?source=locations&limit=500"));
     assert.equal(response.status, 422);
     assert.match((await response.json() as { error: string }).error, /pages/);
+  });
+
+  test("positions forwards the pin under its own key behind the position grant", async () => {
+    reset();
+    const include = "00000000-0000-4000-8000-000000000033";
+    const response = await optionsRoute!.GET(
+      getRequest(`?source=positions&q=eng&limit=10&include=${include}`),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      options: [{ positionId: "position-1", label: "ENG-1042 · Engineer · open" }],
+    });
+    assert.deepEqual(routeState.calls, [
+      {
+        fn: "positions",
+        args: {
+          orgId: "org-1",
+          actorId: "user-1",
+          q: "eng",
+          limit: 10,
+          includePositionId: include,
+        },
+      },
+    ]);
   });
 }

@@ -6,7 +6,8 @@
       "overview": "概览",
       "changeRequests": "变更申请",
       "departments": "部门",
-      "reports": "报表"
+      "reports": "报表",
+      "positions": "职位"
     },
     "vitals": {
       "headcount": "人员数量",
@@ -14,7 +15,11 @@
       "employers": "雇主",
       "employersSub": "{count, plural, other {# 家子公司}}",
       "departments": "部门",
-      "departmentsSub": "{count, plural, other {# 个部门}}"
+      "departmentsSub": "{count, plural, other {# 个部门}}",
+      "openPositions": "开放职位",
+      "openPositionsSub": "{count, plural, other {# 个招聘中的编制}}",
+      "unfundedFte": "无资金来源的已填补 FTE",
+      "unfundedFteSub": "已填补但没有对应资金"
     },
     "groups": {
       "title": "按雇主和部门统计的人员数量",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "名录"
+    },
+    "vacancy": {
+      "title": "按部门统计的空缺",
+      "department": "部门",
+      "employer": "雇主",
+      "positions": "职位",
+      "planned": "计划 FTE",
+      "funded": "已拨款 FTE",
+      "filled": "已填补 FTE",
+      "vacant": "空缺 FTE",
+      "unassignedDepartment": "无部门",
+      "empty": "截至 {date} 没有已设立的职位。",
+      "total": "合计"
     }
   },
   "overview": {
@@ -238,12 +256,63 @@
       "updatedToast": "草稿已更新。",
       "submittedToast": "已提交审批。",
       "withdrawnToast": "申请已撤回。",
-      "requestFailed": "无法保存变更申请。"
+      "requestFailed": "无法保存变更申请。",
+      "kindPositionAssignment": "职位任命",
+      "positionLabel": "职位",
+      "positionUnset": "无职位",
+      "positionHint": "此任命所占据的拨款编制。任命保留其自身的职务、部门和地点。",
+      "positionRequired": "请选择一个职位，或将该任命标记为未任命。",
+      "unassignLabel": "解除职位任命",
+      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。"
     }
   },
   "directory": {
     "employmentStatus": "雇佣状态",
     "serviceStart": "服务开始日期",
     "noEmployment": "无雇佣关系"
+  },
+  "positions": {
+    "title": "职位",
+    "description": "人员编制计划背后的拨款编制：每个职位的计划 FTE、已拨款 FTE 和已填补 FTE，含版本、按期间的拨款和当前任职者。",
+    "statusAll": "全部状态",
+    "statusPlanned": "已规划",
+    "statusOpen": "开放中",
+    "statusFilled": "已填补",
+    "statusFrozen": "已冻结",
+    "statusClosed": "已关闭",
+    "columns": {
+      "code": "编码",
+      "title": "标题",
+      "status": "状态",
+      "department": "部门",
+      "planned": "计划 FTE",
+      "funded": "已拨款 FTE",
+      "filled": "已填补 FTE",
+      "vacant": "空缺 FTE",
+      "holder": "任职者",
+      "unassignedHolder": "空缺"
+    },
+    "holdersCount": "{count, plural, other {# 名任职者}}",
+    "empty": "没有职位符合此筛选条件。",
+    "total": "合计",
+    "drawer": {
+      "title": "职位 {code}",
+      "versions": "版本",
+      "versionNo": "版本 {no}",
+      "effective": "自 {from} 至 {to} 有效",
+      "effectiveOpen": "自 {from} 起有效，无结束日期",
+      "recorded": "记录于 {at}",
+      "funding": "按期间拨款",
+      "period": "期间 {from} 至 {to}",
+      "funded": "已拨款 {fte} FTE",
+      "costPlan": "成本计划 {amount} {currency}",
+      "unfunded": "无拨款记录",
+      "holder": "当前任职者",
+      "holderEmployment": "雇用 {id}",
+      "noHolder": "截至 {date} 无任职者",
+      "warnings": "警告",
+      "refusal": "需要注意",
+      "missing": "此职位不再可见。"
+    }
   }
 }

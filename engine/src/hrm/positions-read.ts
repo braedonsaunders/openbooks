@@ -3,7 +3,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { requireAggregatePositionRead, requireHrmPositionRead } from "./authorization.ts";
-import { HRM_FEATURE_KEY } from "./employment-read.ts";
+import { HRM_FEATURE_KEY, likeEscape } from "./employment-read.ts";
 import {
   computeVacancy,
   formatFte,
@@ -640,6 +640,100 @@ export async function getVacancyAsOf(query: VacancyQuery): Promise<VacancyDTO> {
   return withOrgTransaction(orgId, async () => {
     await assertPositionFeature(db, orgId);
     return loadVacancyAsOf(db, query);
+  });
+}
+
+export interface PositionOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the code or title; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Position id to pin first (the draft's stored value under edit). */
+  readonly includePositionId?: string;
+}
+
+export interface PositionOptionDTO {
+  readonly positionId: string;
+  readonly label: string;
+}
+
+/**
+ * Position options for the assignment picker: code, current title and
+ * lifecycle status. Same aggregate authority as the vacancy read; a
+ * position is visible only when its current version's employer sits inside
+ * the actor's scope. Closed positions still list — whether a closed
+ * establishment takes a holder is the service's decision, never a
+ * picker-side hiding. An unknown or out-of-scope id stays absent rather
+ * than leaking existence.
+ */
+export async function listPositionOptions(query: PositionOptionsQuery): Promise<readonly PositionOptionDTO[]> {
+  const orgId = query.orgId;
+  if (typeof orgId !== "string" || orgId.length === 0) {
+    throw new HrmPositionError("INVALID_INPUT", "orgId must be a non-empty string");
+  }
+  if (typeof query.actorId !== "string" || query.actorId.length === 0) {
+    throw new HrmPositionError("INVALID_INPUT", "actorId must be a non-empty string");
+  }
+  const limit = query.limit ?? 25;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new HrmPositionError("INVALID_INPUT", "limit must be an integer between 1 and 100");
+  }
+  return withOrgTransaction(orgId, async () => {
+    await assertPositionFeature(db, orgId);
+    const allowed = await requireAggregatePositionRead(db, orgId, query.actorId);
+    const fragment = (query.q ?? "").trim();
+    const includeId = query.includePositionId?.trim() ? query.includePositionId.trim() : null;
+    type OptionRow = {
+      positionId: string;
+      code: string;
+      title: string;
+      status: string;
+      subsidiaryId: string;
+    };
+    const page = (await db.execute<OptionRow>(sql`
+      select p.id::text as "positionId", p.position_code as code,
+             v.title, v.status,
+             v.employer_subsidiary_id::text as "subsidiaryId"
+        from positions p
+        join lateral (
+          select title, status, employer_subsidiary_id
+            from position_versions
+           where org_id = p.org_id and position_id = p.id and recorded_until is null
+           order by version_no desc
+           limit 1
+        ) v on true
+       where p.org_id = ${orgId}::uuid
+         ${fragment ? sql`and (p.position_code ilike ${`%${likeEscape(fragment)}%`} escape '\\' or v.title ilike ${`%${likeEscape(fragment)}%`} escape '\\')` : sql``}
+       order by p.position_code, p.id
+       limit ${limit}`)).rows.filter(
+      (row) => allowed === null || allowed.has(row.subsidiaryId),
+    );
+    const pinned = includeId
+      ? (await db.execute<OptionRow>(sql`
+        select p.id::text as "positionId", p.position_code as code,
+               v.title, v.status,
+               v.employer_subsidiary_id::text as "subsidiaryId"
+          from positions p
+          join lateral (
+            select title, status, employer_subsidiary_id
+              from position_versions
+             where org_id = p.org_id and position_id = p.id and recorded_until is null
+             order by version_no desc
+             limit 1
+          ) v on true
+         where p.org_id = ${orgId}::uuid and p.id = ${includeId}::uuid`)).rows.filter(
+          (row) => allowed === null || allowed.has(row.subsidiaryId),
+        )[0] ?? null
+      : null;
+    const rows = pinned
+      ? [pinned, ...page.filter((row) => row.positionId !== pinned.positionId)]
+      : page;
+    return rows.map((row) => ({
+      positionId: row.positionId,
+      label: `${row.code} · ${row.title} · ${row.status}`,
+    }));
   });
 }
 

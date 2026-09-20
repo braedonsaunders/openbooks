@@ -7,6 +7,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
+import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { can, type Authz } from '../authz'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -51,6 +52,38 @@ export interface RecentChangeItem {
   kindLabel: string
   reason: string
   recordedAt: string
+}
+
+export interface HrmVacancyGroup {
+  department: string
+  employer: string
+  positions: number
+  plannedFte: string
+  fundedFte: string
+  filledFte: string
+  vacantFte: string
+}
+
+export interface HrmPositionsSummary {
+  openPositionsLabel: string
+  openPositionsValue: string
+  openPositionsSub: string
+  unfundedFteLabel: string
+  unfundedFteValue: string
+  unfundedFteSub: string
+  vacancyTitle: string
+  departmentColumn: string
+  employerColumn: string
+  positionsColumn: string
+  plannedColumn: string
+  fundedColumn: string
+  filledColumn: string
+  vacantColumn: string
+  vacancyEmpty: string
+  totalLabel: string
+  unassignedDepartment: string
+  groups: HrmVacancyGroup[]
+  totals: { positions: number; plannedFte: string; fundedFte: string; filledFte: string; vacantFte: string }
 }
 
 export interface HrmHomeData {
@@ -109,6 +142,8 @@ export interface HrmHomeData {
   readinessTone: 'warning' | 'positive'
   actionsTitle: string
   actions: DirectoryItem[]
+  /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
+  positions: HrmPositionsSummary | null
 }
 
 /**
@@ -157,6 +192,58 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   const departments = new Set(
     headcount.groups.map((group) => group.departmentId).filter((id): id is string => id !== null),
   ).size
+
+  // The headcount plan rides the same cockpit when the viewer holds the
+  // position read grant: open establishments, unfunded filled FTE, and the
+  // vacancy-by-department breakdown, all resolved through the canonical
+  // position read service. Without the grant the cockpit shows no
+  // positions section at all — never a gated link.
+  let positions: HrmPositionsSummary | null = null
+  if (can(authz, 'hrm.position.read')) {
+    const vacancy = await getVacancyAsOf({
+      orgId,
+      actorId: authz.user.id,
+      effectiveDate,
+      knownAt: new Date().toISOString(),
+    })
+    const openCount = vacancy.positions.filter((row) => row.version.status === 'open').length
+    const unassignedDepartment = t('home.vacancy.unassignedDepartment')
+    positions = {
+      openPositionsLabel: t('home.vitals.openPositions'),
+      openPositionsValue: String(openCount),
+      openPositionsSub: t('home.vitals.openPositionsSub', { count: openCount }),
+      unfundedFteLabel: t('home.vitals.unfundedFte'),
+      unfundedFteValue: vacancy.totals.unfundedFilledFte,
+      unfundedFteSub: t('home.vitals.unfundedFteSub'),
+      vacancyTitle: t('home.vacancy.title'),
+      departmentColumn: t('home.vacancy.department'),
+      employerColumn: t('home.vacancy.employer'),
+      positionsColumn: t('home.vacancy.positions'),
+      plannedColumn: t('home.vacancy.planned'),
+      fundedColumn: t('home.vacancy.funded'),
+      filledColumn: t('home.vacancy.filled'),
+      vacantColumn: t('home.vacancy.vacant'),
+      vacancyEmpty: t('home.vacancy.empty', { date: vacancy.effectiveDate }),
+      totalLabel: t('home.vacancy.total'),
+      unassignedDepartment,
+      groups: vacancy.byDepartment.map((group) => ({
+        department: group.departmentName ?? unassignedDepartment,
+        employer: group.employerSubsidiaryName,
+        positions: group.positions,
+        plannedFte: group.plannedFte,
+        fundedFte: group.fundedFte,
+        filledFte: group.filledFte,
+        vacantFte: group.vacantFte,
+      })),
+      totals: {
+        positions: vacancy.totals.positions,
+        plannedFte: vacancy.totals.plannedFte,
+        fundedFte: vacancy.totals.fundedFte,
+        filledFte: vacancy.totals.filledFte,
+        vacantFte: vacancy.totals.vacantFte,
+      },
+    }
+  }
 
   // The home reflects the org's own surface: the directory names the native
   // employee list (the module's record home) exactly when the viewer may
@@ -406,5 +493,6 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     readinessTone: unmigrated === 0 ? 'positive' : 'warning',
     actionsTitle: t('overview.actions.title'),
     actions,
+    positions,
   }
 }
