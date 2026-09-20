@@ -22,7 +22,7 @@ test('recordFileEvent persists audit evidence on the caller executor and does no
 
 test('file audit contract matches transaction audit fail-closed persistence', () => {
   const transactionAudit = readFileSync(
-    new URL('../../engine/src/transaction-audit.ts', import.meta.url),
+    new URL('../../engine/src/records/transaction-audit.ts', import.meta.url),
     'utf8',
   )
   const recordStart = transactionAudit.indexOf('export async function recordTransactionAudit')

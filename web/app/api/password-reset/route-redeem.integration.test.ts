@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 // F-t01-013 activation block: redeeming a live set-password link from a
 // browser on 127.0.0.1 answered 403 while localhost passed — the origin
@@ -31,7 +31,7 @@ const hooks = registerHooks({
         export async function sendVia() { return { kind: 'sent', providerMessageId: 'isolated' }; }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/email-config.ts") {
+    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.password-reset-redeem-integration')];
         export async function resolveOrgEmailTransport() { return state.transport ? { provider: 'isolated' } : null; }

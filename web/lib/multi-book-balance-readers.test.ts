@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test(
   "all balance readers stay on the primary accounting book",
@@ -11,9 +11,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db, withBypass, withOrg } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
 
       installTrustedTestDatabaseBypass();
       const scratch = await createScratchOrg();

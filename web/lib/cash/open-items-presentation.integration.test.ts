@@ -11,9 +11,9 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { openItems } = await import('./open-items.ts')
 
 const D = '2026-07-14'

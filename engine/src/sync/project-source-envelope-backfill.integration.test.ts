@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, withOrg } from "../db.ts";
+import { db, env, withOrg } from "../platform/db.ts";
 import { loadEntities } from "./migrate.ts";
 import type { MigrationSource } from "./source.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 /**
  * Live-Postgres regression: the connector project loader never backfills the

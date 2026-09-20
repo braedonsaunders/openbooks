@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { assertPeriodModulesOpen } from "../close.ts";
-import { db, withOrg } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { assertPeriodModulesOpen } from "../close/close.ts";
+import { db, withOrg } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import type { MigrationSource } from "./source.ts";
 
 /**

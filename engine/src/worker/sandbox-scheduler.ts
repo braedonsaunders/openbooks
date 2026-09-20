@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import { db, withBypassContext } from "../db.ts";
+import { db, withBypassContext } from "../platform/db.ts";
 
 /**
  * Sandbox refresh scanner — polls every 5 min for ready sandboxes whose

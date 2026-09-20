@@ -33,8 +33,8 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, env, pool, withBypass, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, env, pool, withBypass, withOrg, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { REPORT_ENTITY_MAP } = await import("@openbooks/reports");
 const { runCustomQuery } = await import("@openbooks/reports");
 const { resolveCustomReportBookScope } = await import("./custom-reports.ts");

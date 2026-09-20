@@ -21,7 +21,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  *   - truelayer   : TrueLayer Data API (UK/EU open banking)
  *
  * API providers store sealed credentials and are polled by the scheduler
- * (engine/src/bank-feed-providers.ts → importStatement, source 'feed_api').
+ * (engine/src/banking/bank-feed-providers.ts → importStatement, source 'feed_api').
  * `manual` and `sftp` carry no credentials — they document the account's feed
  * so the Banking cockpit can show one coherent connection list.
  */

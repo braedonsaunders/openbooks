@@ -127,7 +127,7 @@ const hooks = registerHooks({
     }
     // Only the route's OWN db import is wrapped; engine modules reached
     // through it keep the un-instrumented real module.
-    if (specifier === "@openbooks/engine/src/db.ts" && context.parentURL?.includes("setup/labor-costing/route.ts")) {
+    if (specifier === "@openbooks/engine/src/platform/db.ts" && context.parentURL?.includes("setup/labor-costing/route.ts")) {
       return { url: "mock:dbwrap", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -138,7 +138,7 @@ const hooks = registerHooks({
     }
     if (url === "mock:dbwrap") {
       // Delegate to the SAME real-module instance the fixtures use.
-      const realUrl = import.meta.resolve("@openbooks/engine/src/db.ts");
+      const realUrl = import.meta.resolve("@openbooks/engine/src/platform/db.ts");
       return { format: "module", source: mockDbWrapper(realUrl), shortCircuit: true };
     }
     return nextLoad(url, context);
@@ -149,9 +149,9 @@ const routeUrl = "./route.ts?labor-costing-boundary-test";
 const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 interface Fixture {
@@ -373,7 +373,7 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
     });
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -419,7 +419,7 @@ test("a malformed component rejects the whole save and persists nothing", { skip
     await assertNothingPersisted(f.orgId);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -461,7 +461,7 @@ test("a valid save with an invalid control account persists NOTHING — not even
     await assertNothingPersisted(f.orgId);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -524,7 +524,7 @@ test("re-saves keep the audit trail continuous — before values match what was 
     assert.ok(!("laborClearing" in evidence.controlAccounts));
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -562,7 +562,7 @@ test("a save whose INSERT fails after the close commits NO rate gap and NO orpha
   } finally {
     routeState.fault = null;
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -592,7 +592,7 @@ test("a save whose AUDIT write fails rolls the close and the replacement back to
   } finally {
     routeState.fault = null;
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -658,7 +658,7 @@ test("concurrent same-scope starts serialize into one deterministic, fully evide
   } finally {
     routeState.onExecute = null;
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -740,7 +740,7 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
     assert.equal(ratesAfterDelete[1]!.isActive, false);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -774,7 +774,7 @@ test("end/delete audit-write failures roll the data change back with the evidenc
   } finally {
     routeState.fault = null;
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -801,7 +801,7 @@ test("an inactive control account is refused like a summary one", { skip: !proce
     await assertNothingPersisted(f.orgId);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -867,7 +867,7 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
     assert.equal(journals.rows[0]!.n, 0);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -890,7 +890,7 @@ test("save-rate rejects an impossible calendar date with a field error, not a dr
     assert.deepEqual(await storedRates(f.orgId), []);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -913,7 +913,7 @@ test("end-rate rejects an impossible calendar date with a field error, not a dri
     assert.equal((await storedRates(f.orgId))[0]!.effectiveTo, null);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -941,7 +941,7 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", { 
     assert.match(body.error, /periodStart\/periodEnd/);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -987,7 +987,7 @@ test("a backdated save-rate persists mid-timeline, capped the day before its suc
     assert.equal((audits[2]!.changes.after as StoredRate).effectiveTo, "2026-09-16");
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -1022,7 +1022,7 @@ test("a same-start correction keeps the row's window instead of reopening past i
     assert.equal(rates[1]!.effectiveTo, "2026-02-28");
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -1051,7 +1051,7 @@ test("a storage refusal past validation never leaks driver text to the client", 
   } finally {
     routeState.fault = null;
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -1084,7 +1084,7 @@ test("save-rate names WHICH wage scope is unavailable, with the supplied id", { 
     assert.equal((await storedRates(f.orgId)).length, 0);
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });
@@ -1128,7 +1128,7 @@ test("reconcile and post-variance name a subsidiary that is missing, inactive, o
     );
   } finally {
     routeState.authz = null;
-    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
     await dropScratchOrgReporting(f.orgId);
   }
 });

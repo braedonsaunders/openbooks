@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import type {
   SourceAccountMonthRow,
   SourceProjectAccountMonthRow,

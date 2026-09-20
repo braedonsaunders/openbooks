@@ -1,9 +1,9 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { nextDocumentNumber } from './bills'
 import { resolveOrgId } from './org-scope'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 import {
   DriverAdminError,
   createDriver,

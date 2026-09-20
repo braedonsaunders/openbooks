@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PACK_DEFAULT_CODES } from "../tax-pack-provisioning.ts";
+import { PACK_DEFAULT_CODES } from "../tax/pack-provisioning.ts";
 import { packTaxCodesForReturn } from "./index.ts";
 import { SPAIN_TAX_PACK } from "./es.ts";
 

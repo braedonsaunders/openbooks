@@ -7,8 +7,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { taxProfileMap, computeBillTotals } = await import('./bills');
 for (const mode of ['inactive component', 'unrated component', 'lapsed component', 'complete group', 'zero component'] as const) {
   test(`tax profile validity: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

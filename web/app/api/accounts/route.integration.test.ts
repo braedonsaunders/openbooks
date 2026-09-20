@@ -64,8 +64,8 @@ const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

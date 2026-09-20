@@ -5,7 +5,7 @@ import {
   SubscriptionError,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
-} from "../../../../engine/src/subscription-billing.ts";
+} from "../../../../engine/src/billing/subscription-billing.ts";
 
 interface RouteState {
   queries: unknown[];
@@ -157,10 +157,10 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/subscription-billing.ts", "mock:subscription-engine"],
-  ["@openbooks/engine/src/money.ts", "mock:money"],
-  ["@openbooks/engine/src/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/billing/subscription-billing.ts", "mock:subscription-engine"],
+  ["@openbooks/engine/src/money/money.ts", "mock:money"],
+  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],

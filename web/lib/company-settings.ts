@@ -1,13 +1,13 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   assertValidControlAccountMappings,
   CONTROL_ACCOUNT_ROLES,
   ControlAccountsIncompleteError,
   type ControlAccountRecord,
   type OrgControlAccounts,
-} from "@openbooks/engine/src/control-accounts.ts";
+} from "@openbooks/engine/src/records/control-accounts.ts";
 import { isFeatureEnabled } from "./features";
 import { isUuid } from "./list-params";
 import { DEFAULT_LOCALE, isLocale } from "../i18n/config";

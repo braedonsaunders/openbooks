@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db, env, schema } from "../db.ts";
-import { sealJson } from "../secrets.ts";
+import { db, env, schema } from "../platform/db.ts";
+import { sealJson } from "../platform/secrets.ts";
 import {
   acceptWebConnectorResponse,
   authenticateWebConnector,

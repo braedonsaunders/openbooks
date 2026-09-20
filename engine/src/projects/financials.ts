@@ -1,0 +1,880 @@
+import { sql, type SQL } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { db, orgContext, pool } from '../platform/db.ts'
+import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
+import { resolveAccountGroups } from '../records/account-groups.ts'
+import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
+import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '../money/money.ts'
+import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
+import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
+import { businessToday } from '../platform/business-date.ts'
+
+/**
+ * Profile-driven project financials — the configurable successor to the hardcoded
+ * measures in `project-costing.ts`. Given a project type's `FinancialProfile`, it
+ * resolves the full measure catalog (base aggregations + derived formulas) so the
+ * Financials P&L renders per type. Monetary measures stay exact decimal strings
+ * through the entire calculation and are covered by deterministic parity tests.
+ */
+
+const amount = (v: unknown): string => normalizeMoney(v == null ? '0' : String(v))
+
+/**
+ * Authoritative primary-book predicate over `journal_entries e`.
+ *
+ * Parallel books are alternate representations of the same economics, so an
+ * unqualified GL sum counts one event once per book (revenue 100 posted to
+ * the primary and tax books reads back as 200). Every posted-GL measure in
+ * this report therefore pins the same primary posting book the retainage
+ * balance (`projectRetainageHeldSql`: `is_primary and is_active and
+ * posts_gl`) and cost-to-cost progress (`project-revenue.ts`) already treat
+ * as authoritative. The default project financials have no book parameter,
+ * so primary-book parity is the contract — consistent headline and detail.
+ */
+function primaryBookSql(orgId: string): SQL {
+  return sql`e.book_id = (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl)`
+}
+
+export interface ProjectFinancials {
+  /** measure key → dollar value (marginPct is a percentage, not dollars). */
+  measures: Record<string, string | number>
+  costByCategory: { category: string; amount: string }[]
+  costByAccount: { accountId: string; number: string | null; name: string; amount: string }[]
+  documents: { id: string; kind: string; documentNumber: string; documentDate: string; status: string; partyName: string | null; amount: string }[]
+  projectType: string | null
+  contractValue: string
+}
+
+/** Resolve the account-id set for an account-group cost source (empty ⇒ no filter). */
+async function groupAccountIds(orgId: string, src: CostSource): Promise<string[]> {
+  if (src.source !== 'account_group' || !src.dimension) return []
+  const { byAccount } = await resolveAccountGroups(src.dimension, orgId)
+  const keys = src.groupKeys && src.groupKeys.length ? new Set(src.groupKeys) : null
+  const ids: string[] = []
+  for (const [accountId, g] of byAccount) if (!keys || keys.has(g.key)) ids.push(accountId)
+  return ids
+}
+
+/** A GL-cost filter fragment over `journal_lines l` / `accounts a` for a CostSource. */
+function costPredicate(src: CostSource, accountIds: string[]): SQL {
+  if (src.source === 'none') return sql`false`
+  if (src.source === 'account_group') {
+    return accountIds.length ? sql`l.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])` : sql`false`
+  }
+  const types = src.accountTypes ?? []
+  if (!types.length) return sql`false`
+  return sql`a.type in (${sql.join(types.map((t) => sql`${t}`), sql`, `)})`
+}
+
+/**
+ * rate_engine overhead — per-department hourly rates applied to the project's
+ * labor: overhead = Σ ( hours × the rate effective on each entry's work date ).
+ *
+ * Rates come ONLY from the published, effective-dated rate card
+ * (overhead_rates). The Overhead Model's live composite is an analytical
+ * preview that seeds publishing — it is never a costing basis, so project costs
+ * and closed-period margins can never restate retroactively. Which rows apply
+ * to an entry is the posting engine's own rule (overheadRateAppliesToTimeEntry):
+ * org-wide rows reach every entry, a department's own row overrides them, and
+ * rows of one scope stack (a card may carry category rows); per_hour rows cost
+ * hours × $rate, percent rows cost labor cost × rate%.
+ * Purely statistical — no GL posting.
+ */
+async function rateEngineOverhead(
+  orgId: string,
+  projectId: string,
+  cfg: OverheadSource['rateEngine'],
+): Promise<string> {
+  const basis = cfg?.hoursBasis ?? 'total_hours'
+  // Percent rows ride on labour cost (the worker's functional); per-hour rows
+  // ride on the published card, which is denominated in presentation. Only
+  // the percent basis translates.
+  const r = (await db.execute<{ func: string | null; late: string | null; percent_basis: string; hourly: string }>(sql`
+    select coalesce(te.cost_rate_currency, crs.base_currency, o_.base_currency) as func,
+           max(te.worked_on)::text as late,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100, 4))
+             filter (where o.rate_kind = 'percent'), 0) as percent_basis,
+           coalesce(sum(round(te.hours * o.rate_percent, 4))
+             filter (where o.rate_kind <> 'percent'), 0) as hourly
+      from time_entries te
+      join overhead_rates o on ${overheadRateAppliesToTimeEntry('o', 'te')}
+      left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+      join orgs o_ on o_.id = te.org_id
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+       ${basis === 'billed_hours'
+         ? sql`and te.is_billable`
+         : basis === 'actual_hours'
+           ? sql`and te.costing_basis = 'actual'`
+           : sql``}
+     group by 1`))
+  const legs = r.rows.map((leg) => ({ func: leg.func ?? null, date: String(leg.late).slice(0, 10) }))
+  const ctx = await flowTranslation(orgId, legs)
+  let total = '0'
+  for (const leg of r.rows) {
+    const date = String(leg.late).slice(0, 10)
+    total = add(total, translateFlowAmount(String(leg.percent_basis ?? 0), leg.func ?? null, date, ctx.rateAt))
+    total = add(total, amount(leg.hourly))
+  }
+  return amount(total)
+}
+
+async function overheadAdjustments(
+  orgId: string,
+  projectId: string,
+): Promise<string> {
+  const r = (await db.execute<{ adjustment: string }>(sql`
+    select coalesce(sum(amount), 0) as adjustment
+      from project_overhead_adjustments
+     where org_id = ${orgId} and project_id = ${projectId}
+  `))
+  return amount(r.rows[0]?.adjustment)
+}
+
+type AdjustableMeasure =
+  | 'actual_cost'
+  | 'invoiced_to_date'
+  | 'billable_value'
+  | 'total_price'
+  | 'could_be_invoiced'
+  | 'gross_profit'
+
+async function projectFinancialAdjustments(
+  orgId: string,
+  projectId: string,
+): Promise<Record<AdjustableMeasure, string>> {
+  const result = (await db.execute<{ measure: AdjustableMeasure; amount: string }>(sql`
+    select measure, coalesce(sum(amount), 0) as amount
+      from project_financial_adjustments
+     where org_id = ${orgId} and project_id = ${projectId}
+     group by measure
+  `))
+  const adjustments: Record<AdjustableMeasure, string> = {
+    actual_cost: '0.0000',
+    invoiced_to_date: '0.0000',
+    billable_value: '0.0000',
+    total_price: '0.0000',
+    could_be_invoiced: '0.0000',
+    gross_profit: '0.0000',
+  }
+  for (const row of result.rows) adjustments[row.measure] = amount(row.amount)
+  return adjustments
+}
+
+/**
+ * Resolve the full measure catalog against whichever database surface the
+ * ambient tenant context provides. Callers never invoke this directly —
+ * `resolveProjectFinancials` decides the transaction boundary; this function
+ * only guarantees that every statement it issues shares one connection, one
+ * tenant scope, and (when that boundary is a fresh snapshot) one PostgreSQL
+ * snapshot.
+ */
+async function resolveProjectFinancialsInSnapshot(
+  orgId: string,
+  projectId: string,
+  profile: FinancialProfile,
+): Promise<ProjectFinancials> {
+  // Project header (contract value + markup + billing method).
+  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string }>(sql`
+    select coalesce(p.contract_value, 0) as contract_value,
+           coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
+           coalesce(pt.key, 'time_and_materials') as project_type,
+           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
+      from projects p
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+     where p.id = ${projectId} and p.org_id = ${orgId}
+  `))
+  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0' }
+  const contractValue = amount(proj.contract_value)
+  const projectMarkupPercent = amount(proj.markup_percent)
+  const costBudget = profile.costBudget.source === 'wbs_estimates' ? amount(proj.cost_budget) : '0.0000'
+
+  // Account-id sets for account-group cost sources. Overhead only reads GL when
+  // its method is posted_gl_account_group; every other method is a
+  // statistical rate applied below (never a GL sum).
+  const overheadCostSource: CostSource =
+    profile.overhead.method === 'posted_gl_account_group' && profile.overhead.accountGroup
+      ? { source: 'account_group', dimension: profile.overhead.accountGroup.dimension, groupKeys: profile.overhead.accountGroup.groupKeys }
+      : { source: 'none' }
+  const [costIds, overheadIds] = await Promise.all([
+    groupAccountIds(orgId, profile.actualCost),
+    groupAccountIds(orgId, overheadCostSource),
+  ])
+  const financialAdjustmentsPromise = projectFinancialAdjustments(
+    orgId,
+    projectId,
+  )
+  const directSubcontractCommitmentPromise = directSubcontractOpenCommitment(
+    orgId,
+    projectId,
+  )
+
+  const invoiceKinds = profile.invoicedToDate.docKinds
+  const creditKinds = profile.invoicedToDate.creditKinds
+  const kindList = (ks: string[]) => sql.join(ks.map((k) => sql`${k}`), sql`, `)
+  const committedKinds = profile.committedCost.docKinds
+  const committedStatuses = profile.committedCost.statuses ?? ['approved']
+  const billableCostKinds = profile.billableValue.costSourceKinds?.length
+    ? profile.billableValue.costSourceKinds
+    : ['vendor_bill', 'expense_report', 'card_charge', 'check']
+  const billableCostStatuses =
+    profile.billableValue.costSourceStatuses ?? ['approved', 'posted']
+
+  const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
+    // invoicedToDate — effective line tagging (line override, then header
+    // inheritance), matching the posting kernel's dimension semantics.
+    db.execute(sql`
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(round(dl.amount * d.fx_rate, 4)) filter (where d.kind in (${kindList(invoiceKinds)})), 0) as invoiced_pos,
+             coalesce(sum(round(dl.amount * d.fx_rate, 4)) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced_neg
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
+         and d.status = 'posted'
+         and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})
+       group by 1`),
+    // actualCost + revenuePosted — posted GL tagged to the project. Legs
+    // arrive in their line entity's functional and translate below.
+    db.execute(sql`
+      select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
+             coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}
+       group by 1`),
+    // committedCost — unbilled portion (by line amount) of open (approved)
+    // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
+    // migrated orders often carry the amount but no per-unit price.
+    db.execute(sql`
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(
+               case when d.kind = 'project_charge'
+                    then round(coalesce(dl.cost_amount, dl.amount) * d.fx_rate, 4)
+                    else round(
+                      round(
+                        (case when d.kind = 'vendor_credit'
+                              then -dl.amount else dl.amount end)
+                        * case when coalesce(dl.quantity,0) > 0
+                          then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity)
+                          else 1
+                        end,
+                        4
+                      ) * d.fx_rate,
+                      4
+                    )
+               end
+             ), 0) as committed
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
+         and d.status in (${kindList(committedStatuses.length ? committedStatuses : ['__none__'])})
+         and (
+           d.kind = 'project_charge'
+           or (
+             d.kind in (${kindList(committedKinds.length ? committedKinds : ['__none__'])})
+             and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)
+           )
+         )
+       group by 1`),
+    // Billable time is selling-value evidence independent of invoice amount.
+    // Fixed/progress invoices often have no one-to-one time-line relationship,
+    // so total price cannot be reconstructed as invoice + unbilled time.
+    // Bill and cost legs carry their own stamped currencies, so each side
+    // groups by its own functional and translates separately below.
+    db.execute(sql`
+      select coalesce(te.bill_rate_currency, crs.base_currency, o.base_currency) as bill_func,
+             coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as cost_func,
+             max(te.worked_on)::text as late,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as total_bill,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as total_cost,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4))
+               filter (where te.billing_status = 'unbilled'), 0) as unbilled_bill,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4))
+               filter (where te.billing_status = 'unbilled'), 0) as unbilled_cost
+       from time_entries te
+       left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+       join orgs o on o.id = te.org_id
+       where te.org_id = ${orgId} and te.project_id = ${projectId}
+         and te.status = 'approved' and te.is_billable
+       group by 1, 2`),
+    // Billable cost is likewise all eligible work, with its unbilled subset
+    // retained separately for invoicing/backlog presentation.
+    db.execute(sql`
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(round((
+               case
+                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when dl.bill_amount is not null then
+                   case when d.kind = 'vendor_credit'
+                        then -dl.bill_amount else dl.bill_amount end
+                 else
+                   round(
+                     (case when d.kind = 'vendor_credit'
+                           then -dl.amount else dl.amount end)
+                     * case when dl.markup_percent is not null
+                            then 1 + dl.markup_percent / 100
+                            else coalesce(nullif(dl.cost_multiplier, 0), 1)
+                       end,
+                     4
+                   )
+               end
+             ) * d.fx_rate, 4)), 0) as total_bill,
+             coalesce(sum(round(
+               case when d.kind = 'vendor_credit'
+                    then -dl.amount else dl.amount end
+             * d.fx_rate, 4)), 0) as total_cost,
+             coalesce(sum(round((
+               case
+                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when dl.bill_amount is not null then
+                   case when d.kind = 'vendor_credit'
+                        then -dl.bill_amount else dl.bill_amount end
+                 else
+                   round(
+                     (case when d.kind = 'vendor_credit'
+                           then -dl.amount else dl.amount end)
+                     * case when dl.markup_percent is not null
+                            then 1 + dl.markup_percent / 100
+                            else coalesce(nullif(dl.cost_multiplier, 0), 1)
+                       end,
+                     4
+                   )
+               end
+             ) * d.fx_rate, 4)) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
+             coalesce(sum(round((
+               case when d.kind = 'vendor_credit'
+                    then -dl.amount else dl.amount end
+             ) * d.fx_rate, 4))
+               filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
+         and dl.is_billable
+         and d.status in (${kindList(billableCostStatuses.length ? billableCostStatuses : ['__none__'])})
+         and (d.kind = 'project_charge'
+           or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))
+       group by 1`),
+    // laborCost — resolved per profile source (payroll JE / time rate / group).
+    profile.laborCost.source === 'payroll_je'
+      ? db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+             left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
+             and ${primaryBookSql(orgId)}
+           group by 1`)
+      : profile.laborCost.source === 'time_rate'
+        ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+             max(te.worked_on)::text as late,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+             left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+             join orgs o on o.id = te.org_id
+             where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+           group by 1`)
+        : profile.laborCost.source === 'estimated_time_rate'
+          ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+               max(te.worked_on)::text as late,
+               coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+               left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+               join orgs o on o.id = te.org_id
+               where te.org_id = ${orgId} and te.project_id = ${projectId}
+                 and te.status = 'approved' and te.costing_basis = 'estimated'
+             group by 1`)
+        : db.execute(sql`select 0 as labor`),
+    // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
+    profile.overhead.method !== 'posted_gl_account_group'
+      ? db.execute(sql`select 0 as overhead`)
+      : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
+           from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+          where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+            and ${primaryBookSql(orgId)}
+          group by 1`),
+    // project approved labor hours (base for per-hour / rate-engine overhead).
+    db.execute(sql`select coalesce(sum(te.hours), 0) as total,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
+        from time_entries te
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
+    // cost by account (for the breakdown subtab) — same cost predicate.
+    db.execute<{
+      account_id: string; number: string | null; name: string; type: string; amount: string;
+      func: string | null; late: string;
+    }>(sql`
+      select a.id as account_id, a.number, a.name, a.type, sub.base_currency as func,
+             max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}
+         and ${costPredicate(profile.actualCost, costIds)}
+       group by a.id, a.number, a.name, a.type, sub.base_currency having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
+    // documents on the project (transactions tab). Row amounts arrive in
+    // the document's transaction currency with its functional first leg and
+    // translate per row below, so the tab states presentation like the rest.
+    db.execute<{
+      id: string; kind: string; documentNumber: string; documentDate: string; status: string;
+      partyName: string | null; func: string | null; late: string; fxRate: string; amount: string;
+    }>(sql`
+      select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
+             d.status, pt.display_name as "partyName", sub.base_currency as func,
+             coalesce(d.document_date, d.posting_date)::text as late, d.fx_rate as "fxRate",
+             case when d.kind = 'project_charge'
+                  then coalesce(sum(coalesce(dl.bill_amount, dl.amount)), 0)
+                  else coalesce(sum(dl.amount), 0)
+              end as amount
+        from documents d
+        left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+        left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where d.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
+       group by d.id, pt.display_name, sub.base_currency, d.fx_rate order by d.document_date desc, d.document_number desc`),
+  ])
+
+  const [adjustments, directSubcontractCommitment] = await Promise.all([
+    financialAdjustmentsPromise,
+    directSubcontractCommitmentPromise,
+  ])
+  // ---- presentation translation -------------------------------------------
+  // Every money scan above arrives per functional (documents carry their
+  // txn→functional first leg; legs and rates carry their stamped currency).
+  // One shared flow context translates each leg at its latest date; the
+  // scalars below are presentation totals. Project adjustments and WBS
+  // estimates are keyed by project with no currency column, so they read as
+  // presentation already and never enter a leg.
+  // Leg dates are non-null whenever a leg row exists (posting/worked/
+  // document dates are mandatory), so no fallback date is needed; a null
+  // would fail closed in rateAt rather than translate silently.
+  interface Leg { func: string | null; late: string }
+  const legRows = (r: { rows: unknown }): Leg[] => r.rows as Leg[]
+  // Billable-time legs carry independent bill/cost functionals, so both
+  // enter the shared context.
+  interface BillTimeLeg {
+    bill_func: string | null; cost_func: string | null; late: string;
+    total_bill: string; total_cost: string; unbilled_bill: string; unbilled_cost: string;
+  }
+  const billTimeLegs = billableTimeRes.rows as unknown as BillTimeLeg[]
+  const ctx = await flowTranslation(orgId, [
+    ...legRows(invRes), ...legRows(costRes), ...legRows(committedRes),
+    ...legRows(billableLineRes), ...legRows(laborRes),
+    ...legRows(overheadRes), ...legRows(byAccountRes),
+  ].map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })).concat(
+    billTimeLegs.flatMap((r) => {
+      const date = String(r.late).slice(0, 10)
+      return [{ func: r.bill_func ?? null, date }, { func: r.cost_func ?? null, date }]
+    }),
+  ))
+  const mergeSum = (rows: Leg[], pick: (r: Leg) => unknown): string => {
+    let total = '0'
+    for (const r of rows) {
+      total = add(total, translateFlowAmount(String(pick(r) ?? 0), r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    }
+    return total
+  }
+  const invoicedToDate = add(
+    amount(add(
+      mergeSum(legRows(invRes), (r) => (r as unknown as { invoiced_pos: string }).invoiced_pos),
+      neg(mergeSum(legRows(invRes), (r) => (r as unknown as { invoiced_neg: string }).invoiced_neg)),
+    )),
+    adjustments.invoiced_to_date,
+  )
+  const actualCost = add(
+    amount(mergeSum(legRows(costRes), (r) => (r as unknown as { cost: string }).cost)),
+    adjustments.actual_cost,
+  )
+  const revenuePosted = amount(mergeSum(legRows(costRes), (r) => (r as unknown as { revenue: string }).revenue))
+  const committedCost = add(
+    amount(mergeSum(legRows(committedRes), (r) => (r as unknown as { committed: string }).committed)),
+    directSubcontractCommitment,
+  )
+  const laborCost = amount(mergeSum(legRows(laborRes), (r) => (r as unknown as { labor: string }).labor))
+  // Billable-time bill and cost sides merge under their own functionals.
+  const mergeBillTime = (pick: (r: BillTimeLeg) => unknown, useBillFunc: boolean): string => {
+    let total = '0'
+    for (const r of billTimeLegs) {
+      const func = useBillFunc ? r.bill_func : r.cost_func
+      total = add(total, translateFlowAmount(String(pick(r) ?? 0), func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    }
+    return total
+  }
+  const timeBill = mergeBillTime((r) => r.total_bill, true)
+  const timeCost = mergeBillTime((r) => r.total_cost, false)
+  const timeUnbilledBill = mergeBillTime((r) => r.unbilled_bill, true)
+  const timeUnbilledCost = mergeBillTime((r) => r.unbilled_cost, false)
+  const lineLegs = legRows(billableLineRes)
+  const lineBill = mergeSum(lineLegs, (r) => (r as unknown as { total_bill: string }).total_bill)
+  const lineCost = mergeSum(lineLegs, (r) => (r as unknown as { total_cost: string }).total_cost)
+  const lineUnbilledBill = mergeSum(lineLegs, (r) => (r as unknown as { unbilled_bill: string }).unbilled_bill)
+  const lineUnbilledCost = mergeSum(lineLegs, (r) => (r as unknown as { unbilled_cost: string }).unbilled_cost)
+  const overheadTranslated = amount(mergeSum(legRows(overheadRes), (r) => (r as unknown as { overhead: string }).overhead))
+  interface AccountLeg extends Leg { account_id: string; number: string | null; name: string; type: string; amount: string }
+  const accountLegs = byAccountRes.rows as AccountLeg[]
+  const accountTranslated = new Map<string, { accountId: string; number: string | null; name: string; type: string; amount: string }>()
+  for (const r of accountLegs) {
+    const prev = accountTranslated.get(r.account_id) ?? { accountId: r.account_id, number: r.number, name: r.name, type: r.type, amount: '0' }
+    prev.amount = add(prev.amount, translateFlowAmount(String(r.amount ?? 0), r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    accountTranslated.set(r.account_id, prev)
+  }
+  interface DocRow {
+    id: string; kind: string; documentNumber: string; documentDate: string; status: string;
+    partyName: string | null; func: string | null; late: string; fxRate: string; amount: string;
+  }
+  const docTranslated = (docRes.rows as DocRow[]).map((r) => {
+    // First leg (txn→functional) is rounded like a posted leg; the second
+    // leg translates at the document date. Zero-amount headers skip lookup.
+    // (mulDecimal, not mul: the rate carries up to 10 places.)
+    const functional = mulDecimal(String(r.amount ?? 0), String(r.fxRate ?? 1))
+    return { ...r, amount: translateFlowAmount(functional, r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt) }
+  })
+  const totalHours = amount(hoursRes.rows[0]?.total)
+  // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
+  // method turns a rate into the job's share of company overhead.
+  const oh = profile.overhead
+  const calculatedOverhead =
+    oh.method === 'posted_gl_account_group' ? overheadTranslated
+    : oh.method === 'percent_of_labor' ? mulPercent(laborCost, String(oh.ratePercent ?? 0))
+    : oh.method === 'per_labor_hour' ? mul(totalHours, String(oh.ratePerHour ?? 0))
+    : oh.method === 'rate_engine' ? await rateEngineOverhead(orgId, projectId, oh.rateEngine)
+    : '0.0000'
+  const overheadAdjustment = oh.method === 'none'
+    ? '0.0000'
+    : await overheadAdjustments(orgId, projectId)
+  const overhead = add(calculatedOverhead, overheadAdjustment)
+
+  // billable value: what's invoiceable across all work (time + cost lines).
+  // A cost-times-markup profile prices at the job's markup, or at the
+  // profile default when the job carries none — the same fallback the WIP
+  // prebill pricer applies, so Financials and WIP can never disagree.
+  const billableMarkupPercent = profile.totalPrice.defaultMarkupPercent != null && cmp(projectMarkupPercent, '0') === 0
+    ? String(profile.totalPrice.defaultMarkupPercent)
+    : projectMarkupPercent
+  const totalTimeBill = profile.billableValue.timeRate === 'cost_times_markup'
+    ? add(amount(timeCost), mulPercent(amount(timeCost), billableMarkupPercent))
+    : amount(timeBill)
+  const totalLineBill = profile.billableValue.timeRate === 'cost_times_markup'
+    ? add(amount(lineCost), mulPercent(amount(lineCost), billableMarkupPercent))
+    : amount(lineBill)
+  const unbTimeBill = profile.billableValue.includeUnbilledTime
+    ? (profile.billableValue.timeRate === 'cost_times_markup'
+        ? add(amount(timeUnbilledCost), mulPercent(amount(timeUnbilledCost), billableMarkupPercent))
+        : amount(timeUnbilledBill))
+    : '0.0000'
+  const unbLineBill = profile.billableValue.includeUnbilledCostLines
+    ? (profile.billableValue.timeRate === 'cost_times_markup'
+        ? add(amount(lineUnbilledCost), mulPercent(amount(lineUnbilledCost), billableMarkupPercent))
+        : amount(lineUnbilledBill))
+    : '0.0000'
+  const unbilledBillable = add(unbTimeBill, unbLineBill)
+  const billableValue = add(
+    add(totalTimeBill, totalLineBill),
+    adjustments.billable_value,
+  )
+
+  // total cost: only the configured components (labor stays inside actual_cost
+  // unless split out, avoiding double count).
+  const componentSum: Record<string, string> = { actual_cost: actualCost, committed_cost: committedCost, labor_cost: profile.laborCost.source === 'in_actual_cost' ? '0.0000' : laborCost, overhead }
+  const totalCost = sum(profile.totalCost.components.map((key) => componentSum[key] ?? '0.0000'))
+
+  // total price by method.
+  let totalPrice: string
+  switch (profile.totalPrice.method) {
+    case 'contract_field': totalPrice = contractValue; break
+    case 'billable_value': totalPrice = billableValue; break
+    case 'not_to_exceed': totalPrice = cmp(contractValue, '0') > 0 && cmp(contractValue, billableValue) < 0 ? contractValue : billableValue; break
+    case 'cost_plus': {
+      const markupPercent = profile.totalPrice.defaultMarkupPercent != null && cmp(projectMarkupPercent, '0') === 0
+        ? String(profile.totalPrice.defaultMarkupPercent)
+        : projectMarkupPercent
+      totalPrice = add(totalCost, mulPercent(totalCost, markupPercent))
+      break
+    }
+    default: totalPrice = contractValue
+  }
+  totalPrice = add(totalPrice, adjustments.total_price)
+
+  const calculatedCouldBeInvoiced = profile.couldBeInvoiced.formula === 'price_minus_invoiced'
+    ? add(totalPrice, neg(invoicedToDate))
+    : unbilledBillable
+  const couldBeInvoiced = add(
+    calculatedCouldBeInvoiced,
+    adjustments.could_be_invoiced,
+  )
+  const calculatedGrossProfit = add(totalPrice, neg(totalCost))
+  const grossProfit = add(calculatedGrossProfit, adjustments.gross_profit)
+  const totalPriceUnits = toUnits(totalPrice)
+  const marginPct = totalPriceUnits !== 0n
+    ? Number(fromUnits(roundDiv(
+        toUnits(grossProfit) * 100n * 10_000n * (totalPriceUnits < 0n ? -1n : 1n),
+        totalPriceUnits < 0n ? -totalPriceUnits : totalPriceUnits,
+      )))
+    : 0
+  const remainingBudget = add(costBudget, neg(totalCost))
+
+  const measures: Record<string, string | number> = {
+    invoiced_to_date: invoicedToDate,
+    revenue_posted: revenuePosted,
+    actual_cost: actualCost,
+    actual_cost_adjustment: adjustments.actual_cost,
+    invoiced_to_date_adjustment: adjustments.invoiced_to_date,
+    labor_cost: laborCost,
+    calculated_overhead: calculatedOverhead,
+    overhead_adjustment: overheadAdjustment,
+    overhead,
+    committed_cost: committedCost,
+    billable_value: billableValue,
+    billable_value_adjustment: adjustments.billable_value,
+    billable_time_value: totalTimeBill,
+    billable_cost_value: totalLineBill,
+    unbilled_billable: unbilledBillable,
+    cost_budget: costBudget,
+    total_price: totalPrice,
+    total_price_adjustment: adjustments.total_price,
+    could_be_invoiced: couldBeInvoiced,
+    could_be_invoiced_adjustment: adjustments.could_be_invoiced,
+    total_cost: totalCost,
+    gross_profit: grossProfit,
+    gross_profit_adjustment: adjustments.gross_profit,
+    margin_pct: marginPct,
+    remaining_budget: remainingBudget,
+  }
+
+  const costByCategory = new Map<string, string>()
+  for (const r of accountTranslated.values()) {
+    const cat = r.type === 'cogs' ? 'cogs' : 'operating_expense'
+    costByCategory.set(cat, add(costByCategory.get(cat) ?? '0.0000', amount(r.amount)))
+  }
+  // The per-account HAVING filter and amount-descending order the SQL used
+  // to provide now apply after translation, on presentation figures.
+  const costByAccountRows = [...accountTranslated.values()]
+    .filter((r) => Number(r.amount) !== 0)
+    .sort((a, b) => Number(b.amount) - Number(a.amount))
+
+  return {
+    measures,
+    costByCategory: [...costByCategory].map(([category, amount]) => ({ category, amount })),
+    costByAccount: costByAccountRows.map((r) => ({ accountId: r.accountId, number: r.number, name: r.name, amount: amount(r.amount) })),
+    documents: docTranslated.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
+    projectType: proj.project_type,
+    contractValue,
+  }
+}
+
+/**
+ * Resolve a project's full financial report as ONE generation of the ledger.
+ *
+ * The read graph spans the project header, posted GL cost/revenue, open
+ * commitments, billable time and lines, overhead, hours, cost-by-account,
+ * documents, and every adjustment table. Run as independent pooled queries
+ * (READ COMMITTED, one snapshot per statement), a posting or time approval
+ * committing mid-call tears the report apart: the headline total_cost would
+ * disagree with cost-by-account and invoice totals with the document list.
+ *
+ * The whole graph therefore runs inside one transaction:
+ *
+ *  - When the caller already owns a tenant transaction (a posting command
+ *    rendering financials in the same atomic unit), participate in it — its
+ *    isolation level already governs every read below, and opening a second
+ *    transaction would hide that caller's uncommitted writes.
+ *  - Otherwise pin one connection in a REPEATABLE READ READ ONLY snapshot (the
+ *    same boundary `web/lib/custom-reports` draws for governed reports): the
+ *    snapshot is taken at the first statement, so every measure — headline and
+ *    detail alike — observes exactly one committed generation, and READ ONLY
+ *    makes any future write into this path fail loudly instead of silently
+ *    splitting the report across transactions. A concurrent commit during the
+ *    call is absorbed by the NEXT generation, never half-into this one.
+ *
+ * The pinned connection is published through the tenant context's `txDb`, so
+ * helper queries (account groups, subcontract commitments, rate-engine and
+ * adjustment sums) resolve the org-scoped proxy automatically — org context is
+ * preserved for every helper without each one re-deriving it, and an ambient
+ * bypass scope can never leak into this report's reads.
+ */
+export async function resolveProjectFinancials(
+  orgId: string,
+  projectId: string,
+  profile: FinancialProfile,
+): Promise<ProjectFinancials> {
+  const active = orgContext.getStore()
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error("cannot change organization inside an active tenant transaction")
+    }
+    // Reuse the caller's pinned transaction; its snapshot governs.
+    return resolveProjectFinancialsInSnapshot(orgId, projectId, profile)
+  }
+  const client = await pool.connect()
+  try {
+    await client.query("begin isolation level repeatable read read only")
+    // Transaction-local tenant scope: set after BEGIN so the GUCs reset on
+    // commit/rollback, and so the snapshot this transaction pins belongs to
+    // exactly this org under deny-by-default RLS.
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    )
+    const txDb = drizzle({ client })
+    const report = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
+      await resolveProjectFinancialsInSnapshot(orgId, projectId, profile),
+    )
+    await client.query("commit")
+    return report
+  } catch (error) {
+    try {
+      await client.query("rollback")
+    } catch {
+      // A broken connection is discarded when released.
+    }
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * Batched actual-cost reader for project lists — the same reader the cockpit
+ * Financials tab uses, over a page of projects at once.
+ *
+ * The project list used to run its own hardcoded lateral (posted-only,
+ * standard cost types, every book, no adjustments, raw sums), so its
+ * "Actual cost" disagreed with the cockpit's profile-driven actual_cost
+ * (posted+reversed primary-book legs through the type's cost source —
+ * account types or an account group — translated per functional, plus manual
+ * actual_cost adjustments). The list now displays this reader's values while
+ * the lateral stays as the SQL sort grain.
+ *
+ * Grain parity notes (each mirrors the single-project resolver above):
+ * - cost membership reuses the same rule the SQL predicate encodes
+ *   (`none` never matches, groups match resolved member ids, type lists
+ *   match account types — empties match nothing);
+ * - legs aggregate per functional with the max posting date and translate
+ *   through the same `flowTranslation`/`translateFlowAmount` pair, fetched
+ *   once for every leg on the page;
+ * - profiles resolve through one batched type/version lookup that mirrors
+ *   `loadProjectType` row-for-row (complete type row wins, otherwise the
+ *   built-in time-and-materials profile), so tenant cost-source
+ *   customizations apply identically without one query per project.
+ */
+export async function resolveProjectActualCosts(
+  orgId: string,
+  projectIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(projectIds.filter((id) => typeof id === 'string' && id.length > 0))]
+  const out = new Map<string, string>(ids.map((id) => [id, normalizeMoney('0')]))
+  if (ids.length === 0) return out
+  // One type/version lookup for the whole id set (F-t03-013: a list sort over
+  // hundreds of projects cannot afford one `loadProjectType` query each).
+  // Mirrors `loadProjectType` (engine/src/projects/type.ts): a complete type
+  // row (id, versioned financial profile, invoicing and backup profiles)
+  // wins, a type row missing its billing method throws like the single
+  // loader, and anything else falls back to built-in time-and-materials.
+  const builtinTm = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!.financialProfile
+  const today = await businessToday(orgId)
+  const typeRows = (await db.execute<{
+    project_id: string; type_id: string | null; bm: string | null; fp: FinancialProfile | null;
+    has_ip: boolean; has_bp: boolean;
+  }>(sql`
+    select p.id as project_id, pt.id as type_id, pt.billing_method as bm,
+           version.financial_profile as fp,
+           (pt.invoicing_profile is not null) as has_ip,
+           (pt.backup_profile is not null) as has_bp
+      from projects p
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+      left join lateral (
+        select v.financial_profile
+          from project_financial_profile_versions v
+         where v.org_id = p.org_id
+           and v.project_type_id = pt.id
+           and v.effective_from <= ${today}
+           and (v.effective_to is null or v.effective_to >= ${today})
+         order by v.effective_from desc
+         limit 1
+      ) version on true
+     where p.id = any(${`{${ids.join(',')}}`}::uuid[]) and p.org_id = ${orgId}`)).rows
+  const typeByProject = new Map(typeRows.map((r) => [r.project_id, r]))
+  const profiles = new Map<string, FinancialProfile>()
+  for (const id of ids) {
+    try {
+      const row = typeByProject.get(id)
+      if (row?.type_id && row.fp && row.has_ip && row.has_bp) {
+        if (!row.bm) throw new Error(`project type ${row.type_id} is missing its billing classification`)
+        profiles.set(id, row.fp)
+      } else {
+        profiles.set(id, builtinTm)
+      }
+    } catch {
+      // A project whose type cannot load keeps the zero above rather than
+      // failing the whole list page.
+    }
+  }
+  const groupCache = new Map<string, Set<string>>()
+  const groupIdsFor = async (src: CostSource): Promise<Set<string>> => {
+    if (src.source !== 'account_group') return new Set()
+    const key = `${src.dimension ?? ''}::${[...(src.groupKeys ?? [])].sort().join(',')}`
+    const hit = groupCache.get(key)
+    if (hit) return hit
+    const ids = new Set(await groupAccountIds(orgId, src))
+    groupCache.set(key, ids)
+    return ids
+  }
+  const [legs, adjustments] = await Promise.all([
+    db.execute<{ project_id: string; account_id: string; type: string; func: string | null; late: string | null; amount: string }>(sql`
+      select l.project_id, l.account_id, a.type, sub.base_currency as func,
+             max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+       where l.org_id = ${orgId} and l.project_id = any(${`{${ids.join(',')}}`}::uuid[])
+         and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}
+       group by 1, 2, 3, 4`),
+    db.execute<{ project_id: string; amount: string }>(sql`
+      select project_id, coalesce(sum(amount), 0) as amount
+        from project_financial_adjustments
+       where org_id = ${orgId} and project_id = any(${`{${ids.join(',')}}`}::uuid[]) and measure = 'actual_cost'
+       group by 1`),
+  ])
+  const adjustmentByProject = new Map(adjustments.rows.map((r) => [r.project_id, amount(r.amount)]))
+  const ctx = await flowTranslation(
+    orgId,
+    legs.rows.map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })),
+  )
+  await Promise.all(ids.map(async (id) => {
+    const profile = profiles.get(id)
+    if (!profile) return
+    const src = profile.actualCost
+    const memberIds = await groupIdsFor(src)
+    const inSource = (accountId: string, type: string): boolean =>
+      src.source === 'none'
+        ? false
+        : src.source === 'account_group'
+          ? memberIds.has(accountId)
+          : (src.accountTypes ?? []).includes(type)
+    const byFunc = new Map<string, { func: string | null; late: string; cost: string }>()
+    for (const leg of legs.rows) {
+      if (leg.project_id !== id || !inSource(leg.account_id, leg.type)) continue
+      const late = String(leg.late).slice(0, 10)
+      const slot = byFunc.get(`${leg.func ?? ''}`)
+      if (!slot) byFunc.set(`${leg.func ?? ''}`, { func: leg.func, late, cost: String(leg.amount ?? 0) })
+      else {
+        slot.cost = add(slot.cost, String(leg.amount ?? 0))
+        if (late > slot.late) slot.late = late
+      }
+    }
+    let total = '0'
+    for (const leg of byFunc.values()) {
+      total = add(total, translateFlowAmount(leg.cost, leg.func, leg.late, ctx.rateAt))
+    }
+    out.set(id, add(amount(total), adjustmentByProject.get(id) ?? '0.0000'))
+  }))
+  return out
+}

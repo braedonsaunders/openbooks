@@ -27,8 +27,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
 
@@ -96,7 +96,7 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
   // and party names.
   const { org, actor, hidden } = await seedScopedOrg();
   try {
-    const { postDocument } = await import('@openbooks/engine/src/posting.ts');
+    const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts');
     const parties: Record<string, string> = {};
     await withBypassContext(async () => {
       for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {

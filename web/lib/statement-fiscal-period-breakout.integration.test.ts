@@ -20,10 +20,10 @@ registerHooks({
     return next(s, c)
   },
 })
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/db.ts')) as typeof import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/test-fixtures.ts')) as typeof import('@openbooks/engine/src/test-fixtures.ts')
-const { generateAccountingPeriods } = (await import(root + 'engine/src/close.ts')) as typeof import('@openbooks/engine/src/close.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { generateAccountingPeriods } = (await import(root + 'engine/src/close/close.ts')) as typeof import('@openbooks/engine/src/close/close.ts')
 const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
 const { resolvePeriod } = (await import(root + 'web/lib/periods.ts')) as typeof import('./periods')
 

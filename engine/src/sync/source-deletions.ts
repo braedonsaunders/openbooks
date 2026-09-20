@@ -1,12 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, schema, withOrg } from "../db.ts";
-import { nextFreeEntryNumber } from "../entry-number.ts";
-import { reversalJournalLines } from "../reversal-journal-lines.ts";
+import { db, schema, withOrg } from "../platform/db.ts";
+import { nextFreeEntryNumber } from "../records/entry-number.ts";
+import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
-} from "../transaction-audit.ts";
-import { assertPeriodModulesOpen, closeModuleForDocument } from "../close.ts";
+} from "../records/transaction-audit.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/close.ts";
 
 export type SourceDeletionAction = "retain" | "void";
 

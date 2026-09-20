@@ -52,7 +52,7 @@
  * away from zero (roundDiv) — the same discipline as ./compute-statutory.ts
  * and canada/decimal.ts. Never floating point.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   FR_AGS_ER_2026,

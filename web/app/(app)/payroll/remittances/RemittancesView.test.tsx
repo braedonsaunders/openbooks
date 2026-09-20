@@ -21,7 +21,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
-import type { RemittanceGroup } from '../../../../../engine/src/payroll-remittance.ts'
+import type { RemittanceGroup } from '../../../../../engine/src/payroll/remittance.ts'
 Object.assign(globalThis, { React })
 
 test('remittance bill payload follows edited dates while preserving unchanged range values', () => {

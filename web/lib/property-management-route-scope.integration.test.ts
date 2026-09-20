@@ -23,8 +23,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { POST } = await import('../app/api/property-management/route');
 
 const NOT_FOUND = { error: 'Property-management record not found' };
@@ -140,7 +140,7 @@ test('property create/update refuse foreign reference custom values', { skip: !p
     const okCreate = await withOrgContext(org.orgId, () => post(createBody({ ref_party: fx.tenantId })));
     assert.equal(okCreate.status, 201, `expected 201, got ${okCreate.status}: ${JSON.stringify(await okCreate.clone().json().catch(() => null))}`);
     const propertyId = ((await okCreate.json()) as { id: string }).id;
-    // NOTE: create-time custom persistence lives in engine/src/property-management.ts,
+    // NOTE: create-time custom persistence lives in engine/src/property/management.ts,
     // which this worktree resolves to the main checkout at runtime; it is proven by
     // the /tmp/b02-prop-eng probe (absolute-path import, STORED:{"ref_party":"…"}).
     // This route test proves the fence decisions (404s) plus update-half storage.

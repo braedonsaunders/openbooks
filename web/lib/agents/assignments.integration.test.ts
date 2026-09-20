@@ -24,8 +24,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { addWorkItemNote, listWorkItemNotes, loadWorkItemAssignment, setWorkItemAssignment } = await import('./assignments');
 const { loadAgentInbox } = await import('./inbox');

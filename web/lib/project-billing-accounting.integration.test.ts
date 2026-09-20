@@ -8,15 +8,15 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   return next(specifier, context)
 } })
-const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
 const { createBillingRequest } = await import('./billing-requests')
 const { computeBillTotals, taxProfileMap } = await import('./bills')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>
 type Fixture = { org: Org; actor: string; project: string }

@@ -14,9 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
     shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__sandboxWorkflowUser.user;}" };
   return next(specifier, context);
 } });
-const { db } = await import(root + "engine/src/db.ts");
+const { db } = await import(root + "engine/src/platform/db.ts");
 const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + "engine/src/test-fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + "engine/src/testing/fixtures.ts");
 const { createSandbox, deleteSandbox } = await import(root + "engine/src/sandbox/lifecycle.ts");
 const { loadChangeSetDetail } = await import(root + "web/lib/sandbox-change-sets.ts");
 const { entityListSource } = await import(root + "web/lib/list/entity-sources.ts");

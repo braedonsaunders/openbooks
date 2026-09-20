@@ -43,7 +43,7 @@ import {
   hrmChangeRequestSubjectProfile,
 } from "./hrm-change-requests-adapter.ts";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 /**
  * subjectKind → FlowSubjectAdapter. The gate-resume path and every dispatch site rebuild

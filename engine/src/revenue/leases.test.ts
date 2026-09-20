@@ -1,0 +1,341 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { toUnits } from "../money/money.ts";
+import {
+  assertLeaseCommencementOn,
+  assertLeaseTimingSupported,
+  classifyLease,
+  classifyLessorLease,
+  LeaseError,
+  lessorStraightLineSchedule,
+  measureLesseeLease,
+  postDueLeaseSchedules,
+  salesTypeCommencement,
+  shortTermExemptionEligible,
+} from "./leases.ts";
+import {
+  accreteToZero,
+  periodRateFromAnnualPercent,
+  presentValueOfLevelStream,
+  PresentValueError,
+} from "../money/present-value.ts";
+
+// The worked example used throughout: five annual payments of 20,000 in
+// arrears at 5%. Annuity factor 4.3294766708… → liability 86,589.5334.
+
+test("lease liability is the exact present value of the payments (842-20-30-1 / IFRS 16.26)", () => {
+  const pv = presentValueOfLevelStream({
+    payment: "20000",
+    periods: 5,
+    rate: periodRateFromAnnualPercent("5", 1),
+    timing: "arrears",
+  });
+  assert.equal(pv, "86589.5334");
+});
+
+test("advance timing discounts one fewer period", () => {
+  const pv = presentValueOfLevelStream({
+    payment: "20000",
+    periods: 5,
+    rate: periodRateFromAnnualPercent("5", 1),
+    timing: "advance",
+  });
+  // arrears PV × 1.05 = 90,919.0101
+  assert.equal(pv, "90919.0101");
+});
+
+test("createLeaseAgreement persists annualDiscountRatePercent through canonicalDecimal then normalizeDecimal at FX scale", () => {
+  const source = readFileSync(new URL("./leases.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistLeaseAnnualDiscountRate");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistLeaseAnnualDiscountRate helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 10\)/);
+  assert.match(helper, /normalizeDecimal\(exact, 10\)/);
+  assert.match(helper, /annual discount rate must be an exact decimal/);
+  assert.doesNotMatch(helper, /return normalizeDecimal\(value, 10\)/);
+
+  const start = source.indexOf("export async function createLeaseAgreement");
+  const next = source.indexOf("type LeaseRow");
+  const body = source.slice(start, next);
+  assert.match(body, /persistLeaseAnnualDiscountRate\(input\.annualDiscountRatePercent\)/);
+  assert.doesNotMatch(body, /normalizeDecimal\(input\.annualDiscountRatePercent, 10\)/);
+});
+
+test("advance timing is refused at creation, not deferred to commencement", () => {
+  // createLeaseAgreement calls this pure seam before inserting the draft: an
+  // agreement that measureLesseeLease could never commence must fail
+  // validation up front. The measurement guard remains as defense in depth.
+  assert.throws(
+    () => assertLeaseTimingSupported("advance"),
+    (e) => e instanceof LeaseError && /advance-timing/.test(e.message),
+  );
+  assert.doesNotThrow(() => assertLeaseTimingSupported("arrears"));
+});
+
+test("a zero rate degenerates to the undiscounted sum", () => {
+  const pv = presentValueOfLevelStream({
+    payment: "1000",
+    periods: 12,
+    rate: periodRateFromAnnualPercent("0", 12),
+    timing: "arrears",
+  });
+  assert.equal(pv, "12000.0000");
+});
+
+test("finance schedule: interest method, straight-line amortization, retires to exactly zero", () => {
+  const m = measureLesseeLease({
+    payment: "20000",
+    periods: 5,
+    annualRatePercent: "5",
+    periodsPerYear: 1,
+    timing: "arrears",
+    model: "finance",
+  });
+  assert.equal(m.liability, "86589.5334");
+  assert.equal(m.rouAsset, "86589.5334");
+  const y1 = m.schedule[0]!;
+  assert.equal(y1.interest, "4329.4767"); // 86,589.5334 × 5%
+  assert.equal(y1.closing, "70919.0101"); // 86,589.5334 − 15,670.5233
+  assert.equal(y1.amortization, "17317.9067");
+  // The liability retires to zero and amortization consumes the asset exactly.
+  assert.equal(m.schedule[4]!.closing, "0.0000");
+  const amortSum = m.schedule.reduce((a, l) => a + toUnits(l.amortization!), 0n);
+  assert.equal(amortSum, toUnits(m.rouAsset));
+  const interestSum = m.schedule.reduce((a, l) => a + toUnits(l.interest), 0n);
+  const principalSum = m.schedule.reduce((a, l) => a + toUnits(l.payment) - toUnits(l.interest), 0n);
+  assert.equal(interestSum + principalSum, toUnits("100000"));
+  assert.equal(principalSum, toUnits(m.liability));
+});
+
+test("operating schedule: level single cost, liability unwind, ROU stays aligned (842-20-25-6)", () => {
+  const m = measureLesseeLease({
+    payment: "20000",
+    periods: 5,
+    annualRatePercent: "5",
+    periodsPerYear: 1,
+    timing: "arrears",
+    model: "operating",
+  });
+  const y1 = m.schedule[0]!;
+  assert.equal(y1.singleCost, "20000.0000");
+  assert.equal(y1.interest, "4329.4767");
+  assert.equal(y1.rouAdjustment, "15670.5233"); // cost − interest = principal here
+  const adjSum = m.schedule.reduce((a, l) => a + toUnits(l.rouAdjustment!), 0n);
+  assert.equal(adjSum, toUnits(m.rouAsset));
+  // Total cost = total cash, level in every period.
+  for (const line of m.schedule) assert.equal(line.singleCost, "20000.0000");
+});
+
+test("IFRS applies the single lessee model regardless of the criteria (IFRS 16.22)", () => {
+  const c = classifyLease({}, "ifrs");
+  assert.equal(c.model, "finance");
+  const us = classifyLease({}, "us_gaap");
+  assert.equal(us.model, "operating"); // no criterion met
+});
+
+test("US GAAP classification criteria (842-10-25-2)", () => {
+  assert.equal(classifyLease({ transfersOwnership: true }, "us_gaap").model, "finance");
+  assert.equal(classifyLease({ purchaseOptionReasonablyCertain: true }, "us_gaap").model, "finance");
+  assert.equal(
+    classifyLease({ leaseTermMonths: 60, economicLifeMonths: 72 }, "us_gaap").model,
+    "finance", // 83% ≥ 75%
+  );
+  assert.equal(
+    classifyLease({ leaseTermMonths: 36, economicLifeMonths: 120 }, "us_gaap").model,
+    "operating", // 30%
+  );
+  assert.equal(
+    classifyLease({ pvOfPayments: "91000", fairValue: "100000" }, "us_gaap").model,
+    "finance", // 91% ≥ 90%
+  );
+  assert.equal(
+    classifyLease({ pvOfPayments: "86589.5334", fairValue: "100000" }, "us_gaap").model,
+    "operating", // 86.6%
+  );
+  assert.equal(classifyLease({ specializedAsset: true }, "us_gaap").model, "finance");
+  // Thresholds are policy inputs, not hardcodes.
+  assert.equal(
+    classifyLease(
+      { pvOfPayments: "86589.5334", fairValue: "100000", pvThresholdPercent: "85" },
+      "us_gaap",
+    ).model,
+    "finance",
+  );
+});
+
+test("classification refuses junk numerics with a named LeaseError", () => {
+  // Sloppy-operator pastes previously fell through to raw throws (a BigInt
+  // SyntaxError, a money-module Error) instead of the domain error.
+  const junk: [string, Record<string, unknown>][] = [
+    ["junk term months", { leaseTermMonths: "abc", economicLifeMonths: 120 }],
+    ["fractional term months", { leaseTermMonths: 2.5, economicLifeMonths: 120 }],
+    ["negative life months", { leaseTermMonths: 60, economicLifeMonths: -72 }],
+    ["junk term threshold", { leaseTermMonths: 60, economicLifeMonths: 72, termThresholdPercent: "high" }],
+    ["junk pv", { pvOfPayments: "1e5", fairValue: "100000" }],
+    ["junk threshold", { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" }],
+  ];
+  for (const [label, inputs] of junk) {
+    assert.throws(
+      () => classifyLease(inputs as never, "us_gaap"),
+      (e) => e instanceof LeaseError,
+      label,
+    );
+  }
+  assert.throws(
+    () => classifyLessorLease({ pvOfPayments: "91000", fairValue: "100000", thirdPartyResidualGuaranteePv: "junk" }),
+    (e) => e instanceof LeaseError,
+  );
+});
+
+test("short-term exemption eligibility (842-20-25-2 / IFRS 16.5)", () => {
+  assert.equal(shortTermExemptionEligible({ leaseTermMonths: 9 }), true);
+  assert.equal(shortTermExemptionEligible({ leaseTermMonths: 12 }), true);
+  assert.equal(shortTermExemptionEligible({ leaseTermMonths: 13 }), false);
+  assert.equal(
+    shortTermExemptionEligible({ leaseTermMonths: 9, purchaseOptionReasonablyCertain: true }),
+    false,
+  );
+});
+
+test("lessor straight-line levelling returns to exactly zero (IFRS 16.81)", () => {
+  const schedule = lessorStraightLineSchedule(["10000", "11000", "12000", "13000", "14000"]);
+  assert.equal(schedule[0]!.income, "12000.0000");
+  assert.equal(schedule[0]!.accrualDelta, "2000.0000");
+  assert.equal(schedule[4]!.accrualDelta, "-2000.0000");
+  assert.equal(schedule[4]!.cumulativeAccrual, "0.0000");
+});
+
+test("lessor classification mirrors the transfer-of-risks criteria", () => {
+  assert.equal(classifyLessorLease({ transfersOwnership: true }).classification, "sales_type");
+  assert.equal(classifyLessorLease({}).classification, "operating");
+});
+
+test("sales-type commencement derecognises the asset and takes selling profit (842-30-25-1)", () => {
+  const { sellingProfit, lines } = salesTypeCommencement({
+    netInvestment: "90000",
+    carryingAmount: "75000",
+    accounts: {
+      netInvestmentAccountId: "ni",
+      assetAccountId: "asset",
+      sellingProfitAccountId: "profit",
+    },
+  });
+  assert.equal(sellingProfit, "15000.0000");
+  const total = lines.reduce((a, l) => a + toUnits(l.amount), 0n);
+  assert.equal(total, 0n);
+});
+
+test("monthly compounding uses the exact annual/12 rational, not a truncated decimal", () => {
+  // 12 monthly payments of 1,000 at 6% annual (0.5%/month exact).
+  const pv = presentValueOfLevelStream({
+    payment: "1000",
+    periods: 12,
+    rate: periodRateFromAnnualPercent("6", 12),
+    timing: "arrears",
+  });
+  // Annuity factor (1 − 1.005^−12)/0.005 = 11.6189321… → 11,618.9321
+  assert.equal(pv, "11618.9321");
+  // A rate that does NOT divide evenly in decimal (5%/12) still measures and
+  // retires exactly — the rational carries it without truncation.
+  const m = measureLesseeLease({
+    payment: "500",
+    periods: 24,
+    annualRatePercent: "5",
+    periodsPerYear: 12,
+    timing: "arrears",
+    model: "finance",
+  });
+  assert.equal(m.schedule[23]!.closing, "0.0000");
+});
+
+test("present value rejects fractional and unbounded horizons instead of mis-splitting the denominator", () => {
+  const rate = periodRateFromAnnualPercent("6", 12);
+  const pvError = (e: unknown) => e instanceof PresentValueError && /whole number of periods/.test(e.message);
+  // Fractional horizons previously computed without throwing: the visit loop
+  // ran whole t while pow() iterated `exp` times, silently mis-splitting the
+  // common denominator (periods=2.5 returned 1985.0994 — neither the 2- nor
+  // the 3-period value).
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: 2.5, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: 1201, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => presentValueOfLevelStream({ payment: "1000", periods: Number.MAX_SAFE_INTEGER, rate, timing: "arrears" }),
+    pvError,
+  );
+  assert.throws(
+    () => accreteToZero({ opening: "2970.2481", payment: "1000", periods: 2.5, rate }),
+    pvError,
+  );
+  // The supported boundary stays usable without running a giant loop: the
+  // zero-rate path is O(1), proving 1200 is accepted exactly at the cap.
+  assert.equal(
+    presentValueOfLevelStream({ payment: "1000", periods: 1200, rate: { num: 0n, den: 1n }, timing: "arrears" }),
+    "1200000.0000",
+  );
+});
+
+test("period rates require a positive whole periods-per-year (no raw BigInt RangeError)", () => {
+  const rateError = (e: unknown) => e instanceof PresentValueError && /positive whole number/.test(e.message);
+  // Non-integer counts previously escaped as `RangeError: ... cannot be
+  // converted to a BigInt`, which callers catching PresentValueError miss.
+  assert.throws(() => periodRateFromAnnualPercent("5", 2.5), rateError);
+  assert.throws(() => periodRateFromAnnualPercent("5", 0), rateError);
+  assert.throws(() => periodRateFromAnnualPercent("5", -4), rateError);
+});
+
+test("measureLesseeLease enforces a whole period count inside the 100-year horizon", () => {
+  const base = {
+    payment: "1000",
+    annualRatePercent: "6",
+    periodsPerYear: 12,
+    timing: "arrears" as const,
+    model: "finance" as const,
+  };
+  assert.throws(
+    () => measureLesseeLease({ ...base, periods: 2.5 }),
+    (e) => e instanceof LeaseError && /whole number of periods/.test(e.message),
+  );
+  // 1201 monthly periods = just over 100 years; 101 annual periods likewise.
+  assert.throws(
+    () => measureLesseeLease({ ...base, periods: 1201 }),
+    (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+  );
+  assert.throws(
+    () => measureLesseeLease({ ...base, periodsPerYear: 1, periods: 101 }),
+    (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+  );
+  assert.throws(
+    () => measureLesseeLease({ ...base, periodsPerYear: 2.5, periods: 12 }),
+    (e) => e instanceof LeaseError && /positive whole number/.test(e.message),
+  );
+});
+
+test("commencement dates are gated to real calendar dates (YYYY-MM-DD)", () => {
+  assert.throws(
+    () => assertLeaseCommencementOn("not-a-date"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.throws(
+    () => assertLeaseCommencementOn("2026-02-30"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.throws(
+    () => assertLeaseCommencementOn("2026-7-1"),
+    (e) => e instanceof LeaseError && /calendar date/.test(e.message),
+  );
+  assert.doesNotThrow(() => assertLeaseCommencementOn("2026-07-01"));
+});
+
+test("due-lease posting rejects an invalid as-of calendar date before database access", async () => {
+  await assert.rejects(
+    postDueLeaseSchedules("00000000-0000-0000-0000-000000000000", "2026-02-30", null),
+    (error: unknown) => error instanceof LeaseError && /calendar date/.test(error.message),
+  );
+});

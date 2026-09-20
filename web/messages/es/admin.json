@@ -446,7 +446,7 @@
     "builtIn": "Integrado",
     "custom": "Personalizado",
     "emptyTitle": "Aún no hay roles",
-    "emptyDescription": "Ejecute el script de datos iniciales de roles (engine/src/seed-roles.ts) para crear los roles integrados, o cree un rol personalizado.",
+    "emptyDescription": "Ejecute el script de datos iniciales de roles (engine/src/provisioning/seed-roles.ts) para crear los roles integrados, o cree un rol personalizado.",
     "noMatchTitle": "No hay roles coincidentes",
     "noMatchDescription": "Ajuste la búsqueda o el filtro de tipo.",
     "table": {

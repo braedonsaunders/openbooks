@@ -1,5 +1,5 @@
-import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 
 const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const

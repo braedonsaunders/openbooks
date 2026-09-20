@@ -15,10 +15,10 @@
  * that recomputed the answer itself would prove nothing.
  */
 
-import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments.ts";
-import { runRevaluation } from "../../fx-revaluation.ts";
+import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments/payments.ts";
+import { runRevaluation } from "../../close/fx-revaluation.ts";
 import { capture, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
-import { db } from "../../db.ts";
+import { db } from "../../platform/db.ts";
 import { sql } from "drizzle-orm";
 import type { ConformanceCase } from "../types.ts";
 

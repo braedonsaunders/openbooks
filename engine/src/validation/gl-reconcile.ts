@@ -13,7 +13,7 @@
  * Usage: npx tsx --conditions=react-server src/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD]
  */
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { sourceClient } from "../sync/source-client.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]

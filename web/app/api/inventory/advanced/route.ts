@@ -2,8 +2,8 @@ import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/li
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   InventoryError,
   InventoryIdempotencyConflictError,
@@ -15,14 +15,14 @@ import {
   queryLotRecall,
   receiveTransferOrder,
   shipTransferOrder,
-} from "@openbooks/engine/src/inventory.ts";
+} from "@openbooks/engine/src/inventory/inventory.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import {
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
   type CataloguePermission,
-} from "@openbooks/engine/src/permissions.ts";
+} from "@openbooks/engine/src/organization/permissions.ts";
 
 export const runtime = "nodejs";
 

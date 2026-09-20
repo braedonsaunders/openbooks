@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import {

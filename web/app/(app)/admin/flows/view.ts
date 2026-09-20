@@ -2,8 +2,8 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import {
   badge,

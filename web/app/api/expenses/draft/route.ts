@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { nextDocumentNumber } from '../../../../lib/bills'
 

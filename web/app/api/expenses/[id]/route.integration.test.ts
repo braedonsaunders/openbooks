@@ -21,8 +21,8 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
       }
     `)
-    if (specifier === '@openbooks/engine/src/db.ts' && (context.parentURL?.endsWith('/web/lib/expenses.ts') || decodeURIComponent(context.parentURL ?? '').endsWith('/web/app/api/expenses/[id]/route.ts'))) return virtual(`
-      import { db as realDb } from ${JSON.stringify(root + 'engine/src/db.ts')};
+    if (specifier === '@openbooks/engine/src/platform/db.ts' && (context.parentURL?.endsWith('/web/lib/expenses.ts') || decodeURIComponent(context.parentURL ?? '').endsWith('/web/app/api/expenses/[id]/route.ts'))) return virtual(`
+      import { db as realDb } from ${JSON.stringify(root + 'engine/src/platform/db.ts')};
       export const db = new Proxy(realDb, { get(target, key) {
         if (key !== 'execute') return Reflect.get(target, key);
         return async (query) => {
@@ -36,13 +36,13 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/src/document-revision.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
-const { assertExpenseEmployee } = await import('@openbooks/engine/src/expense-validation.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { assertExpenseEmployee } = await import('@openbooks/engine/src/records/expense-validation.ts')
 const { GET, PATCH, DELETE } = await import('./route')
 const DB = !!process.env.OPENBOOKS_DB_URL
 

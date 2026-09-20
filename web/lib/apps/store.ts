@@ -1,14 +1,14 @@
 import { extensionContributionTargetErrors } from './contribution-targets'
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import {
   runAppEndpoint,
   type AppHostAdapters,
   type AppRequest,
   type AppRecordsAdapter,
   type AppStorageAdapter,
-} from '@openbooks/engine/src/apps-runtime.ts'
+} from '@openbooks/engine/src/apps/runtime.ts'
 import {
   executeAppInvocation,
   deriveAppInvocationKey,
@@ -16,15 +16,15 @@ import {
   AppInvocationRequestMismatchError,
   type AppInvocationAuditRow,
   type AppInvocationAttempt,
-} from '@openbooks/engine/src/apps-invocations.ts'
-import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/journal-writes.ts'
+} from '@openbooks/engine/src/apps/invocations.ts'
+import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/ledger/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
 import { APP_CAPABILITIES } from './manifest'
 import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
 import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
 import { EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
-import { actorHasPermission } from '@openbooks/engine/src/actor-permissions.ts'
+import { actorHasPermission } from '@openbooks/engine/src/organization/actor-permissions.ts'
 import { parseNativeExtension } from './native-ui'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
@@ -35,7 +35,7 @@ import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-
 import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
 import { pgTextArrayLiteral } from '@/lib/pg-array'
@@ -44,7 +44,7 @@ import { pgTextArrayLiteral } from '@/lib/pg-array'
  * Apps server store — every function is org-scoped: the caller passes the
  * authenticated user's orgId and no row outside that org is read, written, or
  * run. Wires the real DB-backed adapters into the sandbox runtime (which itself
- * never touches the DB — see engine/src/apps-runtime.ts).
+ * never touches the DB — see engine/src/apps/runtime.ts).
  */
 
 export type AppRow = {
@@ -976,7 +976,7 @@ export async function invokeAppEndpointHandler(opts: {
   // audit row — or roll the whole thing back. A handler failure leaves zero
   // effects; a lost-response retry replays the stored result without
   // re-executing; an audit-write failure rolls everything back. The envelope
-  // lives in engine/src/apps-invocations.ts.
+  // lives in engine/src/apps/invocations.ts.
   try {
     const outcome = await executeAppInvocation({
       orgId: opts.orgId,

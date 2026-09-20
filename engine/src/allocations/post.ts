@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import type { db } from "../db.ts";
-import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money.ts";
-import { resolveAccountGroups } from "../account-groups.ts";
+import type { db } from "../platform/db.ts";
+import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money/money.ts";
+import { resolveAccountGroups } from "../records/account-groups.ts";
 import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
 import { AllocationRuleError, listRulesInEffect } from "./rules.ts";

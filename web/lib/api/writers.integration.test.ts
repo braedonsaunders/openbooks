@@ -23,9 +23,9 @@ registerHooks({
 const { createApplicationRecord } = await import("../application/records.ts");
 const { createRecord, updateRecord, deleteRecord } = await import("./writers.ts");
 const { db, env, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/db.ts");
+  await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 
 test(
   "a rejected custom-record create rolls back its draft and number allocation",

@@ -38,16 +38,16 @@ const hooks = registerHooks({
     if (specifier === "drizzle-orm") {
       return { url: "mock:work-item-drizzle", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/db.ts") {
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { url: "mock:work-item-db", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/modules/nav-registry.ts") {
+    if (specifier === "@openbooks/engine/src/navigation/nav-registry.ts") {
       // The worktree's root node_modules is a symlink to the main
       // checkout's modules, so the workspace alias would resolve the
       // registry to the main checkout (stale). Pin it to this checkout's
       // file: in a normal checkout this maps to the identical module.
       return {
-        url: new URL("../../../engine/src/modules/nav-registry.ts", import.meta.url).href,
+        url: new URL("../../../engine/src/navigation/nav-registry.ts", import.meta.url).href,
         shortCircuit: true,
       };
     }

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 

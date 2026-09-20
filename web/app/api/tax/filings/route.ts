@@ -1,11 +1,11 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
-import { buildTaxFilingSnapshot } from '@openbooks/engine/src/tax-filing.ts'
-import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax-nexus-ledger.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
+import { buildTaxFilingSnapshot } from '@openbooks/engine/src/tax-returns/filing.ts'
+import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

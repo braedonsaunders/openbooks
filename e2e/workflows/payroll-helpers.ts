@@ -7,7 +7,7 @@
  * infrastructure cannot go through product APIs because none exist:
  *
  * - the second approver (no user-provisioning API): inserted with the `pg`
- *   driver using the same scrypt password format as engine/src/seed-user.ts.
+ *   driver using the same scrypt password format as engine/src/provisioning/seed-user.ts.
  *   Fails loudly without OPENBOOKS_DB_URL — never a silent skip.
  * - the approval flow graphs: created through POST /api/admin/flows and
  *   PATCHed with the same trigger→gate shape as seedApprovalFlow.

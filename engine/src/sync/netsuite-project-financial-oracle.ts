@@ -1,13 +1,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import type { FinancialProfile } from "@openbooks/schema";
-import { db } from "../db.ts";
-import { fromUnits, roundDiv, toUnits } from "../money.ts";
-import { netsuiteRestlet, type NetSuiteCreds } from "../netsuite.ts";
-import { unsealJson } from "../secrets.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { netsuiteRestlet, type NetSuiteCreds } from "../connectors/netsuite.ts";
+import { unsealJson } from "../platform/secrets.ts";
 import { buildSource, getConnection } from "./connection.ts";
-import { loadProjectType } from "../project-type.ts";
-import { resolveProjectFinancials } from "../project-financials.ts";
+import { loadProjectType } from "../projects/type.ts";
+import { resolveProjectFinancials } from "../projects/financials.ts";
 
 interface OracleMapping {
   collectionPath: string;

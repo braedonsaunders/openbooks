@@ -5,9 +5,9 @@ import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 /**
  * Regression coverage for the empty-scopes defect in the API-key contract:

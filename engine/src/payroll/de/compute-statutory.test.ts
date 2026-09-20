@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmp } from "../../money.ts";
+import { cmp } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { buildResolution } from "../statutory-rates.ts";

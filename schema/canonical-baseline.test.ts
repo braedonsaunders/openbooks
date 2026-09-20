@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
-import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
+import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
 
 const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
@@ -957,7 +957,7 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
   );
   const migration = readFileSync(sandboxWipeGuardGucMigrationPath, "utf8");
   const lifecycleSource = readFileSync("engine/src/sandbox/lifecycle.ts", "utf8");
-  const fixtureWipeSource = readFileSync("engine/src/test-fixtures.ts", "utf8");
+  const fixtureWipeSource = readFileSync("engine/src/testing/fixtures.ts", "utf8");
   const setterMatch = lifecycleSource.match(
     /set_config\('([a-z0-9_.]+\.sandbox_wipe)', 'on', true\)/,
   );
@@ -1300,7 +1300,7 @@ test("document header totals are enforced against the document's own lines", () 
 test("journal posting serializes with period close through a shared advisory fence", () => {
   const migration = readFileSync(closePostingFenceMigrationPath, "utf8");
   // The fence helper must hash byte-identically to the engine's exclusive
-  // side (periodScopeAdvisoryLock in engine/src/close.ts), or the two sides
+  // side (periodScopeAdvisoryLock in engine/src/close/close.ts), or the two sides
   // would serialize on different keys and the race would stay open. Shared
   // mode is the _shared advisory variant — the one call that lets parallel
   // postings stay parallel while still conflicting with the close writer's

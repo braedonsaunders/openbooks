@@ -2,9 +2,9 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
-import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import {
   grid,
   page,

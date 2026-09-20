@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
-import { ambientTenantOrgId, db } from "../db.ts";
+import { ambientTenantOrgId, db } from "../platform/db.ts";
 import type {
   FlowSubjectAdapter,
   FlowSubjectContext,

@@ -35,10 +35,10 @@
  */
 
 import { sql } from "drizzle-orm";
-import { actorHasPermission } from "../actor-permissions.ts";
-import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
-import { db, withOrgTransaction, type SqlExecutor } from "../db.ts";
-import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { HrmAuthorizationError, requireHrmEmploymentRead } from "./authorization.ts";
 import {
   NoRevisionError,

@@ -4,11 +4,11 @@ import test from 'node:test';
 import pg from 'pg';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/src/depreciation.ts';
+import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
 import { sql } from 'drizzle-orm';
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
-import { db, env } from '@openbooks/engine/src/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
+import { db, env } from '@openbooks/engine/src/platform/db.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -34,7 +34,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { PATCH } = await import('../app/api/assets/[id]/route');
-const { disposeAsset, remeasureAsset } = await import('@openbooks/engine/src/asset-lifecycle.ts');
+const { disposeAsset, remeasureAsset } = await import('@openbooks/engine/src/assets/asset-lifecycle.ts');
 
 const changes = ['cost', 'category', 'subsidiary', 'asset account', 'accumulated account', 'service date', 'draft status', 'active status', 'name', 'unchanged accounts'] as const;
 for (const history of ['none', 'depreciation', 'impairment', 'disposal', 'write-off'] as const) {

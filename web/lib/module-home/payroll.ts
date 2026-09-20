@@ -1,15 +1,15 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   nextPeriodAfter,
   payrollSettings,
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
-} from '@openbooks/engine/src/payroll-run.ts'
-import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll-readiness.ts'
+} from '@openbooks/engine/src/payroll/run.ts'
+import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll/readiness.ts'
 import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import {
   missingPayrollControlAccounts,

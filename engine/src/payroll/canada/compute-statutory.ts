@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { cmp } from "../../money.ts";
+import { cmp } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

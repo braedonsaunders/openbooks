@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { db } from "../../db.ts";
+import type { db } from "../../platform/db.ts";
 import type {
   PayrollStatutoryComputeContext,
   PushStatutoryFn,

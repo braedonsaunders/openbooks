@@ -33,7 +33,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
       '../../../../lib/authz': 'mock:authz',
-      '@openbooks/engine/src/db.ts': 'mock:db',
+      '@openbooks/engine/src/platform/db.ts': 'mock:db',
       'drizzle-orm': 'mock:drizzle',
       'next/server': 'mock:next-server',
     }

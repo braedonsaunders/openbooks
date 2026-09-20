@@ -60,8 +60,8 @@ test("a deliberately planted money.ts mutant is reported as killed", () => {
   try {
     const nodeModules = join(REPO_ROOT, "node_modules");
     if (existsSync(nodeModules)) symlinkSync(nodeModules, join(dir, "node_modules"));
-    const pristine = readFileSync(join(REPO_ROOT, "engine", "src", "money.ts"), "utf8");
-    const suite = readFileSync(join(REPO_ROOT, "engine", "src", "money.test.ts"), "utf8");
+    const pristine = readFileSync(join(REPO_ROOT, "engine", "src", "money", "money.ts"), "utf8");
+    const suite = readFileSync(join(REPO_ROOT, "engine", "src", "money", "money.test.ts"), "utf8");
 
     // The pristine copy must pass in this setup, or a kill below proves nothing.
     writeFileSync(join(dir, "money.ts"), pristine);
@@ -74,7 +74,7 @@ test("a deliberately planted money.ts mutant is reported as killed", () => {
     // runner would emit (inverts formatMoney's zero-precision branch). The
     // anchor is semantic, not a line number, so it survives source shifts;
     // if formatMoney ever loses this branch the lookup fails loudly below.
-    const planted = generateMutants("engine/src/money.ts", pristine).find(
+    const planted = generateMutants("engine/src/money/money.ts", pristine).find(
       (m) =>
         m.operator === "comparison-flip" &&
         m.mutatedSource.includes("decimalPlaces !== 0 ? whole!"),

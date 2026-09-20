@@ -1,9 +1,9 @@
-import { pool, withBypassContext } from "../db.ts";
-import { dispatchQueuedReportRuns, dispatchReportDeliveries, materializeDueReportRuns } from "../report-delivery.ts";
-import { ensureScanOutboxRows, processDueSchedulerOutbox } from "../scheduler-outbox.ts";
-import { processDuePostingEffects } from "../posting-effects.ts";
+import { pool, withBypassContext } from "../platform/db.ts";
+import { dispatchQueuedReportRuns, dispatchReportDeliveries, materializeDueReportRuns } from "../delivery/report-delivery.ts";
+import { ensureScanOutboxRows, processDueSchedulerOutbox } from "../scheduling/outbox.ts";
+import { processDuePostingEffects } from "../ledger/posting-effects.ts";
 import { processGateTimers } from "../flows/gates.ts";
-import { runInSpan } from "../telemetry.ts";
+import { runInSpan } from "../platform/telemetry.ts";
 
 /**
  * The database is the durable scheduler/outbox; Redis queues are rebuilt from
@@ -25,7 +25,7 @@ import { runInSpan } from "../telemetry.ts";
  * connection broke mid-tick the client is discarded rather than returned to the
  * pool, so a stale claim can never leak back into circulation.
  *
- * This module owns the claim primitive; engine/src/scheduler-lock.ts is the
+ * This module owns the claim primitive; engine/src/scheduling/lock.ts is the
  * shared façade where every scheduler topology picks its lock identity and
  * borrows the same primitive, so the report-scheduler tick and the broader web
  * scheduler tick each exclude their own replicas without suppressing each

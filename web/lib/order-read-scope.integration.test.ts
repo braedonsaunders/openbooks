@@ -4,8 +4,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/test-fixtures.ts'
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import type { Authz } from './authz'
 
 const state: { gate: Authz | null; pause: (() => Promise<void>) | null } = { gate: null, pause: null }

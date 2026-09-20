@@ -167,8 +167,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", mockUrl("authz")],
   ["../../../../lib/feature-gates", mockUrl("feature-gates")],
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
-  ["@openbooks/engine/src/db.ts", mockUrl("db")],
-  ["@openbooks/engine/src/tax-pool-run.ts", mockUrl("tax-pool-run")],
+  ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
+  ["@openbooks/engine/src/tax-returns/pool-run.ts", mockUrl("tax-pool-run")],
 ]);
 
 const hooks = registerHooks({

@@ -1,8 +1,8 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
-import { db, schema, withBypassContext, withOrgContext } from "../db.ts";
-import { unsealJson } from "../secrets.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db, schema, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { unsealJson } from "../platform/secrets.ts";
 import { buildCapturePlan, continueRequestXml, negotiateQbxmlVersion, responseStatus, type QbdRequestSpec } from "./qbxml.ts";
 
 const CAPTURE_TTL_MS = 12 * 60 * 60 * 1_000;

@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import {
   createPaymentDocument,
@@ -10,8 +10,8 @@ import {
   updateDraftPayment,
   type AllocationInput,
   type PaymentKind,
-} from "@openbooks/engine/src/payments.ts";
-import { PostingError } from "@openbooks/engine/src/posting.ts";
+} from "@openbooks/engine/src/payments/payments.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting.ts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import {

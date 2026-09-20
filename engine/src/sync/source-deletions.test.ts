@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { postDocument } from "../posting.ts";
+import { db } from "../platform/db.ts";
+import { postDocument } from "../ledger/posting.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { resolveSourceDeletion } from "./source-deletions.ts";
 
 const source = readFileSync("engine/src/sync/source-deletions.ts", "utf8");

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import type { ParsedSessionToken } from "./auth-token-format";
 
 /**

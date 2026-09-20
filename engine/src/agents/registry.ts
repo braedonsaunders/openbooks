@@ -1,4 +1,4 @@
-import type { ContinuousCloseAgentKey } from "../continuous-close-config.ts";
+import type { ContinuousCloseAgentKey } from "./continuous-close-config.ts";
 import { accountingFindings } from "./accounting.ts";
 import { collectionsFindings } from "./collections.ts";
 import { financeFindings } from "./finance.ts";

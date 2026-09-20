@@ -24,7 +24,7 @@
  * `PayrollRateScope` is extended with in engine/src/payroll/statutory-rates.ts.
  * One word, one idea, no translation layer.
  */
-import { PayrollError } from "../payroll-error.ts";
+import { PayrollError } from "./error.ts";
 
 export class PayrollJurisdictionError extends PayrollError {}
 

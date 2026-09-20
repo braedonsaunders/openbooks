@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 
 /**
  * Recall eligibility for an expense report (F-user-003): a pending_approval

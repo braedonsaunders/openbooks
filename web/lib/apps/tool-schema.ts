@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from 'zod'
-import { permissionSetCovers } from '@openbooks/engine/src/permissions.ts'
+import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts'
 import { appToolAssistantName } from './manifest'
 
 /**

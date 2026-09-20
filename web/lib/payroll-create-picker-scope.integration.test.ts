@@ -35,9 +35,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { seedAdoption } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
 // The page LOADER. What this test checks is which schedules and which
 // final-pay candidates the page's queries return for a given subsidiary scope,
 // and that is decided in the loader — the spec only names where the resolved

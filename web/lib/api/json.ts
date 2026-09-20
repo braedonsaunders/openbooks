@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../exact-decimal";
 import { isUuid } from "../list-params";
 

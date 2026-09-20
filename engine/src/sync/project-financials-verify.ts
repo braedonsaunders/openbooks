@@ -7,11 +7,11 @@
  *   ... --job <sourceId>         (show one project's measures)
  */
 import { readFileSync } from 'node:fs'
-import { db } from '../db.ts'
+import { db } from '../platform/db.ts'
 import { sql } from 'drizzle-orm'
-import { resolveProjectFinancials } from '../project-financials.ts'
-import { loadProjectType } from '../project-type.ts'
-import { abs, add, cmp, formatMoney, neg } from '../money.ts'
+import { resolveProjectFinancials } from '../projects/financials.ts'
+import { loadProjectType } from '../projects/type.ts'
+import { abs, add, cmp, formatMoney, neg } from '../money/money.ts'
 
 const CENT = '0.0050'
 const f = (v: string | number) => '$' + Number(formatMoney(v, 2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

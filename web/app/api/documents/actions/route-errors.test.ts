@@ -21,9 +21,9 @@ registerHooks({
 })
 
 const { toActionFailure } = await import('./action-failure')
-const { PostingError } = await import('@openbooks/engine/src/posting.ts')
-const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/control-accounts.ts')
-const { PayrollError } = await import('@openbooks/engine/src/payroll-error.ts')
+const { PostingError } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/records/control-accounts.ts')
+const { PayrollError } = await import('@openbooks/engine/src/payroll/error.ts')
 
 test('typed refusals keep their message as a 422', () => {
   for (const error of [

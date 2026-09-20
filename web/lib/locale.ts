@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { validateSessionToken, SESSION_COOKIE } from "./auth";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 

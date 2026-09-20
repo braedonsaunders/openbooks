@@ -64,7 +64,7 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   ['mock:mutations', `
-    import { db } from '@openbooks/engine/src/db.ts'
+    import { db } from '@openbooks/engine/src/platform/db.ts'
     export async function mutateInsight(_authz, _table, _id, _action, work) {
       return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
     }
@@ -129,8 +129,8 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@/lib/insight-mutations', 'mock:mutations'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../_lib', 'mock:insights-lib'],

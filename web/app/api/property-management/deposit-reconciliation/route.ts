@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { securityDepositReconciliation } from "@openbooks/engine/src/property-management.ts";
-import { sum } from "@openbooks/engine/src/money.ts";
+import { securityDepositReconciliation } from "@openbooks/engine/src/property/management.ts";
+import { sum } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { guardPropertyManagementFeature } from "../../../../lib/property-management-gate";
 

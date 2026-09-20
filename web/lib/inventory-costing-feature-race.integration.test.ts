@@ -14,9 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PUT } = await import("../app/api/items/[id]/costing/route");
 
 for (const field of ["cogsAccountId", "adjustmentAccountId", "varianceAccountId", "receivedNotBilledAccountId"] as const) {

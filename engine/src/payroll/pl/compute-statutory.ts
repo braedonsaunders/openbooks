@@ -54,7 +54,7 @@
  * half-up to the grosz (engine-stated — no quotable agency rule, per the
  * FR precedent). Never floating point.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers PL_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

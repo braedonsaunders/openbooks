@@ -4,14 +4,14 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
-import { BUILT_IN_ROLES } from '@openbooks/engine/src/permissions.ts'
-import { db, env, withBypassContext, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { BUILT_IN_ROLES } from '@openbooks/engine/src/organization/permissions.ts'
+import { db, env, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from '@openbooks/engine/src/test-fixtures.ts'
+} from '@openbooks/engine/src/testing/fixtures.ts'
 import type { ApplicationContext } from './context'
 import type { Authz } from '../authz'
 import type { SessionUser } from '../auth'

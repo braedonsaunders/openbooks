@@ -15,8 +15,8 @@ registerHooks({ resolve(specifier, context, next) {
   }
   // Execute the real runner, then optionally hold its return at the race
   // boundary. API guards, QuickJS, history, and database writes remain real.
-  if (specifier === "@openbooks/engine/src/scripting.ts" && decodeURIComponent(context.parentURL ?? "").endsWith("/scripts/[id]/run/route.ts")) {
-    const actual = JSON.stringify(root + "engine/src/scripting.ts");
+  if (specifier === "@openbooks/engine/src/scripting/scripting.ts" && decodeURIComponent(context.parentURL ?? "").endsWith("/scripts/[id]/run/route.ts")) {
+    const actual = JSON.stringify(root + "engine/src/scripting/scripting.ts");
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(`
       export * from ${actual};
       import { runScheduledScript as actual } from ${actual};
@@ -30,8 +30,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, pool, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("../app/api/admin/scripts/route");
 const { DELETE } = await import("../app/api/admin/scripts/[id]/route");
 const { POST: RUN } = await import("../app/api/admin/scripts/[id]/run/route");

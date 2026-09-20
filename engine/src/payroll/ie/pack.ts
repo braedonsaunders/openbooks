@@ -28,7 +28,7 @@
  * union was closed, with `country` typed `string` to get past it.)
  */
 import { sql } from "drizzle-orm";
-import { add, neg } from "../../money.ts";
+import { add, neg } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   type PayrollCountryPack,
@@ -47,7 +47,7 @@ import type {
   PayrollTaxYearSupport,
 } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 /**
  * The IE pack as it will register once `PayrollCountry` opens: every member

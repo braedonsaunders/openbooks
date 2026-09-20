@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
-import { ensureCloseDefaults } from "../close.ts";
-import { postProjectGlEntry } from "../project-recognition.ts";
+} from "../testing/fixtures.ts";
+import { ensureCloseDefaults } from "../close/close.ts";
+import { postProjectGlEntry } from "../projects/recognition.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,
   allocationRunOccurrenceKey,

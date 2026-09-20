@@ -223,9 +223,9 @@ const hooks = registerHooks({
     }
     if (context.parentURL?.includes("setup/project-types")) {
       const modules: Record<string, string> = {
-        "@openbooks/engine/src/db.ts": "mock:project-types-db",
-        "@openbooks/engine/src/project-financial-profile-versions.ts": "mock:project-types-financial-profile",
-        "@openbooks/engine/src/business-date.ts": "mock:project-types-business-date",
+        "@openbooks/engine/src/platform/db.ts": "mock:project-types-db",
+        "@openbooks/engine/src/projects/financial-profile-versions.ts": "mock:project-types-financial-profile",
+        "@openbooks/engine/src/platform/business-date.ts": "mock:project-types-business-date",
         "../../../../../lib/authz": "mock:project-types-authz",
         "../../../../../lib/projects-gate": "mock:project-types-gate",
         "../../../../../lib/features": "mock:project-types-features",

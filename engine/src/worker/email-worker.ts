@@ -18,16 +18,16 @@ import {
   markPaymentRemittanceFailed,
   markPaymentRemittanceSent,
   resolveOrgEmailTransport,
-} from "../email-config.ts";
+} from "../delivery/email-config.ts";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../db.ts";
-import { isSandboxOrg } from "../sandbox/guard.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { isSandboxOrg } from "../organization/sandbox-guard.ts";
 import {
   markReportDeliveryFailed,
   markReportDeliverySent,
   markReportDeliveryStarted,
   markReportDeliverySuppressed,
-} from "../report-delivery.ts";
+} from "../delivery/report-delivery.ts";
 
 /**
  * Consumes the `emails` queue: one job = one recipient.

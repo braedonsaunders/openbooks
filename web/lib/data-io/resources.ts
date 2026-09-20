@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, type SetupEntity } from '../setup/registry'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { DOC_KINDS, docKindConfig } from '../document-kinds'

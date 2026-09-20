@@ -399,7 +399,7 @@
     "builtIn": "Integrada",
     "custom": "Personalizada",
     "emptyTitle": "Nenhuma função ainda",
-    "emptyDescription": "Execute o script de seed de funções (engine/src/seed-roles.ts) para criar as funções integradas, ou crie uma função personalizada.",
+    "emptyDescription": "Execute o script de seed de funções (engine/src/provisioning/seed-roles.ts) para criar as funções integradas, ou crie uma função personalizada.",
     "noMatchTitle": "Nenhuma função correspondente",
     "noMatchDescription": "Ajuste a busca ou o filtro de tipo.",
     "table": {

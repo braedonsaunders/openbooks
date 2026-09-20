@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/db.ts'
-import { sum, toUnits } from '@openbooks/engine/src/money.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import {
   DocumentEditError,

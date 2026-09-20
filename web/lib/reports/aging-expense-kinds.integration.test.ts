@@ -38,9 +38,9 @@ const { sql } = await import("drizzle-orm");
 // Fixture writes cross the maintenance boundary (withBypass); the readers
 // under test run tenant-scoped through withOrgContext — the same RLS
 // posture as a production request via setRequestOrg.
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { agingByParty, agingDetail } = await import("./aging.ts");
 const { openItems } = await import("../cash/open-items.ts");
 

@@ -1,9 +1,9 @@
 import "server-only";
-import { denyInactiveExtensionPermissions, extensionPermissionAvailability } from "@openbooks/engine/src/extensions/permission-availability.ts";
+import { denyInactiveExtensionPermissions, extensionPermissionAvailability } from "@openbooks/engine/src/organization/extension-permission-availability.ts";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { currentUser, type SessionUser } from "./auth";
 import { accessDeniedHref } from "./gate-targets";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";

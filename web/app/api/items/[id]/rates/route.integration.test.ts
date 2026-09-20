@@ -61,9 +61,9 @@ const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 type PoolClient = import("pg").PoolClient;
 

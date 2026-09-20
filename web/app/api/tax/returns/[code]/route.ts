@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
+import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { parseAdjustments } from './tax-return-params'
 

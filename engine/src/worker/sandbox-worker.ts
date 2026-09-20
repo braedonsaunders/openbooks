@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { getBlockingConnection, SANDBOX_QUEUE, type SandboxJobData } from "@openbooks/jobs";
-import { withBypassContext } from "../db.ts";
+import { withBypassContext } from "../platform/db.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "../sandbox/lifecycle.ts";
 
 /**

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import type { SqlExecutor } from "../db.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 
 // Static imports evaluate before the module body, so in-file assignments
 // cannot guard the import-time database-environment resolution in db.ts.

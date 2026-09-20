@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { buildZip, filesZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../lib/file-zip'

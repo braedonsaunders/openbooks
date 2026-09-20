@@ -56,7 +56,7 @@
 import {
   bmin, D, divIntCents, max0, mulInt, mulRateCents, mulRatioCents, rate6, U,
 } from "../decimal.ts";
-import { roundDiv } from "../../../money.ts";
+import { roundDiv } from "../../../money/money.ts";
 import { qcRatesForPayDate, type QcEditionRates, type QcTaxBracket } from "./rates.ts";
 
 export interface Tp1015Ytd {

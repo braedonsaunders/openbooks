@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src/income-tax-provision.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 

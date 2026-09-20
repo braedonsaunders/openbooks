@@ -14,13 +14,13 @@ import {
   type ReportCustomQuery,
   type ReportMeasure,
 } from "@openbooks/reports";
-import { db, pool } from "../db.ts";
-import { dataDependentFeatureDefault } from "../feature-defaults.ts";
-import { featureEnabled, type FeatureState } from "../feature-registry.ts";
-import { add, normalizeDecimal } from "../money.ts";
-import { actorHasPermission } from "../actor-permissions.ts";
-import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
-import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
+import { db, pool } from "../platform/db.ts";
+import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
+import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
+import { add, normalizeDecimal } from "../money/money.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { DriverAdminError } from "./driver-admin.ts";
 import {
   createDriverResolver,

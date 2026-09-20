@@ -1,12 +1,12 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   createRetroPayRun,
   proposeRetroPay,
-} from '@openbooks/engine/src/payroll-retro-store.ts'
+} from '@openbooks/engine/src/payroll/retro-store.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
@@ -21,7 +21,7 @@ export const runtime = 'nodejs'
  *
  * `POST` with `{ action: 'propose' }` writes NOTHING. It re-runs each affected
  * committed period through the pay run's own calculation
- * (engine/src/payroll-retro-store.ts) and differences the earnings, so it is
+ * (engine/src/payroll/retro-store.ts) and differences the earnings, so it is
  * expensive and unsafe to cache — which is exactly why it is a POST and not a
  * GET. It requires `payroll.run` rather than `payroll.read` for the same
  * reason: it is real payroll computation, not a query.

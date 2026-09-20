@@ -34,7 +34,7 @@ export const crmOpportunityStatuses = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     /**
      * What entering this stage requires (0175). The status declares the
-     * policy; `validateOpportunityStageTransition` in engine/src/crm-math.ts
+     * policy; `validateOpportunityStageTransition` in engine/src/crm/crm-math.ts
      * is the single enforcement point every writer calls, so the board, the
      * drawer, imports and scripts refuse the same transitions identically.
      *

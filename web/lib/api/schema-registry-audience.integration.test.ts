@@ -15,8 +15,8 @@ registerHooks({
 
 const { loadApiSchema } = await import('./schema-registry.ts')
 const { generateOpenApiSpec } = await import('./openapi-server.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 test(
   'API schema hides custom record types outside the caller audience',

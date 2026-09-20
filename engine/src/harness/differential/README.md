@@ -106,4 +106,4 @@ payable account were never marked as open items, so reimbursements could not
 settle through the payment engine — fixed in `posting.ts`
 (`resolveOpenItemAccounts`) and `payments.ts` (control-account derivation from
 allocation targets), with a regression test in
-`engine/src/expense-report-open-item.integration.test.ts`.
+`engine/src/ledger/expense-report-open-item.integration.test.ts`.

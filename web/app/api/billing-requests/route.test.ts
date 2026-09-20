@@ -116,7 +116,7 @@ const mockUrls = new Map<string, string>([
   ["../../../lib/list-params", "mock:list-params"],
   ["../../../lib/projects-gate", "mock:projects-gate"],
   ["../../../lib/exact-decimal", "mock:exact-decimal"],
-  ["@openbooks/engine/src/money.ts", "mock:money"],
+  ["@openbooks/engine/src/money/money.ts", "mock:money"],
   ["../../../lib/billing-requests", "mock:billing-requests"],
 ]);
 

@@ -67,10 +67,10 @@ const hooks = registerHooks({
       const source = specifier === "./auth" ? AUTH_MOCK : SUBSIDIARIES_MOCK;
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(source) };
     }
-    if (specifier === "@openbooks/engine/src/extensions/permission-availability.ts") {
+    if (specifier === "@openbooks/engine/src/organization/extension-permission-availability.ts") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(AVAILABILITY_MOCK) };
     }
-    if (specifier === "@openbooks/engine/src/db.ts") {
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(DB_MOCK) };
     }
     if (

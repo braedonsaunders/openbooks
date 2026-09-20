@@ -8,9 +8,9 @@ registerHooks({resolve(specifier,context,next){
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
-const { documentRevisionSql } = await import('@openbooks/engine/src/document-revision.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { documentRevisionSql } = await import('@openbooks/engine/src/records/revision.ts');
 const { installApp } = await import('./store');
 const base = { type:'custom_field',targetTable:'parties',key:'review_field',label:'Review field',fieldType:'text',config:{} };
 function bundle(field: Record<string,unknown>, version='1.0.0') {

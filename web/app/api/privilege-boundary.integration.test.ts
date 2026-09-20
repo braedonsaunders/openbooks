@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { BUILT_IN_ROLES } from "@openbooks/engine/src/permissions.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { BUILT_IN_ROLES } from "@openbooks/engine/src/organization/permissions.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -12,7 +12,7 @@ import {
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
-} from "@openbooks/engine/src/test-fixtures.ts";
+} from "@openbooks/engine/src/testing/fixtures.ts";
 import { submitForApproval } from "@openbooks/engine/src/flows/submit.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

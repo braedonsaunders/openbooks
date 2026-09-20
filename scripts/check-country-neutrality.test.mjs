@@ -37,15 +37,15 @@ test('the pack scope is anchored, so generic code cannot borrow a pack path', ()
 test('the tax layer scope covers the filing UI, its APIs, and provisioning', () => {
   assert.equal(isTaxLayerPath('web/app/(app)/tax/TaxFilingsView.tsx'), true)
   assert.equal(isTaxLayerPath('web/app/api/tax/returns/route.ts'), true)
-  assert.equal(isTaxLayerPath('engine/src/seed-tax-forms.ts'), true)
-  assert.equal(isTaxLayerPath('engine/src/tax-return.ts'), true)
-  assert.equal(isTaxLayerPath('engine/src/tax-pack-provisioning.ts'), true)
+  assert.equal(isTaxLayerPath('engine/src/tax/seed-tax-forms.ts'), true)
+  assert.equal(isTaxLayerPath('engine/src/tax-returns/return.ts'), true)
+  assert.equal(isTaxLayerPath('engine/src/tax/pack-provisioning.ts'), true)
 })
 
 test('the tax layer scope excludes payroll, so its slice cannot hide here', () => {
   assert.equal(isTaxLayerPath('web/app/(app)/payroll/_ui/EmployeesPanel.tsx'), false)
   assert.equal(isTaxLayerPath('web/app/api/payroll/subsidiary-scope.ts'), false)
-  assert.equal(isTaxLayerPath('engine/src/payroll-run.ts'), false)
+  assert.equal(isTaxLayerPath('engine/src/payroll/run.ts'), false)
 })
 
 test('the audit accepts the real pack and conformance files, branch literals included', () => {

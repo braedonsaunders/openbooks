@@ -19,8 +19,8 @@ import {
   deriveConsolidatedRates,
   runAutoElimination,
   runOwnershipConsolidation,
-} from "../../consolidation.ts";
-import { db } from "../../db.ts";
+} from "../../consolidation/consolidation.ts";
+import { db } from "../../platform/db.ts";
 import { capture, setSpotRate } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 

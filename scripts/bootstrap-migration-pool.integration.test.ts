@@ -20,7 +20,7 @@ import {
   describeBootstrapMigrationFailure,
   releaseMigrationClient,
 } from "./bootstrap-migration-client.ts";
-import { env, longPool, pool } from "../engine/src/db.ts";
+import { env, longPool, pool } from "../engine/src/platform/db.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 

@@ -8,7 +8,7 @@ import test from "node:test";
 // taken when db.ts first loads, so hand that snapshot a throwaway directory
 // before importing the resolver (mirrors import-job.integration.test.ts).
 const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-backend-"));
-const { env } = await import("../db.ts");
+const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { assertTenantRootPrefix, backendFor } = await import("./backend.ts");

@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   PspSettlementError,
   importSettlementBatch,
@@ -13,8 +13,8 @@ import {
   savePspProviderConfig,
   summarizeSettlement,
   type PspProvider,
-} from "@openbooks/engine/src/psp-settlement.ts";
-import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
+} from "@openbooks/engine/src/payments/psp-settlement.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";

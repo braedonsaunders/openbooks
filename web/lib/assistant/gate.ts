@@ -1,4 +1,4 @@
-import { featureEnabled, type FeatureState } from "@openbooks/engine/src/feature-registry.ts";
+import { featureEnabled, type FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
 import { can, type Authz } from "../authz";
 import type { AssistantToolDef, PermissionRule } from "./types";
 

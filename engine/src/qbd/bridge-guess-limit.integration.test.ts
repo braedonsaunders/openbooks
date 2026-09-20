@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db, env, schema } from "../db.ts";
-import { sealJson } from "../secrets.ts";
+import { db, env, schema } from "../platform/db.ts";
+import { sealJson } from "../platform/secrets.ts";
 import { authenticateWebConnector } from "./bridge.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(env.OPENBOOKS_DB_URL && env.OPENBOOKS_DATA_KEY);
 

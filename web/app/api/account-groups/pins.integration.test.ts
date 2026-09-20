@@ -48,9 +48,9 @@ const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.
 const { POST } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 function errorChain(error: unknown): string {

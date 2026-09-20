@@ -23,7 +23,7 @@
  * the federal calculation, to a neighbouring state's tables, or to a flat
  * "typical" rate. There is no default branch in this module.
  */
-import { PayrollError } from "../../../payroll-error.ts";
+import { PayrollError } from "../../error.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
 import { AL_WITHHOLDING } from "./al.ts";
 import { AR_WITHHOLDING } from "./ar.ts";

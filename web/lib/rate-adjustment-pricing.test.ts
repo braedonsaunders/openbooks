@@ -89,10 +89,10 @@ test(
     );
     hooks.deregister();
 
-    const { db, withOrgTransaction } = await import("@openbooks/engine/src/db.ts");
+    const { db, withOrgTransaction } = await import("@openbooks/engine/src/platform/db.ts");
     const { sql } = await import("drizzle-orm");
     const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-      "@openbooks/engine/src/test-fixtures.ts"
+      "@openbooks/engine/src/testing/fixtures.ts"
     );
     const pg = (await import("pg")).default;
 

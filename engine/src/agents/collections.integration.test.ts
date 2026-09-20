@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
-import { defaultContinuousCloseDetectors } from "../continuous-close-config.ts";
-import { runContinuousCloseAgent } from "../continuous-close.ts";
-import { db, withBypass, withBypassContext } from "../db.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
+import { runContinuousCloseAgent } from "../continuous-close/continuous-close.ts";
+import { db, withBypass, withBypassContext } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { collectionsFindings } from "./collections.ts";
 
 /**

@@ -38,7 +38,7 @@
  * Money: bigint units (1e4) throughout via the repo's money.ts — the same
  * discipline as canada/decimal.ts. Coefficients stay decimal strings.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {

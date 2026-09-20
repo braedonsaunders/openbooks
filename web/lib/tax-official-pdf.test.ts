@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { PDFDocument } from 'pdf-lib'
 import { fillOfficialTaxPdf, OfficialPdfError } from './tax-official-pdf.ts'
-import type { TaxReturnBox } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
 
 const box = (lineCode: string, value: string, pdfField: string | null): TaxReturnBox => ({
   lineCode,

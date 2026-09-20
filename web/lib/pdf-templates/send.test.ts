@@ -187,15 +187,15 @@ const mockSources = new Map<string, string>([
 registerHooks({  resolve(specifier, context, nextResolve) {
     // The real email-config module under test imports its db sibling
     // relatively; share the same mocked engine db instance.
-    if (specifier === './db.ts' && context.parentURL?.includes('/engine/src/email-config.ts')) {
+    if (specifier === '../platform/db.ts' && context.parentURL?.includes('/engine/src/delivery/email-config.ts')) {
       return { url: 'mock:db', shortCircuit: true }
     }
     const mocks: Record<string, string> = {
       'server-only': 'mock:server-only',
       'drizzle-orm': 'mock:drizzle-orm',
-      '@openbooks/engine/src/db.ts': 'mock:db',
+      '@openbooks/engine/src/platform/db.ts': 'mock:db',
       '@openbooks/emails': 'mock:emails',
-      '@openbooks/engine/src/business-date.ts': 'mock:business-date',
+      '@openbooks/engine/src/platform/business-date.ts': 'mock:business-date',
       '@openbooks/engine/src/flows/email-tokens.ts': 'mock:email-tokens',
       '@openbooks/pdf': 'mock:openbooks-pdf',
       '../features': 'mock:features',
@@ -228,7 +228,7 @@ registerHooks({  resolve(specifier, context, nextResolve) {
 // while the hooks above route its dependencies to the mocks.
 const sendModuleUrl = './send.ts?attribution-test'
 const { sendRecordPdfEmail } = await import(sendModuleUrl) as typeof import('./send.ts')
-const { insertEmailLog } = await import('../../../engine/src/email-config.ts')
+const { insertEmailLog } = await import('../../../engine/src/delivery/email-config.ts')
 
 function reset(): void {
   state.requestScope = false

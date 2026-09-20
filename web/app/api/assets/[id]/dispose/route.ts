@@ -1,11 +1,11 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { disposeAsset } from "@openbooks/engine/src/asset-lifecycle.ts";
+import { disposeAsset } from "@openbooks/engine/src/assets/asset-lifecycle.ts";
 import {
   businessToday,
   isIsoCalendarDate,
-} from "@openbooks/engine/src/business-date.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+} from "@openbooks/engine/src/platform/business-date.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import {

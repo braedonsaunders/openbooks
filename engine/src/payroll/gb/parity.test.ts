@@ -15,7 +15,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../money.ts";
+import { toUnits } from "../../money/money.ts";
 import {
   calculateGbNic,
   calculateGbPaye,

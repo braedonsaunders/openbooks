@@ -1,5 +1,5 @@
 // Run with (one file per process):
-//   env $OB_TEST_ENV SESSION_SECRET=<64-hex> node --import tsx --import ./engine/src/test-database-bypass.ts \
+//   env $OB_TEST_ENV SESSION_SECRET=<64-hex> node --import tsx --import ./engine/src/testing/database-bypass.ts \
 //     --test --test-force-exit web/lib/apps/tools.integration.test.ts
 //
 // End-to-end proof for App-declared assistant tools: a fixture app with a
@@ -28,9 +28,9 @@ registerHooks({
 const { installApp } = await import('./store')
 const { commitAppToolCommand } = await import('./tools')
 const { buildToolRegistryAsync, executeAssistantTool } = await import('../assistant/registry')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 import type { Authz } from '../authz'
 

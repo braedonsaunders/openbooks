@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createDriver,
   createDriverValue,
@@ -23,7 +23,7 @@ import {
   createScratchUser,
   dropScratchOrgReporting,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 function makeDriver(orgId: string, overrides: Partial<AllocationDriver> = {}): AllocationDriver {
   return {

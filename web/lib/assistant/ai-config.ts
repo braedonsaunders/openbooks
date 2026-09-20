@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { sealSecret, unsealSecret } from "../secrets";
 import {
   isAiProvider,
@@ -19,16 +19,16 @@ import {
   type ContinuousCloseAgentKey,
   type ContinuousCloseDetectorPolicy,
   type ContinuousClosePolicy,
-} from "@openbooks/engine/src/continuous-close.ts";
-import { serializeContinuousCloseDetectors } from "@openbooks/engine/src/continuous-close-config.ts";
-import { fromUnits, toUnits } from "@openbooks/engine/src/money.ts";
+} from "@openbooks/engine/src/continuous-close/continuous-close.ts";
+import { serializeContinuousCloseDetectors } from "@openbooks/engine/src/agents/continuous-close-config.ts";
+import { fromUnits, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   normalizeStoredDocumentCapture,
   type DocumentCaptureSettings,
   type StoredDocumentCapture,
-} from "@openbooks/engine/src/ap-capture-config.ts";
-import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/ap-capture.ts";
-import { type SqlExecutor } from '@openbooks/engine/src/db.ts'
+} from "@openbooks/engine/src/payables/ap-capture-config.ts";
+import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/payables/ap-capture.ts";
+import { type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config

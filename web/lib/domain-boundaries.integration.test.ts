@@ -33,15 +33,15 @@ registerHooks({
   },
 })
 const { db, withBypassContext, withOrgContext } =
-  await import('@openbooks/engine/src/db.ts')
+  await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/src/test-fixtures.ts')
+  await import('@openbooks/engine/src/testing/fixtures.ts')
 const { computeProvisionRun, getProvisionRun } =
-  await import('@openbooks/engine/src/income-tax-provision.ts')
+  await import('@openbooks/engine/src/tax-returns/income-tax-provision.ts')
 const { createPlanVersion, publishPlanVersion, activateLifecycle } =
-  await import('@openbooks/engine/src/advanced-subscriptions.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+  await import('@openbooks/engine/src/billing/advanced-subscriptions.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 const { getAuthz } = await import('./authz')
 const { POST: consolidate } = await import('../app/api/consolidation/route')
 const { GET: provisions, POST: compute } =
@@ -62,9 +62,9 @@ const { POST: prepareFiling } = await import('../app/api/tax/filings/route')
 const { GET: filingExport } =
   await import('../app/api/tax/filings/[id]/export/route')
 const { addCalendarDays } =
-  await import('@openbooks/engine/src/business-date.ts')
+  await import('@openbooks/engine/src/platform/business-date.ts')
 const { customersHome } = await import('./module-home/customers')
-const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm.ts')
+const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
 const {
   GET: opportunityRead,
   PATCH: opportunityEdit,

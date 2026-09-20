@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const view = source('./view.ts')
 const api = source('../../api/notifications/route.ts')
-const registry = source('../../../../engine/src/modules/nav-registry.ts')
+const registry = source('../../../../engine/src/navigation/nav-registry.ts')
 
 /**
  * The inbox is the one nav module with no permission key, and that is only

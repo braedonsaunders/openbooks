@@ -5,7 +5,7 @@ import {
   resolveFeatureOn,
   type FeatureTreeRow,
 } from './feature-tree'
-import { FEATURES } from '../../../../../../engine/src/feature-registry'
+import { FEATURES } from '../../../../../../engine/src/organization/feature-registry'
 
 const CATEGORIES = ['sales', 'operations', 'accounting', 'platform'] as const
 

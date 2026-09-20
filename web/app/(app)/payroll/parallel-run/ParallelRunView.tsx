@@ -28,7 +28,7 @@ import { PagedTable, type PagedColumn } from '../../../../components/paged-table
 import { useMoney } from '../../../../components/money-provider'
 
 /* ------------------------------------------------------------------ */
-/* Shapes (mirror engine/src/payroll-parallel-run-store.ts)            */
+/* Shapes (mirror engine/src/payroll/parallel-run-store.ts)            */
 /* ------------------------------------------------------------------ */
 
 interface UnmappedColumn {
@@ -123,7 +123,7 @@ interface Slot {
  * Deliberately NOT `Number(value) === 0`: money never crosses the
  * floating-point boundary in this product, not even to decide the colour of a
  * cell. Every amount reaching this component is already canonical four-decimal
- * text produced by engine/src/money.ts, so a pattern match is both exact and
+ * text produced by engine/src/money/money.ts, so a pattern match is both exact and
  * cheaper than a parse.
  */
 function isZeroAmount(value: string | null | undefined): boolean {

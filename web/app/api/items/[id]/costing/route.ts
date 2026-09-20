@@ -1,10 +1,10 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import {
   InventoryError,
   inventoryOffsetAccountProblem,
@@ -14,7 +14,7 @@ import {
   parseCostingMethod,
   parseTrackingMode,
   revalueOpenLayersToStandardCost,
-} from '@openbooks/engine/src/inventory.ts'
+} from '@openbooks/engine/src/inventory/inventory.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'

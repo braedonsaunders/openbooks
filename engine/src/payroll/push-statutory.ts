@@ -1,4 +1,4 @@
-import { cmp } from "../money.ts";
+import { cmp } from "../money/money.ts";
 import { statutoryAssessment } from "./packs.ts";
 import type { PushStatutoryFn, StubLine } from "./statutory-context.ts";
 

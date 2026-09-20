@@ -3,8 +3,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };

@@ -57,7 +57,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/feature-gates", "mock:feature-gates"],
   ["../../../../../../lib/list-params", "mock:list-params"],
-  ["@openbooks/engine/src/banking.ts", "mock:banking"],
+  ["@openbooks/engine/src/banking/banking.ts", "mock:banking"],
 ]);
 
 let postRoute: typeof import("./route.ts").POST | undefined;

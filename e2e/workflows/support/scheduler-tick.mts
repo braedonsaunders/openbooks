@@ -24,8 +24,8 @@
  *   docs <orgId> <partyId>
  */
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrg } from "../../../engine/src/db.ts";
-import { runDunningForOrg } from "../../../engine/src/dunning.ts";
+import { db, withBypassContext, withOrg } from "../../../engine/src/platform/db.ts";
+import { runDunningForOrg } from "../../../engine/src/receivables/dunning.ts";
 
 function emit(value: unknown): void {
   console.log(`W5TICK ${JSON.stringify(value)}`);

@@ -1,4 +1,4 @@
-import type { PayrollFilingData } from "../../payroll-filing-registry.ts";
+import type { PayrollFilingData } from "../filing-registry.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,

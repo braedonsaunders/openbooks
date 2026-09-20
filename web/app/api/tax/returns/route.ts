@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/seed-tax-forms.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { planTaxReturnLibraryChange } from '../../../../lib/setup/tax-return-library'
 

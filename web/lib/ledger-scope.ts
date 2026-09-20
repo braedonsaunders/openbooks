@@ -4,7 +4,7 @@ import { sql, type SQL } from 'drizzle-orm'
 /**
  * The one shared answer to "which ACCOUNTS carry open payables/receivables"
  * (0171, F-p3-001). Document-kind membership lives once in
- * engine/src/open-item-kinds.ts (AP_OPEN_ITEM_KINDS / AR_OPEN_ITEM_KINDS) —
+ * engine/src/records/open-item-kinds.ts (AP_OPEN_ITEM_KINDS / AR_OPEN_ITEM_KINDS) —
  * this module never re-lists kinds, only the account side of the scope.
  *
  * An expense report contributes exactly its OUT-OF-POCKET portion by

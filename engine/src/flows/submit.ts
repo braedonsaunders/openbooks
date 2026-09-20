@@ -1,8 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, schema, withOrgTransaction } from "../db.ts";
-import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
-import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
-import { assertExpenseEmployee, assertExpenseSettlement } from "../expense-validation.ts";
+import { db, schema, withOrgTransaction } from "../platform/db.ts";
+import { runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
+import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { runRecordFlows } from "./run.ts";
 
 /**

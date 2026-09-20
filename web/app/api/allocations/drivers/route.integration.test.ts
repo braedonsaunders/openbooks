@@ -64,9 +64,9 @@ const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 const previewRoute = (await import(previewUrl)) as typeof import("./preview/route.ts");
 hooks.deregister();
 
-const { db } = await import("../../../../../engine/src/db.ts");
+const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/test-fixtures.ts"
+  "../../../../../engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

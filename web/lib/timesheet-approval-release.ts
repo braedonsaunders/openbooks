@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { resolveTimesheetWeek } from '@openbooks/engine/src/flows/timesheet-weeks-adapter.ts'
 import { approveSubmittedTimeEntries } from './time-approval'
 import { setTimesheetWeekStatus } from '../app/api/timesheets/_lib'

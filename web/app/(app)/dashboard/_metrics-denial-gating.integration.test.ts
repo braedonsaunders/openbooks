@@ -30,13 +30,13 @@ registerHooks({
   },
 });
 
-const { toUnits } = await import("@openbooks/engine/src/money.ts");
-const { withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type DashboardMoneyReaders = import("./_metrics.ts").DashboardMoneyReaders;
 const { canSeeWidget } = await import("./_widget-access.ts");
-const { businessToday } = await import("@openbooks/engine/src/business-date.ts");
+const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type OpenItem = import("@/lib/cash/core.ts").OpenItem;
 

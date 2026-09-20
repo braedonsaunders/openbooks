@@ -1,4 +1,4 @@
-import { fromUnits, normalizeDecimal, toUnits } from '@openbooks/engine/src/money.ts'
+import { fromUnits, normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /** Commercial quantities use the eight decimal places of document_lines. */
 export const QUANTITY_SCALE = 100_000_000n

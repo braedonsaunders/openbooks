@@ -60,9 +60,9 @@ const routeUrl = "./route.ts?form-layout-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const LAYOUT_ID = "00000000-0000-4000-8000-000000000041";

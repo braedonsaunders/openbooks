@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { syncSourceAccountingPeriods } from "./migrate.ts";
 import type { MigrationSource, SourceEntity } from "./source.ts";
 

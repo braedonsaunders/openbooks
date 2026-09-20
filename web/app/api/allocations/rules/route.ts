@@ -6,7 +6,7 @@ import {
   createRule,
   listRuleHeads,
 } from '../../../../../engine/src/allocations/index.ts'
-import { businessToday } from '../../../../../engine/src/business-date.ts'
+import { businessToday } from '../../../../../engine/src/platform/business-date.ts'
 import { guardAllocations } from '../../../../lib/allocations-gate'
 import { allocationErrorResponse } from '../_lib.ts'
 

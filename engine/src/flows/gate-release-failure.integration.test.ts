@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -11,7 +11,7 @@ import {
   seedDraftDocument,
   type ScratchOrg,
   type FlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
 import { decideGate, DecisionFailedError, GateError, ReleaseError } from "./gates.ts";
 import { FIELD_TICKET_SUBJECT_KIND } from "./field-tickets-adapter.ts";

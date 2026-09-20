@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking.ts'
+import { excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'

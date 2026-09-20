@@ -3,4 +3,4 @@ import 'server-only'
 export {
   resolveProjectFinancials,
   type ProjectFinancials,
-} from '@openbooks/engine/src/project-financials.ts'
+} from '@openbooks/engine/src/projects/financials.ts'

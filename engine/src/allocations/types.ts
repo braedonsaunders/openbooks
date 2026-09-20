@@ -6,7 +6,7 @@
  * engine/src/allocations/ and every web surface codes against these shapes.
  * Design: docs/design/allocation-kernel.md. Schema: schema/src/allocations.ts.
  *
- * Money is always a canonical decimal string handled by engine/src/money.ts
+ * Money is always a canonical decimal string handled by engine/src/money/money.ts
  * bigint helpers — never a JavaScript number.
  */
 

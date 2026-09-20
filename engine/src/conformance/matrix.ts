@@ -11,7 +11,7 @@
  * or reuse one.
  */
 
-import { toUnits } from "../money.ts";
+import { toUnits } from "../money/money.ts";
 import { CONSTRUCTION_CASES } from "./cases/construction.ts";
 import { FOREIGN_CURRENCY_CASES } from "./cases/foreign-currency.ts";
 import { FX_SETTLEMENT_CASES } from "./cases/fx-settlement.ts";

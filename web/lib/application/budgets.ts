@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from "../budget-mutations";
 import type { ApplicationContext } from "./context";

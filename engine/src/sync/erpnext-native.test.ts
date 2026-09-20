@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../money.ts";
+import { toUnits } from "../money/money.ts";
 import type { NativeContext } from "./native.ts";
 import { buildErpInvoice, buildErpPayment, type ErpInvoice } from "./erpnext-native.ts";
 

@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
-import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransport } from '@openbooks/engine/src/email-config.ts'
+import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransport } from '@openbooks/engine/src/delivery/email-config.ts'
 
 export const runtime = 'nodejs'
 

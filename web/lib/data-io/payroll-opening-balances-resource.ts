@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import {
   assertTaxYear,
@@ -13,14 +13,14 @@ import {
   OPENING_BALANCE_FIELDS,
   saveOpeningBalances,
   type OpeningComponentField,
-} from '@openbooks/engine/src/payroll-opening-balances.ts'
+} from '@openbooks/engine/src/payroll/opening-balances.ts'
 import {
   assertMovementDate,
   entitlementOpeningLocks,
   entitlementPlans,
   saveEntitlementOpenings,
   type EntitlementPlan,
-} from '@openbooks/engine/src/payroll-entitlements.ts'
+} from '@openbooks/engine/src/payroll/entitlements.ts'
 import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import { employeeWriteScopeError } from './write-scope'
@@ -36,7 +36,7 @@ import { employeeWriteScopeError } from './write-scope'
  * preview and CSV/XLSX/JSON parsers every other resource uses — rather than a
  * bespoke uploader with its own file handling.
  *
- * Every write still goes through engine/src/payroll-opening-balances.ts, so an
+ * Every write still goes through engine/src/payroll/opening-balances.ts, so an
  * import cannot bypass the money validation or the refusal to restate a
  * carry-in a committed run already consumed.
  */
@@ -321,7 +321,7 @@ export const PAYROLL_OPENING_ENTITLEMENTS_KEY = 'payroll-opening-entitlements'
  * make "load 2027's file" silently re-date every bank.
  *
  * The write path is not separate: both go through
- * engine/src/payroll-entitlements.ts, so an import cannot bypass the sign check
+ * engine/src/payroll/entitlements.ts, so an import cannot bypass the sign check
  * against the plan's direction or the refusal to restate a carry-in a committed
  * run consumed.
  */

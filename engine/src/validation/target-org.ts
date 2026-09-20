@@ -11,7 +11,7 @@
  * the harness announces what it is about to touch before it touches it.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 export interface TargetOrg {
   id: string;

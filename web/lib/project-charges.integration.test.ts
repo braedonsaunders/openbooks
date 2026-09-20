@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { env } from '@openbooks/engine/src/db.ts'
+import { env } from '@openbooks/engine/src/platform/db.ts'
 
 function runIntegrationSource(source: string): void {
   const result = spawnSync(
@@ -11,7 +11,7 @@ function runIntegrationSource(source: string): void {
       '--import',
       'tsx',
       '--import',
-      './engine/src/test-database-bypass.ts',
+      './engine/src/testing/database-bypass.ts',
       '--input-type=module',
       '-e',
       source,
@@ -29,11 +29,11 @@ test(
       import assert from 'node:assert/strict';
       import { randomUUID } from 'node:crypto';
       import { sql } from 'drizzle-orm';
-      import { db } from './engine/src/db.ts';
-      import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
-      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/test-fixtures.ts';
+      import { db } from './engine/src/platform/db.ts';
+      import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
       import { ChargeCommittedError, createProjectCharge } from './web/lib/project-charges.ts';
-      import { priceCappedLadder } from './engine/src/item-rate-pricing.ts';
+      import { priceCappedLadder } from './engine/src/sales/item-rate-pricing.ts';
 
       installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
@@ -133,9 +133,9 @@ test(
       import assert from 'node:assert/strict';
       import { randomUUID } from 'node:crypto';
       import { sql } from 'drizzle-orm';
-      import { db } from './engine/src/db.ts';
-      import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
-      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/test-fixtures.ts';
+      import { db } from './engine/src/platform/db.ts';
+      import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
       import { ChargeError, createProjectCharge } from './web/lib/project-charges.ts';
 
       installTrustedTestDatabaseBypass();
@@ -190,9 +190,9 @@ test(
       import assert from 'node:assert/strict';
       import { randomUUID } from 'node:crypto';
       import { sql } from 'drizzle-orm';
-      import { db } from './engine/src/db.ts';
-      import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
-      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/test-fixtures.ts';
+      import { db } from './engine/src/platform/db.ts';
+      import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
       import { ChargeError, createProjectCharge } from './web/lib/project-charges.ts';
 
       installTrustedTestDatabaseBypass();

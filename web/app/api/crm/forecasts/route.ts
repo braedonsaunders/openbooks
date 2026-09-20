@@ -1,12 +1,12 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
-import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { TAX_RETURN_PACKS } from "../seed-tax-forms.ts";
+import { TAX_RETURN_PACKS } from "../tax/seed-tax-forms.ts";
 
 const readme = readFileSync("README.md", "utf8");
 
@@ -23,13 +23,13 @@ test("README tax-pack count follows the executable catalog", () => {
 
 test("README connector, locale, and container claims match shipped files", () => {
   const connectorFiles: Record<string, string> = {
-    NetSuite: "engine/src/netsuite.ts",
-    "QuickBooks Online": "engine/src/qbo.ts",
+    NetSuite: "engine/src/connectors/netsuite.ts",
+    "QuickBooks Online": "engine/src/connectors/qbo.ts",
     "QuickBooks Desktop Web Connector": "engine/src/qbd",
-    Xero: "engine/src/xero.ts",
-    ERPNext: "engine/src/erpnext.ts",
-    Odoo: "engine/src/odoo.ts",
-    "Microsoft Dynamics": "engine/src/dynamics.ts",
+    Xero: "engine/src/connectors/xero.ts",
+    ERPNext: "engine/src/connectors/erpnext.ts",
+    Odoo: "engine/src/connectors/odoo.ts",
+    "Microsoft Dynamics": "engine/src/connectors/dynamics.ts",
   };
   for (const [name, path] of Object.entries(connectorFiles)) {
     assert.match(readme, new RegExp(`- ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));

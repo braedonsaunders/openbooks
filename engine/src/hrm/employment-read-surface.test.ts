@@ -9,7 +9,7 @@ import {
   loadHeadcountAsOf,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
-import type { SqlExecutor } from "../db.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 import { AmbiguousRevisionError } from "./temporal.ts";
 
 // Unit proof for the HRM read-surface loaders (headcount, episodes,

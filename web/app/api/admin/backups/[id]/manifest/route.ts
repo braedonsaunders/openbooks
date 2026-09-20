@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { auditBackupEvent } from "@openbooks/engine/src/backup.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { auditBackupEvent } from "@openbooks/engine/src/backup/backup.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { contentDisposition } from "../../../../../../lib/export";
 import { isUuid } from "../../../../../../lib/list-params";

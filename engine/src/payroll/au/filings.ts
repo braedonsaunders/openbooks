@@ -7,7 +7,7 @@
  * year-to-date figures for the financial year are complete. STP is a filing
  * on this pack, not a second engine.
  */
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 
 const STP_FINALISATION_REFUSAL =

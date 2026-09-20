@@ -1,5 +1,5 @@
-import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { isUuid } from "../list-params";

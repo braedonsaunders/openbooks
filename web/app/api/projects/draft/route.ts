@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'

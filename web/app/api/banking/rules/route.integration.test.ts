@@ -95,9 +95,9 @@ const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/db.ts");
+  await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

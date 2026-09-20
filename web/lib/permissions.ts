@@ -10,4 +10,4 @@ export {
   isCataloguePermission,
   type PermissionKey,
   type CataloguePermission,
-} from '@openbooks/engine/src/permissions.ts'
+} from '@openbooks/engine/src/organization/permissions.ts'

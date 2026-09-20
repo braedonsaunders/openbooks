@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { authorizeUrl, type QboApp } from '@openbooks/engine/src/qbo.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/secrets.ts'
+import { authorizeUrl, type QboApp } from '@openbooks/engine/src/connectors/qbo.ts'
+import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
 

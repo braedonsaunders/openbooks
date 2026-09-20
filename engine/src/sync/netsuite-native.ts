@@ -6,7 +6,7 @@ import {
   normalizeDecimal,
   normalizeMoney,
   toUnits,
-} from "../money.ts";
+} from "../money/money.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
 /**

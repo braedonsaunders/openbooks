@@ -1,4 +1,4 @@
-import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts';
+import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts';
 export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
 
 /**

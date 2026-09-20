@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 // Committed-database evidence contract for the v1 API-key execution audit
 // (web/lib/application/api-key-audit.ts + executeIdempotent pairing):

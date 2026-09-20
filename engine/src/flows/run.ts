@@ -6,7 +6,7 @@ import {
   type AutomationPlan,
   type TriggerEvent,
 } from "@openbooks/forms-core";
-import { db, schema } from "../db.ts";
+import { db, schema } from "../platform/db.ts";
 import type { FlowExecCtx } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";

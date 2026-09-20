@@ -33,7 +33,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { MutationTargetConfig } from "./config.ts";
 import { generateMutants, type GeneratedMutant } from "./operators.ts";
-import { caseDigest, runId, sourceSha } from "../../provenance.ts";
+import { caseDigest, runId, sourceSha } from "../../platform/provenance.ts";
 
 export type MutantStatus = "killed" | "survived" | "timed-out" | "skipped" | "error";
 
@@ -238,7 +238,7 @@ function testArgs(useDb: boolean): string[] {
     ? ["--no-concurrent-sparkplug", "--no-concurrent-recompilation"]
     : []),
   "--import", "tsx",
-  ...(useDb ? ["--import", "./engine/src/test-database-bypass.ts"] : []),
+  ...(useDb ? ["--import", "./engine/src/testing/database-bypass.ts"] : []),
   "--test", "--test-force-exit", "--test-reporter=tap"];
   return args;
 }

@@ -7,15 +7,15 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 const { loadDocument } = await import('./documents')
 const { loadPdfRecordValues } = await import('./pdf-templates/values')
 
 /**
  * Drawer, customer PDF, and dunning share one balance-due reader
- * (engine/src/balance-due.ts). This test pins the two web surfaces to the
+ * (engine/src/records/balance-due.ts). This test pins the two web surfaces to the
  * hand-computed figures: a partially paid invoice AND a partially consumed
  * credit memo. The credit is the leg trap — it is consumed through the
  * from-leg, so a to-leg-only reader reports the full 60 as still due on the

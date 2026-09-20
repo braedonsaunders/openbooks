@@ -24,22 +24,22 @@ import { auditPublicSnapshot, isConnectorPath } from './check-product-neutrality
 
 /** Connector-named engine sources, keyed by what they cover. */
 const CONNECTOR_TEST_FILES = [
-  'engine/src/netsuite.test.ts',
-  'engine/src/netsuite-bridge.test.ts',
-  'engine/src/qbo.test.ts',
-  'engine/src/xero.test.ts',
-  'engine/src/odoo.test.ts',
-  'engine/src/erpnext.test.ts',
-  'engine/src/dynamics.test.ts',
+  'engine/src/connectors/netsuite.test.ts',
+  'engine/src/connectors/netsuite-bridge.test.ts',
+  'engine/src/connectors/qbo.test.ts',
+  'engine/src/connectors/xero.test.ts',
+  'engine/src/connectors/odoo.test.ts',
+  'engine/src/connectors/erpnext.test.ts',
+  'engine/src/connectors/dynamics.test.ts',
 ]
 
 const CONNECTOR_IMPLEMENTATION_FILES = [
-  'engine/src/netsuite-golden.ts',
-  'engine/src/qbo.ts',
-  'engine/src/xero.ts',
-  'engine/src/odoo.ts',
-  'engine/src/erpnext.ts',
-  'engine/src/dynamics.ts',
+  'engine/src/connectors/netsuite-golden.ts',
+  'engine/src/connectors/qbo.ts',
+  'engine/src/connectors/xero.ts',
+  'engine/src/connectors/odoo.ts',
+  'engine/src/connectors/erpnext.ts',
+  'engine/src/connectors/dynamics.ts',
 ]
 
 test('connector regression tests may name the connector they exercise', () => {

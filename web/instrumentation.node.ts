@@ -2,19 +2,19 @@
 export async function registerNodeInstrumentation() {
   // OTel traces/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is configured; a free
   // no-op otherwise (see engine telemetry.ts). First, so boot is observable.
-  const { startTelemetry } = await import('@openbooks/engine/src/telemetry.ts')
+  const { startTelemetry } = await import('@openbooks/engine/src/platform/telemetry.ts')
   await startTelemetry()
-  const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/db.ts')
+  const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/platform/db.ts')
   await assertSafeRuntimeDatabaseRole()
-  const { ensureScheduler } = await import('@openbooks/engine/src/scheduler.ts')
-  const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduler-mode.ts')
-  const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close.ts')
+  const { ensureScheduler } = await import('@openbooks/engine/src/scheduling/scheduler.ts')
+  const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduling/mode.ts')
+  const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close/continuous-close.ts')
   const { enrichContinuousCloseRun } = await import('./lib/assistant/continuous-close-agent')
   registerContinuousCloseEnricher(enrichContinuousCloseRun)
   // Scheduled work runs in the worker process (npm run worker), which calls
   // ensureScheduler() unconditionally. This web replica schedules only as an
   // explicit single-process opt-in (OPENBOOKS_RUN_SCHEDULER=1), and never
-  // under `next dev` — see engine/src/scheduler-mode.ts.
+  // under `next dev` — see engine/src/scheduling/mode.ts.
   const decision = resolveWebSchedulerMode(process.env)
   if (decision.enabled) {
     ensureScheduler()
@@ -79,7 +79,7 @@ export async function registerNodeInstrumentation() {
         import('./lib/pdf-templates/store'),
         import('./lib/pdf-templates/values'),
         import('./lib/pdf-templates/render'),
-        import('@openbooks/engine/src/business-date.ts'),
+        import('@openbooks/engine/src/platform/business-date.ts'),
       ])
     const [tpl, record] = await Promise.all([
       resolvePdfTemplate(orgId, subjectKind, null),

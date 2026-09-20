@@ -16,8 +16,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, env } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, env } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PUT } = await import("../app/api/projects/[id]/percent-complete/route");
 
 test("project percent-complete refuses a Projects disable committed while its write waits", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

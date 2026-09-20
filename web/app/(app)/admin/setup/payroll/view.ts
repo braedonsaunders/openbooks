@@ -73,7 +73,7 @@ const TABS = [
   // declares each varies by.
   'rates',
   // The hours and days employees are normally scheduled to work — a generic
-  // employment attribute (engine/src/work-schedules.ts) that several
+  // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
   'workSchedules',
   'entitlements', 'limits', 'service', 'derived', 'derivedPreview',

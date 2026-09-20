@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCustomFieldConfig } from '../../../../lib/custom-field-config'
 import { validateCustomFieldDefinition as validateDef, type ExistingFieldDef } from '../../../../lib/custom-field-definition'

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { requirePermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 

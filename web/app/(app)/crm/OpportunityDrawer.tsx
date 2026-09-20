@@ -6,8 +6,8 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { computeOpportunityTotals } from '@openbooks/engine/src/crm-math.ts'
-import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { computeOpportunityTotals } from '@openbooks/engine/src/crm/crm-math.ts'
+import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
 
 type Option = { id: string; name: string }

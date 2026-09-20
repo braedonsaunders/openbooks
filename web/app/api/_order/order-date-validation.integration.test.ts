@@ -1,4 +1,4 @@
-import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts';
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -57,9 +57,9 @@ const hooks = registerHooks({
 const { makePATCH } = await import("./handlers.ts");
 hooks.deregister();
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts",
+  "@openbooks/engine/src/testing/fixtures.ts",
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

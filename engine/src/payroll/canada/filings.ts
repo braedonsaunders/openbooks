@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { add } from "../../money.ts";
-import { keyedFingerprint, unsealSecret } from "../../secrets.ts";
-import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
-import { buildRoeXml, type RoeIssueInput } from "../../payroll-roexml.ts";
-import { buildT4Xml, t4SlipFromReported } from "../../payroll-t4xml.ts";
-import { PayrollError } from "../../payroll-error.ts";
-import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../../payroll-yearend.ts";
+import { db } from "../../platform/db.ts";
+import { add } from "../../money/money.ts";
+import { keyedFingerprint, unsealSecret } from "../../platform/secrets.ts";
+import { filingAccountRef, filingAccountsById } from "../filing.ts";
+import { buildRoeXml, type RoeIssueInput } from "../roexml.ts";
+import { buildT4Xml, t4SlipFromReported } from "../t4xml.ts";
+import { PayrollError } from "../error.ts";
+import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../yearend.ts";
 import type {
   PayrollFilingCorrectionRow,
   PayrollFilingData,
@@ -14,18 +14,18 @@ import type {
   PayrollFilingSlipData,
   PayrollPackFilings,
   PayrollYearEndFiling,
-} from "../../payroll-filing-registry.ts";
+} from "../filing-registry.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";
 
 /**
  * The CA pack's filing declaration: what Canada files, under which program
  * accounts, with which builders. The T4/ROE builders themselves live in
- * engine/src/payroll-t4xml.ts, payroll-roexml.ts and payroll-yearend.ts and
+ * engine/src/payroll/t4xml.ts, payroll-roexml.ts and payroll-yearend.ts and
  * are unchanged — this module is the declaration that lets the generic
  * year-end surface reach them without naming Canada anywhere.
  *
  * Destined for `PAYROLL_COUNTRY_PACKS.CA.filings` (see the packs.ts handoff);
- * until then engine/src/payroll-filing-registry.ts serves it as a built-in.
+ * until then engine/src/payroll/filing-registry.ts serves it as a built-in.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

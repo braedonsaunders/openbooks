@@ -4,8 +4,8 @@ import {
   refreshSourceReconciliationState,
   signOffFromSourceEvidence,
   type SourceClearedEntryEvidence,
-} from "../banking.ts";
-import { db } from "../db.ts";
+} from "../banking/banking.ts";
+import { db } from "../platform/db.ts";
 import type { NativeDocument } from "./native.ts";
 import type { MigrationSource, SourceClearedLineState } from "./source.ts";
 

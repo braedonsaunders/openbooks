@@ -33,8 +33,8 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypassContext, withOrg } from "../engine/src/db.ts";
-import { add, cmp, neg, roundMoney, sum } from "../engine/src/money.ts";
+import { db, pool, withBypassContext, withOrg } from "../engine/src/platform/db.ts";
+import { add, cmp, neg, roundMoney, sum } from "../engine/src/money/money.ts";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -63,7 +63,7 @@ interface EmployeeReplay {
 
 /**
  * The legacy vacation balance, computed with the SAME expression
- * engine/src/payroll-run.ts uses for a termination payout: the tax year's
+ * engine/src/payroll/run.ts uses for a termination payout: the tax year's
  * opening balance, plus every committed stub's accrual, less every committed
  * vacation payout.
  *
@@ -382,7 +382,7 @@ function reportKnownDefects(): void {
     "  3. Both sides count a run only while pay_runs.run_status = 'committed', so a\n"
     + "     VOIDED run drops out of both at once and the tie-out stays exact. The plan\n"
     + "     ledger, however, has no run-status predicate at all — voiding a run must\n"
-    + "     REVERSE its entitlement movements (engine/src/document-void.ts does), or the\n"
+    + "     REVERSE its entitlement movements (engine/src/ledger/document-void.ts does), or the\n"
     + "     two sides diverge by the voided accrual. Re-run this after any pay-run void.",
   );
 }
@@ -402,7 +402,7 @@ async function main(): Promise<number> {
     // nobody reads "0 employees checked" as a clean tie-out again.
     console.error(
       "no orgs visible — either the database is genuinely empty, or this process "
-      + "did not hold RLS bypass (see withBypassContext in engine/src/db.ts). "
+      + "did not hold RLS bypass (see withBypassContext in engine/src/platform/db.ts). "
       + "Confirm with: psql \"$OPENBOOKS_DB_URL\" -c \"set app.bypass_rls='on'\" -c 'select count(*) from orgs'",
     );
     return 1;

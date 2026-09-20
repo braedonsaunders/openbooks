@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import { loadRuleInEffectByKey } from "./rules.ts";
 import type { AllocationRuleVersion, RuleInEffect } from "./types.ts";
 import { definitionHash, validateRuleVersion } from "./validate.ts";

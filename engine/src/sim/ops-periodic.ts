@@ -1,9 +1,9 @@
-import { runDepreciation as engineRunDepreciation } from "../depreciation.ts";
-import { runDueRecurringSchedules } from "../recurring.ts";
-import { runDunning as engineRunDunning } from "../dunning.ts";
-import { computeTaxReturn } from "../tax-return.ts";
-import { runRevaluation } from "../fx-revaluation.ts";
-import { runOwnershipConsolidation, runAutoElimination } from "../consolidation.ts";
+import { runDepreciation as engineRunDepreciation } from "../assets/depreciation.ts";
+import { runDueRecurringSchedules } from "../billing/recurring.ts";
+import { runDunning as engineRunDunning } from "../receivables/dunning.ts";
+import { computeTaxReturn } from "../tax-returns/return.ts";
+import { runRevaluation } from "../close/fx-revaluation.ts";
+import { runOwnershipConsolidation, runAutoElimination } from "../consolidation/consolidation.ts";
 import type { SimOrg } from "./world.ts";
 
 /**

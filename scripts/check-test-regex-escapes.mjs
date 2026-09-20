@@ -162,7 +162,7 @@ export const ALLOWLIST = [
   { file: "web/lib/feature-gates.test.ts", snippet: "replace", reason: "pins the absence of slash-stripping source (backslashes are the source text)" },
   { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "not ok \\\\d", reason: "pins the canary's TAP grep in test.yml, whose text really contains backslash escapes" },
   { file: "scripts/test-fixture-architecture.test.mjs", snippet: "\\$\\{receipt", reason: "pins owner source text that really contains backslash-n escape sequences" },
-  { file: "engine/src/bootstrap-safety.test.ts", snippet: "seed-project-types", reason: "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash" },
+  { file: "engine/src/provisioning/bootstrap-safety.test.ts", snippet: "seed-project-types", reason: "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash" },
 ];
 
 export function isAllowlisted(file, snippet) {

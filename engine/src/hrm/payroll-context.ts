@@ -60,8 +60,8 @@
  */
 
 import { sql } from "drizzle-orm";
-import { actorHasPermission } from "../actor-permissions.ts";
-import { db, withOrgTransaction } from "../db.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   assembleEmploymentAsOf,
   type EmploymentStableRow,

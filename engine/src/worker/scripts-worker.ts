@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
 import { SCRIPTS_QUEUE, getBlockingConnection, type ScriptJobData } from "@openbooks/jobs";
-import { withOrgContext } from "../db.ts";
-import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../scripting.ts";
+import { withOrgContext } from "../platform/db.ts";
+import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../scripting/scripting.ts";
 
 /**
  * Execute one `scripts` queue payload — the exact code the worker callback

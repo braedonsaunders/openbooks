@@ -24,7 +24,7 @@ function publishReceipt(metrics) {
 
 async function runOwner() {
   const { createScratchOrg, dropScratchOrg, closeScratchOrgPool, getScratchOrgLifecycleMetrics } =
-    await import("../engine/src/test-fixtures.ts");
+    await import("../engine/src/testing/fixtures.ts");
   // Force pool initialization before advertising readiness. The owner is the
   // only process allowed to bootstrap or tear down tenants; test-file workers
   // lease these committed slots over the line protocol below.
@@ -97,7 +97,7 @@ if (process.argv.includes("--owner")) {
     closeScratchOrgPool,
     getScratchOrgLifecycleMetrics,
     releaseOutstandingScratchOrgLeases,
-  } = await import("../engine/src/test-fixtures.ts");
+  } = await import("../engine/src/testing/fixtures.ts");
   // Legacy integration tests often lease a scratch org without an explicit
   // drop call. Preserve a small file-scoped working set (some suites build a
   // shared fixture in a module-level harness), but drain it once the fixed

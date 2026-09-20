@@ -2,7 +2,7 @@
  * Display names for finding-assignment team roles.
  *
  * Role names live in the tenant database, seeded in English by BUILT_IN_ROLES
- * (engine/src/permissions.ts). An unrenamed seed role must render through the
+ * (engine/src/organization/permissions.ts). An unrenamed seed role must render through the
  * catalog (agents.drawer.assignment.roles); a role the tenant renamed keeps
  * its stored name. `role-display.test.ts` pins the seed map to the engine
  * tuples so the two cannot drift apart.

@@ -4,11 +4,11 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
-import { receiveInventory } from "@openbooks/engine/src/inventory.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { withSimClock } from "@openbooks/engine/src/clock.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
+import { receiveInventory } from "@openbooks/engine/src/inventory/inventory.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { withSimClock } from "@openbooks/engine/src/platform/clock.ts";
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };

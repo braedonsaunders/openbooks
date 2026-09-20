@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import type { ScratchOrg } from '../../engine/src/test-fixtures.ts'
+import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
 import type { Authz } from './authz.ts'
 
 // Static imports hoist past the shim below, so every module that (even
@@ -14,9 +14,9 @@ registerHooks({
     return next(s, c)
   },
 })
-const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/db.ts')
+const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } = await import(
-  '../../engine/src/test-fixtures.ts'
+  '../../engine/src/testing/fixtures.ts'
 )
 const { REPORT_ENTITY_MAP } = await import('../../packages/reports/src/entities.ts')
 const { runCustomQuery } = await import('../../packages/reports/src/run.ts')

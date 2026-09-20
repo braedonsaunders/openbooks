@@ -1,12 +1,12 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { Alert, Badge } from '@openbooks/ui'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   previewDerivedRule,
   type DerivedRulePreview,
-} from '@openbooks/engine/src/payroll-derived-earnings.ts'
+} from '@openbooks/engine/src/payroll/derived-earnings.ts'
 import { DateRangeFilter } from '../../../../../components/date-range-filter'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { pickString } from '../../../../../lib/list-params'
@@ -19,7 +19,7 @@ import { DerivedRulePreviewTable } from './DerivedRulePreviewTable'
  * moves money without looking at this first.
  *
  * It is the same calculation the pay run performs, read at fact resolution
- * (engine/src/payroll-derived-earnings.ts), never a second implementation.
+ * (engine/src/payroll/derived-earnings.ts), never a second implementation.
  */
 
 const BASE_PATH = '/admin/setup/payroll'

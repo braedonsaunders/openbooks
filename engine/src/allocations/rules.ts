@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../db.ts";
-import { documentRevisionSql } from "../document-revision.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { documentRevisionSql } from "../records/revision.ts";
 import type {
   AccountScope,
   AllocationApplyPolicy,

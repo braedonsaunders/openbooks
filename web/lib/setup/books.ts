@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/src/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { auditSetupChange as audit } from './audit'
 import { coerceBoolean } from './coerce'
 import type { SetupEntity } from './registry'

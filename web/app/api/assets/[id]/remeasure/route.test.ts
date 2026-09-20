@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
 interface RemeasurementCall {
   orgId: string
@@ -94,9 +94,9 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
-  ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
-  ['@openbooks/engine/src/asset-lifecycle.ts', 'mock:asset-lifecycle'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/assets/asset-lifecycle.ts', 'mock:asset-lifecycle'],
 ])
 
 const hooks = registerHooks({

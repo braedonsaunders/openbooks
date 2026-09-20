@@ -13,7 +13,7 @@
  *   書) are refused by name (see JP_REFUSED_2026 in ./rates.ts), so `yearEnd`
  *   is empty rather than approximate.
  */
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 export function jpPackFilings(): PayrollPackFilings {
   return {

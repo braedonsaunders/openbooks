@@ -1,5 +1,5 @@
-import { fromUnits, normalizeMoney, toUnits } from "../money.ts";
-import { m2oId } from "../odoo.ts";
+import { fromUnits, normalizeMoney, toUnits } from "../money/money.ts";
+import { m2oId } from "../connectors/odoo.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
 /**

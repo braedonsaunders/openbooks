@@ -2,8 +2,8 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import {
   activatePropertyLease,
   addLeaseCharge,
@@ -15,7 +15,7 @@ import {
   updateManagedProperty,
   updatePropertyLease,
   updatePropertyUnit,
-} from '@openbooks/engine/src/property-management.ts'
+} from '@openbooks/engine/src/property/management.ts'
 import { coerceBoolean, UUID_RE } from '../setup/coerce'
 import { INVENTORY_ITEM_KINDS } from './master-data-resources'
 import {

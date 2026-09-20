@@ -62,9 +62,9 @@ const { setupResource } = (await import(setupResourceUrl)) as typeof import("./d
 const { SETUP_ENTITY_BY_KEY } = await import("./setup/registry.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 test("segment hierarchy API validation walks scoped descendants before the write", () => {

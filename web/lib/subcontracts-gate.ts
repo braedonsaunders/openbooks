@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 
 async function enabled(orgId: string): Promise<boolean> {
   const result = (await db.execute<{ enabled: boolean }>(sql`

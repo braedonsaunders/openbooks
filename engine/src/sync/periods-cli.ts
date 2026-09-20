@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { buildSource, type ConnectionRow } from "./connection.ts";
 import { syncSourceAccountingPeriods } from "./migrate.ts";
 

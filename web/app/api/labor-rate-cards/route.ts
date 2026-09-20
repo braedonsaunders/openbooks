@@ -2,8 +2,8 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/db.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 

@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
-import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { absoluteUnits, moneyAbs, type WorkItemSeverity } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
-import { MODULE_BY_KEY } from "../modules/nav-registry.ts";
+import { MODULE_BY_KEY } from "../navigation/nav-registry.ts";
 
 /**
  * Evidence "open source" target, resolved through the nav registry — never a

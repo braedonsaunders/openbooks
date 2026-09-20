@@ -31,8 +31,8 @@ type Ctx = {
 };
 
 async function setup(): Promise<Ctx> {
-  const { db } = await import("../db.ts");
-  const { createScratchOrg, createScratchUser } = await import("../test-fixtures.ts");
+  const { db } = await import("../platform/db.ts");
+  const { createScratchOrg, createScratchUser } = await import("../testing/fixtures.ts");
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Payroll context actor", "payroll_context_actor");
   await db.execute(sql`
@@ -71,19 +71,19 @@ async function setup(): Promise<Ctx> {
 }
 
 async function teardown(orgId: string): Promise<void> {
-  const { dropScratchOrgReporting } = await import("../test-fixtures.ts");
+  const { dropScratchOrgReporting } = await import("../testing/fixtures.ts");
   await dropScratchOrgReporting(orgId);
 }
 
 async function mkPerson(ctx: Ctx, name: string, subsidiaryId: string | null = ctx.subId): Promise<string> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   return (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, subsidiary_id, custom)
     values (${ctx.orgId}, 'person', ${name}, ${subsidiaryId}, '{}'::jsonb) returning id`)).rows[0]!.id;
 }
 
 async function mkEmployment(ctx: Ctx, workerId: string, subId: string = ctx.subId): Promise<string> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   return (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
     values (${ctx.orgId}, ${workerId}, ${subId}) returning id`)).rows[0]!.id;
@@ -94,7 +94,7 @@ async function mkVersion(
   employmentId: string,
   opts: { status?: string; from?: string; to?: string | null } = {},
 ): Promise<void> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   await db.execute(sql`
     insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to)
     values (${ctx.orgId}, ${employmentId}, 1, ${opts.status ?? "active"},
@@ -114,7 +114,7 @@ async function seedPersonRow(
   personId: string,
   employmentId: string | null = null,
 ): Promise<void> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   switch (table) {
     case "employee_payroll_profiles":
       await db.execute(sql`
@@ -214,7 +214,7 @@ const TABLES = [
 ] as const;
 
 async function employmentOf(table: string, orgId: string, personId: string): Promise<string | null> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const rows = (await db.execute<{ employmentId: string | null }>(sql`
     select employment_id as "employmentId" from ${sql.identifier(table)}
      where org_id = ${orgId} and employee_party_id = ${personId}`)).rows;
@@ -223,7 +223,7 @@ async function employmentOf(table: string, orgId: string, personId: string): Pro
 }
 
 async function personRowCount(table: string, orgId: string, personId: string): Promise<number> {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   return Number((await db.execute<{ n: string }>(sql`
     select count(*)::text as n from ${sql.identifier(table)}
      where org_id = ${orgId} and employee_party_id = ${personId}`)).rows[0]!.n);
@@ -281,7 +281,7 @@ test("the coherence trigger refuses a same-org employment of another worker, nam
 test("profiles carry a partial unique on employment; the legacy per-person unique stays", { skip: !DB, timeout: 120_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const worker = await mkPerson(ctx, "Profile worker");
   const employment = await mkEmployment(ctx, worker);
   await seedPersonRow(ctx, "employee_payroll_profiles", worker);
@@ -332,7 +332,7 @@ test("profiles carry a partial unique on employment; the legacy per-person uniqu
 test("plan limits refuse an employment link on non-person scopes", { skip: !DB, timeout: 120_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const worker = await mkPerson(ctx, "Limit worker");
   const employment = await mkEmployment(ctx, worker);
   await assert.rejects(
@@ -390,7 +390,7 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
 test("stamp refuses the org on ambiguity without allowPartial; allowPartial stamps the clean and lists the rest", { skip: !DB, timeout: 180_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const mod = await import("./payroll-context.ts");
   const clean = await mkPerson(ctx, "Clean worker");
   const cleanEmployment = await mkEmployment(ctx, clean);
@@ -464,7 +464,7 @@ test("the stamp writer refuses an actor without payroll.run, dry-run included, w
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
   const mod = await import("./payroll-context.ts");
-  const { createScratchUser } = await import("../test-fixtures.ts");
+  const { createScratchUser } = await import("../testing/fixtures.ts");
   const worker = await mkPerson(ctx, "Ungranted worker");
   const employment = await mkEmployment(ctx, worker);
   await mkVersion(ctx, employment);
@@ -495,7 +495,7 @@ test("the stamp writer refuses an actor without payroll.run, dry-run included, w
 test("the resolver returns the single employment and refuses the three coded cases", { skip: !DB, timeout: 120_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const mod = await import("./payroll-context.ts");
   const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
   const worker = await mkPerson(ctx, "Resolved worker");
@@ -561,7 +561,7 @@ test("the resolver returns the single employment and refuses the three coded cas
     },
   );
   // No payroll.run grant: the boundary refuses before reading.
-  const outsider = await (await import("../test-fixtures.ts")).createScratchUser(
+  const outsider = await (await import("../testing/fixtures.ts")).createScratchUser(
     ctx.orgId, "No grant", "no_grant",
   );
   await assert.rejects(
@@ -578,7 +578,7 @@ test("the resolver returns the single employment and refuses the three coded cas
 test("manager routing resolves the line, falls back to the supervisor, and reports no one", { skip: !DB, timeout: 120_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const mod = await import("./payroll-context.ts");
   const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
   const worker = await mkPerson(ctx, "Routed worker");
@@ -621,7 +621,7 @@ test("manager routing resolves the line, falls back to the supervisor, and repor
 test("the single_line exclusion keeps two live lines unseedable, so ambiguity cannot persist", { skip: !DB, timeout: 120_000 }, async (t) => {
   const ctx = await setup();
   t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const worker = await mkPerson(ctx, "Single-line worker");
   const employment = await mkEmployment(ctx, worker);
   const bossA = await mkEmployment(ctx, await mkPerson(ctx, "Boss A"));
@@ -642,7 +642,7 @@ test("the single_line exclusion keeps two live lines unseedable, so ambiguity ca
 });
 
 test("the merge catalog needs no new lines: no 0186 FK targets parties(id)", { skip: !DB, timeout: 120_000 }, async () => {
-  const { db } = await import("../db.ts");
+  const { db } = await import("../platform/db.ts");
   const { PARTY_MERGE_REF_COVERAGE } = await import("../sync/party-merges.ts");
   const catalog = (await db.execute<{ tbl: string; col: string }>(sql`
     select distinct tc.table_name as tbl, kcu.column_name as col

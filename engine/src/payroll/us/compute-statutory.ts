@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { PayrollError } from "../../payroll-error.ts";
-import { sum } from "../../money.ts";
+import { PayrollError } from "../error.ts";
+import { sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

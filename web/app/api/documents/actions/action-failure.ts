@@ -1,6 +1,6 @@
-import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
-import { PostingError } from '@openbooks/engine/src/posting.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
+import { PostingError } from '@openbooks/engine/src/ledger/posting.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 
 /**
  * Map an action failure to its response (F-t06-002). Typed kernel, control-

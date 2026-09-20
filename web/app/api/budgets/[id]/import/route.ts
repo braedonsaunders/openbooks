@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'

@@ -18,8 +18,8 @@ registerHooks({
   },
 });
 
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { columnDescriptors, DOCUMENT_BUILT_IN_EXPR } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

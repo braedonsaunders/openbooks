@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withMaintenanceTransaction } from "../db.ts";
+import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";

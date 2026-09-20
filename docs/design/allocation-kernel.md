@@ -30,12 +30,12 @@ table, and three **modes** that decide when a rule fires:
 
 Everything else in the app that allocates today stays where it is (rev-rec, depreciation,
 leases, CAM, landed cost, payroll labor distribution). The overhead net-zero-pair writer
-(`engine/src/overhead-apply.ts`) is the one existing mechanism that becomes a system-owned
+(`engine/src/projects/overhead-apply.ts`) is the one existing mechanism that becomes a system-owned
 `post` rule (slice 4), because it *is* a post-mode net-zero-pair allocation with one driver.
 
 Design constraints (AGENTS.md): financial-institution grade; balanced, deterministic,
 idempotent; immutable posted history (corrections by reversal); effective-dated config;
-bigint money (`engine/src/money.ts`), never floats; enforcement at the service/API boundary;
+bigint money (`engine/src/money/money.ts`), never floats; enforcement at the service/API boundary;
 reuse-first (Setup registry, report engine, RecordListView, Drawer, SplitLinesEditor,
 ModuleView specs); vendor-neutral copy; every gate on the Features switchboard.
 
@@ -67,7 +67,7 @@ Columns and their meaning:
   - `document_kinds jsonb` (text[] or null = any document kind),
   - `account_scope jsonb` = `{ kind:'any' } | { kind:'accounts', accountIds } |
     { kind:'account_group', dimension, groupKey }` (account groups are the pool primitive —
-    `engine/src/account-groups.ts`),
+    `engine/src/records/account-groups.ts`),
   - `dimension_filters jsonb` = `{ departmentIds?, locationIds?, classIds?, projectIds?,
     subsidiaryIds?, partyIds?, itemIds?, extraDims?: Record<segmentKey, valueIds[]>,
     requireUntagged?: ('department'|'location'|'class'|'project')[] }`.
@@ -210,7 +210,7 @@ holds rows; none does anywhere).
   first child's inherited fields. "Un-split" collapses the group into one line at the
   first child's coordinates.
 - `post.ts` (A5) — `contributePostingAllocations(db, doc, kernelLines, deps) →
-  ContributedLine[]` called in `engine/src/posting.ts` right after kernel lines are built
+  ContributedLine[]` called in `engine/src/ledger/posting.ts` right after kernel lines are built
   and BEFORE `applySubsidiaries`. Rules in effect on the posting date, `post` mode,
   book_scope covering the primary book, matched per kernel line via `match.ts`. Each
   contributor's line set must balance per subsidiary on its own
@@ -269,7 +269,7 @@ holds rows; none does anywhere).
   entry gated), `allocationsAtEntry` and `allocationsAtPosting` with `parentKey:
   'allocations'`; turn-off impact counts (open previewed runs, active rules); never blocked.
 - **Permissions** (A10): `allocations.read`, `allocations.manage`, `allocations.run`,
-  `allocations.approve` in `engine/src/permissions.ts` + built-in roles + `seed-roles.ts`
+  `allocations.approve` in `engine/src/organization/permissions.ts` + built-in roles + `seed-roles.ts`
   rerun note. Posting a run additionally requires `gl.post`.
 - **i18n**: `web/messages/en/allocations.json` (+ fallbacks file per the i18n gotchas
   memory); labels via keys, never literals.
@@ -302,15 +302,15 @@ holds rows; none does anywhere).
 | ----- | ---------- | --------- | ---------- |
 | A1 engine-core | apportion, validate, definitionHash, rule/version service (CRUD, publish, retire, overlap guard) | `engine/src/allocations/{apportion,validate,rules}.ts` | schema (landed) |
 | A2 drivers | driver registry resolvers + manual values service | `engine/src/allocations/drivers.ts` | schema |
-| A3 period-run | preview/post/reverse/rerun + lineage + GlLine extension | `engine/src/allocations/period-run.ts`, `engine/src/project-recognition.ts` (additive) | A1 apportion, A2 (inject a `DriverResolver`; start with fixed_percent) |
+| A3 period-run | preview/post/reverse/rerun + lineage + GlLine extension | `engine/src/allocations/period-run.ts`, `engine/src/projects/recognition.ts` (additive) | A1 apportion, A2 (inject a `DriverResolver`; start with fixed_percent) |
 | A4 entry-mode | `match.ts` (first commit), `entry.ts`, `applyDocumentEdit` wiring, generic writers `distributionKey` | `engine/src/allocations/{match,entry}.ts`, `web/lib/documents.ts`, `web/lib/api/writers.ts` | A1 apportion |
-| A5 post-mode | posting seam, contributor stamping, secondary-book entries, void mirroring, GL impact drawer grouping | `engine/src/allocations/post.ts`, `engine/src/posting.ts`, `web/components/journal-entry-link.tsx` | A4 match |
-| A6 script-trigger | `custom_gl_lines` trigger in the QuickJS runtime, ScriptDrawer template, scripting docs | `engine/src/scripting.ts`, `web/app/(app)/admin/scripts/*`, `web/lib/docs/articles/scripting.ts` | A5 seam (stub until landed) |
+| A5 post-mode | posting seam, contributor stamping, secondary-book entries, void mirroring, GL impact drawer grouping | `engine/src/allocations/post.ts`, `engine/src/ledger/posting.ts`, `web/components/journal-entry-link.tsx` | A4 match |
+| A6 script-trigger | `custom_gl_lines` trigger in the QuickJS runtime, ScriptDrawer template, scripting docs | `engine/src/scripting/scripting.ts`, `web/app/(app)/admin/scripts/*`, `web/lib/docs/articles/scripting.ts` | A5 seam (stub until landed) |
 | A7 setup-ui-rules | Rules tab + Rule drawer + versions + rules/targets API routes + setup registry entry | `web/app/(app)/admin/setup/allocations/*`, `web/app/api/allocations/rules/*`, `web/lib/setup/registry.ts` (one small commit) | A1 service |
 | A8 setup-ui-drivers-runs | Drivers tab + drawer + values grid, Runs tab + preview/post/reverse UI + lineage drill + API routes | `web/app/(app)/admin/setup/allocations/{drivers,runs}*`, `web/app/api/allocations/{drivers,runs,lineage}/*` | A2, A3 |
 | A9 line-grid | entry-mode UI in line grid/document drawer, split dialog, group rendering, suggest chips, entry-candidates API, data-io | `web/components/line-grid.tsx`, `web/components/document-drawer.tsx`, `web/app/api/allocations/entry-candidates/route.ts`, `web/lib/data-io/*` | A4 |
-| A10 platform | Features + permissions + roles, report entities + built-ins, scheduler outbox kind + runner, close automation action, governed catalog migration 0161 | `engine/src/feature-registry.ts`, `web/lib/features.ts`, `engine/src/permissions.ts`, `packages/reports/src/*`, `engine/src/scheduler-outbox.ts`, `engine/src/close*.ts`, `schema/migrations/generated/0161_*.sql` | schema |
-| A11 overhead-fold (wave 2) | overhead net-zero pair → system-owned post rule, backfill parity test | `engine/src/overhead-apply.ts` | A5 |
+| A10 platform | Features + permissions + roles, report entities + built-ins, scheduler outbox kind + runner, close automation action, governed catalog migration 0161 | `engine/src/organization/feature-registry.ts`, `web/lib/features.ts`, `engine/src/organization/permissions.ts`, `packages/reports/src/*`, `engine/src/scheduling/outbox.ts`, `engine/src/close*.ts`, `schema/migrations/generated/0161_*.sql` | schema |
+| A11 overhead-fold (wave 2) | overhead net-zero pair → system-owned post rule, backfill parity test | `engine/src/projects/overhead-apply.ts` | A5 |
 | A12 docs-trust (wave 2) | in-app docs article, trust corpus cases, i18n fallbacks for other locales | `web/lib/docs/*`, `corpus/*` | A3, A4, A5 |
 | A13 assistant (wave 2, after the assistant fleet releases its files) | `preview_allocation`, `explain_allocation`, `list_allocation_rules` tools + MCP | `web/lib/assistant/*`, `web/lib/mcp/*` | A3, A8 |
 

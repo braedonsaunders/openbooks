@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   REPORT_ENTITY_MAP,
   defaultRowsQuery,

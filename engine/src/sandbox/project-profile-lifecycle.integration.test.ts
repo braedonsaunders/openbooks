@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
-import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };

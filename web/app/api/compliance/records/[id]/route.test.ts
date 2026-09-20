@@ -201,7 +201,7 @@ mockSources.set(
 )
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@/lib/authz', 'mock:authz'],
   ['@/lib/compliance', 'mock:compliance'],
 ])

@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { businessToday } from "../business-date.ts";
-import { db, schema } from "../db.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db, schema } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 

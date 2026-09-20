@@ -1,6 +1,6 @@
-import { withOrgContext } from "../../db.ts";
-import { withSimClock } from "../../clock.ts";
-import { createScriptJournal } from "../../journal-writes.ts";
+import { withOrgContext } from "../../platform/db.ts";
+import { withSimClock } from "../../platform/clock.ts";
+import { createScriptJournal } from "../../ledger/journal-writes.ts";
 import { provisionCorpusOrg, type CorpusWorld } from "../corpus-lib/provision.ts";
 import { replayEvent } from "../corpus-lib/post.ts";
 import {

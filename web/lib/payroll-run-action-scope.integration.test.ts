@@ -15,10 +15,10 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { mutatePayRunAdjustment } = await import("@openbooks/engine/src/payroll-run-adjustments.ts");
+const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { mutatePayRunAdjustment } = await import("@openbooks/engine/src/payroll/run-adjustments.ts");
 const { GET, POST } = await import("../app/api/payroll/runs/[id]/route");
 
 for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee", "include-employee", "bulk-adjustment", "set-scope", "preview-gl", "calculate", "dry-run", "commit", "read", "read-adjustments"] as const) {

@@ -1,12 +1,12 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   OPENING_BALANCE_FIELDS,
   type OpeningBalanceYear,
-} from '@openbooks/engine/src/payroll-opening-balances.ts'
-import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll-entitlements-openings.ts'
+} from '@openbooks/engine/src/payroll/opening-balances.ts'
+import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
 import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'

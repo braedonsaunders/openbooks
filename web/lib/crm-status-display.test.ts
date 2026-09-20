@@ -39,7 +39,7 @@ for (const locale of ['en', 'fr', 'es']) {
 }
 
 test('the seeded-name map matches the engine provisioning seed', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm.ts'), 'utf8')
+  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm', 'crm.ts'), 'utf8')
   const block = seed.match(/DEFAULT_OPPORTUNITY_STATUSES = \[([\s\S]*?)\] as const/)
   assert.ok(block, 'engine must declare DEFAULT_OPPORTUNITY_STATUSES')
   const names = [...block[1]!.matchAll(/\[\s*"[^"]+",\s*"([^"]+)"/g)].map((m) => m[1])
@@ -68,7 +68,7 @@ for (const locale of ['en', 'fr', 'es']) {
 }
 
 test('the account seeded-name map matches the engine provisioning seed', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm.ts'), 'utf8')
+  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm', 'crm.ts'), 'utf8')
   const block = seed.match(/DEFAULT_ACCOUNT_STATUSES = \[([\s\S]*?)\] as const/)
   assert.ok(block, 'engine must declare DEFAULT_ACCOUNT_STATUSES')
   const names = [...block[1]!.matchAll(/\[\s*"[^"]+",\s*"[^"]+",\s*"([^"]+)"/g)].map((m) => m[1])

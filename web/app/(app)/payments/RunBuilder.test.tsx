@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 
 const source = readFileSync(new URL('./RunBuilder.tsx', import.meta.url), 'utf8')
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listSchema } from "@openbooks/engine/src/sqlapi.ts";
+import { listSchema } from "@openbooks/engine/src/platform/sqlapi.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { hasUnrestrictedQueryScope } from "../../../../lib/query-console-access";
 

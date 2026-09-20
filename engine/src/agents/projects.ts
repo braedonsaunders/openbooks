@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { add, cmp } from "../money.ts";
-import { addCalendarDays, businessToday } from "../business-date.ts";
+import { add, cmp } from "../money/money.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
-import { db } from "../db.ts";
+} from "./continuous-close-config.ts";
+import { db } from "../platform/db.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

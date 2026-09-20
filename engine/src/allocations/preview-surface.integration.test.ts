@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   AllocationRunError,
   previewAllocationRun,
 } from "./period-run.ts";
-import { postProjectGlEntry } from "../project-recognition.ts";
+import { postProjectGlEntry } from "../projects/recognition.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

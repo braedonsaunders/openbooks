@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   SubscriptionError,
   billSubscriptionNow,
@@ -11,11 +11,11 @@ import {
   normalizeSubscriptionMoney,
   prorateFirstInvoice,
   type Interval,
-} from "@openbooks/engine/src/subscription-billing.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+} from "@openbooks/engine/src/billing/subscription-billing.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 
 export const runtime = "nodejs";
 

@@ -2,7 +2,7 @@ import 'server-only'
 import { listActiveExtensionContributions } from '@openbooks/engine/src/extensions/projections.ts'
 import { sql } from 'drizzle-orm'
 import { hiddenNavModules, resolvedFeatureState } from '../features'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import {
   ADMIN_HUB_PERMISSIONS,

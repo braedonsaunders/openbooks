@@ -7,11 +7,11 @@
  */
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { pool, withOrgTransaction } from "../engine/src/db.ts";
+import { pool, withOrgTransaction } from "../engine/src/platform/db.ts";
 import {
   reconcilePayrollFilingAccounts,
   type PayrollFilingReconciliation,
-} from "../engine/src/payroll-filing-reconciliation.ts";
+} from "../engine/src/payroll/filing-reconciliation.ts";
 
 const previewRollback = new Error(
   "Preview complete: rollback reviewed reconciliation",

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   parsePayRunCalculationErrors,
   parsePayRunRefusalAcknowledgement,
@@ -8,15 +8,15 @@ import {
   payRunRefusalDigest,
   type PayRunCalculationError,
   type PayRunRefusalAcknowledgement,
-} from '@openbooks/engine/src/payroll-run.ts'
+} from '@openbooks/engine/src/payroll/run.ts'
 import {
   lockAndCheckPayrollRunPopulation,
   payrollSubsidiaryScopeFilter,
-} from '@openbooks/engine/src/payroll-scope.ts'
+} from '@openbooks/engine/src/payroll/scope.ts'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import {
   payRunChanges,
@@ -27,12 +27,12 @@ import {
   type PayRunReadiness,
   type PayRunStaleness,
   type StubChange,
-} from '@openbooks/engine/src/payroll-readiness.ts'
+} from '@openbooks/engine/src/payroll/readiness.ts'
 import {
   payrollPaymentMethodSettings,
   resolvedPaymentMethodSql,
-} from '@openbooks/engine/src/payroll-payment-method.ts'
-import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+} from '@openbooks/engine/src/payroll/payment-method.ts'
+import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'

@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
-import { db, pool } from "../engine/src/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../engine/src/test-fixtures.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../engine/src/testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

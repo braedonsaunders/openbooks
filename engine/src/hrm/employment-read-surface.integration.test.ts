@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   EmploymentReadError,
   findEmploymentsByParty,
@@ -14,7 +14,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 

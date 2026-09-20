@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import {
   computeScheduledScriptNextRunAt,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
-} from '@openbooks/engine/src/scripting.ts'
-import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/script-config.ts'
+} from '@openbooks/engine/src/scripting/scripting.ts'
+import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/scripting/script-config.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 

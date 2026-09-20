@@ -8,7 +8,7 @@ import type {
  *
  * Transcribed from the CRA's published "When to remit (pay)" table and its
  * weekend/holiday sentence — the same page the legacy per-account function in
- * `engine/src/payroll-remittance.ts` (`remittanceDueDateExplained`) quotes:
+ * `engine/src/payroll/remittance.ts` (`remittanceDueDateExplained`) quotes:
  *
  *   https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/
  *     payroll/remitting-source-deductions/how-when-remit-due-dates.html

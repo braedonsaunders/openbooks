@@ -14,7 +14,7 @@ import {
 import { requirePermission, can } from '../../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../../lib/data'
-import { getProvisionRun } from '@openbooks/engine/src/income-tax-provision.ts'
+import { getProvisionRun } from '@openbooks/engine/src/tax-returns/income-tax-provision.ts'
 import type { ProvisionDifference, ProvisionSummary, ReconStep } from './sections'
 
 /**

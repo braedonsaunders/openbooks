@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const fx = read("./tools-fx.ts");
 const catalog = read("../application/tool-catalog.ts");
-const engine = read("../../../engine/src/fx-revaluation.ts");
+const engine = read("../../../engine/src/close/fx-revaluation.ts");
 
 // FX reads reuse the tables the close/consolidation engine reads — never a
 // parallel rate source. Rates are exact numeric strings, never floats.

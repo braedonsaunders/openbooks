@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
-import { db, pool, withBypassContext, withOrg } from "../db.ts";
+import { db, pool, withBypassContext, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,

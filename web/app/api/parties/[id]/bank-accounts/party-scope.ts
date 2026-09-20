@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 
 /** Party record boundary shared by every bank-account verb here (null-subsidiary parties are org-wide). */

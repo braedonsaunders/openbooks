@@ -5,8 +5,8 @@ registerHooks({resolve(specifier,context,next){if(specifier==='server-only')retu
 const {sql}=await import('drizzle-orm');
 const {randomUUID}=await import('node:crypto');
 const {pathToFileURL}=await import('node:url');
-const {db,withOrgTransaction}=await import('@openbooks/engine/src/db.ts');
-const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/test-fixtures.ts');
+const {db,withOrgTransaction}=await import('@openbooks/engine/src/platform/db.ts');
+const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/testing/fixtures.ts');
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 

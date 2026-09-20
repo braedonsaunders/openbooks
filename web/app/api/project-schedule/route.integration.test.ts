@@ -110,7 +110,7 @@ const hooks = registerHooks({
     if (specifier === '../../../lib/authz') return { url: 'mock:authz', shortCircuit: true }
     if (specifier === '../../../lib/projects-gate') return { url: 'mock:feature-gate', shortCircuit: true }
     if (specifier === '../../../lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     return nextResolve(specifier, context)
   },

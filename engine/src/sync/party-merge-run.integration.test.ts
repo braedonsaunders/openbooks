@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
 import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
 

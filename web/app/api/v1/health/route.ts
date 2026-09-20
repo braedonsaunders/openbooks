@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
-import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/file-storage.ts";
-import { pool } from "@openbooks/engine/src/db.ts";
+import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
+import { pool } from "@openbooks/engine/src/platform/db.ts";
 import { requireSessionSecret } from "../../../../lib/auth-secret-policy";
 
 export const runtime = "nodejs";

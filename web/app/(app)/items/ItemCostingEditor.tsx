@@ -56,7 +56,7 @@ const OFFSET_FIELDS: readonly CostingOffsetField[] = [
 
 /**
  * Client mirror of the server's inventoryOffsetAccountProblem rule
- * (engine/src/inventory.ts): every offset account must differ from the
+ * (engine/src/inventory/inventory.ts): every offset account must differ from the
  * inventory asset account, or PUT /api/items/[id]/costing answers 422.
  * Checked inline before any submit (F-t09-002) so the form can refuse the
  * combination itself instead of surfacing it as a transient toast.

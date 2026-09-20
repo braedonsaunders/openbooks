@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { ambientTenantOrgId, db } from "../db.ts";
+import { ambientTenantOrgId, db } from "../platform/db.ts";
 import type {
   FlowSubjectAdapter,
   FlowSubjectContext,

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { Authz } from "../authz";
 import { can } from "../authz";
 import { resolvedFeatureState } from "../features";

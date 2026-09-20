@@ -26,7 +26,7 @@
  * the generic gate too — the prefecture selects the health rate, so an
  * unknown code must stop here, not price a neighbour's rate.
  */
-import { toUnits } from "../../money.ts";
+import { toUnits } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers JP_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

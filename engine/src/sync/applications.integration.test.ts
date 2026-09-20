@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { recomputeOpenBalances, reconcileApplications } from "./applications.ts";
-import { DocumentVoidError, requestDocumentVoid } from "../document-void.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
+import { DocumentVoidError, requestDocumentVoid } from "../ledger/document-void.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

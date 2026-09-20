@@ -10,9 +10,9 @@ export type PermNamespace = 'ap' | 'ar' | 'gl'
 
 /**
  * Period-close module whose lock governs posting this kind — mirrors
- * engine/src/close.ts CLOSE_MODULES. Required on every registry entry so a
+ * engine/src/close/close.ts CLOSE_MODULES. Required on every registry entry so a
  * new document kind cannot exist without an explicit close-module decision:
- * engine/src/close.test.ts asserts closeModuleForDocument(kind) equals this
+ * engine/src/close/close.test.ts asserts closeModuleForDocument(kind) equals this
  * field for every kind, so an unmapped kind fails typecheck here and CI there
  * instead of silently posting under the GL lock alone.
  */
@@ -118,7 +118,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // Project charge / resource usage — allocates a pooled, already-incurred cost
   // (non-inventory materials, owned equipment, internal services) onto a project
   // at a cost rate, carrying a billable rate for T&M. Posts DR project COGS /
-  // CR cost pool (see the project_charge rule in engine/src/posting.ts). Internal
+  // CR cost pool (see the project_charge rule in engine/src/ledger/posting.ts). Internal
   // (no party); direct-post.
   project_charge: {
     kind: 'project_charge', closeModule: 'gl', family: 'gl', numberPrefix: 'CHG-', permNamespace: 'gl', i18n: 'banking',
@@ -126,7 +126,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
   // Pay run: committed payroll GL projection (signed lines, like a journal).
-  // Lines are machine-built by engine/src/payroll-run.ts commitPayRun — the
+  // Lines are machine-built by engine/src/payroll/run.ts commitPayRun — the
   // drawer never edits them; the payroll workspace is the editing surface.
   pay_run: {
     kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PAY-', permNamespace: 'gl', i18n: 'banking',

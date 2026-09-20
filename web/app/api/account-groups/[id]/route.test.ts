@@ -53,9 +53,9 @@ const routeUrl = "./route.ts?account-group-audit-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts",
+  "@openbooks/engine/src/testing/fixtures.ts",
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

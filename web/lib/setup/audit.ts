@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SetupEntity } from './registry'
 
 /** Snapshot the actual stored setup row, including its ordered join-table

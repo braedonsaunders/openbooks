@@ -1,30 +1,30 @@
-import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, exactOrderUnitPrice, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
-import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   issueSalesOrder,
   SalesOrderIssueError,
-} from '@openbooks/engine/src/sales-orders.ts'
+} from '@openbooks/engine/src/sales/sales-orders.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
-} from '@openbooks/engine/src/document-void.ts'
+} from '@openbooks/engine/src/ledger/document-void.ts'
 import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
 
 /**

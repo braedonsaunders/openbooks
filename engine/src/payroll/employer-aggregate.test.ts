@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { add, cmp } from "../money.ts";
+import { add, cmp } from "../money/money.ts";
 import {
   assertAggregateLeviesValid,
   assessAggregateLevyStub,

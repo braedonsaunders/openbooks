@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { cashPosition } from "../../../../lib/cash/cash-position";

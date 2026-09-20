@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { getDocumentCaptureTestConfig } from '@openbooks/engine/src/ap-capture-config.ts'
-import { testAzureDocumentProvider } from '@openbooks/engine/src/ap-capture.ts'
+import { getDocumentCaptureTestConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
+import { testAzureDocumentProvider } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 
 export const runtime = 'nodejs'

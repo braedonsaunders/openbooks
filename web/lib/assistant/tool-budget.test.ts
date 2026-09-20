@@ -32,7 +32,7 @@ registerHooks({
 
 const { ASSISTANT_TOOLS, buildToolRegistry } = await import("./registry");
 const { APPLICATION_TOOLS } = await import("../application/tool-catalog");
-const { FEATURES } = await import("@openbooks/engine/src/feature-registry.ts");
+const { FEATURES } = await import("@openbooks/engine/src/organization/feature-registry.ts");
 const { moduleOfTool } = await import("./tool-router");
 
 /**

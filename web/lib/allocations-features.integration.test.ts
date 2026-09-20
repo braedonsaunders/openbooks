@@ -3,8 +3,8 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/test-fixtures.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 // Same seam as web/lib/setup-feature-fence.integration.test.ts: shim the RSC
 // `server-only` marker (this file runs from the root, one file per process).

@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { AlertTriangle, Check, FileText, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
-import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
+import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { ReadOnlyValue } from '../../../../components/read-only-value'
 
 type Evidence = { fieldKey: string; lineIndex: number | null; confidence: string | null; pageNumber: number | null; polygon: { points: number[]; width: number; height: number } | null }

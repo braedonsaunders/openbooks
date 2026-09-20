@@ -34,7 +34,7 @@
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
   from "../../certificates.ts";
-import { roundDiv } from "../../../money.ts";
+import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
   payPeriodFor,

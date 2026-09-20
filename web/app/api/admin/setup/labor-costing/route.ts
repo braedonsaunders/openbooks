@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import {
   can,
   guardPermission,
@@ -17,8 +17,8 @@ import {
   laborClearingReconciliation,
   postPayrollVariance,
   type LaborCostComponent,
-} from '@openbooks/engine/src/labor-costing.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+} from '@openbooks/engine/src/projects/labor-costing.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'

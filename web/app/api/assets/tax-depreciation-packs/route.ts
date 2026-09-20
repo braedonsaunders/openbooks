@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-depreciation-packs.ts'
+import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'

@@ -2,8 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
 

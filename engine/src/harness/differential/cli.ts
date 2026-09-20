@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool, withOrgContext } from "../../db.ts";
+import { pool, withOrgContext } from "../../platform/db.ts";
 import { assertSimEnabled } from "../../sim/db-guard.ts";
 import { resetOrg } from "../../sim/world.ts";
 import { cheapInvariants } from "../../sim/invariants/index.ts";

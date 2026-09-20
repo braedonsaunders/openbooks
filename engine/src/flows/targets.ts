@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { AssigneeTarget, RecipientTarget } from "@openbooks/forms-core";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 /**
  * AssigneeTarget / RecipientTarget → concrete users and email addresses using

@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money.ts";
-import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../open-item-kinds.ts";
-import { addCalendarDays, businessToday } from "../business-date.ts";
+import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
-import { db } from "../db.ts";
+} from "./continuous-close-config.ts";
+import { db } from "../platform/db.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

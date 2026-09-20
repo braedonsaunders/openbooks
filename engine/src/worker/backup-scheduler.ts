@@ -6,8 +6,8 @@ import {
   computeNextRunAt,
   deleteBackupObject,
   headBackupObject,
-} from "../backup.ts";
-import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../db.ts";
+} from "../backup/backup.ts";
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 
 /**
  * Backup scheduler — polls for enabled backup_policies whose next_run_at is

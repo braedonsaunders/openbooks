@@ -43,9 +43,9 @@ const hooks = registerHooks({
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -138,9 +138,9 @@ registerHooks({
     const mocks: Record<string, string> = {
       "server-only": "mock:server-only",
       "drizzle-orm": "mock:drizzle-orm",
-      "@openbooks/engine/src/db.ts": "mock:db",
+      "@openbooks/engine/src/platform/db.ts": "mock:db",
       "@openbooks/emails": "mock:emails",
-      "@openbooks/engine/src/email-config.ts": "mock:email-config",
+      "@openbooks/engine/src/delivery/email-config.ts": "mock:email-config",
       "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
       "./auth": "mock:auth",
       "./auth-policy": "mock:auth-policy",

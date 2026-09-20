@@ -35,7 +35,7 @@ for (const locale of ['en', 'fr', 'es']) {
 }
 
 test('the seeded-name map matches the engine built-in roles', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'permissions.ts'), 'utf8')
+  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'organization', 'permissions.ts'), 'utf8')
   const region = seed.slice(seed.indexOf('BUILT_IN_ROLES'), seed.indexOf('BUILT_IN_ROLE_KEYS'))
   assert.ok(region.length > 0, 'engine must declare BUILT_IN_ROLES')
   const names = [...region.matchAll(/^\s*name: "([^"]+)"/gm)].map((m) => m[1])

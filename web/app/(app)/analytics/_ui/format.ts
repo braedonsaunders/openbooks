@@ -4,7 +4,7 @@
 
 import { useCallback } from 'react'
 import { useMoney } from '@/components/money-provider'
-import { formatMoney as formatExactMoney, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { formatMoney as formatExactMoney, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 /** Format canonical ledger strings without coercing them through Number. */
