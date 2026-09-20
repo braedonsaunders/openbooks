@@ -116,8 +116,12 @@ the same entry stamped as script lines; standard lines stay locked.
 Gates: the caller needs **gl.post** (re-resolved live, exactly like a journal
 write), and both the **scripts** feature and the allocation posting mode must
 be on. **ob.journal.create** is unavailable inside this trigger — return lines
-instead. The sandbox exposes no clock or randomness here, so contributions are
-deterministic: two runs over the same document produce the same lines.
+instead. Before any script source executes, the sandbox blocks **Date** and
+**Math.random** and prevents replacing those controls. Live SQL reads through
+**ob.query**, **ob.record.load**, and **ob.search** are also unavailable in this
+trigger: even a read-only query can return the clock, randomness, or changed
+data. Compute contributions from **ctx.document**, **ctx.lines**, and
+**ctx.kernelLines**. Other script triggers retain their governed query access.
 
 ## Client script execution
 
