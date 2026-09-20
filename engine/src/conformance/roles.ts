@@ -141,6 +141,10 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
 
   const actorId = await createScratchUser(scratch.orgId, "Conformance Runner", "accountant");
 
+  // The lease service now enforces the same authority as its native API.
+  // Give the measured actor that explicit capability, not an implicit bypass.
+  await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
+    values (${scratch.orgId},${actorId},'assets.manage','grant')`);
   const roleOf = new Map<string, Role>();
   for (const role of ROLES) {
     const account = roles[role];

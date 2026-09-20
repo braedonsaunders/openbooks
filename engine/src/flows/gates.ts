@@ -137,6 +137,9 @@ async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
 async function gateSubjectSubsidiaryId(gate: Pick<GateRow, "subjectKind" | "subjectId" | "orgId">): Promise<string | null> {
   const r = await db.execute<{ subsidiaryId: string | null }>(sql`
     select case
+             when g.subject_kind = 'financial_change' then (
+               select fc.subsidiary_id from financial_changes fc where fc.id=g.subject_id and fc.org_id=g.org_id
+             )
              when g.subject_kind = 'party_bank_account' then (
                select p.subsidiary_id
                  from party_bank_accounts ba
@@ -810,6 +813,14 @@ async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[])
       if (byId.has(g.subjectId)) g.subsidiaryId = byId.get(g.subjectId) ?? null;
     }
   };
+  const changes = idsFor("financial_change");
+  if (changes.length > 0) {
+    const result = await db.execute<{id:string;subsidiaryId:string}>(sql`
+      select id,subsidiary_id as "subsidiaryId" from financial_changes where org_id=${orgId}
+        and id in (select jsonb_array_elements_text(${JSON.stringify(changes)}::jsonb)::uuid)
+    `);
+    apply(result.rows);
+  }
   const timesheets = idsFor("timesheet_week");
   if (timesheets.length > 0) {
     const r = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
@@ -858,8 +869,12 @@ function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = JSON.stringify([...allowedSubsidiaryIds]);
   return sql`and (
-    d.id is null
+    (d.id is null and g.subject_kind <> 'financial_change')
     or d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+    or (g.subject_kind='financial_change' and exists (
+      select 1 from financial_changes fc where fc.org_id=g.org_id and fc.id=g.subject_id
+      and fc.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+    ))
   )`;
 }
 

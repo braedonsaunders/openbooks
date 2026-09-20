@@ -63,15 +63,10 @@ test("createLeaseAgreement persists annualDiscountRatePercent through canonicalD
   assert.doesNotMatch(body, /normalizeDecimal\(input\.annualDiscountRatePercent, 10\)/);
 });
 
-test("advance timing is refused at creation, not deferred to commencement", () => {
-  // createLeaseAgreement calls this pure seam before inserting the draft: an
-  // agreement that measureLesseeLease could never commence must fail
-  // validation up front. The measurement guard remains as defense in depth.
-  assert.throws(
-    () => assertLeaseTimingSupported("advance"),
-    (e) => e instanceof LeaseError && /advance-timing/.test(e.message),
-  );
+test("contractual advance and arrears timings are accepted without rewriting the agreement", () => {
+  assert.doesNotThrow(() => assertLeaseTimingSupported("advance"));
   assert.doesNotThrow(() => assertLeaseTimingSupported("arrears"));
+  assert.throws(() => assertLeaseTimingSupported("other" as never), /matching the signed agreement/);
 });
 
 test("a zero rate degenerates to the undiscounted sum", () => {
