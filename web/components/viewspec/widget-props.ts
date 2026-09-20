@@ -23,4 +23,3 @@ export function stringRecord(props: Record<string, unknown>, key: string): Recor
   }
   return out
 }
-
