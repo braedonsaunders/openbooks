@@ -334,6 +334,28 @@ test("an infinite loop is stopped by the deadline", async () => {
   assert.equal(r.status, "timeout");
 });
 
+test("a guest stack overflow is an endpoint error, not a host process abort", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() { function rec() { rec(); } rec(); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(r.status, "error");
+  assert.equal(
+    r.error,
+    "guest stack overflow: the handler exceeded the sandbox stack limit",
+  );
+  // Dispose of that poisoned WASM runtime must not take the process down:
+  // a later endpoint on the same host still returns a result.
+  const after = await runAppEndpoint({
+    source: `function handler() { return 1 }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(after.status, "ok");
+  assert.equal(after.response!.body, 1);
+});
+
 test('platform query plans round-trip through QuickJS without exposing SQL', async () => {
   const adapters = withPlatform(fakeAdapters())
   const plan = { from: { type: 'items', as: 'item' }, select: [{ source: 'item', field: 'id' }] }
