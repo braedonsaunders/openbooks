@@ -80,8 +80,12 @@ export function liveVersionAsOf(alias: string, today: string): SQL {
  * actor's scope reads as no_employment here, exactly as
  * loadEmploymentsByParty filters it rather than returning it. Null
  * employers are invisible (the read service refuses such subjects).
- * HRM off returns no joins — predicates naming emp.* then fail closed
- * in the where builder, and no column can select what FROM never made.
+ * HRM off returns no joins. The where builder emits emp.* predicates ONLY
+ * when its caller says hrmEnabled: true (employeeWhere below); a caller
+ * that omits the joins must not say so, and a caller that says nothing
+ * gets predicates that match nothing rather than a query naming a table
+ * FROM never made. The two flags are one decision made twice by the same
+ * caller (entity-list-view passes hrmOn to both), never inferred here.
  */
 export function employeeBaseJoins(
   hrmOn: boolean,
@@ -219,10 +223,13 @@ function employeeDirectoryFilterPredicate(clause: FilterClause, hrmOn: boolean):
 
 /**
  * Employee-list WHERE: the party-role base shared with vendorWhere, plus
- * the directory predicates. HRM off, every directory filter — quick or
- * saved-view — fails closed to an empty row set (the CRM-off twin of
- * customerWhere): the joins are absent, so there is nothing to compare
- * against.
+ * the directory predicates. Every directory filter — quick or saved-view —
+ * fails closed to an empty row set (the CRM-off twin of customerWhere)
+ * unless the caller asserts hrmEnabled: true, because only that caller
+ * knows whether it emitted the employment joins the predicates need. HRM
+ * off, or a caller that never said: `false`, never `emp.*`. A saved view
+ * that still names a directory filter after the switch goes off therefore
+ * lists nothing rather than erroring or silently widening the list.
  */
 export function employeeWhere(
   view: ListViewConfig,
@@ -230,7 +237,9 @@ export function employeeWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const hrmOn = adhoc.hrmEnabled !== false;
+  // Fail closed by default: undefined is "the caller did not say", and a
+  // caller that did not say may not have emitted the joins.
+  const hrmOn = adhoc.hrmEnabled === true;
   const parts: SQL[] = [rolePartyWhere("employee", view, adhoc, orgId, allowedSubsidiaryIds)];
   for (const filter of view.filters) {
     const predicate = employeeDirectoryFilterPredicate(filter, hrmOn);
