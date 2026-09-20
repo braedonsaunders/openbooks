@@ -109,6 +109,11 @@ export async function loadInventory(
         label: t('view.movements'),
         active: view === 'movements',
       },
+      {
+        href: '/inventory/counts',
+        label: t('view.counts'),
+        active: false,
+      },
       ...(canSetup
         ? [
             {

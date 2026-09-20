@@ -289,6 +289,10 @@ export const stockCounts = pgTable("stock_counts", {
   id: id(),
   orgId: orgRef(),
   locationId: uuid("location_id").notNull(),
+  /** Owning legal entity (0200): the snapshot, the drift check, and every
+   *  adjustment movement are scoped to this subsidiary — a count is a claim
+   *  about one entity's stock, never inferred from the posting session. */
+  subsidiaryId: uuid("subsidiary_id").notNull(),
   status: text("status", { enum: ["draft", "counting", "review", "posted", "cancelled"] })
     .notNull()
     .default("draft"),

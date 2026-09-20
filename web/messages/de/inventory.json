@@ -12,7 +12,8 @@
     "onhand": "Bestand",
     "movements": "Bewegungen",
     "locations": "Lagerorte",
-    "bom": "Stückliste"
+    "bom": "Stückliste",
+    "counts": "Zählungen"
   },
   "labels": {
     "item": "Artikel",
@@ -135,6 +136,72 @@
         "expiry": "Verfallsdatum"
       },
       "noneYet": "Noch keine Chargen — lagern Sie Bestand mit Chargennummer ein."
+    }
+  },
+  "counts": {
+    "title": "Inventurzählungen",
+    "description": "Körperliche Inventur über Zähllisten — Bestand erfassen, zählen, prüfen und Differenzen als Lageranpassungen verbuchen.",
+    "newButton": "Neue Zählung",
+    "empty": "Noch keine Zählungen. Eröffne eine, um den Bestand zu erfassen und mit dem Zählen zu beginnen.",
+    "failed": "Bestandszählung fehlgeschlagen",
+    "created": "Zählung eröffnet",
+    "creating": "Wird eröffnet…",
+    "updated": "Zählung aktualisiert",
+    "columns": {
+      "date": "Zähldatum",
+      "location": "Standort",
+      "status": "Stand",
+      "progress": "Gezählt",
+      "variance": "Differenz",
+      "memo": "Notiz",
+      "item": "Artikel",
+      "stockLocation": "Lagerort",
+      "lot": "Charge",
+      "expected": "Sollmenge",
+      "counted": "Zählmenge",
+      "movement": "Anpassung"
+    },
+    "statusNames": {
+      "draft": "Entwurf",
+      "counting": "Zählung läuft",
+      "review": "In Prüfung",
+      "posted": "Verbucht",
+      "cancelled": "Abgebrochen"
+    },
+    "actions": {
+      "start": "Zählung starten",
+      "submit": "Zur Prüfung einreichen",
+      "post": "Anpassungen verbuchen",
+      "return": "Zurück zur Zählung",
+      "cancel": "Zählung abbrechen",
+      "record": "Zählung erfassen",
+      "save": "Speichern",
+      "recount": "Neu erfassen",
+      "recountHint": "Sollmenge aus dem Live-Bestand neu übernehmen und den Zählwert löschen",
+      "setDate": "Datum setzen",
+      "close": "Schließen"
+    },
+    "create": {
+      "title": "Neue Zykluszählung",
+      "submit": "Zählung eröffnen",
+      "location": "Geschäftsstandort",
+      "subsidiary": "Tochtergesellschaft",
+      "selectLocation": "Standort wählen…",
+      "selectSubsidiary": "Gesellschaft wählen…",
+      "selectItem": "Artikel wählen…",
+      "selectStockLocation": "Lagerort wählen…",
+      "selectLot": "Charge (falls geführt)…",
+      "missingFields": "Wähle Standort, Gesellschaft, Datum und mindestens eine Zeile.",
+      "lines": "Zu zählende Zeilen",
+      "addLine": "Zeile hinzufügen",
+      "removeLine": "Entfernen"
+    },
+    "detail": {
+      "title": "Bestandszählung",
+      "loading": "Zählung wird geladen…",
+      "noLines": "Keine Zeilen in dieser Zählung.",
+      "postedBadge": "Verbucht",
+      "unpostedBadge": "Nicht verbucht"
     }
   }
 }

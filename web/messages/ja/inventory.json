@@ -12,7 +12,8 @@
     "onhand": "手持在庫",
     "movements": "変動",
     "locations": "保管場所",
-    "bom": "部品表"
+    "bom": "部品表",
+    "counts": "カウント"
   },
   "labels": {
     "item": "品目",
@@ -135,6 +136,72 @@
         "expiry": "有効期限"
       },
       "noneYet": "ロットはまだありません — ロット番号付きで在庫を受け入れてください。"
+    }
+  },
+  "counts": {
+    "title": "循環棚卸",
+    "description": "棚卸カウントによる実地棚卸 — 在庫をスナップショットし、数えて、確認して、差異を在庫調整として計上します。",
+    "newButton": "新規カウント",
+    "empty": "カウントはまだありません。在庫をスナップショットして数え始めるには、新規作成してください。",
+    "failed": "棚卸カウントの要求に失敗しました",
+    "created": "カウントを開始しました",
+    "creating": "開始中…",
+    "updated": "カウントを更新しました",
+    "columns": {
+      "date": "カウント日",
+      "location": "ロケーション",
+      "status": "ステータス",
+      "progress": "カウント済み",
+      "variance": "差異",
+      "memo": "メモ",
+      "item": "品目",
+      "stockLocation": "保管場所",
+      "lot": "ロット",
+      "expected": "予定数",
+      "counted": "実数",
+      "movement": "調整"
+    },
+    "statusNames": {
+      "draft": "下書き",
+      "counting": "カウント中",
+      "review": "確認中",
+      "posted": "計上済み",
+      "cancelled": "中止"
+    },
+    "actions": {
+      "start": "カウント開始",
+      "submit": "確認に送る",
+      "post": "調整を計上",
+      "return": "カウントに戻す",
+      "cancel": "カウントを中止",
+      "record": "カウントを記録",
+      "save": "保存",
+      "recount": "数え直す",
+      "recountHint": "現在の在庫から予定数を再取得し、カウント値を消去します",
+      "setDate": "日付を設定",
+      "close": "閉じる"
+    },
+    "create": {
+      "title": "新規循環棚卸",
+      "submit": "カウントを開く",
+      "location": "事業所",
+      "subsidiary": "所有子会社",
+      "selectLocation": "ロケーションを選択…",
+      "selectSubsidiary": "子会社を選択…",
+      "selectItem": "品目を選択…",
+      "selectStockLocation": "保管場所を選択…",
+      "selectLot": "ロット（管理対象のみ）…",
+      "missingFields": "ロケーション、子会社、日付、明細を1件以上指定してください。",
+      "lines": "カウント対象明細",
+      "addLine": "明細を追加",
+      "removeLine": "削除"
+    },
+    "detail": {
+      "title": "棚卸カウント",
+      "loading": "カウントを読込中…",
+      "noLines": "このカウントに明細はありません。",
+      "postedBadge": "計上済み",
+      "unpostedBadge": "未計上"
     }
   }
 }
