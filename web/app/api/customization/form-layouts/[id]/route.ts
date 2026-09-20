@@ -101,9 +101,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     changes.allowedRoles = body.allowedRoles;
   }
   if (body.isActive !== undefined) {
-    // Collection POST coerces isDefault with !!, but an explicit PATCH value
-    // outside the boolean domain would otherwise reach the column and either
-    // coerce silently or abort the update with an unhandled storage 500.
+    // Collection POST refuses a non-boolean isDefault. An explicit PATCH
+    // isActive outside the boolean domain would otherwise reach the column
+    // and either coerce silently or abort with an unhandled storage 500.
     if (typeof body.isActive !== "boolean") {
       return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
     }

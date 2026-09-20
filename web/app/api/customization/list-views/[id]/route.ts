@@ -107,8 +107,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.isDefault !== undefined) {
     // A truthy non-boolean would otherwise reach the boolean column and
     // either coerce silently ('yes'::boolean) or abort the update with an
-    // unhandled storage error surfaced as a 500; collection POST coerces
-    // with !!, but an explicit PATCH value outside the domain is refused.
+    // unhandled storage error surfaced as a 500. Collection POST and PATCH
+    // both refuse a value outside the boolean domain.
     if (typeof body.isDefault !== 'boolean') {
       return NextResponse.json({ error: 'isDefault must be a boolean' }, { status: 400 });
     }

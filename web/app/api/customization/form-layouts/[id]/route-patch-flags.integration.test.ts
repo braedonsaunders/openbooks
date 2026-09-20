@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression for PATCH /api/customization/form-layouts/:id.
-// Collection POST coerces isDefault with !!, but the [id] PATCH wrote
+// Collection POST refuses a non-boolean isDefault. The [id] PATCH wrote
 // body.isDefault / body.isActive straight into boolean columns. A non-boolean
 // JSON value reaches PostgreSQL, which either throws 22P02 (raw 500 through
 // the route's catch-all) or coerces silently — the same unhandled-storage
