@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import { type db } from "@openbooks/engine/src/platform/db.ts";
+
+/** `db.transaction`'s handle — `SqlExecutor` is the pool `execute` and is not assignable from `tx`. */
+export type ListViewDefaultExecutor = Pick<
+  Parameters<Parameters<typeof db.transaction>[0]>[0],
+  "execute"
+>;
 
 /**
  * Exclusive default for one list-view scope.
@@ -32,7 +38,7 @@ export class AmbiguousListViewDefaultError extends Error {
 }
 
 export async function claimListViewDefaultSlot(
-  tx: SqlExecutor,
+  tx: ListViewDefaultExecutor,
   args: {
     orgId: string;
     recordType: string;
@@ -59,7 +65,7 @@ export async function claimListViewDefaultSlot(
 }
 
 export async function assertSingleListViewDefault(
-  tx: SqlExecutor,
+  tx: ListViewDefaultExecutor,
   args: {
     orgId: string;
     recordType: string;

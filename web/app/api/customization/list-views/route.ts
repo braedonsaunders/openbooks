@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-  const scope = body.scope === "org" ? "org" : "user";
+  const scope: "org" | "user" = body.scope === "org" ? "org" : "user";
   // org-scope views require the admin permission; personal views are self-service.
   if (scope === "org" && !can(authz, "admin.customization.manage"))
     return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
