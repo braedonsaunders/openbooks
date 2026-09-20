@@ -34,10 +34,21 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 // themselves: CREATE DATABASE and CREATE ROLE are bootstrap-superuser work, not
 // runtime-role work. CI connects every other step as the constrained owner
 // (openbooks_app) on purpose, so that role deliberately lacks CREATEDB and the
-// provisioning here fails with 42501. Take the admin URL when CI supplies one
-// and fall back to the ordinary URL locally, where they are the same superuser.
-const ADMIN_DB_URL = () =>
-  (process.env.OPENBOOKS_TEST_ADMIN_DB_URL || process.env.OPENBOOKS_DB_URL)!.trim();
+// provisioning here fails with 42501. Take the admin URL CI supplies.
+const ADMIN_DB_URL = (): string => {
+  // Refuse by name rather than fall back to the runtime login: the constrained
+  // role cannot replay migrations, and the fallback did not fail, it hung with
+  // no database activity. scripts/testdb.sh print_env and .github/workflows/
+  // test.yml both emit the privileged URL.
+  const url = process.env.OPENBOOKS_TEST_ADMIN_DB_URL?.trim();
+  assert.ok(
+    url,
+    "this test replays migrations with the privileged test-cluster login and requires " +
+      "OPENBOOKS_TEST_ADMIN_DB_URL (emitted by scripts/testdb.sh env and .github/workflows/test.yml); " +
+      "refusing rather than falling back to the runtime role",
+  );
+  return url;
+};
 
 const root = join(import.meta.dirname, "..");
 const generatedDir = join(root, "schema", "migrations", "generated");

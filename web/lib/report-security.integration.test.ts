@@ -397,10 +397,16 @@ test(
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const { Client } = await import('pg')
-    const admin = new Client({
-      connectionString:
-        process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
-    })
+    // The trigger below is superuser work; refuse by name rather than fall
+    // back to the runtime role (scripts/testdb.sh print_env and CI both emit
+    // the privileged URL).
+    const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL?.trim()
+    assert.ok(
+      adminUrl,
+      'this test installs a trigger with the privileged test-cluster login and requires ' +
+        'OPENBOOKS_TEST_ADMIN_DB_URL (emitted by scripts/testdb.sh env and .github/workflows/test.yml)',
+    )
+    const admin = new Client({ connectionString: adminUrl })
     await admin.connect()
     const fixture = await withBypassContext(() => createScratchOrg())
     const oid = fixture.orgId
