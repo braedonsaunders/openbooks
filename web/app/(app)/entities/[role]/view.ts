@@ -13,6 +13,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../lib/compliance'
 import { loadParty } from '../../../api/parties/_lib'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
+import { loadTeamEmploymentPayload } from '../../../../lib/hrm/self-service'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
@@ -222,7 +223,11 @@ export async function loadEntityRole(
           canManageActivities: crmEnabled && can(authz, 'crm.activities.manage'),
           // The party's scoped employments for the Employment tab (null =
           // gated, so the tab never renders without the read surface behind
-          // it). Employee drawers only: other roles never resolve HRM.
+          // it). Employee drawers only: other roles never resolve HRM. A
+          // manager holding the report on their team opens the same tab
+          // through the structural team fallback (canManageHrm stays false
+          // — the record routes re-check every grant); payroll, wages, and
+          // compliance stay hidden below unless their own grants hold.
           hrm: canReadHrm && role === 'employee' && partyId && isUuid(partyId)
             ? {
                 employmentIds: [
@@ -241,7 +246,9 @@ export async function loadEntityRole(
                 canReadExits: can(authz, 'hrm.retention.read'),
                 canRecordExit: can(authz, 'hrm.performance.manage'),
               }
-            : null,
+            : !canReadHrm && hrmEnabled && can(authz, 'hrm.self.read') && role === 'employee' && partyId && isUuid(partyId)
+              ? await loadTeamEmploymentPayload(orgId, authz.user.id, partyId)
+              : null,
           canReadCrmAccounts,
           canManageCrmAccounts,
           lifecycleStage: openLifecycleStage,

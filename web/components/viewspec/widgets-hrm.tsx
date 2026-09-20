@@ -16,6 +16,8 @@ import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
+import { HrmFacts } from '../../app/(app)/me/sections'
+import { ProfileDialog, StepCompleteButton } from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import {
@@ -170,6 +172,34 @@ export const HRM_WIDGETS = {
     <LeaveDialog
       requestId={str(props, 'requestId') ?? null}
       closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
+    />
+  ),
+  /** Label/value facts behind the Me profile and overview panels — the
+   *  loader-resolved rows, never ids. Empty sets render the loader's empty
+   *  line (a missing address is legitimate) rather than a blank panel. */
+  'hrm-facts': (props) => (
+    <HrmFacts
+      facts={(props.facts as ComponentProps<typeof HrmFacts>['facts']) ?? []}
+      empty={str(props, 'empty')}
+    />
+  ),
+  /** One checklist step's complete action inside the shared table: posts
+   *  to the existing step endpoint and refreshes on success, rendering
+   *  the service refusal inline. The only row-action island the Me
+   *  checklists table needs. */
+  'hrm-step-complete': (props) => (
+    <StepCompleteButton
+      stepId={str(props, 'stepId') ?? ''}
+      label={str(props, 'label') ?? ''}
+      failedLabel={str(props, 'failedLabel') ?? ''}
+    />
+  ),
+  /** The profile edit drawer, opened from the page header through the
+   *  `edit` search param; submit files the profile_change request. */
+  'hrm-profile-dialog': (props) => (
+    <ProfileDialog
+      dialog={(props.dialog as ComponentProps<typeof ProfileDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/profile'}
     />
   ),
   /** Department leave calendar: loader-resolved absence days grouped by
