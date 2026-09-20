@@ -23,16 +23,17 @@ export function nextDefaultFlags(
   }
 }
 
+export function inactiveDefaultMessage(kind: CustomizationDefaultKind): string {
+  return `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating`
+}
+
 export function refuseInactiveDefault(args: {
   kind: CustomizationDefaultKind
   isDefault: boolean
   isActive: boolean
 }): { ok: true } | { ok: false; error: string } {
   if (args.isDefault && !args.isActive) {
-    return {
-      ok: false,
-      error: `An inactive ${args.kind} cannot be the default — activate it, or unset default before deactivating`,
-    }
+    return { ok: false, error: inactiveDefaultMessage(args.kind) }
   }
   return { ok: true }
 }

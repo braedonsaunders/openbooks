@@ -9,9 +9,10 @@ import { registerHooks } from 'node:module'
 const stateKey = Symbol.for('openbooks.list-view-inactive-default-test')
 interface DbState {
   loadRow: Record<string, unknown> | null
+  lockOverride: Record<string, unknown>
   statements: unknown[]
 }
-const dbState: DbState = { loadRow: null, statements: [] }
+const dbState: DbState = { loadRow: null, lockOverride: {}, statements: [] }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = dbState
 
 const mockAuthz = `
@@ -79,7 +80,7 @@ const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 
 const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 
-function installDb(loadRow: Record<string, unknown>) {
+function installDb(loadRow: Record<string, unknown>, opts?: { lockOverride?: Record<string, unknown> }) {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
     db: {
       execute: (query: unknown) => Promise<{ rows: unknown[] }>
@@ -87,12 +88,35 @@ function installDb(loadRow: Record<string, unknown>) {
     }
   }
   state.loadRow = loadRow
+  state.lockOverride = opts?.lockOverride ?? {}
   state.statements = []
   state.db = {
     execute: async () => ({ rows: state.loadRow ? [state.loadRow] : [] }),
-    transaction: async () => {
-      state.statements.push('write')
-      return undefined
+    transaction: async (fn) => {
+      let txCalls = 0
+      const tx = {
+        execute: async (query: unknown) => {
+          state.statements.push(query)
+          txCalls += 1
+          if (txCalls === 1) {
+            return {
+              rows: state.loadRow
+                ? [{
+                    id: VIEW_ID,
+                    recordType: state.loadRow.recordType,
+                    scope: state.loadRow.scope,
+                    ownerId: state.loadRow.ownerId,
+                    isDefault: state.loadRow.isDefault,
+                    isActive: state.loadRow.isActive,
+                    ...state.lockOverride,
+                  }]
+                : [],
+            }
+          }
+          return { rows: [{ id: VIEW_ID }] }
+        },
+      }
+      return fn(tx)
     },
   }
 }
@@ -147,4 +171,14 @@ test('PATCH refuses promoting an inactive view to default', async () => {
   assert.equal(res.status, 400)
   assert.match(String((await res.json()).error), /inactive view cannot be the default/i)
   assert.equal(dbState.statements.length, 0)
+})
+
+test('inactive-default refusal uses the locked row, not the pre-transaction snapshot', async () => {
+  installDb(viewRow({ isDefault: false, isActive: true }), {
+    lockOverride: { isDefault: true, isActive: true },
+  })
+  const res = await patch({ isActive: false })
+  assert.equal(res.status, 400)
+  assert.match(String((await res.json()).error), /inactive view cannot be the default/i)
+  assert.equal(dbState.statements.length, 1, 'FOR UPDATE then refuse — no UPDATE')
 })

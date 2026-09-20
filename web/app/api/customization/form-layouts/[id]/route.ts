@@ -7,7 +7,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { parseFormLayout } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
-import { nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
 
 export const runtime = "nodejs";
 
@@ -126,39 +126,57 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`is_default = ${body.isDefault}`);
     changes.isDefault = body.isDefault;
   }
-  // resolveFormLayout selects only is_active rows before picking isDefault.
-  // Next-state default+inactive is a save no resolve can observe.
-  const nextFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
-  const inactiveDefault = refuseInactiveDefault({ kind: "form", ...nextFlags });
-  if (!inactiveDefault.ok) return NextResponse.json({ error: inactiveDefault.error }, { status: 400 });
+  // Request-complete contradiction needs no row snapshot. Concurrent
+  // default+deactivate is decided from the locked row inside the write.
+  const requestFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
+  const requestRefusal = refuseInactiveDefault({ kind: "form", ...requestFlags });
+  if (!requestRefusal.ok) return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
   if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
+
+  const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+  const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
   try {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
-    // UPDATE the named row first and refuse a zero-row match *before*
-    // clearing other defaults. The previous order unset every default for
-    // the record type, then updated without returning; a miss (RLS,
-    // concurrent delete) still reported {ok:true} and left the org with
-    // no default for resolveFormLayout to read. Same returning check as DELETE.
     const updated = await db.transaction(async (tx) => {
-      const result = await tx.execute<{ id: string }>(sql`
-        update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
+      const locked = (await tx.execute<{
+        id: string;
+        recordType: string;
+        isDefault: boolean;
+        isActive: boolean;
+      }>(sql`
+        select id, record_type as "recordType",
+               is_default as "isDefault", is_active as "isActive"
+          from form_layouts
          where id = ${id} and org_id = ${user.orgId}
-         returning id`);
-      const row = result.rows[0];
-      if (!row) return null;
+         for update`)).rows[0];
+      if (!locked) return { kind: "not_found" as const };
+      const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
+      const inactiveDefault = refuseInactiveDefault({ kind: "form", ...nextFlags });
+      if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
       if (body.isDefault)
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
-           where org_id = ${user.orgId} and record_type = ${existing.recordType}
+           where org_id = ${user.orgId} and record_type = ${locked.recordType}
              and is_default and id <> ${id}`);
+      // Next-state default+inactive must match zero rows even if the JS
+      // refusal is skipped — refuse by name, never {ok:true}.
+      const written = (await tx.execute<{ id: string }>(sql`
+        update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
+         where id = ${id} and org_id = ${user.orgId}
+           and not (${nextDefaultSql} and not ${nextActiveSql})
+         returning id`)).rows[0];
+      if (!written) {
+        return { kind: "inactive_default" as const, error: inactiveDefaultMessage("form") };
+      }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
-      return row;
+      return { kind: "ok" as const };
     });
-    if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = (e as Error).message ?? "update failed";
