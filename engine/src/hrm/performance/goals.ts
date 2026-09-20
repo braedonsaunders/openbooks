@@ -331,13 +331,15 @@ export async function requireGoalReadAuthority(
   await requireHrmPerformanceOnEmployment(exec, orgId, actorId, employmentId, "hrm.performance.manage");
 }
 
-/** Progress evidence for one goal, newest last: the subject, their
- * manager as of today, or HR reads — the same scope as the goal list. */
-export async function listGoalUpdates(args: {
+/**
+ * One goal with its progress evidence, newest last: the subject, their
+ * manager as of today, or HR reads — the same scope as the goal list.
+ */
+export async function getGoal(args: {
   orgId: string;
   actorId: string;
   goalId: string;
-}): Promise<{ progressPercent: number; note: string | null; recordedAt: string }[]> {
+}): Promise<{ goal: GoalDTO; updates: { progressPercent: number; note: string | null; recordedAt: string }[] }> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const goalId = requireId("goalId", args.goalId);
@@ -345,13 +347,23 @@ export async function listGoalUpdates(args: {
     await assertPerformanceFeature(db, orgId);
     const goal = await loadGoal(db, orgId, goalId);
     await requireGoalReadAuthority(db, orgId, actorId, goal.employmentId);
-    const rows = (await db.execute<{ progressPercent: number; note: string | null; recordedAt: string }>(sql`
+    const updates = (await db.execute<{ progressPercent: number; note: string | null; recordedAt: string }>(sql`
       select progress_percent as "progressPercent", note,
              recorded_at as "recordedAt"
         from hrm_goal_updates
        where org_id = ${orgId} and goal_id = ${goalId}
        order by recorded_at
     `)).rows;
-    return rows;
+    return { goal: toGoalDTO(goal), updates };
   });
+}
+
+/** Progress evidence for one goal, newest last: the subject, their
+ * manager as of today, or HR reads — the same scope as the goal list. */
+export async function listGoalUpdates(args: {
+  orgId: string;
+  actorId: string;
+  goalId: string;
+}): Promise<{ progressPercent: number; note: string | null; recordedAt: string }[]> {
+  return (await getGoal(args)).updates;
 }

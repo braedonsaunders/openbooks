@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { requireHrmPerformanceOnEmployment } from "../authorization.ts";
+import { requireHrmPerformanceOnEmployment, requireHrmRetentionRead } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
 import { parseCivilDay } from "./performance-math.ts";
@@ -364,5 +364,59 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
       );
     }
     return toExitDTO(await loadExit(db, orgId, exitId));
+  });
+}
+
+/**
+ * One exit record through the retention read gate (HR only). Writes stay
+ * on hrm.performance.manage above; reads never do.
+ */
+export async function getExitRecord(args: {
+  orgId: string;
+  actorId: string;
+  exitId: string;
+}): Promise<ExitRecordDTO> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  const exitId = requireId("exitId", args.exitId);
+  return withOrgTransaction(orgId, async () => {
+    await assertPerformanceFeature(db, orgId);
+    await requireHrmRetentionRead(db, orgId, actorId);
+    return toExitDTO(await loadExit(db, orgId, exitId));
+  });
+}
+
+/** Exit records, newest first, through the retention read gate (HR only). */
+export async function listExitRecords(args: {
+  orgId: string;
+  actorId: string;
+  employmentId?: string;
+}): Promise<ExitRecordDTO[]> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  const employmentId =
+    args.employmentId == null ? null : requireId("employmentId", args.employmentId);
+  return withOrgTransaction(orgId, async () => {
+    await assertPerformanceFeature(db, orgId);
+    await requireHrmRetentionRead(db, orgId, actorId);
+    const rows = (await db.execute<StoredExit>(sql`
+      select id,
+             employment_id as "employmentId",
+             termination_change_id as "terminationChangeId",
+             reason_kind as "reasonKind",
+             is_voluntary as "isVoluntary",
+             is_regrettable as "isRegrettable",
+             would_rehire as "wouldRehire",
+             interview_held_on::text as "interviewHeldOn",
+             interviewer_party_id as "interviewerPartyId",
+             destination, notes,
+             recorded_by as "recordedBy",
+             recorded_at as "recordedAt"
+        from hrm_exit_records
+       where org_id = ${orgId}
+         ${employmentId === null ? sql`` : sql`and employment_id = ${employmentId}`}
+       order by recorded_at desc
+    `)).rows;
+    return rows.map(toExitDTO);
   });
 }
