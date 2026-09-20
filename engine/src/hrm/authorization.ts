@@ -128,33 +128,6 @@ async function loadTrustedEmploymentSubject(
   };
 }
 
-/**
- * Trusted-runner identity half: the actor must be an active users row in
- * this organization. actorIdentity falls back to the global db for a home
- * identity outside the local view; HRM must not follow that bypass. A
- * missing or inactive local row is refused here so the gate never treats
- * "not in this org" as "ask for a permission grant" or as allow.
- */
-async function assertEstablishedActor(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  purpose: "access" | "approval",
-): Promise<void> {
-  const row = (await exec.execute<{ isActive: boolean }>(sql`
-    select is_active as "isActive"
-      from users
-     where id = ${actorId} and org_id = ${orgId}
-  `)).rows[0];
-  if (!row?.isActive) {
-    throw new HrmAuthorizationError(
-      purpose === "approval"
-        ? "Employment approval refused: the identity behind this action is not established in this organization."
-        : "Employment access refused: the identity behind this action is not established in this organization.",
-    );
-  }
-}
-
 /** Employer-scope half of every gate: the actor must see the employer entity. */
 async function assertEmployerScope(
   exec: SqlExecutor,
@@ -178,10 +151,17 @@ async function requireHrmEmploymentAccess(
   employmentId: string,
   permission: HrmEmploymentPermission,
 ): Promise<TrustedEmploymentSubject> {
-  await assertEstablishedActor(exec, orgId, actorId, "access");
-  // actorHasPermission fails closed for unknown/inactive actors and enforces
-  // the live grant set — no parallel role system, no trusted booleans.
+  // actorHasPermission resolves platform super-admins through actorIdentity's
+  // home-org bypass. Do not require a local users row first: that treats an
+  // established cross-org super-admin as missing. Unknown and inactive
+  // principals still fail closed here.
   if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    const identity = await actorIdentity(exec, orgId, actorId);
+    if (!identity?.isActive) {
+      throw new HrmAuthorizationError(
+        "Employment access refused: the identity behind this action is not established in this organization.",
+      );
+    }
     throw new HrmAuthorizationError(
       `Employment access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
     );
@@ -479,7 +459,6 @@ export async function loadActorPerson(
   orgId: string,
   actorId: string,
 ): Promise<ApprovalPerson & { isSuperAdmin: boolean }> {
-  await assertEstablishedActor(exec, orgId, actorId, "approval");
   const identity = await actorIdentity(exec, orgId, actorId);
   if (!identity?.isActive) {
     throw new HrmAuthorizationError(
