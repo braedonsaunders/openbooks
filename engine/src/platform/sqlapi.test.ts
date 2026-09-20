@@ -23,8 +23,10 @@ class GovernedPoolHarness {
   async connectGovernedReadClient() {
     this.governedConnects += 1;
     return {
-      query: async (text: string, params?: unknown[]) => {
-        this.queries.push({ text, params });
+      query: async (textOrConfig: string | { text: string; values?: unknown[] }, params?: unknown[]) => {
+        const text = typeof textOrConfig === "string" ? textOrConfig : textOrConfig.text;
+        const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
+        this.queries.push({ text, params: values });
         const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
         if (normalized === "select * from (select 42 as answer) __q limit 2") {
           return {
@@ -139,6 +141,32 @@ test("query validation refuses unquoted set_config and keeps dollar-quoted liter
   assert.equal(validateUserSql(dollarQuoted), dollarQuoted);
 });
 
+test("query validation refuses set_config when the name is a quoted identifier", () => {
+  assert.throws(
+    () => validateUserSql(`select pg_catalog."set_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select pg_catalog."SET_CONFIG"('app.bypass_rls', 'on', true)`),
+    /set_config/,
+  );
+});
+
+test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; set search_path to public; select 1 */"),
+    /one statement|read-only/,
+  );
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; call foo(); select 1 */"),
+    /one statement|read-only/,
+  );
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; do $$ begin null; end $$; select 1 */"),
+    /one statement|read-only/,
+  );
+});
+
 test("SQL API operations use only the isolated governed pool", async () => {
   harness.reset();
 
@@ -171,6 +199,12 @@ test("SQL API operations use only the isolated governed pool", async () => {
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
   assert.ok(statements.includes("select * from (select 42 as answer) __q limit 2"));
+  assert.equal(
+    harness.queries.find(({ text }) =>
+      text.replace(/\s+/g, " ").trim().toLowerCase() === "select * from (select 42 as answer) __q limit 2",
+    )?.params?.length,
+    0,
+  );
   assert.equal(statements.filter((text) => text === "rollback").length, 2);
   assert.equal(
     statements.filter((text) => text === "truncate table pg_temp.openbooks_query_context").length,
