@@ -645,3 +645,194 @@ export async function loadZenginSettings(orgId: string, runId?: string) {
   `));
   return validateZenginSettings(unsealJson<Partial<ZenginSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
+
+// ---------------------------------------------------------------------------
+// CNAB 240 — Banco do Brasil variant: counterparty coordinates + originator
+// ---------------------------------------------------------------------------
+
+/**
+ * A Brazilian bank code (código de compensação / ISPB participant): 3 digits.
+ *
+ * '001' is Banco do Brasil; any other code on this rail means the credit
+ * leaves BB as a TED (câmara 018). Shape only: allocation validity is the
+ * Banco Central's, not a transcription here.
+ */
+export function isValidBancoCode(value: string): boolean {
+  return /^\d{3}$/.test(value.trim());
+}
+
+/**
+ * A Brazilian agência number: 1–5 digits, zero-padded to 5 on the wire
+ * (CNAB 240 G008). BB agências are 4 digits; other banks vary. Anything
+ * longer cannot be expressed in the fixed-width agência field and is
+ * refused, never truncated into another branch's number.
+ */
+export function normalizeAgencia(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (!/^\d{1,5}$/.test(digits)) return null;
+  if (/^0+$/.test(digits)) return null;
+  return digits.padStart(5, "0");
+}
+
+/**
+ * A Brazilian conta number: 1–12 digits, zero-padded to 12 on the wire
+ * (CNAB 240 G010). Longer values are refused, never truncated into a
+ * differently-numbered account.
+ */
+export function normalizeContaNumero(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (!/^\d{1,12}$/.test(digits)) return null;
+  if (/^0+$/.test(digits)) return null;
+  return digits.padStart(12, "0");
+}
+
+/**
+ * A single agency/account check digit (G009/G011): one alphanumeric
+ * character (BB digits are numeric; 'X' occurs). Blank is not a digit —
+ * a missing DV is refused rather than zero-filled into a wrong one.
+ */
+export function isValidContaDv(value: string): boolean {
+  return /^[A-Za-z0-9]$/.test(value.trim());
+}
+
+/**
+ * A CPF (11 digits) or CNPJ (14 digits) with VALID check digits (módulo 11).
+ *
+ * Unlike the Bacs modulus tables — pinned weight tables that false-refuse
+ * newly allocated accounts — the CPF/CNPJ check-digit algorithm is public,
+ * stable (Receita Federal, unchanged for decades) and table-free, so a
+ * mistyped inscription is refused here rather than emitted into Segmento B,
+ * where the bank's confrontation would reject it (or worse, the wrong
+ * inscription would ride alongside the right account). All-same-digit
+ * values are structurally invalid and refused. Formatting (dots, slash,
+ * hyphen, spaces) edits out; anything else is not an inscription.
+ */
+export function normalizeCpfCnpj(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 11 && digits.length !== 14) return null;
+  if (/^(\d)\1+$/.test(digits)) return null;
+  const mod11 = (base: string, weights: number[]): number => {
+    const sum = base.split("").reduce((acc, d, i) => acc + Number(d) * weights[i]!, 0);
+    const mod = sum % 11;
+    return mod < 2 ? 0 : 11 - mod;
+  };
+  if (digits.length === 11) {
+    const body = digits.slice(0, 9);
+    const d1 = mod11(body, [10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    const d2 = mod11(body + String(d1), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    if (digits !== `${body}${d1}${d2}`) return null;
+    return digits;
+  }
+  const body = digits.slice(0, 12);
+  const d1 = mod11(body, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const d2 = mod11(body + String(d1), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  if (digits !== `${body}${d1}${d2}`) return null;
+  return digits;
+}
+
+export function isValidCpfCnpj(value: string): boolean {
+  return normalizeCpfCnpj(value) !== null;
+}
+
+/** Segmento B G005: '1' pessoa física (CPF), '2' pessoa jurídica (CNPJ). */
+export function inscricaoTipoFor(digits: string): "1" | "2" | null {
+  if (digits.length === 11) return "1";
+  if (digits.length === 14) return "2";
+  return null;
+}
+
+// NOTE: CNAB 240 originator settings ARE shaped here (like the Bacs rail)
+// because the writer needs exactly the bank-assigned convênio coordinates —
+// the 9-digit BB payment convênio, the debit agência/conta with their DVs,
+// the employer CNPJ and the company name — and each is validated to its
+// channel shape below. The ARQUIVO layout version (164–166) is REQUIRED
+// tenant configuration rather than a default: versions are bank- and
+// era-specific (Bradesco '089', Inter '107', BB '050'–'084' across manual
+// vintages) and must match the lote version per the bank's pairing table,
+// so inventing one risks a file the bank's parser rejects. The LOTE version
+// is pinned to '045' — the current version in all three BB-flavored
+// transcriptions. The file LAYOUT they populate is transcribed in
+// `buildCnab240BbFile` (engine/src/payments/rail-formatters.ts) with
+// per-field source notes.
+export interface Cnab240BbSettings {
+  /** Employer CNPJ, 14 digits (header arquivo/lote 19–32). */
+  cnpjEmpresa: string;
+  /** BB payment convênio, 9 digits (header arquivo/lote 33–41; '0126' pinned at 42–45). */
+  convenio: string;
+  /** Debit agência, 1–5 digits, zero-padded to 5 on the wire (53–57). */
+  agencia: string;
+  /** Debit agência DV, 1 alphanumeric (58). */
+  agenciaDv: string;
+  /** Debit conta, 1–12 digits, zero-padded to 12 on the wire (59–70). */
+  conta: string;
+  /** Debit conta DV, 1 alphanumeric (71). */
+  contaDv: string;
+  /** Company name as it appears on the file (≤30 chars, 73–102). */
+  nomeEmpresa: string;
+  /** Arquivo layout version, 3 digits (164–166; must pair with lote '045' per BB's table). */
+  versaoLayoutArquivo: string;
+}
+
+const CNAB240BB_REQUIRED: (keyof Cnab240BbSettings)[] = [
+  "cnpjEmpresa", "convenio", "agencia", "agenciaDv", "conta", "contaDv", "nomeEmpresa", "versaoLayoutArquivo",
+];
+
+export function validateCnab240BbSettings(raw: Partial<Cnab240BbSettings> | null): { ok: true; settings: Cnab240BbSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing: string[] = CNAB240BB_REQUIRED.filter((k) => {
+    const v = s[k];
+    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
+  });
+  if (!missing.includes("cnpjEmpresa") && normalizeCpfCnpj(s.cnpjEmpresa!)?.length !== 14) {
+    missing.push("cnpjEmpresa (14-digit employer CNPJ with valid check digits)");
+  }
+  if (!missing.includes("convenio") && !/^\d{9}$/.test(s.convenio!.replace(/\D/g, ""))) {
+    missing.push("convenio (9-digit Banco do Brasil payment convênio assigned by your branch)");
+  }
+  if (!missing.includes("agencia") && normalizeAgencia(s.agencia!) === null) {
+    missing.push("agencia (debit agência, up to 5 digits)");
+  }
+  if (!missing.includes("agenciaDv") && !isValidContaDv(s.agenciaDv!)) {
+    missing.push("agenciaDv (debit agência check digit, one character)");
+  }
+  if (!missing.includes("conta") && normalizeContaNumero(s.conta!) === null) {
+    missing.push("conta (debit conta, up to 12 digits)");
+  }
+  if (!missing.includes("contaDv") && !isValidContaDv(s.contaDv!)) {
+    missing.push("contaDv (debit conta check digit, one character)");
+  }
+  if (!missing.includes("nomeEmpresa") && s.nomeEmpresa!.trim().length > 30) {
+    missing.push("nomeEmpresa (max 30 characters, shown on the file)");
+  }
+  if (!missing.includes("versaoLayoutArquivo") && !/^\d{3}$/.test(s.versaoLayoutArquivo!.trim())) {
+    missing.push("versaoLayoutArquivo (3-digit arquivo layout version from your convênio documentation; must pair with lote 045 per Banco do Brasil's version table)");
+  }
+  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
+  return {
+    ok: true,
+    settings: {
+      cnpjEmpresa: normalizeCpfCnpj(s.cnpjEmpresa!)!,
+      convenio: s.convenio!.replace(/\D/g, ""),
+      agencia: s.agencia!.replace(/\D/g, ""),
+      agenciaDv: s.agenciaDv!.trim().toUpperCase(),
+      conta: s.conta!.replace(/\D/g, ""),
+      contaDv: s.contaDv!.trim().toUpperCase(),
+      nomeEmpresa: s.nomeEmpresa!.trim(),
+      versaoLayoutArquivo: s.versaoLayoutArquivo!.trim(),
+    },
+  };
+}
+
+export async function loadCnab240BbSettings(orgId: string, runId?: string) {
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'cnab240_bb_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `));
+  return validateCnab240BbSettings(unsealJson<Partial<Cnab240BbSettings>>(r.rows[0]?.originator_secrets_encrypted));
+}

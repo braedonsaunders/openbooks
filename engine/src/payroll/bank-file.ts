@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildBacsFile, buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, buildZenginFile, encodeZenginFile, type BacsPayment, type CemtexPayment, type Cpa005Payment, type NachaEntry, type ZenginPayment } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, normalizeBankCode, normalizeBranchCode, normalizeBsb, normalizeZenginAccount, toZenginKana, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateZenginSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type ZenginSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
+import { buildBacsFile, buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, buildCnab240BbFile, buildZenginFile, encodeZenginFile, type BacsPayment, type CemtexPayment, type Cpa005Payment, type NachaEntry, type Cnab240BbPayment, type ZenginPayment } from "../payments/rail-formatters.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeBankCode, normalizeContaNumero, normalizeCpfCnpj, normalizeBranchCode, normalizeBsb, normalizeZenginAccount, toZenginKana, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateCnab240BbSettings, validateZenginSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type Cnab240BbSettings, type ZenginSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -37,7 +37,7 @@ import { unsealJson } from "../platform/secrets.ts";
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
 
-export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "zengin";
+export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "zengin" | "cnab240";
 
 export interface PayRunBankFileFormatSpec {
   /** Off means: do not emit these bytes, and say why. */
@@ -196,6 +196,27 @@ export interface PayRunBankFileFormatSpec {
  *
  * No bank has cleared a file from this writer; Zengin is a weaker evidence
  * class than Cemtex.
+ *
+ * ── CNAB 240, Banco do Brasil variant (Brazil) — ON ─────────────────────────
+ * The FEBRABAN CNAB 240 Pagamentos credit file as Banco do Brasil accepts it
+ * (header de arquivo, forma-01 / forma-41 lotes with tipo de serviço '30',
+ * one Segmento A + Segmento B pair per payment, trailer de lote, trailer de
+ * arquivo), rendered by the shared AP builder (`buildCnab240BbFile`,
+ * engine/src/payments/rail-formatters.ts) — payroll maps its EFT population
+ * onto the builder's generic payment rows and adds nothing of its own, so
+ * AP can originate the same rail later with no fork. CNAB 240 is
+ * bank-specific in places (BB `convênio + '0126'` vs Bradesco's 20-char
+ * convênio, arquivo versions, the 178–230 tail): this rail is the BB variant
+ * and says so — the rail is `cnab240_bb_credit`, the builder and settings
+ * carry the `Bb` suffix, and the writer's evidence log names every source
+ * with publisher, edition and date. The money bytes are five-sourced (two
+ * bank-published manuals plus three independent implementations); the
+ * BB-flavored envelope choices fail loud at bank validation — see the
+ * builder. Same-bank (BB) employees ride forma 01 / câmara 000; other-bank
+ * employees ride forma 41 / TED câmara 018 in a second lote. An employee row
+ * without a shaped agência/conta/DVs, a 3-digit bank code or a check-digit-
+ * valid CPF/CNPJ is a named refusal, never a silent drop and never a
+ * coerced account (a coerced agência pays a stranger).
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
   cpa005: {
@@ -244,6 +265,13 @@ export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankF
     // bank reads Shift_JIS bytes (see `buildZenginFile` /
     // `encodeZenginFile`, engine/src/payments/rail-formatters.ts).
     contentType: "text/plain; charset=Shift_JIS",
+  },
+  cnab240: {
+    enabled: true,
+    currency: "BRL",
+    rails: ["cnab240_bb_credit"],
+    extension: "rem",
+    contentType: "text/plain; charset=us-ascii",
   },
 };
 
@@ -363,6 +391,7 @@ export interface PayrollOriginatorConfig {
   cemtex?: CemtexSettings;
   bacs?: BacsSettings;
   zengin?: ZenginSettings;
+  cnab240bb?: Cnab240BbSettings;
 }
 
 export type PayrollOriginatorResult =
@@ -384,6 +413,7 @@ function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "c
   if (format === "cemtex") return "crlf";
   if (format === "bacs") return "crlf";
   if (format === "zengin") return "crlf";
+  if (format === "cnab240") return "crlf";
   return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
 }
 
@@ -721,11 +751,51 @@ function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * CNAB 240 (Banco do Brasil variant) originator validation.
+ *
+ * The originator half of a CNAB 240 remessa is the employer's convênio
+ * coordinates at Banco do Brasil: the 9-digit payment convênio (header
+ * arquivo/lote 33–41, with '0126' pinned at 42–45), the debit agência and
+ * conta with their check digits, the employer CNPJ and the company name.
+ * All are tenant configuration on the payment bank profile (Setup →
+ * Payment operations, `cnab240_bb_credit` rail) and all are validated by
+ * the shared `validateCnab240BbSettings` — a malformed convênio or CNPJ is
+ * refused by name rather than emitted into a field the bank would misread
+ * as another agreement. This rail transmits to Banco do Brasil only: an
+ * Itaú/Bradesco/Santander employer needs that bank's variant, which is a
+ * different layout, not a different configuration.
+ */
+function resolveCnab240Bb(row: ProfileRow): PayrollOriginatorResult {
+  const raw = unsealJson<Partial<Cnab240BbSettings>>(row.originator_secrets_encrypted) ?? {};
+  const checked = validateCnab240BbSettings(raw);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: checked.missing.map(
+        (key) => `${key} (Setup → Payment operations, on this profile; assigned by Banco do Brasil with your convênio, never defaulted)`,
+      ),
+    };
+  }
+  return {
+    ok: true,
+    config: {
+      paymentBankProfileId: row.id,
+      profileName: row.name,
+      format: "cnab240",
+      currency: row.currency ?? "BRL",
+      lineEnding: "crlf",
+      cnab240bb: checked.settings,
+    },
+  };
+}
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
   // Branch on the profile's rail-mapped format, never on a country: packs
   // declare which rail they settle on and this resolver only reads it.
   const resolved =
-    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : format === "zengin" ? resolveZengin(row) : resolveNacha(row);
+    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : format === "zengin" ? resolveZengin(row) : format === "cnab240" ? resolveCnab240Bb(row) : resolveNacha(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -784,7 +854,24 @@ export interface PayRunBankFileCredit extends PayRunBankFileEntry {
   depositType?: string;
   /** Zengin only: the half-width katakana payee name on the data record. */
   payeeKana?: string;
+  /** CNAB 240 only: the validated destino address this credit will be paid to. */
+  cnab240?: Cnab240CreditorAddress;
 }
+
+/** The validated destino address of one CNAB 240 credit. */
+export interface Cnab240CreditorAddress {
+  /** 3-digit destination bank ('001' rides forma 01; anything else rides TED forma 41). */
+  bancoFavorecido: string;
+  /** Normalized agência (5 digits), agência DV, conta DV, optional second DV. */
+  agencia: string;
+  agenciaDv: string;
+  contaDv: string;
+  dac: string | null;
+  /** '1' CPF / '2' CNPJ with check-digit-valid inscription. */
+  inscricaoTipo: "1" | "2";
+  inscricaoNumero: string;
+}
+
 
 /**
  * The SEPA address of one payroll credit, resolved purely.
@@ -955,6 +1042,87 @@ export function resolveZenginCreditor(
 }
 
 /**
+ * The CNAB 240 destino address of one payroll credit, resolved purely.
+ *
+ * Split out from `loadCredits` so the refusal logic is unit-testable with no
+ * database: a bank code that is not 3 digits, an agência/conta outside the
+ * fixed-width shapes, a missing check digit, or a CPF/CNPJ that fails the
+ * módulo-11 check is a typed refusal naming the employee and the remedy —
+ * never a silent drop and never a coerced account, because a coerced agência
+ * pays a stranger. Brazilian details are agência + conta (with check
+ * digits), never an IBAN: the IBAN validator is not consulted, and an IBAN
+ * in these fields is refused as unshaped rather than parsed.
+ */
+export function resolveCnab240Creditor(
+  employeeName: string,
+  routing: Record<string, string>,
+  accountNumber: string,
+): { ok: true; address: Cnab240CreditorAddress } | { ok: false; reason: string } {
+  const chequeRemedy = " — correct it on the employee's approved bank account or pay this employee by cheque";
+  const banco = (routing.banco ?? routing.bankCode ?? "").trim();
+  if (!isValidBancoCode(banco)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: CNAB 240 needs a 3-digit bank code on the employee's approved bank account ('001' for Banco do Brasil, the destination bank's code for a TED)${chequeRemedy}`,
+    };
+  }
+  const agencia = normalizeAgencia(routing.agencia ?? routing.branch ?? "");
+  if (!agencia) {
+    return {
+      ok: false,
+      reason: `${employeeName}: CNAB 240 needs an agência of up to 5 digits on the employee's approved bank account${chequeRemedy}`,
+    };
+  }
+  const agenciaDv = (routing.agenciaDv ?? routing.branchDv ?? "").trim().toUpperCase();
+  if (!isValidContaDv(agenciaDv)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: CNAB 240 needs the agência check digit on the employee's approved bank account${chequeRemedy}`,
+    };
+  }
+  const conta = normalizeContaNumero(accountNumber);
+  if (!conta) {
+    return {
+      ok: false,
+      reason: `${employeeName}: "${accountNumber}" is not a valid conta (up to 12 digits) — correct it on the employee's approved bank account or pay this employee by cheque`,
+    };
+  }
+  const contaDv = (routing.contaDv ?? routing.accountDv ?? "").trim().toUpperCase();
+  if (!isValidContaDv(contaDv)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: CNAB 240 needs the conta check digit on the employee's approved bank account${chequeRemedy}`,
+    };
+  }
+  const dacRaw = (routing.dac ?? "").trim().toUpperCase();
+  if (dacRaw !== "" && !isValidContaDv(dacRaw)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: DAC "${routing.dac}" is not a single check-digit character — correct it on the employee's approved bank account or remove it (leave blank for Banco do Brasil accounts)`,
+    };
+  }
+  const inscricao = normalizeCpfCnpj(routing.cpfCnpj ?? routing.cpf ?? routing.cnpj ?? "");
+  if (!inscricao) {
+    return {
+      ok: false,
+      reason: `${employeeName}: CNAB 240 needs a check-digit-valid CPF (11 digits) or CNPJ (14 digits) on the employee's approved bank account — it rides Segmento B and TED confrontation checks it${chequeRemedy}`,
+    };
+  }
+  return {
+    ok: true,
+    address: {
+      bancoFavorecido: banco,
+      agencia,
+      agenciaDv,
+      contaDv,
+      dac: dacRaw === "" ? null : dacRaw,
+      inscricaoTipo: inscricaoTipoFor(inscricao)!,
+      inscricaoNumero: inscricao,
+    },
+  };
+}
+
+/**
  * The EFT population with the bank coordinates each credit needs.
  *
  * An employee may hold more than one approved account; payroll has no
@@ -1093,6 +1261,25 @@ export async function loadCredits(
         payeeKana: resolved.payeeKana,
       });
       continue;
+    } else if (format === "cnab240") {
+      // A CNAB 240 credit is addressed by banco + agência + conta (with
+      // check digits) plus the favorecido inscription on Segmento B —
+      // never an IBAN. Anything unshaped or check-digit-invalid is a named
+      // refusal, never silently dropped and never coerced into a
+      // differently-numbered account.
+      const resolved = resolveCnab240Creditor(entry.employeeName, routing, accountNumber);
+      if (!resolved.ok) {
+        problems.push(resolved.reason);
+        continue;
+      }
+      credits.push({
+        ...entry,
+        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+        routing,
+        accountNumber: accountNumber.replace(/\D/g, ""),
+        cnab240: resolved.address,
+      });
+      continue;
     } else {
       const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
       if (!/^\d{9}$/.test(aba)) {
@@ -1202,6 +1389,34 @@ export function readTrailerTotals(format: PayRunBankFileFormat, content: string)
       count: Number(last.slice(74, 80)),
     };
   }
+  if (format === "cnab240") {
+    // Every record is 240 chars; the value tie reads the P007 somatória at
+    // positions 24–41 (slice 23–41) of each tipo-5 trailer de lote, and the
+    // count reads the Segmento A records themselves (tipo '3', 'A' at
+    // position 14). The arquivo trailer is the LAST record and must be tipo
+    // 9 / lote 9999 — asserted so a truncated file cannot pass.
+    const last = records[records.length - 1];
+    if (!last || last[7] !== "9" || last.slice(3, 7) !== "9999" || last.length !== 240) {
+      throw new PayrollError("generated CNAB 240 file has no readable trailer de arquivo record");
+    }
+    let totalCents = 0n;
+    let count = 0;
+    for (const line of records) {
+      if (line.length !== 240) {
+        throw new PayrollError(`payroll bank file record is ${line.length} characters, not 240`);
+      }
+      if (line[7] === "5") {
+        const field = line.slice(23, 41);
+        if (!/^\d{18}$/.test(field)) {
+          throw new PayrollError("generated CNAB 240 trailer de lote has no readable somatória");
+        }
+        totalCents += BigInt(field);
+      }
+      if (line[7] === "3" && line[13] === "A") count += 1;
+    }
+    if (count === 0) throw new PayrollError("generated CNAB 240 file has no Segmento A records");
+    return { totalCents, count };
+  }
   if (format === "zengin") {
     // The trailer "8" record is the SECOND-TO-LAST record (the end "9"
     // record closes the file); the detail count sits at positions 2–7
@@ -1298,6 +1513,12 @@ export interface PayRunBankFileBuildInput {
   bacsVolSerial?: string;
   /** Bacs UHL1 file number (3 digits), allocated by the artifact module. */
   bacsFileNumber?: string;
+  /**
+   * CNAB 240 NSA (header arquivo 158–163, 6 digits), allocated by the
+   * artifact module from the same number sequence. The bank sequences files
+   * on it, so it must be unique per file — never re-derived at download time.
+   */
+  cnabNsa?: string;
   /** The date the money must be in employees' accounts (the run's pay date). */
   fundsDate: string;
   /** File creation instant. Explicit so a golden test is reproducible. */
@@ -1689,6 +1910,57 @@ function buildZenginPayroll(
     // The transfer date: the day the salary must move — the run's pay date,
     // the same date the other rails settle on (emitted as MMDD).
     transferDate: localDate(input.fundsDate),
+    payments,
+  });
+}
+
+/**
+ * Render payroll credits through the SHARED AP CNAB 240 builder
+ * (`buildCnab240BbFile`, engine/src/payments/rail-formatters.ts) — the same
+ * function, the same agência/conta shape gates, the same 240-character
+ * records. Payroll only maps its own population onto the builder's generic
+ * payment rows; there is no second CNAB implementation here.
+ */
+function buildCnab240Payroll(
+  input: PayRunBankFileBuildInput,
+  credits: PayRunBankFileCredit[],
+): string {
+  const settings = input.originator.cnab240bb;
+  if (!settings) throw new PayrollError("CNAB 240 originator configuration is missing");
+  if (!input.cnabNsa) {
+    throw new PayrollError("CNAB 240 requires an allocated NSA sequence number");
+  }
+  const payments: Cnab240BbPayment[] = credits.map((credit) => {
+    if (!credit.cnab240) {
+      throw new PayrollError(
+        `payroll bank file refuses ${credit.employeeName}: no validated destino address was resolved for this credit`,
+      );
+    }
+    return {
+      // Centavos via money.ts bigint units — never a float division.
+      amountCents: toUnits(credit.amount) / 100n,
+      bancoFavorecido: credit.cnab240.bancoFavorecido,
+      agencia: credit.cnab240.agencia,
+      agenciaDv: credit.cnab240.agenciaDv,
+      conta: credit.accountNumber,
+      contaDv: credit.cnab240.contaDv,
+      dac: credit.cnab240.dac,
+      favorecidoNome: credit.employeeName,
+      inscricaoTipo: credit.cnab240.inscricaoTipo,
+      inscricaoNumero: credit.cnab240.inscricaoNumero,
+      // Seu número (G064, 20 chars) — what the employer reconciles the
+      // bank's return by. Mirrors the CPA-005 cross-reference
+      // `PAY ${employeeNumber}`; unique per employee per file.
+      seuNumero: `PAY ${credit.employeeNumber}`.slice(0, 20),
+    };
+  });
+  return buildCnab240BbFile({
+    settings,
+    nsa: input.cnabNsa,
+    creationDate: input.createdAt,
+    // The payment date: the day the money must be in employees' accounts —
+    // the run's pay date, the same date the other rails settle on.
+    paymentDate: localDate(input.fundsDate),
     payments,
   });
 }
