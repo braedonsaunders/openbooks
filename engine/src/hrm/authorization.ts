@@ -1307,3 +1307,45 @@ export async function requireEmploymentOrTeamSubject(
     }
   }
 }
+
+// HR-13 begin: construction-compliance duties. Read sees rate tables,
+// classifications, comp classes, per-diem policies, certified runs and
+// findings; manage authors them and runs generation, approval and voids.
+// Org-level grants (construction configuration is org-wide, never
+// per-employment): granted to the same built-in roles as
+// hrm.employment.read/manage, enforced at the service boundary on every
+// entry function — the API routes gate the same keys, never instead.
+/** Construction-compliance duties (0223/0224). */
+export const HRM_CONSTRUCTION_PERMISSIONS = [
+  "hrm.construction.read",
+  "hrm.construction.manage",
+] as const;
+
+export type HrmConstructionPermission = (typeof HRM_CONSTRUCTION_PERMISSIONS)[number];
+
+/** See construction-compliance configuration and reports. */
+export async function requireHrmConstructionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.read"))) {
+    throw new HrmAuthorizationError(
+      "Construction compliance access requires the hrm.construction.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/** Author construction-compliance configuration, entries, runs and findings transitions. */
+export async function requireHrmConstructionManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.manage"))) {
+    throw new HrmAuthorizationError(
+      "Construction compliance access requires the hrm.construction.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+// HR-13 end

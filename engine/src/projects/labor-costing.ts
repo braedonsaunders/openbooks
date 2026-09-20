@@ -300,9 +300,31 @@ export function computeCostRate(
  * touched). Safe to call for any id set; skips silently when the org has no
  * covering wage. Returns the number of entries stamped.
  */
+// HR-13 begin: prevailing-wage injection point. The HRM construction
+// module owns schedule-aware wage resolution but this module may not
+// import it (bounded modules), so the resolver is injected — the web
+// approval path registers the HRM implementation, tests register fakes,
+// and the default prices nothing so every existing caller keeps the
+// standard wage path.
+export type PrevailingWageEntryWage = (args: {
+  orgId: string;
+  actorId: string | null;
+  employeePartyId: string;
+  projectId: string;
+  workedOn: string;
+}) => Promise<{ wage: string; currency: string } | null>;
+
+let prevailingWageEntryWage: PrevailingWageEntryWage = async () => null;
+
+export function setPrevailingWageEntryWage(hook: PrevailingWageEntryWage): void {
+  prevailingWageEntryWage = hook;
+}
+// HR-13 end
+
 export async function snapshotLaborCostRates(
   orgId: string,
   timeEntryIds: string[],
+  opts?: { actorId?: string },
 ): Promise<number> {
   if (timeEntryIds.length === 0) return 0;
   const settings = await laborCostingSettings(orgId);
@@ -312,6 +334,7 @@ export async function snapshotLaborCostRates(
   const rows = (await db.execute<{
       id: string;
       employee_party_id: string;
+      project_id: string | null;
       worked_on: string;
       cost_multiplier: string;
       job_title: string | null;
@@ -322,7 +345,7 @@ export async function snapshotLaborCostRates(
       target_subsidiary_id: string | null;
       worker_comp_percent: string | null;
     }>(sql`
-    select te.id, te.employee_party_id, te.worked_on,
+    select te.id, te.employee_party_id, te.project_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
            er.job_title, er.trade_id, er.department_id, employee.subsidiary_id,
            coalesce(project_sub.base_currency, employee_sub.base_currency) as target_currency,
@@ -350,12 +373,39 @@ export async function snapshotLaborCostRates(
   let stamped = 0;
   // Cache wage resolution per employee+date (a week of entries shares both).
   const cache = new Map<string, ResolvedWage | null>();
+  // HR-13 begin: prevailing-wage hook (registered by the HRM
+  // construction module from the web approval path — this module never
+  // imports hrm, so the resolver is injected, not referenced). When the
+  // org runs prevailing wage and the entry's project is in a rate
+  // schedule's scope, the schedule prices the hour first; otherwise the
+  // standard wage table below runs unchanged, and with no hook
+  // registered every entry takes the standard path. Whether the cached
+  // wage was prevailing-priced rides alongside because a schedule line
+  // is not a labor_cost_rates row and must stamp a null rate id.
+  const prevailingPriced = new Map<string, boolean>();
+  // HR-13 end
   const fxCache = new Map<string, string>();
   for (const r of rows.rows) {
     const targetCurrency = r.target_currency ?? orgCurrency;
     const targetSubsidiaryId = r.target_subsidiary_id ?? rootSubsidiaryId;
-    const key = `${r.employee_party_id}|${r.worked_on}|${targetSubsidiaryId}`;
+    const key = `${r.employee_party_id}|${r.worked_on}|${targetSubsidiaryId}|${r.project_id ?? ""}`;
     let wage = cache.get(key);
+    // HR-13 begin: prevailing-wage prices in-scope project hours first.
+    if (wage === undefined && r.project_id) {
+      const prevailing = await prevailingWageEntryWage({
+        orgId,
+        actorId: opts?.actorId ?? null,
+        employeePartyId: r.employee_party_id,
+        projectId: r.project_id,
+        workedOn: r.worked_on,
+      });
+      if (prevailing) {
+        wage = { wage: prevailing.wage, currency: prevailing.currency, scope: "org", rateId: "" };
+        prevailingPriced.set(key, true);
+        cache.set(key, wage);
+      }
+    }
+    // HR-13 end
     if (wage === undefined) {
       wage = await resolveWage(orgId, r.employee_party_id, r.worked_on, {
         jobTitle: r.job_title,
@@ -414,7 +464,7 @@ export async function snapshotLaborCostRates(
     await db.execute(sql`
       update time_entries
          set cost_rate = ${rate},
-             labor_cost_rate_id = ${wage.rateId},
+             labor_cost_rate_id = ${prevailingPriced.get(key) ? null : wage.rateId},
              wage_rate = ${wage.wage},
              wage_currency = ${wage.currency},
              wage_fx_rate = ${normalizeDecimal(fxRate, 10)},
