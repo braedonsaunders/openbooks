@@ -2,22 +2,12 @@ import { NativeExtension } from '../../app/(app)/apps/[key]/NativeExtension'
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import type { WidgetRef } from '@braedonsaunders/appkit-viewspec'
 import { isFieldRef, resolvePath } from '@braedonsaunders/appkit-viewspec'
-import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
-import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
-import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'
-import { StatementMatrixTable } from '../../app/(app)/reports/StatementMatrixTable'
 import { SubsidiarySwitcher } from '../subsidiary-switcher'
 import { ModuleHomeTabs, LiveDirectory } from '../module-home/ui'
 import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
 import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
-import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
-import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
-import { PartyHeading } from '../../app/(app)/reports/registers/sections'
-import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { CurrencyBasisControl, type CurrencyOption } from '../../app/(app)/reports/aging/currency-basis'
-import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
-import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/sections'
 import { NewViewButton } from '../../app/(app)/knowledge/views/NewViewButton'
 import { ViewStudio } from '../../app/(app)/knowledge/views/ViewStudio'
@@ -41,14 +31,8 @@ import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAcces
 import { Activity, Building2, CheckCircle2, KeyRound, Mail, Send, Settings, Trash2, Users } from 'lucide-react'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
-import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
-import {
-  KindChips,
-  ApprovalTabs,
-  ApprovalEngineCell,
-  SubmittedDocumentCell,
-} from '../../app/(app)/approvals/sections'
+import { KindChips, ApprovalTabs, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/approvals/sections'
 import { ApprovalsTable } from '../../app/(app)/approvals/ApprovalsTable'
 import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/approvals/DelegationControls'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
@@ -58,60 +42,28 @@ import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
 import { EntityListSlot } from './entity-list-slot'
 import { RecordListSlot } from './record-list-slot'
 import { SetupSectionSlot } from './setup-section-slot'
-import {
-  PlatformUserHeader,
-  GrantActingCell,
-  GrantControlCell,
-  NoGrantsBody,
-  IdentityRecordCard,
-} from '../../app/(app)/platform/users/[id]/sections'
+import { PlatformUserHeader, GrantActingCell, GrantControlCell, NoGrantsBody, IdentityRecordCard } from '../../app/(app)/platform/users/[id]/sections'
 import { AdminRolesTable } from '../../app/(app)/admin/roles/sections'
 import { NewRoleButton } from '../../app/(app)/admin/roles/RoleEditor'
 import { AuditRowsTable, AuditEventFlyout, AuditDocsLink } from '../../app/(app)/admin/audit/sections'
-import {
-  NotificationsInbox,
-  NotificationsMarkAllRead,
-} from '../../app/(app)/notifications/NotificationsInbox'
-import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
-import { BankingAttentionList } from '../../app/(app)/banking/sections'
-import {
-  HrmHeadcountTable,
-  HrmPendingRequests,
-  HrmReadiness,
-  HrmRecentChanges,
-  HrmUpcomingChanges,
-} from '../../app/(app)/hrm/sections'
+import { NotificationsInbox, NotificationsMarkAllRead } from '../../app/(app)/notifications/NotificationsInbox'
+import { HrmHeadcountTable, HrmPendingRequests, HrmReadiness, HrmRecentChanges, HrmUpcomingChanges } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
-import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
-import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
 import { QueryConsole } from '../../app/(app)/query/sections'
 import { HealthHero } from '../../app/(app)/accounting/sections'
-import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
 import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
-import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
-import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
 import { Library, ArrowLeft } from 'lucide-react'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
-import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
 import { DocsHome } from '../../app/(app)/docs/sections'
 import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
-import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
-import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
 import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
 import { ExportClient } from '../../app/(app)/data/export/ExportClient'
 import { ImportWizard } from '../../app/(app)/data/import/ImportWizard'
-import { SubcontractsWorkspace } from '../../app/(app)/subcontracts/SubcontractsWorkspace'
-import { ApCockpit } from '../../app/(app)/ap/cockpit/ApCockpit'
-import { ApHeaderActions } from '../../app/(app)/ap/sections'
-import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { TrashList } from '../../app/(app)/documents/trash/TrashList'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
-import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
-import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
-import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
 import { AssistantApp } from '../assistant/assistant-app'
 import { ChatMarkdown } from '../assistant/markdown'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
@@ -119,9 +71,6 @@ import { DashboardGridSlot } from './dashboard-grid-slot'
 import { DashboardEditSlot } from './dashboard-edit-slot'
 import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
-import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
-import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
-import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
@@ -138,152 +87,29 @@ import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
 import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
 import PdfTemplateEditor from '../../app/(app)/admin/pdf-templates/[id]/PdfTemplateEditor'
-import { ReportBuilder } from '../../app/(app)/reports/custom/builder/[id]/ReportBuilder'
 import FlowBuilder from '../../app/(app)/admin/flows/[id]/FlowBuilder'
 import { FilingWorksheet } from '../../app/(app)/compliance/information-returns/[id]/FilingWorksheet'
-import { DeliveryPanel } from '../../app/(app)/reports/custom/run/[id]/delivery/DeliveryPanel'
-import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
-import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
 import { ChangeSetDrawer } from '../../app/(app)/admin/sandboxes/change-sets/ChangeSetDrawer'
 import { PaymentProvidersClient } from '../../app/(app)/admin/setup/payment-providers/PaymentProvidersClient'
 import { ProjectTypesWorkspace } from '../../app/(app)/admin/setup/project-types/ProjectTypesWorkspace'
-import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciation/sections'
 import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
 import { ApiConsole } from '../../app/(app)/api-docs/ApiConsole'
-import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/OpeningBalancesView'
-import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
-import { TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
-import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
-import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
 import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
-import { ProvisionComputeButton } from '../../app/(app)/tax/provisions/ProvisionComputeButton'
-import { NewEquipmentButton } from '../../app/(app)/assets/equipment/NewEquipmentButton'
-import { EquipmentDrawer } from '../../app/(app)/assets/equipment/EquipmentDrawer'
 import { KpiStrip } from '../kpi-strip'
-import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
-import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
-import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
-import { CustomerView } from '../../app/(app)/analytics/customer-intelligence/CustomerView'
-import { FinancialHealthView } from '../../app/(app)/analytics/financial-health/FinancialHealthView'
-import { SentinelView } from '../../app/(app)/analytics/sentinel/SentinelView'
-import { SpendVelocityView } from '../../app/(app)/analytics/spend-velocity/SpendVelocityView'
-import { UtilizationView } from '../../app/(app)/analytics/utilization/UtilizationView'
-import { VendorView } from '../../app/(app)/analytics/vendor-performance/VendorView'
-import { TrueCostView } from '../../app/(app)/analytics/true-cost/TrueCostView'
 import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
-import {
-  TaxDepreciationHeader,
-  TaxDepreciationOverviewSlot,
-} from '../../app/(app)/admin/setup/tax-depreciation/sections'
-import {
-  ProvisionDifferencesSection,
-  ProvisionFrameworkBadge,
-  ProvisionPostButton,
-  ProvisionReconSection,
-  ProvisionStatusBadge,
-} from '../../app/(app)/tax/provisions/[id]/sections'
-import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRunView'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
 import { BackupManager } from '../../app/(app)/admin/backups/BackupManager'
 import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(app)/apps/sections'
-import {
-  NewSetupRecordButton,
-  PaymentOperationsEditor,
-  PaymentOperationsTabs,
-  PaymentScheduleNextRun,
-} from '../../app/(app)/admin/setup/payment-operations/sections'
-import {
-  ReconcileStats,
-  ReconcileStatusBadge,
-} from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
-import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
-import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
 import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
-import { CaptureList } from '../../app/(app)/ap/capture/sections'
-import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
-import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
-import { ProjectProfitabilityTable } from '../../app/(app)/reports/project-profitability/ProjectProfitabilityTable'
-import {
-  OverheadApplicationTabSlot,
-  OverheadLifecycleTabSlot,
-  OverheadModelBody,
-  OverheadModelHeader,
-  OverheadRatesTabSlot,
-} from '../../app/(app)/admin/setup/overhead/sections'
-import {
-  AllocationsDriversTabSlot,
-  AllocationsRuleDrawerSlot,
-  AllocationsRulesTabSlot,
-  AllocationsRunsTabSlot,
-  AllocationsSetupHeader,
-} from '../../app/(app)/admin/setup/allocations/sections'
-import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
-import {
-  SetupReadinessCheckCard,
-  SetupReadinessHero,
-} from '../../app/(app)/admin/setup/readiness/sections'
-import { ResultView } from '../../app/(app)/reports/custom/ResultView'
-import { PaperView } from '../../app/(app)/reports/PaperView'
-import {
-  FlowNameCell,
-  FlowLastRunCell,
-  FlowRowActionsCell,
-  NewFlowButton as NewFlowListButton,
-} from '../../app/(app)/admin/flows/sections'
-import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
-import {
-  LaborPricingHeading,
-  LaborPricingView,
-} from '../../app/(app)/admin/setup/labor-pricing/sections'
-import { RunWizard } from '../../app/(app)/payroll/runs/[id]/RunWizard'
-import {
-  PayrollSetupHeader,
-  PayrollSetupBanner,
-  PayrollSetupTabs,
-  PacksTabSlot,
-  AccountsTabSlot,
-  PaydayTabSlot,
-  RatesTabSlot,
-  WorkSchedulesTabSlot,
-  DerivedPreviewTabSlot,
-  HolidaysTabSlot,
-  HolidayCalendarTabSlot,
-} from '../../app/(app)/admin/setup/payroll/sections'
-import { Sparkles } from 'lucide-react'
-import { cn } from '@openbooks/ui'
-import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
-import {
-  PayrollChecklistBanner,
-  PayrollPreviousRun,
-  PayrollManageLinks,
-  PayrollScheduleList,
-  type PayrollPreviousRunProps,
-  type PayrollScheduleListProps,
-} from '../../app/(app)/payroll/sections'
-import {
-  BlockedBillsSection,
-  ComplianceSetupBanner,
-  ExpiringVendorsSection,
-  ReadinessPanel,
-  WaiversPanel,
-} from '../../app/(app)/compliance/sections'
-import {
-  TaxFilingDrawer,
-  TaxHistoryTable,
-  TaxPageHeader,
-  TaxPageShell,
-  TaxPreparePanel,
-  TaxTabPanels,
-  TaxTabs,
-} from '../../app/(app)/tax/sections'
+import { OverheadApplicationTabSlot, OverheadLifecycleTabSlot, OverheadModelBody, OverheadModelHeader, OverheadRatesTabSlot } from '../../app/(app)/admin/setup/overhead/sections'
+import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesTabSlot, AllocationsRunsTabSlot, AllocationsSetupHeader } from '../../app/(app)/admin/setup/allocations/sections'
+import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
+import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton } from '../../app/(app)/admin/flows/sections'
+import { BlockedBillsSection, ComplianceSetupBanner, ExpiringVendorsSection, ReadinessPanel, WaiversPanel } from '../../app/(app)/compliance/sections'
 import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
 import { InviteUserButton } from '../../app/(app)/admin/users/InviteDialog'
-import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
-import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
-import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
-import { NewPaymentButton } from '../../app/(app)/payments/NewPaymentButton'
 import { Plus } from 'lucide-react'
 import { FolderTree } from '../../app/(app)/documents/FolderTree'
 import { FileList } from '../../app/(app)/documents/FileList'
@@ -292,76 +118,25 @@ import { FolderDrawer } from '../../app/(app)/documents/FolderDrawer'
 import { UploadButton } from '../../app/(app)/documents/UploadButton'
 import { NewFolderButton } from '../../app/(app)/documents/NewFolderButton'
 import { DocumentsActions, DocumentsBreadcrumb } from '../../app/(app)/documents/sections'
-import { BankFeedPanel } from '../../app/(app)/banking/imports/sections'
 import { NewBudgetButton } from '../../app/(app)/budgets/NewBudgetButton'
 import { BudgetDrawer } from '../../app/(app)/budgets/BudgetDrawer'
-import { NewRunButton } from '../../app/(app)/payroll/_ui/NewRunButton'
-import { FieldTicketDrawer } from '../../app/(app)/field-tickets/FieldTicketDrawer'
-import { NewRuleButton, RunRulesButton, RuleDrawer } from '../../app/(app)/banking/rules/RuleDrawer'
-import { ArrowUpRight } from 'lucide-react'
 import { WeeklyGrid } from '../../app/(app)/timesheets/WeeklyGrid'
-import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
-import { NewItemButton } from '../../app/(app)/items/NewItemButton'
-import { NewItemRedirect } from '../../app/(app)/items/NewItemRedirect'
-import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
-import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
 import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
 import { OpportunityKanbanBoard, OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
 import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
-import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
-import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
-import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
-import { buildListDrawerHref } from '../../lib/list-params'
-import {
-  CloseActionCell,
-  CloseReadinessCell,
-  CloseStatusCell,
-  SingleBookLabel,
-} from '../../app/(app)/close/sections'
-import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
-import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
-import { OrderDrawer } from '../../app/(app)/_order/OrderDrawer'
+import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
 import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
 import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
-import {
-  SetupBadgeLinkCell,
-  SetupCloseSlot,
-  SetupCodeCell,
-  SetupCompanySlot,
-  SetupDescription,
-  SetupDrawerSlot,
-  SetupFxSlot,
-} from '../../app/(app)/admin/setup/[entity]/sections'
+import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot } from '../../app/(app)/admin/setup/[entity]/sections'
 import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
 import { JournalDrawer } from '../../app/(app)/journal/JournalDrawer'
 import { NewJournalButton } from '../../app/(app)/journal/NewJournalButton'
-import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
-import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
-import { NewAssetRedirect } from '../../app/(app)/assets/NewAssetRedirect'
-import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
-import { AssetDrawer } from '../../app/(app)/assets/AssetDrawer'
-import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
 import { Gauge, History, Camera, BellRing } from 'lucide-react'
 import { DateRangeFilter } from '../date-range-filter'
-import {
-  ForecastSectionHeading,
-  ForecastKpiGroup,
-  ForecastFilters,
-  ManageQuotasButton,
-  QuotaEmptyAction,
-  ForecastSnapshotAction,
-} from '../../app/(app)/crm/forecasts/sections'
+import { ForecastSectionHeading, ForecastKpiGroup, ForecastFilters, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
 import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
 import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
-import {
-  AccountStats,
-  UnmatchedCountCell,
-  ReconActionCell,
-} from '../../app/(app)/banking/[accountId]/sections'
-import { ImportStatementButton } from '../../app/(app)/banking/[accountId]/ImportStatementButton'
-import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/StartReconciliationButton'
-import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { DocumentDrawer } from '../document-drawer'
 import { DocumentRowActions } from '../document-row-actions'
 import { NewDocumentButton } from '../new-document-button'
@@ -371,49 +146,20 @@ import { AppliedPaymentsPanel, type AppliedPayment } from '../applied-payments-p
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { SearchSelectFilter } from '../filter-bar'
 import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
-import {
-  ListViewDesigner,
-  NewViewButton as NewListViewButton,
-} from '../../app/(app)/admin/customization/ListViewDesigner'
-import {
-  CustomizationTabs,
-  FormDefaultCell,
-  ViewScopeCell,
-} from '../../app/(app)/admin/customization/sections'
+import { ListViewDesigner, NewViewButton as NewListViewButton } from '../../app/(app)/admin/customization/ListViewDesigner'
+import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from '../../app/(app)/admin/customization/sections'
 import { BookOpen } from 'lucide-react'
-import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
-import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
-import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
-import {
-  TabNav,
-  Metric,
-  ReportsCardHeading,
-  NarrativeEntry,
-  FindingCell,
-} from '../../app/(app)/continuous-close/sections'
+import { TabNav, Metric, ReportsCardHeading, NarrativeEntry, FindingCell } from '../../app/(app)/continuous-close/sections'
 import { WorkItemDrawer } from '../../app/(app)/continuous-close/WorkItemDrawer'
 import { NarrativeDrawer } from '../../app/(app)/continuous-close/NarrativeDrawer'
 import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
 import { NewPartyRedirect } from '../../app/(app)/parties/NewPartyRedirect'
 import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
 import { RelatedTxnSlot } from './related-txn-slot'
-import { NewReportButton } from '../../app/(app)/reports/custom/NewReportButton'
-import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReportActions'
 import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
 import { VendorComplianceDrawer } from '../../app/(app)/compliance/vendors/VendorComplianceDrawer'
-import {
-  UserIdentityCell,
-  UserRolesCell,
-  UserGrantsCell,
-  UserManageCell,
-} from '../../app/(app)/platform/users/sections'
-import {
-  OrgNameCell,
-  OrgEnvironmentCell,
-  OrgLocaleCell,
-  OrgUsersCell,
-  OrgOpenCell,
-} from '../../app/(app)/platform/organizations/sections'
+import { UserIdentityCell, UserRolesCell, UserGrantsCell, UserManageCell } from '../../app/(app)/platform/users/sections'
+import { OrgNameCell, OrgEnvironmentCell, OrgLocaleCell, OrgUsersCell, OrgOpenCell } from '../../app/(app)/platform/organizations/sections'
 import { SearchInput } from '../search-input'
 import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { FilterChips } from '../filter-bar'
@@ -424,6 +170,13 @@ import { CloseWizard } from '../../app/(app)/close/CloseWizard'
 import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
+import { PAYROLL_WIDGETS } from './widgets-payroll'
+import { BANKING_WIDGETS } from './widgets-banking'
+import { REPORTING_WIDGETS } from './widgets-reporting'
+import { ASSETS_TAX_WIDGETS } from './widgets-assets-tax'
+import { COMMERCE_WIDGETS } from './widgets-commerce'
+import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
+
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -441,46 +194,8 @@ import Link from 'next/link'
  * author who lacks a permission gets the same empty result a user would.
  */
 
-type WidgetRenderer = (props: Record<string, unknown>) => ReactNode
-
-function str(props: Record<string, unknown>, key: string): string | undefined {
-  const value = props[key]
-  return typeof value === 'string' ? value : undefined
-}
-
-/** Finite numbers only: NaN and Infinity are treated as absent, so a widget
- *  falls back to its default rather than rendering a `NaN`. */
-function num(props: Record<string, unknown>, key: string): number | undefined {
-  const value = props[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
-}
-
-function stringRecord(props: Record<string, unknown>, key: string): Record<string, string> | undefined {
-  const value = props[key]
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'string') out[k] = v
-  }
-  return out
-}
-
 export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
-  /**
-   * The statement matrix. Placed whole rather than decomposed into `table`
-   * blocks: it owns variance percentages, scale divisors, hierarchical line
-   * rendering and its own drill construction, and re-expressing that as
-   * generic columns would reimplement it rather than compose it. The loader
-   * hands over the `StatementView` it already built.
-   */
-  'statement-matrix': (props) => (
-    <StatementMatrixTable
-      view={props.view as ComponentProps<typeof StatementMatrixTable>['view']}
-      scale={props.scale as ComponentProps<typeof StatementMatrixTable>['scale']}
-      currency={str(props, 'currency')}
-      drill={props.drill as ComponentProps<typeof StatementMatrixTable>['drill']}
-    />
-  ),
+  'statement-matrix': REPORTING_WIDGETS['statement-matrix'],
   /* --- purchasing cockpit ------------------------------------------------ */
   'subsidiary-switcher': (props) => (
     <SubsidiarySwitcher
@@ -533,36 +248,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'live-directory': (props) => (
     <LiveDirectory items={props.items as ComponentProps<typeof LiveDirectory>['items']} />
   ),
-
-  /* --- reports ----------------------------------------------------------- */
-  'journal-entry-heading': (props) => (
-    <JournalEntryHeading
-      entryId={str(props, 'entryId') ?? ''}
-      docKind={(props.docKind as string | null) ?? null}
-      docId={(props.docId as string | null) ?? null}
-      entryNumber={(props.entryNumber as string | null) ?? null}
-      date={str(props, 'date') ?? ''}
-      originLabel={str(props, 'originLabel') ?? ''}
-      memo={(props.memo as string | null) ?? null}
-    />
-  ),
-  'account-heading': (props) => (
-    <AccountHeading
-      accountId={str(props, 'accountId') ?? ''}
-      from={str(props, 'from') ?? ''}
-      to={str(props, 'to') ?? ''}
-      number={(props.number as string | null) ?? null}
-      name={str(props, 'name') ?? ''}
-    />
-  ),
-  'entry-cell': (props) => (
-    <EntryCell
-      entryId={str(props, 'entryId') ?? ''}
-      docKind={(props.docKind as string | null) ?? null}
-      docId={(props.docId as string | null) ?? null}
-      entryNumber={(props.entryNumber as string | null) ?? null}
-    />
-  ),
+  'journal-entry-heading': REPORTING_WIDGETS['journal-entry-heading'],
+  'account-heading': REPORTING_WIDGETS['account-heading'],
+  'entry-cell': REPORTING_WIDGETS['entry-cell'],
   /** A primary action button that navigates — the common page-header action. */
   'link-button': (props) => {
     const href = str(props, 'href')
@@ -592,16 +280,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       failed={Number(props.failed ?? 0)}
     />
   ),
-  'party-heading': (props) => (
-    <PartyHeading
-      partyId={(props.partyId as string | null) ?? null}
-      partyName={str(props, 'partyName') ?? ''}
-      statementHref={str(props, 'statementHref') ?? ''}
-      closingLabel={str(props, 'closingLabel') ?? ''}
-      closing={str(props, 'closing') ?? ''}
-      closingDrill={props.closingDrill as ComponentProps<typeof PartyHeading>['closingDrill']}
-    />
-  ),
+  'party-heading': REPORTING_WIDGETS['party-heading'],
   /* --- admin lists -------------------------------------------------------- */
   'search-input': (props) => (
     <SearchInput
@@ -673,31 +352,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       customTypes={(props.customTypes as ComponentProps<typeof ScriptDrawer>['customTypes']) ?? []}
     />
   ),
-  'party-link-cell': (props) => (
-    <PartyLinkCell
-      partyId={(props.partyId as string | null) ?? null}
-      partyName={str(props, 'partyName') ?? ''}
-      href={str(props, 'href') ?? ''}
-    />
-  ),
-  'aging-strip': (props) => (
-    <AgingStrip
-      cells={(props.cells as ComponentProps<typeof AgingStrip>['cells']) ?? []}
-      totalLabel={str(props, 'totalLabel') ?? ''}
-      total={str(props, 'total') ?? ''}
-      totalDrill={props.totalDrill as ComponentProps<typeof AgingStrip>['totalDrill']}
-    />
-  ),
-  'statement-rows': (props) => (
-    <StatementRows rows={(props.rows as ComponentProps<typeof StatementRows>['rows']) ?? []} />
-  ),
-  'reconciliation-note': (props) => (
-    <ReconciliationNote
-      label={str(props, 'label') ?? ''}
-      status={str(props, 'status') ?? ''}
-      reconciled={props.reconciled === true}
-    />
-  ),
+  'party-link-cell': REPORTING_WIDGETS['party-link-cell'],
+  'aging-strip': REPORTING_WIDGETS['aging-strip'],
+  'statement-rows': REPORTING_WIDGETS['statement-rows'],
+  'reconciliation-note': REPORTING_WIDGETS['reconciliation-note'],
   'empty-state': (props) => {
     // `action` names a widget rather than carrying JSX, so an empty state can
     // offer its create button without the spec expressing a component.
@@ -975,57 +633,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'notifications-mark-all-read': (props) => (
     <NotificationsMarkAllRead unread={num(props, 'unread') ?? 0} />
   ),
-
-  /* --- banking cockpit ------------------------------------------------------- */
-  /** A widget, not a slot: the LOADER already did the roster's server work and
-   *  passes the prefs through as data, so no org id, user id or Authz crosses
-   *  the spec. Persistence rides the session cookie inside the component. */
-  'banking-roster': (props) => (
-    <AccountsRosterPanel
-      accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
-      totalCash={Number(props.totalCash ?? 0)}
-      totalCards={Number(props.totalCards ?? 0)}
-      layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
-    />
-  ),
-  /** A conditional PAIR — a count label when there is unmatched activity, a
-   *  plain one when clean — so the choice lives here, not in the spec. */
-  'banking-match': (props) => (
-    <Button
-      variant={(str(props, 'variant') ?? 'outline') as ComponentProps<typeof Button>['variant']}
-      asChild
-    >
-      <Link href={(str(props, 'href') ?? '/banking/match') as never}>
-        <ListChecks size={14} />
-        {props.showCount === true ? (str(props, 'countLabel') ?? '') : (str(props, 'label') ?? '')}
-      </Link>
-    </Button>
-  ),
-  'banking-attention-list': (props) => (
-    <BankingAttentionList
-      items={(props.items as ComponentProps<typeof BankingAttentionList>['items']) ?? []}
-      allClear={str(props, 'allClear') ?? ''}
-    />
-  ),
-
-  /* --- launchers and consoles ------------------------------------------------ */
-  /** Both are whole client components that own their own search, icon maps and
-   *  editor state. Decomposing either would reimplement it, not compose it. */
-  'analytics-hub': (props) => (
-    <AnalyticsHub
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      groups={(props.groups as ComponentProps<typeof AnalyticsHub>['groups']) ?? []}
-    />
-  ),
-  'reports-hub': (props) => (
-    <ReportsHub
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      groups={(props.groups as ComponentProps<typeof ReportsHub>['groups']) ?? []}
-      canCreate={props.canCreate === true}
-    />
-  ),
+  'banking-roster': BANKING_WIDGETS['banking-roster'],
+  'banking-match': BANKING_WIDGETS['banking-match'],
+  'banking-attention-list': BANKING_WIDGETS['banking-attention-list'],
+  'analytics-hub': REPORTING_WIDGETS['analytics-hub'],
+  'reports-hub': REPORTING_WIDGETS['reports-hub'],
   'query-console': () => <QueryConsole />,
 
   /* --- accounting cockpit ---------------------------------------------------- */
@@ -1187,20 +799,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       }
     />
   ),
-
-  /** The accounting-equation check: a conditional pair, so the loader decides
-   *  and the component renders the decision. */
-  /** The generic tabular report paper: it owns the chrome, the column
-   *  alignment and the money formatting for any report shaped as groups of
-   *  rows. The loader assembles the data; this places the component. */
-  'paper-view': (props) => (
-    <PaperView
-      company={str(props, 'company') ?? ''}
-      currency={str(props, 'currency')}
-      emptyLabel={str(props, 'emptyLabel') ?? ''}
-      data={props.data as ComponentProps<typeof PaperView>['data']}
-    />
-  ),
+  'paper-view': REPORTING_WIDGETS['paper-view'],
   /* --- app launcher ----------------------------------------------------------- */
   /** Flat props: widget props resolve one level deep, so the loader
    *  denormalizes each row and the spec binds per-item fields. */
@@ -1228,78 +827,13 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       className={str(props, 'className')}
     />
   ),
-
-  /* --- payment operations ------------------------------------------------------ */
-  'payment-operations-tabs': (props) => (
-    <PaymentOperationsTabs
-      tabs={(props.tabs as ComponentProps<typeof PaymentOperationsTabs>['tabs']) ?? []}
-    />
-  ),
-  /** `link-button`'s closed icon map has no `plus`, and this action carries
-   *  one — so it gets its own entry rather than widening that map for a
-   *  single caller. */
-  'new-setup-record': (props) => (
-    <NewSetupRecordButton href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
-  ),
-  /** The native row formats this timestamp CLIENT-side, in the browser's
-   *  locale and timezone. The loader must not format it, so the raw ISO
-   *  string travels and the cell runs the identical expression. */
-  'payment-schedule-next-run': (props) => (
-    <PaymentScheduleNextRun value={(props.value as string | null) ?? null} />
-  ),
-  'payment-operations-editor': (props) => {
-    const editor = props.editor as ComponentProps<typeof PaymentOperationsEditor>['editor'] | null
-    if (!editor) return null
-    return <PaymentOperationsEditor editor={editor} />
-  },
-
-  /* --- reconciliation workspace ------------------------------------------------ */
-  'reconcile-status-badge': (props) => (
-    <ReconcileStatusBadge
-      label={str(props, 'label') ?? ''}
-      variant={(str(props, 'variant') ?? 'secondary') as 'success' | 'warning' | 'secondary'}
-    />
-  ),
-  /** One widget, not four stat tiles: the native tiles are plain bordered
-   *  divs, and the difference tile holds a conditional pair (green zero vs
-   *  amber nonzero) that a spec must not express. */
-  'reconcile-stats': (props) => (
-    <ReconcileStats
-      statementBalanceLabel={str(props, 'statementBalanceLabel') ?? ''}
-      statementBalanceValue={str(props, 'statementBalanceValue') ?? ''}
-      clearedBalanceLabel={str(props, 'clearedBalanceLabel') ?? ''}
-      clearedBalanceValue={str(props, 'clearedBalanceValue') ?? ''}
-      differenceLabel={str(props, 'differenceLabel') ?? ''}
-      difference={str(props, 'difference') ?? '0'}
-      differenceCurrency={str(props, 'differenceCurrency') ?? ''}
-      matchedLabel={str(props, 'matchedLabel') ?? ''}
-      matchedValue={str(props, 'matchedValue') ?? ''}
-    />
-  ),
-  /** Whole, like `match-workspace`: selection state across three prefixed
-   *  panes plus every mutation. `canReconcile` is a loader-resolved boolean,
-   *  never an Authz. */
-  'reconcile-workspace': (props) => (
-    <ReconcileWorkspace
-      basePath={str(props, 'basePath') ?? ''}
-      accountPath={str(props, 'accountPath') ?? ''}
-      currentParams={
-        (props.currentParams as ComponentProps<typeof ReconcileWorkspace>['currentParams']) ?? {}
-      }
-      reconciliation={props.reconciliation as ComponentProps<typeof ReconcileWorkspace>['reconciliation']}
-      difference={str(props, 'difference') ?? '0'}
-      canReconcile={props.canReconcile === true}
-      stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
-      stmtTotal={Number(props.stmtTotal ?? 0)}
-      stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>['stmtParams']}
-      glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>['glRows']) ?? []}
-      glTotal={Number(props.glTotal ?? 0)}
-      glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>['glParams']}
-      matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
-      matchedTotal={Number(props.matchedTotal ?? 0)}
-      mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
-    />
-  ),
+  'payment-operations-tabs': BANKING_WIDGETS['payment-operations-tabs'],
+  'new-setup-record': BANKING_WIDGETS['new-setup-record'],
+  'payment-schedule-next-run': BANKING_WIDGETS['payment-schedule-next-run'],
+  'payment-operations-editor': BANKING_WIDGETS['payment-operations-editor'],
+  'reconcile-status-badge': BANKING_WIDGETS['reconcile-status-badge'],
+  'reconcile-stats': BANKING_WIDGETS['reconcile-stats'],
+  'reconcile-workspace': BANKING_WIDGETS['reconcile-workspace'],
 
   /* --- admin backups ---------------------------------------------------------- */
   /** Whole: a per-field schedule form, polling effects and fetch mutations
@@ -1338,20 +872,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'doc-article': (props) => (
     <DocArticleView content={props.content as ComponentProps<typeof DocArticleView>['content']} />
   ),
-
-  /* --- cash control centre ------------------------------------------------------ */
-  /** A widget, not a slot: the LOADER already did the server work, so no user
-   *  id, org id or Authz crosses the spec. Layout persistence rides the
-   *  session cookie inside the component. */
-  'cash-cockpit': (props) => (
-    <CashCockpit
-      data={props.data as ComponentProps<typeof CashCockpit>['data']}
-      layoutPrefs={props.layoutPrefs as ComponentProps<typeof CashCockpit>['layoutPrefs']}
-      canConfigure={props.canConfigure === true}
-      canPayRun={props.canPayRun === true}
-      canCollectionRun={props.canCollectionRun === true}
-    />
-  ),
+  'cash-cockpit': BANKING_WIDGETS['cash-cockpit'],
 
   /* --- data export ------------------------------------------------------------------ */
   /** No props: `ExportClient` fetches its own resource descriptors after
@@ -1360,54 +881,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** Also no props: the import wizard owns its own `WizardLayout` shell and
    *  every step's state. `bare` layout, or the chrome nests. */
   'import-wizard': () => <ImportWizard />,
-
-  /* --- subcontracts ----------------------------------------------------------------- */
-  /** SIX FLAT props (`projects`, `vendors`, `expenseAccounts`, `parties`,
-   *  `multiCurrency`, `permissions`) — no nested bag. Six drawer tabs, the
-   *  register fetch and every mutation are client state. */
-  'subcontracts-workspace': (props) => (
-    <SubcontractsWorkspace {...(props as unknown as ComponentProps<typeof SubcontractsWorkspace>)} />
-  ),
-
-  /* --- AP cockpit ------------------------------------------------------------------- */
-  /** The capture link and the create menu as ONE widget, because the native
-   *  header nests them in their own `gap-2` row. */
-  'ap-header-actions': (props) => (
-    <ApHeaderActions
-      captureHref={str(props, 'captureHref') ?? ''}
-      captureLabel={str(props, 'captureLabel') ?? ''}
-      canCreate={props.canCreate === true}
-      newItems={(props.newItems as ComponentProps<typeof ApHeaderActions>['newItems']) ?? []}
-      newBasePath={str(props, 'newBasePath') ?? ''}
-      newTriggerLabel={str(props, 'newTriggerLabel') ?? ''}
-      newCreatingLabel={str(props, 'newCreatingLabel') ?? ''}
-      newFailedLabel={str(props, 'newFailedLabel') ?? ''}
-    />
-  ),
-  /** Whole, exactly as `ar-cockpit`: vitals, the pay-run planner, aging bars,
-   *  the cash-out schedule, the vendor table and three on-demand flyouts. */
-  'ap-cockpit': (props) => (
-    <ApCockpit
-      data={props.data as ComponentProps<typeof ApCockpit>['data']}
-      canConfigure={props.canConfigure === true}
-      canPay={props.canPay === true}
-    />
-  ),
-
-  /* --- collections ------------------------------------------------------------------ */
-  /** The shell (container + PageHeader + client island) is ONE component
-   *  because the island's four-way panel switch is tab state: presence omits
-   *  a block, it never chooses between four. */
-  'collections-shell': (props) => (
-    <CollectionsShell
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      subscriptionsEnabled={props.subscriptionsEnabled === true}
-      advancedSubscriptionsEnabled={props.advancedSubscriptionsEnabled === true}
-      customers={(props.customers as ComponentProps<typeof CollectionsShell>['customers']) ?? []}
-      incomeAccounts={(props.incomeAccounts as ComponentProps<typeof CollectionsShell>['incomeAccounts']) ?? []}
-    />
-  ),
+  'subcontracts-workspace': COMMERCE_WIDGETS['subcontracts-workspace'],
+  'ap-header-actions': COMMERCE_WIDGETS['ap-header-actions'],
+  'ap-cockpit': COMMERCE_WIDGETS['ap-cockpit'],
+  'collections-shell': COMMERCE_WIDGETS['collections-shell'],
 
   /* --- document trash --------------------------------------------------------------- */
   /** Not `pageHeader({ back })`: that slot renders UiBackLink (`← label`),
@@ -1420,68 +897,19 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'trash-list': (props) => (
     <TrashList items={(props.rows as ComponentProps<typeof TrashList>['items']) ?? []} />
   ),
-
-  /* --- expenses cockpit ------------------------------------------------------------- */
-  'expenses-dashboard': (props) => (
-    <ExpensesDashboard data={props.data as ComponentProps<typeof ExpensesDashboard>['data']} />
-  ),
-
-  /* --- revenue ---------------------------------------------------------------------- */
-  /** No remount key: the native page renders `<ContractDrawer>` keyless (the
-   *  journal-drawer arrangement — its state resets via closeHref navigation),
-   *  so a key here would diverge. This differs from the account / party /
-   *  document drawers deliberately. */
-  'contract-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof ContractDrawer> | null
-    if (!drawer) return null
-    return <ContractDrawer {...drawer} />
-  },
-  /** Presence is the spec's `when` on `canRun`, not a check in here. */
-  'run-recognition': () => <RunRecognitionButton />,
+  'expenses-dashboard': COMMERCE_WIDGETS['expenses-dashboard'],
+  'contract-drawer': COMMERCE_WIDGETS['contract-drawer'],
+  'run-recognition': COMMERCE_WIDGETS['run-recognition'],
 
   /* --- platform sync ---------------------------------------------------------------- */
   /** No props. The console holds every fetch and mutation — a 2.5s live poll
    *  while a run is in flight, run/test/toggle-mirror/schedule/delete with
    *  busy flags, `window.open` for OAuth and the QWC download. */
   'sync-console': () => <PlatformClient />,
-
-  /* --- payroll retro ---------------------------------------------------------------- */
-  /** Money stays canonical: the workspace formats client-side in the
-   *  browser's locale, so the loader must not pre-format it. */
-  'retro-workspace': (props) => (
-    <RetroWorkspace
-      schedules={props.schedules as ComponentProps<typeof RetroWorkspace>['schedules']}
-      canRun={props.canRun === true}
-    />
-  ),
-
-  /* --- payroll remittances ---------------------------------------------------------- */
-  /** The groups travel verbatim: plain serializable engine output. Money and
-   *  messages resolve inside the view through useMoney/useTranslations, so
-   *  the loader must not pre-format either. */
-  'remittance-cockpit': (props) => (
-    <RemittancesView
-      groups={(props.groups as ComponentProps<typeof RemittancesView>['groups']) ?? []}
-      populationRefusal={str(props, 'populationRefusal')}
-      from={str(props, 'from') ?? ''}
-      to={str(props, 'to') ?? ''}
-      canCreate={props.canCreate === true}
-    />
-  ),
-  'remittance-ap-note': (props) => (
-    <RemittanceApNote note={str(props, 'note') ?? ''} linkLabel={str(props, 'linkLabel') ?? ''} />
-  ),
-
-  /* --- payroll year-end ------------------------------------------------------------- */
-  /** Money stays canonical numeric text: the view formats client-side in the
-   *  browser's locale. */
-  'year-end-workspace': (props) => (
-    <YearEndView
-      year={num(props, 'year') ?? new Date().getFullYear()}
-      years={(props.years as number[]) ?? []}
-      sections={(props.sections as ComponentProps<typeof YearEndView>['sections']) ?? []}
-    />
-  ),
+  'retro-workspace': PAYROLL_WIDGETS['retro-workspace'],
+  'remittance-cockpit': PAYROLL_WIDGETS['remittance-cockpit'],
+  'remittance-ap-note': PAYROLL_WIDGETS['remittance-ap-note'],
+  'year-end-workspace': PAYROLL_WIDGETS['year-end-workspace'],
 
   /* --- admin islands ---------------------------------------------------------------- */
   /** The org nav-layout editor: unsaved client state, prompt() dialogs, a
@@ -1698,50 +1126,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       context={props.context as ComponentProps<typeof AppRuntimeChrome>['context']}
     />
   ),
-
-  /* --- tax provision list ----------------------------------------------------------- */
-  /** The empty state lives INSIDE the component: the native empty path keeps
-   *  the card and header-row chrome and renders a `colSpan={6}` note, which a
-   *  spec-level empty block would drop. */
-  'provision-runs-table': (props) => (
-    <ProvisionRunsTable
-      columns={props.columns as ComponentProps<typeof ProvisionRunsTable>['columns']}
-      emptyText={str(props, 'emptyText') ?? ''}
-      rows={(props.rows as ComponentProps<typeof ProvisionRunsTable>['rows']) ?? []}
-    />
-  ),
-  'provision-compute-button': () => <ProvisionComputeButton />,
-
-  /* --- equipment -------------------------------------------------------------------- */
-  'equipment-header-links': (props) => (
-    <EquipmentHeaderLinks
-      fixedAssetsLabel={str(props, 'fixedAssetsLabel') ?? ''}
-      taxDepreciationLabel={str(props, 'taxDepreciationLabel') ?? ''}
-      documentationLabel={str(props, 'documentationLabel') ?? ''}
-      showFixedAssetsLinks={props.showFixedAssetsLinks === true}
-    />
-  ),
-  /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
-   *  the stat-tile block's. */
-  'equipment-kpi-strip': (props) => (
-    <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
-  ),
+  'provision-runs-table': ASSETS_TAX_WIDGETS['provision-runs-table'],
+  'provision-compute-button': ASSETS_TAX_WIDGETS['provision-compute-button'],
+  'equipment-header-links': ASSETS_TAX_WIDGETS['equipment-header-links'],
+  'equipment-kpi-strip': ASSETS_TAX_WIDGETS['equipment-kpi-strip'],
   /** The generic KPI strip — every KPI row is the house KpiStrip. */
   'kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
-  'new-equipment': () => <NewEquipmentButton />,
-  /** The remount key rides along as a prop: switching units must reset the
-   *  drawer's client state, and a widget at a fixed spec position would
-   *  otherwise be reused across units. */
-  'equipment-drawer': (props) => {
-    const drawer = props.drawer as
-      | (ComponentProps<typeof EquipmentDrawer> & { remountKey: string })
-      | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <EquipmentDrawer key={remountKey} {...rest} />
-  },
+  'new-equipment': ASSETS_TAX_WIDGETS['new-equipment'],
+  'equipment-drawer': ASSETS_TAX_WIDGETS['equipment-drawer'],
 
   /* --- insights dashboard builder --------------------------------------------------- */
   /** Whole: a drag-and-drop board with a card palette, placement state and
@@ -1766,38 +1160,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'api-console': (props) => (
     <ApiConsole schema={(props.schema as ComponentProps<typeof ApiConsole>['schema']) ?? []} />
   ),
-
-  /* --- payroll opening balances ----------------------------------------------------- */
-  /** Money stays canonical text: the grid trims zeros for display over raw
-   *  store strings, client-side. */
-  'opening-balances-grid': (props) => (
-    <OpeningBalancesView
-      year={num(props, 'year') ?? new Date().getFullYear()}
-      currentYear={num(props, 'currentYear') ?? new Date().getFullYear()}
-      initial={props.initial as ComponentProps<typeof OpeningBalancesView>['initial']}
-      fields={props.fields as ComponentProps<typeof OpeningBalancesView>['fields']}
-      components={props.components as ComponentProps<typeof OpeningBalancesView>['components']}
-      canManage={props.canManage === true}
-    />
-  ),
-  /** No `year`: entitlement banks are lifetime balances by design. */
-  'entitlement-openings-grid': (props) => (
-    <EntitlementOpeningsView
-      initial={props.initial as ComponentProps<typeof EntitlementOpeningsView>['initial']}
-      canManage={props.canManage === true}
-    />
-  ),
-
-  /* --- tax setup -------------------------------------------------------------------- */
-  /** The native page owns a plain `<header>`, not the PageHeader component. */
-  'tax-setup-header': (props) => (
-    <TaxSetupHeader title={str(props, 'title') ?? ''} subtitle={str(props, 'subtitle') ?? ''} />
-  ),
-  /** ONE object prop. Country display names stay CLIENT-side (browser
-   *  locale), so the loader passes raw country codes and formats nothing. */
-  'tax-setup-guide': (props) => (
-    <TaxSetupGuideSlot guide={props.guide as ComponentProps<typeof TaxSetupGuideSlot>['guide']} />
-  ),
+  'opening-balances-grid': PAYROLL_WIDGETS['opening-balances-grid'],
+  'entitlement-openings-grid': PAYROLL_WIDGETS['entitlement-openings-grid'],
+  'tax-setup-header': ASSETS_TAX_WIDGETS['tax-setup-header'],
+  'tax-setup-guide': ASSETS_TAX_WIDGETS['tax-setup-guide'],
 
   /* --- setup wizard ----------------------------------------------------------------- */
   /** FIVE FLAT props. Ten animated steps, each owning state, mutations and
@@ -1810,19 +1176,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** No props: the island fetches its own providers, bank accounts and
    *  surcharge rules and owns every form. */
   'payment-providers-workspace': () => <PaymentProvidersClient />,
-
-  /* --- book depreciation setup ------------------------------------------------------ */
-  /** Deliberately NOT the tax-depreciation header: two tabs fit, so the
-   *  native strip omits `overflow-x-auto` and `shrink-0`. Two components,
-   *  because the markup genuinely differs. */
-  'depreciation-setup-header': (props) => (
-    <DepreciationSetupHeader
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      tabs={(props.tabs as ComponentProps<typeof DepreciationSetupHeader>['tabs']) ?? []}
-      tabsAria={str(props, 'tabsAria') ?? ''}
-    />
-  ),
+  'depreciation-setup-header': ASSETS_TAX_WIDGETS['depreciation-setup-header'],
 
   /* --- security settings ------------------------------------------------------------ */
   /** No props. Every control is client state or a fetch to /api/auth/*. */
@@ -1835,16 +1189,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'project-types-workspace': (props) => (
     <ProjectTypesWorkspace {...(props as unknown as ComponentProps<typeof ProjectTypesWorkspace>)} />
   ),
-
-  /* --- payroll separations ---------------------------------------------------------- */
-  /** Money stays canonical: the view formats client-side. */
-  'separations-workspace': (props) => (
-    <SeparationsView
-      year={num(props, 'year') ?? 0}
-      years={(props.years as number[]) ?? []}
-      sections={(props.sections as ComponentProps<typeof SeparationsView>['sections']) ?? []}
-    />
-  ),
+  'separations-workspace': PAYROLL_WIDGETS['separations-workspace'],
 
   /* --- sandboxes -------------------------------------------------------------------- */
   /** Whole, and the per-row mutations are the reason: create / refresh /
@@ -1867,17 +1212,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       periods={props.periods as ComponentProps<typeof SandboxManager>['periods']}
     />
   ),
-
-  /** Schedule forms, cadence pickers, recipient editing and the run list's
-   *  retry actions — all client state. */
-  'delivery-panel': (props) => (
-    <DeliveryPanel
-      definitionId={str(props, 'definitionId') ?? ''}
-      schedules={props.schedules as ComponentProps<typeof DeliveryPanel>['schedules']}
-      recentRuns={props.recentRuns as ComponentProps<typeof DeliveryPanel>['recentRuns']}
-      canSchedule={props.canSchedule === true}
-    />
-  ),
+  'delivery-panel': REPORTING_WIDGETS['delivery-panel'],
   /** Whole: per-row adjustment forms, the reason capture and the file/void
    *  actions are client state. The ledger figure and the filed figure are both
    *  on every row by design — never one silently replacing the other. */
@@ -1902,18 +1237,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       permissions={props.permissions as ComponentProps<typeof FlowBuilder>['permissions']}
     />
   ),
-  /** `hiddenEntityKeys` is a per-caller PERMISSION result — the entities this
-   *  reader may not query — resolved in the loader and travelling as a plain
-   *  string array. The `Authz` it came from does not. */
-  'report-builder': (props) => (
-    <ReportBuilder
-      customEntities={props.customEntities as ComponentProps<typeof ReportBuilder>['customEntities']}
-      hiddenEntityKeys={props.hiddenEntityKeys as ComponentProps<typeof ReportBuilder>['hiddenEntityKeys']}
-      inventoryEnabled={props.inventoryEnabled === true}
-      company={str(props, 'company') ?? ''}
-      definition={props.definition as ComponentProps<typeof ReportBuilder>['definition']}
-    />
-  ),
+  'report-builder': REPORTING_WIDGETS['report-builder'],
   /** The GrapesJS canvas: its own document model, drag-and-drop, the
    *  merge-field palette and every save/preview mutation. */
   'pdf-template-editor': (props) => (
@@ -1923,14 +1247,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       collections={props.collections as ComponentProps<typeof PdfTemplateEditor>['collections']}
     />
   ),
-
-  /* --- WIP and prebilling ----------------------------------------------------------- */
-  /** Whole: the create drawer, the detail drawer, per-line edit/hold/release
-   *  forms and every transition. Decomposing would strand that state from
-   *  the actions it drives — the `match-workspace` reason. */
-  'wip-billing-workspace': (props) => (
-    <WipBillingWorkspace {...(props as unknown as ComponentProps<typeof WipBillingWorkspace>)} />
-  ),
+  'wip-billing-workspace': COMMERCE_WIDGETS['wip-billing-workspace'],
 
   /* --- home dashboard --------------------------------------------------------------- */
   /** The greeting row. The loader resolves the greeting string (locale +
@@ -1979,62 +1296,17 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       initialFindingId={str(props, 'initialFindingId')}
     />
   ),
-
-  /* --- banking reconciliations ------------------------------------------------------ */
-  /** The empty-state action. The native page passes it unconditionally (no
-   *  permission gate), so the spec does too — it is data, not a branch. */
-  'choose-recon-account': (props) => (
-    <Button asChild>
-      <Link href={(str(props, 'href') ?? '/banking') as never}>{str(props, 'label') ?? ''}</Link>
-    </Button>
-  ),
-
-  /* --- analytics dashboards --------------------------------------------------------- */
-  //
-  // Seven dashboards, one shape: the `analytics-header` frame over a single
-  // bespoke client view. Each view owns charts, drill tables and client
-  // filter state; decomposing them into generic blocks would reimplement the
-  // component rather than compose it — the `paper-view` precedent.
-  //
-  // The period control is ONE entry shared by six of the seven, because the
-  // native pages render the byte-identical `<ReportFilterBar controls={{
-  // period: true }} />`. A second entry would be a duplicate, not coverage.
-  'report-period-filter': () => <ReportFilterBar controls={{ period: true }} />,
-  'cashflow-horizon-control': (props) => <HorizonControl value={num(props, 'value') ?? 4} />,
-  'cashflow-view': (props) => (
-    <CashflowView data={props.data as ComponentProps<typeof CashflowView>['data']} />
-  ),
-  /** `defs` is RATIO_DEFS: a static table of ratio definitions, plain data,
-   *  not a component or a capability. */
-  'financial-health-view': (props) => (
-    <FinancialHealthView
-      data={props.data as ComponentProps<typeof FinancialHealthView>['data']}
-      defs={props.defs as ComponentProps<typeof FinancialHealthView>['defs']}
-      budgetsEnabled={props.budgetsEnabled === true}
-    />
-  ),
-  'utilization-view': (props) => (
-    <UtilizationView data={props.data as ComponentProps<typeof UtilizationView>['data']} />
-  ),
-  'spend-velocity-view': (props) => (
-    <SpendVelocityView data={props.data as ComponentProps<typeof SpendVelocityView>['data']} />
-  ),
-  'vendor-view': (props) => (
-    <VendorView data={props.data as ComponentProps<typeof VendorView>['data']} />
-  ),
-  'customer-view': (props) => (
-    <CustomerView
-      data={props.data as ComponentProps<typeof CustomerView>['data']}
-      profitability={props.profitability as ComponentProps<typeof CustomerView>['profitability']}
-      projectsEnabled={props.projectsEnabled === true}
-    />
-  ),
-  'true-cost-view': (props) => (
-    <TrueCostView data={props.data as ComponentProps<typeof TrueCostView>['data']} />
-  ),
-  'sentinel-view': (props) => (
-    <SentinelView data={props.data as ComponentProps<typeof SentinelView>['data']} />
-  ),
+  'choose-recon-account': BANKING_WIDGETS['choose-recon-account'],
+  'report-period-filter': REPORTING_WIDGETS['report-period-filter'],
+  'cashflow-horizon-control': REPORTING_WIDGETS['cashflow-horizon-control'],
+  'cashflow-view': REPORTING_WIDGETS['cashflow-view'],
+  'financial-health-view': REPORTING_WIDGETS['financial-health-view'],
+  'utilization-view': REPORTING_WIDGETS['utilization-view'],
+  'spend-velocity-view': REPORTING_WIDGETS['spend-velocity-view'],
+  'vendor-view': REPORTING_WIDGETS['vendor-view'],
+  'customer-view': REPORTING_WIDGETS['customer-view'],
+  'true-cost-view': REPORTING_WIDGETS['true-cost-view'],
+  'sentinel-view': REPORTING_WIDGETS['sentinel-view'],
 
   /* --- app library ---------------------------------------------------------------- */
   /** Seven FLAT props. The install button is not a separate widget: it is
@@ -2053,101 +1325,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   /** NOT `apps-empty-icon` — that one renders Boxes; this renders Library. */
   'library-empty-icon': () => <LibraryEmptyIcon />,
-
-  /* --- tax depreciation setup ---------------------------------------------------- */
-  /** `descriptionClassName` is loader-resolved verbatim: `max-w-3xl` appears
-   *  on the overview branch only. */
-  'tax-depreciation-header': (props) => (
-    <TaxDepreciationHeader
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      descriptionClassName={str(props, 'descriptionClassName') ?? ''}
-      tabs={(props.tabs as ComponentProps<typeof TaxDepreciationHeader>['tabs']) ?? []}
-      tabsAria={str(props, 'tabsAria') ?? ''}
-    />
-  ),
-  /** Country names and pack sorting stay CLIENT-side (browser locale), so
-   *  the loader passes raw country codes and formats nothing. */
-  'tax-depreciation-overview': (props) => (
-    <TaxDepreciationOverviewSlot
-      overview={props.overview as ComponentProps<typeof TaxDepreciationOverviewSlot>['overview']}
-    />
-  ),
-
-  /* --- tax provision detail ------------------------------------------------------ */
-  //
-  // Both sections are widgets (the admin-users precedent): the native page
-  // hand-rolls two plain <table>s with their own classes.
-  'provision-recon-section': (props) => (
-    <ProvisionReconSection
-      title={str(props, 'title') ?? ''}
-      pretaxLabel={str(props, 'pretaxLabel') ?? ''}
-      pretaxAmount={str(props, 'pretaxAmount') ?? ''}
-      enactedRateText={str(props, 'enactedRateText') ?? ''}
-      amountLabel={str(props, 'amountLabel') ?? ''}
-      percentLabel={str(props, 'percentLabel') ?? ''}
-      steps={(props.steps as ComponentProps<typeof ProvisionReconSection>['steps']) ?? []}
-      summaries={(props.summaries as ComponentProps<typeof ProvisionReconSection>['summaries']) ?? []}
-    />
-  ),
-  /** The empty note lives INSIDE the component, not as a spec-level empty
-   *  state: the native empty path keeps the section chrome and puts an
-   *  italic note inside it. */
-  'provision-differences-section': (props) => (
-    <ProvisionDifferencesSection
-      title={str(props, 'title') ?? ''}
-      emptyNote={str(props, 'emptyNote') ?? ''}
-      columns={
-        (props.columns as ComponentProps<typeof ProvisionDifferencesSection>['columns']) ?? {
-          item: '',
-          bookBasis: '',
-          taxBasis: '',
-          difference: '',
-          effect: '',
-        }
-      }
-      differences={
-        (props.differences as ComponentProps<typeof ProvisionDifferencesSection>['differences']) ?? []
-      }
-    />
-  ),
-  'provision-status-badge': (props) => (
-    <ProvisionStatusBadge
-      label={str(props, 'label') ?? ''}
-      variant={(str(props, 'variant') ?? 'secondary') as 'success' | 'secondary' | 'outline'}
-    />
-  ),
-  'provision-framework-badge': (props) => (
-    <ProvisionFrameworkBadge label={str(props, 'label') ?? ''} />
-  ),
-  'provision-post-button': (props) => <ProvisionPostButton runId={str(props, 'runId') ?? ''} />,
-
-  /* --- payroll parallel run ------------------------------------------------------ */
-  /** Whole: picker state, compare/discard/tolerance mutations, a findings
-   *  drawer and conditional cell pairs. Money stays canonical text because
-   *  the component formats client-side. */
-  'parallel-run-workspace': (props) => (
-    <ParallelRunView
-      registers={props.registers as ComponentProps<typeof ParallelRunView>['registers']}
-      runs={props.runs as ComponentProps<typeof ParallelRunView>['runs']}
-      comparisons={props.comparisons as ComponentProps<typeof ParallelRunView>['comparisons']}
-      tolerances={props.tolerances as ComponentProps<typeof ParallelRunView>['tolerances']}
-      slots={props.slots as ComponentProps<typeof ParallelRunView>['slots']}
-      canManage={props.canManage === true}
-    />
-  ),
-
-  /* --- bank feeds setup --------------------------------------------------------- */
-  /** Five FLAT props, spread exactly as the page passed them. */
-  'bank-feeds-workspace': (props) => (
-    <BankFeedsClient
-      connections={(props.connections as ComponentProps<typeof BankFeedsClient>['connections']) ?? []}
-      sftpServers={(props.sftpServers as ComponentProps<typeof BankFeedsClient>['sftpServers']) ?? []}
-      sftpSchedules={(props.sftpSchedules as ComponentProps<typeof BankFeedsClient>['sftpSchedules']) ?? []}
-      accounts={(props.accounts as ComponentProps<typeof BankFeedsClient>['accounts']) ?? []}
-      daemon={props.daemon as ComponentProps<typeof BankFeedsClient>['daemon']}
-    />
-  ),
+  'tax-depreciation-header': ASSETS_TAX_WIDGETS['tax-depreciation-header'],
+  'tax-depreciation-overview': ASSETS_TAX_WIDGETS['tax-depreciation-overview'],
+  'provision-recon-section': ASSETS_TAX_WIDGETS['provision-recon-section'],
+  'provision-differences-section': ASSETS_TAX_WIDGETS['provision-differences-section'],
+  'provision-status-badge': ASSETS_TAX_WIDGETS['provision-status-badge'],
+  'provision-framework-badge': ASSETS_TAX_WIDGETS['provision-framework-badge'],
+  'provision-post-button': ASSETS_TAX_WIDGETS['provision-post-button'],
+  'parallel-run-workspace': PAYROLL_WIDGETS['parallel-run-workspace'],
+  'bank-feeds-workspace': BANKING_WIDGETS['bank-feeds-workspace'],
 
   /* --- docs home -------------------------------------------------------------- */
   /** A gradient hero, composite link cards and hover-reveal arrows: generic
@@ -2156,23 +1342,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'docs-home': (props) => (
     <DocsHome content={props.content as ComponentProps<typeof DocsHome>['content']} />
   ),
-
-  /* --- property management ---------------------------------------------------- */
-  'property-management-workspace': (props) => (
-    <PropertyManagementWorkspace
-      {...(props as unknown as ComponentProps<typeof PropertyManagementWorkspace>)}
-    />
-  ),
-
-  /* --- AR cockpit ------------------------------------------------------------- */
-  /** Whole: schedule bars, a collections worklist and a week drill that
-   *  fetches on demand are client behaviour a spec cannot name. */
-  'ar-cockpit': (props) => (
-    <ArCockpit
-      data={props.data as ComponentProps<typeof ArCockpit>['data']}
-      canCollect={props.canCollect === true}
-    />
-  ),
+  'property-management-workspace': COMMERCE_WIDGETS['property-management-workspace'],
+  'ar-cockpit': COMMERCE_WIDGETS['ar-cockpit'],
 
   /* --- crm setup -------------------------------------------------------------- */
   /** One client island, like the labor-costing workspace. Six per-tab column
@@ -2218,38 +1389,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       </Button>
     )
   },
-  /** The button owns its own label; the spec only gates it. */
-  'capture-upload': (props) => <CaptureUploadButton disabled={props.disabled === true} />,
-  /** A widget, not a `table` block — the same call `AdminUsersTable` made. It
-   *  owns row selection, per-row checkboxes (materialized rows unselectable)
-   *  and three bulk actions; neither table variant can name that. */
-  'capture-list': (props) => <CaptureList {...(props as ComponentProps<typeof CaptureList>)} />,
-  /** The not-configured banner text with an optional configure link. */
-  'capture-not-configured': (props) => (
-    <>
-      {str(props, 'text') ?? ''}{' '}
-      {props.showConfigureLink === true ? (
-        <Link
-          href={(str(props, 'configureHref') ?? '/admin/ai') as never}
-          className="font-medium underline"
-        >
-          {str(props, 'configureLabel') ?? ''}
-        </Link>
-      ) : null}
-    </>
-  ),
-  'capture-review-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof CaptureReviewDrawer> | null
-    if (!drawer) return null
-    return <CaptureReviewDrawer {...drawer} />
-  },
-
-  /* --- project profitability -------------------------------------------------- */
-  /** Not `paper-view`: that would restyle the page's section wrappers and
-   *  silently drop the negative-money colouring. Diffed, kept separate. */
-  'project-profitability-table': (props) => (
-    <ProjectProfitabilityTable {...(props as ComponentProps<typeof ProjectProfitabilityTable>)} />
-  ),
+  'capture-upload': COMMERCE_WIDGETS['capture-upload'],
+  'capture-list': COMMERCE_WIDGETS['capture-list'],
+  'capture-not-configured': COMMERCE_WIDGETS['capture-not-configured'],
+  'capture-review-drawer': COMMERCE_WIDGETS['capture-review-drawer'],
+  'project-profitability-table': REPORTING_WIDGETS['project-profitability-table'],
 
   /* --- overhead model --------------------------------------------------------- */
   'overhead-model-header': (props) => (
@@ -2316,120 +1460,23 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       stateLabel={str(props, 'stateLabel') ?? ''}
     />
   ),
-
-  /* --- saved view run --------------------------------------------------------- */
-  'saved-view-header': (props) => (
-    <SavedViewHeader
-      viewId={str(props, 'viewId') ?? ''}
-      name={str(props, 'name') ?? ''}
-      scope={str(props, 'scope') ?? ''}
-      scopeLabel={str(props, 'scopeLabel') ?? ''}
-      subtitle={str(props, 'subtitle') ?? ''}
-      backHref={str(props, 'backHref') ?? '/knowledge/views'}
-      backLabel={str(props, 'backLabel') ?? ''}
-      canEdit={props.canEdit === true}
-      labels={props.labels as ComponentProps<typeof SavedViewHeader>['labels']}
-    />
-  ),
-  'saved-view-meta': (props) => (
-    <SavedViewMeta
-      typeLabel={str(props, 'typeLabel') ?? ''}
-      lastUpdated={str(props, 'lastUpdated') ?? ''}
-      rowsRange={str(props, 'rowsRange') ?? null}
-    />
-  ),
-  'result-view': (props) => (
-    <ResultView
-      company={str(props, 'company') ?? ''}
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? null}
-      result={props.result as ComponentProps<typeof ResultView>['result']}
-      drillTarget={props.drillTarget as ComponentProps<typeof ResultView>['drillTarget']}
-    />
-  ),
-  'balance-check': (props) => (
-    <BalanceCheck
-      equation={str(props, 'equation') ?? ''}
-      balanced={props.balanced === true}
-      label={str(props, 'label') ?? ''}
-    />
-  ),
-
-  /* --- bank matching workspace ------------------------------------------------ */
-  /** Whole: it owns selection state across three paginated lists plus the
-   *  match/unmatch calls and an add-journal form. Decomposing it would strand
-   *  the selection from the actions it drives. */
-  'match-workspace': (props) => (
-    <MatchWorkspace
-      accounts={(props.accounts as ComponentProps<typeof MatchWorkspace>['accounts']) ?? []}
-      offsetAccounts={
-        (props.offsetAccounts as ComponentProps<typeof MatchWorkspace>['offsetAccounts']) ?? []
-      }
-      account={(props.account as ComponentProps<typeof MatchWorkspace>['account']) ?? null}
-      session={(props.session as ComponentProps<typeof MatchWorkspace>['session']) ?? null}
-      data={(props.data as ComponentProps<typeof MatchWorkspace>['data']) ?? null}
-      totals={(props.totals as ComponentProps<typeof MatchWorkspace>['totals']) ?? null}
-      currentParams={(props.currentParams as ComponentProps<typeof MatchWorkspace>['currentParams']) ?? {}}
-      tab={(str(props, 'tab') ?? 'match') as ComponentProps<typeof MatchWorkspace>['tab']}
-    />
-  ),
-
-  'psp-settlements': (props) => (
-    <PspSettlementsWorkspace
-      strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>['strings']}
-      initialRows={
-        (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
-      }
-      initialSubsidiaries={
-        (props.initialSubsidiaries as ComponentProps<typeof PspSettlementsWorkspace>['initialSubsidiaries']) ?? null
-      }
-    />
-  ),
-
-  /* --- payroll setup workspace ------------------------------------------------ */
-  //
-  // The tab bodies are SLOTS, not widgets with props: each re-derives the org
-  // id, the registry entry and the manage gate from the session, so the spec
-  // carries only which tab is open and the URL it was rendering with.
-  'payroll-setup-header': (props) => (
-    <PayrollSetupHeader
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      launcher={props.launcher as ComponentProps<typeof PayrollSetupHeader>['launcher']}
-    />
-  ),
-  'payroll-setup-banner': (props) => (
-    <PayrollSetupBanner
-      launcher={props.launcher as ComponentProps<typeof PayrollSetupBanner>['launcher']}
-    />
-  ),
-  /** The active-vs-plain link pair (and aria-current set vs omitted) lives in
-   *  the component; every `active` flag is loader-resolved data. */
-  'payroll-setup-tabs': (props) => (
-    <PayrollSetupTabs
-      groups={(props.groups as ComponentProps<typeof PayrollSetupTabs>['groups']) ?? []}
-      activeGroup={str(props, 'activeGroup') ?? ''}
-      tabsAria={str(props, 'tabsAria') ?? ''}
-      subTabs={(props.subTabs as ComponentProps<typeof PayrollSetupTabs>['subTabs']) ?? []}
-    />
-  ),
-  'payroll-packs-tab': () => <PacksTabSlot />,
-  'payroll-accounts-tab': () => <AccountsTabSlot />,
-  'payroll-payday-tab': () => <PaydayTabSlot />,
-  'payroll-rates-tab': () => <RatesTabSlot />,
-  'payroll-schedules-tab': () => <WorkSchedulesTabSlot />,
-  'payroll-derived-preview-tab': (props) => (
-    <DerivedPreviewTabSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
-  ),
-  'payroll-holidays-tab': (props) => (
-    <HolidaysTabSlot
-      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') ?? '/admin/setup/payroll'}
-    />
-  ),
-  'payroll-holiday-calendar-tab': (props) => (
-    <HolidayCalendarTabSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
-  ),
+  'saved-view-header': REPORTING_WIDGETS['saved-view-header'],
+  'saved-view-meta': REPORTING_WIDGETS['saved-view-meta'],
+  'result-view': REPORTING_WIDGETS['result-view'],
+  'balance-check': REPORTING_WIDGETS['balance-check'],
+  'match-workspace': BANKING_WIDGETS['match-workspace'],
+  'psp-settlements': BANKING_WIDGETS['psp-settlements'],
+  'payroll-setup-header': PAYROLL_WIDGETS['payroll-setup-header'],
+  'payroll-setup-banner': PAYROLL_WIDGETS['payroll-setup-banner'],
+  'payroll-setup-tabs': PAYROLL_WIDGETS['payroll-setup-tabs'],
+  'payroll-packs-tab': PAYROLL_WIDGETS['payroll-packs-tab'],
+  'payroll-accounts-tab': PAYROLL_WIDGETS['payroll-accounts-tab'],
+  'payroll-payday-tab': PAYROLL_WIDGETS['payroll-payday-tab'],
+  'payroll-rates-tab': PAYROLL_WIDGETS['payroll-rates-tab'],
+  'payroll-schedules-tab': PAYROLL_WIDGETS['payroll-schedules-tab'],
+  'payroll-derived-preview-tab': PAYROLL_WIDGETS['payroll-derived-preview-tab'],
+  'payroll-holidays-tab': PAYROLL_WIDGETS['payroll-holidays-tab'],
+  'payroll-holiday-calendar-tab': PAYROLL_WIDGETS['payroll-holiday-calendar-tab'],
 
   /* --- automation flows ------------------------------------------------------- */
   'new-flow': () => <NewFlowListButton />,
@@ -2454,121 +1501,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       updatedAt={str(props, 'updatedAt') ?? ''}
     />
   ),
-
-  /* --- labor costing / pricing ------------------------------------------------ */
-  /** Not `link-button`: that renders one 14px icon with no space and no
-   *  `size="sm"`. This cluster is two sized buttons with spaced icons plus a
-   *  teal text link carrying a literal arrow. Diffed, kept separate. */
-  'labor-costing-header-actions': (props) => (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button asChild variant="outline" size="sm">
-        <Link href={(str(props, 'guideHref') ?? '') as never}>
-          <Sparkles size={14} aria-hidden /> {str(props, 'guideLabel') ?? ''}
-        </Link>
-      </Button>
-      <Button asChild variant="ghost" size="sm">
-        <Link href="/docs/labor-costing">
-          <BookOpen size={14} aria-hidden /> {str(props, 'docsLabel') ?? ''}
-        </Link>
-      </Button>
-      <Link
-        href="/admin/setup/overhead"
-        className="px-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-      >
-        {str(props, 'overheadLabel') ?? ''} →
-      </Link>
-    </div>
-  ),
-  /** Not `module-home-tabs`: that is a pill strip; these are underline links
-   *  with no `aria-current`. */
-  'labor-costing-tabs': (props) => {
-    const tabs = (props.tabs as { href: string; label: string; active: boolean }[]) ?? []
-    return (
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href as never}
-            className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              tab.active
-                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-    )
-  },
-  /** The spec spreads the workspace's props directly, as the loader builds
-   *  them — there is no nested `workspace` bag. */
-  'labor-costing-workspace': (props) => (
-    <LaborCostingWorkspace {...(props as unknown as ComponentProps<typeof LaborCostingWorkspace>)} />
-  ),
-  'labor-pricing-heading': (props) => (
-    <LaborPricingHeading
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      docsHref={str(props, 'docsHref') ?? '/docs/labor-pricing'}
-      docsLabel={str(props, 'docsLabel') ?? ''}
-    />
-  ),
-  'labor-pricing-view': (props) => (
-    <LaborPricingView {...(props as unknown as ComponentProps<typeof LaborPricingView>)} />
-  ),
-
-  /* --- pay run wizard --------------------------------------------------------- */
-  /** Five freely-navigable steps whose every control is a fetch flow plus
-   *  client state a spec cannot name — the /tax shape. */
-  'pay-run-wizard': (props) => (
-    <RunWizard {...(props as unknown as ComponentProps<typeof RunWizard>)} />
-  ),
-
-  /* --- payroll cockpit ------------------------------------------------------- */
-  'payroll-settings-banner': (props) => (
-    <PayrollChecklistBanner
-      text={str(props, 'text') ?? ''}
-      settings={str(props, 'settings') ?? ''}
-      openSettingsLabel={str(props, 'openSettingsLabel') ?? ''}
-    />
-  ),
-  /** Includes its own empty state: a negated conditional pair is not a spec
-   *  construct, the same call the purchasing cockpit made. */
-  'payroll-current-period': (props) => (
-    <PayrollScheduleList
-      schedules={(props.schedules as PayrollScheduleListProps['schedules']) ?? []}
-      emptyText={str(props, 'emptyText') ?? ''}
-      showSetupLink={props.showSetupLink === true}
-      setupLabel={str(props, 'setupLabel') ?? ''}
-      labels={
-        (props.labels as PayrollScheduleListProps['labels']) ?? {
-          frequency: {},
-          period: '',
-          payDate: '',
-          employees: '',
-          net: '',
-        }
-      }
-    />
-  ),
-  'payroll-previous-run': (props) => (
-    <PayrollPreviousRun
-      run={(props.run as PayrollPreviousRunProps['run']) ?? null}
-      periodLabel={str(props, 'periodLabel') ?? ''}
-      payDateLabel={str(props, 'payDateLabel') ?? ''}
-      netLabel={str(props, 'netLabel') ?? ''}
-      employeesLabel={str(props, 'employeesLabel') ?? ''}
-      noneText={str(props, 'noneText') ?? ''}
-    />
-  ),
-  'payroll-manage-links': (props) => (
-    <PayrollManageLinks
-      paySchedulesLabel={str(props, 'paySchedulesLabel') ?? ''}
-      payComponentsLabel={str(props, 'payComponentsLabel') ?? ''}
-    />
-  ),
+  'labor-costing-header-actions': PAYROLL_WIDGETS['labor-costing-header-actions'],
+  'labor-costing-tabs': PAYROLL_WIDGETS['labor-costing-tabs'],
+  'labor-costing-workspace': PAYROLL_WIDGETS['labor-costing-workspace'],
+  'labor-pricing-heading': PAYROLL_WIDGETS['labor-pricing-heading'],
+  'labor-pricing-view': PAYROLL_WIDGETS['labor-pricing-view'],
+  'pay-run-wizard': PAYROLL_WIDGETS['pay-run-wizard'],
+  'payroll-settings-banner': PAYROLL_WIDGETS['payroll-settings-banner'],
+  'payroll-current-period': PAYROLL_WIDGETS['payroll-current-period'],
+  'payroll-previous-run': PAYROLL_WIDGETS['payroll-previous-run'],
+  'payroll-manage-links': PAYROLL_WIDGETS['payroll-manage-links'],
 
   /* --- compliance cockpit ---------------------------------------------------- */
   //
@@ -2614,69 +1556,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       empty={str(props, 'empty') ?? ''}
     />
   ),
-
-  /* --- tax ------------------------------------------------------------------- */
-  /**
-   * The whole tax page through one widget, and coarse by necessity: the native
-   * page sits inside `PageContainer`, whose motion wrappers carry
-   * `data-page-motion` attributes and post-animation inline styles a spec grid
-   * (a plain div) cannot reproduce. Every unit below is a shared component the
-   * page has always rendered; this only binds loader data to props. The tab
-   * flags are loader-computed and applied inside `TaxTabPanels`, because a
-   * `when` cannot cross a widget boundary.
-   */
-  'tax-page': (props) => (
-    <TaxPageShell>
-      <TaxPageHeader
-        title={str(props, 'title') ?? ''}
-        description={str(props, 'description') ?? ''}
-        setupHref={str(props, 'setupHref') ?? '/admin/setup/tax-return-forms'}
-        setupLabel={str(props, 'setupLabel') ?? ''}
-        canManageSetup={props.canManageSetup === true}
-      />
-      <TaxTabs tabs={(props.tabs as ComponentProps<typeof TaxTabs>['tabs']) ?? []} />
-      <TaxTabPanels
-        tabKey={str(props, 'tabKey') ?? 'prepare'}
-        onPrepare={props.onPrepare === true}
-        onHistory={props.onHistory === true}
-        prepare={
-          <TaxPreparePanel
-            forms={(props.forms as ComponentProps<typeof TaxPreparePanel>['forms']) ?? []}
-            canSave={props.canSave === true}
-            canManageSetup={props.canManageSetup === true}
-          />
-        }
-        history={<TaxHistoryTable {...(props.history as ComponentProps<typeof TaxHistoryTable>)} />}
-      />
-    </TaxPageShell>
-  ),
-  'tax-filing-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof TaxFilingDrawer>['drawer']
-    if (!drawer) return null
-    return <TaxFilingDrawer drawer={drawer} />
-  },
-
-  /* --- customers cockpit ----------------------------------------------------- */
-  'relationships-section': (props) => (
-    <RelationshipsSection
-      rows={(props.rows as ComponentProps<typeof RelationshipsSection>['rows']) ?? []}
-      crmEnabled={props.crmEnabled !== false}
-      empty={str(props, 'empty') ?? ''}
-    />
-  ),
-  /** The AR strip. Named `customer-ar-pulse`, not `ar-pulse`: the purchasing
-   *  cockpit already owns `ap-pulse`, and two similarly named entries pointing
-   *  at different components is exactly how a registry starts lying. */
-  'customer-ar-pulse': (props) => (
-    <CustomerArPulse
-      outstanding={str(props, 'outstanding') ?? ''}
-      overdue={str(props, 'overdue') ?? ''}
-      overdueIsNegative={props.overdueIsNegative === true}
-      dso={str(props, 'dso') ?? ''}
-      labels={props.labels as ComponentProps<typeof CustomerArPulse>['labels']}
-      href={str(props, 'href') ?? ''}
-    />
-  ),
+  'tax-page': ASSETS_TAX_WIDGETS['tax-page'],
+  'tax-filing-drawer': ASSETS_TAX_WIDGETS['tax-filing-drawer'],
+  'relationships-section': COMMERCE_WIDGETS['relationships-section'],
+  'customer-ar-pulse': COMMERCE_WIDGETS['customer-ar-pulse'],
 
   /* --- admin hub ------------------------------------------------------------ */
   /** One hub navigation card. The icon and the accent are lookups resolved
@@ -2730,57 +1613,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       </Link>
     )
   },
-
-  /* --- payments ------------------------------------------------------------- */
-  'new-payment': (props) => (
-    <NewPaymentButton
-      kind={(str(props, 'kind') ?? 'vendor_payment') as ComponentProps<typeof NewPaymentButton>['kind']}
-      basePath={str(props, 'basePath') ?? '/payments'}
-      label={str(props, 'label') ?? ''}
-    />
-  ),
-  /** The create-run action is a plain link button, not the payment button —
-   *  the two are a conditional pair the loader chooses between. */
-  'new-payment-run': (props) => {
-    const href = str(props, 'href')
-    if (!href) return null
-    return (
-      <Button asChild>
-        <Link href={href as never}>
-          <Plus size={16} />
-          {str(props, 'label') ?? ''}
-        </Link>
-      </Button>
-    )
-  },
-  'payments-view-tabs': (props) => (
-    <PaymentsViewTabs
-      view={(str(props, 'view') ?? 'payments') as 'payments' | 'runs'}
-      labels={props.labels as ComponentProps<typeof PaymentsViewTabs>['labels']}
-    />
-  ),
-  /** Not the payments strip: this one carries no hover treatment and no
-   *  transition class, and the harness compares class strings exactly. */
-  'receipts-view-tabs': (props) => (
-    <ReceiptsViewTabs
-      view={(str(props, 'view') ?? 'receipts') as 'receipts' | 'runs'}
-      labels={props.labels as ComponentProps<typeof ReceiptsViewTabs>['labels']}
-    />
-  ),
-  'payments-section': (props) => (
-    <PaymentsSectionSlot
-      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') ?? '/payments'}
-      kind={str(props, 'kind') === 'customer_payment' ? 'customer_payment' : 'vendor_payment'}
-    />
-  ),
-  'payment-runs-section': (props) => (
-    <RunsSectionSlot
-      sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') === '/receipts' ? '/receipts' : '/payments'}
-      direction={str(props, 'direction') === 'inbound' ? 'inbound' : 'outbound'}
-    />
-  ),
+  'new-payment': BANKING_WIDGETS['new-payment'],
+  'new-payment-run': BANKING_WIDGETS['new-payment-run'],
+  'payments-view-tabs': BANKING_WIDGETS['payments-view-tabs'],
+  'receipts-view-tabs': BANKING_WIDGETS['receipts-view-tabs'],
+  'payments-section': BANKING_WIDGETS['payments-section'],
+  'payment-runs-section': BANKING_WIDGETS['payment-runs-section'],
 
   /* --- file cabinet --------------------------------------------------------- */
   'documents-actions': (props) => (
@@ -2831,22 +1669,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <FolderDrawer key={remountKey} {...rest} />
   },
-
-  /* --- bank feeds ----------------------------------------------------------- */
-  /** One widget, not a table: every row is a bundle of conditional pairs (a
-   *  last-attempt date or nothing, an error line or nothing, a paused marker
-   *  or nothing), and a spec must never express those. */
-  'bank-feed-panel': (props) => (
-    <BankFeedPanel
-      title={str(props, 'title') ?? ''}
-      manageLabel={str(props, 'manageLabel') ?? ''}
-      emptyMessage={str(props, 'emptyMessage') ?? ''}
-      lastSyncLabel={str(props, 'lastSyncLabel') ?? ''}
-      lastAttemptLabel={str(props, 'lastAttemptLabel') ?? ''}
-      neverLabel={str(props, 'neverLabel') ?? ''}
-      feeds={(props.feeds as ComponentProps<typeof BankFeedPanel>['feeds']) ?? []}
-    />
-  ),
+  'bank-feed-panel': BANKING_WIDGETS['bank-feed-panel'],
 
   /* --- budgets -------------------------------------------------------------- */
   'new-budget': (props) => (
@@ -2860,52 +1683,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <BudgetDrawer key={remountKey} {...rest} />
   },
-
-  /* --- pay runs ------------------------------------------------------------- */
-  'new-pay-run': (props) => (
-    <NewRunButton
-      schedules={(props.schedules as ComponentProps<typeof NewRunButton>['schedules']) ?? []}
-      finalPayCandidates={
-        (props.finalPayCandidates as ComponentProps<typeof NewRunButton>['finalPayCandidates']) ?? []
-      }
-      today={str(props, 'today') ?? ''}
-    />
-  ),
-  /** A pay run opens a full wizard page, not a drawer, so its row action is a
-   *  plain link built from the row id. */
-  'pay-run-row-actions': (props) => (
-    <Link
-      href={`/payroll/runs/${String(props.id ?? '')}` as never}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
-      aria-label={str(props, 'label') ?? ''}
-      title={str(props, 'label') ?? ''}
-    >
-      <ArrowUpRight size={15} />
-    </Link>
-  ),
-
-  /* --- field tickets -------------------------------------------------------- */
-  /** Keyless, like `journal-drawer`: the native page renders no key and the
-   *  drawer resets from effects on the ticket id. */
-  'field-ticket-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof FieldTicketDrawer> | null
-    if (!drawer) return null
-    return <FieldTicketDrawer {...drawer} />
-  },
-
-  /* --- bank rules ----------------------------------------------------------- */
-  'new-bank-rule': () => <NewRuleButton />,
-  'run-bank-rules': (props) => (
-    <RunRulesButton
-      accounts={(props.accounts as ComponentProps<typeof RunRulesButton>['accounts']) ?? []}
-    />
-  ),
-  'bank-rule-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof RuleDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <RuleDrawer key={remountKey} {...rest} />
-  },
+  'new-pay-run': PAYROLL_WIDGETS['new-pay-run'],
+  'pay-run-row-actions': PAYROLL_WIDGETS['pay-run-row-actions'],
+  'field-ticket-drawer': COMMERCE_WIDGETS['field-ticket-drawer'],
+  'new-bank-rule': BANKING_WIDGETS['new-bank-rule'],
+  'run-bank-rules': BANKING_WIDGETS['run-bank-rules'],
+  'bank-rule-drawer': BANKING_WIDGETS['bank-rule-drawer'],
 
   /* --- entity role lists ---------------------------------------------------- */
   'new-role-party': (props) => (
@@ -2937,41 +1720,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <WeeklyGrid key={remountKey} {...rest} />
   },
-
-  /* --- items ---------------------------------------------------------------- */
-  /** One widget for the whole header slot: the native markup differs per view
-   *  (the catalog wraps tabs+button, rate books passes bare tabs), and `wrap`
-   *  selects between them as data rather than as a branch in the spec. */
-  'items-header-actions': (props) => {
-    const tabs = (props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']) ?? []
-    const inner = (
-      <>
-        <ModuleHomeTabs tabs={tabs} />
-        {props.showNew === true ? <NewItemButton /> : null}
-      </>
-    )
-    return props.wrap === true ? <div className="flex items-center gap-3">{inner}</div> : inner
-  },
-  'new-item': () => <NewItemButton />,
-  'new-item-redirect': () => <NewItemRedirect />,
-  'item-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ItemDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ItemDrawer key={remountKey} {...rest} />
-  },
-
-  /* --- inventory ------------------------------------------------------------ */
-  'new-movement': () => <NewMovementButton />,
-  'inventory-action-drawer': (props) => (
-    <InventoryActionDrawer
-      items={(props.items as ComponentProps<typeof InventoryActionDrawer>['items']) ?? []}
-      stockLocations={
-        (props.stockLocations as ComponentProps<typeof InventoryActionDrawer>['stockLocations']) ?? []
-      }
-      accounts={(props.accounts as ComponentProps<typeof InventoryActionDrawer>['accounts']) ?? []}
-    />
-  ),
+  'items-header-actions': COMMERCE_WIDGETS['items-header-actions'],
+  'new-item': COMMERCE_WIDGETS['new-item'],
+  'new-item-redirect': COMMERCE_WIDGETS['new-item-redirect'],
+  'item-drawer': COMMERCE_WIDGETS['item-drawer'],
+  'new-movement': COMMERCE_WIDGETS['new-movement'],
+  'inventory-action-drawer': COMMERCE_WIDGETS['inventory-action-drawer'],
   /** A registry-backed configuration surface re-homed onto another module's
    *  tab. The registry entry is CODE, so the spec names it by key and the slot
    *  looks it up; org id and the manage gate are re-derived from the session. */
@@ -3027,37 +1781,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
-
-  /* --- expense reports ------------------------------------------------------ */
-  /** The button owns its own labels — it is a client component reading the
-   *  message catalog directly, so the spec passes nothing. */
-  'new-expense': () => <NewExpenseButton />,
-  /**
-   * Per-row expense actions. The open href is BUILT here from the row id and
-   * the current URL, because the native page builds it the same way and a
-   * spec cannot construct a query string. `canSubmit`/`canPost` arrive as
-   * loader-resolved booleans, not as a capability object.
-   */
-  'expense-row-actions': (props) => (
-    <ExpenseActions
-      id={String(props.id ?? '')}
-      status={String(props.status ?? '')}
-      canSubmit={props.canSubmit === true}
-      canPost={props.canPost === true}
-      openHref={buildListDrawerHref(
-        '/expenses/reports',
-        (props.sp as Record<string, string | string[] | undefined>) ?? {},
-        'expense',
-        String(props.id ?? ''),
-      )}
-    />
-  ),
-  'expense-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ExpenseDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ExpenseDrawer key={remountKey} {...rest} />
-  },
+  'new-expense': COMMERCE_WIDGETS['new-expense'],
+  'expense-row-actions': COMMERCE_WIDGETS['expense-row-actions'],
+  'expense-drawer': COMMERCE_WIDGETS['expense-drawer'],
 
   /* --- period close --------------------------------------------------------- */
   /** `size: 'sm'` is load-bearing here: the default renders h-10 where the
@@ -3103,36 +1829,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       startDefaultBookId={str(props, 'startDefaultBookId') ?? ''}
     />
   ),
-
-  /* --- orders (quotes, sales orders, purchase orders) ----------------------- */
-  //
-  // One set of entries for all three order pages: they render the same
-  // `_order` components and differ only in the api path, base path and param
-  // the loader resolves. Three near-identical registry entries would have been
-  // three places to drift.
-  'new-order': (props) => (
-    <NewOrderButton
-      apiPath={str(props, 'apiPath') ?? ''}
-      base={str(props, 'base') ?? ''}
-      param={str(props, 'param') ?? ''}
-      label={str(props, 'label') ?? ''}
-      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
-    />
-  ),
-  'new-order-redirect': (props) => (
-    <NewOrderRedirect
-      apiPath={str(props, 'apiPath') ?? ''}
-      base={str(props, 'base') ?? ''}
-      param={str(props, 'param') ?? ''}
-      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
-    />
-  ),
-  'order-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof OrderDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <OrderDrawer key={remountKey} {...rest} />
-  },
+  'new-order': COMMERCE_WIDGETS['new-order'],
+  'new-order-redirect': COMMERCE_WIDGETS['new-order-redirect'],
+  'order-drawer': COMMERCE_WIDGETS['order-drawer'],
 
   /* --- setup workspace ------------------------------------------------------ */
   /** The inline "Learn more" link (with its significant leading space) appears
@@ -3206,34 +1905,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     return <JournalDrawer {...drawer} />
   },
   'new-journal': () => <NewJournalButton />,
-
-  /* --- fixed assets --------------------------------------------------------- */
-  'assets-tabs': (props) => (
-    <AssetsTabs tabs={(props.tabs as ComponentProps<typeof AssetsTabs>['tabs']) ?? []} />
-  ),
-  'assets-doc-link': (props) => <AssetsDocLink label={str(props, 'label') ?? ''} />,
-  'assets-equipment-link': (props) => <AssetsEquipmentLink label={str(props, 'label') ?? ''} />,
-  'new-asset': () => <NewAssetButton />,
-  'new-asset-redirect': () => <NewAssetRedirect />,
-  'run-depreciation': (props) => (
-    <RunDepreciationButton
-      books={(props.books as ComponentProps<typeof RunDepreciationButton>['books']) ?? []}
-    />
-  ),
-  'asset-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof AssetDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <AssetDrawer key={remountKey} {...rest} />
-  },
-  'tax-pools': (props) => (
-    <TaxPoolsView
-      canRun={props.canRun === true}
-      canConfigure={props.canConfigure === true}
-      regimes={(props.regimes as ComponentProps<typeof TaxPoolsView>['regimes']) ?? []}
-      defaultTaxYear={typeof props.defaultTaxYear === 'number' ? props.defaultTaxYear : 0}
-    />
-  ),
+  'assets-tabs': ASSETS_TAX_WIDGETS['assets-tabs'],
+  'assets-doc-link': ASSETS_TAX_WIDGETS['assets-doc-link'],
+  'assets-equipment-link': ASSETS_TAX_WIDGETS['assets-equipment-link'],
+  'new-asset': ASSETS_TAX_WIDGETS['new-asset'],
+  'new-asset-redirect': ASSETS_TAX_WIDGETS['new-asset-redirect'],
+  'run-depreciation': ASSETS_TAX_WIDGETS['run-depreciation'],
+  'asset-drawer': ASSETS_TAX_WIDGETS['asset-drawer'],
+  'tax-pools': ASSETS_TAX_WIDGETS['tax-pools'],
 
   /* --- sales forecasts ------------------------------------------------------ */
   'forecast-snapshot-button': (props) => (
@@ -3327,45 +2006,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <RecordDrawer key={remountKey} {...rest} />
   },
-
-  /* --- bank account workspace ---------------------------------------------- */
-  /** One widget, not four stat tiles: the native tiles are plain bordered divs
-   *  with conditional content, while `stat-tile` renders the cockpit tile. */
-  'account-stats': (props) => (
-    <AccountStats
-      glBalanceLabel={str(props, 'glBalanceLabel') ?? ''}
-      glBalanceValue={str(props, 'glBalanceValue') ?? ''}
-      reconciledThroughLabel={str(props, 'reconciledThroughLabel') ?? ''}
-      reconciledThrough={(props.reconciledThrough as string | null) ?? null}
-      neverLabel={str(props, 'neverLabel') ?? ''}
-      unmatchedLinesLabel={str(props, 'unmatchedLinesLabel') ?? ''}
-      unmatchedLinesValue={str(props, 'unmatchedLinesValue') ?? ''}
-      reconciliationLabel={str(props, 'reconciliationLabel') ?? ''}
-      reconBadgeLabel={str(props, 'reconBadgeLabel') ?? ''}
-      reconBadgeVariant={(props.reconBadgeVariant as 'warning' | 'secondary') ?? 'secondary'}
-    />
-  ),
-  'unmatched-count-cell': (props) => (
-    <UnmatchedCountCell display={str(props, 'display') ?? ''} isZero={props.isZero === true} />
-  ),
-  'recon-action-cell': (props) => (
-    <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
-  ),
-  'import-statement': (props) => <ImportStatementButton accountId={str(props, 'accountId') ?? ''} />,
-  'start-reconciliation': (props) => (
-    <StartReconciliationButton
-      accountId={str(props, 'accountId') ?? ''}
-      openReconciliationId={(props.openReconciliationId as string | null) ?? null}
-      glBalance={str(props, 'glBalance') ?? ''}
-    />
-  ),
-  /** The statement drawer owns its own sl* search/sort/pagination internally,
-   *  so the whole payload passes through — the api-key-drawer precedent. */
-  'statement-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof StatementDrawer> | null
-    if (!drawer) return null
-    return <StatementDrawer {...drawer} />
-  },
+  'account-stats': BANKING_WIDGETS['account-stats'],
+  'unmatched-count-cell': BANKING_WIDGETS['unmatched-count-cell'],
+  'recon-action-cell': BANKING_WIDGETS['recon-action-cell'],
+  'import-statement': BANKING_WIDGETS['import-statement'],
+  'start-reconciliation': BANKING_WIDGETS['start-reconciliation'],
+  'statement-drawer': BANKING_WIDGETS['statement-drawer'],
 
   /* --- documents lists ----------------------------------------------------- */
   'new-document': (props) => (
@@ -3467,16 +2113,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
     />
   ),
-
-  /* --- projects ----------------------------------------------------------- */
-  'new-project': () => <NewProjectButton />,
-  'new-project-redirect': () => <NewProjectRedirect />,
-  'project-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ProjectDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ProjectDrawer key={remountKey} {...rest} />
-  },
+  'new-project': COMMERCE_WIDGETS['new-project'],
+  'new-project-redirect': COMMERCE_WIDGETS['new-project-redirect'],
+  'project-drawer': COMMERCE_WIDGETS['project-drawer'],
 
   /* --- chart of accounts -------------------------------------------------- */
   'new-account': (props) => (
@@ -3619,21 +2258,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-  'new-report': () => <NewReportButton />,
-  'report-name-cell': (props) => (
-    <ReportNameCell
-      name={str(props, 'name') ?? ''}
-      href={str(props, 'href') ?? ''}
-      summary={str(props, 'summary') ?? ''}
-    />
-  ),
-  'custom-report-actions': (props) => (
-    <CustomReportActions
-      id={str(props, 'id') ?? ''}
-      kind={str(props, 'kind') === 'built_in' ? 'built_in' : 'custom'}
-      canCreate={props.canCreate === true}
-    />
-  ),
+  'new-report': REPORTING_WIDGETS['new-report'],
+  'report-name-cell': REPORTING_WIDGETS['report-name-cell'],
+  'custom-report-actions': REPORTING_WIDGETS['custom-report-actions'],
   'compliance-matrix': (props) => (
     <VendorComplianceMatrix
       rows={props.rows as ComponentProps<typeof VendorComplianceMatrix>['rows']}
@@ -3816,21 +2443,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       transactionLabel={str(props, 'transactionLabel') ?? ''}
     />
   ),
-  'save-view': () => <SaveViewButton />,
-  'export-menu': (props) => (
-    <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />
-  ),
-  'schedule-report': (props) => {
-    const definitionId = str(props, 'definitionId')
-    if (!definitionId) return null
-    return (
-      <ScheduleReportButton
-        definitionId={definitionId}
-        statementParams={stringRecord(props, 'statementParams')}
-        historyHref={str(props, 'historyHref')}
-      />
-    )
-  },
+  'save-view': REPORTING_WIDGETS['save-view'],
+  'export-menu': REPORTING_WIDGETS['export-menu'],
+  'schedule-report': REPORTING_WIDGETS['schedule-report'],
 }
 
 /**
