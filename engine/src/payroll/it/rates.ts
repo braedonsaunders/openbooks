@@ -1,8 +1,8 @@
 /**
- * The IT pack's tax-year support: 2025 transcribed, 2026 refused by name.
+ * The IT pack's tax-year support: 2025 and 2026 transcribed.
  *
- * 2025 (this file + tax-year-2025.ts): IRPEF 23/35/43 scaglioni (L. 207/2024
- * art. 1 c. 2, AdE rates page, 730/2026 TABELLA 1), art. 13 detrazione lavoro
+ * 2025 (tax-year-2025.ts): IRPEF 23/35/43 scaglioni (L. 207/2024 art. 1
+ * c. 2, AdE rates page, 730/2026 TABELLA 1), art. 13 detrazione lavoro
  * dipendente with the 1.955 base and 1.910/1.190 taper (Circ. 4/E/2025,
  * 730/2026 TABELLA 6), the +65 euro art. 13 c. 2 increase, the L. 207/2024
  * c. 4 somma and c. 6 ulteriore detrazione, the trattamento integrativo with
@@ -11,19 +11,22 @@
  * (INPS Circ. 26/2025, Tabella 1/2025), and the CU half-up-to-cent rounding.
  * Sourcing outcomes per host are recorded in tax-year-2025.ts.
  *
- * 2026 is refused by name: L. 30 dicembre 2025, n. 199, art. 1 c. 3–4 cut
- * the second bracket (€28,001–€50,000) from 35% to 33% — so above €50,000
- * the due tax is €13,700 + 43% — and neutralises the benefit above €200,000
- * of total income. The Agenzia delle Entrate's own rates page (last update
- * 16/01/2026) carries the cut as a note while its table still prints the
- * prior 35% / €14,140 figures, so the page alone cannot be transcribed
- * without reconciling table against note against the Gazzetta text; INPS
- * Circ. n. 6 del 30 gennaio 2026 and the 2026 addizionali deliberations are
- * likewise untranscribed here.
+ * 2026 (tax-year-2026.ts): IRPEF 23/33/43 (L. 199/2025 art. 1 c. 3, AdE
+ * rates page note upd. 16/01/2026 — the page's own table still prints 35%,
+ * the note governs); the 200k sterilizzazione (L. 199/2025 art. 1 c. 4)
+ * with no engine effect (no oneri inputs); standing art. 13 / c. 4 somma /
+ * c. 6 ulteriore / TI law the 2026 Budget did not amend; INPS 2026 annual
+ * values (Circ. 6/2026: minimale 58,13, prima fascia 56.224, massimale
+ * 122.295; Circ. 27/2026: FPLD 33%) with the 9,19/23,81 split carried from
+ * Tabella 1/2025 (labeled in the module); the CU half-up rule and the ratio
+ * truncation carried pending CU 2027 / 730-2027. The 2026-only 5%/15%
+ * substitute regimes are refused by name (no engine inputs for them).
+ * Sourcing outcomes per host are recorded in tax-year-2026.ts.
  */
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollTaxYearSupport } from "../tax-years.ts";
 import { IT_2025_EDITION_LABEL } from "./tax-year-2025.ts";
+import { IT_2026_EDITION_LABEL } from "./tax-year-2026.ts";
 
 export const IT_TAX_YEARS: PayrollTaxYearSupport = {
   country: "IT",
@@ -37,6 +40,20 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
         + "AdE Circolare 4/E del 16 maggio 2025; AdE 730/2026 istruzioni "
         + "(redditi 2025); CU 2026 istruzioni; INPS Circolare n. 26 del 30 "
         + "gennaio 2025; INPS Tabella 1/2025",
+      status: "published",
+    },
+    {
+      year: 2026,
+      label: IT_2026_EDITION_LABEL,
+      effectiveFrom: "2026-01-01",
+      citation:
+        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4, 7, 10–11 "
+        + "(GU n. 301 del 30/12/2025, S.O.); AdE IRPEF rates page "
+        + "(upd. 16/01/2026); AdE Circ. 2/E del 24 febbraio 2026 + FAQ Circ. "
+        + "3/E/2026 (2026 substitute regimes, refused); L. 207/2024 art. 1 "
+        + "c. 2–7 (standing law, no sunset); D.L. 3/2020 art. 1 as amended "
+        + "(TI); INPS Circolare n. 6 del 30 gennaio 2026; INPS Circolare "
+        + "n. 27 dell'11 marzo 2026 (FPLD 33%, massimale 122.295)",
       status: "published",
     },
   ],
@@ -62,17 +79,24 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
     ],
     barrels: [],
     steps: [
-      "Read the year's Legge di Bilancio (for 2026: L. 30 dicembre 2025, n. 199, art. 1 c. 3–4 — "
-      + "second IRPEF bracket 33%, benefit neutralised above €200,000) from the Gazzetta Ufficiale.",
+      "Read the year's Legge di Bilancio from the Gazzetta Ufficiale (worked example for 2026: "
+      + "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4 — second IRPEF bracket 33%, benefit neutralised "
+      + "above €200,000 — plus the year's substitute regimes, which are refused by name when the "
+      + "engine has no inputs for them).",
       "Reconcile against the AdE IRPEF rates page "
       + "(https://www.agenziaentrate.gov.it/portale/web/english/personal-income-tax-rates-and-calculation): "
-      + "do not transcribe while its table and notes disagree.",
-      "Transcribe the year's INPS circular (for 2026: Circolare n. 6 del 30 gennaio 2026) — "
-      + "minimali, massimali, and FPLD/IVS employee/employer rates.",
+      + "do not transcribe while its table and notes disagree (in 2026 the note governed).",
+      "Transcribe the year's INPS circular (for 2026: Circolare n. 6 del 30 gennaio 2026, plus "
+      + "Circolare n. 27 dell'11 marzo 2026 for the FPLD total and massimale) — minimali, massimali, "
+      + "and FPLD/IVS employee/employer rates. A cell no 2026 publication states is CARRIED from the "
+      + "prior Tabella with the carry labeled in the year module, never silently.",
+      "Check the year's CU istruzioni and 730 TABELLA 6 for the rounding and ratio rules (for 2026 "
+      + "both were carried pending CU 2027 / 730-2027 — re-verify on publication).",
       "Transcribe the year's addizionale regionale deliberations and the MEF addizionale comunale "
       + "dataset; Trento and Bolzano deliberate separately inside region 04.",
-      "Add the edition to IT_TAX_YEARS.editions with the AdE provvedimento citation, flip "
-      + "installable to true, and wire computeItStatutory to the tables.",
+      "Add the edition to IT_TAX_YEARS.editions with the agency citations, add the year's tables "
+      + "module plus its IT_<year>_TABLES entry, and extend the taxYear dispatch in "
+      + "computeItStatutoryWithRates.",
     ],
   },
 };

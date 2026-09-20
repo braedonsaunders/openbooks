@@ -1,12 +1,12 @@
 /**
- * IT payroll pack tests — the declaration and the 2025 statutory pass.
+ * IT payroll pack tests — the declaration and the statutory pass.
  *
- * The pack is installable:true for 2025 (proven by tax-year-2025.test.ts);
- * 2026 is refused by name. Regions stay unsupported by choice (no region
- * publishes its own tables — surtaxes compute from tenant-declared rates),
- * while every withholding entry is implemented. The wrapper glue is tested
- * here with injected rates (no Postgres); the DB resolution lives in the
- * thin production entry only.
+ * The pack is installable:true for 2025 (proven by tax-year-2025.test.ts)
+ * and 2026 (proven by tax-year-2026.test.ts); later years are refused by
+ * name. All 20 regions are supported (no region publishes its own tables —
+ * surtaxes compute from tenant-declared rates), and every withholding entry
+ * is implemented. The wrapper glue is tested here with injected rates (no
+ * Postgres); the DB resolution lives in the thin production entry only.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -141,16 +141,19 @@ test("the certificate carries the engine's employee inputs", () => {
   assert.equal(IT_PAYROLL_PACK.certificates(), IT_CERTIFICATES);
 });
 
-test("2025 is published; 2026 is refused by name", () => {
+test("2025 and 2026 are published; later years are refused by name", () => {
   const published2025 = IT_TAX_YEARS.editions.filter(
     (edition) => edition.year === 2025 && edition.status === "published",
   );
   assert.equal(published2025.length, 1);
   assert.match(published2025[0]!.citation, /L\. 30 dicembre 2024, n\. 207/);
+  // Inverted (was: 2026 refused): the 2026 edition transcribed L. 199/2025's
+  // 33% second bracket. Never delete this — invert it again when 2027 lands.
   const published2026 = IT_TAX_YEARS.editions.filter(
     (edition) => edition.year === 2026 && edition.status === "published",
   );
-  assert.deepEqual(published2026, []);
+  assert.equal(published2026.length, 1);
+  assert.match(published2026[0]!.citation, /L\. 30 dicembre 2025, n\. 199/);
   assert.match(IT_TAX_YEARS.scaffold.steps.join("\n"), /L\. 30 dicembre 2025, n\. 199/);
   assert.equal(IT_PAYROLL_PACK.taxYears, IT_TAX_YEARS);
 });
@@ -231,20 +234,35 @@ function fakeCtx(overrides: {
   return { ctx, pushed };
 }
 
-test("the statutory pass refuses 2026 with the year before touching rates", async () => {
+test("the statutory pass computes 2026 and refuses untranscribed years by name", async () => {
+  // 2026 computes through the same glue (null rates refuse at the scope
+  // point, not at the year gate — the year is transcribed).
   await assert.rejects(
     computeItStatutoryWithRates(fakeCtx({ taxYear: 2026 }).ctx, {
       regionalRate: null,
       municipalRate: null,
       municipalExemption: null,
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof ItPayrollRefusal);
-      assert.ok(error instanceof PayrollError);
-      assert.match((error as Error).message, /2026/);
-      return true;
-    },
+    /it_addizionale_regionale.*03/,
   );
+  // Both sides of the transcribed window refuse with the year before
+  // touching rates: 2024 (prior) and 2027 (future). Never extrapolate.
+  for (const taxYear of [2024, 2027]) {
+    await assert.rejects(
+      computeItStatutoryWithRates(fakeCtx({ taxYear }).ctx, {
+        regionalRate: null,
+        municipalRate: null,
+        municipalExemption: null,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ItPayrollRefusal);
+        assert.ok(error instanceof PayrollError);
+        assert.match((error as Error).message, new RegExp(`tax year ${taxYear}`));
+        assert.match((error as Error).message, /2025 and 2026 are the transcribed/);
+        return true;
+      },
+    );
+  }
 });
 
 test("missing declared rates refuse naming the scope point", async () => {
@@ -335,7 +353,11 @@ test("CU and 770 are declared annually, unpopulated, with refused corrections", 
     assert.equal(filing.amendment.supported, false, `${filing.key} names its correction gap`);
     await assert.rejects(
       filing.population("org", 2025),
-      /no tax-year edition is transcribed/,
+      /no filing population is transcribed/,
+    );
+    await assert.rejects(
+      filing.population("org", 2026),
+      /no filing population is transcribed/,
     );
     assert.equal(filing.parseRowId("anything"), null);
   }

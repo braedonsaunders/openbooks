@@ -1,5 +1,5 @@
 /**
- * The Italy payroll pack: 2025 computes end to end.
+ * The Italy payroll pack: 2025 and 2026 compute end to end.
  *
  * Declares every statutory levy Italy withholds or accrues on dependent
  * employment — national IRPEF, the domicile region's addizionale regionale,
@@ -8,9 +8,9 @@
  * 20-region coverage, and the national festivity calendar.
  *
  * `installable: true` for 2025 (transcribed in tax-year-2025.ts, proven by
- * the tax-year-2025 goldens); 2026 is refused by name (see rates.ts —
- * L. 199/2025 rewrote the second IRPEF bracket and the AdE page is
- * internally inconsistent).
+ * the tax-year-2025 goldens) and 2026 (transcribed in tax-year-2026.ts,
+ * proven by the tax-year-2026 goldens — IRPEF 23/33/43 per L. 199/2025;
+ * later years are refused by name, see rates.ts).
  *
  * The trattamento integrativo and c. 4 somma payouts travel as generic
  * `credit` lines (kind `credit`, assessed on earnings, remitted to the tax

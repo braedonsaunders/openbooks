@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { formatInZone } from "../platform/business-date.ts";
+import { now, withSimClock } from "../platform/clock.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { payRunReadiness, payrollSetupState } from "./readiness.ts";
@@ -19,6 +21,7 @@ import {
   payrollTaxYearCoverage,
   payrollTaxYearForDate,
   payrollTaxYearProblem,
+  type PayrollTaxYearCoverage,
   payrollTaxYearSupport,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
@@ -137,6 +140,111 @@ test("the UNFILLED sentinel is findable wherever a scaffold left one", () => {
   assert.deepEqual(unfilledPaths({ a: "1", b: { c: UNFILLED } }), ["b.c"]);
   assert.deepEqual(unfilledPaths([{ rate: UNFILLED }]), ["0.rate"]);
   assert.deepEqual(unfilledPaths({ a: "1" }), []);
+});
+
+/**
+ * Packs track the CURRENT tax year (queue item 45: Italy was STALE at 2025
+ * while every other pack carried 2026).
+ *
+ * The engines have always refused an untranscribed year at Calculate time.
+ * This guard catches the drift EARLIER — the day a pack stops covering the
+ * current year — by reading the TYPED declaration
+ * (`payrollTaxYearCoverage()`), never a grep.
+ */
+
+const PINNED_TODAY = "2026-09-20";
+
+/**
+ * The instrument: which installable packs do NOT support their own current
+ * tax year. The current year comes from each pack's own year definition
+ * (`payrollTaxYearForDate`), so a fiscal-year pack (AU, July, closing-year
+ * naming) is asked about its year, not the calendar's. Each gap names the
+ * pack, the missing year, the years it does support, and the module that
+ * must transcribe them: the message is the product of this test, so it is
+ * asserted exactly, not merely that something failed.
+ */
+function currentYearGaps(
+  coverage: PayrollTaxYearCoverage[],
+  currentYearFor: (country: string) => number,
+): string[] {
+  const gaps: string[] = [];
+  for (const entry of coverage) {
+    if (!entry.installable) continue;
+    const current = currentYearFor(entry.country);
+    if (!entry.supported.includes(current)) {
+      gaps.push(
+        `${entry.country} does not support the current tax year ${current} — supported: `
+        + `[${entry.supported.join(", ")}], draft: [${entry.draft.join(", ")}] `
+        + `(see ${entry.ratesModule})`,
+      );
+    }
+  }
+  return gaps;
+}
+
+test("every installable pack supports its current tax year", () => {
+  // LIVE guard, on the real clock: "today" is the product's own business
+  // date (now() through formatInZone, the helper businessToday builds on),
+  // and each pack's current year is its own definition of it — never a
+  // hardcoded year, or this starts failing on 1 January. When a pack drifts
+  // (as IT did at 2025 while every other pack carried 2026), this goes red
+  // naming the pack.
+  const today = formatInZone(now(), "UTC");
+  const gaps = currentYearGaps(
+    payrollTaxYearCoverage(),
+    (country) => payrollTaxYearForDate(country, today).taxYear,
+  );
+  assert.deepEqual(gaps, []);
+});
+
+test("the instrument fails a pack pinned to a past year, naming it and its years", async () => {
+  // FAIL direction, on a pinned clock so the red is deterministic: Italy as
+  // it stood before its 2026 edition (supported [2025], current year 2026).
+  // This is the realistic red, not a synthetic collision — it is the exact
+  // message the live guard above would have printed for that tree.
+  await withSimClock(`${PINNED_TODAY}T12:00:00Z`, async () => {
+    const today = formatInZone(now(), "UTC");
+    assert.equal(today, PINNED_TODAY);
+    const coverage = payrollTaxYearCoverage().map((entry) =>
+      entry.country === "IT" ? { ...entry, supported: [2025], draft: [] } : entry);
+    // The year in the message comes from the pinned clock, not a literal:
+    // move the pin and this still names whatever year the pin sits in (and
+    // goes red if the pin ever lands inside 2025, where the pin stops
+    // demonstrating a gap at all).
+    const itYear = payrollTaxYearForDate("IT", today).taxYear;
+    assert.deepEqual(
+      currentYearGaps(coverage, (country) => payrollTaxYearForDate(country, today).taxYear),
+      [
+        `IT does not support the current tax year ${itYear} — supported: [2025], `
+        + "draft: [] (see engine/src/payroll/it/rates.ts)",
+      ],
+    );
+  });
+});
+
+test("the instrument passes the real set and ignores non-installable packs", async () => {
+  // PASS direction, same pinned clock: the unmodified declaration is clean,
+  // and a non-installable entry with no current year behind it is not a gap
+  // (the filter is on installable, and this proves it is not vacuous).
+  await withSimClock(`${PINNED_TODAY}T12:00:00Z`, async () => {
+    const today = formatInZone(now(), "UTC");
+    const currentYearFor = (country: string) => payrollTaxYearForDate(country, today).taxYear;
+    assert.deepEqual(currentYearGaps(payrollTaxYearCoverage(), currentYearFor), []);
+    const withExtra: PayrollTaxYearCoverage[] = [
+      ...payrollTaxYearCoverage(),
+      {
+        country: "ZY",
+        installable: false,
+        supported: [],
+        draft: [],
+        ratesModule: "nowhere",
+        regionsWithOwnTables: [],
+        editions: [],
+        regions: [],
+      },
+    ];
+    assert.deepEqual(currentYearGaps(withExtra, currentYearFor), []);
+  });
 });
 
 /* ------------------------------------------------------------------ */
