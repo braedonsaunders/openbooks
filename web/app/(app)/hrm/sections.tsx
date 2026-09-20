@@ -15,6 +15,9 @@ export type HrmHeadcountRow = {
   subsidiary: string
   department: string | null
   headcount: number
+  /** Drill-through to the employee directory filtered to this department
+   *  (or its unassigned roster); absent when the viewer may not open it. */
+  href?: string | null
 }
 
 /**
@@ -59,7 +62,13 @@ export function HrmHeadcountTable({
         {groups.map((group, i) => (
           <tr key={`${group.subsidiary}-${group.department ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
             <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">{group.subsidiary}</td>
-            <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{group.department ?? unassigned}</td>
+            <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
+              {group.href ? (
+                <Link href={group.href as never} className="hover:underline">{group.department ?? unassigned}</Link>
+              ) : (
+                group.department ?? unassigned
+              )}
+            </td>
             <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
               {group.headcount.toLocaleString()}
             </td>
