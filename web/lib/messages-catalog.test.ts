@@ -3393,6 +3393,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
     'ja:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
     'ja:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
     'ja:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'ja:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
     'zh:payroll.filings.run.title|{label}',
     'zh:payroll.filings.slip.description|{label} · {year}',
     'zh:payroll.profiles.fields.sin|SIN / SSN',
@@ -3401,6 +3402,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
     'zh:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
     'zh:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
     'zh:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'zh:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
     'pt-BR:payroll.columns.status|Status',
     'pt-BR:payroll.entitlements.hoursSuffix|h',
     'pt-BR:payroll.filings.run.title|{label}',
@@ -3416,6 +3418,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
     'pt-BR:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
     'pt-BR:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
     'pt-BR:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'pt-BR:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
     'pt-BR:payroll.workSchedules.columns.status|Status',
   ])
   const I7_SOURCE = flattenCatalog('en')
@@ -3424,7 +3427,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1159, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1160, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3468,6 +3471,7 @@ const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
   'fr:payroll.filings.lifecycle.correction|Correction',
   'fr:payroll.filings.run.title|{label}',
   'fr:payroll.filings.slip.description|{label} · {year}',
+  'fr:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
   'fr:payroll.parallelRun.exact|exact',
   'fr:payroll.parallelRun.tiles.net|Net',
   'fr:payroll.profiles.columns.province|Province',
@@ -3494,6 +3498,7 @@ const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
   'es:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
   'es:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
   'es:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+  'es:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
   'de:payroll.columns.status|Status',
   'de:payroll.entitlements.hoursSuffix|h',
   'de:payroll.entitlements.plan|Plan',
@@ -3510,6 +3515,7 @@ const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
   'de:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
   'de:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
   'de:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+  'de:payroll.wizard.readiness.codes.pack.notPayable|{detail}',
   'de:payroll.workSchedules.columns.status|Status',
   'de:payroll.workSchedules.fields.name|Name',
 ])
@@ -3524,7 +3530,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1159, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1160, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

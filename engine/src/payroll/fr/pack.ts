@@ -393,4 +393,7 @@ export const FR_PAYROLL_PACK = {
   computeStatutory: computeFrStatutory,
   statutoryEngineLabel: "PAS",
   factorLabels: { ...FR_FACTOR_LABELS },
+  // No `emp` facts: the engine reads the PAS rate off the certificate
+  // answers, never off bare profile keys.
+  employeeFacts: [],
 } satisfies Omit<PayrollCountryPack, "country"> & { country: "FR" };

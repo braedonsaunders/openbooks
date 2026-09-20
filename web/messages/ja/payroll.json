@@ -167,6 +167,9 @@
         "statutory": {
           "taxYear": "{detail}",
           "rateUnconfigured": "{detail}"
+        },
+        "pack": {
+          "notPayable": "{detail}"
         }
       }
     },

@@ -476,4 +476,7 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   computeStatutory: computeDeStatutory,
   statutoryEngineLabel: "Programmablaufplan (EStG §39b)",
   factorLabels: { ...DE_FACTOR_LABELS },
+  // No `emp` facts: the engine reads Steuerklasse and factors off the
+  // certificate answers, never off bare profile keys.
+  employeeFacts: [],
 };

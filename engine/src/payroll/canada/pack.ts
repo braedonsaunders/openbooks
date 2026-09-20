@@ -13,6 +13,7 @@ import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS, PROVINCE_NAMES } from ".
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./quebec/remittance.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
+import { CA_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 /**
  * The Canada payroll country pack — registered and installable.
@@ -262,4 +263,5 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     ...TP1015_FACTOR_LABELS,
     ...CA_COMPUTE_FACTOR_LABELS,
   },
+  employeeFacts: CA_EMPLOYEE_FACTS,
 };

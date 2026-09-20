@@ -16,6 +16,11 @@
  * boundary — the pack's uniform rule (see BR_2026_ROUNDING).
  */
 import { fromUnits, toUnits } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers BR_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
@@ -115,14 +120,16 @@ export async function computeBrStatutoryWithRates(
     );
   }
 
-  const regime = emp["br_regime"];
+  // Resolved through the pack's employeeFacts declaration (see the PL
+  // adapter): raw values untouched, undeclared keys refused at authoring.
+  const regime = empFact("BR", emp, "br_regime");
   if (regime !== undefined && regime !== null && regime !== "" && regime !== "clt") {
     fail(
       `employee br_regime "${regime}" is not standard monthly CLT — aprendiz (2% FGTS), doméstico, `
       + "temporário and other regimes price differently: see BR_REFUSED_2026",
     );
   }
-  const depRaw = emp["br_dependentes"];
+  const depRaw = empFact("BR", emp, "br_dependentes");
   if (depRaw === undefined || depRaw === null || depRaw === "") {
     fail(
       'employee br_dependentes is missing: the R$ 189,59 dependent deduction needs the count — '
@@ -133,7 +140,7 @@ export async function computeBrStatutoryWithRates(
   if (!Number.isInteger(dependentes) || dependentes < 0) {
     fail(`employee br_dependentes "${depRaw}" is not a non-negative integer`);
   }
-  const pensaoRaw = emp["br_pensao_mensal"];
+  const pensaoRaw = empFact("BR", emp, "br_pensao_mensal");
   const pensao = pensaoRaw === undefined || pensaoRaw === null || pensaoRaw === ""
     ? "0.00"
     : (() => {

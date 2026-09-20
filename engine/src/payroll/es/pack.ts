@@ -27,6 +27,7 @@ import { esPackFilings } from "./filings.ts";
 import { ES_JURISDICTIONS } from "./jurisdictions.ts";
 import { ES_PACK_RATES, ES_TAX_YEARS } from "./rates.ts";
 import { ES_WITHHOLDING } from "./withholding.ts";
+import { ES_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 /** Structural conformance without the closed union (see module doc). */
 export type EsPayrollPack = Omit<PayrollCountryPack, "country"> & {
@@ -173,4 +174,5 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   computeStatutory: computeEsStatutory,
   statutoryEngineLabel: "AEAT",
   factorLabels: { ...ES_FACTOR_LABELS },
+  employeeFacts: ES_EMPLOYEE_FACTS,
 };

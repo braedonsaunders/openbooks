@@ -53,6 +53,7 @@ import { VT_FACTOR_LABELS } from "./states/vt.ts";
 import { WI_FACTOR_LABELS } from "./states/wi.ts";
 import { WV_FACTOR_LABELS } from "./states/wv.ts";
 import { US_LOCAL_FACTOR_LABELS } from "./withholding.ts";
+import { US_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 /**
  * Names for the stub-line mirror factors (`SIT_<code>` / `LIT_<code>`) no
@@ -401,4 +402,5 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     ...US_COMPUTE_FACTOR_LABELS,
   },
   describeFactor: usDescribeFactor,
+  employeeFacts: US_EMPLOYEE_FACTS,
 };

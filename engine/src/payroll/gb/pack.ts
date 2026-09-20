@@ -205,4 +205,7 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   computeStatutory: computeGbStatutory,
   statutoryEngineLabel: "PAYE",
   factorLabels: { ...GB_FACTOR_LABELS },
+  // No `emp` facts: the engine reads the tax code and student-loan flags
+  // off the certificate answers, never off bare profile keys.
+  employeeFacts: [],
 };

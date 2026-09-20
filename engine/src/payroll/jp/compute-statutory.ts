@@ -27,6 +27,11 @@
  * unknown code must stop here, not price a neighbour's rate.
  */
 import { toUnits } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers JP_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
@@ -111,7 +116,9 @@ export async function computeJpStatutoryWithRates(
   }
   const gross = yenOf(income, "monthly gross");
 
-  const standardRaw = ctx.emp["jp_hyojun_hoshu"];
+  // Resolved through the pack's employeeFacts declaration (see the PL
+  // adapter): raw values untouched, undeclared keys refused at authoring.
+  const standardRaw = empFact("JP", ctx.emp, "jp_hyojun_hoshu");
   if (standardRaw == null || !/^\d+$/.test(standardRaw)) {
     fail(
       `employee jp_hyojun_hoshu "${standardRaw ?? ""}" is not set: the 標準報酬月額 (a published 厚生年金 `
@@ -120,7 +127,7 @@ export async function computeJpStatutoryWithRates(
   }
   const standard = Number(standardRaw);
 
-  const kaigo = ctx.emp["jp_kaigo_dainigou"];
+  const kaigo = empFact("JP", ctx.emp, "jp_kaigo_dainigou");
   if (kaigo !== "false") {
     fail(
       `employee jp_kaigo_dainigou "${kaigo ?? ""}" is not "false": a 介護保険第2号被保険者 (40–64) owes `

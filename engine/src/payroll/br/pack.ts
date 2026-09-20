@@ -23,6 +23,7 @@ import { brPackFilings } from "./filings.ts";
 import { BR_JURISDICTIONS } from "./jurisdictions.ts";
 import { BR_PACK_RATES, BR_TAX_YEARS } from "./rates.ts";
 import { BR_WITHHOLDING } from "./withholding.ts";
+import { BR_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 export const BR_PAYROLL_PACK: PayrollCountryPack = {
   country: "BR",
@@ -130,4 +131,5 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   computeStatutory: computeBrStatutory,
   statutoryEngineLabel: "IRRF/INSS",
   factorLabels: { ...BR_FACTOR_LABELS },
+  employeeFacts: BR_EMPLOYEE_FACTS,
 };

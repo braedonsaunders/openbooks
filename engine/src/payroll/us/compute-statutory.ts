@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../../payroll-error.ts";
 import { sum } from "../../money.ts";
+import { empFact } from "../employee-facts.ts";
+// Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
+// through the declaration in every import graph — never via a transitive
+// side effect of the pack registry.
+import "./employee-facts.ts";
 import {
   certificateSubRegions,
   packCertificates,
@@ -85,23 +90,23 @@ export async function computeUsStatutory(
   assertRegionSupported(region);
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
-  const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
+  const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const statutory = calculatePub15T({
     payDate: run.pay_date!, periodsPerYear: P,
     wages: income, supplemental: nonPeriodic,
     ficaWages: pensionable, futaWages: insurable,
     filingStatus,
-    multipleJobs: bool(emp.multiple_jobs),
-    dependentCredits: emp.dependent_credits ?? undefined,
-    otherIncomeAnnual: emp.other_income_annual ?? undefined,
-    deductionsAnnual: emp.deductions_annual ?? undefined,
-    extraPerPeriod: emp.additional_tax_per_period ?? undefined,
-    pre2020: bool(emp.w4_pre_2020)
-      ? { allowances: Number(emp.w4_allowances ?? 0), married: filingStatus === "married_joint" }
+    multipleJobs: bool(empFact("US", emp, "multiple_jobs")),
+    dependentCredits: empFact("US", emp, "dependent_credits") ?? undefined,
+    otherIncomeAnnual: empFact("US", emp, "other_income_annual") ?? undefined,
+    deductionsAnnual: empFact("US", emp, "deductions_annual") ?? undefined,
+    extraPerPeriod: empFact("US", emp, "additional_tax_per_period") ?? undefined,
+    pre2020: bool(empFact("US", emp, "w4_pre_2020"))
+      ? { allowances: Number(empFact("US", emp, "w4_allowances") ?? 0), married: filingStatus === "married_joint" }
       : undefined,
-    fitExempt: bool(emp.tax_exempt),
-    ficaExempt: bool(emp.fica_exempt),
-    futaExempt: bool(emp.futa_exempt),
+    fitExempt: bool(empFact("US", emp, "tax_exempt")),
+    ficaExempt: bool(empFact("US", emp, "fica_exempt")),
+    futaExempt: bool(empFact("US", emp, "futa_exempt")),
     futaEffectiveRate: config.futaRate(region) ?? undefined,
     sui: config.sui(region, filingAccountId),
     ytd: {
@@ -132,7 +137,7 @@ export async function computeUsStatutory(
   const subRegionsOnFile = (side: "work" | "residence"): string[] => {
     const sideRegion = side === "work"
       ? region
-      : ((emp.residence_region as string | null) || region);
+      : ((empFact("US", emp, "residence_region") as string | null) || region);
     const codes: string[] = [];
     for (const certificate of packCertificates(country).certificates) {
       if (!certificate.fields.some((field) => field.subRegion?.side === side)) continue;
@@ -148,11 +153,11 @@ export async function computeUsStatutory(
 
   const workSubRegions = subRegionsOnFile("work");
   const residenceSubRegions = subRegionsOnFile("residence");
-  const residenceRegion = (emp.residence_region as string | null) || region;
+  const residenceRegion = (empFact("US", emp, "residence_region") as string | null) || region;
   const resolution = resolveWithholding({
     country,
     workRegion: region,
-    residenceRegion: (emp.residence_region as string | null) ?? null,
+    residenceRegion: (empFact("US", emp, "residence_region") as string | null) ?? null,
     workSubRegions,
     residenceSubRegions,
     certificatesOnFile: certificateKeysOnFile(),

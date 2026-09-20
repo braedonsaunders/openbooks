@@ -86,6 +86,8 @@ function fixturePack(): PayrollCountryPack {
     // Like `name` and `employeeIdentifier` above, REQUIRED — a new pack
     // states its trace labels (here: none) instead of inheriting silence.
     factorLabels: {},
+    // The fixture reads no `emp` facts, stated.
+    employeeFacts: [],
   };
 }
 

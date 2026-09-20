@@ -156,6 +156,8 @@ const FREEDONIA: PayrollCountryPack = {
   // A new pack cannot forget the trace labels either: they are REQUIRED on
   // PayrollCountryPack, so this fixture states its (empty) answer.
   factorLabels: {},
+  // Freedonia reads no `emp` facts, stated like every pack must.
+  employeeFacts: [],
   statutorySlots: [
     {
       key: "payg",
