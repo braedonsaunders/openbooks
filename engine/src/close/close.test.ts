@@ -828,7 +828,8 @@ test(
 );
 
 test("close automation claims carry lease fencing, stale takeover, and stage checkpoints", () => {
-  const engine = readFileSync(new URL("./automations.ts", import.meta.url), "utf8");
+  const engine = ["./automations.ts", "./close.ts"].map((file) =>
+    readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
 
   // The claim books a random fencing token with its lock timestamp and the
   // conflict contract that keeps concurrent schedulers single-fire.
