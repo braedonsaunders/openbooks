@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
-export interface LeaseDisplay {
+export type LeaseDisplay = {
   id: string;
   lease_number: string;
   description: string | null;
@@ -19,7 +19,7 @@ export interface LeaseDisplay {
   initial_rou_asset: string | null;
   revision: number;
   classification_inputs: Record<string, unknown>;
-}
+};
 export async function loadLease(
   orgId: string,
   id: string,
