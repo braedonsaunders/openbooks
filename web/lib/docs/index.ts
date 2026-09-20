@@ -259,7 +259,6 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
-  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment,
   // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end

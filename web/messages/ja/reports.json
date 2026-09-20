@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "アクション理由",
         "description": "HRアクションごとの理由コードに1行 — 変更申請の語彙。HR雇用権限が必要です。"
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "賃金表",
+        "description": "賃金表・分類・適用日ごとの1行：解決可能な基本給、現金フリンジ、控除可能分、残業倍率。"
+      },
+      "hrm_per_diem_entries": {
+        "label": "日当エントリ",
+        "description": "雇用・プロジェクト・日ごとの1行：計算済み日当・旅費とステータス。"
+      },
+      "hrm_comp_class_split": {
+        "label": "クラス分割",
+        "description": "優先度ルールとプレミアムクラス：各時間をどのクラスが単価付けするかと100あたり料率。"
+      },
+      "hrm_certified_runs": {
+        "label": "認証実行",
+        "description": "プロジェクト・週ごとの認証給与実行：確定データとパック形式・ファイル。"
+      },
+      "hrm_compliance_findings": {
+        "label": "指摘事項",
+        "description": "種類別の追加専用事前フラグ：比率違反、賃金未設定、未解決クラス。"
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "終了日",
         "employment_id": "雇用（id）",
         "id": "加入（id）"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "賃金表",
+        "classification": "分類",
+        "base_rate": "基本給",
+        "fringe_rate": "現金フリンジ",
+        "currency": "通貨",
+        "effective_from": "適用日"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "日",
+        "amount": "金額",
+        "currency": "通貨",
+        "status": "状態",
+        "employment_id": "雇用 (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "クラス",
+        "priority": "優先度",
+        "rate": "率 / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "週末日",
+        "format_key": "形式",
+        "status": "状態",
+        "project_id": "プロジェクト (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "種類",
+        "worked_on": "日",
+        "status": "状態",
+        "project_id": "プロジェクト (ID)"
       }
     },
     "enumValues": {

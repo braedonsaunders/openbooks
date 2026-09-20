@@ -984,7 +984,9 @@
     "hrm_team_manage": "Traiter les étapes assignées par le responsable",
     "automations_read": "Voir les recettes d'automatisation et le journal",
     "automations_manage": "Créer des automatisations et régler les approbations",
-    "automations_run": "Exécuter les automatisations"
+    "automations_run": "Exécuter les automatisations",
+    "hrm_construction_read": "Voir la conformité construction",
+    "hrm_construction_manage": "Gérer la conformité construction"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2426,6 +2428,31 @@
       "home-announcements": {
         "title": "Annonces",
         "description": "Annonces de l'entreprise pour l'accueil, avec audience et dates."
+      },
+      "construction-classifications": {
+        "title": "Classifications de métier",
+        "singularTitle": "Classification de métier",
+        "description": "Taxonomie des métiers pour la paie en vigueur : classes de compagnons et d'apprentis avec la classe de compagnon de chaque ratio."
+      },
+      "construction-rate-schedules": {
+        "title": "Grilles salariales",
+        "singularTitle": "Grille salariale",
+        "description": "Grilles en vigueur, syndicales et déclarées avec portée projet, site et filiale plus réciprocité."
+      },
+      "construction-comp-classes": {
+        "title": "Classes d'indemnisation",
+        "singularTitle": "Classe d'indemnisation",
+        "description": "Classes de prime avec taux pour 100 là où déclaré ; les règles de priorité fixent le prix de chaque heure."
+      },
+      "construction-per-diem-policies": {
+        "title": "Règles journalières",
+        "singularTitle": "Règle journalière",
+        "description": "Règles de calcul des indemnités par base. La fiscalité vit sur la composante de paie, jamais ici."
+      },
+      "construction-ratio-rules": {
+        "title": "Règles de ratio",
+        "singularTitle": "Règle de ratio",
+        "description": "Ratios compagnon-apprenti par grille, mesurés quotidiennement ou hebdomadairement. L'écart se paie au taux compagnon."
       }
     },
     "fields": {
@@ -2743,7 +2770,22 @@
       "endsOn": "Fin le",
       "action": "Action",
       "reasonCode": "Code de motif",
-      "requiresComment": "Commentaire requis"
+      "requiresComment": "Commentaire requis",
+      "trade": "Métier",
+      "isApprentice": "Apprenti",
+      "apprenticeProgramRef": "Réf programme",
+      "journeyClassificationId": "Classe compagnon",
+      "apprenticeClassificationId": "Classe apprenti",
+      "sourceRef": "Réf source",
+      "jurisdictionCode": "Juridiction",
+      "reciprocity": "Réciprocité",
+      "ratePer100": "Taux / 100",
+      "lodgingOffset": "Déduction logement",
+      "payComponentId": "Composante de paie",
+      "scheduleId": "Grille",
+      "ratioJourney": "Compagnon",
+      "ratioApprentice": "Apprenti",
+      "measured": "Mesure"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2822,7 +2864,10 @@
       "benefitEmployerComponent": "Composante de contribution employeur tarifant ses lignes. Obligatoire si le régime tarife un coût employeur.",
       "benefitWaitingPeriod": "Jours de service avant de pouvoir adhérer au régime.",
       "benefitRequiresApproval": "Les adhésions attendent l'approbation d'un gestionnaire.",
-      "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications."
+      "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications.",
+      "rateScheduleSource": "Numéro de décision ou identifiant de convention derrière cette grille.",
+      "rateScheduleJurisdiction": "Vocabulaire du pack, texte libre dans la couche générique — le pack l'interprète.",
+      "perDiemComponent": "Composante de gain par laquelle transitent les montants. Son traitement fiscal est l'unique déclaration."
     },
     "options": {
       "timeClassification": {
@@ -3240,6 +3285,25 @@
         "termination": "Départ",
         "profile_change": "Changement de profil",
         "other": "Autre"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Salaire en vigueur",
+        "unionAgreement": "Convention syndicale",
+        "orgDeclared": "Déclaré"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Section d'origine",
+        "jobsiteLocal": "Lieu du chantier",
+        "higherOf": "Le plus élevé"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Forfait journalier",
+        "distanceBrackets": "Tranches de distance",
+        "hoursThreshold": "Seuil d'heures"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Quotidienne",
+        "weekly": "Hebdomadaire"
       }
     },
     "laborCosting": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "Verbes d'événement de changement",
       "description": "Annuler, rescinder et corriger les changements d'emploi en événements ajoutés."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Conformité construction",
+      "description": "Grilles de salaires en vigueur, paies certifiées, classes d'indemnisation, ratios d'apprentis et journalières pour travaux propres. Requiert paie, projets et suivi du temps."
+    },
+    "hrmPrevailingWage": {
+      "title": "Salaire en vigueur",
+      "description": "Résoudre le salaire par lieu, classification et date depuis des grilles déclarées."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Paie certifiée",
+      "description": "Rapports hebdomadaires figés rendus via les fichiers déclarés du pack."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Classes d'indemnisation",
+      "description": "Répartir les heures chiffrées entre classes par règles de priorité."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Ratios d'apprentis",
+      "description": "Exiger les ratios compagnon-apprenti au quotidien ; l'écart se paie au taux compagnon."
+    },
+    "hrmPerDiem": {
+      "title": "Journalières",
+      "description": "Calculer journalières et déplacements depuis les temps approuvés vers la paie."
     }
   },
   "backupsManager": {

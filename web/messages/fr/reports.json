@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "Motifs d'action",
         "description": "Une ligne par code de motif et action RH — le vocabulaire des demandes de changement. Requiert la permission emploi RH."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Grilles salariales",
+        "description": "Une ligne par grille, classification et date : base résoluble, avantages en espèces, crédit et heures supplémentaires."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Indemnités journalières",
+        "description": "Une ligne par emploi, projet et jour : journalières et déplacements calculés avec statut."
+      },
+      "hrm_comp_class_split": {
+        "label": "Répartition des classes",
+        "description": "Règles de priorité avec leurs classes : quelle classe chiffre chaque heure et son taux pour 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Paies certifiées",
+        "description": "Paies certifiées par projet et semaine : données figées avec format et fichier."
+      },
+      "hrm_compliance_findings": {
+        "label": "Constats",
+        "description": "Marqueurs préalables par type : ratios, taux manquants, classes non résolues."
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "En vigueur jusqu'au",
         "employment_id": "Emploi (id)",
         "id": "Adhésion (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Grille",
+        "classification": "Classification",
+        "base_rate": "Taux de base",
+        "fringe_rate": "Avantages",
+        "currency": "Devise",
+        "effective_from": "En vigueur le"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Jour",
+        "amount": "Montant",
+        "currency": "Devise",
+        "status": "Statut",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Classe",
+        "priority": "Priorité",
+        "rate": "Taux / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Semaine au",
+        "format_key": "Format",
+        "status": "Statut",
+        "project_id": "Projet (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Type",
+        "worked_on": "Jour",
+        "status": "Statut",
+        "project_id": "Projet (id)"
       }
     },
     "enumValues": {

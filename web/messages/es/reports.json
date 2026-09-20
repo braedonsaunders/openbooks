@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "Motivos de acción",
         "description": "Una fila por código de motivo y acción de RR. HH.: el vocabulario de las solicitudes de cambio. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Tablas salariales",
+        "description": "Una fila por tabla, clasificación y fecha: base resoluble, beneficios en efectivo, acreditable y horas extra."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Dietas",
+        "description": "Una fila por empleo, proyecto y día: dietas y viajes calculados con estado."
+      },
+      "hrm_comp_class_split": {
+        "label": "Reparto de clases",
+        "description": "Reglas de prioridad con sus clases: qué clase tasa cada hora y su tasa por 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Ejecuciones certificadas",
+        "description": "Nóminas certificadas por proyecto y semana: datos congelados con formato y archivo."
+      },
+      "hrm_compliance_findings": {
+        "label": "Hallazgos",
+        "description": "Marcas previas solo-agregar por tipo: proporciones, tarifas faltantes, clases sin resolver."
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "Vigente hasta",
         "employment_id": "Empleo (id)",
         "id": "Inscripción (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Tabla",
+        "classification": "Clasificación",
+        "base_rate": "Tarifa base",
+        "fringe_rate": "Beneficios",
+        "currency": "Moneda",
+        "effective_from": "Vigente desde"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Día",
+        "amount": "Importe",
+        "currency": "Moneda",
+        "status": "Estado",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Clase",
+        "priority": "Prioridad",
+        "rate": "Tasa / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Semana hasta",
+        "format_key": "Formato",
+        "status": "Estado",
+        "project_id": "Proyecto (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Tipo",
+        "worked_on": "Día",
+        "status": "Estado",
+        "project_id": "Proyecto (id)"
       }
     },
     "enumValues": {

@@ -984,7 +984,9 @@
     "hrm_team_manage": "处理经理分配的团队步骤",
     "automations_read": "查看自动化配方和运行日志",
     "automations_manage": "编写自动化和审批设置",
-    "automations_run": "立即运行自动化"
+    "automations_run": "立即运行自动化",
+    "hrm_construction_read": "查看建筑合规",
+    "hrm_construction_manage": "管理建筑合规"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2471,6 +2473,31 @@
       "home-announcements": {
         "title": "公告",
         "description": "面向首页的公司公告，可设置受众与日期。"
+      },
+      "construction-classifications": {
+        "title": "工作分类",
+        "singularTitle": "工作分类",
+        "description": "现行工资定价的工种分类：熟练工与学徒类别，以及每个学徒比例对应的熟练工类别。"
+      },
+      "construction-rate-schedules": {
+        "title": "工资表",
+        "singularTitle": "工资表",
+        "description": "现行工资、工会协议和企业自定工资表，含项目、地点和子公司范围及互惠规则。"
+      },
+      "construction-comp-classes": {
+        "title": "工伤类别",
+        "singularTitle": "工伤类别",
+        "description": "已申报每100费率的工伤保险类别；优先级规则决定每小时的定价类别。"
+      },
+      "construction-per-diem-policies": {
+        "title": "每日津贴政策",
+        "singularTitle": "每日津贴政策",
+        "description": "按基数计算每日津贴的规则。应税性位于工资组成部分中，不在此处。"
+      },
+      "construction-ratio-rules": {
+        "title": "比例规则",
+        "singularTitle": "比例规则",
+        "description": "每个工资表的熟练工与学徒比例，按日或按周衡量。违规按熟练工标准计价。"
       }
     },
     "fields": {
@@ -2788,7 +2815,22 @@
       "endsOn": "结束于",
       "action": "操作",
       "reasonCode": "原因代码",
-      "requiresComment": "需要说明"
+      "requiresComment": "需要说明",
+      "trade": "工种",
+      "isApprentice": "学徒",
+      "apprenticeProgramRef": "项目编号",
+      "journeyClassificationId": "熟练工类别",
+      "apprenticeClassificationId": "学徒类别",
+      "sourceRef": "依据编号",
+      "jurisdictionCode": "管辖区",
+      "reciprocity": "互惠规则",
+      "ratePer100": "费率 / 100",
+      "lodgingOffset": "住宿抵扣",
+      "payComponentId": "工资组成部分",
+      "scheduleId": "工资表",
+      "ratioJourney": "熟练工",
+      "ratioApprentice": "学徒",
+      "measured": "衡量方式"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2867,7 +2909,10 @@
       "benefitEmployerComponent": "为公司行计价的公司缴款组成部分。计划有公司费用时必填。",
       "benefitWaitingPeriod": "可参保前的服务天数。",
       "benefitRequiresApproval": "参保需经经理批准后生效。",
-      "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。"
+      "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。",
+      "rateScheduleSource": "该工资表依据的裁定编号或协议ID。",
+      "rateScheduleJurisdiction": "工资包词汇，通用层为自由文本 — 由工资包解释。",
+      "perDiemComponent": "金额通过的所得组成部分。其税务处理是唯一的应税性声明。"
     },
     "options": {
       "payFrequency": {
@@ -3285,6 +3330,25 @@
         "termination": "离职",
         "profile_change": "档案变更",
         "other": "其他"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "现行工资",
+        "unionAgreement": "工会协议",
+        "orgDeclared": "企业自定"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "属地标准",
+        "jobsiteLocal": "工地标准",
+        "higherOf": "取较高者"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "每日定额",
+        "distanceBrackets": "距离分档",
+        "hoursThreshold": "工时门槛"
+      },
+      "hrmRatioMeasured": {
+        "daily": "按日",
+        "weekly": "按周"
       }
     },
     "payroll": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "变更事件动词",
       "description": "以追加事件取消、撤销和更正雇佣变更。"
+    },
+    "hrmConstructionCompliance": {
+      "title": "建筑合规",
+      "description": "自营施工的现行工资表、认证工资、工伤类别、学徒比例和每日津贴。需要工资、项目和考勤。"
+    },
+    "hrmPrevailingWage": {
+      "title": "现行工资",
+      "description": "根据已申报工资表按地点、分类和日期确定工资。"
+    },
+    "hrmCertifiedPayroll": {
+      "title": "认证工资",
+      "description": "通过工资包申报文件渲染的每周冻结报告。"
+    },
+    "hrmWorkersCompClasses": {
+      "title": "工伤类别",
+      "description": "按优先级规则将成本工时拆分到保险类别。"
+    },
+    "hrmApprenticeRatios": {
+      "title": "学徒比例",
+      "description": "按日执行熟练工与学徒比例；违规按熟练工标准计价。"
+    },
+    "hrmPerDiem": {
+      "title": "每日津贴",
+      "description": "根据已批准考勤计算每日津贴和差旅费并传入工资。"
     }
   },
   "backupsManager": {

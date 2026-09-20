@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "操作原因",
         "description": "每个HR操作的原因代码一行 — 变更申请的词汇表。需要HR雇佣权限。"
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "工资表",
+        "description": "每个工资表、分类和生效日期一行：可确定的基本工资、现金津贴、可抵免部分和加班倍率。"
+      },
+      "hrm_per_diem_entries": {
+        "label": "每日津贴",
+        "description": "每个雇佣关系、项目和日期一行：已计算的津贴和差旅费及其状态。"
+      },
+      "hrm_comp_class_split": {
+        "label": "类别拆分",
+        "description": "优先级规则及其保险类别：哪个类别为每小时定价及其每100费率。"
+      },
+      "hrm_certified_runs": {
+        "label": "认证运行",
+        "description": "按项目和周的认证工资运行：冻结数据含格式文件和修订链接。"
+      },
+      "hrm_compliance_findings": {
+        "label": "发现项",
+        "description": "按种类的追加式运行前标记：比例违规、缺少工资标准、未解决类别。"
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "生效至",
         "employment_id": "雇佣（id）",
         "id": "参保（id）"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "工资表",
+        "classification": "分类",
+        "base_rate": "基本工资",
+        "fringe_rate": "现金津贴",
+        "currency": "货币",
+        "effective_from": "生效日期"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "日期",
+        "amount": "金额",
+        "currency": "货币",
+        "status": "状态",
+        "employment_id": "雇佣关系 (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "类别",
+        "priority": "优先级",
+        "rate": "费率 / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "截至周",
+        "format_key": "格式",
+        "status": "状态",
+        "project_id": "项目 (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "类型",
+        "worked_on": "日期",
+        "status": "状态",
+        "project_id": "项目 (ID)"
       }
     },
     "enumValues": {

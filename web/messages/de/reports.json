@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "Aktionsgründe",
         "description": "Eine Zeile pro Grundcode und HR-Aktion — das Vokabular der Änderungsanträge. Erfordert die HR-Beschäftigungsberechtigung."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Lohntafeln",
+        "description": "Eine Zeile je Tafel, Klassifizierung und Stichtag: auflösbarer Basis-, Barzulagen-, Anrechnungs- und Überstundensatz."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Tagegelder",
+        "description": "Eine Zeile je Beschäftigung, Projekt und Tag: berechnete Tagegeld- und Fahrtbeträge mit Status."
+      },
+      "hrm_comp_class_split": {
+        "label": "Gefahrenklassen-Split",
+        "description": "Prioritätsregeln mit Gefahrenklassen: welche Klasse jede Stunde bepreist, und Satz je 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Zertifizierte Läufe",
+        "description": "Zertifizierte Abrechnungsläufe je Projekt und Woche: eingefrorene Daten mit Pack-Format und Datei."
+      },
+      "hrm_compliance_findings": {
+        "label": "Feststellungen",
+        "description": "Append-only Vorlaufkennzeichen je Art: Quotenverstöße, fehlende Sätze, ungeklärte Klassen."
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "Ende",
         "employment_id": "Beschäftigung (ID)",
         "id": "Anmeldung (ID)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Tafel",
+        "classification": "Klassifizierung",
+        "base_rate": "Basissatz",
+        "fringe_rate": "Barzulage",
+        "currency": "Währung",
+        "effective_from": "Gültig ab"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Tag",
+        "amount": "Betrag",
+        "currency": "Währung",
+        "status": "Status",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Klasse",
+        "priority": "Priorität",
+        "rate": "Satz / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Woche bis",
+        "format_key": "Format",
+        "status": "Status",
+        "project_id": "Projekt (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Art",
+        "worked_on": "Tag",
+        "status": "Status",
+        "project_id": "Projekt (ID)"
       }
     },
     "enumValues": {

@@ -984,7 +984,9 @@
     "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten",
     "automations_read": "Automatisierungsrezepte und Ausführungsprotokoll sehen",
     "automations_manage": "Automatisierungen und Genehmigungseinstellungen verfassen",
-    "automations_run": "Automatisierungen jetzt ausführen"
+    "automations_run": "Automatisierungen jetzt ausführen",
+    "hrm_construction_read": "Bau-Compliance einsehen",
+    "hrm_construction_manage": "Bau-Compliance verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2539,6 +2541,31 @@
       "home-announcements": {
         "title": "Ankündigungen",
         "description": "Firmenankündigungen für die Startseite, mit Zielgruppe und Zeitraum."
+      },
+      "construction-classifications": {
+        "title": "Arbeitsklassifizierungen",
+        "singularTitle": "Arbeitsklassifizierung",
+        "description": "Gewerketaxonomie für die Tariflohnbewertung: Gesellen- und Azubiklassen mit der Gesellenklasse, gegen die jede Quote zählt."
+      },
+      "construction-rate-schedules": {
+        "title": "Lohntafeln",
+        "singularTitle": "Lohntafel",
+        "description": "Tarif-, Vertrags- und betriebliche Tafeln mit Projekt-, Standort- und Gesellschaftsgeltung plus Reziprozität."
+      },
+      "construction-comp-classes": {
+        "title": "Gefahrenklassen",
+        "singularTitle": "Gefahrenklasse",
+        "description": "BG-Gefahrenklassen mit Satz je 100, wo erklärt; Prioritätsregeln entscheiden die Bepreisung."
+      },
+      "construction-per-diem-policies": {
+        "title": "Tagegeldregeln",
+        "singularTitle": "Tagegeldregel",
+        "description": "Berechnungsregeln für Tagegeld je Basis. Die Steuerbarkeit liegt auf der Lohnkomponente, nie hier."
+      },
+      "construction-ratio-rules": {
+        "title": "Quotenregeln",
+        "singularTitle": "Quotenregel",
+        "description": "Geselle-zu-Azubi-Quoten je Tafel, täglich oder wöchentlich gemessen. Verstöße werden zum Gesellensatz bepreist."
       }
     },
     "fields": {
@@ -2856,7 +2883,22 @@
       "endsOn": "Endet am",
       "action": "Aktion",
       "reasonCode": "Grundcode",
-      "requiresComment": "Erläuterung erforderlich"
+      "requiresComment": "Erläuterung erforderlich",
+      "trade": "Gewerk",
+      "isApprentice": "Azubi",
+      "apprenticeProgramRef": "Programmref",
+      "journeyClassificationId": "Gesellenklasse",
+      "apprenticeClassificationId": "Azubiklasse",
+      "sourceRef": "Quellenref",
+      "jurisdictionCode": "Jurisdiktion",
+      "reciprocity": "Reziprozität",
+      "ratePer100": "Satz / 100",
+      "lodgingOffset": "Unterkunftsabzug",
+      "payComponentId": "Lohnkomponente",
+      "scheduleId": "Tafel",
+      "ratioJourney": "Geselle",
+      "ratioApprentice": "Azubi",
+      "measured": "Messung"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2935,7 +2977,10 @@
       "benefitEmployerComponent": "Arbeitgeberbeitrags-Komponente für die Arbeitgeberzeilen. Pflicht, wenn der Plan Arbeitgeberkosten bepreist.",
       "benefitWaitingPeriod": "Diensttage, bevor der Plan gewählt werden darf.",
       "benefitRequiresApproval": "Anmeldungen warten bis zur Genehmigung durch einen Manager.",
-      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen."
+      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen.",
+      "rateScheduleSource": "Feststellungsnummer oder Vereinbarungskennung hinter dieser Tafel.",
+      "rateScheduleJurisdiction": "Pack-Vokabular, Freitext in der generischen Schicht — das Pack interpretiert.",
+      "perDiemComponent": "Verdienstkomponente, über die Beträge laufen. Ihre Steuerbehandlung ist die einzige Steuerbarkeitsdeklaration."
     },
     "options": {
       "timeClassification": {
@@ -3353,6 +3398,25 @@
         "termination": "Austritt",
         "profile_change": "Profiländerung",
         "other": "Sonstiges"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Tariflohn",
+        "unionAgreement": "Tarifvertrag",
+        "orgDeclared": "Betrieblich"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Heimbezirk",
+        "jobsiteLocal": "Einsatzort",
+        "higherOf": "Höherer Satz"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Tagespauschale",
+        "distanceBrackets": "Entfernungsstaffel",
+        "hoursThreshold": "Stundenschwelle"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Täglich",
+        "weekly": "Wöchentlich"
       }
     },
     "bankFeeds": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "Änderungsereignisverben",
       "description": "Beschäftigungsänderungen als angehängte Ereignisse stornieren, zurücknehmen und korrigieren."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Bau-Compliance",
+      "description": "Tariflohntabellen, zertifizierte Abrechnungen, Gefahrenklassen, Azubi-Quoten und Tagegeld für eigene Bauleistung. Benötigt Lohn, Projekte und Zeiterfassung."
+    },
+    "hrmPrevailingWage": {
+      "title": "Tariflohn",
+      "description": "Lohn nach Einsatzort, Klassifizierung und Datum aus erklärten Tafeln auflösen."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Zertifizierte Abrechnung",
+      "description": "Eingefrorene wöchentliche Berichte, gerendert über die erklärten Pack-Dateien."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Gefahrenklassen",
+      "description": "Kalkulierte Stunden per Prioritätsregeln auf Gefahrenklassen splitten."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Azubi-Quoten",
+      "description": "Geselle-zu-Azubi-Quoten täglich prüfen; Verstöße werden zum Gesellensatz bepreist."
+    },
+    "hrmPerDiem": {
+      "title": "Tagegeld",
+      "description": "Tagegeld und Fahrtkosten aus genehmigten Zeiten in die Lohnschnittstelle rechnen."
     }
   },
   "extensions": {

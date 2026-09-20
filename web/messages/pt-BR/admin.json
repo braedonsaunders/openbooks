@@ -984,7 +984,9 @@
     "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor",
     "automations_read": "Ver receitas de automação e o histórico",
     "automations_manage": "Criar automações e ajustes de aprovação",
-    "automations_run": "Executar automações agora"
+    "automations_run": "Executar automações agora",
+    "hrm_construction_read": "Ver conformidade de construção",
+    "hrm_construction_manage": "Gerenciar conformidade de construção"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2471,6 +2473,31 @@
       "home-announcements": {
         "title": "Avisos",
         "description": "Avisos da empresa para a página inicial, com público e datas."
+      },
+      "construction-classifications": {
+        "title": "Classificações de trabalho",
+        "singularTitle": "Classificação de trabalho",
+        "description": "Taxonomia de ofícios para salário vigente: classes de oficiais e aprendizes com a classe oficial de cada proporção."
+      },
+      "construction-rate-schedules": {
+        "title": "Tabelas salariais",
+        "singularTitle": "Tabela salarial",
+        "description": "Tabelas vigentes, sindicais e declaradas com escopo de projeto, local e filial mais reciprocidade."
+      },
+      "construction-comp-classes": {
+        "title": "Classes de compensação",
+        "singularTitle": "Classe de compensação",
+        "description": "Classes de prêmio com taxa por 100 onde declarada; regras de prioridade decidem o preço de cada hora."
+      },
+      "construction-per-diem-policies": {
+        "title": "Políticas de diárias",
+        "singularTitle": "Política de diárias",
+        "description": "Regras de cálculo de diárias por base. A tributação vive no componente salarial, nunca aqui."
+      },
+      "construction-ratio-rules": {
+        "title": "Regras de proporção",
+        "singularTitle": "Regra de proporção",
+        "description": "Proporções oficial-aprendiz por tabela, medidas diária ou semanalmente. A violação é precificada a oficial."
       }
     },
     "fields": {
@@ -2788,7 +2815,22 @@
       "endsOn": "Termina em",
       "action": "Ação",
       "reasonCode": "Código de motivo",
-      "requiresComment": "Exige comentário"
+      "requiresComment": "Exige comentário",
+      "trade": "Ofício",
+      "isApprentice": "Aprendiz",
+      "apprenticeProgramRef": "Ref programa",
+      "journeyClassificationId": "Classe oficial",
+      "apprenticeClassificationId": "Classe aprendiz",
+      "sourceRef": "Ref fonte",
+      "jurisdictionCode": "Jurisdição",
+      "reciprocity": "Reciprocidade",
+      "ratePer100": "Taxa / 100",
+      "lodgingOffset": "Desconto hospedagem",
+      "payComponentId": "Componente salarial",
+      "scheduleId": "Tabela",
+      "ratioJourney": "Oficial",
+      "ratioApprentice": "Aprendiz",
+      "measured": "Medição"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2867,7 +2909,10 @@
       "benefitEmployerComponent": "Componente de contribuição do empregador que tarifa suas linhas. Obrigatório se o plano tarifa custo do empregador.",
       "benefitWaitingPeriod": "Dias de serviço antes de poder aderir ao plano.",
       "benefitRequiresApproval": "As inscrições aguardam até um gerente aprová-las.",
-      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes."
+      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes.",
+      "rateScheduleSource": "Número de determinação ou id de acordo por trás desta tabela.",
+      "rateScheduleJurisdiction": "Vocabulário do pack, texto livre na camada genérica — o pack interpreta.",
+      "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração."
     },
     "options": {
       "payFrequency": {
@@ -3285,6 +3330,25 @@
         "termination": "Desligamento",
         "profile_change": "Alteração de perfil",
         "other": "Outro"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Salário vigente",
+        "unionAgreement": "Acordo sindical",
+        "orgDeclared": "Declarado"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Local de origem",
+        "jobsiteLocal": "Local da obra",
+        "higherOf": "O maior"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Diária fixa",
+        "distanceBrackets": "Faixas de distância",
+        "hoursThreshold": "Limiar de horas"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Diária",
+        "weekly": "Semanal"
       }
     },
     "payroll": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "Verbos de evento de alteração",
       "description": "Cancelar, rescindir e corrigir alterações de vínculo como eventos anexados."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Conformidade de construção",
+      "description": "Tabelas de salário vigente, folhas certificadas, classes de compensação, proporções de aprendizes e diárias para obra própria. Requer folha, projetos e ponto."
+    },
+    "hrmPrevailingWage": {
+      "title": "Salário vigente",
+      "description": "Resolver o salário por local, classificação e data a partir de tabelas declaradas."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Folha certificada",
+      "description": "Relatórios semanais congelados renderizados pelos arquivos declarados do pack."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Classes de compensação",
+      "description": "Dividir horas custeadas entre classes por regras de prioridade."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Proporções de aprendizes",
+      "description": "Exigir proporções oficial-aprendiz diariamente; a violação é precificada a oficial."
+    },
+    "hrmPerDiem": {
+      "title": "Diárias",
+      "description": "Calcular diárias e viagens do tempo aprovado para a folha."
     }
   },
   "backupsManager": {

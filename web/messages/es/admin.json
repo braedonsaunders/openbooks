@@ -984,7 +984,9 @@
     "hrm_team_manage": "Trabajar pasos asignados por el responsable",
     "automations_read": "Ver recetas de automatización y el historial",
     "automations_manage": "Crear automatizaciones y ajustes de aprobación",
-    "automations_run": "Ejecutar automatizaciones ahora"
+    "automations_run": "Ejecutar automatizaciones ahora",
+    "hrm_construction_read": "Ver cumplimiento de construcción",
+    "hrm_construction_manage": "Gestionar cumplimiento de construcción"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2426,6 +2428,31 @@
       "home-announcements": {
         "title": "Anuncios",
         "description": "Anuncios de la empresa para el inicio, con audiencia y fechas."
+      },
+      "construction-classifications": {
+        "title": "Clasificaciones de trabajo",
+        "singularTitle": "Clasificación de trabajo",
+        "description": "Taxonomía de oficios para precios de salario vigente: clases de oficiales y aprendices con la clase de oficial contra la que cuenta cada proporción."
+      },
+      "construction-rate-schedules": {
+        "title": "Tablas salariales",
+        "singularTitle": "Tabla salarial",
+        "description": "Tablas vigentes, sindicales y declaradas con alcance de proyecto, ubicación y filial más reciprocidad."
+      },
+      "construction-comp-classes": {
+        "title": "Clases de compensación",
+        "singularTitle": "Clase de compensación",
+        "description": "Clases de prima con tasa por 100 donde se declara; reglas de prioridad deciden el precio de cada hora."
+      },
+      "construction-per-diem-policies": {
+        "title": "Políticas de dietas",
+        "singularTitle": "Política de dietas",
+        "description": "Reglas de cálculo de dietas por base. La tributación vive en el componente salarial, nunca aquí."
+      },
+      "construction-ratio-rules": {
+        "title": "Reglas de proporción",
+        "singularTitle": "Regla de proporción",
+        "description": "Proporciones oficial-aprendiz por tabla, medidas diaria o semanalmente. El incumplimiento se tasa a línea de oficial."
       }
     },
     "fields": {
@@ -2743,7 +2770,22 @@
       "endsOn": "Termina el",
       "action": "Acción",
       "reasonCode": "Código de motivo",
-      "requiresComment": "Requiere comentario"
+      "requiresComment": "Requiere comentario",
+      "trade": "Oficio",
+      "isApprentice": "Aprendiz",
+      "apprenticeProgramRef": "Ref programa",
+      "journeyClassificationId": "Clase oficial",
+      "apprenticeClassificationId": "Clase aprendiz",
+      "sourceRef": "Ref fuente",
+      "jurisdictionCode": "Jurisdicción",
+      "reciprocity": "Reciprocidad",
+      "ratePer100": "Tasa / 100",
+      "lodgingOffset": "Descuento alojamiento",
+      "payComponentId": "Componente salarial",
+      "scheduleId": "Tabla",
+      "ratioJourney": "Oficial",
+      "ratioApprentice": "Aprendiz",
+      "measured": "Medición"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2822,7 +2864,10 @@
       "benefitEmployerComponent": "Componente de contribución del empleador que tarifa sus filas. Obligatorio si el plan tarifa costo del empleador.",
       "benefitWaitingPeriod": "Días de servicio antes de poder inscribirse en el plan.",
       "benefitRequiresApproval": "Las inscripciones esperan hasta que un gerente las apruebe.",
-      "benefitLevelKey": "Clave del nivel que nombra la inscripción — single, family — estable ante cambios de precio."
+      "benefitLevelKey": "Clave del nivel que nombra la inscripción — single, family — estable ante cambios de precio.",
+      "rateScheduleSource": "Número de determinación o id de convenio tras esta tabla.",
+      "rateScheduleJurisdiction": "Vocabulario del pack, texto libre en la capa genérica — el pack lo interpreta.",
+      "perDiemComponent": "Componente de ganancia por el que cruzan los importes. Su tratamiento fiscal es la única declaración de tributación."
     },
     "options": {
       "timeClassification": {
@@ -3240,6 +3285,25 @@
         "termination": "Baja",
         "profile_change": "Cambio de perfil",
         "other": "Otro"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Salario vigente",
+        "unionAgreement": "Convenio sindical",
+        "orgDeclared": "Declarado"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Local de origen",
+        "jobsiteLocal": "Lugar de obra",
+        "higherOf": "El mayor"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Diario fijo",
+        "distanceBrackets": "Tramos de distancia",
+        "hoursThreshold": "Umbral de horas"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Diaria",
+        "weekly": "Semanal"
       }
     },
     "laborCosting": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "Verbos de evento de cambio",
       "description": "Cancelar, rescindir y corregir cambios de empleo como eventos añadidos."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Cumplimiento de construcción",
+      "description": "Tablas de salario vigente, nóminas certificadas, clases de compensación, proporciones de aprendices y dietas para obra propia. Requiere nómina, proyectos y control horario."
+    },
+    "hrmPrevailingWage": {
+      "title": "Salario vigente",
+      "description": "Resolver el salario por ubicación, clasificación y fecha desde tablas declaradas."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Nómina certificada",
+      "description": "Informes semanales congelados renderizados con los archivos declarados del pack."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Clases de compensación",
+      "description": "Repartir horas costeadas entre clases por reglas de prioridad."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Proporciones de aprendices",
+      "description": "Exigir proporciones oficial-aprendiz a diario; el incumplimiento se tasa a oficial."
+    },
+    "hrmPerDiem": {
+      "title": "Dietas",
+      "description": "Calcular dietas y viajes desde tiempo aprobado hacia la interfaz de nómina."
     }
   },
   "backupsManager": {

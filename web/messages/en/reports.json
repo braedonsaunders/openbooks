@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "Action reasons",
         "description": "One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Rate schedule lines",
+        "description": "One row per schedule, classification, and effective date: the resolvable base, cash fringe, creditable fringe, and overtime multiplier."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Per-diem entries",
+        "description": "One row per employment, project, and day: computed per-diem and travel amounts with status across computed, approved, voided, and consumed."
+      },
+      "hrm_comp_class_split": {
+        "label": "Comp class split",
+        "description": "Priority match rules with their premium classes: which class prices each costed hour and its rate per 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Certified runs",
+        "description": "Certified payroll runs by project and week: frozen payloads with pack format, file artefact, and amendment links."
+      },
+      "hrm_compliance_findings": {
+        "label": "Compliance findings",
+        "description": "Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches."
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "Effective to",
         "employment_id": "Employment (id)",
         "id": "Enrolment (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Schedule",
+        "classification": "Classification",
+        "base_rate": "Base rate",
+        "fringe_rate": "Cash fringe",
+        "currency": "Currency",
+        "effective_from": "Effective from"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Day",
+        "amount": "Amount",
+        "currency": "Currency",
+        "status": "Status",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Class",
+        "priority": "Priority",
+        "rate": "Rate / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Week ending",
+        "format_key": "Format",
+        "status": "Status",
+        "project_id": "Project (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Kind",
+        "worked_on": "Day",
+        "status": "Status",
+        "project_id": "Project (id)"
       }
     },
     "enumValues": {

@@ -41,8 +41,7 @@ const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performa
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status"];
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me",
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status",
   // HR-13 begin: read-only construction-compliance tools.
   "hrm_compliance_findings", "hrm_certified_payroll",
   // HR-13 end
@@ -84,7 +83,7 @@ const TOOL_PERMS: Record<string, string> = {
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the twelve slice tools plus the core inbox tool", () => {
+test("the module exports exactly the fourteen slice tools plus the core inbox tool", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
 });
 
@@ -104,14 +103,15 @@ test("inbox_items is the core own-scope tool: self grant, no feature, read-only"
   tool.inputSchema.parse({ filter: "notices", limit: 10 });
   assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
   assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
-test("the module exports exactly the thirteen HRM read tools", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
+});
 
 // HR-13 begin: construction tools sit behind the construction switch, not
 // the bare hrm switch — a general-business org never sees them.
 const TOOL_FEATURES: Record<string, string> = {
   hrm_compliance_findings: "hrmConstructionCompliance",
   hrm_certified_payroll: "hrmConstructionCompliance",
+  // HR-16: the automations recipe tool rides the automations switch.
+  automations_status: "automations",
 };
 // HR-13 end
 
@@ -119,10 +119,6 @@ for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-    // HR-16 begin: automations_status rides the automations switch, every
-    // other slice tool rides hrm.
-    assert.equal(tool.feature, name === "automations_status" ? "automations" : "hrm");
-    // HR-16 end
     // HR-13: construction tools carry their own switch (TOOL_FEATURES above).
     assert.equal(tool.feature, TOOL_FEATURES[name] ?? "hrm");
     assert.equal(tool.tier, "module");

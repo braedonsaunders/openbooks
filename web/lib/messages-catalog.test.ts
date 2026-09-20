@@ -3008,7 +3008,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3564, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3607, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3366,8 +3366,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3564
-  const ADMIN_I2_SOURCE_HASH = '5a7287d7cd9ce271ae2be34a62e6180579b61c1eaf80fb6cdabd44061acbbb2a'
+  const ADMIN_I2_SOURCE_COUNT = 3607
+  const ADMIN_I2_SOURCE_HASH = '43ccc1a2bf0f35e7b60bd58aaf97553c2d4ee9dc59adf6a90bd2f68044cde6d1'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4450,6 +4450,16 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'pt-BR:reports.catalog.columns.hrm_employment_history.status|Status',
     'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
     'de:reports.catalog.columns.hrm_positions.code|Code',
+    // HR-13: reviewed cognates in the construction report columns.
+    'de:reports.catalog.columns.hrm_per_diem_entries.status|Status',
+    'de:reports.catalog.columns.hrm_certified_runs.status|Status',
+    'de:reports.catalog.columns.hrm_certified_runs.format_key|Format',
+    'de:reports.catalog.columns.hrm_compliance_findings.status|Status',
+    'fr:reports.catalog.columns.hrm_rate_schedule_lines.classification|Classification',
+    'fr:reports.catalog.columns.hrm_certified_runs.format_key|Format',
+    'pt-BR:reports.catalog.columns.hrm_per_diem_entries.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_certified_runs.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_compliance_findings.status|Status',
     'de:reports.catalog.columns.hrm_positions.status|Status',
     'fr:reports.catalog.columns.hrm_positions.code|Code',
     'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
@@ -5143,9 +5153,8 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1363,
   "inventory": 104,
-  "reports": 1371,
+  "reports": 1395,
   "sync": 172,
   "login": 33,
   "accounts": 82,

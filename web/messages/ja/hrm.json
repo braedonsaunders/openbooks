@@ -10,7 +10,8 @@
       "myLeave": "自分の休暇",
       "recruiting": "採用",
       "performance": "パフォーマンス",
-      "benefits": "福利厚生"
+      "benefits": "福利厚生",
+      "compliance": "コンプライアンス"
     },
     "recruiting": {
       "title": "採用",
@@ -1085,6 +1086,114 @@
       "termination": "退職",
       "profile_change": "プロフィール変更",
       "other": "その他"
+    }
+  },
+  "compliance": {
+    "title": "コンプライアンス",
+    "description": "標準賃金、認証給与、労災クラス、見習い比率、日当 — 同じ勤怠・プロジェクト・給与記録から建設コンプライアンスを処理します。",
+    "refused": "コンプライアンスは利用できません",
+    "needRead": "このワークスペースを開くには建設関連の読み取り権限が必要です。",
+    "generate": "レポートを生成",
+    "findingsTitle": "指摘事項",
+    "ratesTitle": "賃金表",
+    "certifiedTitle": "認証給与",
+    "classesTitle": "クラス",
+    "perdiemTitle": "日当",
+    "empty": "まだ何もありません。",
+    "emptyAction": "下の設定で構成してください。",
+    "active": "有効",
+    "retired": "廃止",
+    "sections": {
+      "findings": "指摘事項",
+      "rates": "賃金表",
+      "certified": "認証給与",
+      "classes": "クラス",
+      "perdiem": "日当"
+    },
+    "kinds": {
+      "ratio_breach": "比率違反",
+      "missing_rate": "賃金未設定",
+      "class_unresolved": "クラス未解決",
+      "registration_missing": "登録不足",
+      "fringe_mismatch": "フリンジ不一致"
+    },
+    "findingStatus": {
+      "open": "未対応",
+      "acknowledged": "確認済み",
+      "resolved": "解決済み"
+    },
+    "runStatus": {
+      "draft": "下書き",
+      "generated": "生成済み",
+      "submitted": "提出済み",
+      "amended": "修正済み"
+    },
+    "entryStatus": {
+      "computed": "計算済み",
+      "approved": "承認済み",
+      "voided": "無効",
+      "consumed": "消費済み"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "標準賃金",
+      "union_agreement": "組合協定",
+      "org_declared": "自社宣言"
+    },
+    "reciprocity": {
+      "home_local": "所属支部",
+      "jobsite_local": "現場支部",
+      "higher_of": "高い方"
+    },
+    "scope": {
+      "project": "プロジェクト",
+      "location": "拠点",
+      "subsidiary": "子会社",
+      "org": "全社"
+    },
+    "columns": {
+      "kind": "種類",
+      "project": "プロジェクト",
+      "day": "日",
+      "status": "状態",
+      "recorded": "記録日",
+      "schedule": "賃金表",
+      "scope": "範囲",
+      "reciprocity": "相互適用",
+      "window": "期間",
+      "run": "実行",
+      "week": "週",
+      "format": "形式",
+      "code": "コード",
+      "name": "名称",
+      "rate": "率 / 100",
+      "rules": "ルール",
+      "amount": "金額",
+      "actions": "操作"
+    },
+    "stats": {
+      "openFindings": "未対応の指摘",
+      "openFindingsSub": "次回実行前に対応",
+      "dueReports": "未提出レポート",
+      "dueReportsSub": "{week} 週のレポートがない案件",
+      "unresolvedClasses": "未解決クラス",
+      "unresolvedClassesSub": "一致するルールがない時間",
+      "perdiemWaiting": "承認待ち日当",
+      "perdiemWaitingSub": "計算済みエントリの承認"
+    },
+    "actions": {
+      "acknowledge": "確認",
+      "resolve": "解決",
+      "approve": "承認",
+      "void": "無効化",
+      "submit": "提出"
+    },
+    "generateDialog": {
+      "title": "認証レポートを生成",
+      "project": "プロジェクト",
+      "week": "週末日",
+      "format": "形式",
+      "generate": "生成",
+      "cancel": "キャンセル"
     }
   }
 }
