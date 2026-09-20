@@ -9,6 +9,12 @@ import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
+/** Same accessibility rule resolveFormLayout uses: empty/null ⇒ everyone. */
+function rowIsAccessible(allowedRoles: string[] | null, userRoles: string[]): boolean {
+  if (!allowedRoles || allowedRoles.length === 0) return true;
+  return allowedRoles.some((role) => userRoles.includes(role));
+}
+
 /**
  * PUT /api/customization/form-preferences — set the signed-in user's preferred
  * form for a record type. Self-service (any authenticated user). Body:
@@ -36,12 +42,39 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "form layout not found" }, { status: 404 });
   }
   if (layoutId) {
-    // The preferred form must be one of this org's layouts for this record type.
-    const owned = (await db.execute(sql`
-      select 1 from form_layouts
+    // The preferred form must be one resolveFormLayout would actually apply:
+    // in-org, matching record type, is_active, and role-accessible (admins
+    // bypass). Saving an inactive or role-restricted form used to return
+    // {ok:true} while resolve dropped it, so the save had no observable effect.
+    const owned = (await db.execute<{
+      isActive: boolean;
+      allowedRoles: string[] | null;
+    }>(sql`
+      select is_active as "isActive", allowed_roles as "allowedRoles"
+        from form_layouts
        where id = ${layoutId} and org_id = ${user.orgId} and record_type = ${body.recordType}
     `));
-    if (!owned.rows[0]) return NextResponse.json({ error: "form layout not found" }, { status: 404 });
+    const row = owned.rows[0];
+    if (!row) return NextResponse.json({ error: "form layout not found" }, { status: 404 });
+    if (!row.isActive) {
+      return NextResponse.json(
+        {
+          error:
+            "form layout is inactive — activate it in Customization, or choose an active form",
+        },
+        { status: 422 },
+      );
+    }
+    const userRoles = (user.roles ?? []).map((role) => role.key);
+    if (!(rowIsAccessible(row.allowedRoles, userRoles) || userRoles.includes("admin"))) {
+      return NextResponse.json(
+        {
+          error:
+            "form layout is restricted to other roles — choose a form available to your role, or ask an administrator to grant your role access",
+        },
+        { status: 403 },
+      );
+    }
   }
   await db.execute(sql`
     insert into user_form_preferences (org_id, user_id, record_type, layout_id, created_by, updated_by)
