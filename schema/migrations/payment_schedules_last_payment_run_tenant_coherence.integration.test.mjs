@@ -1,10 +1,10 @@
 /**
- * Testdb proof for 0211_payment_schedules_last_payment_run_tenant_coherence.
+ * Testdb proof for 0212_payment_schedules_last_payment_run_tenant_coherence.
  *
  * Same-org payment schedules may name their last payment run. A cross-tenant
  * last_payment_run_id insert or update is refused by the composite FK.
- * Applying 0211 against a dirty pointer (cross-tenant or orphaned) fails
- * closed and does not rewrite those rows. 0211 itself is not rewritten here.
+ * Applying 0212 against a dirty pointer (cross-tenant or orphaned) fails
+ * closed and does not rewrite those rows. 0212 itself is not rewritten here.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -17,7 +17,7 @@ import pg from "pg";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const generatedDir = join(dirname(fileURLToPath(import.meta.url)), "generated");
 const repairSql = readFileSync(
-  join(generatedDir, "0211_payment_schedules_last_payment_run_tenant_coherence.sql"),
+  join(generatedDir, "0212_payment_schedules_last_payment_run_tenant_coherence.sql"),
   "utf8",
 );
 
@@ -190,7 +190,7 @@ test(
 );
 
 test(
-  "0211 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+  "0212 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

@@ -86,7 +86,7 @@ export const flows = pgTable(
     ...auditColumns,
   },
   (t) => [
-    // Exact organization and id key required by tenant-coherent references (0212).
+    // Exact organization and id key required by tenant-coherent references (0213).
     uniqueIndex("flows_org_id_id_unique").on(t.orgId, t.id),
     index("flows_org_subject").on(t.orgId, t.subjectKind, t.enabled),
   ],
@@ -124,7 +124,7 @@ export const flowRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
-    // Tenant pair required by 0212: a run may only name a flow of its own org.
+    // Tenant pair required by 0213: a run may only name a flow of its own org.
     foreignKey({
       name: "flow_runs_flow_id_fkey",
       columns: [t.orgId, t.flowId],
@@ -358,7 +358,7 @@ schema/migrations/referential-integrity.sql):
   flow_scheduled_occurrences.run_id → flow_runs.id
   flows.org_id                  → orgs.id (on delete cascade)
   flow_runs.org_id              → orgs.id (on delete cascade)
-  flow_runs.(org_id, flow_id)   → flows(org_id, id) (on delete cascade; 0212)
+  flow_runs.(org_id, flow_id)   → flows(org_id, id) (on delete cascade; 0213)
   flow_run_effects.org_id       → orgs.id (on delete cascade)
   flow_run_effects.run_id       → flow_runs.id (on delete cascade)
   flow_gates.org_id             → orgs.id (on delete cascade)

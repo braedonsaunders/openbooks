@@ -78,6 +78,12 @@ test("payment-schedule last-run tenant-FK repair is fail-closed and does not rew
     repairName > "0210_payment_runs_source_schedule_tenant_coherence.sql",
     `${repairName} must be the next free ordinal after 0210`,
   );
+  assert.equal(repairName, "0212_payment_schedules_last_payment_run_tenant_coherence.sql");
+  assert.equal(
+    publishedSql.filter((file) => file.startsWith("0211_")).length,
+    0,
+    "0211 is reserved for Payroll; generated/ must contain no 0211_* from this goal",
+  );
 
   const shipped = readFileSync(join(generatedDir, shippedBaseline), "utf8");
   assert.match(

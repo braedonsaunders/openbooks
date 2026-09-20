@@ -20,7 +20,7 @@ const publishedSql = readdirSync(generatedDir)
   .filter((file) => file.endsWith(".sql"))
   .sort();
 const shippedBaseline = "0001_baseline.sql";
-const predecessor = "0211_payment_schedules_last_payment_run_tenant_coherence.sql";
+const predecessor = "0212_payment_schedules_last_payment_run_tenant_coherence.sql";
 const repairName = publishedSql.find((file) =>
   /^\d{4}_flow_runs_flow_tenant_coherence\.sql$/.test(file),
 );
@@ -72,13 +72,18 @@ test("flow_runs flow tenant-FK repair is fail-closed and does not rewrite histor
   );
   assert.ok(
     publishedSql.includes(predecessor),
-    "0211 remains the last-run repair; this slice must not invent a second one",
+    "0212 remains the last-run repair; this slice must not invent a second one",
   );
   assert.ok(
     repairName > predecessor,
-    `${repairName} must be the next free ordinal after 0211`,
+    `${repairName} must be the next free ordinal after 0212`,
   );
-  assert.equal(repairName, "0212_flow_runs_flow_tenant_coherence.sql");
+  assert.equal(repairName, "0213_flow_runs_flow_tenant_coherence.sql");
+  assert.equal(
+    publishedSql.filter((file) => file.startsWith("0211_")).length,
+    0,
+    "0211 is reserved for Payroll; generated/ must contain no 0211_* from this goal",
+  );
   assert.ok(
     publishedSql.includes("0200_stock_count_subsidiary.sql"),
     "0200 remains stock-count subsidiary; this repair must not reuse that ordinal",
@@ -105,7 +110,7 @@ test("flow_runs flow tenant-FK repair is fail-closed and does not rewrite histor
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.doesNotMatch(migration, /0200_stock_count/);
-  assert.doesNotMatch(migration, /0207_allocation|0208_pay_run|0209_pay_stubs|0210_payment_runs|0211_payment_schedules/);
+  assert.doesNotMatch(migration, /0207_allocation|0208_pay_run|0209_pay_stubs|0210_payment_runs|0212_payment_schedules/);
 
   assert.match(
     migration,
