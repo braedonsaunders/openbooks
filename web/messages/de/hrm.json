@@ -240,5 +240,10 @@
       "withdrawnToast": "Antrag zurückgezogen.",
       "requestFailed": "Der Änderungsantrag konnte nicht gespeichert werden."
     }
+  },
+  "directory": {
+    "employmentStatus": "Beschäftigungsstatus",
+    "serviceStart": "Dienstbeginn",
+    "noEmployment": "Keine Beschäftigung"
   }
 }

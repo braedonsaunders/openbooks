@@ -240,5 +240,10 @@
       "withdrawnToast": "申请已撤回。",
       "requestFailed": "无法保存变更申请。"
     }
+  },
+  "directory": {
+    "employmentStatus": "雇佣状态",
+    "serviceStart": "服务开始日期",
+    "noEmployment": "无雇佣关系"
   }
 }

@@ -1304,6 +1304,30 @@ test('as-of labels ship translated in every locale and keep the date placeholder
   }
 })
 
+test('employee directory copy is present in every locale and translated', () => {
+  // HR-2b: the native employee list's employment status and service start
+  // columns and the no-employment quick-filter option resolve through
+  // hrm.directory.*; a missing key renders the raw path in the roster.
+  const keys = [
+    'hrm.directory.employmentStatus',
+    'hrm.directory.serviceStart',
+    'hrm.directory.noEmployment',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
 test('banking feed operational panel copy is present in every locale and translated', () => {
   // The /banking/imports live-feeds panel (F-t05-015) renders these keys;
   // present-but-English values read as hardcoded copy on screen.

@@ -240,5 +240,10 @@
       "withdrawnToast": "申請を取り下げました。",
       "requestFailed": "変更申請を保存できませんでした。"
     }
+  },
+  "directory": {
+    "employmentStatus": "雇用ステータス",
+    "serviceStart": "勤務開始日",
+    "noEmployment": "雇用なし"
   }
 }

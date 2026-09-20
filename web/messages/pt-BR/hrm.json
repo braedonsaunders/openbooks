@@ -240,5 +240,10 @@
       "withdrawnToast": "Solicitação retirada.",
       "requestFailed": "Não foi possível salvar a solicitação de alteração."
     }
+  },
+  "directory": {
+    "employmentStatus": "Status de emprego",
+    "serviceStart": "Início do serviço",
+    "noEmployment": "Sem vínculo empregatício"
   }
 }

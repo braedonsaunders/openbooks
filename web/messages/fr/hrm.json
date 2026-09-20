@@ -240,5 +240,10 @@
       "withdrawnToast": "Demande retirée.",
       "requestFailed": "La demande de changement n'a pas pu être enregistrée."
     }
+  },
+  "directory": {
+    "employmentStatus": "Statut d'emploi",
+    "serviceStart": "Début de service",
+    "noEmployment": "Sans emploi"
   }
 }
