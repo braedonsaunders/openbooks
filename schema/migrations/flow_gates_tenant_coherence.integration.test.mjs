@@ -276,10 +276,9 @@ test(
       await assert.rejects(
         applyRepair(client),
         (error) => {
-          const text = String(error);
-          assert.match(text, /23514|legacy data violates tenant coherence/);
+          assert.equal(postgresCode(error), "23514");
           assert.match(
-            text,
+            String(error),
             /legacy data violates tenant coherence: public\.flow_gates\.flow_id/,
           );
           return true;
@@ -318,10 +317,9 @@ test(
       await assert.rejects(
         applyRepair(client),
         (error) => {
-          const text = String(error);
-          assert.match(text, /23514|legacy data violates tenant coherence/);
+          assert.equal(postgresCode(error), "23514");
           assert.match(
-            text,
+            String(error),
             /legacy data violates tenant coherence: public\.flow_gates\.run_id/,
           );
           return true;
@@ -358,10 +356,9 @@ test(
       await assert.rejects(
         applyRepair(client),
         (error) => {
-          const text = String(error);
-          assert.match(text, /23514|legacy data violates tenant coherence/);
+          assert.equal(postgresCode(error), "23514");
           assert.match(
-            text,
+            String(error),
             /legacy data violates tenant coherence: public\.flow_gates\.flow_id/,
           );
           return true;
