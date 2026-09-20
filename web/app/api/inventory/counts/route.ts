@@ -16,12 +16,12 @@ import {
   startStockCount,
   submitStockCountForReview,
 } from '@openbooks/engine/src/inventory/stock-counts.ts'
+import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
 import {
-  executeIdempotentInventoryAction,
   InventoryError,
   InventoryIdempotencyConflictError,
   InventoryOwnershipError,
-} from '@openbooks/engine/src/inventory/inventory.ts'
+} from '@openbooks/engine/src/inventory/contracts.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
