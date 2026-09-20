@@ -67,7 +67,8 @@ registerHooks({
   },
 })
 
-const { POST } = await import('./route.ts?form-layout-post-inactive-default')
+const routeUrl = './route.ts?form-layout-post-inactive-default'
+const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {

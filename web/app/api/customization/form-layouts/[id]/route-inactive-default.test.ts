@@ -67,7 +67,8 @@ registerHooks({
   },
 })
 
-const { PATCH } = await import('./route.ts?form-layout-inactive-default')
+const routeUrl = './route.ts?form-layout-inactive-default'
+const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 
 const LAYOUT_ID = '22222222-2222-4222-8222-222222222222'
 
