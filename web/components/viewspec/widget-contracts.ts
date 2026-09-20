@@ -181,6 +181,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-recent-changes': { props: ['empty', 'items', 'notAvailable'] },
   'hrm-upcoming-changes': { props: ['ends', 'endsEmpty', 'endsTitle', 'notAvailable', 'starts', 'startsEmpty', 'startsTitle', 'truncated', 'truncatedNote'] },
   'hrm-vacancy-table': { props: ['departmentColumn', 'employerColumn', 'empty', 'filledColumn', 'fundedColumn', 'groups', 'plannedColumn', 'positionsColumn', 'total', 'totalLabel', 'vacantColumn'] },
+  'hrm-onboarding-panel': { props: ['empty', 'openCount', 'openLabel', 'overdue', 'overdueLabel', 'upcoming', 'upcomingLabel', 'viewAll', 'viewAllHref'] },
+  'hrm-processes': { props: [] },
   'identity-cell': { props: ['detail', 'name'] },
   'identity-record-card': { props: ['facts', 'title'] },
   'import-statement': { props: ['accountId'] },

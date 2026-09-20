@@ -64,6 +64,13 @@ export const STEP_EVIDENCE_KINDS = ["none", "acknowledgement", "attachment"] as 
 export const STEP_STATUSES = ["pending", "done", "skipped"] as const;
 
 /** Checklist configuration per process kind, with an applies_to filter. */
+/**
+ * NOTE: the SQL migration additionally carries two STORED GENERATED columns
+ * on hrm_process_templates (applies_employer_subsidiary_id,
+ * applies_department_id) projecting the applies_to slots for structured
+ * surfaces. They are readable but never written, so they stay SQL-only by
+ * design — the shape CHECK is the single authority on filter content.
+ */
 export const hrmProcessTemplates = pgTable(
   "hrm_process_templates",
   {

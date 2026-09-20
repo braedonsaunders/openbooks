@@ -2090,6 +2090,98 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
 
+  // --- HRM process checklists (0193) ---------------------------------------
+  // Onboarding/offboarding/transfer templates with their ordered steps. The
+  // list/drawer/API are the generic Setup surfaces; ordered steps render by
+  // position and the applies_to filter edits as JSON (validated per-entity
+  // in write.ts, which proves the named subsidiary, department, and owner
+  // party are visible in the org). Deleting a template that opened
+  // processes is refused by name — retire with isActive instead.
+  {
+    key: 'hrm-process-templates',
+    table: 'hrm_process_templates',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'clipboard-check',
+    orgScoped: true,
+    orderBy: 'kind, name',
+    hasActive: true,
+    columns: [
+      { key: 'kind', kind: 'badge' },
+      { key: 'name', kind: 'text' },
+      { key: 'appliesEmployerSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'appliesDepartmentId', kind: 'ref', ref: 'departments' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      {
+        key: 'kind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'onboarding', labelKey: 'options.hrmProcessKind.onboarding' },
+          { value: 'offboarding', labelKey: 'options.hrmProcessKind.offboarding' },
+          { value: 'transfer', labelKey: 'options.hrmProcessKind.transfer' },
+        ],
+      },
+      { key: 'name', kind: 'text', required: true },
+      // The two filter slots project from the applies_to jsonb through
+      // STORED GENERATED columns (readable for prefill, never written):
+      // empty means all. The write path folds them back into applies_to
+      // before buildRow — see normalizeHrmProcessTemplateInput in write.ts.
+      { key: 'appliesEmployerSubsidiaryId', kind: 'ref', ref: 'subsidiaries', helpTextKey: 'fieldHelp.hrmProcessAppliesSubsidiary' },
+      { key: 'appliesDepartmentId', kind: 'ref', ref: 'departments', helpTextKey: 'fieldHelp.hrmProcessAppliesDepartment' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-process-template-steps',
+    table: 'hrm_process_template_steps',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-process-templates' },
+      { key: 'position', kind: 'number' },
+      { key: 'title', kind: 'text' },
+      { key: 'ownerKind', kind: 'badge' },
+      { key: 'required', kind: 'boolean' },
+    ],
+    fields: [
+      { key: 'templateId', kind: 'ref', ref: 'hrm-process-templates', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'title', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      {
+        key: 'ownerKind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'manager', labelKey: 'options.hrmStepOwner.manager' },
+          { value: 'hr', labelKey: 'options.hrmStepOwner.hr' },
+          { value: 'employee', labelKey: 'options.hrmStepOwner.employee' },
+          { value: 'named_party', labelKey: 'options.hrmStepOwner.namedParty' },
+        ],
+      },
+      { key: 'ownerPartyId', kind: 'ref', ref: 'employees' },
+      { key: 'dueOffsetDays', kind: 'integer' },
+      { key: 'required', kind: 'boolean' },
+      {
+        key: 'evidenceKind',
+        kind: 'select',
+        options: [
+          { value: 'none', labelKey: 'options.hrmStepEvidence.none' },
+          { value: 'acknowledgement', labelKey: 'options.hrmStepEvidence.acknowledgement' },
+          { value: 'attachment', labelKey: 'options.hrmStepEvidence.attachment' },
+        ],
+      },
+    ],
+  },
   // --- Assets --------------------------------------------------------------
   {
     key: 'asset-categories',

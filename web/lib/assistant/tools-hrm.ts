@@ -9,6 +9,8 @@ import {
   getHeadcountAsOf,
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
+import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
+import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
@@ -43,8 +45,10 @@ import {
  * The one SQL in this file enumerates stable employment identities for the
  * org-wide change-request list (org + subsidiary scope, capped). Version and
  * request rows are never selected here: they come only from the loaders.
+ * The process checklist tool likewise reuses the canonical process read
+ * service (processes-read.ts) — no process SQL here either.
  * Authoring stays human-attested — there are no HRM write tools in this
- * slice, so nothing here can mutate an employment or a request.
+ * slice, so nothing here can mutate an employment, a request, or a checklist.
  */
 
 const HRM_FEATURE_OFF = "hrm_feature_disabled";
@@ -59,6 +63,7 @@ export function hrmRefusal(error: unknown): ToolResult {
   if (
     error instanceof EmploymentReadError ||
     error instanceof HrmPositionError ||
+    error instanceof HrmProcessError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -331,6 +336,21 @@ const hrmPositionsAsOf: AssistantToolDef = {
       .enum(["planned", "open", "filled", "frozen", "closed"])
       .optional()
       .describe("Keep only this lifecycle status"),
+const processSegments = ["open", "overdue", "completed", "cancelled"] as const;
+
+const hrmProcesses: AssistantToolDef = {
+  name: "hrm_processes",
+  description:
+    "Process checklists with step status, owners, and due dates: one checklist in full, or every visible checklist in a segment with progress and next due. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.process.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    processId: uuidInput.optional().describe("One checklist in full; omit for the segment list"),
+    segment: z.enum(processSegments).optional().describe("List segment (default open)"),
+    employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -384,6 +404,84 @@ const hrmPositionsAsOf: AssistantToolDef = {
             holders: row.holders,
           })),
           href: "/hrm/positions",
+    const a = raw as {
+      processId?: string;
+      segment?: (typeof processSegments)[number];
+      employmentId?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      // One checklist in full: authorized per record inside the loader, so a
+      // missing, foreign-org, or out-of-scope id refuses uniformly instead
+      // of returning an empty object pretending it does not exist.
+      if (a.processId) {
+        const detail = await getProcess({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          processId: a.processId,
+        });
+        // Explicit projection: evidence actors and skip reasons are audit
+        // facts and stay in the record read, so a future step column cannot
+        // ride this tool silently.
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
+            kind: detail.kind,
+            effectiveDate: detail.effectiveDate,
+            status: detail.status,
+            employmentId: detail.employmentId,
+            workerName: detail.workerName,
+            progress: detail.progress,
+            steps: detail.steps.map((step) => ({
+              id: step.id,
+              position: step.position,
+              title: step.title,
+              ownerKind: step.ownerKind,
+              dueOn: step.dueOn,
+              required: step.required,
+              evidenceKind: step.evidenceKind,
+              status: step.status,
+              overdue: step.overdue,
+            })),
+            href: "/hrm/processes",
+          },
+        };
+      }
+      const processes = await listProcesses({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        segment: a.segment ?? "open",
+      });
+      const kept = (a.employmentId
+        ? processes.filter((process) => process.employmentId === a.employmentId)
+        : processes
+      ).map((process) => ({
+        // Explicit projection: the worker party id stays in the record
+        // read, so a future list column cannot ride this tool silently.
+        id: process.id,
+        kind: process.kind,
+        effectiveDate: process.effectiveDate,
+        status: process.status,
+        employmentId: process.employmentId,
+        workerName: process.workerName,
+        required: process.required,
+        doneRequired: process.doneRequired,
+        overdueSteps: process.overdueSteps,
+        nextDueOn: process.nextDueOn,
+      }));
+      const page = compactRows(kept, { limit });
+      return {
+        ok: true,
+        data: {
+          segment: a.segment ?? "open",
+          employmentId: a.employmentId ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
+          processes: page.items,
+          href: "/hrm/processes",
         },
       };
     } catch (error) {
@@ -393,3 +491,4 @@ const hrmPositionsAsOf: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmProcesses];
