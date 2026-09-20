@@ -60,6 +60,18 @@ async function grant(orgId: string, userId: string, permissions: string[]): Prom
   }
 }
 
+// Same shape as the change-request suite: the approval release refuses an
+// approver with no linked person by design, so every decider gets one.
+async function linkPerson(orgId: string, userId: string): Promise<string> {
+  const partyId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
+  `);
+  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
+  return partyId;
+}
+
 async function mkParty(orgId: string, name: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
@@ -121,6 +133,7 @@ async function setupHarness(): Promise<Harness> {
   await enableHrm(org.orgId);
   const managerId = await createScratchUser(org.orgId, "HRM Process Manager", "hrm_process_manager");
   await grant(org.orgId, managerId, ["hrm.process.read", "hrm.process.manage", "hrm.employment.manage"]);
+  await linkPerson(org.orgId, managerId);
   const workerPartyId = await mkParty(org.orgId, "Process Worker");
   const employmentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
   await mkVersion(org.orgId, employmentId, "2020-01-01");
@@ -428,7 +441,11 @@ test("reads segment overdue work and the overview under RLS with a second org", 
     assert.equal(overview.openProcesses.length, 1);
     assert.ok(overview.overdueSteps.length > 0);
 
+    // The foreign org needs the hrm switch on too: with it off the reads
+    // refuse FEATURE_OFF before RLS is ever exercised, so invisibility
+    // would prove nothing.
     const foreign = await createScratchOrg();
+    await enableHrm(foreign.orgId);
     try {
       const outsider = await createScratchUser(foreign.orgId, "Outsider", "outsider");
       await grant(foreign.orgId, outsider, ["hrm.process.read", "hrm.process.manage"]);
