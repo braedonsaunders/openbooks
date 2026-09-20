@@ -4398,6 +4398,8 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+  // Spanish 'General' is the reviewed cognate for the payroll General sub-tab.
+  'es:parties.drawer.payrollTabs.general|General',
     'de:reports.catalog.columns.hrm_employment_history.person|Person',
     'de:reports.catalog.columns.hrm_employment_history.status|Status',
     'de:reports.catalog.columns.hrm_employment_history.version_no|Version',
