@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createPaymentDocument } from "../payments/payments.ts";
+import { createPaymentDocument } from "../payments/payment-documents.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { add, cmp, mulDecimal, neg, sum } from "../money/money.ts";
 import { addDays, isWeekend, isMonthEnd, dayOfMonth } from "./manifest.ts";

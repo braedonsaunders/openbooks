@@ -1,18 +1,12 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import {
-  attestOwnerManagedClose,
-  closeApprovedRun,
-  CloseError,
-  decidePeriodReopen,
-  publishCloseRun,
-  refreshCloseRun,
-  requestCloseApproval,
-  requestPeriodReopen,
-  startCloseRun,
-  type CloseModule,
-} from "@openbooks/engine/src/close/close.ts";
+import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
+import { CloseError, type CloseModule } from "@openbooks/engine/src/close/period-policy.ts";
+import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
+import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
+import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
 import {
   RevaluationError,
   RevaluationFeatureDisabledError,

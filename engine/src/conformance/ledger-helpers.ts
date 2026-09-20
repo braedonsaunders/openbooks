@@ -19,7 +19,8 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { postDocument, type PostingDeps } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import type { ActualEntry, ActualLine, CaseContext, LedgerContext } from "./types.ts";
 
 /** Posting dependencies for the conformance tenant. */

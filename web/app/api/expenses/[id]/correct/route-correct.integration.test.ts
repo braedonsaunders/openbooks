@@ -39,7 +39,7 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { POST } = await import('./route.ts')
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded

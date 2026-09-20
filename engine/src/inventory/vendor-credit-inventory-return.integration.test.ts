@@ -14,7 +14,8 @@ import {
   receiveInventory,
 } from "./inventory.ts";
 import { toUnits } from "../money/money.ts";
-import { postDocument, PostingError } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { PostingError } from "../ledger/posting-contracts.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

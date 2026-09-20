@@ -83,7 +83,21 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/payments/payments.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-accounts.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-contracts.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-documents.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-errors.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-posting.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-queries.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/payment-return.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/rail-formatters.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/rail-settings.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/run-cancellation.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/run-creation.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/run-files.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/run-posting.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/run-readiness.ts', 'mock:payments'],
+  ['@openbooks/engine/src/payments/settlement-policy.ts', 'mock:payments'],
   ['@openbooks/engine/src/flows/run.ts', 'mock:flows'],
   ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', 'mock:bank-adapter'],
 ])

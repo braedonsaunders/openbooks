@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { bankBalances, openItems } = await import("./cash/core");
 for (const path of ["partial month", "completed month", "receivables", "payables"] as const) {
   for (const mode of ["all", "restricted", "empty"] as const) {

@@ -7,7 +7,8 @@ import {
 } from "@openbooks/engine/src/ledger/document-void.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
-import { postDocument, PostingError } from "@openbooks/engine/src/ledger/posting.ts";
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import {
   controlDeps,
   createPermission,

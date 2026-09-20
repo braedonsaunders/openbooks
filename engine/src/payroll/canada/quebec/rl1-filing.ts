@@ -7,7 +7,7 @@ import {
 } from "../../filing-registry.ts";
 import { rl1Population, rl1Slips, RL1_UNSUPPORTED_BOXES } from "../../rl1.ts";
 import { RL1_AMENDMENT_REFUSAL, RL1_XML_DOWNLOAD_REFUSAL } from "../../rl1xml.ts";
-import { PayrollError } from "../../run.ts";
+import { PayrollError } from "../../error.ts";
 
 /**
  * The Quebec RL-1's year-end filing declaration — the jurisdiction-within-a-

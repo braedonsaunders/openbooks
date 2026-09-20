@@ -18,10 +18,7 @@ import {
   lockAndCheckPayrollRunPopulation,
   payrollRunPopulationScopeFilter,
 } from "./scope.ts";
-import {
-  payrollSubsidiaryScopeFilter,
-  type PayrollSubsidiaryScope,
-} from "./run.ts";
+import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 
 /**

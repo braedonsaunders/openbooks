@@ -7,7 +7,8 @@ import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/records/control-accounts.ts'
-import { postDocument, PostingError } from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import {
   DocumentEditError,

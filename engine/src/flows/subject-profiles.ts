@@ -1,5 +1,5 @@
 import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
-import { DOCUMENT_KINDS } from "../close/close.ts";
+import { DOCUMENT_KINDS } from "../close/period-policy.ts";
 
 /**
  * FlowSubjectProfiles for document kinds — the author-time vocabulary the

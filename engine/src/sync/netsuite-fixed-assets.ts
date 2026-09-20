@@ -3,7 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withOrg, withOrgContext } from "../platform/db.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { buildNativeContext } from "./native.ts";
 import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
 

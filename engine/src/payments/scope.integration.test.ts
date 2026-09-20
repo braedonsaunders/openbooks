@@ -3,21 +3,18 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  createPaymentDocument,
-  createPaymentRun,
-  openItemsForParty,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} from "./payments.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { createPaymentRun } from "./run-creation.ts";
+import { openItemsForParty } from "./payment-queries.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 async function line(

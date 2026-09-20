@@ -24,11 +24,7 @@ import {
   type PayrollRemittanceSchedule,
   type StatutoryRemittanceDeclaration,
 } from "./packs.ts";
-import {
-  payrollSubsidiaryInScope,
-  payrollSubsidiaryScopeFilter,
-  type PayrollSubsidiaryScope,
-} from "./run.ts";
+import { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 
 type RemittanceExecutor = Pick<typeof db, "execute">;
 

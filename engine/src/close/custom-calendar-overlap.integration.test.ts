@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { CloseError, generateAccountingPeriods } from "./close.ts";
+import { CloseError } from "./period-policy.ts";
+import { generateAccountingPeriods } from "./calendar.ts";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 

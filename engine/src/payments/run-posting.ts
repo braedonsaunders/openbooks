@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrgTransaction } from "../platform/db.ts";
-import { runPostDocumentEffects } from "../ledger/posting.ts";
+import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
 import { PaymentError, PaymentRunPostingClaimFencedError } from "./payment-errors.ts";

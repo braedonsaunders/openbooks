@@ -11,7 +11,7 @@ import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 
 export class PropertyManagementError extends Error {
   constructor(message: string, readonly status = 422) {

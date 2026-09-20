@@ -2,14 +2,9 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  closeApprovedRun,
-  decidePeriodReopen,
-  publishCloseRun,
-  recloseApprovedReopen,
-  requestPeriodReopen,
-  startCloseRun,
-} from "./close.ts";
+import { closeApprovedRun, publishCloseRun } from "./run-completion.ts";
+import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "./reopening.ts";
+import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 

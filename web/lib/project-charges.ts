@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { postDocument } from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { nextDocumentNumber } from './bills'

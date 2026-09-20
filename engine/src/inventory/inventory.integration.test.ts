@@ -38,7 +38,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

@@ -10,16 +10,12 @@ import {
   ATTR_SURFACE,
   runInSpan,
 } from "../platform/telemetry.ts";
-import {
-  createPaymentDocument,
-  openItemsForParty,
-  postPaymentWithApplications,
-  paymentControlDeps,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-  type AllocationInput,
-} from "./payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { openItemsForParty } from "./payment-queries.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { paymentControlDeps } from "./payment-accounts.ts";
+import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 
 /**

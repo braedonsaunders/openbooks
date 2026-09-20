@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { encryptAccountNumber, decryptAccountNumber } from "../payments/payments.ts";
+import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SftpResolver, type SftpServerHandle } from "./server.ts";
 
 /**

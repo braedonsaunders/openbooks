@@ -33,7 +33,7 @@ import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend
 import type {
   PayRunCalculationError,
   PayRunRefusalAcknowledgement,
-} from '@openbooks/engine/src/payroll/run.ts'
+} from '@openbooks/engine/src/payroll/run-calculation-evidence.ts'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'

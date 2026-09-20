@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { add, cmp, toUnits } from "../money/money.ts";
-import { encryptAccountNumber } from "../payments/payments.ts";
+import { encryptAccountNumber } from "../payments/rail-settings.ts";
 import {
   NACHA_PAYROLL_ENTRY_CLASS,
   NACHA_PAYROLL_ENTRY_DESCRIPTION,
@@ -24,9 +24,10 @@ import {
   releasePayRunBankFile,
 } from "./bank-file-artifact.ts";
 import { packStatutoryComponents, setPackSlotAccount } from "./packs.ts";
-import {
-  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
-} from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 

@@ -1,4 +1,4 @@
-import { ensureCloseDefaults } from "../close/close.ts";
+import { ensureCloseDefaults } from "../close/defaults.ts";
 import { ensureCrmDefaults } from "../crm/crm.ts";
 import { ensureCustomizationDefaults } from "./customization-defaults.ts";
 import { ensureBuiltInPaymentFormats } from "../payments/operations.ts";

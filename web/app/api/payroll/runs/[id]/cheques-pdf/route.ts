@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
+import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { db } from '@openbooks/engine/src/platform/db.ts'

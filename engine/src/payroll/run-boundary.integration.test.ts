@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
-import { createPayRun, PayrollError } from './run.ts'
+import { createPayRun } from "./run-lifecycle.ts";
+import { PayrollError } from "./error.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from '../testing/fixtures.ts'
 
 const invalidPeriods = [

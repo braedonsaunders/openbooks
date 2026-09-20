@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createPaymentRun } from '@openbooks/engine/src/payments/payments.ts'
+import { createPaymentRun } from "@openbooks/engine/src/payments/run-creation.ts";
 import { guardPermission } from '../../../../lib/authz'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'

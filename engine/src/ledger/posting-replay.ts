@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/close.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period-policy.ts";
 import { resolveBillInventoryAccounts } from "../inventory/inventory.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";

@@ -39,7 +39,7 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { POST } = await import("./route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

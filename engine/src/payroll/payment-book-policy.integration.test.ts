@@ -4,8 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 import { recordPayRunPayment } from "./payment.ts";
-import { commitPayRun } from "./run.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 for (const policy of ["inactive", "non-posting", "non-primary"] as const) {

@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { finalizeCloseFlowApproval, refreshCloseRun, startCloseRun } from "./close.ts";
+import { finalizeCloseFlowApproval } from "./approvals.ts";
+import { refreshCloseRun } from "./run-automation.ts";
+import { startCloseRun } from "./run-start.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;

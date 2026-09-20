@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createPaymentDocument } from '@openbooks/engine/src/payments/payments.ts'
+import { createPaymentDocument } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { guardPermission } from '../../../../lib/authz'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'

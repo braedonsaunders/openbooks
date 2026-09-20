@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sum } from "../money/money.ts";
-import { PostingError, projectChargeKernelLines, type PostingDocument, type PostingDocumentLine } from "./posting.ts";
+import { PostingError, type PostingDocument, type PostingDocumentLine } from "./posting-contracts.ts";
+import { projectChargeKernelLines } from "./posting-rules.ts";
 
 const COST = "11111111-1111-4111-8111-111111111111";
 const RECOVERY = "22222222-2222-4222-8222-222222222222";

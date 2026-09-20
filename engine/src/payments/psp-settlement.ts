@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { assertPeriodModulesOpen } from "../close/close.ts";
+import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";

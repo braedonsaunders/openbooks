@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { isZero, sum } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 // ---------------------------------------------------------------------------
 // Shared kernel poster

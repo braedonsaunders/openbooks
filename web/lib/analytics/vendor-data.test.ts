@@ -17,13 +17,8 @@ const { vendorData } = await import("./vendor-data.ts");
 hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
-const {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} = await import("@openbooks/engine/src/payments/payments.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { createPaymentDocument, updateDraftPayment } = await import("@openbooks/engine/src/payments/payment-documents.ts"), { postPaymentWithApplications } = await import("@openbooks/engine/src/payments/payment-posting.ts"), { sameCurrencyAllocation } = await import("@openbooks/engine/src/payments/settlement-policy.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);

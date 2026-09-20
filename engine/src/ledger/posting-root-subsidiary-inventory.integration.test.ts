@@ -6,10 +6,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { receiveInventory } from "../inventory/inventory.ts";
-import {
-  postDocument,
-  runPostDocumentEffects,
-} from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
+import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import {
   claimPostingEffectsForDocument,
   MAX_POSTING_EFFECTS_ATTEMPTS,
@@ -451,7 +449,7 @@ test("a purchase order converted into a vendor bill receives its inventory at th
       createScratchUser,
       dropScratchOrg,
     } from "./engine/src/testing/fixtures.ts";
-    import { postDocument } from "./engine/src/ledger/posting.ts";
+    import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import {
       inventoryPostingEffectKey,

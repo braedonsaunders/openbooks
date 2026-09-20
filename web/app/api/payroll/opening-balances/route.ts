@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
+import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import {
   assertTaxYear,
   OPENING_BALANCE_FIELDS,

@@ -20,7 +20,7 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { postDocument } from "./engine/src/ledger/posting.ts";
+    import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { convertOrder, createOrderDraft, receivePurchaseOrder } from "./web/lib/order-cycle.ts";
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";

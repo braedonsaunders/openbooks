@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "../organization/subsidiaries.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "../money/money.ts";

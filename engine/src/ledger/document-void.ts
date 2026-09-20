@@ -3,11 +3,7 @@ import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import {
-  assertPeriodModulesOpen,
-  CloseError,
-  closeModuleForDocument,
-} from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";

@@ -2,12 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import {
-  payrollSettings,
-  seedPayrollComponents,
-  statutoryHolidayPayEnabled,
-  type PayrollSubsidiaryScope,
-} from '@openbooks/engine/src/payroll/run.ts'
+import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
+import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import {
   declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,

@@ -12,7 +12,7 @@
  */
 import { sql } from "drizzle-orm";
 import { db, withOrg, pool } from "../engine/src/platform/db.ts";
-import { postDocument } from "../engine/src/ledger/posting.ts";
+import { postDocument } from "../engine/src/ledger/posting-document.ts";
 import { deriveConsolidatedRates, runAutoElimination } from "../engine/src/consolidation/consolidation.ts";
 
 const q = async (s: ReturnType<typeof sql>): Promise<Record<string, unknown>[]> =>

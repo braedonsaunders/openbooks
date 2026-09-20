@@ -6,7 +6,7 @@ import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, mul, neg, sum, isZero } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 
 /**
  * Project GL recognition — the accounting-correct layer on top of the billing

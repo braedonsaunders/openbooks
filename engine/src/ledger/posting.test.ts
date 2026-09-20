@@ -4,16 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
-import {
-  assertFinalKernelBalance,
-  controlLineIsOpenItem,
-  glProjectionKey,
-  postDocument,
-  PostingError,
-  RULES,
-  type PostingDocument,
-  type PostingDocumentLine,
-} from "./posting.ts";
+import { assertFinalKernelBalance } from "./posting-invariants.ts";
+import { controlLineIsOpenItem, RULES } from "./posting-rules.ts";
+import { glProjectionKey } from "./posting-projection.ts";
+import { postDocument } from "./posting-document.ts";
+import { PostingError, type PostingDocument, type PostingDocumentLine } from "./posting-contracts.ts";
 
 const controlAccounts = new Set(["ar", "ap"]);
 const DB = !!process.env.OPENBOOKS_DB_URL;
