@@ -175,6 +175,15 @@ export const PERMISSION_CATALOGUE = [
   "hrm.construction.manage",
   // HR-13 end
   // HR-9 self-service — the person's own view and the manager's team.
+  // HR-12 compensation (0221/0222) — the same confidentiality rule as
+  // employment: who is paid what, and whether pay is equitable, are
+  // never riders on time.*, payroll.*, or parties.*. read = bands,
+  // architecture and cycle reads; manage = cycles, push, plans,
+  // snapshots; approve = the Flows gate on cycle decisions.
+  // Admin-only like the employment keys above.
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "hrm.compensation.approve",
   // self.read sees only the actor's own employment summary, requests and
   // steps (every read scopes by the party behind the login, never by a
   // caller-supplied id); self.request files profile-change proposals for
@@ -452,6 +461,11 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
       { key: "hrm.benefits.read", labelKey: permissionLabelKey("hrm.benefits.read") },
       { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
+      // HR-12 begin
+      { key: "hrm.compensation.read", labelKey: permissionLabelKey("hrm.compensation.read") },
+      { key: "hrm.compensation.manage", labelKey: permissionLabelKey("hrm.compensation.manage") },
+      { key: "hrm.compensation.approve", labelKey: permissionLabelKey("hrm.compensation.approve") },
+      // HR-12 end
       { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
       { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
       { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
