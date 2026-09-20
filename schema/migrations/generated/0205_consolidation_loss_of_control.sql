@@ -1,3 +1,5 @@
+-- OpenBooks forward migration 0205_consolidation_loss_of_control.
+--
 SET search_path=public,pg_catalog;
 CREATE TABLE IF NOT EXISTS consolidation_control_losses (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL REFERENCES orgs(id),
