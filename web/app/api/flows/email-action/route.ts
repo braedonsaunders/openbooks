@@ -8,7 +8,10 @@ import {
   GateError,
   type EmailActionClaims,
 } from '@openbooks/engine/src/flows/index.ts'
+import { subsidiaryScopeAllows } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { allowedSubsidiaryIds } from '../../../../lib/subsidiaries'
+import { loadFlowSubjectSubsidiary } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -16,8 +19,9 @@ export const runtime = 'nodejs'
  * One-click email approvals — NO session required (web/middleware.ts excludes
  * this path). The HMAC token (engine/src/flows/email-tokens.ts) is the entire
  * grant: it binds one gate row + one decision + one assignee with an
- * EMAIL_TOKEN_TTL_MS expiry, and decideGate still authorizes that assignee
- * normally, so the link can never do more than the assignee could in the app.
+ * EMAIL_TOKEN_TTL_MS expiry. decideGate still authorizes that assignee
+ * normally and receives their resolved subsidiary set, so the link can never
+ * do more than the assignee could in the app (including legal-entity scope).
  *
  *   GET  ?token=…   verify → standalone confirmation page (never decides)
  *   POST (form)     verify → decide as the token's assignee → done page
@@ -60,6 +64,7 @@ type GateSummary = {
   title: string
   status: string
   subject_kind: string
+  subject_id: string
   decided_by_name: string | null
   document_number: string | null
   doc_kind: string | null
@@ -71,7 +76,7 @@ type GateSummary = {
 
 async function loadGateSummary(gateId: string, orgId?: string): Promise<GateSummary | null> {
   const r = (await db.execute<GateSummary>(sql`
-    select g.id, g.org_id as "orgId", g.title, g.status, g.subject_kind,
+    select g.id, g.org_id as "orgId", g.title, g.status, g.subject_kind, g.subject_id,
            du.name as decided_by_name,
            d.document_number, d.kind as doc_kind, d.total, d.currency,
            d.document_date, p.display_name as party_name
@@ -90,6 +95,32 @@ async function loadEnabledGate(gateId: string): Promise<GateSummary | null> {
   if (!gate) return null
   if (!(await isFeatureEnabled(gate.orgId, 'flows'))) return null
   return gate
+}
+
+/**
+ * Sessionless one-click links have no request Authz. Resolve the token
+ * assignee's legal-entity set the same way the session path does, then refuse
+ * before rendering document details or calling decideGate. Omitted scope is
+ * unrestricted in the engine — this must always pass the resolved set.
+ */
+async function loadAssigneeGateScope(
+  userId: string,
+  gate: GateSummary,
+): Promise<{ allowedSubsidiaryIds: Set<string> | null; denied: boolean }> {
+  const scope = await allowedSubsidiaryIds(userId, gate.orgId)
+  const subsidiaryId = await withOrgContext(gate.orgId, () =>
+    loadFlowSubjectSubsidiary(gate.subject_kind, gate.subject_id, gate.orgId),
+  )
+  return { allowedSubsidiaryIds: scope, denied: !subsidiaryScopeAllows(scope, subsidiaryId) }
+}
+
+/** Same HTTP status as the in-app decide path; no document body. */
+function notFoundPage(): NextResponse {
+  return page(
+    'This approval link is invalid or has expired',
+    `<p style="color:#52525b">This approval was not found. Open <strong>OpenBooks → Approvals</strong> to decide there.</p>`,
+    404,
+  )
 }
 
 function documentSummaryHtml(g: GateSummary): string {
@@ -142,6 +173,8 @@ export async function GET(req: Request) {
 
   const gate = await loadEnabledGate(claims.gateId)
   if (!gate) return invalidTokenPage()
+  const { denied } = await loadAssigneeGateScope(claims.assigneeUserId, gate)
+  if (denied) return notFoundPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
   return confirmationPage(token, claims, gate)
@@ -177,6 +210,8 @@ export async function POST(req: Request) {
 
   const gate = await loadEnabledGate(claims.gateId)
   if (!gate) return invalidTokenPage()
+  const { allowedSubsidiaryIds: scope, denied } = await loadAssigneeGateScope(claims.assigneeUserId, gate)
+  if (denied) return notFoundPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
   try {
@@ -190,6 +225,7 @@ export async function POST(req: Request) {
         gateId: claims.gateId,
         decision: claims.decision,
         userId: claims.assigneeUserId,
+        allowedSubsidiaryIds: scope,
         comment: reason || null,
       }),
     )
@@ -200,6 +236,9 @@ export async function POST(req: Request) {
         const fresh = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId, gate.orgId))
         return fresh ? alreadyHandledPage(fresh) : invalidTokenPage()
       }
+      // Engine re-check of the legal-entity boundary (subject moved, or the
+      // early guard raced). Same 404 as the in-app decide path.
+      if (/not found/.test(e.message)) return notFoundPage()
       return page('Could not record your decision', `<p style="color:#52525b">${esc(e.message)}</p>`, 409)
     }
     console.error('[flows] email-action decide failed:', e)
