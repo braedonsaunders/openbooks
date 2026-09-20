@@ -24,6 +24,7 @@ import {
   resolveAsOf,
 } from "./temporal.ts";
 import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
+import { endEnrollmentsForTermination } from "./benefits/enrollments.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -1296,6 +1297,18 @@ async function applyEmploymentVersionChange(
       employmentId: request.employment_id,
       changeId,
       trigger: versionTrigger,
+    });
+  }
+  // A termination ends every live benefit enrolment in this same
+  // transaction (HR-8): coverage cannot outlive the employment, and the
+  // ends-or-cancels land atomically with the version successor above — a
+  // throw rolls all of it back together.
+  if (payload.kind === "termination") {
+    await endEnrollmentsForTermination(exec, {
+      orgId,
+      actorId,
+      employmentId: request.employment_id,
+      terminatedOn: parseCivilDate(payload.effectiveDate),
     });
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
