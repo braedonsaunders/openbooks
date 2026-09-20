@@ -27,7 +27,7 @@ type Row = Record<string, unknown>
   viewRows: [] as Row[],
   prefViewId: null as string | null,
   // A present row with view_id NULL is "use system default" (schema:
-  // null viewId ⇒ org default). That is not the same as no preference row.
+  // null viewId ⇒ skip personal, then org/system). That is not the same as no preference row.
   prefCleared: false,
   async execute() {
     const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
@@ -215,6 +215,25 @@ test('a personal isDefault is the user default when no preference is set', async
   assert.equal(resolved.row?.id, personal.id)
   assert.equal(resolved.view.perPage, 50)
   assert.deepEqual(resolved.view.sort, { column: 'short_code', dir: 'desc' })
+})
+
+test('a unique personal isDefault applies when the org view is not default', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [seedRow({ isDefault: false }), personal] }, 'org-case-13b')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 50)
 })
 
 // The views-menu preference is the more specific "I chose this view" write

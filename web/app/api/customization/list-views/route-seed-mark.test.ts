@@ -149,3 +149,57 @@ test('POST stores a marked config without the mark', async () => {
   assert.ok(!('seededDefault' in stored[0]!), 'the stored config must not carry the seed mark')
   assert.deepEqual(stored[0]!.sort, { column: 'display_name', dir: 'desc' })
 })
+
+function postRequest(body: unknown): Request {
+  return new Request('http://x/api/customization/list-views', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+test('POST refuses a non-boolean isDefault by name and writes nothing', async () => {
+  installDb()
+  const res = await POST(
+    postRequest({
+      recordType: 'employee',
+      name: 'Default view',
+      scope: 'org',
+      config: seedShape,
+      isDefault: 'false',
+    }),
+  )
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).error, 'isDefault must be a boolean')
+  assert.equal((dbState as DbState).statements.length, 0, 'rejected create must not enter the write transaction')
+})
+
+test('POST refuses overlapping defaults by name', async () => {
+  installDb()
+  const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
+    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+  }
+  state.db = {
+    execute: async () => ({ rows: [] }),
+    transaction: async (fn) => {
+      const tx = {
+        execute: async (query: unknown) => {
+          state.statements.push(query)
+          return { rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Default view', n: 2 }] }
+        },
+      }
+      return fn(tx)
+    },
+  }
+  const res = await POST(
+    postRequest({
+      recordType: 'employee',
+      name: 'Default view',
+      scope: 'user',
+      config: seedShape,
+      isDefault: true,
+    }),
+  )
+  assert.equal(res.status, 409)
+  assert.match(String((await res.json()).error), /Clear the extra default/)
+})

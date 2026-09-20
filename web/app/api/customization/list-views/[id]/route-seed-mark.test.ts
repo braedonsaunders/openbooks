@@ -168,3 +168,102 @@ test('PATCH stores a marked config without the mark, keeping the edit', async ()
   assert.ok(!('seededDefault' in stored[0]!), 'the stored config must not carry the seed mark')
   assert.deepEqual(stored[0]!.sort, { column: 'short_code', dir: 'desc' })
 })
+
+function patchRequest(body: unknown): Request {
+  return new Request(`http://x/api/customization/list-views/${VIEW_ID}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+const activePersonal = {
+  id: VIEW_ID,
+  recordType: 'employee',
+  name: 'Default view',
+  scope: 'user',
+  ownerId: 'user-1',
+  isDefault: false,
+  isActive: true,
+  config: seedShape,
+  createdAt: AT,
+  updatedAt: AT,
+}
+
+test('PATCH refuses an inactive personal isDefault instead of saving it', async () => {
+  installDb(activePersonal)
+  const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  })
+  assert.notEqual(res.status, 200, 'an inactive personal default must not report success')
+  assert.equal(res.status, 400)
+  assert.match(String((await res.json()).error), /inactive view cannot be the default/)
+  assert.equal((dbState as DbState).statements.length, 0, 'the inactive default must not be written')
+})
+
+test('PATCH refuses deactivating a personal view that stays default', async () => {
+  installDb({ ...activePersonal, isDefault: true, isActive: true })
+  const res = await PATCH(patchRequest({ isActive: false }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  })
+  assert.equal(res.status, 400)
+  assert.match(String((await res.json()).error), /unset default before deactivating/)
+  assert.equal((dbState as DbState).statements.length, 0)
+})
+
+test('PATCH of a vanished view is a named zero-row failure', async () => {
+  installDb(activePersonal)
+  const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
+    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+  }
+  state.db.transaction = async (fn) => {
+    const tx = {
+      execute: async (query: unknown) => {
+        state.statements.push(query)
+        return { rows: [] }
+      },
+    }
+    return fn(tx)
+  }
+  const res = await PATCH(patchRequest({ name: 'Renamed' }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  })
+  assert.notEqual(res.status, 200, 'a zero-row update must not report success')
+  assert.equal(res.status, 404)
+  assert.equal((await res.json()).error, 'not found')
+})
+
+test('PATCH refuses overlapping personal defaults by name', async () => {
+  installDb(activePersonal)
+  const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
+    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+  }
+  let txCalls = 0
+  state.db.transaction = async (fn) => {
+    const tx = {
+      execute: async (query: unknown) => {
+        state.statements.push(query)
+        txCalls += 1
+        if (txCalls === 1) {
+          return {
+            rows: [{
+              id: VIEW_ID,
+              recordType: 'employee',
+              scope: 'user',
+              ownerId: 'user-1',
+              isDefault: false,
+              isActive: true,
+            }],
+          }
+        }
+        return { rows: [{ id: VIEW_ID, n: 2 }] }
+      },
+    }
+    return fn(tx)
+  }
+  const res = await PATCH(patchRequest({ isDefault: true }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  })
+  assert.equal(res.status, 409)
+  assert.match(String((await res.json()).error), /Clear the extra default/)
+})
