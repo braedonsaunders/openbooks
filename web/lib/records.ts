@@ -1,8 +1,9 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
+import { pgTextArrayLiteral } from './pg-array'
 import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
 /**
@@ -146,6 +147,27 @@ export function recordVisibleInSubsidiaryFence(
   const subsidiaryId = data.subsidiary_id
   if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
   return fence.has(subsidiaryId)
+}
+
+/**
+ * Query form of recordVisibleInSubsidiaryFence for custom_records.data.
+ * Returns null when the caller is unrestricted (no extra predicate).
+ */
+export function recordVisibleInSubsidiaryFenceSql(
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+  declaresSubsidiaryField: boolean,
+): SQL | null {
+  const fence = allowedSubsidiaryIds ?? null
+  if (fence === null) return null
+  const inFence = sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])`
+  if (declaresSubsidiaryField) {
+    return fence.size === 0 ? sql`false` : inFence
+  }
+  return sql`(
+    ${inFence}
+    or data ->> ${'subsidiary_id'} is null
+    or data ->> ${'subsidiary_id'} = ${''}
+  )`
 }
 
 /**

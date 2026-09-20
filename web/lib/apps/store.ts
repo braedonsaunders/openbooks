@@ -36,9 +36,8 @@ import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, type RecordTypeRow } from '@/lib/records'
+import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
-import { pgTextArrayLiteral } from '@/lib/pg-array'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -676,19 +675,17 @@ function recordsAdapter(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): AppRecordsAdapter {
   /**
-   * The bridge caller's subsidiary fence for one custom-record type. Types
-   * declaring the conventional subsidiary_id field are filtered to the
-   * caller's visible entities (fail-closed on an empty fence); types without
-   * the field stay org-visible — the same predicate platform.ts enforces.
+   * The bridge caller's subsidiary fence for one custom-record type. Same
+   * rule as recordVisibleInSubsidiaryFence: honor stored JSON subsidiary_id
+   * even when the live type no longer declares the field.
    */
   function scopeFor(type: RecordTypeRow): SQL {
-    if (allowedSubsidiaryIds === null) return sql``
     const lint = lintRecordFields(type.fields, type.name)
-    if (!lint.success || !hasSubsidiaryField(lint.sections)) return sql``
-    const ids = [...allowedSubsidiaryIds]
-    return ids.length > 0
-      ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(ids)}::text[])`
-      : sql`and false`
+    const cond = recordVisibleInSubsidiaryFenceSql(
+      allowedSubsidiaryIds,
+      lint.success && hasSubsidiaryField(lint.sections),
+    )
+    return cond ? sql`and ${cond}` : sql``
   }
   return {
     async list(typeKey, filters) {

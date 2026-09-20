@@ -196,3 +196,92 @@ test('bridge records.list/get honor the caller subsidiary fence on JSON subsidia
     await withBypass(() => dropScratchOrg(fx.org.orgId))
   }
 })
+
+test('bridge records.list/get still hide stored JSON subsidiary_id after the type drops the field', { skip: !DB }, async () => {
+  const typeKey = `bridgedrop-${randomUUID().replaceAll('-', '').slice(0, 10)}`
+  const visibleId = randomUUID()
+  const hiddenId = randomUUID()
+  const fx = await withBypass(async () => {
+    const org = await createScratchOrg()
+    const { adminId } = await seedFlowActors(org.orgId)
+    const branch = randomUUID()
+    const typeId = randomUUID()
+    const fields = [{
+      id: 'main',
+      title: 'Details',
+      fields: [{ id: 'title', type: 'text', label: 'Title' }],
+    }]
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${branch}, ${org.orgId}, ${org.subsidiaryId}, 'Bridge Dropped Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+    `)
+    await db.execute(sql`
+      insert into custom_record_types
+        (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+      values
+        (${typeId}, ${org.orgId}, ${typeKey}, 'Bridge Dropped', 'Bridge Dropped',
+         ${JSON.stringify(fields)}::jsonb, 'published', ${adminId}, ${adminId})
+    `)
+    for (const [id, subsidiaryId, title] of [
+      [visibleId, org.subsidiaryId, 'visible'] as const,
+      [hiddenId, branch, 'hidden'] as const,
+    ]) {
+      await db.execute(sql`
+        insert into custom_records
+          (id, org_id, type_id, type_key, record_number, data, search_text, status, created_by, updated_by)
+        values
+          (${id}, ${org.orgId}, ${typeId}, ${typeKey}, ${id},
+           ${JSON.stringify({ subsidiary_id: subsidiaryId, title })}::jsonb,
+           ${title}, 'active', ${adminId}, ${adminId})
+      `)
+    }
+    const user = {
+      id: adminId,
+      email: 'bridge-drop@scratch.test',
+      name: 'Bridge Drop Caller',
+      roles: [{ key: 'admin', name: 'Admin' }],
+      orgId: org.orgId,
+      envKind: 'production' as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: adminId,
+      homeOrgId: org.orgId,
+    }
+    return { org, actorId: adminId, user }
+  })
+  try {
+    const appKey = await installRecordsApp({
+      org: fx.org,
+      actorId: fx.actorId,
+      branchId: '',
+      typeKey,
+      plainTypeKey: '',
+      visibleId,
+      hiddenId,
+      user: fx.user,
+    })
+    const base = {
+      orgId: fx.org.orgId,
+      user: fx.user,
+      key: appKey,
+      userCan: () => true,
+      allowedSubsidiaryIds: new Set([fx.org.subsidiaryId]) as ReadonlySet<string> | null,
+    }
+    const listed = await withOrgContext(fx.org.orgId, () =>
+      runBridgeMethod({ ...base, method: 'records.list', payload: { typeKey } }),
+    )
+    assert.equal(listed.ok, true, JSON.stringify(listed))
+    const rows = (listed as { result?: Array<{ id: string }> }).result ?? []
+    assert.deepEqual(rows.map((r) => r.id), [visibleId])
+
+    const gotHidden = await withOrgContext(fx.org.orgId, () =>
+      runBridgeMethod({ ...base, method: 'records.get', payload: { typeKey, id: hiddenId } }),
+    )
+    assert.equal(gotHidden.ok, true, JSON.stringify(gotHidden))
+    assert.equal((gotHidden as { result?: unknown }).result, null)
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.org.orgId))
+  }
+})
