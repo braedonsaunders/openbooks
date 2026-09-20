@@ -47,15 +47,6 @@ async function sandboxCounterpartMap(table: "subsidiaries" | "departments", prod
  * carryover_rule, rating_scale) carry kinds, decimal strings, day counts
  * and label strings — no identities — and copy verbatim on purpose. */
 export const SCOPE_FILTER_TABLES = ["hrm_process_templates", "hrm_leave_policies", "hrm_review_cycles"] as const;
-/** HRM scope filters: `applies_to` on process templates, leave policies,
- * and enrollment windows is
- * `{ employer_subsidiary_id?: uuid|null, department_id?: uuid|null }` (the
- * shape CHECK on each table is the authority). Both keys are tenant identities
- * that the scalar FK rebase never sees, so a verbatim copy would pin a sandbox
- * rule to a PRODUCTION entity or department. The sibling rule columns
- * (accrual_rule, carryover_rule) carry kinds, decimal strings and day counts —
- * no identities — and copy verbatim on purpose. */
-export const SCOPE_FILTER_TABLES = ["hrm_process_templates", "hrm_leave_policies", "hrm_enrollment_windows"] as const;
 export type ScopeFilterTable = (typeof SCOPE_FILTER_TABLES)[number];
 
 export function remapScopeFilter(

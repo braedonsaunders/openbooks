@@ -952,12 +952,6 @@ export async function requireAggregatePerformanceManage(
  * exactly like the employment gates.
  */
 export async function requireHrmPerformanceOnEmployment(
-/** Benefits duties (HR-8). Confidential like employment. */
-export const HRM_BENEFITS_PERMISSIONS = ["hrm.benefits.read", "hrm.benefits.manage"] as const;
-
-export type HrmBenefitsPermission = (typeof HRM_BENEFITS_PERMISSIONS)[number];
-
-async function requireHrmBenefitsAccess(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -965,14 +959,6 @@ async function requireHrmBenefitsAccess(
   permission: HrmPerformancePermission,
 ): Promise<TrustedEmploymentSubject> {
   await requireHrmPerformanceGrant(exec, orgId, actorId, permission);
-  permission: HrmBenefitsPermission,
-  // Same hardwiring as employment and leave: live grant set, subject loaded
-  // from worker_employments on the trusted runner, employer scope enforced.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Benefits access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -980,36 +966,6 @@ async function requireHrmBenefitsAccess(
 
 /** See exit records and turnover. HR-only: no structural scope exists here. */
 export async function requireHrmRetentionRead(
-/** See benefit elections scoped to an employment. */
-export async function requireHrmBenefitsRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-): Promise<TrustedEmploymentSubject> {
-  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.read");
-}
-
-/**
- * Author elections and inputs against an employment: the manage grant plus
- * the employment's employer scope.
- */
-export async function requireHrmBenefitsManageOnEmployment(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-): Promise<TrustedEmploymentSubject> {
-  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.manage");
-}
-
-/**
- * Org-level benefits configuration (windows, approvals, input generation):
- * permission only, no subsidiary scope — a window or plan decision is org
- * configuration, and scoping it by one employer would let two managers
- * decide the same election differently.
- */
-export async function requireHrmBenefitsManage(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -1017,8 +973,6 @@ export async function requireHrmBenefitsManage(
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
     throw new HrmAuthorizationError(
       "Retention access requires the hrm.retention.read permission — ask an administrator to grant it in /admin/roles.",
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.benefits.manage"))) {
-      "Benefits configuration requires the hrm.benefits.manage permission — ask an administrator to grant it in /admin/roles.",
     );
   }
 }
@@ -1058,10 +1012,82 @@ export async function loadManagedEmploymentIds(
        and (r.effective_to is null or r.effective_to > ${asOf}::date)
   `)).rows;
   return rows.map((row) => row.employmentId);
+}
+
+/** Benefits duties (HR-8). Confidential like employment. */
+export const HRM_BENEFITS_PERMISSIONS = ["hrm.benefits.read", "hrm.benefits.manage"] as const;
+
+export type HrmBenefitsPermission = (typeof HRM_BENEFITS_PERMISSIONS)[number];
+
+async function requireHrmBenefitsAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmBenefitsPermission,
+): Promise<TrustedEmploymentSubject> {
+  // Same hardwiring as employment and leave: live grant set, subject loaded
+  // from worker_employments on the trusted runner, employer scope enforced.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Benefits access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** See benefit elections scoped to an employment. */
+export async function requireHrmBenefitsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.read");
+}
+
+/**
+ * Author elections and inputs against an employment: the manage grant plus
+ * the employment's employer scope.
+ */
+export async function requireHrmBenefitsManageOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.manage");
+}
+
+/**
+ * Org-level benefits configuration (windows, approvals, input generation):
+ * permission only, no subsidiary scope — a window or plan decision is org
+ * configuration, and scoping it by one employer would let two managers
+ * decide the same election differently.
+ */
+export async function requireHrmBenefitsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.benefits.manage"))) {
+    throw new HrmAuthorizationError(
+      "Benefits configuration requires the hrm.benefits.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/**
  * Self-service election gate: hrm.benefits.read plus proof the employment
  * is the actor's own. An employee reads and elects only their own
  * enrolments through this structural scope — nothing beyond their own rows.
+ */
 export async function requireOwnEmploymentForBenefits(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
   const subject = await requireHrmBenefitsRead(exec, orgId, actorId, employmentId);
@@ -1079,7 +1105,11 @@ export async function requireOwnEmploymentForBenefits(
  * employment: the hrm.benefits.read grant, then the employer-subsidiary
  * scope for the caller to filter by (null = unrestricted), never a boolean
  * to trust.
+ */
 export async function requireAggregateBenefitsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
 ): Promise<Set<string> | null> {
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.benefits.read"))) {
     throw new HrmAuthorizationError(

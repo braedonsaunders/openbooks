@@ -130,8 +130,7 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
 });
 
 test("hrm route tabs are the six working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance']) {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/benefits']) {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee
@@ -143,9 +142,9 @@ test("hrm route tabs are the six working surfaces, each behind its own gate", ()
   assert.match(groupTabs, /'\/hrm\/positions': 'hrm\.position\.read'/, "positions tab hides without the headcount-plan read grant");
   assert.match(groupTabs, /'\/hrm\/processes': 'hrm\.process\.read'/, "processes tab hides without the process read grant");
   assert.match(groupTabs, /'\/hrm\/leave': 'hrm\.leave\.read'/, "leave desk tab hides without the leave read grant");
+  assert.match(groupTabs, /'\/hrm\/benefits': 'hrm\.benefits\.read'/, "benefits tab hides without the benefits read grant");
   assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm\.recruiting\.read'/, "recruiting tab hides without the funnel read grant");
   assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm'/, "recruiting tab hides while the feature switch is off");
-  assert.match(groupTabs, /'\/hrm\/benefits': 'hrm\.benefits\.read'/, "benefits tab hides without the benefits read grant");
   assert.match(groupTabs, /'\/entities\/employees': 'parties\.read'/, "employees tab hides without the parties grant");
   // The performance tab carries NO permission entry by design: it sits
   // behind hrm.performance.read OR the structural scope (a manager with

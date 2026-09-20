@@ -577,8 +577,12 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 't.employment_id' },
     ],
     defaultSort: { column: 'terminated_on', direction: 'desc' },
+  },
+  {
     key: 'hrm_benefit_enrollments',
     label: 'Benefit enrolments',
+    category: 'hrm',
+    description:
       'One row per benefit election — person, employer, department at election, plan and coverage tier, status, and the stored per-period employee and employer amounts in plan currency. Requires the HRM benefits permission.',
     // One row per hrm_benefit_enrollments row with its stored amounts: a
     // later plan repricing never rewrites these figures, so SUM over a
@@ -595,18 +599,25 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id
       LEFT JOIN hrm_benefit_plan_levels lvl
         ON lvl.plan_id = e.plan_id AND lvl.org_id = e.org_id AND lvl.level_key = e.coverage_level_key
+      LEFT JOIN employment_assignment_versions pa
         ON pa.employment_id = e.employment_id AND pa.org_id = e.org_id
+       AND pa.is_primary AND pa.recorded_until IS NULL
        AND pa.effective_from <= e.effective_from
        AND (pa.effective_to IS NULL OR pa.effective_to > e.effective_from)
       LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = e.org_id`,
     orgColumn: 'e.org_id',
     subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
     requiredPermission: HRM_BENEFITS_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
     // The election start is the fact: the period picker narrows cost by
     // the month coverage began, so a mid-year election attributes to its
     // own period, never to the plan year.
     defaultPeriodField: 'effective_from',
+    columns: [
       { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'e.effective_from' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.code' },
       { key: 'plan_name', label: 'Plan name', kind: 'text', expr: 'p.name' },
       { key: 'coverage', label: 'Coverage', kind: 'text', expr: 'lvl.label' },
@@ -617,6 +628,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'e.effective_to' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
       { key: 'id', label: 'Enrolment (id)', kind: 'uuid', expr: 'e.id' },
+    ],
     defaultSort: { column: 'effective_from', direction: 'desc' },
   },
 ]

@@ -139,6 +139,11 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // at consume time, never silently absorbed). pay_component_id is never
   // re-pointed by a party merge: components carry no party column.
   ["hrm_benefit_payroll_inputs", "employee_party_id"],
+  // 0197: a plan's provider is a vendor party that follows the merge
+  // wholesale — no uniqueness on hrm_benefit_plans involves that column,
+  // so re-pointing cannot duplicate (the party-merges coverage test names
+  // every parties(id) foreign key; this one was missing from the seam).
+  ["hrm_benefit_plans", "provider_party_id"],
 ];
 
 /**

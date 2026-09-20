@@ -231,111 +231,6 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 }),
               ],
             }),
-            panel({
-              title: f('recentTitle'),
-              iconKey: 'scroll-text',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-recent-changes', {
-                  items: data.recent,
-                  empty: data.recentEmpty,
-                  notAvailable: data.queueNotAvailable,
-                }),
-              ],
-            }),
-            ...(data.leavePanel
-              ? [
-                  panel({
-                    title: data.leavePanel.title,
-                    iconKey: 'calendar',
-                    bodyClassName: 'p-0',
-                    className: 'shrink-0',
-                    blocks: [
-                      widgetBlock('hrm-leave-panel', {
-                        items: data.leavePanel.onLeaveToday,
-                        empty: data.leavePanel.onLeaveEmpty,
-                        pendingCount: data.leavePanel.pendingCount,
-                        pendingLabel: data.leavePanel.pendingLabel,
-                        queueHref: data.leavePanel.queueHref,
-                        viewAllLabel: data.pendingViewAll,
-                      }),
-                    ],
-                  }),
-                ]
-              : []),
-            ...(data.benefitsPanel
-              ? [
-                  panel({
-                    title: data.benefitsPanel.title,
-                    iconKey: 'heart-pulse',
-                    bodyClassName: 'p-0',
-                    className: 'shrink-0',
-                    blocks: [
-                      widgetBlock('hrm-benefits-panel', {
-                        openWindows: data.benefitsPanel.openWindows,
-                        openLabel: data.benefitsPanel.openLabel,
-                        openEmpty: data.benefitsPanel.openEmpty,
-                        pendingCount: data.benefitsPanel.pendingCount,
-                        pendingLabel: data.benefitsPanel.pendingLabel,
-                        missingCount: data.benefitsPanel.missingCount,
-                        missingLabel: data.benefitsPanel.missingLabel,
-                        queueHref: data.benefitsPanel.queueHref,
-                        viewAllLabel: data.pendingViewAll,
-                      }),
-                    ],
-                  }),
-                ]
-              : []),
-          ]),
-
-          grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
-            panel({
-              title: f('upcomingTitle'),
-              iconKey: 'timer',
-              hint: f('upcomingHint'),
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-upcoming-changes', {
-                  starts: data.starts,
-                  ends: data.ends,
-                  startsTitle: data.startsTitle,
-                  startsEmpty: data.startsEmpty,
-                  endsTitle: data.endsTitle,
-                  endsEmpty: data.endsEmpty,
-                  notAvailable: data.queueNotAvailable,
-                  truncated: data.upcomingTruncated,
-                  truncatedNote: data.upcomingTruncatedNote,
-                }),
-              ],
-            }),
-            panel({
-              title: f('readinessTitle'),
-              iconKey: 'triangle-alert',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-readiness', {
-                  message: data.readinessMessage,
-                  docHref: data.readinessDocHref,
-                  docLabel: data.readinessDocLabel,
-                  tone: data.readinessTone,
-                }),
-              ],
-            }),
-            widgetBlock('directory-section', {
-              items: data.actions,
-              title: data.actionsTitle,
-            }),
-            // The shared `directory-section` component (purchasing/sections.tsx)
-            // renders the wrapper-or-null pair, so it is reused, not copied.
-            widgetBlock('directory-section', {
-              items: data.directory,
-              title: data.directoryTitle,
-            }),
-            // The onboarding panel is additive: it renders exactly when the
-            // loader resolved it (the viewer holds hrm.process.read).
             ...(data.onboarding
               ? [
                   panel({
@@ -373,6 +268,29 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                         pendingCount: data.leavePanel.pendingCount,
                         pendingLabel: data.leavePanel.pendingLabel,
                         queueHref: data.leavePanel.queueHref,
+                        viewAllLabel: data.pendingViewAll,
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
+            ...(data.benefitsPanel
+              ? [
+                  panel({
+                    title: data.benefitsPanel.title,
+                    iconKey: 'heart-pulse',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-benefits-panel', {
+                        openWindows: data.benefitsPanel.openWindows,
+                        openLabel: data.benefitsPanel.openLabel,
+                        openEmpty: data.benefitsPanel.openEmpty,
+                        pendingCount: data.benefitsPanel.pendingCount,
+                        pendingLabel: data.benefitsPanel.pendingLabel,
+                        missingCount: data.benefitsPanel.missingCount,
+                        missingLabel: data.benefitsPanel.missingLabel,
+                        queueHref: data.benefitsPanel.queueHref,
                         viewAllLabel: data.pendingViewAll,
                       }),
                     ],
