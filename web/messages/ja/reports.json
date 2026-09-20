@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "離職",
         "description": "退職者ごとに1行 — 氏名、終了日、勤続日数、退職理由、退職記録の自己都合・惜別フラグ。終了月と部門で集計して期間×部門の退職表に; 率は定着パネルから。"
+      },
+      "hrm_benefit_enrollments": {
+        "label": "福利厚生加入",
+        "description": "加入ごと1行 — 加入者、雇用者、加入時の部門、プランと保障区分、状態、期間ごとの保存金額。福利厚生権限が必要。"
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "自己都合",
         "regrettable": "惜別",
         "employment_id": "雇用 (ID)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "開始日",
+        "person": "加入者",
+        "employer": "雇用者",
+        "department": "部門",
+        "plan": "プラン",
+        "plan_name": "プラン名",
+        "coverage": "保障区分",
+        "status": "状態",
+        "employee_amount": "本人金額",
+        "employer_amount": "会社金額",
+        "currency": "通貨",
+        "effective_to": "終了日",
+        "employment_id": "雇用（id）",
+        "id": "加入（id）"
       }
     },
     "enumValues": {

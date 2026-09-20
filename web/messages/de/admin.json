@@ -2518,6 +2518,16 @@
         "title": "Beurteilungsfragen",
         "singularTitle": "Beurteilungsfrage",
         "description": "Fragen in einem Beurteilungsabschnitt: Bewertung, Text oder beides. Pflichtfragen müssen vor dem Einreichen beantwortet werden."
+      },
+      "benefit-plans": {
+        "title": "Leistungspläne",
+        "singularTitle": "Leistungsplan",
+        "description": "Was die Organisation über das Gehalt hinaus bietet — Gesundheit, Zahn, Rente — mit Kosten, Teilmonatsregel und Abrechnungskomponenten."
+      },
+      "benefit-plan-levels": {
+        "title": "Leistungsstufen",
+        "singularTitle": "Leistungsstufe",
+        "description": "Deckungsstufen je Plan — nur Mitarbeiter, Familie — mit den Stufenkosten."
       }
     },
     "fields": {
@@ -2815,7 +2825,20 @@
       "answerKind": "Antwortart",
       "ratingScaleMin": "Skalenminimum",
       "ratingScaleMax": "Skalenmaximum",
-      "ratingScaleLabels": "Skalenbeschriftungen"
+      "ratingScaleLabels": "Skalenbeschriftungen",
+      "providerPartyId": "Anbieter",
+      "employerSubsidiaryId": "Arbeitgebergesellschaft",
+      "employeeCostBasis": "Arbeitnehmer-Kostenbasis",
+      "employeeCost": "Arbeitnehmerkosten",
+      "employerCostBasis": "Arbeitgeber-Kostenbasis",
+      "employerCost": "Arbeitgeberkosten",
+      "pretax": "Vorsteuer",
+      "prorationBasis": "Anteilberechnung",
+      "employeePayComponentId": "Arbeitnehmerkomponente",
+      "employerPayComponentId": "Arbeitgeberkomponente",
+      "waitingPeriodDays": "Wartezeit (Tage)",
+      "requiresApproval": "Genehmigung erforderlich",
+      "levelKey": "Stufenschlüssel"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2881,7 +2904,20 @@
       "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall.",
       "hrmReviewScaleMin": "Niedrigste Bewertung, die die Skala akzeptiert, zum Beispiel 1.",
       "hrmReviewScaleMax": "Höchste Bewertung, die die Skala akzeptiert, zum Beispiel 5.",
-      "hrmReviewScaleLabels": "Optionale Endpunktbeschriftungen, niedrigste zuerst."
+      "hrmReviewScaleLabels": "Optionale Endpunktbeschriftungen, niedrigste zuerst.",
+      "benefitKind": "Organisationsweite Art — Gesundheit, Zahn, Sehen, Leben, Rente, Wellness, sonstige. Freitext, niemals eine geschlossene Liste.",
+      "benefitProvider": "Anbieter oder Träger hinter dem Plan, falls vorhanden.",
+      "benefitSubsidiary": "Arbeitgebergesellschaft, der der Plan angeboten wird; leer bedeutet alle.",
+      "benefitCurrency": "Planwährung, drei Buchstaben. Wird auf jeder Anmeldung gespeichert und niemals umgerechnet.",
+      "benefitCostBasis": "Wie die Kostenangabe liest: je Periode, Monat, Jahr oder Prozent vom Lohn.",
+      "benefitCost": "Kostenbetrag in der Planwährung. Prozentwerte sind Prozentsätze.",
+      "benefitPretax": "Die eigene Vorsteuer-Erklärung der Organisation; Abrechnungspakete interpretieren sie.",
+      "benefitProrationBasis": "Pflicht: wie ein Teilmonat zahlt. Voller Monat trägt den ganzen Monat; täglich skaliert nach abgedeckten Tagen.",
+      "benefitEmployeeComponent": "Abzugskomponente für die Arbeitnehmerzeilen. Pflicht, wenn der Plan Arbeitnehmerkosten bepreist.",
+      "benefitEmployerComponent": "Arbeitgeberbeitrags-Komponente für die Arbeitgeberzeilen. Pflicht, wenn der Plan Arbeitgeberkosten bepreist.",
+      "benefitWaitingPeriod": "Diensttage, bevor der Plan gewählt werden darf.",
+      "benefitRequiresApproval": "Anmeldungen warten bis zur Genehmigung durch einen Manager.",
+      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen."
     },
     "options": {
       "timeClassification": {
@@ -3268,6 +3304,16 @@
         "rating": "Bewertung",
         "text": "Textantwort",
         "ratingAndText": "Bewertung und Text"
+      },
+      "benefitCostBasis": {
+        "per_period": "Je Abrechnungsperiode",
+        "per_month": "Je Monat",
+        "per_year": "Je Jahr",
+        "percent_of_pay": "Prozent vom Lohn"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Voller Monat — der ganze Monat unabhängig von den Daten",
+        "daily": "Täglich — anteilig nach abgedeckten Tagen"
       }
     },
     "bankFeeds": {
@@ -4017,7 +4063,9 @@
       "basisCaps": "Bemessungsdeckel",
       "deductionProtection": "Abzugsschutz",
       "holidayCompanyDay": "Firmenfeiertag",
-      "holidayElection": "Wahl zu einem gesetzlichen Feiertag"
+      "holidayElection": "Wahl zu einem gesetzlichen Feiertag",
+      "benefitCosts": "Kosten und Anteilberechnung",
+      "benefitComponents": "Abrechnungskomponenten"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",

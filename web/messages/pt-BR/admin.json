@@ -2450,6 +2450,16 @@
         "title": "Perguntas de avaliação",
         "singularTitle": "Pergunta de avaliação",
         "description": "Perguntas de uma seção do modelo: nota, texto ou ambos. Perguntas obrigatórias devem ser respondidas antes do envio."
+      },
+      "benefit-plans": {
+        "title": "Planos de benefícios",
+        "singularTitle": "Plano de benefícios",
+        "description": "O que a organização oferece além do salário — saúde, odontológico, aposentadoria — com valores, regra de rateio e componentes."
+      },
+      "benefit-plan-levels": {
+        "title": "Níveis de benefícios",
+        "singularTitle": "Nível de benefícios",
+        "description": "Níveis de cobertura por plano — só empregado, família — com os custos do nível."
       }
     },
     "fields": {
@@ -2747,7 +2757,20 @@
       "answerKind": "Tipo de resposta",
       "ratingScaleMin": "Mínimo da escala",
       "ratingScaleMax": "Máximo da escala",
-      "ratingScaleLabels": "Rótulos da escala"
+      "ratingScaleLabels": "Rótulos da escala",
+      "providerPartyId": "Fornecedor",
+      "employerSubsidiaryId": "Subsidiária empregadora",
+      "employeeCostBasis": "Base do custo do empregado",
+      "employeeCost": "Custo do empregado",
+      "employerCostBasis": "Base do custo do empregador",
+      "employerCost": "Custo do empregador",
+      "pretax": "Pré-tributário",
+      "prorationBasis": "Rateio",
+      "employeePayComponentId": "Componente do empregado",
+      "employerPayComponentId": "Componente do empregador",
+      "waitingPeriodDays": "Carência (dias)",
+      "requiresApproval": "Requer aprovação",
+      "levelKey": "Chave do nível"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2813,7 +2836,20 @@
       "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram.",
       "hrmReviewScaleMin": "Nota mais baixa que a escala aceita, por exemplo 1.",
       "hrmReviewScaleMax": "Nota mais alta que a escala aceita, por exemplo 5.",
-      "hrmReviewScaleLabels": "Rótulos opcionais das extremidades, o menor primeiro."
+      "hrmReviewScaleLabels": "Rótulos opcionais das extremidades, o menor primeiro.",
+      "benefitKind": "Tipo declarado pela organização — saúde, odontológico, visão, vida, aposentadoria, bem-estar, outro. Texto livre, nunca lista fechada.",
+      "benefitProvider": "Fornecedor ou operadora por trás do plano, se houver.",
+      "benefitSubsidiary": "Subsidiária empregadora à qual o plano é oferecido; vazio significa todas.",
+      "benefitCurrency": "Moeda do plano, três letras. Guardada em cada inscrição e nunca convertida.",
+      "benefitCostBasis": "Como o valor se lê: por período, mês, ano ou percentual do salário.",
+      "benefitCost": "Valor na moeda do plano. Valores percentuais são percentuais.",
+      "benefitPretax": "A própria declaração pré-tributária da organização; os pacotes a interpretam.",
+      "benefitProrationBasis": "Obrigatório: como um mês parcial paga. Mês cheio leva o mês inteiro; diário escala pelos dias cobertos.",
+      "benefitEmployeeComponent": "Componente de desconto que tarifa as linhas do empregado. Obrigatório se o plano tarifa custo do empregado.",
+      "benefitEmployerComponent": "Componente de contribuição do empregador que tarifa suas linhas. Obrigatório se o plano tarifa custo do empregador.",
+      "benefitWaitingPeriod": "Dias de serviço antes de poder aderir ao plano.",
+      "benefitRequiresApproval": "As inscrições aguardam até um gerente aprová-las.",
+      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes."
     },
     "options": {
       "payFrequency": {
@@ -3200,6 +3236,16 @@
         "rating": "Nota",
         "text": "Texto",
         "ratingAndText": "Nota e texto"
+      },
+      "benefitCostBasis": {
+        "per_period": "Por período de pagamento",
+        "per_month": "Por mês",
+        "per_year": "Por ano",
+        "percent_of_pay": "Percentual do salário"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Mês cheio — o mês inteiro sejam quais forem as datas",
+        "daily": "Diário — rateado pelos dias cobertos"
       }
     },
     "payroll": {
@@ -3948,7 +3994,9 @@
       "deductionProtection": "Proteção de descontos",
       "basisCaps": "Tetos da base",
       "holidayElection": "Opção sobre feriado legal",
-      "holidayCompanyDay": "Feriado da empresa"
+      "holidayCompanyDay": "Feriado da empresa",
+      "benefitCosts": "Custos e rateio",
+      "benefitComponents": "Componentes de folha"
     },
     "guide": {
       "hero": {

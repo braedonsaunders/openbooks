@@ -9,7 +9,8 @@
       "leave": "Urlaub",
       "myLeave": "Mein Urlaub",
       "recruiting": "Einstellung",
-      "performance": "Leistung"
+      "performance": "Leistung",
+      "benefits": "Leistungen"
     },
     "recruiting": {
       "title": "Einstellung",
@@ -26,7 +27,13 @@
       "startingSoon": "Beginnen bald",
       "startingSoonSub": "{count, plural, one {# endet in den nächsten 30 Tagen} other {# enden in den nächsten 30 Tagen}}",
       "onLeave": "Heute abwesend",
-      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}"
+      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}",
+      "employers": "Arbeitgeber",
+      "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
+      "departments": "Abteilungen",
+      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}",
+      "unfundedFte": "Ungedeckt besetzte FTE",
+      "unfundedFteSub": "Besetzt ohne dahinterstehende Finanzierung"
     },
     "groups": {
       "title": "Personalstand nach Abteilung",
@@ -129,6 +136,13 @@
       "title": "Urlaub",
       "onLeaveEmpty": "Heute niemand abwesend.",
       "pendingSub": "warten auf Genehmigung"
+    },
+    "benefits": {
+      "title": "Leistungen",
+      "openWindows": "Offen",
+      "noOpenWindow": "Kein Anmeldefenster ist offen.",
+      "pendingSub": "Ausstehende Genehmigungen",
+      "missingSub": "Anmeldungen ohne Eingaben"
     }
   },
   "queue": {
@@ -287,6 +301,12 @@
     "exit": {
       "title": "Austrittsdatensatz",
       "empty": "Noch kein Austrittsdatensatz."
+    },
+    "benefits": {
+      "title": "Leistungen",
+      "empty": "Noch keine Leistungsanmeldungen oder Angehörige.",
+      "viewAll": "Leistungen",
+      "dependents": "{count, plural, one {# Angehöriger: {names}} other {# Angehörige: {names}}}"
     }
   },
   "directory": {
@@ -710,5 +730,77 @@
     "noMissingExits": "Jede Beendigung hat ihren Austrittsdatensatz.",
     "noInterviewTitle": "Austrittsdatensätze ohne Gespräch",
     "noInterviewEmpty": "Jeder Austrittsdatensatz hat sein Gespräch."
+  },
+  "benefits": {
+    "title": "Leistungen",
+    "description": "Pläne, Anmeldefenster, Anmeldungen und die monatlichen Beträge für die Abrechnung.",
+    "windowsTitle": "Anmeldefenster",
+    "enrolmentsTitle": "Anmeldungen",
+    "segmentsLabel": "Anzeigen",
+    "allLabel": "Alle",
+    "segments": {
+      "open": "Offen",
+      "draft": "Entwurf",
+      "closed": "Geschlossen",
+      "enrolments": "Anmeldungen"
+    },
+    "columns": {
+      "window": "Fenster",
+      "kind": "Art",
+      "range": "Zeitraum",
+      "elections": "Anmeldungen",
+      "pending": "Offen",
+      "status": "Status",
+      "employee": "Mitarbeiter",
+      "plan": "Plan",
+      "coverage": "Stufe",
+      "employeeAmount": "Arbeitnehmer",
+      "employerAmount": "Arbeitgeber"
+    },
+    "windowsEmptyTitle": "Keine Fenster hier",
+    "windowsEmpty": "Noch nichts in diesem Bereich.",
+    "enrolmentsEmptyTitle": "Keine Anmeldungen hier",
+    "enrolmentsEmpty": "Noch nichts angemeldet.",
+    "unknownSegmentTitle": "Unbekannter Bereich",
+    "unknownSegment": "Es gibt keinen Leistungsbereich {segment}.",
+    "newWindow": "Neues Fenster",
+    "newWindowTitle": "Neues Anmeldefenster",
+    "windowName": "Name",
+    "windowKind": "Art",
+    "windowOpens": "Beginn am",
+    "windowCloses": "Ende am",
+    "windowPlanYear": "Planjahr beginnt am",
+    "windowSubsidiary": "Arbeitgebergesellschaft",
+    "windowDepartment": "Abteilung",
+    "windowAll": "Alle",
+    "windowRequired": "Benennen Sie das Fenster und setzen Sie alle drei Daten vor dem Speichern.",
+    "windowFailed": "Das Fenster konnte nicht gespeichert werden.",
+    "createWindow": "Fenster anlegen",
+    "cancel": "Abbrechen",
+    "openAction": "Fenster öffnen",
+    "closeAction": "Fenster schließen",
+    "closeReasonPlaceholder": "Warum schließt dieses Fenster? Offene Anmeldungen werden mit diesem Grund abgelehnt.",
+    "openWindow": "Öffnen",
+    "openEnrollment": "Öffnen",
+    "approve": "Genehmigen",
+    "drawerProgress": "Anmeldefortschritt",
+    "drawerEnrolments": "Anmeldungen in diesem Fenster",
+    "drawerNoEnrolments": "Noch keine Anmeldungen in diesem Fenster.",
+    "windowKinds": {
+      "open_enrollment": "Offene Anmeldung",
+      "new_hire": "Neueinstellung",
+      "life_event": "Lebensereignis"
+    },
+    "statusNames": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "closed": "Geschlossen",
+      "elected": "Angemeldet",
+      "waived": "Verzichtet",
+      "pending_approval": "Zur Genehmigung",
+      "active": "Aktiv",
+      "ended": "Beendet",
+      "cancelled": "Storniert"
+    }
   }
 }

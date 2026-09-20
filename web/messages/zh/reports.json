@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "流失",
         "description": "每位离职者一行 — 人员、终止日期、在职天数、离职原因，以及离职记录中的自愿与惋惜标志。按终止月份和部门分组得到期间×部门离职表；比率来自留任面板。"
+      },
+      "hrm_benefit_enrollments": {
+        "label": "福利参保",
+        "description": "每次参保一行 — 参保人、雇主、参保时部门、计划与保障档次、状态及按期存储金额。需要福利权限。"
       }
     },
     "columns": {
@@ -1339,6 +1343,22 @@
         "voluntary": "自愿",
         "regrettable": "惋惜",
         "employment_id": "雇佣 (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "生效自",
+        "person": "参保人",
+        "employer": "雇主",
+        "department": "部门",
+        "plan": "计划",
+        "plan_name": "计划名称",
+        "coverage": "保障档次",
+        "status": "状态",
+        "employee_amount": "个人金额",
+        "employer_amount": "公司金额",
+        "currency": "货币",
+        "effective_to": "生效至",
+        "employment_id": "雇佣（id）",
+        "id": "参保（id）"
       }
     },
     "enumValues": {

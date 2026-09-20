@@ -9,7 +9,8 @@
       "leave": "休暇",
       "myLeave": "自分の休暇",
       "recruiting": "採用",
-      "performance": "パフォーマンス"
+      "performance": "パフォーマンス",
+      "benefits": "福利厚生"
     },
     "recruiting": {
       "title": "採用",
@@ -26,7 +27,13 @@
       "startingSoon": "まもなく入社",
       "startingSoonSub": "{count, plural, other {今後30日以内に # 名が退社}}",
       "onLeave": "本日休暇中",
-      "onLeaveSub": "{count, plural, other {承認待ち # 件}}"
+      "onLeaveSub": "{count, plural, other {承認待ち # 件}}",
+      "employers": "雇用主",
+      "employersSub": "{count, plural, other {# 子会社}}",
+      "departments": "部門",
+      "departmentsSub": "{count, plural, other {# 部門}}",
+      "unfundedFte": "財源のない充足済みFTE",
+      "unfundedFteSub": "充足済みだが財源の割り当てがない"
     },
     "groups": {
       "title": "部門別人員数",
@@ -129,6 +136,13 @@
       "title": "休暇",
       "onLeaveEmpty": "本日欠勤中の人はいません。",
       "pendingSub": "承認待ち"
+    },
+    "benefits": {
+      "title": "福利厚生",
+      "openWindows": "受付中",
+      "noOpenWindow": "受付中の加入期間はありません。",
+      "pendingSub": "承認待ち",
+      "missingSub": "入力のない加入"
     }
   },
   "queue": {
@@ -287,6 +301,12 @@
     "exit": {
       "title": "退職記録",
       "empty": "退職記録はまだありません。"
+    },
+    "benefits": {
+      "title": "福利厚生",
+      "empty": "福利厚生の加入や扶養家族はまだありません。",
+      "viewAll": "福利厚生",
+      "dependents": "扶養家族（{count}人）: {names}"
     }
   },
   "directory": {
@@ -710,5 +730,77 @@
     "noMissingExits": "すべての終了者に退職記録があります。",
     "noInterviewTitle": "面談なしの退職記録",
     "noInterviewEmpty": "すべての退職記録に面談があります。"
+  },
+  "benefits": {
+    "title": "福利厚生",
+    "description": "プラン、加入期間、加入、および給与への月額金額。",
+    "windowsTitle": "加入期間",
+    "enrolmentsTitle": "加入",
+    "segmentsLabel": "表示",
+    "allLabel": "すべて",
+    "segments": {
+      "open": "受付中",
+      "draft": "下書き",
+      "closed": "終了",
+      "enrolments": "加入"
+    },
+    "columns": {
+      "window": "期間",
+      "kind": "種類",
+      "range": "期間",
+      "elections": "加入数",
+      "pending": "保留中",
+      "status": "状態",
+      "employee": "従業員",
+      "plan": "プラン",
+      "coverage": "区分",
+      "employeeAmount": "本人",
+      "employerAmount": "会社"
+    },
+    "windowsEmptyTitle": "期間はありません",
+    "windowsEmpty": "この区分にはまだ何もありません。",
+    "enrolmentsEmptyTitle": "加入はありません",
+    "enrolmentsEmpty": "まだ加入がありません。",
+    "unknownSegmentTitle": "不明な区分",
+    "unknownSegment": "福利厚生の区分 {segment} は存在しません。",
+    "newWindow": "新規期間",
+    "newWindowTitle": "新規加入期間",
+    "windowName": "名称",
+    "windowKind": "種類",
+    "windowOpens": "開始日",
+    "windowCloses": "終了日",
+    "windowPlanYear": "プラン年度開始日",
+    "windowSubsidiary": "雇用子会社",
+    "windowDepartment": "部門",
+    "windowAll": "すべて",
+    "windowRequired": "保存前に名称と3つの日付を入力してください。",
+    "windowFailed": "期間を保存できませんでした。",
+    "createWindow": "期間を作成",
+    "cancel": "キャンセル",
+    "openAction": "期間を開始",
+    "closeAction": "期間を終了",
+    "closeReasonPlaceholder": "この期間を終了する理由は？保留中の加入はこの理由で却下されます。",
+    "openWindow": "開く",
+    "openEnrollment": "開く",
+    "approve": "承認",
+    "drawerProgress": "加入状況",
+    "drawerEnrolments": "この期間の加入",
+    "drawerNoEnrolments": "この期間にはまだ加入がありません。",
+    "windowKinds": {
+      "open_enrollment": "定期加入",
+      "new_hire": "新規雇用",
+      "life_event": "ライフイベント"
+    },
+    "statusNames": {
+      "draft": "下書き",
+      "open": "受付中",
+      "closed": "終了",
+      "elected": "加入済",
+      "waived": "辞退",
+      "pending_approval": "承認待ち",
+      "active": "有効",
+      "ended": "終了済",
+      "cancelled": "取消済"
+    }
   }
 }
