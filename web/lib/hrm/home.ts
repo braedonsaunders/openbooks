@@ -8,6 +8,7 @@ import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
+import { loadRecruitingOverview } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { getLocale } from 'next-intl/server'
 import { can, type Authz } from '../authz'
@@ -109,6 +110,18 @@ export interface HrmOnboardingPanelData {
   viewAllHref: string
 }
 
+export interface HrmRecruitingPanelData {
+  panelTitle: string
+  openLabel: string
+  openValue: string
+  awaitingLabel: string
+  awaitingValue: string
+  interviewsLabel: string
+  interviewsValue: string
+  viewAll: string
+  viewAllHref: string
+}
+
 export interface HrmHomeData {
   title: string
   description: string
@@ -180,6 +193,8 @@ export interface HrmHomeData {
   /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
   positions: HrmPositionsSummary | null
   leavePanel: LeavePanelData | null
+  /** Recruiting figures; null without hrm.recruiting.read. */
+  recruiting: HrmRecruitingPanelData | null
 }
 
 /**
@@ -508,6 +523,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     : null
 
   const leavePanel = await loadLeavePanel(authz)
+  const recruiting = await loadRecruitingPanel(authz)
   const leavePending = leavePanel?.pendingCount ?? 0
   const overdueSteps = onboarding?.overdue.length ?? 0
   const openPositions = positions ? Number(positions.openPositionsValue) : 0
@@ -542,6 +558,14 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         hint: t('home.directory.processesHint', { count: overdueSteps }),
         tone: overdueSteps > 0 ? 'negative' : 'neutral',
       },
+    })
+  }
+  if (recruiting) {
+    directory.push({
+      href: '/hrm/recruiting',
+      label: t('home.tabs.recruiting'),
+      iconKey: 'target',
+      badge: { value: recruiting.openValue, hint: t('home.directory.recruitingHint', { count: Number(recruiting.awaitingValue) }), tone: Number(recruiting.awaitingValue) > 0 ? 'warning' : 'neutral' },
     })
   }
   if (canReadLeave) {
@@ -650,5 +674,30 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     // Leave panel: on leave today plus pending approvals, for viewers who
     // may open the Leave tab. Null (no panel) without the leave grant.
     leavePanel,
+    recruiting,
+  }
+}
+
+/**
+ * Recruiting rail panel: open requisitions, offers awaiting response, and
+ * interviews this week, resolved through the canonical recruiting read
+ * service. Null (no panel) without the recruiting grant — never a gated
+ * link.
+ */
+export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPanelData | null> {
+  if (!can(authz, 'hrm.recruiting.read')) return null
+  const t = await getTranslations('hrm')
+  const overview = await loadRecruitingOverview({ orgId: authz.user.orgId, actorId: authz.user.id })
+  if (!overview) return null
+  return {
+    panelTitle: t('home.recruiting.title'),
+    openLabel: t('home.recruiting.open'),
+    openValue: String(overview.openRequisitions),
+    awaitingLabel: t('home.recruiting.awaiting'),
+    awaitingValue: String(overview.offersAwaitingResponse),
+    interviewsLabel: t('home.recruiting.interviews'),
+    interviewsValue: String(overview.interviewsThisWeek),
+    viewAll: t('home.recruiting.viewAll'),
+    viewAllHref: '/hrm/recruiting',
   }
 }

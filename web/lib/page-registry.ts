@@ -1420,6 +1420,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/recruiting': {
+    route: '/hrm/recruiting',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/recruiting/view')
+      return {
+        load: (input) => m.loadRecruitingPage(input.searchParams ?? {}),
+        spec: (data) => m.recruitingSpec(data as never),
+      }
+    },
+  },
   '/insights': {
     route: '/insights',
     segments: [],

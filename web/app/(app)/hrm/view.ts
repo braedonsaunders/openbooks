@@ -274,6 +274,27 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                   }),
                 ]
               : []),
+            ...(data.recruiting
+              ? [
+                  panel({
+                    title: data.recruiting.panelTitle,
+                    iconKey: 'briefcase',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-recruiting-panel', {
+                        figures: [
+                          { label: data.recruiting.openLabel, value: data.recruiting.openValue },
+                          { label: data.recruiting.awaitingLabel, value: data.recruiting.awaitingValue },
+                          { label: data.recruiting.interviewsLabel, value: data.recruiting.interviewsValue },
+                        ],
+                        viewAll: data.recruiting.viewAll,
+                        viewAllHref: data.recruiting.viewAllHref,
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
             panel({
               title: f('recentTitle'),
               iconKey: 'scroll-text',

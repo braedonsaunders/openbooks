@@ -3,10 +3,12 @@ import {
   HrmLeavePanel,
   HrmPendingRequests,
   HrmRecentChanges,
+  HrmRecruitingPanel,
   HrmUpcomingChanges,
   OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
+import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
 import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
@@ -78,6 +80,15 @@ export const HRM_WIDGETS = {
     const drawer = props.drawer as ComponentProps<typeof PositionDrawer>['drawer']
     if (!drawer) return null
     return <PositionDrawer drawer={drawer} />
+  },
+  /** The recruiting flyout: requisition, candidate, and offer drawers plus
+   *  the create form, all closing by navigation. Null payload renders
+   *  nothing — the spec's `when` gate already omits it, so this is the
+   *  second half of the same guard. */
+  'hrm-recruiting-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof RecruitingDrawer>['drawer']
+    if (!drawer) return null
+    return <RecruitingDrawer drawer={drawer} />
   },
   /* --- HR-4 processes and HR-5 leave (rehomed verbatim from widgets.tsx) --- */
   /** The onboarding rail panel: loader-resolved open counts plus the overdue
@@ -154,4 +165,15 @@ export const HRM_WIDGETS = {
     />
   ),
 
+  /** Recruiting funnel figures beside the queue link: open requisitions,
+   *  offers awaiting response, interviews this week — loader-resolved.
+   */
+  'hrm-recruiting-panel': (props) => (
+    <HrmRecruitingPanel
+      figures={(props.figures as ComponentProps<typeof HrmRecruitingPanel>['figures']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      viewAll={str(props, 'viewAll') ?? ''}
+      viewAllHref={str(props, 'viewAllHref') ?? '/hrm/recruiting'}
+    />
+  ),
 } satisfies Record<string, WidgetRenderer>

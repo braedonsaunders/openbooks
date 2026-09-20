@@ -181,6 +181,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-pending-requests',
   'hrm-position-drawer',
   'hrm-recent-changes',
+  'hrm-recruiting-drawer',
+  'hrm-recruiting-panel',
   'hrm-upcoming-changes',
   'hrm-onboarding-panel',
   'hrm-process-drawer',
