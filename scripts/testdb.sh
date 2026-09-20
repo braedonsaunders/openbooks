@@ -313,7 +313,15 @@ case "$cmd" in
     # newline into an underscore and silently create a database nobody asked for.
     db=$(test_db_name "$raw")
     psql_super -c "drop database if exists ${db} with (force)" >/dev/null
-    psql_super -c "create database ${db} template ${TEMPLATE}" >/dev/null
+    # OWNER is not inherited from the template: CREATE DATABASE assigns the
+    # database to the role that RUNS it, and this runs as the superuser. Without
+    # this clause every copy is superuser-owned, the runtime role has no CREATE
+    # on it, and the first fixture to build a scratch schema dies with
+    # "permission denied for database <db>" — naming the database, so it reads
+    # like a missing GRANT rather than the wrong owner. The template itself is
+    # already RUNTIME_ROLE-owned (bootstrap transfers it), which is exactly why
+    # the omission is invisible until a copy is used.
+    psql_super -c "create database ${db} template ${TEMPLATE} owner ${RUNTIME_ROLE}" >/dev/null
     # Prove the copy carries the schema the template advertised. A suite that
     # fails on a missing column should be able to blame the product, not us.
     want=$(template_meta fingerprint)
