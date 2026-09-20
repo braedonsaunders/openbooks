@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * Statutory holiday pay (calculateStub phase 2), rendered WITH the holiday
@@ -26,8 +27,10 @@ export function StatHolidayPaySection(props: { statutoryHolidayPay: boolean }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statutoryHolidayPay: next }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       setEnabled(next)
       toast.success(t('saved'))
       router.refresh()
