@@ -3,7 +3,7 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { add, fromUnits, mulRatio, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 
-export interface AssetBasisDelta {
+export type AssetBasisDelta = {
   unitsRemaining: string | null;
   depreciableAfter: string | null;
   cost: string;
@@ -11,7 +11,7 @@ export interface AssetBasisDelta {
   salvage: string;
   impairmentReleased: string;
   cutoff: string | null;
-}
+};
 /** Acquisition and posted depreciation are never rewritten by a partial disposal. */
 export async function assetBasisDelta(
   tx: SqlExecutor,
