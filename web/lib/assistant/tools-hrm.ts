@@ -293,6 +293,10 @@ const hrmChangeRequests: AssistantToolDef = {
         expectedEmploymentRevision: number;
         payloadSchemaVersion: string;
         reason: string | null;
+        // HR-16 begin: 0227 classification carried from submit.
+        action: string | null;
+        reasonCode: string | null;
+        // HR-16 end
         submittedBy: string | null;
         submittedAt: string | null;
         flowRunId: string | null;
@@ -322,6 +326,10 @@ const hrmChangeRequests: AssistantToolDef = {
             expectedEmploymentRevision: request.expectedEmploymentRevision,
             payloadSchemaVersion: request.payloadSchemaVersion,
             reason: request.reason,
+            // HR-16 begin
+            action: request.action,
+            reasonCode: request.reasonCode,
+            // HR-16 end
             submittedBy: request.submittedBy,
             submittedAt: request.submittedAt,
             flowRunId: request.flowRunId,
@@ -1133,3 +1141,53 @@ const inboxItems: AssistantToolDef = {
 
 HRM_TOOLS.push(inboxItems);
 // HR-15 end
+// HR-16 begin: automation run/error status (0226). Read-only: recipes and
+// the run log with errors, behind the automations switch and read grant.
+const automationsStatus: AssistantToolDef = {
+  name: "automations_status",
+    "Automation recipes with status and the run log: recent runs and errors per recipe, newest first. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["automations.read"] },
+  feature: "automations",
+    status: z.enum(["queued", "running", "succeeded", "failed", "skipped_no_match", "simulated"]).optional().describe("Keep only runs in this status"),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum runs to return (default 25)"),
+    if (!(await isFeatureEnabled(authz.user.orgId, "automations"))) {
+      return { ok: false, error: "automations_feature_disabled" };
+    const a = raw as { status?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 25, 100);
+      const { listAutomations } = await import("@openbooks/engine/src/automations/services.ts");
+      const automations = await listAutomations(authz.user.orgId, authz.user.id);
+      const runs = (
+        await db.execute<{
+          id: string;
+          automationId: string;
+          status: string;
+          version: number;
+          subjectKind: string | null;
+          error: unknown;
+          createdAt: string;
+        }>(sql`
+          select r.id::text as id, r.automation_id::text as "automationId", r.status,
+                 r.version, r.subject_kind as "subjectKind", r.error,
+                 to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt"
+            from automation_runs r
+           where r.org_id = ${authz.user.orgId}::uuid
+             and (${a.status ?? null}::text is null or r.status = ${a.status ?? null}::text)
+           order by r.created_at desc limit ${limit}
+        `)
+      ).rows;
+          automations: automations.map((recipe) => ({
+            id: recipe.id,
+            name: recipe.name,
+            status: recipe.status,
+            version: recipe.version,
+            triggerKind: (recipe.trigger as { kind?: string } | null)?.kind ?? null,
+            lastRunAt: recipe.lastRunAt,
+            errorMessage: recipe.errorMessage,
+          runs,
+      // Automation service refusals (permission, missing recipe) surface
+      // with their message intact — hrmRefusal only maps HRM reads.
+      return { ok: false, error: error instanceof Error ? error.message : "automations_status_failed" };
+// HR-16 end
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus];

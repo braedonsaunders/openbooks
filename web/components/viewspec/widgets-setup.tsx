@@ -20,6 +20,8 @@ import { OverheadApplicationTabSlot, OverheadLifecycleTabSlot, OverheadModelBody
 import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesTabSlot, AllocationsRunsTabSlot, AllocationsSetupHeader } from '../../app/(app)/admin/setup/allocations/sections'
 import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
 import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton } from '../../app/(app)/admin/flows/sections'
+import { AutomationBuilder } from '../../app/(app)/admin/automations/[id]/AutomationBuilder'
+import { AutomationLastRunCell, AutomationNameCell, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
 import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
 import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
 import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot } from '../../app/(app)/admin/setup/[entity]/sections'
@@ -348,6 +350,36 @@ export const SETUP_WIDGETS = {
   ),
 
   /* --- automation flows ------------------------------------------------------- */
+  // HR-16 begin: the automation recipe list/builder cells (linear recipe
+  // mode beside the graph-based flows builder — no new graph components).
+  'new-automation': (props) => <NewAutomationListButton label={str(props, 'label') ?? ''} />,
+  'automation-name-cell': (props) => (
+    <AutomationNameCell name={str(props, 'name') ?? ''} href={str(props, 'href') ?? ''} />
+  ),
+  'automation-last-run-cell': (props) => (
+    <AutomationLastRunCell at={str(props, 'at') ?? null} fallback={str(props, 'fallback') ?? ''} />
+  ),
+  'automation-row-actions': (props) => (
+    <AutomationRowActionsCell
+      id={str(props, 'id') ?? ''}
+      status={str(props, 'status') ?? ''}
+      runLabel={str(props, 'runLabel') ?? ''}
+      enableLabel={str(props, 'enableLabel') ?? ''}
+      disableLabel={str(props, 'disableLabel') ?? ''}
+      actionFailed={str(props, 'actionFailed') ?? ''}
+    />
+  ),
+  'automation-builder': (props) => (
+    <AutomationBuilder
+      automation={props.automation as ComponentProps<typeof AutomationBuilder>['automation']}
+      runs={props.runs as ComponentProps<typeof AutomationBuilder>['runs']}
+      canSimulate={props.canSimulate === true}
+      saveFailed={str(props, 'saveFailed') ?? ''}
+      backHref={str(props, 'backHref') ?? '/admin/automations'}
+      backLabel={str(props, 'backLabel') ?? ''}
+    />
+  ),
+  // HR-16 end
   'new-flow': () => <NewFlowListButton />,
   'flow-name-cell': (props) => (
     <FlowNameCell name={str(props, 'name') ?? ''} href={str(props, 'href') ?? ''} />

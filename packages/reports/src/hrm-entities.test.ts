@@ -15,7 +15,7 @@ import { validateCustomQuery } from './validate'
 // entity (0193) carries hrm.process.read: checklist state is governed by
 // the process gate, not the employment one.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'automations', 'automation_runs', 'hrm_action_reasons'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -30,6 +30,12 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_reviews: 'hrm.performance.read',
   hrm_goals: 'hrm.performance.read',
   hrm_turnover: 'hrm.retention.read',
+  // HR-16 begin: recipe and run-log entities ride the automations read
+  // grant; the reason vocabulary rides the employment read grant.
+  automations: 'automations.read',
+  automation_runs: 'automations.read',
+  hrm_action_reasons: 'hrm.employment.read',
+  // HR-16 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -41,12 +47,22 @@ test('workforce entities are registered on the shared catalog exactly once', () 
   }
 })
 
-test('workforce entities refuse without the hrm gate and their own read permission', () => {
+test('workforce entities refuse without their gate and their own read permission', () => {
+  // HR-16 begin: recipe entities ride the automations switch, the reason
+  // vocabulary rides hrmActionReasons, everything else rides hrm.
+  const HRM_FEATURES: Record<(typeof HRM_KEYS)[number], string> = {
+    hrm_headcount: 'hrm', hrm_employment_history: 'hrm', hrm_change_requests: 'hrm',
+    hrm_positions: 'hrm', hrm_processes: 'hrm', hrm_leave_absences: 'hrm',
+    hrm_requisitions: 'hrm', hrm_applications: 'hrm', hrm_benefit_enrollments: 'hrm',
+    hrm_reviews: 'hrm', hrm_goals: 'hrm', hrm_turnover: 'hrm',
+    automations: 'automations', automation_runs: 'automations', hrm_action_reasons: 'hrmActionReasons',
+  }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
-    assert.equal(entity.featureKey, 'hrm', key)
+    assert.equal(entity.featureKey, HRM_FEATURES[key], key)
   }
+  // HR-16 end
 })
 
 test('workforce entities scope to one org and one legal-entity boundary', () => {
@@ -63,8 +79,13 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_reviews: 'r.org_id',
     hrm_goals: 'g.org_id',
     hrm_turnover: 't.org_id',
+    // HR-16 begin
+    automations: 'a.org_id',
+    automation_runs: 'r.org_id',
+    hrm_action_reasons: 'r.org_id',
+    // HR-16 end
   }
-  const scopeColumns: Record<(typeof HRM_KEYS)[number], string> = {
+  const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
     hrm_employment_history: 'e.employer_subsidiary_id',
     hrm_change_requests: 'e.employer_subsidiary_id',
@@ -77,16 +98,36 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_reviews: 'e.employer_subsidiary_id',
     hrm_goals: 'e.employer_subsidiary_id',
     hrm_turnover: 'e.employer_subsidiary_id',
+    // HR-16 begin: platform configuration and Setup vocabulary are org-wide
+    // under an admin-only grant — no subsidiary column exists to scope.
+    automations: null,
+    automation_runs: null,
+    hrm_action_reasons: null,
+    // HR-16 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.orgColumn, orgColumns[key], `${key} org column`)
-    assert.deepEqual(entity.subsidiaryScope, { column: scopeColumns[key] }, `${key} subsidiary scope`)
+    // HR-16 begin: org-wide configuration entities carry no subsidiary scope.
+    const scope = scopeColumns[key]
+    if (scope === null) {
+      assert.equal(entity.subsidiaryScope, undefined, `${key} carries no subsidiary scope`)
+    } else {
+      assert.deepEqual(entity.subsidiaryScope, { column: scope }, `${key} subsidiary scope`)
+    }
+    // HR-16 end
     // Every table join is pinned to the base org: an unpinned join is how a
     // report leaks rows across tenants. The decided-at lateral reads the
     // request's own snapshot, not another table, so it carries no pin.
     const blocks = entity.from.split(/\bJOIN\b/i).slice(1)
-    assert.ok(blocks.length >= 2, `${key} must join governed tables`)
+    // HR-16 begin: single-table org-wide entities join nothing — the
+    // org predicate on the base table is the whole tenant boundary.
+    if (key === 'automations' || key === 'hrm_action_reasons') {
+      assert.equal(blocks.length, 0, `${key} reads one org-scoped table`)
+    } else {
+      assert.ok(blocks.length >= 1, `${key} must join governed tables`)
+    }
+    // HR-16 end
     for (const block of blocks) {
       if (/LATERAL/i.test(block.split('(')[0] ?? '')) continue
       assert.match(block, /\borg_id\s*=\s*\w+\.org_id/i, `${key}: ${block.trim().slice(0, 80)}`)

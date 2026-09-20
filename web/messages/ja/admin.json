@@ -981,7 +981,10 @@
     "hrm_self_read": "自分の雇用サマリーを閲覧",
     "hrm_self_request": "自分のプロフィール変更を申請",
     "hrm_team_read": "今日時点の直属の部下を閲覧",
-    "hrm_team_manage": "マネージャー割当のチームステップを処理"
+    "hrm_team_manage": "マネージャー割当のチームステップを処理",
+    "automations_read": "自動化レシピと実行ログを閲覧",
+    "automations_manage": "自動化と承認設定を作成",
+    "automations_run": "自動化を今すぐ実行"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2850,7 +2853,10 @@
       "body": "本文",
       "audience": "対象者",
       "startsOn": "開始日",
-      "endsOn": "終了日"
+      "endsOn": "終了日",
+      "action": "アクション",
+      "reasonCode": "理由コード",
+      "requiresComment": "コメント必須"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3331,6 +3337,22 @@
         "all": "全員",
         "managers": "マネージャー",
         "employees": "従業員"
+      },
+      "hrmAction": {
+        "hire": "採用",
+        "rehire": "再雇用",
+        "transfer": "異動",
+        "promotion": "昇進",
+        "demotion": "降格",
+        "pay_change": "給与変更",
+        "manager_change": "上長変更",
+        "location_change": "勤務地変更",
+        "schedule_change": "勤務時間変更",
+        "leave_of_absence": "休職",
+        "return": "復職",
+        "termination": "退職",
+        "profile_change": "プロフィール変更",
+        "other": "その他"
       }
     },
     "invoicing": {
@@ -4508,6 +4530,34 @@
     "timeTracking": {
       "description": "提出と承認付きの個人週次タイムシートです。",
       "title": "工数管理"
+    },
+    "automations": {
+      "title": "自動化",
+      "description": "Flows上のトリガー型レシピ — スケジュール、日付相対、フィールド変更、イベント、ドキュメント、手動トリガーが順序付きアクションを実行します。"
+    },
+    "automationDateTriggers": {
+      "title": "日付トリガー",
+      "description": "入社数日前など、エンティティの日付を基準にレシピを実行します。"
+    },
+    "automationFieldTriggers": {
+      "title": "フィールドトリガー",
+      "description": "監視フィールドの変更時にレシピを実行します。"
+    },
+    "automationWebhooks": {
+      "title": "Webhookアクション",
+      "description": "レシピから組織が宣言した署名付きWebhookを呼び出します。"
+    },
+    "automationSimulator": {
+      "title": "シミュレーター",
+      "description": "実際のサブジェクトに対して書き込みなしでレシピを試行します。"
+    },
+    "hrmActionReasons": {
+      "title": "アクション・理由コード",
+      "description": "すべての変更申請にHRアクションと理由コードを必須にします。"
+    },
+    "hrmEventVerbs": {
+      "title": "変更イベント動詞",
+      "description": "雇用変更の取消・破棄・訂正を追加イベントとして行います。"
     }
   },
   "extensions": {
@@ -4789,6 +4839,118 @@
       "notFound": "このページはあなた向けに「見つかりません」と応答するため、読むレイアウトがありません。",
       "redirect": "このページは描画せず{href}へ転送します。通常は保持していない権限か、オフの機能が原因です。",
       "segment": "このルートの表示にはレコードが必要です。編集するにはアドレスに?param.{segment}=…を追加してください。"
+    }
+  },
+  "automations": {
+    "title": "自動化",
+    "description": "Flows上のトリガー型レシピ — スケジュール、日付相対、フィールド変更、イベント、ドキュメント、手動トリガーが順序付きアクションを実行します。",
+    "backToFlows": "フローに戻る",
+    "backToList": "自動化一覧に戻る",
+    "list": {
+      "newButton": "新規自動化",
+      "newTitle": "新規自動化",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: 入社3日前のウェルカムタスク",
+      "nameRequired": "自動化に名前を付けてください。",
+      "triggerLabel": "トリガー",
+      "createFailed": "自動化を作成できませんでした。",
+      "create": "作成",
+      "cancel": "キャンセル",
+      "neverRan": "未実行",
+      "statusLabel": "ステータス",
+      "emptyTitle": "自動化はまだありません",
+      "emptyDescription": "自動化はスケジュール・日付・フィールド変更・イベント・ドキュメント・手動トリガーから順序付きアクションを実行します。",
+      "columnAutomation": "自動化",
+      "columnStatus": "ステータス",
+      "columnTrigger": "トリガー",
+      "columnLastRun": "最終実行",
+      "columnError": "エラー",
+      "columnActions": "操作",
+      "runNow": "今すぐ実行",
+      "enable": "有効化",
+      "disable": "無効化",
+      "actionFailed": "操作に失敗しました。"
+    },
+    "status": {
+      "enabled": "有効",
+      "draft": "下書き",
+      "disabled": "無効",
+      "error": "エラー"
+    },
+    "triggerKinds": {
+      "schedule": "スケジュール",
+      "date_relative": "日付相対",
+      "field_change": "フィールド変更",
+      "event": "イベント",
+      "document": "ドキュメント",
+      "manual": "手動"
+    },
+    "builder": {
+      "pageTitle": "自動化ビルダー",
+      "description": "トリガー、対象と条件、アクション、シミュレーション、実行ログ。",
+      "buildTab": "構築",
+      "runsTab": "実行履歴",
+      "saved": "保存しました。",
+      "saveFailed": "保存できませんでした。",
+      "nameTitle": "名前",
+      "saveName": "名前を保存",
+      "triggerTitle": "トリガー",
+      "saveTrigger": "トリガーを保存",
+      "cronLabel": "Cron",
+      "timezoneLabel": "タイムゾーン",
+      "entityLabel": "エンティティ",
+      "dateFieldLabel": "日付フィールド",
+      "offsetLabel": "オフセット（日）",
+      "directionLabel": "方向",
+      "before": "前",
+      "after": "後",
+      "atTimeLabel": "時刻（HH:MM）",
+      "fieldLabel": "フィールド",
+      "changedToLabel": "変更後（空=すべて）",
+      "subjectKindLabel": "サブジェクト種別",
+      "eventKindLabel": "イベント",
+      "documentUploaded": "アップロード済み",
+      "documentSigned": "署名済み",
+      "documentTemplated": "テンプレートから",
+      "whoWhenTitle": "対象と条件",
+      "whoWhenHelp": "スコープフィルタで適用対象を絞り、条件ツリーで実行タイミングを決めます。",
+      "rule_subsidiaryId": "子会社",
+      "rule_departmentId": "部門",
+      "rule_locationId": "拠点",
+      "rule_workerType": "雇用形態",
+      "rule_positionId": "ポジション",
+      "ruleBlank": "空=すべて",
+      "conditionsMode": "条件",
+      "conditionsAll": "すべて満たす",
+      "conditionsAny": "いずれかを満たす",
+      "opLabel": "演算子",
+      "valueLabel": "値",
+      "remove": "削除",
+      "addCondition": "条件を追加",
+      "saveWhoWhen": "対象と条件を保存",
+      "actionsTitle": "アクション",
+      "actionKindLabel": "アクション種別",
+      "actionJsonLabel": "アクションJSON",
+      "addAction": "アクションを追加",
+      "saveActions": "アクションを保存",
+      "simulateTitle": "シミュレーション",
+      "simulateHelp": "書き込みなしの試行 — entity:idを指定、空ならサンプリング。",
+      "simulateSubjectLabel": "サブジェクト",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "シミュレーション実行",
+      "stepKind": "ステップ",
+      "stepStatus": "ステータス",
+      "stepDetail": "詳細",
+      "runStatus": "ステータス",
+      "runsEmpty": "実行履歴がありません。",
+      "runVersion": "バージョン",
+      "runSubject": "サブジェクト",
+      "runCreated": "作成",
+      "runSteps": "ステップ",
+      "viewSteps": "ステップ",
+      "stepsTitle": "実行ステップ",
+      "runLoadFailed": "実行を読み込めませんでした。",
+      "closeSteps": "閉じる"
     }
   }
 }

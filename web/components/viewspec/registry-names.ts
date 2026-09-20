@@ -63,6 +63,12 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'approval-tabs',
   'approvals-table',
   'approvals-pagination',
+  // HR-16 begin
+  'automation-builder',
+  'automation-last-run-cell',
+  'automation-name-cell',
+  'automation-row-actions',
+  // HR-16 end
   'apps-empty-icon',
   'apps-launcher-button',
   'apps-library-button',
@@ -198,6 +204,9 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-process-drawer',
   'hrm-propose-change-dialog',
   'hrm-review-drawer',
+  // HR-16 begin
+  'hrm-verb-chip',
+  // HR-16 end
   'hrm-window-dialog',
   'hrm-window-drawer',
   'hrm-benefit-change-dialog',
@@ -259,6 +268,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-equipment',
   'new-expense',
   'new-filing',
+  'new-automation',
   'new-flow',
   'new-form',
   'new-item',

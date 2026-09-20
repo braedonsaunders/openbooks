@@ -981,7 +981,10 @@
     "hrm_self_read": "Ver el resumen del empleo propio",
     "hrm_self_request": "Presentar cambios de perfil propios",
     "hrm_team_read": "Ver reportes directos hoy",
-    "hrm_team_manage": "Trabajar pasos asignados por el responsable"
+    "hrm_team_manage": "Trabajar pasos asignados por el responsable",
+    "automations_read": "Ver recetas de automatización y el historial",
+    "automations_manage": "Crear automatizaciones y ajustes de aprobación",
+    "automations_run": "Ejecutar automatizaciones ahora"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2737,7 +2740,10 @@
       "body": "Cuerpo",
       "audience": "Audiencia",
       "startsOn": "Comienza el",
-      "endsOn": "Termina el"
+      "endsOn": "Termina el",
+      "action": "Acción",
+      "reasonCode": "Código de motivo",
+      "requiresComment": "Requiere comentario"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -3218,6 +3224,22 @@
         "all": "Todos",
         "managers": "Responsables",
         "employees": "Empleados"
+      },
+      "hrmAction": {
+        "hire": "Contratación",
+        "rehire": "Recontratación",
+        "transfer": "Traslado",
+        "promotion": "Ascenso",
+        "demotion": "Descenso",
+        "pay_change": "Cambio salarial",
+        "manager_change": "Cambio de responsable",
+        "location_change": "Cambio de sede",
+        "schedule_change": "Cambio de horario",
+        "leave_of_absence": "Excedencia",
+        "return": "Reincorporación",
+        "termination": "Baja",
+        "profile_change": "Cambio de perfil",
+        "other": "Otro"
       }
     },
     "laborCosting": {
@@ -4508,6 +4530,34 @@
     "wipBilling": {
       "title": "Trabajo en curso y prefacturación",
       "description": "Revise el trabajo facturable de proyectos, retenga o ajuste líneas con evidencia, apruebe prefacturas y supervise la antigüedad del trabajo en curso, la realización y las fugas."
+    },
+    "automations": {
+      "title": "Automatizaciones",
+      "description": "Recetas basadas en desencadenantes sobre Flows: desencadenantes de horario, fecha, cambio de campo, evento, documento y manuales que ejecutan acciones ordenadas."
+    },
+    "automationDateTriggers": {
+      "title": "Desencadenantes de fecha",
+      "description": "Ejecutar recetas en fechas relativas de la entidad, como días antes del inicio."
+    },
+    "automationFieldTriggers": {
+      "title": "Desencadenantes de campo",
+      "description": "Ejecutar recetas cuando cambia un campo observado."
+    },
+    "automationWebhooks": {
+      "title": "Acciones webhook",
+      "description": "Llamar a webhooks firmados declarados por la organización desde las recetas."
+    },
+    "automationSimulator": {
+      "title": "Simulador",
+      "description": "Probar recetas contra sujetos reales sin escrituras."
+    },
+    "hrmActionReasons": {
+      "title": "Códigos de acción y motivo",
+      "description": "Exigir una acción de RR. HH. y un código de motivo en cada solicitud de cambio."
+    },
+    "hrmEventVerbs": {
+      "title": "Verbos de evento de cambio",
+      "description": "Cancelar, rescindir y corregir cambios de empleo como eventos añadidos."
     }
   },
   "backupsManager": {
@@ -4790,5 +4840,117 @@
       "installed": "Instalado"
     },
     "title": "Aplicaciones"
+  },
+  "automations": {
+    "title": "Automatizaciones",
+    "description": "Recetas basadas en desencadenantes sobre Flows: desencadenantes de horario, fecha, cambio de campo, evento, documento y manuales que ejecutan acciones ordenadas.",
+    "backToFlows": "Volver a Flows",
+    "backToList": "Volver a automatizaciones",
+    "list": {
+      "newButton": "Nueva automatización",
+      "newTitle": "Nueva automatización",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "p. ej. Tareas de bienvenida antes del inicio",
+      "nameRequired": "Dé un nombre a la automatización.",
+      "triggerLabel": "Desencadenante",
+      "createFailed": "No se pudo crear la automatización.",
+      "create": "Crear",
+      "cancel": "Cancelar",
+      "neverRan": "Nunca ejecutada",
+      "statusLabel": "Estado",
+      "emptyTitle": "Aún no hay automatizaciones",
+      "emptyDescription": "Las automatizaciones ejecutan acciones ordenadas desde desencadenantes de horario, fecha, cambio de campo, evento, documento o manuales.",
+      "columnAutomation": "Automatización",
+      "columnStatus": "Estado",
+      "columnTrigger": "Desencadenante",
+      "columnLastRun": "Última ejecución",
+      "columnError": "Error",
+      "columnActions": "Acciones",
+      "runNow": "Ejecutar ahora",
+      "enable": "Activar",
+      "disable": "Desactivar",
+      "actionFailed": "La acción falló."
+    },
+    "status": {
+      "enabled": "Activada",
+      "draft": "Borrador",
+      "disabled": "Desactivada",
+      "error": "Error"
+    },
+    "triggerKinds": {
+      "schedule": "Horario",
+      "date_relative": "Relativo a fecha",
+      "field_change": "Cambio de campo",
+      "event": "Evento",
+      "document": "Documento",
+      "manual": "Manual"
+    },
+    "builder": {
+      "pageTitle": "Editor de automatización",
+      "description": "Desencadenante, quién y cuándo, acciones, simulación e historial.",
+      "buildTab": "Crear",
+      "runsTab": "Ejecuciones",
+      "saved": "Guardado.",
+      "saveFailed": "No se pudo guardar.",
+      "nameTitle": "Nombre",
+      "saveName": "Guardar nombre",
+      "triggerTitle": "Desencadenante",
+      "saveTrigger": "Guardar desencadenante",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Zona horaria",
+      "entityLabel": "Entidad",
+      "dateFieldLabel": "Campo de fecha",
+      "offsetLabel": "Desplazamiento (días)",
+      "directionLabel": "Dirección",
+      "before": "Antes",
+      "after": "Después",
+      "atTimeLabel": "A las (HH:MM)",
+      "fieldLabel": "Campo",
+      "changedToLabel": "Cambió a (vacío = cualquiera)",
+      "subjectKindLabel": "Tipo de sujeto",
+      "eventKindLabel": "Evento",
+      "documentUploaded": "Subido",
+      "documentSigned": "Firmado",
+      "documentTemplated": "Desde plantilla",
+      "whoWhenTitle": "Quién y cuándo",
+      "whoWhenHelp": "Los filtros de alcance limitan a quién aplica la receta; el árbol de condiciones decide cuándo se ejecuta.",
+      "rule_subsidiaryId": "Filial",
+      "rule_departmentId": "Departamento",
+      "rule_locationId": "Sede",
+      "rule_workerType": "Tipo de trabajador",
+      "rule_positionId": "Puesto",
+      "ruleBlank": "Vacío = todos",
+      "conditionsMode": "Condiciones",
+      "conditionsAll": "Todas deben cumplirse",
+      "conditionsAny": "Basta una",
+      "opLabel": "Op",
+      "valueLabel": "Valor",
+      "remove": "Quitar",
+      "addCondition": "Añadir condición",
+      "saveWhoWhen": "Guardar quién y cuándo",
+      "actionsTitle": "Acciones",
+      "actionKindLabel": "Tipo de acción",
+      "actionJsonLabel": "JSON de acción",
+      "addAction": "Añadir acción",
+      "saveActions": "Guardar acciones",
+      "simulateTitle": "Simular",
+      "simulateHelp": "Prueba sin escrituras: elija entidad:id o deje vacío para muestrear.",
+      "simulateSubjectLabel": "Sujeto",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simular",
+      "stepKind": "Paso",
+      "stepStatus": "Estado",
+      "stepDetail": "Detalle",
+      "runStatus": "Estado",
+      "runsEmpty": "Sin ejecuciones.",
+      "runVersion": "Versión",
+      "runSubject": "Sujeto",
+      "runCreated": "Creada",
+      "runSteps": "Pasos",
+      "viewSteps": "Pasos",
+      "stepsTitle": "Pasos de la ejecución",
+      "runLoadFailed": "No se pudo cargar la ejecución.",
+      "closeSteps": "Cerrar"
+    }
   }
 }

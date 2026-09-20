@@ -981,7 +981,10 @@
     "hrm_self_read": "View own employment summary",
     "hrm_self_request": "File profile changes for own party",
     "hrm_team_read": "View direct reports as of today",
-    "hrm_team_manage": "Work manager-assigned team steps"
+    "hrm_team_manage": "Work manager-assigned team steps",
+    "automations_read": "See automation recipes and the run log",
+    "automations_manage": "Author automations and approval settings",
+    "automations_run": "Run automations now"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2782,7 +2785,10 @@
       "body": "Body",
       "audience": "Audience",
       "startsOn": "Starts on",
-      "endsOn": "Ends on"
+      "endsOn": "Ends on",
+      "action": "Action",
+      "reasonCode": "Reason code",
+      "requiresComment": "Requires comment"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3263,6 +3269,22 @@
         "all": "Everyone",
         "managers": "Managers",
         "employees": "Employees"
+      },
+      "hrmAction": {
+        "hire": "Hire",
+        "rehire": "Rehire",
+        "transfer": "Transfer",
+        "promotion": "Promotion",
+        "demotion": "Demotion",
+        "pay_change": "Pay change",
+        "manager_change": "Manager change",
+        "location_change": "Location change",
+        "schedule_change": "Schedule change",
+        "leave_of_absence": "Leave of absence",
+        "return": "Return",
+        "termination": "Termination",
+        "profile_change": "Profile change",
+        "other": "Other"
       }
     },
     "payroll": {
@@ -4508,6 +4530,34 @@
     "allocationsAtPosting": {
       "title": "Allocations at posting",
       "description": "Let allocation rules and authorized scripts contribute extra GL lines to a transaction's own journal entry at posting."
+    },
+    "automations": {
+      "title": "Automations",
+      "description": "Trigger-based recipes on Flows: schedule, date, field-change, event, document, and manual triggers firing ordered actions."
+    },
+    "automationDateTriggers": {
+      "title": "Date triggers",
+      "description": "Fire recipes relative to entity dates, such as days before an employment starts."
+    },
+    "automationFieldTriggers": {
+      "title": "Field triggers",
+      "description": "Fire recipes when a watched field changes."
+    },
+    "automationWebhooks": {
+      "title": "Webhook actions",
+      "description": "Call org-declared signed webhook endpoints from recipes."
+    },
+    "automationSimulator": {
+      "title": "Simulator",
+      "description": "Dry-run recipes against real subjects with no writes."
+    },
+    "hrmActionReasons": {
+      "title": "Action and reason codes",
+      "description": "Require an HR action and reason code on every change request."
+    },
+    "hrmEventVerbs": {
+      "title": "Change event verbs",
+      "description": "Cancel, rescind, and correct employment changes as appended events."
     }
   },
   "backupsManager": {
@@ -4789,6 +4839,118 @@
       "previewAction": "Form preview only. Backend actions run after activation, using the installed version and your permissions.",
       "previewRecords": "Form preview using the proposed record definition. After activation, this workspace uses the shared record list, filters, and drawers.",
       "existingRecordsPreview": "This screen references an existing record type. Live records are available after activation to users with access."
+    }
+  },
+  "automations": {
+    "title": "Automations",
+    "description": "Trigger-based recipes on Flows — schedule, date, field-change, event, document, and manual triggers firing ordered actions.",
+    "backToFlows": "Back to Flows",
+    "backToList": "Back to automations",
+    "list": {
+      "newButton": "New automation",
+      "newTitle": "New automation",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Welcome tasks before start",
+      "nameRequired": "Give the automation a name.",
+      "triggerLabel": "Trigger",
+      "createFailed": "Could not create the automation.",
+      "create": "Create",
+      "cancel": "Cancel",
+      "neverRan": "Never ran",
+      "statusLabel": "Status",
+      "emptyTitle": "No automations yet",
+      "emptyDescription": "Automations fire ordered actions from schedule, date, field-change, event, document, or manual triggers.",
+      "columnAutomation": "Automation",
+      "columnStatus": "Status",
+      "columnTrigger": "Trigger",
+      "columnLastRun": "Last run",
+      "columnError": "Error",
+      "columnActions": "Actions",
+      "runNow": "Run now",
+      "enable": "Enable",
+      "disable": "Disable",
+      "actionFailed": "The action failed."
+    },
+    "status": {
+      "enabled": "Enabled",
+      "draft": "Draft",
+      "disabled": "Disabled",
+      "error": "Error"
+    },
+    "triggerKinds": {
+      "schedule": "Schedule",
+      "date_relative": "Date relative",
+      "field_change": "Field change",
+      "event": "Event",
+      "document": "Document",
+      "manual": "Manual"
+    },
+    "builder": {
+      "pageTitle": "Automation builder",
+      "description": "Trigger, who and when, actions, simulation, and the run log.",
+      "buildTab": "Build",
+      "runsTab": "Runs",
+      "saved": "Saved.",
+      "saveFailed": "Could not save.",
+      "nameTitle": "Name",
+      "saveName": "Save name",
+      "triggerTitle": "Trigger",
+      "saveTrigger": "Save trigger",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Timezone",
+      "entityLabel": "Entity",
+      "dateFieldLabel": "Date field",
+      "offsetLabel": "Offset (days)",
+      "directionLabel": "Direction",
+      "before": "Before",
+      "after": "After",
+      "atTimeLabel": "At (HH:MM)",
+      "fieldLabel": "Field",
+      "changedToLabel": "Changed to (blank = any)",
+      "subjectKindLabel": "Subject kind",
+      "eventKindLabel": "Event",
+      "documentUploaded": "Uploaded",
+      "documentSigned": "Signed",
+      "documentTemplated": "From template",
+      "whoWhenTitle": "Who and When",
+      "whoWhenHelp": "Scope filters narrow who the recipe applies to; the condition tree decides when it fires.",
+      "rule_subsidiaryId": "Subsidiary",
+      "rule_departmentId": "Department",
+      "rule_locationId": "Location",
+      "rule_workerType": "Worker type",
+      "rule_positionId": "Position",
+      "ruleBlank": "Blank = all",
+      "conditionsMode": "Conditions",
+      "conditionsAll": "All must match",
+      "conditionsAny": "Any may match",
+      "opLabel": "Op",
+      "valueLabel": "Value",
+      "remove": "Remove",
+      "addCondition": "Add condition",
+      "saveWhoWhen": "Save who and when",
+      "actionsTitle": "Actions",
+      "actionKindLabel": "Action kind",
+      "actionJsonLabel": "Action JSON",
+      "addAction": "Add action",
+      "saveActions": "Save actions",
+      "simulateTitle": "Simulate",
+      "simulateHelp": "Dry-run with no writes — pick entity:id or leave blank to sample.",
+      "simulateSubjectLabel": "Subject",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simulate",
+      "stepKind": "Step",
+      "stepStatus": "Status",
+      "stepDetail": "Detail",
+      "runStatus": "Status",
+      "runsEmpty": "No runs yet.",
+      "runVersion": "Version",
+      "runSubject": "Subject",
+      "runCreated": "Created",
+      "runSteps": "Steps",
+      "viewSteps": "Steps",
+      "stepsTitle": "Run steps",
+      "runLoadFailed": "Could not load the run.",
+      "closeSteps": "Close"
     }
   }
 }

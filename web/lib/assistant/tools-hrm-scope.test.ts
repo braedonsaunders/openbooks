@@ -41,7 +41,7 @@ const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performa
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -66,6 +66,10 @@ const TOOL_PERMS: Record<string, string> = {
   // The self-service summary scopes by the party behind the login, so it
   // carries the self grant every built-in role holds — never employment.read.
   hrm_me: "hrm.self.read",
+  // HR-16 begin: the automation status tool carries the automations read
+  // grant behind the automations switch — never an HR key.
+  automations_status: "automations.read",
+  // HR-16 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
@@ -90,13 +94,18 @@ test("inbox_items is the core own-scope tool: self grant, no feature, read-only"
   tool.inputSchema.parse({ filter: "notices", limit: 10 });
   assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
   assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
+test("the module exports exactly the twelve HRM read tools", () => {
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
 for (const name of TOOL_NAMES) {
-  test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
+  test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-    assert.equal(tool.feature, "hrm");
+    // HR-16 begin: automations_status rides the automations switch, every
+    // other slice tool rides hrm.
+    assert.equal(tool.feature, name === "automations_status" ? "automations" : "hrm");
+    // HR-16 end
     assert.equal(tool.tier, "module");
     assert.ok(
       tool.category === "read" || tool.category === "search",
@@ -261,21 +270,25 @@ function fakeAuthz(permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-test("the registry gate admits only each tool's grant holders while hrm is on", () => {
+test("the registry gate admits only each tool's grant holders while its feature is on", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  // HR-16 begin: per-tool feature state (automations_status rides automations).
+  const featureState = (name: string, on: boolean): Record<string, boolean> =>
+    name === "automations_status" ? { automations: on } : { hrm: on };
+  // HR-16 end
   for (const name of TOOL_NAMES) {
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
     const reader = fakeAuthz(["assistant.use", perm]);
-    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
-    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
+    assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, true)), true, `${name} must run for a gated reader`);
+    assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, false)), false, `${name} must hide while its feature is off`);
     assert.equal(
-      canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, { hrm: true }),
+      canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, featureState(name, true)),
       false,
       `${name} must refuse without ${perm}`,
     );
     assert.equal(
-      canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
+      canRunTool(fakeAuthz([perm]), byName.get(name)!, featureState(name, true)),
       false,
       `${name} still requires assistant.use`,
     );
@@ -304,6 +317,13 @@ test("registrations: registry spread, scrape lists, matrix entry, playbook, cont
   const entry = matrix.split("\n").find((line) => line.includes('prefix: "hrm"'));
   assert.ok(entry, "coverage matrix needs an hrm entry");
   for (const name of TOOL_NAMES) {
+    // HR-16 begin: automations_status covers the automations prefixes, not hrm.
+    if (name === "automations_status") {
+      assert.ok(matrix.includes('prefix: "admin/automations"'), "coverage matrix needs an automations entry");
+      assert.ok(matrix.includes('"automations_status"'), "matrix automations entry must cover automations_status");
+      continue;
+    }
+    // HR-16 end
     assert.ok(entry.includes(`"${name}"`), `matrix hrm entry must cover ${name}`);
   }
   assert.ok(!entry.includes("uncovered"), "the hrm entry must map tools, never an uncovered gap");

@@ -981,7 +981,10 @@
     "hrm_self_read": "查看本人的雇佣摘要",
     "hrm_self_request": "提交本人的档案变更",
     "hrm_team_read": "查看今日直接下属",
-    "hrm_team_manage": "处理经理分配的团队步骤"
+    "hrm_team_manage": "处理经理分配的团队步骤",
+    "automations_read": "查看自动化配方和运行日志",
+    "automations_manage": "编写自动化和审批设置",
+    "automations_run": "立即运行自动化"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2782,7 +2785,10 @@
       "body": "正文",
       "audience": "受众",
       "startsOn": "开始于",
-      "endsOn": "结束于"
+      "endsOn": "结束于",
+      "action": "操作",
+      "reasonCode": "原因代码",
+      "requiresComment": "需要说明"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3263,6 +3269,22 @@
         "all": "所有人",
         "managers": "管理者",
         "employees": "员工"
+      },
+      "hrmAction": {
+        "hire": "入职",
+        "rehire": "重新入职",
+        "transfer": "调动",
+        "promotion": "晋升",
+        "demotion": "降职",
+        "pay_change": "薪酬变更",
+        "manager_change": "上级变更",
+        "location_change": "地点变更",
+        "schedule_change": "班次变更",
+        "leave_of_absence": "休假",
+        "return": "返岗",
+        "termination": "离职",
+        "profile_change": "档案变更",
+        "other": "其他"
       }
     },
     "payroll": {
@@ -4508,6 +4530,34 @@
     "allocationsAtPosting": {
       "title": "过账时分摊",
       "description": "让分摊规则与授权脚本在过账时为交易自有日记账分录贡献额外总账明细。"
+    },
+    "automations": {
+      "title": "自动化",
+      "description": "基于Flows的触发器配方 — 计划、日期相对、字段变更、事件、文档和手动触发器按序执行操作。"
+    },
+    "automationDateTriggers": {
+      "title": "日期触发器",
+      "description": "按实体日期相对触发配方，如入职前几天。"
+    },
+    "automationFieldTriggers": {
+      "title": "字段触发器",
+      "description": "监视字段变更时触发配方。"
+    },
+    "automationWebhooks": {
+      "title": "Webhook操作",
+      "description": "从配方调用组织声明的签名Webhook端点。"
+    },
+    "automationSimulator": {
+      "title": "模拟器",
+      "description": "对真实主体无写入试运行配方。"
+    },
+    "hrmActionReasons": {
+      "title": "操作与原因代码",
+      "description": "每个变更申请必须填写HR操作和原因代码。"
+    },
+    "hrmEventVerbs": {
+      "title": "变更事件动词",
+      "description": "以追加事件取消、撤销和更正雇佣变更。"
     }
   },
   "backupsManager": {
@@ -4789,6 +4839,118 @@
       "previewAction": "仅表单预览。后端操作在激活后运行，使用已安装版本与您的权限。",
       "previewRecords": "使用拟议记录定义的表单预览。激活后，此工作区使用共享记录列表、筛选与抽屉。",
       "existingRecordsPreview": "此界面引用现有记录类型。激活后，有访问权限的用户可使用正式记录。"
+    }
+  },
+  "automations": {
+    "title": "自动化",
+    "description": "基于Flows的触发器配方 — 计划、日期相对、字段变更、事件、文档和手动触发器按序执行操作。",
+    "backToFlows": "返回流程",
+    "backToList": "返回自动化列表",
+    "list": {
+      "newButton": "新建自动化",
+      "newTitle": "新建自动化",
+      "nameLabel": "名称",
+      "namePlaceholder": "例如：入职前3天的欢迎任务",
+      "nameRequired": "请为自动化命名。",
+      "triggerLabel": "触发器",
+      "createFailed": "无法创建自动化。",
+      "create": "创建",
+      "cancel": "取消",
+      "neverRan": "从未运行",
+      "statusLabel": "状态",
+      "emptyTitle": "暂无自动化",
+      "emptyDescription": "自动化通过计划、日期、字段变更、事件、文档或手动触发器按序执行操作。",
+      "columnAutomation": "自动化",
+      "columnStatus": "状态",
+      "columnTrigger": "触发器",
+      "columnLastRun": "上次运行",
+      "columnError": "错误",
+      "columnActions": "操作",
+      "runNow": "立即运行",
+      "enable": "启用",
+      "disable": "禁用",
+      "actionFailed": "操作失败。"
+    },
+    "status": {
+      "enabled": "已启用",
+      "draft": "草稿",
+      "disabled": "已禁用",
+      "error": "错误"
+    },
+    "triggerKinds": {
+      "schedule": "计划",
+      "date_relative": "日期相对",
+      "field_change": "字段变更",
+      "event": "事件",
+      "document": "文档",
+      "manual": "手动"
+    },
+    "builder": {
+      "pageTitle": "自动化构建器",
+      "description": "触发器、对象与条件、操作、模拟和运行日志。",
+      "buildTab": "构建",
+      "runsTab": "运行记录",
+      "saved": "已保存。",
+      "saveFailed": "保存失败。",
+      "nameTitle": "名称",
+      "saveName": "保存名称",
+      "triggerTitle": "触发器",
+      "saveTrigger": "保存触发器",
+      "cronLabel": "Cron",
+      "timezoneLabel": "时区",
+      "entityLabel": "实体",
+      "dateFieldLabel": "日期字段",
+      "offsetLabel": "偏移（天）",
+      "directionLabel": "方向",
+      "before": "之前",
+      "after": "之后",
+      "atTimeLabel": "时间（HH:MM）",
+      "fieldLabel": "字段",
+      "changedToLabel": "变更为（空=任意）",
+      "subjectKindLabel": "主体类型",
+      "eventKindLabel": "事件",
+      "documentUploaded": "已上传",
+      "documentSigned": "已签署",
+      "documentTemplated": "来自模板",
+      "whoWhenTitle": "对象与条件",
+      "whoWhenHelp": "范围过滤器限定配方适用对象；条件树决定触发时机。",
+      "rule_subsidiaryId": "子公司",
+      "rule_departmentId": "部门",
+      "rule_locationId": "地点",
+      "rule_workerType": "用工类型",
+      "rule_positionId": "职位",
+      "ruleBlank": "空=全部",
+      "conditionsMode": "条件",
+      "conditionsAll": "全部满足",
+      "conditionsAny": "满足其一",
+      "opLabel": "运算符",
+      "valueLabel": "值",
+      "remove": "删除",
+      "addCondition": "添加条件",
+      "saveWhoWhen": "保存对象与条件",
+      "actionsTitle": "操作",
+      "actionKindLabel": "操作类型",
+      "actionJsonLabel": "操作JSON",
+      "addAction": "添加操作",
+      "saveActions": "保存操作",
+      "simulateTitle": "模拟",
+      "simulateHelp": "无写入试运行 — 填写 entity:id，留空则抽样。",
+      "simulateSubjectLabel": "主体",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "模拟运行",
+      "stepKind": "步骤",
+      "stepStatus": "状态",
+      "stepDetail": "详情",
+      "runStatus": "状态",
+      "runsEmpty": "暂无运行记录。",
+      "runVersion": "版本",
+      "runSubject": "主体",
+      "runCreated": "创建时间",
+      "runSteps": "步骤",
+      "viewSteps": "步骤",
+      "stepsTitle": "运行步骤",
+      "runLoadFailed": "无法加载运行记录。",
+      "closeSteps": "关闭"
     }
   }
 }

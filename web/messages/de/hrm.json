@@ -160,7 +160,9 @@
       "kind": "Änderung",
       "effective": "Wirksam",
       "requester": "Antragsteller",
-      "submitted": "Eingereicht"
+      "submitted": "Eingereicht",
+      "action": "Aktion",
+      "verb": "Verb"
     },
     "emptyTitle": "Keine Änderungsanträge in dieser Ansicht",
     "emptyDescription": "Diese Ansicht ist leer — in diesem Segment wurde noch nichts beantragt.",
@@ -172,7 +174,14 @@
     "proposeFailed": "Die Beschäftigungsliste konnte nicht geladen werden.",
     "draftBadge": "Aktionen",
     "openEmployee": "Personalakte öffnen",
-    "notAvailable": "Nicht verfügbar"
+    "notAvailable": "Nicht verfügbar",
+    "reasonsButton": "Grundcodes",
+    "verbs": {
+      "apply": "Anwenden",
+      "cancel": "Abbrechen",
+      "rescind": "Zurücknehmen",
+      "correct": "Korrigieren"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "Der finanzierte Bestand, den diese Zuordnung besetzt. Die Zuordnung behält eigenen Titel, Abteilung und Standort.",
       "positionRequired": "Wählen Sie eine Position oder markieren Sie die Zuordnung als nicht zugeordnet.",
       "unassignLabel": "Von der Position lösen",
-      "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand."
+      "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand.",
+      "actionLabel": "Aktion",
+      "actionPlaceholder": "Aktion wählen",
+      "actionRequired": "Wählen Sie die HR-Aktion dieser Änderung.",
+      "reasonCodeLabel": "Grund",
+      "reasonCodePlaceholder": "Grund wählen",
+      "rescindAction": "Zurücknehmen",
+      "correctAction": "Korrigieren",
+      "rescindTitle": "Änderung zurücknehmen",
+      "correctTitle": "Änderung korrigieren",
+      "rescindToast": "Änderung zurückgenommen.",
+      "correctToast": "Korrektur erfasst."
     },
     "exit": {
       "title": "Austrittsdatensatz",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "Warum sich die Deckung ändert",
       "changeSubmit": "Änderung speichern",
       "changeFailed": "Die Änderung konnte nicht gespeichert werden."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Einstellung",
+      "rehire": "Wiedereinstellung",
+      "transfer": "Versetzung",
+      "promotion": "Beförderung",
+      "demotion": "Herabstufung",
+      "pay_change": "Gehaltsänderung",
+      "manager_change": "Vorgesetztenwechsel",
+      "location_change": "Standortwechsel",
+      "schedule_change": "Arbeitszeitänderung",
+      "leave_of_absence": "Beurlaubung",
+      "return": "Rückkehr",
+      "termination": "Austritt",
+      "profile_change": "Profiländerung",
+      "other": "Sonstiges"
     }
   }
 }

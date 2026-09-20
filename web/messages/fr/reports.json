@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "Adhésions avantages",
         "description": "Une ligne par adhésion — personne, employeur, service à l'adhésion, régime et niveau de couverture, statut et montants enregistrés par période. Exige la permission avantages."
+      },
+      "automations": {
+        "label": "Automatisations",
+        "description": "Une ligne par recette d'automatisation — type de déclencheur, statut, version et dernière exécution. Requiert la permission automatisations."
+      },
+      "automation_runs": {
+        "label": "Exécutions d'automatisation",
+        "description": "Une ligne par déclenchement — version exécutée, sujet, statut, étapes et erreur. Requiert la permission automatisations."
+      },
+      "hrm_action_reasons": {
+        "label": "Motifs d'action",
+        "description": "Une ligne par code de motif et action RH — le vocabulaire des demandes de changement. Requiert la permission emploi RH."
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "Motif",
         "created_at": "Créé le",
         "id": "Demande (id)",
-        "employment_id": "Emploi (id)"
+        "employment_id": "Emploi (id)",
+        "action": "Action",
+        "reason_code": "Code de motif"
       },
       "hrm_positions": {
         "code": "Code",

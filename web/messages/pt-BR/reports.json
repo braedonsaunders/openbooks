@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "Inscrições de benefícios",
         "description": "Uma linha por inscrição de benefícios — pessoa, empregador, departamento na inscrição, plano e nível de cobertura, estado e valores guardados por período. Requer a permissão de benefícios."
+      },
+      "automations": {
+        "label": "Automações",
+        "description": "Uma linha por receita de automação — tipo de gatilho, status, versão e última execução. Requer a permissão de automações."
+      },
+      "automation_runs": {
+        "label": "Execuções de automação",
+        "description": "Uma linha por disparo — versão executada, assunto, status, etapas e erro. Requer a permissão de automações."
+      },
+      "hrm_action_reasons": {
+        "label": "Motivos de ação",
+        "description": "Uma linha por código de motivo e ação de RH — o vocabulário das solicitações. Requer a permissão de emprego do RH."
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "Motivo",
         "created_at": "Criado em",
         "id": "Solicitação (id)",
-        "employment_id": "Emprego (id)"
+        "employment_id": "Emprego (id)",
+        "action": "Ação",
+        "reason_code": "Código de motivo"
       },
       "hrm_positions": {
         "code": "Código",

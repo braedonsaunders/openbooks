@@ -160,7 +160,9 @@
       "kind": "Cambio",
       "effective": "Vigencia",
       "requester": "Solicitante",
-      "submitted": "Enviada"
+      "submitted": "Enviada",
+      "action": "Acción",
+      "verb": "Verbo"
     },
     "emptyTitle": "No hay solicitudes de cambio aquí",
     "emptyDescription": "Esta vista está vacía — aún no se ha propuesto nada en este segmento.",
@@ -172,7 +174,14 @@
     "proposeFailed": "La lista de empleos no se pudo cargar.",
     "draftBadge": "Acciones",
     "openEmployee": "Abrir el registro del empleado",
-    "notAvailable": "No disponible"
+    "notAvailable": "No disponible",
+    "reasonsButton": "Códigos de motivo",
+    "verbs": {
+      "apply": "Aplicar",
+      "cancel": "Cancelar",
+      "rescind": "Rescindir",
+      "correct": "Corregir"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "La plantilla financiada que ocupa esta asignación. La asignación conserva su propio título, departamento y ubicación.",
       "positionRequired": "Elija un puesto o marque la asignación como sin asignar.",
       "unassignLabel": "Desasignar del puesto",
-      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla."
+      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla.",
+      "actionLabel": "Acción",
+      "actionPlaceholder": "Seleccione una acción",
+      "actionRequired": "Elija la acción de RR. HH. de este cambio.",
+      "reasonCodeLabel": "Motivo",
+      "reasonCodePlaceholder": "Seleccione un motivo",
+      "rescindAction": "Rescindir",
+      "correctAction": "Corregir",
+      "rescindTitle": "Rescindir cambio",
+      "correctTitle": "Corregir cambio",
+      "rescindToast": "Cambio rescindido.",
+      "correctToast": "Corrección registrada."
     },
     "exit": {
       "title": "Registro de salida",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "Por qué cambia la cobertura",
       "changeSubmit": "Guardar cambio",
       "changeFailed": "No se pudo registrar el cambio."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Contratación",
+      "rehire": "Recontratación",
+      "transfer": "Traslado",
+      "promotion": "Ascenso",
+      "demotion": "Descenso",
+      "pay_change": "Cambio salarial",
+      "manager_change": "Cambio de responsable",
+      "location_change": "Cambio de sede",
+      "schedule_change": "Cambio de horario",
+      "leave_of_absence": "Excedencia",
+      "return": "Reincorporación",
+      "termination": "Baja",
+      "profile_change": "Cambio de perfil",
+      "other": "Otro"
     }
   }
 }

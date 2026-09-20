@@ -12,6 +12,10 @@ import { laborPricing } from './articles/labor-pricing'
 import { hrmProcesses } from './articles/hrm-processes'
 // HR-15: inbox and persona homes article.
 import { inboxAndHome } from './articles/inbox-and-home'
+// HR-16 begin
+import { automations } from './articles/automations'
+import { correctingAndRescinding } from './articles/correcting-and-rescinding'
+// HR-16 end
 import { performanceAndRetention } from './articles/performance-and-retention'
 import { selfService } from './articles/self-service'
 import { payroll } from './articles/payroll'
@@ -252,6 +256,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, automations, correctingAndRescinding, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

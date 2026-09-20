@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "福利参保",
         "description": "每次参保一行 — 参保人、雇主、参保时部门、计划与保障档次、状态及按期存储金额。需要福利权限。"
+      },
+      "automations": {
+        "label": "自动化",
+        "description": "每个自动化配方一行 — 触发器类型、状态、版本和上次运行。需要自动化权限。"
+      },
+      "automation_runs": {
+        "label": "自动化运行",
+        "description": "每次触发一行 — 执行版本、主体、状态、步骤和错误。需要自动化权限。"
+      },
+      "hrm_action_reasons": {
+        "label": "操作原因",
+        "description": "每个HR操作的原因代码一行 — 变更申请的词汇表。需要HR雇佣权限。"
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "原因",
         "created_at": "创建时间",
         "id": "申请（ID）",
-        "employment_id": "雇用（ID）"
+        "employment_id": "雇用（ID）",
+        "action": "操作",
+        "reason_code": "原因代码"
       },
       "hrm_positions": {
         "code": "编码",

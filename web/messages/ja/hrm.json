@@ -160,7 +160,9 @@
       "kind": "変更",
       "effective": "発効",
       "requester": "申請者",
-      "submitted": "提出"
+      "submitted": "提出",
+      "action": "アクション",
+      "verb": "動詞"
     },
     "emptyTitle": "ここに変更申請はありません",
     "emptyDescription": "このビューは空です — このセグメントではまだ何も提案されていません。",
@@ -172,7 +174,14 @@
     "proposeFailed": "雇用リストを読み込めませんでした。",
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
-    "notAvailable": "利用不可"
+    "notAvailable": "利用不可",
+    "reasonsButton": "理由コード",
+    "verbs": {
+      "apply": "適用",
+      "cancel": "取消",
+      "rescind": "破棄",
+      "correct": "訂正"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "この配属が保持する財源付き編制。配属自体のタイトル、部門、勤務地は保持されます。",
       "positionRequired": "ポジションを選択するか、配属を未割当としてマークしてください。",
       "unassignLabel": "ポジションから外す",
-      "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。"
+      "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。",
+      "actionLabel": "アクション",
+      "actionPlaceholder": "アクションを選択",
+      "actionRequired": "この変更のHRアクションを選択してください。",
+      "reasonCodeLabel": "理由",
+      "reasonCodePlaceholder": "理由を選択",
+      "rescindAction": "破棄",
+      "correctAction": "訂正",
+      "rescindTitle": "変更を破棄",
+      "correctTitle": "変更を訂正",
+      "rescindToast": "変更を破棄しました。",
+      "correctToast": "訂正を記録しました。"
     },
     "exit": {
       "title": "退職記録",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "保障を変更する理由",
       "changeSubmit": "変更を保存",
       "changeFailed": "変更を記録できませんでした。"
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "採用",
+      "rehire": "再雇用",
+      "transfer": "異動",
+      "promotion": "昇進",
+      "demotion": "降格",
+      "pay_change": "給与変更",
+      "manager_change": "上長変更",
+      "location_change": "勤務地変更",
+      "schedule_change": "勤務時間変更",
+      "leave_of_absence": "休職",
+      "return": "復職",
+      "termination": "退職",
+      "profile_change": "プロフィール変更",
+      "other": "その他"
     }
   }
 }

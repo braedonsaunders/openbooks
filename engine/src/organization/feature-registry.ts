@@ -146,7 +146,7 @@ export const FEATURES: FeatureDef[] = [
   // over the existing Flows gates. The builder is platform-nav under Flows;
   // exception-only approval is a per-flow SETTING, not a feature.
   // HR-16 begin
-  { key: 'automations', defaultEnabled: false, category: 'platform', parentKey: 'flows' },
+  { key: 'automations', defaultEnabled: false, category: 'platform', parentKey: 'flows', navModules: ['automations'] },
   { key: 'automationDateTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   { key: 'automationFieldTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations' },

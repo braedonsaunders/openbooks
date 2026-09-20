@@ -981,7 +981,10 @@
     "hrm_self_read": "Voir son résumé d'emploi",
     "hrm_self_request": "Déposer ses modifications de profil",
     "hrm_team_read": "Voir ses subordonnés directs aujourd'hui",
-    "hrm_team_manage": "Traiter les étapes assignées par le responsable"
+    "hrm_team_manage": "Traiter les étapes assignées par le responsable",
+    "automations_read": "Voir les recettes d'automatisation et le journal",
+    "automations_manage": "Créer des automatisations et régler les approbations",
+    "automations_run": "Exécuter les automatisations"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2737,7 +2740,10 @@
       "body": "Corps",
       "audience": "Audience",
       "startsOn": "Début le",
-      "endsOn": "Fin le"
+      "endsOn": "Fin le",
+      "action": "Action",
+      "reasonCode": "Code de motif",
+      "requiresComment": "Commentaire requis"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3218,6 +3224,22 @@
         "all": "Tous",
         "managers": "Managers",
         "employees": "Employés"
+      },
+      "hrmAction": {
+        "hire": "Embauche",
+        "rehire": "Réembauche",
+        "transfer": "Mutation",
+        "promotion": "Promotion",
+        "demotion": "Rétrogradation",
+        "pay_change": "Changement de salaire",
+        "manager_change": "Changement de manager",
+        "location_change": "Changement de site",
+        "schedule_change": "Changement d'horaire",
+        "leave_of_absence": "Congé",
+        "return": "Retour",
+        "termination": "Départ",
+        "profile_change": "Changement de profil",
+        "other": "Autre"
       }
     },
     "laborCosting": {
@@ -4508,6 +4530,34 @@
     "wipBilling": {
       "title": "Travaux en cours et préfacturation",
       "description": "Révisez les travaux de projet facturables, bloquez ou ajustez des lignes avec preuves, approuvez les préfactures et suivez l’ancienneté des travaux en cours, la réalisation et les pertes."
+    },
+    "automations": {
+      "title": "Automatisations",
+      "description": "Recettes déclenchées sur Flows : déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document et manuels qui exécutent des actions ordonnées."
+    },
+    "automationDateTriggers": {
+      "title": "Déclencheurs de date",
+      "description": "Exécuter les recettes relativement aux dates d'entité, par ex. jours avant une embauche."
+    },
+    "automationFieldTriggers": {
+      "title": "Déclencheurs de champ",
+      "description": "Exécuter les recettes quand un champ surveillé change."
+    },
+    "automationWebhooks": {
+      "title": "Actions webhook",
+      "description": "Appeler des webhooks signés déclarés par l'organisation depuis les recettes."
+    },
+    "automationSimulator": {
+      "title": "Simulateur",
+      "description": "Tester les recettes sur des sujets réels sans écriture."
+    },
+    "hrmActionReasons": {
+      "title": "Codes d'action et de motif",
+      "description": "Exiger une action RH et un code de motif sur chaque demande de changement."
+    },
+    "hrmEventVerbs": {
+      "title": "Verbes d'événement de changement",
+      "description": "Annuler, rescinder et corriger les changements d'emploi en événements ajoutés."
     }
   },
   "backupsManager": {
@@ -4790,5 +4840,117 @@
       "installed": "Installé"
     },
     "title": "Applications"
+  },
+  "automations": {
+    "title": "Automatisations",
+    "description": "Recettes déclenchées sur Flows — déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document et manuels qui exécutent des actions ordonnées.",
+    "backToFlows": "Retour aux flux",
+    "backToList": "Retour aux automatisations",
+    "list": {
+      "newButton": "Nouvelle automatisation",
+      "newTitle": "Nouvelle automatisation",
+      "nameLabel": "Nom",
+      "namePlaceholder": "p. ex. Tâches d'accueil avant l'arrivée",
+      "nameRequired": "Donnez un nom à l'automatisation.",
+      "triggerLabel": "Déclencheur",
+      "createFailed": "L'automatisation n'a pas pu être créée.",
+      "create": "Créer",
+      "cancel": "Annuler",
+      "neverRan": "Jamais exécutée",
+      "statusLabel": "Statut",
+      "emptyTitle": "Aucune automatisation",
+      "emptyDescription": "Les automatisations exécutent des actions ordonnées depuis des déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document ou manuels.",
+      "columnAutomation": "Automatisation",
+      "columnStatus": "Statut",
+      "columnTrigger": "Déclencheur",
+      "columnLastRun": "Dernière exécution",
+      "columnError": "Erreur",
+      "columnActions": "Actions",
+      "runNow": "Exécuter",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "actionFailed": "L'action a échoué."
+    },
+    "status": {
+      "enabled": "Activée",
+      "draft": "Brouillon",
+      "disabled": "Désactivée",
+      "error": "Erreur"
+    },
+    "triggerKinds": {
+      "schedule": "Planifié",
+      "date_relative": "Relatif à une date",
+      "field_change": "Changement de champ",
+      "event": "Événement",
+      "document": "Document",
+      "manual": "Manuel"
+    },
+    "builder": {
+      "pageTitle": "Éditeur d'automatisation",
+      "description": "Déclencheur, qui et quand, actions, simulation et journal.",
+      "buildTab": "Construire",
+      "runsTab": "Exécutions",
+      "saved": "Enregistré.",
+      "saveFailed": "Enregistrement impossible.",
+      "nameTitle": "Nom",
+      "saveName": "Enregistrer le nom",
+      "triggerTitle": "Déclencheur",
+      "saveTrigger": "Enregistrer le déclencheur",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Fuseau horaire",
+      "entityLabel": "Entité",
+      "dateFieldLabel": "Champ de date",
+      "offsetLabel": "Décalage (jours)",
+      "directionLabel": "Direction",
+      "before": "Avant",
+      "after": "Après",
+      "atTimeLabel": "À (HH:MM)",
+      "fieldLabel": "Champ",
+      "changedToLabel": "Devenu (vide = tout)",
+      "subjectKindLabel": "Type de sujet",
+      "eventKindLabel": "Événement",
+      "documentUploaded": "Téléversé",
+      "documentSigned": "Signé",
+      "documentTemplated": "Depuis modèle",
+      "whoWhenTitle": "Qui et quand",
+      "whoWhenHelp": "Les filtres de portée limitent à qui s'applique la recette ; l'arbre de conditions décide quand elle se déclenche.",
+      "rule_subsidiaryId": "Filiale",
+      "rule_departmentId": "Département",
+      "rule_locationId": "Site",
+      "rule_workerType": "Type de travailleur",
+      "rule_positionId": "Poste",
+      "ruleBlank": "Vide = tous",
+      "conditionsMode": "Conditions",
+      "conditionsAll": "Toutes requises",
+      "conditionsAny": "Une suffit",
+      "opLabel": "Op",
+      "valueLabel": "Valeur",
+      "remove": "Retirer",
+      "addCondition": "Ajouter une condition",
+      "saveWhoWhen": "Enregistrer qui et quand",
+      "actionsTitle": "Actions",
+      "actionKindLabel": "Type d'action",
+      "actionJsonLabel": "JSON d'action",
+      "addAction": "Ajouter une action",
+      "saveActions": "Enregistrer les actions",
+      "simulateTitle": "Simuler",
+      "simulateHelp": "Essai sans écriture — choisissez entité:id ou laissez vide pour échantillonner.",
+      "simulateSubjectLabel": "Sujet",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simuler",
+      "stepKind": "Étape",
+      "stepStatus": "Statut",
+      "stepDetail": "Détail",
+      "runStatus": "Statut",
+      "runsEmpty": "Aucune exécution.",
+      "runVersion": "Version",
+      "runSubject": "Sujet",
+      "runCreated": "Créée",
+      "runSteps": "Étapes",
+      "viewSteps": "Étapes",
+      "stepsTitle": "Étapes de l'exécution",
+      "runLoadFailed": "L'exécution n'a pas pu être chargée.",
+      "closeSteps": "Fermer"
+    }
   }
 }

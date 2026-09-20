@@ -780,6 +780,18 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'automate',
     requiredPermission: 'flows.manage',
   },
+  // HR-16 begin: the automation recipe builder beside Flows (platform nav
+  // under Flows; the automations feature gates it, exception-only approval
+  // is a per-flow setting).
+  {
+    key: 'automations',
+    href: '/admin/automations',
+    label: 'Automations',
+    iconKey: 'workflow',
+    group: 'settings',
+    subgroup: 'automate',
+    requiredPermission: 'automations.read',
+  },
   {
     key: 'admin-extensions',
     href: '/admin/apps',
@@ -836,6 +848,9 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.customization.manage',
   'scripts.manage',
   'flows.manage',
+  // HR-16 begin
+  'automations.read',
+  // HR-16 end
   'apps.manage',
   'api.keys.manage',
   'sql.execute',
@@ -944,6 +959,9 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'admin-page-layouts',
     'admin-pdf-templates',
     'flows',
+    // HR-16 begin
+    'automations',
+    // HR-16 end
     'admin-scripts',
     'admin-extensions',
     'sql',

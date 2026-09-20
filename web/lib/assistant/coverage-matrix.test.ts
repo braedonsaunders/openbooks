@@ -157,6 +157,10 @@ const MATRIX: Entry[] = [
   { prefix: "admin/pdf-templates", tools: ["list_pdf_templates", "get_pdf_template"] },
   { prefix: "customization", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "admin/flows", tools: ["list_approvals"], note: "flow authoring writes have no application service" },
+  // HR-16 begin: the automation recipe list/builder reads through the automations read service; recipe authoring, enable/disable, run-now and simulate are human-attested with no assistant write surface by design.
+  { prefix: "admin/automations", tools: ["automations_status"], note: "the recipe list, builder, simulate and runs read through the automations read service; authoring, enable/disable, run-now and simulate are human-attested with no assistant write surface by design" },
+  { prefix: "automations", tools: ["automations_status"], note: "recipe and run reads reuse the automations read service; writes are human-attested with no assistant write surface by design" },
+  // HR-16 end
   { prefix: "flows", tools: ["list_approvals", "decide_approval"], note: "flow authoring and manual/record-state triggers have no application service" },
   { prefix: "hrm/change-requests", tools: ["hrm_change_requests", "list_approvals", "decide_approval"], note: "the queue lists through the employment read service while decisions run through native Flows gates; authoring, submit and withdraw are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/leave", tools: ["hrm_leave", "list_approvals", "decide_approval"], note: "the queue, department calendar, and drawer read through the leave read service while decisions run through native Flows gates; filing, submit, withdraw, cancel and absence recording are human-attested HR actions with no assistant write surface by design" },

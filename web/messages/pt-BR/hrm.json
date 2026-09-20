@@ -160,7 +160,9 @@
       "kind": "Alteração",
       "effective": "Vigência",
       "requester": "Solicitante",
-      "submitted": "Enviada"
+      "submitted": "Enviada",
+      "action": "Ação",
+      "verb": "Verbo"
     },
     "emptyTitle": "Nenhuma solicitação de alteração aqui",
     "emptyDescription": "Esta visão está vazia — nada foi proposto neste segmento ainda.",
@@ -172,7 +174,14 @@
     "proposeFailed": "A lista de empregos não pôde ser carregada.",
     "draftBadge": "Ações",
     "openEmployee": "Abrir o registro do funcionário",
-    "notAvailable": "Indisponível"
+    "notAvailable": "Indisponível",
+    "reasonsButton": "Códigos de motivo",
+    "verbs": {
+      "apply": "Aplicar",
+      "cancel": "Cancelar",
+      "rescind": "Rescindir",
+      "correct": "Corrigir"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "O quadro financiado que esta atribuição ocupa. A atribuição mantém seu próprio título, departamento e local.",
       "positionRequired": "Escolha uma posição ou marque a atribuição como não atribuída.",
       "unassignLabel": "Desatribuir da posição",
-      "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro."
+      "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro.",
+      "actionLabel": "Ação",
+      "actionPlaceholder": "Selecione uma ação",
+      "actionRequired": "Escolha a ação de RH desta alteração.",
+      "reasonCodeLabel": "Motivo",
+      "reasonCodePlaceholder": "Selecione um motivo",
+      "rescindAction": "Rescindir",
+      "correctAction": "Corrigir",
+      "rescindTitle": "Rescindir alteração",
+      "correctTitle": "Corrigir alteração",
+      "rescindToast": "Alteração rescindida.",
+      "correctToast": "Correção registrada."
     },
     "exit": {
       "title": "Registro de saída",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "Por que a cobertura muda",
       "changeSubmit": "Salvar alteração",
       "changeFailed": "Não foi possível registrar a alteração."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Admissão",
+      "rehire": "Readmissão",
+      "transfer": "Transferência",
+      "promotion": "Promoção",
+      "demotion": "Rebaixamento",
+      "pay_change": "Alteração salarial",
+      "manager_change": "Troca de gestor",
+      "location_change": "Troca de unidade",
+      "schedule_change": "Alteração de jornada",
+      "leave_of_absence": "Licença",
+      "return": "Retorno",
+      "termination": "Desligamento",
+      "profile_change": "Alteração de perfil",
+      "other": "Outro"
     }
   }
 }

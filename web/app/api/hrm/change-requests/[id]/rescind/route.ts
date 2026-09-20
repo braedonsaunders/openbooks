@@ -4,7 +4,7 @@ import { rescindEmploymentChange } from "@openbooks/engine/src/automations/event
 import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
-import { changeRequestErrorResponse } from "../../../_lib";
+import { changeRequestErrorResponse } from '../../_lib';
 import { automationErrorResponse } from "../../../../automations/_lib";
 import { rescindBody } from "../../../../automations/bodies";
 

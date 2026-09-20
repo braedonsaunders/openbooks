@@ -160,7 +160,9 @@
       "kind": "Change",
       "effective": "Effective",
       "requester": "Requester",
-      "submitted": "Submitted"
+      "submitted": "Submitted",
+      "action": "Action",
+      "verb": "Verb"
     },
     "emptyTitle": "No change requests here",
     "emptyDescription": "This view is empty — nothing has been proposed in this segment yet.",
@@ -172,7 +174,14 @@
     "proposeFailed": "The employment list could not be loaded.",
     "draftBadge": "Actions",
     "openEmployee": "Open the employee record",
-    "notAvailable": "Not available"
+    "notAvailable": "Not available",
+    "reasonsButton": "Reason codes",
+    "verbs": {
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "rescind": "Rescind",
+      "correct": "Correct"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "The funded establishment this assignment holds. The assignment keeps its own title, department, and location.",
       "positionRequired": "Pick a position or mark the assignment as unassigned.",
       "unassignLabel": "Unassign from the position",
-      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment."
+      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment.",
+      "actionLabel": "Action",
+      "actionPlaceholder": "Select an action",
+      "actionRequired": "Pick the HR action this change files under.",
+      "reasonCodeLabel": "Reason",
+      "reasonCodePlaceholder": "Select a reason",
+      "rescindAction": "Rescind",
+      "correctAction": "Correct",
+      "rescindTitle": "Rescind change",
+      "correctTitle": "Correct change",
+      "rescindToast": "Change rescinded.",
+      "correctToast": "Correction recorded."
     },
     "exit": {
       "title": "Exit record",
@@ -1048,6 +1068,24 @@
       "changeReasonPlaceholder": "Why the coverage changes",
       "changeSubmit": "Save change",
       "changeFailed": "The change could not be recorded."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Hire",
+      "rehire": "Rehire",
+      "transfer": "Transfer",
+      "promotion": "Promotion",
+      "demotion": "Demotion",
+      "pay_change": "Pay change",
+      "manager_change": "Manager change",
+      "location_change": "Location change",
+      "schedule_change": "Schedule change",
+      "leave_of_absence": "Leave of absence",
+      "return": "Return",
+      "termination": "Termination",
+      "profile_change": "Profile change",
+      "other": "Other"
     }
   }
 }

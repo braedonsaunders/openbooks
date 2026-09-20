@@ -981,7 +981,10 @@
     "hrm_self_read": "Eigene Anstellungsübersicht ansehen",
     "hrm_self_request": "Profiländerungen für die eigene Person einreichen",
     "hrm_team_read": "Direkte Mitarbeitende heute ansehen",
-    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten"
+    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten",
+    "automations_read": "Automatisierungsrezepte und Ausführungsprotokoll sehen",
+    "automations_manage": "Automatisierungen und Genehmigungseinstellungen verfassen",
+    "automations_run": "Automatisierungen jetzt ausführen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2850,7 +2853,10 @@
       "body": "Text",
       "audience": "Zielgruppe",
       "startsOn": "Beginnt am",
-      "endsOn": "Endet am"
+      "endsOn": "Endet am",
+      "action": "Aktion",
+      "reasonCode": "Grundcode",
+      "requiresComment": "Erläuterung erforderlich"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3331,6 +3337,22 @@
         "all": "Alle",
         "managers": "Führungskräfte",
         "employees": "Mitarbeitende"
+      },
+      "hrmAction": {
+        "hire": "Einstellung",
+        "rehire": "Wiedereinstellung",
+        "transfer": "Versetzung",
+        "promotion": "Beförderung",
+        "demotion": "Herabstufung",
+        "pay_change": "Gehaltsänderung",
+        "manager_change": "Vorgesetztenwechsel",
+        "location_change": "Standortwechsel",
+        "schedule_change": "Arbeitszeitänderung",
+        "leave_of_absence": "Beurlaubung",
+        "return": "Rückkehr",
+        "termination": "Austritt",
+        "profile_change": "Profiländerung",
+        "other": "Sonstiges"
       }
     },
     "bankFeeds": {
@@ -4508,6 +4530,34 @@
     "timeTracking": {
       "description": "Persönliche Wochenstundenzettel mit Einreichung und Genehmigung.",
       "title": "Zeiterfassung"
+    },
+    "automations": {
+      "title": "Automatisierungen",
+      "description": "Triggerbasierte Rezepte auf Flows: Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- und manuelle Trigger lösen geordnete Aktionen aus."
+    },
+    "automationDateTriggers": {
+      "title": "Datumstrigger",
+      "description": "Rezepte relativ zu Entitätsdaten auslösen, z. B. Tage vor Beschäftigungsbeginn."
+    },
+    "automationFieldTriggers": {
+      "title": "Feldtrigger",
+      "description": "Rezepte bei Änderung eines beobachteten Felds auslösen."
+    },
+    "automationWebhooks": {
+      "title": "Webhook-Aktionen",
+      "description": "Deklarierte signierte Webhook-Endpunkte der Org aus Rezepten aufrufen."
+    },
+    "automationSimulator": {
+      "title": "Simulator",
+      "description": "Rezepte ohne Schreibvorgänge an echten Subjekten testen."
+    },
+    "hrmActionReasons": {
+      "title": "Aktions- und Grundcodes",
+      "description": "Bei jedem Änderungsantrag eine HR-Aktion und einen Grundcode verlangen."
+    },
+    "hrmEventVerbs": {
+      "title": "Änderungsereignisverben",
+      "description": "Beschäftigungsänderungen als angehängte Ereignisse stornieren, zurücknehmen und korrigieren."
     }
   },
   "extensions": {
@@ -4789,6 +4839,118 @@
       "redirect": "Diese Seite sendet Sie stattdessen an {href}. Das ist meist eine Berechtigung, die Ihnen fehlt, oder eine Funktion, die aus ist.",
       "notFound": "Diese Seite antwortet für Sie mit „nicht gefunden“, daher gibt es kein Layout zu lesen.",
       "empty": "Diese Seite zeigt für Sie nichts, daher gibt es kein Layout zu lesen."
+    }
+  },
+  "automations": {
+    "title": "Automatisierungen",
+    "description": "Triggerbasierte Rezepte auf Flows — Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- und manuelle Trigger lösen geordnete Aktionen aus.",
+    "backToFlows": "Zurück zu Flows",
+    "backToList": "Zurück zu den Automatisierungen",
+    "list": {
+      "newButton": "Neue Automatisierung",
+      "newTitle": "Neue Automatisierung",
+      "nameLabel": "Name",
+      "namePlaceholder": "z. B. Willkommensaufgaben vor Start",
+      "nameRequired": "Geben Sie der Automatisierung einen Namen.",
+      "triggerLabel": "Trigger",
+      "createFailed": "Die Automatisierung konnte nicht erstellt werden.",
+      "create": "Erstellen",
+      "cancel": "Abbrechen",
+      "neverRan": "Nie ausgeführt",
+      "statusLabel": "Status",
+      "emptyTitle": "Noch keine Automatisierungen",
+      "emptyDescription": "Automatisierungen lösen geordnete Aktionen aus Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- oder manuellen Triggern aus.",
+      "columnAutomation": "Automatisierung",
+      "columnStatus": "Status",
+      "columnTrigger": "Trigger",
+      "columnLastRun": "Letzte Ausführung",
+      "columnError": "Fehler",
+      "columnActions": "Aktionen",
+      "runNow": "Jetzt ausführen",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "actionFailed": "Die Aktion ist fehlgeschlagen."
+    },
+    "status": {
+      "enabled": "Aktiviert",
+      "draft": "Entwurf",
+      "disabled": "Deaktiviert",
+      "error": "Fehler"
+    },
+    "triggerKinds": {
+      "schedule": "Zeitplan",
+      "date_relative": "Datumsbezogen",
+      "field_change": "Feldänderung",
+      "event": "Ereignis",
+      "document": "Dokument",
+      "manual": "Manuell"
+    },
+    "builder": {
+      "pageTitle": "Automatisierungs-Editor",
+      "description": "Trigger, Wer und Wann, Aktionen, Simulation und Ausführungsprotokoll.",
+      "buildTab": "Erstellen",
+      "runsTab": "Läufe",
+      "saved": "Gespeichert.",
+      "saveFailed": "Konnte nicht gespeichert werden.",
+      "nameTitle": "Name",
+      "saveName": "Namen speichern",
+      "triggerTitle": "Trigger",
+      "saveTrigger": "Trigger speichern",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Zeitzone",
+      "entityLabel": "Entität",
+      "dateFieldLabel": "Datumsfeld",
+      "offsetLabel": "Abstand (Tage)",
+      "directionLabel": "Richtung",
+      "before": "Vor",
+      "after": "Nach",
+      "atTimeLabel": "Um (HH:MM)",
+      "fieldLabel": "Feld",
+      "changedToLabel": "Geändert zu (leer = beliebig)",
+      "subjectKindLabel": "Subjektart",
+      "eventKindLabel": "Ereignis",
+      "documentUploaded": "Hochgeladen",
+      "documentSigned": "Signiert",
+      "documentTemplated": "Aus Vorlage",
+      "whoWhenTitle": "Wer und Wann",
+      "whoWhenHelp": "Bereichsfilter grenzen ein, für wen das Rezept gilt; der Bedingungsbaum entscheidet, wann es auslöst.",
+      "rule_subsidiaryId": "Tochtergesellschaft",
+      "rule_departmentId": "Abteilung",
+      "rule_locationId": "Standort",
+      "rule_workerType": "Beschäftigungsart",
+      "rule_positionId": "Position",
+      "ruleBlank": "Leer = alle",
+      "conditionsMode": "Bedingungen",
+      "conditionsAll": "Alle müssen zutreffen",
+      "conditionsAny": "Eine genügt",
+      "opLabel": "Op",
+      "valueLabel": "Wert",
+      "remove": "Entfernen",
+      "addCondition": "Bedingung hinzufügen",
+      "saveWhoWhen": "Wer und Wann speichern",
+      "actionsTitle": "Aktionen",
+      "actionKindLabel": "Aktionsart",
+      "actionJsonLabel": "Aktions-JSON",
+      "addAction": "Aktion hinzufügen",
+      "saveActions": "Aktionen speichern",
+      "simulateTitle": "Simulieren",
+      "simulateHelp": "Testlauf ohne Schreibvorgänge — Entität:ID wählen oder leer lassen für eine Stichprobe.",
+      "simulateSubjectLabel": "Subjekt",
+      "simulateSubjectPlaceholder": "leave_request:<ID>",
+      "simulateButton": "Simulieren",
+      "stepKind": "Schritt",
+      "stepStatus": "Status",
+      "stepDetail": "Detail",
+      "runStatus": "Status",
+      "runsEmpty": "Noch keine Läufe.",
+      "runVersion": "Version",
+      "runSubject": "Subjekt",
+      "runCreated": "Erstellt",
+      "runSteps": "Schritte",
+      "viewSteps": "Schritte",
+      "stepsTitle": "Laufschritte",
+      "runLoadFailed": "Der Lauf konnte nicht geladen werden.",
+      "closeSteps": "Schließen"
     }
   }
 }
