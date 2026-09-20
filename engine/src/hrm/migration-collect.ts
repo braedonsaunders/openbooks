@@ -86,6 +86,26 @@ export class EmploymentCollectionError extends Error {
   }
 }
 
+/**
+ * The dangling-schedule refusal, decided on the join itself. pay_schedule_id
+ * is NOT NULL, so a profile whose schedule the org-scoped read cannot
+ * observe (a cross-org or otherwise missing reference) is corrupt and is
+ * refused with its remedy. The schedule's OWN subsidiary is a payload column
+ * that is legitimately null for an org-wide schedule — it was never a join
+ * sentinel, and treating it as one refused every org whose schedules are
+ * org-wide and sent the operator to reconcile healthy data.
+ */
+export function assertScheduleObservable(
+  profile: Pick<ProfileRecord, "id" | "pay_schedule_id" | "schedule_missing">,
+): void {
+  if (!profile.schedule_missing) return;
+  throw new EmploymentCollectionError(
+    `payroll profile ${profile.id} names pay schedule ${profile.pay_schedule_id} ` +
+      "which no read can observe; refusing to collect a dangling payroll " +
+      "reference — reconcile employee_payroll_profiles before re-running",
+  );
+}
+
 /** One operator employer/date override, keyed by native party id. */
 export interface OperatorEmploymentMapping {
   readonly partyId: string;
@@ -153,7 +173,10 @@ interface ProfileRecord {
   pay_schedule_id: string;
   labour_jurisdiction: string | null;
   is_active: boolean;
+  /** The schedule's own subsidiary scope; null is a legitimate org-wide schedule. */
   schedule_subsidiary_id: string | null;
+  /** True only when the LEFT JOIN found no schedule row: the reference is dangling. */
+  schedule_missing: boolean;
 }
 
 interface SubsidiaryRecord {
@@ -237,7 +260,8 @@ export async function collectLegacyEmployments(
              p.pay_schedule_id::text as pay_schedule_id,
              p.labour_jurisdiction as labour_jurisdiction,
              p.is_active as is_active,
-             s.subsidiary_id::text as schedule_subsidiary_id
+             s.subsidiary_id::text as schedule_subsidiary_id,
+             (s.id is null) as schedule_missing
         from employee_payroll_profiles p
         left join pay_schedules s
           on s.org_id = p.org_id and s.id = p.pay_schedule_id
@@ -298,15 +322,7 @@ export async function collectLegacyEmployments(
         );
       }
       const profile = profiles.get(role.party_id) ?? null;
-      if (profile !== null && profile.schedule_subsidiary_id === null) {
-        // pay_schedule_id is NOT NULL: a profile whose schedule no read can
-        // observe is corrupt, and a null payroll scope would hide it.
-        throw new EmploymentCollectionError(
-          `payroll profile ${profile.id} names pay schedule ${profile.pay_schedule_id} ` +
-            "which no read can observe; refusing to collect a dangling payroll " +
-            "reference — reconcile employee_payroll_profiles before re-running",
-        );
-      }
+      if (profile !== null) assertScheduleObservable(profile);
       const mapping = mappingByParty.get(role.party_id) ?? null;
       return buildRow({
         orgId,

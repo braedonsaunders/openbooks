@@ -233,6 +233,33 @@ test("clean employees collect to ready rows with observation candidates", { skip
   }
 });
 
+test("an org-wide schedule (subsidiary null) collects and classifies ready, never refused", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    // The production shape: one schedule shared by every subsidiary. Its
+    // subsidiary_id is null by design, and the LEFT JOIN still finds it.
+    const scheduleId = await seedSchedule(org.orgId, "Org-wide biweekly", null);
+    const employee = await seedEmployee(
+      org, "Org-wide Employee", { hiredOn: "2021-06-01" }, { scheduleId });
+    await seedCommittedStub(org, actorId, scheduleId, employee.partyId, "2026-09-10");
+
+    const collected = await collectLegacyEmployments(org.orgId);
+    assert.equal(collected.rows.length, 1);
+    const row = rowByParty(collected.rows, employee.partyId);
+    assert.equal(row.payroll?.present, true);
+    assert.equal(row.payroll?.subsidiaryId, null, "an org-wide schedule corroborates no subsidiary");
+    assert.equal(row.employer.assertedSubsidiaryId, org.subsidiaryId);
+
+    const preflight = preflightEmploymentMigration(collected.rows);
+    assert.equal(preflight.counts.ready, 1);
+    assert.equal(preflight.rows[0]?.classification, "ready");
+    assert.equal(preflight.rows[0]?.candidate?.employerSubsidiaryId, org.subsidiaryId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("schedule subsidiary versus party subsidiary collects a conflict the classifier refuses", { skip }, async () => {
   const org = await createScratchOrg();
   try {
