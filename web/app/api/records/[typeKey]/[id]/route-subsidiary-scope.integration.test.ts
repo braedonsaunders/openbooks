@@ -22,7 +22,10 @@ const hooks = registerHooks({
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
-    if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
+    if (
+      (specifier === '../../../../../lib/authz' || specifier === '../../../../lib/authz') &&
+      context.parentURL?.includes('/api/records/')
+    ) {
       return { url: 'mock:custom-record-detail-scope-authz', shortCircuit: true }
     }
     if (specifier.startsWith('@/') && context.parentURL) {
@@ -43,7 +46,8 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?custom-record-detail-scope-test'
-const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const { GET: LIST } = (await import('../route.ts?custom-record-detail-scope-list')) as typeof import('../route.ts')
 hooks.deregister()
 
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -174,6 +178,109 @@ test(
           { params: Promise.resolve({ typeKey, id: recordId }) },
         )
         assert.equal(response.status, 404)
+      })
+    } finally {
+      state.authz = null
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'interactive PATCH after field-drop keeps stored subsidiary_id so the other fence cannot list/get it',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = `patchdrop-${randomUUID().replaceAll('-', '').slice(0, 8)}`
+    const visibleId = randomUUID()
+    const { org, actorId, branch } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      const other = randomUUID()
+      const customTypeId = randomUUID()
+      const fields = [{
+        id: 'main',
+        title: 'Details',
+        fields: [{ id: 'title', type: 'text', label: 'Title' }],
+      }]
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${other}, ${created.orgId}, ${created.subsidiaryId}, 'Patch Drop Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+        values
+          (${customTypeId}, ${created.orgId}, ${typeKey}, 'Patch Dropped', 'Patch Dropped',
+           ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
+      `)
+      await db.execute(sql`
+        insert into custom_records
+          (id, org_id, type_id, type_key, record_number, data, search_text, status, created_by, updated_by)
+        values
+          (${visibleId}, ${created.orgId}, ${customTypeId}, ${typeKey}, ${visibleId},
+           ${JSON.stringify({ subsidiary_id: created.subsidiaryId, title: 'visible' })}::jsonb,
+           'visible', 'active', ${actor}, ${actor})
+      `)
+      return { org: created, actorId: actor, branch: other }
+    })
+
+    const homeAuthz = {
+      user: {
+        id: actorId,
+        orgId: org.orgId,
+        roles: [{ key: 'admin', name: 'Admin' }],
+      },
+      permissions: new Set(['records.read', 'records.create']),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    }
+    const otherAuthz = { ...homeAuthz, allowedSubsidiaryIds: new Set([branch]) }
+
+    try {
+      await withOrgContext(org.orgId, async () => {
+        state.authz = homeAuthz
+        const params = { params: Promise.resolve({ typeKey, id: visibleId }) }
+        const opened = await GET(
+          new Request(`http://localhost/api/records/${typeKey}/${visibleId}`),
+          params,
+        )
+        assert.equal(opened.status, 200, await opened.clone().text())
+        const revision = ((await opened.json()) as { record: { updated_at: string } }).record.updated_at
+
+        const saved = await PATCH(
+          new Request(`http://localhost/api/records/${typeKey}/${visibleId}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ data: { title: 'kept' }, expectedUpdatedAt: revision }),
+          }),
+          params,
+        )
+        assert.equal(saved.status, 200, await saved.clone().text())
+        const stored = (await db.execute<{ title: string; subsidiary_id: string | null }>(sql`
+          select data ->> 'title' as title, data ->> 'subsidiary_id' as subsidiary_id
+            from custom_records where id = ${visibleId}
+        `)).rows[0]
+        assert.equal(stored?.title, 'kept')
+        assert.equal(
+          stored?.subsidiary_id,
+          org.subsidiaryId,
+          'interactive PATCH after field-drop must not erase the stored JSON subsidiary_id',
+        )
+
+        state.authz = otherAuthz
+        const listed = await LIST(
+          new Request(`http://localhost/api/records/${typeKey}`),
+          { params: Promise.resolve({ typeKey }) },
+        )
+        assert.equal(listed.status, 200, await listed.clone().text())
+        const body = (await listed.json()) as { records: Array<{ id: string }>; total: number }
+        assert.equal(body.records.some((row) => row.id === visibleId), false)
+        const got = await GET(
+          new Request(`http://localhost/api/records/${typeKey}/${visibleId}`),
+          params,
+        )
+        assert.equal(got.status, 404)
       })
     } finally {
       state.authz = null
