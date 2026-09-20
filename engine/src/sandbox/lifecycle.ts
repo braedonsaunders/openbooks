@@ -12,6 +12,18 @@ import {
 import { CUSTOMIZATION_LAYER, runClone, type SandboxTier } from "./clone.ts";
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
+import { verifyCloneRls } from "./verify-rls.ts";
+
+/** A zero-row sandbox lookup is a failure: the caller asked to act on a named id. */
+export function requireFoundSandbox<T>(
+  sandboxId: string,
+  row: T | null | undefined,
+): T {
+  if (row == null || (typeof row === "string" && row.length === 0)) {
+    throw new Error(`sandbox not found: ${sandboxId}`);
+  }
+  return row;
+}
 
 /**
  * Sandbox lifecycle: create, refresh (non-destructive), reset, delete. The
@@ -277,6 +289,13 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       actorId: input.createdBy ?? null,
     });
     await neuterSandbox(sandboxOrgId);
+    // Prove tenant isolation on the clone before it is marked ready.
+    // withOrg opens its own bypass-off transactions even when the caller
+    // holds withBypassContext (ALS bypass, no pinned connection).
+    await verifyCloneRls({
+      productionOrgId: input.productionOrgId,
+      sandboxOrgId,
+    });
     await db.execute(sql`
       update sandboxes
          set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
@@ -337,8 +356,7 @@ export async function refreshSandbox(
     org_id: string; production_org_id: string; tier: SandboxTier; masked: boolean; as_of_period_id: string | null;
   }>(sql`
     select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`);
-  const s = row.rows[0];
-  if (!s) throw new Error(`sandbox not found: ${sandboxId}`);
+  const s = requireFoundSandbox(sandboxId, row.rows[0]);
   const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`));
   const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
 
@@ -353,9 +371,11 @@ export async function refreshSandbox(
          where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'
          returning id`));
       if (!marked.rows[0]) {
-        const current = (await db.execute<{ status: string }>(sql`
-          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0];
-        if (!current) throw new Error(`sandbox not found: ${sandboxId}`);
+        requireFoundSandbox(
+          sandboxId,
+          (await db.execute<{ status: string }>(sql`
+          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0],
+        );
         throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
       }
 
@@ -405,6 +425,14 @@ export async function refreshSandbox(
       // helper; the key follows the house pg_advisory_xact_lock convention.
       advisoryLockKey: `openbooks:sandbox-refresh:${sandboxId}`,
     });
+    // After the clone unit commits. The refresh transaction keeps
+    // app.bypass_rls=on on its pinned connection, so isolation cannot be
+    // proven from inside it. verifyCloneRls opens its own withOrg
+    // transactions (bypass off) against the materialized clone.
+    await verifyCloneRls({
+      productionOrgId: s.production_org_id,
+      sandboxOrgId: s.org_id,
+    });
   } catch (err) {
     // Never clobber a deleter's mark: losing the race above (or a delete that
     // landed mid-refresh) must leave 'deleting' for the deleter to finish.
@@ -433,8 +461,7 @@ export async function resetSandbox(sandboxId: string): Promise<void> {
  * cascades the sandboxes row). */
 export async function deleteSandbox(sandboxId: string): Promise<void> {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
-  const orgId = row.rows[0]?.org_id as string | undefined;
-  if (!orgId) return;
+  const orgId = requireFoundSandbox(sandboxId, row.rows[0]?.org_id as string | undefined);
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
   // under its clone unit corrupts the refresh and strands the status. The
   // conditional mark makes the race atomic — the loser refuses loudly.
@@ -444,9 +471,11 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
      where id = ${sandboxId} and org_id = ${orgId} and status <> 'refreshing'
      returning id`));
   if (!marked.rows[0]) {
-    const current = (await db.execute<{ status: string }>(sql`
-      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0];
-    if (!current) return;
+    requireFoundSandbox(
+      sandboxId,
+      (await db.execute<{ status: string }>(sql`
+      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0],
+    );
     throw new Error(`cannot delete sandbox ${sandboxId} while it is refreshing — retry once the refresh completes`);
   }
   try {
