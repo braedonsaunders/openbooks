@@ -19,7 +19,8 @@ import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
-import { hrmEmploymentChangeRequests, workerEmployments } from "./hrm";
+import { hrmEmploymentChangeRequests } from "./hrm-change-requests";
+import { workerEmployments } from "./hrm";
 import { positions } from "./hrm-positions";
 
 /**
