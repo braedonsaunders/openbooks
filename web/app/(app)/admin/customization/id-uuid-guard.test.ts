@@ -3,9 +3,9 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// Member routes must refuse a non-UUID [id] with HTTP 400 before any uuid-column
-// bind. A 404 here is the unknown-id contract and is the wrong refusal: it
-// means the raw string reached loadOwn (or was collapsed into "not found").
+// Member routes must refuse a non-UUID [id] with HTTP 400 naming that the id
+// must be a UUID, before any uuid-column bind. A 404 is the unknown-id
+// contract and is the wrong refusal — this test fails if the status is 404.
 // Auth, gates, and the database are stubbed so the only thing under test is
 // that response contract.
 
@@ -232,15 +232,20 @@ for (const [label, handlers] of [
       for (const id of MALFORMED) {
         resetQueries()
         const result = await call(handlers, verb, id)
+        assert.notEqual(
+          result.status,
+          404,
+          `${label} ${verb} ${id}: malformed id must be 400, not the 404 unknown-id contract: ${JSON.stringify(result.json)}`,
+        )
         assert.equal(
           result.status,
           400,
           `${label} ${verb} ${id}: expected 400, got ${result.status}: ${JSON.stringify(result.json)} ${result.thrown ?? ''}`,
         )
-        assert.equal(
-          (result.json as { error?: string } | null)?.error,
-          'invalid id',
-          `${label} ${verb} ${id}: 400 must name the invalid-id refusal`,
+        assert.match(
+          String((result.json as { error?: string } | null)?.error ?? ''),
+          /must be a UUID/i,
+          `${label} ${verb} ${id}: 400 must name that the id must be a UUID`,
         )
         assert.equal(state.statements.length, 0, `${label} ${verb} ${id} reached the database`)
       }

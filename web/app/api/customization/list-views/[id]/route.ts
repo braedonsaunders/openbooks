@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const row = await loadOwn(authz.user.orgId, authz.user.id, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
@@ -47,7 +47,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
@@ -147,7 +147,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
