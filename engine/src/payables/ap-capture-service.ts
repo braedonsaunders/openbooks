@@ -582,12 +582,50 @@ const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /** Effective permission check for engine-side authority gates (role grants + overrides). */
 
+/**
+ * Inbox vendor/PO visibility, applied after the capture row is locked so a
+ * concurrent association change cannot sneak past a pre-transaction probe.
+ * Unrestricted callers (null/omitted set) skip. Empty set denies. Null
+ * vendor/PO subsidiaries stay org-wide, matching the AP capture list.
+ */
+async function assertLockedCaptureAssociationsVisible(
+  tx: SqlExecutor,
+  orgId: string,
+  item: Pick<CaptureRow, "vendor_candidate_id" | "purchase_order_id">,
+  allowed: ReadonlySet<string> | null | undefined,
+): Promise<void> {
+  if (allowed == null) return;
+  if (allowed.size === 0) throw new CaptureMaterializationError("Capture item not found");
+  if (item.vendor_candidate_id) {
+    const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties
+       where org_id = ${orgId} and id = ${item.vendor_candidate_id}
+       for update
+    `)).rows[0];
+    if (!vendor || (vendor.subsidiaryId != null && !allowed.has(vendor.subsidiaryId))) {
+      throw new CaptureMaterializationError("Capture item not found");
+    }
+  }
+  if (item.purchase_order_id) {
+    const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from documents
+       where org_id = ${orgId} and id = ${item.purchase_order_id}
+       for update
+    `)).rows[0];
+    if (!purchaseOrder || (purchaseOrder.subsidiaryId != null && !allowed.has(purchaseOrder.subsidiaryId))) {
+      throw new CaptureMaterializationError("Capture item not found");
+    }
+  }
+}
+
 export async function materializeCapture(input: {
   orgId: string;
   captureItemId: string;
   actorId: string | null;
   /** Accept an off-price PO match; requires AP approval and is audited. */
   priceOverride?: boolean;
+  /** Null/omitted = unrestricted. Restricted callers must pass their set. */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const result = await db.transaction(async (tx) => {
     const loaded = (await tx.execute<CaptureRow>(sql`
@@ -595,6 +633,7 @@ export async function materializeCapture(input: {
     `));
     const item = loaded.rows[0];
     if (!item) throw new CaptureMaterializationError("Capture item not found");
+    await assertLockedCaptureAssociationsVisible(tx, input.orgId, item, input.allowedSubsidiaryIds);
     if (item.document_id) {
       const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id} and org_id = ${input.orgId}`));
       return { documentId: item.document_id, documentNumber: existing.rows[0]?.document_number ?? "" };

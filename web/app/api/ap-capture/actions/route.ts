@@ -108,7 +108,12 @@ export async function POST(request: Request) {
            ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
         `))
         if (!visible.rows[0]) throw new Error('Capture item not found')
-        const created = await materializeCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id })
+        const created = await materializeCapture({
+          orgId: gate.user.orgId,
+          captureItemId: id,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
         results.push({ id, ok: true, documentId: created.documentId })
       }
     } catch (error) {

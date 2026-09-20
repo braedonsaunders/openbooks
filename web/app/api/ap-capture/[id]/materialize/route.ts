@@ -10,10 +10,11 @@ export const runtime = 'nodejs'
 
 /**
  * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
- * (`web/app/(app)/ap/capture/view.ts`). materializeCapture has no subsidiary
- * argument and always posts to the org root, so the route must refuse an
- * out-of-scope capture before the engine runs. A miss uses the engine's
- * missing-item shape so hidden and nonexistent stay indistinguishable.
+ * (`web/app/(app)/ap/capture/view.ts`). The probe fails fast; the engine
+ * re-checks under the capture FOR UPDATE (and locks vendor/PO) so a
+ * concurrent association change cannot sneak through. A miss uses the
+ * engine's missing-item shape so hidden and nonexistent stay
+ * indistinguishable.
  */
 function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
   if (allowed === null) return sql``
@@ -39,7 +40,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
        ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
     `))
     if (!visible.rows[0]) return NextResponse.json({ error: 'Capture item not found' }, { status: 422 })
-    return NextResponse.json(await materializeCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id }))
+    return NextResponse.json(await materializeCapture({
+      orgId: gate.user.orgId,
+      captureItemId: id,
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    }))
   } catch (error) {
     if (error instanceof CaptureMaterializationError) return NextResponse.json({ error: error.message }, { status: error.status })
     throw error

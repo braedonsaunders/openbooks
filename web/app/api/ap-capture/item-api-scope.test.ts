@@ -63,15 +63,41 @@ test("PATCH fences the vendor and PO resolveAndValidateCapture will persist, not
   const afterResolve = src.slice(resolveAt);
   assert.match(
     afterResolve,
-    /if \(resolved\.vendorId\)[\s\S]*?guardSubsidiaryScope\(gate, vendor\.subsidiaryId, \{ orgWideNull: true \}\)/,
-    "auto-resolved vendorId must pass the inbox subsidiary gate before UPDATE",
+    /if \(resolved\.vendorId\)[\s\S]*?from parties[\s\S]*?for update[\s\S]*?guardSubsidiaryScope\(gate, vendor\.subsidiaryId, \{ orgWideNull: true \}\)/,
+    "auto-resolved vendorId must be locked then gated before UPDATE",
   );
   assert.match(
     afterResolve,
-    /if \(resolved\.purchaseOrderId\)[\s\S]*?guardSubsidiaryScope\(gate, purchaseOrder\.subsidiaryId, \{ orgWideNull: true \}\)/,
-    "auto-resolved purchaseOrderId must pass the inbox subsidiary gate before UPDATE",
+    /if \(resolved\.purchaseOrderId\)[\s\S]*?from documents[\s\S]*?for update[\s\S]*?guardSubsidiaryScope\(gate, purchaseOrder\.subsidiaryId, \{ orgWideNull: true \}\)/,
+    "auto-resolved purchaseOrderId must be locked then gated before UPDATE",
+  );
+  assert.match(
+    afterResolve,
+    /resolvedAssociationsInScope\(gate\.user\.orgId, gate\.allowedSubsidiaryIds, resolved\.vendorId, resolved\.purchaseOrderId\)/,
+    "the UPDATE WHERE must predicate on the resolved ids, not only the pre-update row",
   );
   assert.match(afterResolve, /throw new Error\('capture_not_found'\)/, "out-of-scope resolved associations must be the same 404 as a missing capture");
+});
+
+test("materialize routes pass subsidiary scope into the locking engine transaction", () => {
+  for (const file of ["[id]/materialize/route.ts", "actions/route.ts"] as const) {
+    const src = source(file);
+    assert.match(
+      src,
+      /materializeCapture\(\{[\s\S]*?allowedSubsidiaryIds: gate\.allowedSubsidiaryIds/,
+      `${file} must thread the caller's fence into materializeCapture so the check runs after FOR UPDATE`,
+    );
+  }
+  const engine = readFileSync(join(dir, "../../../../engine/src/payables/ap-capture-service.ts"), "utf8");
+  const lockAt = engine.indexOf("from ap_capture_items where org_id = ${input.orgId} and id = ${input.captureItemId} for update");
+  assert.ok(lockAt >= 0, "materializeCapture must lock the capture row");
+  const afterLock = engine.slice(lockAt);
+  const checkAt = afterLock.indexOf("assertLockedCaptureAssociationsVisible");
+  const documentAt = afterLock.indexOf("if (item.document_id)");
+  assert.ok(checkAt >= 0, "materializeCapture must re-check vendor/PO visibility after the capture lock");
+  assert.ok(documentAt >= 0 && checkAt < documentAt, "the visibility check must run before a draft is reused or created");
+  assert.match(engine, /from parties[\s\S]*for update/);
+  assert.match(engine, /from documents[\s\S]*for update/);
 });
 
 test("ap-capture malformed-id authz double exports the PATCH subsidiary gate", () => {
