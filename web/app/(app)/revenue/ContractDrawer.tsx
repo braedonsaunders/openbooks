@@ -47,10 +47,11 @@ export function contractSummaryTotals(
 }
 
 /**
- * Read-only drill-down for a revenue contract: its performance obligations and,
+ * Revenue contract detail: performance obligations and,
  * per obligation, the primary-book recognition schedule (planned vs recognized,
  * with the posted period entries). Recognition is driven by invoices + the Run
- * action, so this surface reads rather than edits.
+ * action. Contract changes prepare a separate, independently approved proposal;
+ * this drawer never edits recognized history in place.
  */
 export function ContractDrawer({
   payload,
