@@ -85,6 +85,20 @@ CREATE TABLE IF NOT EXISTS public.hrm_process_templates (
                  AND applies_to ->> 'department_id' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')))
 );
 
+-- Read-only slot projections of the applies_to filter for structured
+-- surfaces (the Setup drawer prefills ref selects from row columns, and a
+-- raw-JSON workforce field is barred by registry.test.ts): GENERATED ALWAYS
+-- STORED, so they are readable but never written — the Setup write path
+-- folds the two slot fields back into applies_to before buildRow (see
+-- web/lib/setup/write.ts), and the shape CHECK above stays the single
+-- authority on the filter's content.
+ALTER TABLE ONLY public.hrm_process_templates
+  ADD COLUMN IF NOT EXISTS applies_employer_subsidiary_id uuid
+    GENERATED ALWAYS AS ((applies_to ->> 'employer_subsidiary_id')::uuid) STORED;
+ALTER TABLE ONLY public.hrm_process_templates
+  ADD COLUMN IF NOT EXISTS applies_department_id uuid
+    GENERATED ALWAYS AS ((applies_to ->> 'department_id')::uuid) STORED;
+
 CREATE TABLE IF NOT EXISTS public.hrm_process_template_steps (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
