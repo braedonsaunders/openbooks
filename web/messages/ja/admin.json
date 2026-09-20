@@ -975,7 +975,9 @@
     "hrm_process_manage": "プロセスチェックリストを開く、完了する、キャンセルする",
     "hrm_performance_read": "プライバシー範囲でレビューサイクルとレビューを閲覧",
     "hrm_performance_manage": "レビューサイクルの実行、レビューの調整と共有",
-    "hrm_retention_read": "退職記録と離職率を閲覧"
+    "hrm_retention_read": "退職記録と離職率を閲覧",
+    "hrm_benefits_read": "福利厚生プランと加入の表示",
+    "hrm_benefits_manage": "福利厚生プラン、加入期間、加入の管理"
   },
   "ai": {
     "metaTitle": "AI設定",

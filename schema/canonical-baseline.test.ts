@@ -389,6 +389,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0194_hrm_leave_attendance.sql",
     "0195_hrm_recruiting.sql",
     "0196_hrm_performance_retention.sql",
+    "0197_hrm_benefits.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1840,6 +1841,11 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.performance.read",
     "hrm.performance.manage",
     "hrm.retention.read",
+    // HR-8 benefits (migration 0197): read sees plans, elections and
+    // inputs; manage authors plans, windows, elections and generates
+    // inputs. Admin-only like the employment keys above.
+    "hrm.benefits.read",
+    "hrm.benefits.manage",
   ];
   assert.deepEqual(
     snapshot,

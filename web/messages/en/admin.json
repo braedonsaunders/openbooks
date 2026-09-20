@@ -975,7 +975,9 @@
     "hrm_recruiting_manage": "Manage requisitions, candidates, interviews, and offers",
     "hrm_performance_read": "View review cycles and reviews through the privacy scope",
     "hrm_performance_manage": "Run review cycles, calibrate and share reviews",
-    "hrm_retention_read": "View exit records and turnover"
+    "hrm_retention_read": "View exit records and turnover",
+    "hrm_benefits_read": "View benefit plans and elections",
+    "hrm_benefits_manage": "Manage benefit plans, windows, and elections"
   },
   "ai": {
     "metaTitle": "AI providers",

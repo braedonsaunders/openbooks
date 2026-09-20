@@ -130,6 +130,15 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // duplicate. The composite tenant FKs keep the re-point inside the org.
   ["hrm_reviews", "subject_party_id"],
   ["hrm_exit_records", "interviewer_party_id"],
+  // 0197: the benefit pay-run input's employee_party_id is the key the run
+  // reads, resolved by HR from the employment at write time. SIMPLE, not
+  // GUARDED: the input uniqueness is (org, enrollment, kind, month) and
+  // carries no party column, so re-pointing the party cannot collide.
+  // employment_id columns need no entry (the employment rows move above,
+  // and inputs whose employment now points elsewhere are refused by name
+  // at consume time, never silently absorbed). pay_component_id is never
+  // re-pointed by a party merge: components carry no party column.
+  ["hrm_benefit_payroll_inputs", "employee_party_id"],
 ];
 
 /**

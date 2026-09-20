@@ -975,7 +975,9 @@
     "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen",
     "hrm_performance_read": "Überprüfungszyklen und Beurteilungen im Datenschutzkreis einsehen",
     "hrm_performance_manage": "Überprüfungszyklen durchführen, Beurteilungen kalibrieren und teilen",
-    "hrm_retention_read": "Austrittsdatensätze und Fluktuation einsehen"
+    "hrm_retention_read": "Austrittsdatensätze und Fluktuation einsehen",
+    "hrm_benefits_read": "Leistungspläne und Anmeldungen anzeigen",
+    "hrm_benefits_manage": "Leistungspläne, Anmeldefenster und Anmeldungen verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",

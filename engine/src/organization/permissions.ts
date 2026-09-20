@@ -162,6 +162,11 @@ export const PERMISSION_CATALOGUE = [
   "hrm.performance.read",
   "hrm.performance.manage",
   "hrm.retention.read",
+  // HR-8 benefits (0197) — the same confidentiality rule as employment:
+  // read sees plans, elections and inputs; manage authors plans, windows,
+  // elections and generates inputs. Admin-only like the employment keys.
+  "hrm.benefits.read",
+  "hrm.benefits.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -417,6 +422,8 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.performance.read", labelKey: permissionLabelKey("hrm.performance.read") },
       { key: "hrm.performance.manage", labelKey: permissionLabelKey("hrm.performance.manage") },
       { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
+      { key: "hrm.benefits.read", labelKey: permissionLabelKey("hrm.benefits.read") },
+      { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
     ],
   },
   {

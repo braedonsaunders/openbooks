@@ -126,6 +126,8 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_candidates", columnName: "display_name", transform: "faker_name" },
   { tableName: "hrm_candidates", columnName: "email", transform: "faker_email" },
   { tableName: "hrm_candidates", columnName: "phone", transform: "faker_phone" },
+  // HR-8: covered-dependent names are PII like party display names.
+  { tableName: "hrm_benefit_dependents", columnName: "display_name", transform: "faker_name" },
   { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
   { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
