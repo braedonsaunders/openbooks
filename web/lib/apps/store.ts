@@ -466,8 +466,8 @@ export async function setAppStatus(
   userId: string,
   key: string,
   status: 'installed' | 'disabled',
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<{ affectedRows: number }> {
+  return await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
@@ -480,7 +480,19 @@ export async function setAppStatus(
        where org_id = ${orgId} and key = ${key}
        for update`)
     const app = existing.rows[0]
-    if (!app || app.status === status) return
+    if (!app) {
+      throw new AppError(
+        `App "${key}" was not found in this organization. Install it or GET /api/apps/${key} to confirm the key before changing status.`,
+        404,
+      )
+    }
+    if (app.status === status) {
+      const other = status === 'installed' ? 'disabled' : 'installed'
+      throw new AppError(
+        `App "${key}" is already ${status}. PATCH status to "${other}" if you need a status change.`,
+        409,
+      )
+    }
 
     const version = (await tx.execute<{ id: string; manifest: AppManifest }>(sql`select v.id,v.manifest from app_versions v join apps a on a.org_id=v.org_id and a.id=v.app_id where a.org_id=${orgId} and a.id=${app.id} and v.id=a.active_version_id`)).rows[0]
     if (status === 'disabled') {
@@ -491,10 +503,17 @@ export async function setAppStatus(
       for (const contribution of version.manifest.contributions ?? []) if (contribution.kind === 'page') await projectExtensionPage(tx, { orgId,actorId:userId,extensionId:app.id,extensionKey:key,version:version.manifest.version,versionId:version.id,contribution,reason:'Enable extension' })
       await projectSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,versionId:version.id,previousVersionId:version.id,contributions:(version.manifest.contributions ?? []).filter(item=>item.kind!=='page'),reason:'Enable extension'})
     }
-    await tx.execute(sql`
+    const updated = await tx.execute<{ id: string }>(sql`
       update apps
          set status = ${status}, updated_at = now(), updated_by = ${userId}
-       where org_id = ${orgId} and id = ${app.id}`)
+       where org_id = ${orgId} and id = ${app.id} and status is distinct from ${status}
+      returning id`)
+    if (!updated.rows.length) {
+      throw new AppError(
+        `App "${key}" status was not changed to ${status}. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'apps', ${app.id}, 'update',
@@ -504,12 +523,12 @@ export async function setAppStatus(
           after: { key: app.key, name: app.name, status },
         })}::jsonb,
         ${userId})`)
-
+    return { affectedRows: updated.rows.length }
   })
 }
 
-export async function deleteApp(orgId: string, userId: string, key: string): Promise<void> {
-  await db.transaction(async (tx) => {
+export async function deleteApp(orgId: string, userId: string, key: string): Promise<{ affectedRows: number }> {
+  return await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
@@ -542,7 +561,12 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
        where a.org_id = ${orgId} and a.key = ${key}
        for update of a`)
     const app = existing.rows[0]
-    if (!app) return
+    if (!app) {
+      throw new AppError(
+        `App "${key}" was not found in this organization. Confirm the key is installed here before uninstalling.`,
+        404,
+      )
+    }
 
     // App-owned rows cascade with the app. Capture the complete execution and
     // code evidence first so the audit row remains useful after uninstall.
@@ -598,10 +622,23 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
     await withdrawExtensionPages(tx,orgId,userId,app.id,'Uninstall extension')
     await withdrawSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,reason:'Uninstall extension'})
     if (preserveHistory) {
-      await tx.execute(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id}`)
-      return
+      const updated = await tx.execute<{ id: string }>(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id} returning id`)
+      if (!updated.rows.length) {
+        throw new AppError(
+          `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+          409,
+        )
+      }
+      return { affectedRows: updated.rows.length }
     }
-    await tx.execute(sql`delete from apps where org_id = ${orgId} and id = ${app.id}`)
+    const deleted = await tx.execute<{ id: string }>(sql`delete from apps where org_id = ${orgId} and id = ${app.id} returning id`)
+    if (!deleted.rows.length) {
+      throw new AppError(
+        `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
+    return { affectedRows: deleted.rows.length }
   })
 }
 
