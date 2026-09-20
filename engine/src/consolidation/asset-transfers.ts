@@ -2,6 +2,7 @@ import { assetGroupHistory } from "../organization/asset-group-history.ts";
 import {
   groupAssetPlan,
   type GroupAssetValuation,
+  type GroupAssetCounterfactual,
 } from "../money/asset-group-plan.ts";
 import {
   accruedDepreciation,
@@ -43,6 +44,7 @@ export interface AssetTransferBasis {
   groupAccumulated: string;
   groupSalvage: string;
   groupPlan: DatedDepreciation[];
+  groupUnimpaired?: GroupAssetCounterfactual;
   nci?: NciAllocation | NciAllocation[];
   buyerCost: string;
   buyerToGroupRate: string;
@@ -360,7 +362,11 @@ export async function consolidateAssetTransfers(
         "the transferred asset has a legal-book valuation without an approved group measurement; open the receiving asset and propose its Group valuation before consolidation",
       );
     const valuations = await assetGroupHistory(tx, orgId, transfer.id, cutoff);
-    const group = groupAssetPlan(transfer.basis.groupPlan, valuations);
+    const group = groupAssetPlan(
+      transfer.basis.groupPlan,
+      valuations,
+      transfer.basis.groupUnimpaired,
+    );
     const valuationAdjustment = add(
       valuationRows.reduce(
         (sum, v) => add(sum, mulRate(v.amount, rate(v.date, "average_rate"))),
@@ -440,6 +446,7 @@ export async function consolidateAssetTransfers(
       const atMovement = groupAssetPlan(
         transfer.basis.groupPlan,
         valuations.filter((v) => v.effectiveOn <= m.date),
+        transfer.basis.groupUnimpaired,
       );
       const groupAt = add(
         add(transfer.basis.groupCost, atMovement.costDelta),

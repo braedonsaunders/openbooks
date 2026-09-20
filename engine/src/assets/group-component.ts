@@ -1,12 +1,21 @@
 import {
   groupAssetPlan,
   type GroupAssetValuation,
+  type GroupAssetCounterfactual,
 } from "../money/asset-group-plan.ts";
 import {
   splitDepreciationPlan,
   type DatedDepreciation,
 } from "../money/depreciation-plan.ts";
-import { add, cmp, mulRatio, neg, toUnits } from "../money/money.ts";
+import {
+  add,
+  cmp,
+  divRate,
+  mulRate,
+  mulRatio,
+  neg,
+  toUnits,
+} from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { measurePartialDisposal } from "./asset-basis.ts";
 export interface GroupComponentInput {
@@ -19,6 +28,50 @@ export interface GroupComponentInput {
   /** Counterfactual evidence is needed when prior impairment changed service. */
   unimpairedAccumulated?: string;
   unimpairedRemainingPlan?: { date: string; amount: string }[];
+  unimpairedRemovedPlan?: { date: string; amount: string }[];
+}
+/** Carry both measured service histories into the next legal owner. An internal
+ * transfer cannot reset the group's IAS 36 impairment-reversal ceiling. */
+export function transferGroupComponent(
+  component: GroupAssetValuation,
+  historicalBuyerRate: string,
+  currentSellerRate: string,
+) {
+  if (
+    component.kind !== "component" ||
+    component.removedCost === undefined ||
+    component.removedAccumulated === undefined ||
+    component.removedSalvage === undefined ||
+    !component.removedPlan ||
+    component.removedUnimpairedAccumulated === undefined ||
+    !component.removedUnimpairedPlan
+  )
+    throw new Error(
+      "onward transfer requires the approved component's measured and unimpaired service evidence",
+    );
+  const translate = (value: string) =>
+    mulRate(divRate(value, historicalBuyerRate), currentSellerRate);
+  const groupCost = translate(component.removedCost),
+    groupAccumulated = translate(component.removedAccumulated),
+    groupSalvage = translate(component.removedSalvage),
+    unimpairedAccumulated = translate(component.removedUnimpairedAccumulated);
+  const plan = (lines: DatedDepreciation[], accumulated: string) =>
+    allocate(
+      lines.map((line) => ({ ...line, amount: translate(line.amount) })),
+      1n,
+      1n,
+      add(add(groupCost, neg(accumulated)), neg(groupSalvage)),
+    );
+  return {
+    groupCost,
+    groupAccumulated,
+    groupSalvage,
+    groupPlan: plan(component.removedPlan, groupAccumulated),
+    groupUnimpaired: {
+      accumulatedDelta: add(unimpairedAccumulated, neg(groupAccumulated)),
+      plan: plan(component.removedUnimpairedPlan, unimpairedAccumulated),
+    },
+  };
 }
 const total = (lines: DatedDepreciation[]) =>
   lines.reduce((n, l) => add(n, l.amount), "0");
@@ -53,6 +106,7 @@ export function measureGroupComponent(args: {
     groupAccumulated: string;
     groupSalvage: string;
     groupPlan: DatedDepreciation[];
+    groupUnimpaired?: GroupAssetCounterfactual;
   };
   history: GroupAssetValuation[];
   effectiveOn: string;
@@ -67,13 +121,18 @@ export function measureGroupComponent(args: {
     args.identified &&
     (args.identified.remainingPlan.length > 1200 ||
       (args.identified.removedPlan?.length ?? 0) > 1200 ||
-      (args.identified.unimpairedRemainingPlan?.length ?? 0) > 1200)
+      (args.identified.unimpairedRemainingPlan?.length ?? 0) > 1200 ||
+      (args.identified.unimpairedRemovedPlan?.length ?? 0) > 1200)
   )
     throw new Error(
       "group component plans support at most 1,200 accounting periods",
     );
   const { basis, effectiveOn } = args,
-    current = groupAssetPlan(basis.groupPlan, args.history);
+    current = groupAssetPlan(
+      basis.groupPlan,
+      args.history,
+      basis.groupUnimpaired,
+    );
   const held = toUnits(args.buyerCostBefore),
     original = toUnits(args.originalBuyerCost),
     removed = toUnits(args.removedBuyerCost),
@@ -240,6 +299,34 @@ export function measureGroupComponent(args: {
       ),
     );
   }
+  const removedUnimpairedAccumulated = add(
+    counterAccum,
+    neg(remainingCounterAccum),
+  );
+  if (cmp(removedUnimpairedAccumulated, measurement.removedAccumulated) > 0)
+    throw new Error(
+      "unimpaired component evidence cannot leave a lower transferred carrying amount than the impaired group basis",
+    );
+  const removedUnimpairedDep = add(
+    add(measurement.removedCost, neg(removedUnimpairedAccumulated)),
+    neg(measurement.removedSalvage),
+  );
+  const removedUnimpairedPlan = !args.onward
+    ? []
+    : identified
+      ? priorImpairment
+        ? dated(
+            identified.unimpairedRemovedPlan ?? [],
+            removedUnimpairedDep,
+            "Transferred component unimpaired group depreciation",
+          )
+        : removedPlan
+      : allocate(
+          counterElapsed.remaining,
+          removed,
+          original,
+          removedUnimpairedDep,
+        );
   const full = (v: string) =>
     after === 0n ? "0" : mulRatio(v, original, after);
   const normalize = (plan: DatedDepreciation[], target: string) =>
@@ -275,5 +362,7 @@ export function measureGroupComponent(args: {
     removedAccumulated: measurement.removedAccumulated,
     removedSalvage: measurement.removedSalvage,
     removedPlan,
+    removedUnimpairedAccumulated,
+    removedUnimpairedPlan,
   };
 }

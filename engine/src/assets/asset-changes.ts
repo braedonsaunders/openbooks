@@ -1,10 +1,14 @@
 import { assetGroupHistory } from "../organization/asset-group-history.ts";
 import {
   measureGroupComponent,
+  transferGroupComponent,
   type GroupComponentInput,
 } from "./group-component.ts";
 import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
-import { type GroupAssetValuation } from "../money/asset-group-plan.ts";
+import {
+  type GroupAssetValuation,
+  type GroupAssetCounterfactual,
+} from "../money/asset-group-plan.ts";
 import { type DatedDepreciation } from "../money/depreciation-plan.ts";
 import { applyAssetReversal } from "./asset-change-reversals.ts";
 import {
@@ -33,7 +37,6 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
   add,
   cmp,
-  divRate,
   fromUnits,
   mulRatio,
   mulRate,
@@ -883,6 +886,7 @@ async function snapshot(
         groupAccumulated: string;
         groupSalvage: string;
         groupPlan: DatedDepreciation[];
+        groupUnimpaired?: GroupAssetCounterfactual;
         buyerCost: string;
         buyerToGroupRate: string;
       };
@@ -1199,6 +1203,7 @@ export async function applyAssetChange(
               ...l,
               amount: mulRate(l.amount, t.sellerToGroupRate),
             }));
+          let groupUnimpaired: GroupAssetCounterfactual | undefined;
           const predecessor = state.predecessors.find(
             (p) => p.book_id === preview.bookId,
           );
@@ -1212,30 +1217,19 @@ export async function applyAssetChange(
                 "an onward transfer must retain its existing group consolidation currency and elimination entity",
               );
             const component = state.groupComponents[preview.bookId]!;
-            const translateBasis = (v: string) =>
-              mulRate(
-                divRate(v, predecessor.basis.buyerToGroupRate),
-                t.sellerToGroupRate,
-              );
-            groupCost = translateBasis(component.removedCost!);
-            groupAccumulated = translateBasis(component.removedAccumulated!);
-            groupSalvage = translateBasis(component.removedSalvage!);
-            groupPlan = component.removedPlan!.map((l) => ({
-              ...l,
-              amount: translateBasis(l.amount),
-            }));
-            if (groupPlan.length) {
-              const assigned = groupPlan
-                .slice(0, -1)
-                .reduce((sum, l) => add(sum, l.amount), "0");
-              groupPlan.at(-1)!.amount = add(
-                add(add(groupCost, neg(groupAccumulated)), neg(groupSalvage)),
-                neg(assigned),
-              );
-            }
+            const transferred = transferGroupComponent(
+              component,
+              predecessor.basis.buyerToGroupRate,
+              t.sellerToGroupRate,
+            );
+            groupCost = transferred.groupCost;
+            groupAccumulated = transferred.groupAccumulated;
+            groupSalvage = transferred.groupSalvage;
+            groupPlan = transferred.groupPlan;
+            groupUnimpaired = transferred.groupUnimpaired;
           }
           await tx.execute(
-            sql`insert into asset_transfer_bases(org_id,change_id,source_asset_id,receiving_asset_id,book_id,effective_on,seller_subsidiary_id,buyer_subsidiary_id,elimination_subsidiary_id,group_currency,basis,created_by) values(${orgId},${changeId},${change.subject_id},${receivingAssetId},${preview.bookId},${input.effectiveOn},${state.seller.id},${state.buyer.id},${t.eliminationSubsidiaryId},${state.elimination!.base_currency},${JSON.stringify({ groupCost, groupAccumulated, groupSalvage, groupPlan, nci: state.nci, buyerCost: mulRate(t.buyerAmount, t.buyerToGroupRate), buyerToGroupRate: t.buyerToGroupRate, ctaAccountId: t.ctaAccountId, groupAssetAccountId: t.groupAssetAccountId, groupAccumulatedAccountId: t.groupAccumulatedAccountId, groupDepreciationAccountId: t.groupDepreciationAccountId, groupGainLossAccountId: t.groupGainLossAccountId, taxRatePercent: t.taxRatePercent, deferredTaxAccountId: t.deferredTaxAccountId, taxExpenseAccountId: t.taxExpenseAccountId })}::jsonb,${actorId})`,
+            sql`insert into asset_transfer_bases(org_id,change_id,source_asset_id,receiving_asset_id,book_id,effective_on,seller_subsidiary_id,buyer_subsidiary_id,elimination_subsidiary_id,group_currency,basis,created_by) values(${orgId},${changeId},${change.subject_id},${receivingAssetId},${preview.bookId},${input.effectiveOn},${state.seller.id},${state.buyer.id},${t.eliminationSubsidiaryId},${state.elimination!.base_currency},${JSON.stringify({ groupCost, groupAccumulated, groupSalvage, groupPlan, groupUnimpaired, nci: state.nci, buyerCost: mulRate(t.buyerAmount, t.buyerToGroupRate), buyerToGroupRate: t.buyerToGroupRate, ctaAccountId: t.ctaAccountId, groupAssetAccountId: t.groupAssetAccountId, groupAccumulatedAccountId: t.groupAccumulatedAccountId, groupDepreciationAccountId: t.groupDepreciationAccountId, groupGainLossAccountId: t.groupGainLossAccountId, taxRatePercent: t.taxRatePercent, deferredTaxAccountId: t.deferredTaxAccountId, taxExpenseAccountId: t.taxExpenseAccountId })}::jsonb,${actorId})`,
           );
           const rebuilt = await buildScheduleWithRunner(
             tx,
