@@ -12,7 +12,7 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { subsidiaryScopeAllows } from "../authz";
-import { disabledDocKinds } from "../documents";
+import { disabledDocKinds } from "../documents.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
 import { uuidInput, num, capList } from "./tools-shared";

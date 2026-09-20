@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { isDocKindEnabled } from '../../../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'

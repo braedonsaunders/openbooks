@@ -32,7 +32,7 @@ function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | nul
 }
 import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
 import { loadProjectType } from './project-type'
-import { computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
+import { computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from "./bills.ts";
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 import { featureEnabled, type FeatureState } from './features'
 

@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { BANK_KINDS } from '../documents'
+import { BANK_KINDS } from "../document-kinds.ts";
 import { reconcilableBankMembership } from '../banking-accounts'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'

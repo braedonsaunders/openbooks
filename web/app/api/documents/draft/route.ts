@@ -1,7 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { createDocumentDraft, DOC_KINDS, createPermission, isDocKindEnabled } from '../../../../lib/documents'
+import { createDocumentDraft, isDocKindEnabled } from "../../../../lib/documents.ts";
+import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
 
 export const runtime = 'nodejs'
 

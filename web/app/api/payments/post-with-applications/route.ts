@@ -9,10 +9,7 @@ import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contrac
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
-import {
-  DocumentEditError,
-  requireDocumentEditRevision,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
 

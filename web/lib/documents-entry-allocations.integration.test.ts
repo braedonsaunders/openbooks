@@ -22,9 +22,7 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
-const { applyDocumentEdit, DocumentEditError, loadDocument, loadDocumentEditCurrent } = await import(
-  "./documents.ts"
-);
+const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocument, loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { submitAndReleaseIfUngated } = await import("@openbooks/engine/src/flows/submit.ts");
 

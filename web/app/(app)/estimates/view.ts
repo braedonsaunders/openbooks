@@ -11,7 +11,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { loadOrder } from '../../api/_order/lib'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
-import { taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
+import { taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 
 /**

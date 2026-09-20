@@ -11,16 +11,15 @@ import {
 } from '@openbooks/engine/src/allocations/entry.ts'
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
-import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
-import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-export { documentRevisionCounterSql, documentRevisionSql }
+import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
+import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
+import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
@@ -28,63 +27,16 @@ import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 
 import {
-  DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
+  DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
   runDocumentVersionedTransaction, buildReversalLinkEvidence,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
-export {
-  DocumentEditError, DOCUMENT_EDIT_VERSION_REQUIRED, requireDocumentEditRevision,
-  assertDocumentEditRevision, assertNoExistingDocumentCorrection,
-  runDocumentVersionedTransaction, validateCorrectionReason, buildReversalLinkEvidence,
-  documentRevisionProjection, normalizeDocumentRecordRevisions,
-} from '@openbooks/engine/src/records/document-edit-policy.ts'
-import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
-export type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
-import { loadDocument as loadDocumentForOrg, loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
-export { controlDeps, loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
-
-/** Compatibility adapter for session-scoped web callers; engine reads require an explicit org. */
-export async function loadDocument(id: string, orgId?: string) {
-  return loadDocumentForOrg(id, await resolveOrgId(orgId))
-}
-
-/**
- * Unified line-based posting-document machinery.
- *
- * The `documents` table is a single supertype keyed by `kind`; the posting
- * engine (engine/src/ledger/posting.ts) holds the per-kind GL rules. The UI for
- * vendor bills, customer invoices, credit memos, card charges, checks, and
- * transfers is structurally identical — a header (party or funding source +
- * dates + memo) and a line grid (account + amount + tax + dimensions). This
- * module retains the shared draft/edit orchestration and web compatibility
- * exports. Explicit-org reads and revision/correction policy live in engine
- * ledger/records services so non-web adapters can use them without this editor.
- *
- * The kind configuration (client-safe) lives in lib/document-kinds.ts and is
- * re-exported here. The shared math (number sequences, tax computation,
- * tax-rate lookup) lives in lib/bills.ts and is re-exported here; it is fully
- * kind-agnostic.
- */
-
-export { computeBillTotals, computeBillTotalsWithProvider, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
-export {
-  DOC_KINDS,
-  DOC_KIND_FEATURE,
-  AP_KINDS,
-  AR_KINDS,
-  BANK_KINDS,
-  docKindConfig,
-  createPermission,
-  postPermission,
-  readPermission,
-  type DocKindConfig,
-  type DocFamily,
-  type PermNamespace,
-} from './document-kinds'
+import type { BillLineInput, DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
+import { loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
 
 /** False when this kind belongs to a Features switch that is off. */
 export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {

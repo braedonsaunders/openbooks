@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { disabledDocKinds } from '../../../../lib/documents'
+import { disabledDocKinds } from "../../../../lib/documents.ts";
 import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
 import { starterTemplate } from '../../../../lib/pdf-templates/starters'
 import { listPdfTemplates } from '../../../../lib/pdf-templates/store'

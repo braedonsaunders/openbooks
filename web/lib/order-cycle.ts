@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { nextDocumentNumber, persistLineTaxComponents } from './bills'
+import { nextDocumentNumber, persistLineTaxComponents } from "./bills.ts";
 import {
   ORDER_KINDS,
   PURCHASE_RECEIPT_KIND,

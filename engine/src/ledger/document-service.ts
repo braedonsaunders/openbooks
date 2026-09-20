@@ -4,10 +4,10 @@
  * permissions/feature/subsidiary access before exposing these results.
  */
 import { sql } from 'drizzle-orm'
-import { db } from '../db.ts'
-import { documentBalanceDueLateral } from '../balance-due.ts'
-import { documentRevisionCounterSql } from '../document-revision.ts'
-import { loadRequiredControlAccounts } from '../control-accounts.ts'
+import { db } from '../platform/db.ts'
+import { documentBalanceDueLateral } from '../records/balance-due.ts'
+import { documentRevisionCounterSql } from '../records/revision.ts'
+import { loadRequiredControlAccounts } from '../records/control-accounts.ts'
 import type { DocumentEditCurrent } from './document-input.ts'
 import { DocumentEditError } from '../records/document-edit-policy.ts'
 
@@ -28,7 +28,7 @@ export async function controlDeps(orgId: string) {
 /**
  * Full document payload for a drawer: header + lines. For open-item kinds
  * (invoices, credits) `applied` and `balance_due` (= total − applied) come
- * from the shared balance-due reader (engine/src/balance-due.ts), so the
+ * from the shared balance-due reader (engine/src/records/balance-due.ts), so the
  * drawer, the customer PDF, and dunning report the same figure by
  * construction. Both stay NULL until the document posts.
  */

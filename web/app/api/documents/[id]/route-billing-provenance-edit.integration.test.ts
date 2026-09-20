@@ -33,7 +33,7 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import('../../../../lib/documents.ts')
+const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { createBillingRequest } = await import('../../../../lib/billing-requests.ts')
 const { generateInvoiceFromBillingRequest } = await import('../../../../lib/billing.ts')
 const { PATCH } = await import('./route.ts')

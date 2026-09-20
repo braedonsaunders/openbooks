@@ -3,7 +3,7 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
-import { isDocKindEnabled } from '../../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog'
 import { getPdfTemplate } from '../../../../../lib/pdf-templates/store'
 import { customMergeFields } from '../../../../../lib/pdf-templates/values'

@@ -10,10 +10,7 @@ import {
 } from "../api/schema-registry";
 import { createRecord, deleteRecord, updateRecord, type WriteResult } from "../api/writers";
 import { clamp, isUuid } from "../list-params";
-import {
-  documentRevisionProjection,
-  normalizeDocumentRecordRevisions,
-} from "../documents";
+import { documentRevisionProjection, normalizeDocumentRecordRevisions } from "../../../engine/src/records/document-edit-policy.ts";
 import { pgTextArrayLiteral } from "../pg-array";
 import type { ApplicationContext } from "./context";
 import {
@@ -60,7 +57,7 @@ async function typeAudienceVisible(
   );
 }
 
-export { normalizeDocumentRecordRevisions } from "../documents";
+export { normalizeDocumentRecordRevisions } from "../../../engine/src/records/document-edit-policy.ts";
 
 async function scopeFor(
   context: ApplicationContext,

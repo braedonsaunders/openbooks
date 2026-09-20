@@ -3,17 +3,11 @@ import { sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
-import {
-  assertNoExistingDocumentCorrection,
-  buildReversalLinkEvidence,
-  DocumentEditError,
-  documentRevisionCounterSql,
-  requireDocumentEditRevision,
-  runDocumentVersionedTransaction,
-  validateCorrectionReason,
-  validateEditableDocumentLines,
-} from './documents'
+import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from "./bills.ts";
+import { type BillLineInput } from "../../engine/src/ledger/document-input.ts";
+import { assertNoExistingDocumentCorrection, buildReversalLinkEvidence, DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction, validateCorrectionReason } from "../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
+import { validateEditableDocumentLines } from "./documents.ts";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { canonicalDecimal } from './exact-decimal'
 import { segmentRegistry, validateExtraDims } from './segments'

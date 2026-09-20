@@ -5,8 +5,8 @@ import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
-import { controlDeps } from './documents'
-import { nextDocumentNumber } from './bills'
+import { controlDeps } from "../../engine/src/ledger/document-service.ts";
+import { nextDocumentNumber } from "./bills.ts";
 import {
   type RuleCriteria,
   type RuleOutcome,

@@ -10,7 +10,7 @@ import { denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { documentRevisionSql } from '../../../../../lib/documents'
+import { documentRevisionSql } from "../../../../../../engine/src/records/revision.ts";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 
 export const runtime = 'nodejs'

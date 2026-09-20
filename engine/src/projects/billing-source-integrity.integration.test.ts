@@ -72,7 +72,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   return next(specifier, context);
 }});
-const { applyDocumentEdit, loadDocumentEditCurrent } = await import("../../../web/lib/documents.ts");
+const { applyDocumentEdit } = await import("../../../web/lib/documents.ts"), { loadDocumentEditCurrent } = await import("../ledger/document-service.ts");
 import { createPayApplication, submitPayApplication, approvePayApplication, generatePayApplicationInvoice, releaseRetainage } from "./construction-billing.ts";
 import { cmp, neg } from "../money/money.ts";
 import { assertGeneratedBillingEdit } from "./billing-source-integrity.ts";
