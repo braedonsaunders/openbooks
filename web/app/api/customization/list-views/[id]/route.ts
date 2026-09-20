@@ -11,7 +11,8 @@ import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from 
 import {
   AmbiguousListViewDefaultError,
   assertSingleListViewDefault,
-  claimListViewDefaultSlot,
+  clearSiblingListViewDefaults,
+  lockListViewDefaultScope,
 } from "../../../../../lib/customization/list-view-default";
 
 export const runtime = "nodejs";
@@ -158,7 +159,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ownerId: locked.scope === "user" ? user.id : null,
         exceptId: id,
       };
-      if (body.isDefault) await claimListViewDefaultSlot(tx, defaultScope);
+      // Lock only — sibling clears wait until THIS update returns a row.
+      // Otherwise a concurrent delete can demote the live default, write
+      // audit, and still report {ok:true} for a view that is gone.
+      if (body.isDefault) await lockListViewDefaultScope(tx, defaultScope);
       // Next-state default+inactive must match zero rows even if the JS
       // refusal is skipped — refuse by name, never {ok:true}.
       const written = (await tx.execute<{ id: string }>(sql`
@@ -167,9 +171,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
            and not (${nextDefaultSql} and not ${nextActiveSql})
          returning id`)).rows[0];
       if (!written) {
-        return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
+        if (nextFlags.isDefault && !nextFlags.isActive) {
+          return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
+        }
+        return { kind: "not_found" as const };
       }
-      if (body.isDefault) await assertSingleListViewDefault(tx, defaultScope);
+      if (body.isDefault) {
+        await clearSiblingListViewDefaults(tx, defaultScope);
+        await assertSingleListViewDefault(tx, defaultScope);
+      }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
