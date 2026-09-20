@@ -1,6 +1,9 @@
 {
   "modules": {
     "hrm": "Recursos humanos",
+    "hrm-change-requests": "Solicitudes de cambio",
+    "hrm-departments": "Departamentos",
+    "hrm-reports": "Informes de RR. HH.",
     "dashboard": "Panel",
     "assistant": "Asistente de IA",
     "continuous-close": "Agentes",

@@ -3,7 +3,10 @@
     "title": "Ressources humaines",
     "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement.",
     "tabs": {
-      "overview": "Vue d'ensemble"
+      "overview": "Vue d'ensemble",
+      "changeRequests": "Demandes de changement",
+      "departments": "Services",
+      "reports": "Rapports"
     },
     "vitals": {
       "headcount": "Effectif",

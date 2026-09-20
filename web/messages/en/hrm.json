@@ -3,7 +3,10 @@
     "title": "Human Resources",
     "description": "Employment records with as-of history, headcount, and change-request tracking.",
     "tabs": {
-      "overview": "Overview"
+      "overview": "Overview",
+      "changeRequests": "Change requests",
+      "departments": "Departments",
+      "reports": "Reports"
     },
     "vitals": {
       "headcount": "Headcount",

@@ -3,7 +3,10 @@
     "title": "人力资源",
     "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。",
     "tabs": {
-      "overview": "概览"
+      "overview": "概览",
+      "changeRequests": "变更申请",
+      "departments": "部门",
+      "reports": "报表"
     },
     "vitals": {
       "headcount": "人员数量",

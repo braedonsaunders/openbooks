@@ -63,6 +63,12 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // The NATIVE employee entity list — HRM deliberately has no second
     // roster; the employment record is a tab on the employee drawer.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
+    // The org-wide change-request queue, the department headcount board,
+    // and the workforce reports launch pad — each its own route with its
+    // own page gate, so every tab lands on a surface the viewer may open.
+    { href: '/hrm/change-requests', ns: 'hrm', key: 'home.tabs.changeRequests' },
+    { href: '/hrm/departments', ns: 'hrm', key: 'home.tabs.departments' },
+    { href: '/hrm/reports', ns: 'hrm', key: 'home.tabs.reports' },
   ],
 }
 
@@ -84,6 +90,9 @@ const TAB_FEATURE: Record<string, string> = {
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',
   '/hrm': 'hrm',
+  '/hrm/change-requests': 'hrm',
+  '/hrm/departments': 'hrm',
+  '/hrm/reports': 'hrm',
   '/close': 'continuousClose',
 }
 
@@ -150,16 +159,22 @@ export async function customerGroupTabs(
   return groupTabs('customers', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }
 
-/** The permission behind the HRM strip's native-list tab. The cockpit tab
- * needs nothing beyond the page's own hrm.employment.read gate. */
+/** The permission each HRM-strip destination enforces. The cockpit tab needs
+ * nothing beyond the page's own hrm.employment.read gate; the queue and
+ * departments tabs sit behind the same grant, and the reports tab behind
+ * the reports grant the builder uses. */
 const HRM_TAB_PERMISSION: Record<string, string> = {
   '/entities/employees': 'parties.read',
+  '/hrm/change-requests': 'hrm.employment.read',
+  '/hrm/departments': 'hrm.employment.read',
+  '/hrm/reports': 'reports.read',
 }
 
 /**
- * The HRM strip with the permission exclusion applied, so a viewer who can
- * read employment but not parties is never offered an Employees tab that
- * access-denies.
+ * The HRM strip with the permission exclusions applied, so a viewer is
+ * never offered a tab that access-denies — no Employees tab without
+ * parties.read, no workspace tabs without the employment read grant, and
+ * no Reports tab without the reports grant.
  */
 export async function hrmGroupTabs(
   authz: Authz,

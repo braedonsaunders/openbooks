@@ -3,7 +3,10 @@
     "title": "Personalwesen",
     "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen.",
     "tabs": {
-      "overview": "Übersicht"
+      "overview": "Übersicht",
+      "changeRequests": "Änderungsanträge",
+      "departments": "Abteilungen",
+      "reports": "Berichte"
     },
     "vitals": {
       "headcount": "Personalbestand",

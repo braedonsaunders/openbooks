@@ -3,7 +3,10 @@
     "title": "Recursos humanos",
     "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio.",
     "tabs": {
-      "overview": "Resumen"
+      "overview": "Resumen",
+      "changeRequests": "Solicitudes de cambio",
+      "departments": "Departamentos",
+      "reports": "Informes"
     },
     "vitals": {
       "headcount": "Plantilla",
