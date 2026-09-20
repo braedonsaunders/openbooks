@@ -391,6 +391,49 @@ test('the customer list collapses to customers when CRM is off', () => {
   assert.deepEqual(on.listFilters.map((filter) => filter.key), ['status', 'status_id', 'owner_user_id', 'territory_id'])
 })
 
+test('the employee list gains directory columns with HRM on and drops them with HRM off', () => {
+  // HR-2b: the roster carries department, job title, employment status,
+  // employer subsidiary and service start while HRM is on; HRM off, it is
+  // the party roster and nothing else — filters and columns absent, not
+  // empty. Untouched org defaults pick the columns up through
+  // mergeCustomFieldsIntoView, which appends missing registry columns.
+  const employee = getRecordType('employee')
+  assert.ok(employee)
+  const off = recordTypeForFeatureState(employee, { inventory: true, hrm: false })
+  assert.deepEqual(off.listColumns.map((column) => column.key), [
+    'display_name',
+    'short_code',
+    'email',
+    'phone',
+    'status',
+  ])
+  assert.deepEqual(off.listFilters.map((filter) => filter.key), [])
+
+  const on = recordTypeForFeatureState(employee, { inventory: true, hrm: true })
+  assert.deepEqual(on.listColumns.map((column) => column.key), [
+    'display_name',
+    'short_code',
+    'email',
+    'phone',
+    'department',
+    'job_title',
+    'employment_status',
+    'employer',
+    'service_start',
+    'status',
+  ])
+  assert.deepEqual(on.listFilters.map((filter) => filter.key), ['department', 'employment_status', 'employer'])
+  for (const column of on.listColumns.filter((c) => ['department', 'job_title', 'employment_status', 'employer', 'service_start'].includes(c.key))) {
+    assert.ok(column.labelKey && column.labelKey.includes('.'), `${column.key} resolves its label through the catalogs`)
+    assert.ok(column.sortable && column.sortKey, `${column.key} is sortable through a whitelisted sort key`)
+  }
+  assert.deepEqual(defaultListView('employee').sort, { column: 'display_name', dir: 'asc' })
+  const visible = defaultListView('employee').columns.filter((c) => c.visible).map((c) => c.key)
+  for (const key of ['department', 'job_title', 'employment_status', 'employer', 'service_start']) {
+    assert.ok(visible.includes(key), `the seeded default view carries ${key}`)
+  }
+})
+
 test('journal origin filter offers migration alongside the posting origins (F-t12-014)', () => {
   // Migration true-ups are GL-native journals visible with Origin=All, so
   // the Origin dropdown must offer Migration as an explicit choice too.

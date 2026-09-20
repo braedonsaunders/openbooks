@@ -36,8 +36,11 @@ export {
   NO_EMPLOYMENT,
   UNASSIGNED_DEPARTMENT,
   EMPLOYEE_HRM_FILTER_KEYS,
+  EMPLOYEE_HRM_COLUMN_KEYS,
   liveVersionAsOf,
   employeeBaseJoins,
+  employeeBuiltInExpr,
+  employeeSorts,
   employeeWhere,
 } from "./entity-list-query/employment-directory"
 

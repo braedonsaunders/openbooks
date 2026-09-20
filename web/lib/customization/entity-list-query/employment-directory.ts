@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { rolePartyWhere } from "./customers";
+import { PARTY_BUILT_IN_EXPR, PARTY_SORTS, rolePartyWhere } from "./customers";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
 import { uuidOrFalse } from "../list-query";
 
@@ -34,6 +34,15 @@ export const UNASSIGNED_DEPARTMENT = "unassigned" as const;
 
 /** ListFilter/column keys the directory adds; dropped while HRM is off. */
 export const EMPLOYEE_HRM_FILTER_KEYS = ["department", "employment_status", "employer"] as const;
+
+/** List column keys the directory adds; dropped while HRM is off. */
+export const EMPLOYEE_HRM_COLUMN_KEYS = [
+  "department",
+  "job_title",
+  "employment_status",
+  "employer",
+  "service_start",
+] as const;
 
 /**
  * The ONE shared as-of predicate every directory column and filter reads.
@@ -250,4 +259,37 @@ export function employeeWhere(
     );
   }
   return sql.join(parts, sql` `);
+}
+
+/**
+ * Employee-list column expressions. HRM on, the party columns plus the
+ * directory columns, every one read off the shared employment joins above
+ * — no column carries its own version subquery, so the as-of semantics
+ * have exactly one definition. HRM off, the party columns only: a stored
+ * view still naming a directory column selects nothing for it, and
+ * columnDescriptors drops it — absent, not empty.
+ */
+export function employeeBuiltInExpr(hrmOn: boolean): Record<string, SQL> {
+  if (!hrmOn) return PARTY_BUILT_IN_EXPR;
+  return {
+    ...PARTY_BUILT_IN_EXPR,
+    department: sql`emp_dept.name`,
+    job_title: sql`emp.job_title`,
+    employment_status: sql`emp.employment_status`,
+    employer: sql`emp_sub.name`,
+    service_start: sql`emp.service_start`,
+  };
+}
+
+/** Sort expressions twin of employeeBuiltInExpr: same joins, same gate. */
+export function employeeSorts(hrmOn: boolean): Record<string, SQL> {
+  if (!hrmOn) return PARTY_SORTS;
+  return {
+    ...PARTY_SORTS,
+    department: sql`emp_dept.name`,
+    job_title: sql`emp.job_title`,
+    employment_status: sql`emp.employment_status`,
+    employer: sql`emp_sub.name`,
+    service_start: sql`emp.service_start`,
+  };
 }

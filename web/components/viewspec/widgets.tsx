@@ -870,6 +870,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       filterOptions={(props.filterOptions as ComponentProps<typeof ListViewDesigner>['filterOptions']) ?? {}}
       inventoryEnabled={props.inventoryEnabled === true}
       crmEnabled={props.crmEnabled === true}
+      hrmEnabled={props.hrmEnabled === true}
     />
   ),
 

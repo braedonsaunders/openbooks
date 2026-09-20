@@ -568,6 +568,30 @@ const CUSTOMER_CRM_COLUMN_KEYS = [
 
 const CUSTOMER_CRM_FILTER_KEYS = ["status_id", "owner_user_id", "territory_id"] as const;
 
+/**
+ * HR-2b employee directory columns and filters. The keys mirror
+ * web/lib/customization/entity-list-query/employment-directory.ts
+ * (EMPLOYEE_HRM_COLUMN_KEYS / EMPLOYEE_HRM_FILTER_KEYS) — a new directory
+ * key must be added in both places, with its SQL in employeeBuiltInExpr.
+ */
+const EMPLOYEE_HRM_COLUMN_KEYS = [
+  "department",
+  "job_title",
+  "employment_status",
+  "employer",
+  "service_start",
+] as const;
+
+const EMPLOYEE_HRM_FILTER_KEYS = ["department", "employment_status", "employer"] as const;
+
+const EMPLOYEE_HRM_COLUMNS: RecordTypeMeta["listColumns"] = [
+  { key: "department", labelKey: "common.labels.department", kind: "text", sortable: true, sortKey: "department", defaultWidth: 150 },
+  { key: "job_title", labelKey: "parties.drawer.jobTitle", kind: "text", sortable: true, sortKey: "job_title", defaultWidth: 170 },
+  { key: "employment_status", labelKey: "hrm.directory.employmentStatus", kind: "status", sortable: true, sortKey: "employment_status", defaultWidth: 120 },
+  { key: "employer", labelKey: "hrm.home.groups.employer", kind: "text", sortable: true, sortKey: "employer", defaultWidth: 150 },
+  { key: "service_start", labelKey: "hrm.directory.serviceStart", kind: "date", sortable: true, sortKey: "service_start", defaultWidth: 110 },
+];
+
 const CUSTOMER_LIST_COLUMNS: RecordTypeMeta["listColumns"] = [
   ...PARTY_LIST_COLUMNS.map((column) =>
     column.key === "status"
@@ -1196,7 +1220,14 @@ const EMPLOYEE: RecordTypeMeta = {
     { key: "hired_on", labelKey: "parties.drawer.hiredOn", level: "header", kind: "date" },
   ],
   lineFields: [],
-  listColumns: PARTY_LIST_COLUMNS,
+  // The directory columns sit between the contact columns and the party
+  // status: existing columns keep their relative order, and the party
+  // status stays last where the status facet counts it.
+  listColumns: [
+    ...PARTY_LIST_COLUMNS.filter((column) => column.key !== "status"),
+    ...EMPLOYEE_HRM_COLUMNS,
+    ...PARTY_LIST_COLUMNS.filter((column) => column.key === "status"),
+  ],
   // HR-2b directory filters. The department and employer value sets are
   // tenant data, so they arrive through the list's quick-filter loaders and
   // the unassigned employment states ride as static options. Saved views
@@ -1784,7 +1815,7 @@ export const ITEM_INVENTORY_KIND_VALUES = ["inventory", "assembly", "kit"] as co
 /** Apply Features-gated list-filter options. The registry stays static. */
 export function recordTypeForFeatureState(
   meta: RecordTypeMeta,
-  features: { inventory: boolean; crm?: boolean },
+  features: { inventory: boolean; crm?: boolean; hrm?: boolean },
 ): RecordTypeMeta {
   let out = meta
   if (!features.inventory && meta.key === 'item') {
@@ -1822,6 +1853,18 @@ export function recordTypeForFeatureState(
             options: filter.options.filter((option) => option.value === 'customer'),
           }
         }),
+    }
+  }
+  if (features.hrm === false && out.key === 'employee') {
+    // HRM off: the list is the party roster and nothing else. Every
+    // directory column and filter goes — their SQL reads the employment
+    // joins that employeeBaseJoins(false) never makes.
+    const hrmColumns = new Set<string>(EMPLOYEE_HRM_COLUMN_KEYS)
+    const hrmFilters = new Set<string>(EMPLOYEE_HRM_FILTER_KEYS)
+    out = {
+      ...out,
+      listColumns: out.listColumns.filter((column) => !hrmColumns.has(column.key)),
+      listFilters: out.listFilters.filter((filter) => !hrmFilters.has(filter.key)),
     }
   }
   return out
