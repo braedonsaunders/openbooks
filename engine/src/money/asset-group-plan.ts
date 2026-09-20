@@ -3,6 +3,12 @@ import {
   accruedDepreciation,
   type DatedDepreciation,
 } from "./depreciation-plan.ts";
+/** An onward transfer retains the group's pre-impairment counterfactual.
+ * Accumulation is a delta from the receiving frozen group basis. */
+export interface GroupAssetCounterfactual {
+  accumulatedDelta: string;
+  plan: DatedDepreciation[];
+}
 /** Group-only valuation workpapers retain the original group's denomination.
  * Each replaces only future service; earned depreciation is never repriced. */
 export interface GroupAssetValuation {
@@ -18,6 +24,8 @@ export interface GroupAssetValuation {
   removedAccumulated?: string;
   removedSalvage?: string;
   removedPlan?: DatedDepreciation[];
+  removedUnimpairedAccumulated?: string;
+  removedUnimpairedPlan?: DatedDepreciation[];
   effectiveOn: string;
   serviceFrom?: string;
   fullDelta: string;
@@ -29,14 +37,17 @@ export interface GroupAssetValuation {
 export function groupAssetPlan(
   original: DatedDepreciation[],
   valuations: GroupAssetValuation[],
+  counterfactual?: GroupAssetCounterfactual,
 ) {
   let plan = original.map((line) => ({ ...line })),
     delta = "0.0000",
     costDelta = "0.0000",
     salvageDelta = "0.0000",
     basisAccumulatedDelta = "0.0000",
-    unimpairedAccumulatedDelta = "0.0000";
-  let unimpairedPlan = original.map((line) => ({ ...line }));
+    unimpairedAccumulatedDelta = counterfactual?.accumulatedDelta ?? "0.0000";
+  let unimpairedPlan = (counterfactual?.plan ?? original).map((line) => ({
+    ...line,
+  }));
   for (const event of valuations) {
     const serviceFrom = event.serviceFrom ?? event.effectiveOn;
     const before = plan

@@ -18,6 +18,7 @@ const groupComponent = z.object({
   removedPlan: plan.optional(),
   unimpairedAccumulated: exactMoney().optional(),
   unimpairedRemainingPlan: plan.optional(),
+  unimpairedRemovedPlan: plan.optional(),
 });
 const assetChangeSchema = z.object({
   operation: z.enum(["partial_disposal", "intercompany_transfer"]),

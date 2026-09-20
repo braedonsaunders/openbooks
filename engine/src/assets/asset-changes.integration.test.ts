@@ -643,6 +643,113 @@ test(
       ).rows[0]!.target_balances;
       assert.equal(correctedTarget[f.org.accounts.invAsset], "600.0000");
       assert.equal(correctedTarget[f.org.accounts.recognized], "300.0000");
+
+      // A second internal owner must retain both sides of the impaired
+      // component's service evidence, including its recoverable ceiling.
+      const impairment2 = await remeasureAsset(f.org.orgId, received, {
+        date: "2026-09-01",
+        newCarryingValue: "900",
+        actorId: f.actors.submitterId,
+      });
+      const source2 = (
+        await db.execute<{ id: string }>(sql`
+        select id from asset_events where org_id=${f.org.orgId}
+          and asset_id=${received} and journal_entry_id=${impairment2.entryId}
+      `)
+      ).rows[0]!.id;
+      const group2 = await proposeAssetGroupValuation(
+        f.org.orgId,
+        received,
+        f.actors.submitterId,
+        {
+          ...groupInput,
+          sourceEventId: source2,
+          effectiveOn: "2026-09-01",
+          carryingValue: "800",
+          idempotencyKey: randomUUID(),
+          remainingPlan: [{ date: "2026-09-30", amount: "800" }],
+        },
+      );
+      await approve(f, group2);
+      await applyAssetGroupValuation(f.org.orgId, group2, f.actors.submitterId);
+      const nextBuyer = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values(${nextBuyer},${f.org.orgId},${f.org.subsidiaryId},'Next owner','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into intercompany_pairs(org_id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id)
+        values(${f.org.orgId},${buyer},${nextBuyer},${dueFrom},${dueTo})
+      `);
+      const onward = await proposeAssetChange(
+        f.org.orgId,
+        received,
+        f.actors.submitterId,
+        {
+          ...request,
+          effectiveOn: "2026-09-01",
+          idempotencyKey: randomUUID(),
+          proceeds: "250",
+          portion: {
+            books: [
+              {
+                bookId: f.org.bookId,
+                cost: "600",
+                accumulated: "400",
+                salvage: "0",
+                group: {
+                  cost: "1200",
+                  accumulated: "1000",
+                  salvage: "0",
+                  remainingPlan: [{ date: "2026-09-30", amount: "600" }],
+                  removedPlan: [{ date: "2026-09-30", amount: "200" }],
+                  unimpairedAccumulated: "900",
+                  unimpairedRemainingPlan: [
+                    { date: "2026-09-30", amount: "700" },
+                  ],
+                  unimpairedRemovedPlan: [
+                    { date: "2026-09-30", amount: "300" },
+                  ],
+                },
+              },
+            ],
+          },
+          transfer: {
+            ...request.transfer!,
+            subsidiaryId: nextBuyer,
+            assetNumber: "RECEIVED-2",
+            buyerAmount: "250",
+            lifeMonths: 1,
+          },
+        },
+      );
+      await approve(f, onward);
+      const onwardResult = await applyAssetChange(
+        f.org.orgId,
+        onward,
+        f.actors.submitterId,
+      );
+      const nextBasis = (
+        await db.execute<{
+          basis: {
+            groupCost: string;
+            groupAccumulated: string;
+            groupPlan: { amount: string }[];
+            groupUnimpaired: {
+              accumulatedDelta: string;
+              plan: { amount: string }[];
+            };
+          };
+        }>(sql`
+        select basis from asset_transfer_bases where org_id=${f.org.orgId}
+          and receiving_asset_id=${String(onwardResult.receivingAssetId)} and book_id=${f.org.bookId}
+      `)
+      ).rows[0]!.basis;
+      assert.equal(nextBasis.groupCost, "1200.0000");
+      assert.equal(nextBasis.groupAccumulated, "1000.0000");
+      assert.equal(nextBasis.groupPlan[0]!.amount, "200.0000");
+      assert.equal(nextBasis.groupUnimpaired.accumulatedDelta, "-100.0000");
+      assert.equal(nextBasis.groupUnimpaired.plan[0]!.amount, "300.0000");
     }),
 );
 

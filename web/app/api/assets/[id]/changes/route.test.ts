@@ -114,6 +114,9 @@ test("group component amounts and service reach the actual proposal schema witho
     accumulated: "900.0000",
     salvage: "0.0000",
     remainingPlan: [{ date: "2026-09-30", amount: "700.0000" }],
+    unimpairedAccumulated: "850.0000",
+    unimpairedRemainingPlan: [{ date: "2026-09-30", amount: "750.0000" }],
+    unimpairedRemovedPlan: [{ date: "2026-09-30", amount: "350.0000" }],
   };
   const body = {
     ...valid,

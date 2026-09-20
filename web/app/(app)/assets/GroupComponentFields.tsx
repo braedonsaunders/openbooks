@@ -22,7 +22,11 @@ export function GroupComponentFields({
   const set = (patch: Partial<GroupComponentInput>) =>
     onChange({ ...current, ...patch });
   const plan = (
-    key: "remainingPlan" | "removedPlan" | "unimpairedRemainingPlan",
+    key:
+      | "remainingPlan"
+      | "removedPlan"
+      | "unimpairedRemainingPlan"
+      | "unimpairedRemovedPlan",
     label: string,
   ) => {
     const rows = current[key] ?? [];
@@ -121,6 +125,12 @@ export function GroupComponentFields({
           "unimpairedRemainingPlan",
           "Retained unimpaired group depreciation",
         )}
+        {onward
+          ? plan(
+              "unimpairedRemovedPlan",
+              "Transferred component unimpaired group depreciation",
+            )
+          : null}
       </details>
     </fieldset>
   );

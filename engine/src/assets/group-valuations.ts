@@ -30,6 +30,7 @@ import {
 import {
   groupAssetPlan,
   type GroupAssetValuation,
+  type GroupAssetCounterfactual,
 } from "../money/asset-group-plan.ts";
 import {
   splitDepreciationPlan,
@@ -59,6 +60,7 @@ type Transfer = {
     groupSalvage: string;
     buyerToGroupRate: string;
     groupPlan: DatedDepreciation[];
+    groupUnimpaired?: GroupAssetCounterfactual;
   };
 };
 function exact(value: string, label: string) {
@@ -206,7 +208,11 @@ async function snapshot(
     s.transfer.id,
     input.effectiveOn,
   );
-  const current = groupAssetPlan(s.transfer.basis.groupPlan, valuations);
+  const current = groupAssetPlan(
+    s.transfer.basis.groupPlan,
+    valuations,
+    s.transfer.basis.groupUnimpaired,
+  );
   const postedThrough = (
     await tx.execute<{ date: string | null }>(
       sql`select max(p.ends_on)::text as date from depreciation_schedules schedule join depreciation_schedule_lines l on l.org_id=schedule.org_id and l.schedule_id=schedule.id join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id where schedule.org_id=${orgId} and schedule.asset_id=${assetId} and schedule.book_id=${s.row.book_id} and l.posted_amount is not null and p.ends_on<=${input.effectiveOn}`,
