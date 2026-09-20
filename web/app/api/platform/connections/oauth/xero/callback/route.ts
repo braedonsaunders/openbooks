@@ -7,44 +7,54 @@ import { exchangeCode, listConnections as xeroTenants, type XeroApp } from '@ope
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import {
+  acceptConnectionOauthState,
+  connectionOauthBounce,
+  connectionOauthCookieValue,
+  connectionOauthRedirectUri,
+  pinProviderChoice,
+} from '../../_flow'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
- * Xero OAuth callback: decrypt `state` for {orgId, connectionId}, exchange the
- * code with THAT connection's app credentials, resolve the authorized tenant
- * via /connections, and merge tokens + tenantId back onto the same row.
+ * Xero OAuth callback: consume the one-time cookie nonce, decrypt `state`
+ * for {orgId, connectionId}, exchange the code with THAT connection's app
+ * credentials, pin the tenant (prior stored id, or the only authorized
+ * tenant — never the first row of a longer list), and merge tokens + tenantId
+ * back onto the same row.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
-  const back = (status: string) => NextResponse.redirect(new URL(`/sync?oauth=${status}`, req.url))
 
-  if (url.searchParams.get('error')) return back('denied')
+  if (url.searchParams.get('error')) return connectionOauthBounce('denied')
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
-  if (!code || !state) return back('invalid')
+  if (!code || !state) return connectionOauthBounce('invalid')
 
-  const st = unsealJson<{ orgId: string; connectionId: string }>(state)
-  if (!st?.orgId || !st?.connectionId) return back('badstate')
-  if (st.orgId !== gate.user.orgId) return back('badstate')
+  const st = acceptConnectionOauthState(state, connectionOauthCookieValue(req))
+  if (!st) return connectionOauthBounce('badstate')
+  if (st.orgId !== gate.user.orgId) return connectionOauthBounce('badstate')
   const conn = await getConnection(st.orgId, st.connectionId)
-  if (!conn || conn.source !== 'xero') return back('notfound')
+  if (!conn || conn.source !== 'xero') return connectionOauthBounce('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
-  if (!secret?.clientId || !secret?.clientSecret) return back('nocreds')
+  if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
 
   const app: XeroApp = {
     clientId: secret.clientId,
     clientSecret: secret.clientSecret,
-    redirectUri: `${url.origin}/api/platform/connections/oauth/xero/callback`,
+    redirectUri: connectionOauthRedirectUri('xero'),
   }
   try {
     const tokens = await exchangeCode(app, code)
     const tenants = await xeroTenants(tokens.accessToken)
-    const tenant = tenants[0]
-    if (!tenant) return back('notenant')
+    const priorTenantId = (conn.config as { tenantId?: string }).tenantId
+    const pinned = pinProviderChoice(tenants, priorTenantId, (tenant) => tenant.tenantId, 'notenant')
+    if (!pinned.ok) return connectionOauthBounce(pinned.status)
+    const tenant = pinned.item
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const displayName = `${tenant.tenantName} (Xero)`
@@ -91,9 +101,9 @@ export async function GET(req: Request) {
       })
       return true
     })
-    if (!connected) return back('error')
-    return back('connected')
+    if (!connected) return connectionOauthBounce('error')
+    return connectionOauthBounce('connected')
   } catch {
-    return back('error')
+    return connectionOauthBounce('error')
   }
 }

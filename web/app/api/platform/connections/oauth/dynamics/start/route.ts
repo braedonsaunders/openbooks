@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server'
 import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
+import { unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import {
+  attachConnectionOauthCookie,
+  connectionOauthRedirectUri,
+  mintConnectionOauthState,
+} from '../../_flow'
 
 export const runtime = 'nodejs'
 
 /**
  * Begin the Dynamics 365 Business Central consent flow for one connection. The
  * Entra app creds live on the connection (sealed); the org's directory (tenant)
- * id + BC environment ride on its config. {orgId, connectionId} round-trips
- * through Entra in an encrypted `state`.
+ * id + BC environment ride on its config. A one-time nonce rides in the sealed
+ * `state` and in an HttpOnly cookie.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
@@ -31,9 +36,11 @@ export async function GET(req: Request) {
   const app: DynamicsApp = {
     clientId: secret.clientId,
     clientSecret: '',
-    redirectUri: `${new URL(req.url).origin}/api/platform/connections/oauth/dynamics/callback`,
+    redirectUri: connectionOauthRedirectUri('dynamics'),
     aadTenantId: cfg.aadTenantId,
   }
-  const state = sealJson({ orgId: gate.user.orgId, connectionId })
-  return NextResponse.redirect(authorizeUrl(app, state))
+  const { state, nonce } = mintConnectionOauthState(gate.user.orgId, connectionId)
+  const response = NextResponse.redirect(authorizeUrl(app, state))
+  attachConnectionOauthCookie(response, nonce)
+  return response
 }
