@@ -3,8 +3,10 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "../authz";
+import { entryDetail } from "../data";
 import { isFeatureEnabled } from "../features";
 import { ReportBookSelectionError, reportBookSelection } from "../report-books";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import {
   compactRows,
@@ -490,23 +492,23 @@ const previewAllocation: AssistantToolDef = {
     if (!can(authz, "allocations.run")) {
       return { ok: false, error: "forbidden" };
     }
-    const off = await allocationsOff(authz);
-    if (off) return off;
     const a = raw as {
       ruleId?: string; ruleKey?: string; periodId?: string; period?: string;
       bookId?: string; subsidiaryId?: string;
     };
+    // Restricted callers must pin a subsidiary they can see. Omitting the pin
+    // would pass null into previewAllocationRun and sweep every legal entity.
+    if (authz.allowedSubsidiaryIds !== null) {
+      if (a.subsidiaryId === undefined || !authz.allowedSubsidiaryIds.has(a.subsidiaryId)) {
+        return { ok: false, error: "forbidden" };
+      }
+    }
+    const off = await allocationsOff(authz);
+    if (off) return off;
     const ruleId = await resolveRuleId(authz.user.orgId, a);
     if (typeof ruleId !== "string") return ruleId;
     const periodId = await resolveAllocationPeriodId(authz.user.orgId, a);
     if (typeof periodId !== "string") return periodId;
-    // Route parity: a restricted caller may only pin a subsidiary it sees.
-    if (
-      a.subsidiaryId !== undefined && authz.allowedSubsidiaryIds !== null &&
-      !authz.allowedSubsidiaryIds.has(a.subsidiaryId)
-    ) {
-      return { ok: false, error: "forbidden" };
-    }
     try {
       // Omitted book defaults to the primary book (the statement-pages
       // selection contract); the engine re-checks book scope at compute.
@@ -594,13 +596,24 @@ const explainAllocation: AssistantToolDef = {
       throw error;
     }
     try {
-      // Run-drawer parity: a restricted caller only sees runs pinned to a
-      // subsidiary in its set; org-wide runs stay invisible to them.
+      // Same visibility as the surfaces that own each anchor. A miss is
+      // not-found (not empty lineage): run drawer, get_journal_entry, get_document.
       if (anchor.kind === "run") {
         const run = await getRun(authz.user.orgId, anchor.id);
         if (!runSubsidiaryVisible(authz.allowedSubsidiaryIds, run.subsidiaryId)) {
           return { ok: false, error: "allocation_run_not_found" };
         }
+      } else if (anchor.kind === "journalEntry") {
+        const seen = await entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds);
+        if (!seen.entry) return { ok: false, error: "entry_not_found" };
+      } else if (anchor.kind === "document") {
+        const seen = await db.execute<{ id: string }>(sql`
+          select d.id::text as id
+            from documents d
+           where d.id = ${anchor.id} and d.org_id = ${authz.user.orgId}
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+           limit 1`);
+        if (!seen.rows[0]) return { ok: false, error: "document_not_found" };
       }
       const result = await queryLineage(authz.user.orgId, {
         runId: a.runId,
