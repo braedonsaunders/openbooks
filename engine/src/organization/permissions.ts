@@ -143,6 +143,16 @@ export const PERMISSION_CATALOGUE = [
   "hrm.leave.request",
   "hrm.leave.approve",
   "hrm.leave.manage",
+  // HR-6 recruiting — the same confidentiality rule as employment:
+  // candidate PII plus the funnel are never a rider on time.*, payroll.*,
+  // or parties.*. read = see requisitions, candidates, the pipeline,
+  // interviews and offers; manage = author every recruiting write
+  // (requisitions, candidates, applications, interviews, offers, hire).
+  // A hiring manager reads and moves candidates on their OWN requisitions
+  // without the org-wide grant (fenced in authorization.ts); candidate PII
+  // (email, phone, resume) is returned only to hrm.recruiting.read holders.
+  "hrm.recruiting.read",
+  "hrm.recruiting.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -393,6 +403,8 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.leave.request", labelKey: permissionLabelKey("hrm.leave.request") },
       { key: "hrm.leave.approve", labelKey: permissionLabelKey("hrm.leave.approve") },
       { key: "hrm.leave.manage", labelKey: permissionLabelKey("hrm.leave.manage") },
+      { key: "hrm.recruiting.read", labelKey: permissionLabelKey("hrm.recruiting.read") },
+      { key: "hrm.recruiting.manage", labelKey: permissionLabelKey("hrm.recruiting.manage") },
     ],
   },
   {

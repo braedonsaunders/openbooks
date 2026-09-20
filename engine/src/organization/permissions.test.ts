@@ -84,6 +84,8 @@ test("hrm employment permissions are catalogued, grouped, and held by admin only
     "hrm.leave.request",
     "hrm.leave.approve",
     "hrm.leave.manage",
+    "hrm.recruiting.read",
+    "hrm.recruiting.manage",
   ];
   for (const perm of keys) {
     assert.ok(
