@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "Plantilla",
       "headcountSub": "A {date}",
-      "employers": "Empleadores",
-      "employersSub": "{count, plural, one {# filial} other {# filiales}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
       "openPositions": "Puestos abiertos",
-      "openPositionsSub": "{count, plural, one {# establecimiento en contratación} other {# establecimientos en contratación}}",
-      "unfundedFte": "FTE cubiertos sin financiación",
-      "unfundedFteSub": "Cubierto sin financiación asignada"
+      "openPositionsSub": "{fte} ETC vacantes",
+      "startingSoon": "Empiezan pronto",
+      "startingSoonSub": "{count, plural, one {# termina en los próximos 30 días} other {# terminan en los próximos 30 días}}",
+      "onLeave": "De permiso hoy",
+      "onLeaveSub": "{count, plural, one {# solicitud pendiente de aprobación} other {# solicitudes pendientes de aprobación}}"
     },
     "groups": {
-      "title": "Plantilla por empleador y departamento",
-      "employer": "Empleador",
+      "title": "Plantilla por departamento",
+      "employer": "Filial",
       "department": "Departamento",
       "headcount": "Plantilla",
       "unassigned": "Sin asignar",
@@ -31,12 +29,16 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Directorio"
+      "title": "Directorio",
+      "employeesHint": "en servicio hoy",
+      "positionsHint": "abiertos",
+      "processesHint": "{count, plural, one {# paso vencido} other {# pasos vencidos}}",
+      "leaveHint": "{count, plural, one {# pendiente de aprobación} other {# pendientes de aprobación}}"
     },
     "vacancy": {
       "title": "Vacantes por departamento",
       "department": "Departamento",
-      "employer": "Empleador",
+      "employer": "Filial",
       "positions": "Puestos",
       "planned": "FTE planificados",
       "funded": "FTE financiados",
@@ -53,6 +55,19 @@
       "upcomingLabel": "Próximo",
       "empty": "No hay listas abiertas.",
       "viewAll": "Ver todos los procesos"
+    },
+    "trend": {
+      "title": "Plantilla, últimos 12 meses",
+      "hint": "En servicio al cierre de cada mes, hasta hoy.",
+      "series": "Plantilla"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "allClear": "Nada requiere atención.",
+      "pending": "{count, plural, one {# solicitud de cambio pendiente de decisión} other {# solicitudes de cambio pendientes de decisión}}",
+      "overdueSteps": "{count, plural, one {# paso de lista vencido} other {# pasos de lista vencidos}}",
+      "leavePending": "{count, plural, one {# solicitud de permiso pendiente de aprobación} other {# solicitudes de permiso pendientes de aprobación}}",
+      "unfunded": "{fte} ETC cubiertos sin financiación"
     }
   },
   "overview": {
@@ -313,7 +328,7 @@
       "title": "Nuevo puesto",
       "code": "Código del puesto",
       "titleField": "Título",
-      "employer": "Empleador",
+      "employer": "Filial empleadora",
       "department": "Departamento",
       "noDepartment": "Sin departamento",
       "plannedFte": "ETC planificado",

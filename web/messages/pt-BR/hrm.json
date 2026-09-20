@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "Headcount",
       "headcountSub": "Em {date}",
-      "employers": "Empregadores",
-      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
       "openPositions": "Posições abertas",
-      "openPositionsSub": "{count, plural, one {# estabelecimento recrutando} other {# estabelecimentos recrutando}}",
-      "unfundedFte": "FTE preenchido sem financiamento",
-      "unfundedFteSub": "Preenchido sem financiamento vinculado"
+      "openPositionsSub": "{fte} FTE vagos",
+      "startingSoon": "Começam em breve",
+      "startingSoonSub": "{count, plural, one {# termina nos próximos 30 dias} other {# terminam nos próximos 30 dias}}",
+      "onLeave": "De licença hoje",
+      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}"
     },
     "groups": {
-      "title": "Headcount por empregador e departamento",
-      "employer": "Empregador",
+      "title": "Quadro de pessoal por departamento",
+      "employer": "Subsidiária",
       "department": "Departamento",
       "headcount": "Headcount",
       "unassigned": "Não atribuído",
@@ -31,12 +29,16 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Diretório"
+      "title": "Diretório",
+      "employeesHint": "em serviço hoje",
+      "positionsHint": "abertas",
+      "processesHint": "{count, plural, one {# etapa atrasada} other {# etapas atrasadas}}",
+      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}"
     },
     "vacancy": {
       "title": "Vagas por departamento",
       "department": "Departamento",
-      "employer": "Empregador",
+      "employer": "Subsidiária",
       "positions": "Posições",
       "planned": "FTE planejado",
       "funded": "FTE financiado",
@@ -53,6 +55,19 @@
       "upcomingLabel": "A vencer",
       "empty": "Nenhuma lista aberta.",
       "viewAll": "Ver todos os processos"
+    },
+    "trend": {
+      "title": "Quadro de pessoal, últimos 12 meses",
+      "hint": "Em serviço no fim de cada mês, até hoje.",
+      "series": "Quadro de pessoal"
+    },
+    "attention": {
+      "title": "Precisa de atenção",
+      "allClear": "Nada precisa de atenção.",
+      "pending": "{count, plural, one {# solicitação de mudança aguardando decisão} other {# solicitações de mudança aguardando decisão}}",
+      "overdueSteps": "{count, plural, one {# etapa de checklist atrasada} other {# etapas de checklist atrasadas}}",
+      "leavePending": "{count, plural, one {# solicitação de licença aguardando aprovação} other {# solicitações de licença aguardando aprovação}}",
+      "unfunded": "{fte} FTE preenchidos sem financiamento"
     }
   },
   "overview": {
@@ -313,7 +328,7 @@
       "title": "Nova posição",
       "code": "Código da posição",
       "titleField": "Título",
-      "employer": "Empregador",
+      "employer": "Subsidiária empregadora",
       "department": "Departamento",
       "noDepartment": "Sem departamento",
       "plannedFte": "FTE planejado",

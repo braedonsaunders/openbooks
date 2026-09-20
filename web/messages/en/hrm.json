@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "Headcount",
       "headcountSub": "As of {date}",
-      "employers": "Employers",
-      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
-      "departments": "Departments",
-      "departmentsSub": "{count, plural, one {# department} other {# departments}}",
       "openPositions": "Open positions",
-      "openPositionsSub": "{count, plural, one {# establishment recruiting} other {# establishments recruiting}}",
-      "unfundedFte": "Unfunded filled FTE",
-      "unfundedFteSub": "Filled with no funding behind it"
+      "openPositionsSub": "{fte} vacant FTE",
+      "startingSoon": "Starting soon",
+      "startingSoonSub": "{count, plural, one {# ending in the next 30 days} other {# ending in the next 30 days}}",
+      "onLeave": "On leave today",
+      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}"
     },
     "groups": {
-      "title": "Headcount by employer and department",
-      "employer": "Employer",
+      "title": "Headcount by department",
+      "employer": "Subsidiary",
       "department": "Department",
       "headcount": "Headcount",
       "unassigned": "Unassigned",
@@ -31,12 +29,16 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Directory"
+      "title": "Directory",
+      "employeesHint": "in service today",
+      "positionsHint": "open",
+      "processesHint": "{count, plural, one {# step overdue} other {# steps overdue}}",
+      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}"
     },
     "vacancy": {
       "title": "Vacancy by department",
       "department": "Department",
-      "employer": "Employer",
+      "employer": "Subsidiary",
       "positions": "Positions",
       "planned": "Planned FTE",
       "funded": "Funded FTE",
@@ -53,6 +55,19 @@
       "upcomingLabel": "Due soon",
       "empty": "No open checklists.",
       "viewAll": "View all processes"
+    },
+    "trend": {
+      "title": "Headcount, last 12 months",
+      "hint": "In service at each month end, through today.",
+      "series": "Headcount"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "Nothing needs attention.",
+      "pending": "{count, plural, one {# change request awaiting decision} other {# change requests awaiting decision}}",
+      "overdueSteps": "{count, plural, one {# checklist step overdue} other {# checklist steps overdue}}",
+      "leavePending": "{count, plural, one {# leave request awaiting approval} other {# leave requests awaiting approval}}",
+      "unfunded": "{fte} filled FTE with no funding behind it"
     }
   },
   "overview": {
@@ -314,7 +329,7 @@
       "title": "New position",
       "code": "Position code",
       "titleField": "Title",
-      "employer": "Employer",
+      "employer": "Employing subsidiary",
       "department": "Department",
       "noDepartment": "No department",
       "plannedFte": "Planned FTE",

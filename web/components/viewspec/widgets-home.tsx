@@ -72,6 +72,7 @@ export const HOME_WIDGETS = {
       height={typeof props.height === 'number' ? props.height : undefined}
       area={props.area === true}
       maxTicks={typeof props.maxTicks === 'number' ? props.maxTicks : undefined}
+      format={str(props, 'format') === 'count' ? 'count' : 'money'}
     />
   ),
   'directory-section': (props) => (

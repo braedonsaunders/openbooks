@@ -2486,6 +2486,16 @@
         "title": "休暇ポリシー",
         "singularTitle": "休暇ポリシー",
         "description": "各休暇種別の付与時間、適用対象、必要な事前通知。時間としての権利であり、金額は給与計算で算出されます。"
+      },
+      "hrm-process-templates": {
+        "title": "プロセステンプレート",
+        "singularTitle": "プロセステンプレート",
+        "description": "入社・退社・異動のチェックリスト。プロセス開始時の手順、担当者、期限オフセット、証跡を定義します。"
+      },
+      "hrm-process-template-steps": {
+        "title": "プロセステンプレートの手順",
+        "singularTitle": "プロセステンプレートの手順",
+        "description": "プロセステンプレートの順序付き手順。担当者、期限オフセット、証跡ルールを持ちます。"
       }
     },
     "fields": {

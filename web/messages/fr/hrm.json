@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "Effectif",
       "headcountSub": "Au {date}",
-      "employers": "Employeurs",
-      "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
-      "departments": "Services",
-      "departmentsSub": "{count, plural, one {# service} other {# services}}",
       "openPositions": "Postes ouverts",
-      "openPositionsSub": "{count, plural, one {# établissement qui recrute} other {# établissements qui recrutent}}",
-      "unfundedFte": "ETP pourvus non financés",
-      "unfundedFteSub": "Pourvu sans financement associé"
+      "openPositionsSub": "{fte} ETP vacants",
+      "startingSoon": "Arrivées prochaines",
+      "startingSoonSub": "{count, plural, one {# départ dans les 30 prochains jours} other {# départs dans les 30 prochains jours}}",
+      "onLeave": "En congé aujourd'hui",
+      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}"
     },
     "groups": {
-      "title": "Effectif par employeur et par service",
-      "employer": "Employeur",
+      "title": "Effectif par service",
+      "employer": "Filiale",
       "department": "Service",
       "headcount": "Effectif",
       "unassigned": "Non affecté",
@@ -31,12 +29,16 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Annuaire"
+      "title": "Annuaire",
+      "employeesHint": "en service aujourd'hui",
+      "positionsHint": "ouverts",
+      "processesHint": "{count, plural, one {# étape en retard} other {# étapes en retard}}",
+      "leaveHint": "{count, plural, one {# en attente d'approbation} other {# en attente d'approbation}}"
     },
     "vacancy": {
       "title": "Postes vacants par service",
       "department": "Service",
-      "employer": "Employeur",
+      "employer": "Filiale",
       "positions": "Postes",
       "planned": "ETP prévus",
       "funded": "ETP financés",
@@ -53,6 +55,19 @@
       "upcomingLabel": "Bientôt dû",
       "empty": "Aucune liste ouverte.",
       "viewAll": "Voir tous les processus"
+    },
+    "trend": {
+      "title": "Effectif, 12 derniers mois",
+      "hint": "En service à chaque fin de mois, jusqu'à aujourd'hui.",
+      "series": "Effectif"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Rien à traiter.",
+      "pending": "{count, plural, one {# demande de changement en attente de décision} other {# demandes de changement en attente de décision}}",
+      "overdueSteps": "{count, plural, one {# étape de liste en retard} other {# étapes de liste en retard}}",
+      "leavePending": "{count, plural, one {# demande de congé en attente d'approbation} other {# demandes de congé en attente d'approbation}}",
+      "unfunded": "{fte} ETP pourvus sans financement"
     }
   },
   "overview": {
@@ -313,7 +328,7 @@
       "title": "Nouveau poste",
       "code": "Code du poste",
       "titleField": "Intitulé",
-      "employer": "Employeur",
+      "employer": "Filiale employeuse",
       "department": "Service",
       "noDepartment": "Aucun service",
       "plannedFte": "ETP prévu",

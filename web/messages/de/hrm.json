@@ -12,18 +12,16 @@
     "vitals": {
       "headcount": "Personalbestand",
       "headcountSub": "Stand {date}",
-      "employers": "Arbeitgeber",
-      "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
-      "departments": "Abteilungen",
-      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}",
       "openPositions": "Offene Positionen",
-      "openPositionsSub": "{count, plural, one {# einstellende Einrichtung} other {# einstellende Einrichtungen}}",
-      "unfundedFte": "Ungedeckt besetzte FTE",
-      "unfundedFteSub": "Besetzt ohne dahinterstehende Finanzierung"
+      "openPositionsSub": "{fte} VZÄ unbesetzt",
+      "startingSoon": "Beginnen bald",
+      "startingSoonSub": "{count, plural, one {# endet in den nächsten 30 Tagen} other {# enden in den nächsten 30 Tagen}}",
+      "onLeave": "Heute abwesend",
+      "onLeaveSub": "{count, plural, one {# Antrag wartet auf Genehmigung} other {# Anträge warten auf Genehmigung}}"
     },
     "groups": {
-      "title": "Personalbestand nach Arbeitgeber und Abteilung",
-      "employer": "Arbeitgeber",
+      "title": "Personalstand nach Abteilung",
+      "employer": "Gesellschaft",
       "department": "Abteilung",
       "headcount": "Personalbestand",
       "unassigned": "Nicht zugeordnet",
@@ -31,12 +29,16 @@
       "total": "Gesamt"
     },
     "directory": {
-      "title": "Verzeichnis"
+      "title": "Verzeichnis",
+      "employeesHint": "heute im Dienst",
+      "positionsHint": "offen",
+      "processesHint": "{count, plural, one {# Schritt überfällig} other {# Schritte überfällig}}",
+      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}"
     },
     "vacancy": {
       "title": "Vakanzen nach Abteilung",
       "department": "Abteilung",
-      "employer": "Arbeitgeber",
+      "employer": "Gesellschaft",
       "positions": "Positionen",
       "planned": "Geplante FTE",
       "funded": "Finanzierte FTE",
@@ -53,6 +55,19 @@
       "upcomingLabel": "Bald fällig",
       "empty": "Keine offenen Checklisten.",
       "viewAll": "Alle Vorgänge anzeigen"
+    },
+    "trend": {
+      "title": "Personalstand, letzte 12 Monate",
+      "hint": "Im Dienst zum jeweiligen Monatsende, bis heute.",
+      "series": "Personalstand"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Nichts erfordert Aufmerksamkeit.",
+      "pending": "{count, plural, one {# Änderungsantrag wartet auf Entscheidung} other {# Änderungsanträge warten auf Entscheidung}}",
+      "overdueSteps": "{count, plural, one {# Checklistenschritt überfällig} other {# Checklistenschritte überfällig}}",
+      "leavePending": "{count, plural, one {# Urlaubsantrag wartet auf Genehmigung} other {# Urlaubsanträge warten auf Genehmigung}}",
+      "unfunded": "{fte} besetzte VZÄ ohne Finanzierung"
     }
   },
   "overview": {
@@ -313,7 +328,7 @@
       "title": "Neue Stelle",
       "code": "Stellencode",
       "titleField": "Bezeichnung",
-      "employer": "Arbeitgeber",
+      "employer": "Anstellende Gesellschaft",
       "department": "Abteilung",
       "noDepartment": "Keine Abteilung",
       "plannedFte": "Geplante VZÄ",

@@ -2418,6 +2418,16 @@
         "title": "休假政策",
         "singularTitle": "休假政策",
         "description": "每种休假累积多少时间、覆盖谁、需要多少提前通知。以时间为单位的权利；金额由工资核算计算。"
+      },
+      "hrm-process-templates": {
+        "title": "流程模板",
+        "singularTitle": "流程模板",
+        "description": "入职、离职和调动清单：流程开启时的步骤、负责人、到期偏移和证据要求。"
+      },
+      "hrm-process-template-steps": {
+        "title": "流程模板步骤",
+        "singularTitle": "流程模板步骤",
+        "description": "流程模板中的一个有序步骤，含负责人、到期偏移和证据规则。"
       }
     },
     "fields": {

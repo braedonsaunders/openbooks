@@ -2373,6 +2373,16 @@
         "title": "Politiques de congé",
         "singularTitle": "Politique de congé",
         "description": "Le temps accumulé par chaque type, qui il couvre et le préavis requis. Droit en temps ; la valeur est calculée par la paie."
+      },
+      "hrm-process-templates": {
+        "title": "Modèles de processus",
+        "singularTitle": "Modèle de processus",
+        "description": "Listes d'intégration, de départ et de mutation : les étapes, responsables, délais et preuves avec lesquels un processus s'ouvre."
+      },
+      "hrm-process-template-steps": {
+        "title": "Étapes de modèle de processus",
+        "singularTitle": "Étape de modèle de processus",
+        "description": "Une étape ordonnée d'un modèle de processus avec son responsable, son délai et sa règle de preuve."
       }
     },
     "fields": {

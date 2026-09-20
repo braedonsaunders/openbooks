@@ -15,6 +15,7 @@ import {
   statTile,
   table,
   text,
+  textBlock,
   widget,
   widgetBlock,
   type PageSpec,
@@ -24,20 +25,15 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { loadHrmHome, type HrmHomeData } from '../../../lib/hrm/home'
 
 /**
- * The HRM cockpit, split into a loader and a spec.
- *
- * This follows the purchasing-cockpit archetype, not a list page: ViewSpec
- * composes the grid and the panels; the panel BODIES stay components, shared
- * by the page and the widget registry via ./sections so they cannot drift
- * (see ../../purchasing/view.ts for the division and its rationale).
- *
- * The headcount hero is a `stat-tile` vitals strip plus a `table` block
- * over loader-resolved rows and strings — a block, not a widget, because
- * there is no capability left to re-derive: the loader already resolved
- * headcount through the canonical HRM read service. The rail carries the pending queue, the 30-day starts and ends, the
- * recent change evidence, the readiness panel, and the quick actions —
- * every empty section states what is empty and why, so zero never renders
- * as a blank cockpit.
+ * The HRM cockpit, split into a loader and a spec — the banking/purchasing
+ * archetype: a four-tile vitals strip, a hero column (the 12-month headcount
+ * trend and headcount by department, then the queues that feed them), and a
+ * rail that is the work queue (needs attention, the live directory, the
+ * 30-day starts and ends, quick actions). ViewSpec composes the grid and
+ * the panels; panel bodies are shared blocks and widgets, and every figure
+ * arrives loader-resolved through the canonical HRM reads. A single-entity
+ * org never sees a subsidiary column: the loader says whether the org runs
+ * more than one, and the spec builds the columns from that fact.
  */
 
 const f = ref<HrmHomeData>()
@@ -65,6 +61,9 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
+        // Vitals: four tiles, the same strip every module home carries.
+        // Each is a figure someone acts on; counts of configuration
+        // (subsidiaries, departments) are not vitals and do not sit here.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4', [
           statTile({
             iconKey: 'users',
@@ -73,53 +72,66 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
             value: f('headcountValue'),
             sub: f('headcountSub'),
           }),
-          statTile({
-            iconKey: 'building',
-            accent: 'indigo',
-            label: f('employersLabel'),
-            value: f('employersValue'),
-            sub: f('employersSub'),
-          }),
-          statTile({
-            iconKey: 'layers',
-            accent: 'violet',
-            label: f('departmentsLabel'),
-            value: f('departmentsValue'),
-            sub: f('departmentsSub'),
-          }),
-          statTile({
-            iconKey: 'clipboard-check',
-            accent: 'amber',
-            label: f('pendingLabel'),
-            value: f('pendingValue'),
-            sub: f('pendingSub'),
-          }),
           ...(data.positions
             ? [
                 statTile({
                   iconKey: 'briefcase',
-                  accent: 'amber',
+                  accent: 'indigo',
                   label: f('positions.openPositionsLabel'),
                   value: f('positions.openPositionsValue'),
                   sub: f('positions.openPositionsSub'),
                 }),
-                statTile({
-                  iconKey: 'triangle-alert',
-                  accent: 'red',
-                  label: f('positions.unfundedFteLabel'),
-                  value: f('positions.unfundedFteValue'),
-                  sub: f('positions.unfundedFteSub'),
-                }),
               ]
-            : []),
+            : data.onLeaveLabel
+              ? [
+                  statTile({
+                    iconKey: 'timer',
+                    accent: 'indigo',
+                    label: f('onLeaveLabel'),
+                    value: f('onLeaveValue'),
+                    sub: f('onLeaveSub'),
+                  }),
+                ]
+              : []),
+          statTile({
+            iconKey: 'clipboard-check',
+            accent: data.pendingAccent,
+            label: f('pendingLabel'),
+            value: f('pendingValue'),
+            sub: f('pendingSub'),
+          }),
+          statTile({
+            iconKey: 'calendar-clock',
+            accent: 'violet',
+            label: f('startingLabel'),
+            value: f('startingValue'),
+            sub: f('startingSub'),
+          }),
         ]),
 
         grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
-          grid('flex min-h-0 flex-col gap-5 lg:col-span-2', [
+          // The hero column: the trend and the headcount table are the
+          // headline objects; the queues that feed them sit below.
+          grid('flex min-h-0 flex-col gap-5 overflow-y-auto lg:col-span-2', [
+            panel({
+              title: f('trendTitle'),
+              iconKey: 'trending-up',
+              hint: f('trendHint'),
+              className: 'shrink-0',
+              blocks: [
+                widgetBlock('trend-chart', {
+                  labels: data.trendLabels,
+                  series: [{ name: data.trendSeriesName, data: data.trendData }],
+                  height: 170,
+                  area: true,
+                  format: 'count',
+                }),
+              ],
+            }),
             panel({
               title: f('groupsTitle'),
               iconKey: 'users',
-              className: 'min-h-0',
+              className: 'shrink-0',
               bodyClassName: 'p-0',
               blocks: [
                 table({
@@ -136,7 +148,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                       ? [
                           spanRow({
                             label: f('totalLabel'),
-                            labelColSpan: 2,
+                            labelColSpan: data.multiSubsidiary ? 2 : 1,
                             cells: [
                               {
                                 cell: text(f('totalValue')),
@@ -148,9 +160,9 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                         ]
                       : undefined,
                   columns: [
-                    column(data.employerColumn, text(item('subsidiary'))),
-                    // No href today, so the link degrades to text; the day
-                    // the loader resolves a drill-through it renders a link.
+                    // The subsidiary column exists only for an org that runs
+                    // more than one: a single-entity org sees departments.
+                    ...(data.multiSubsidiary ? [column(data.employerColumn, text(item('subsidiary')))] : []),
                     column(data.departmentColumn, link(item('departmentLabel'), item('href'))),
                     column(data.headcountColumn, text(item('headcountLabel')), {
                       align: 'right',
@@ -160,6 +172,49 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 }),
               ],
             }),
+            ...(data.positions
+              ? [
+                  panel({
+                    title: f('positions.vacancyTitle'),
+                    iconKey: 'briefcase',
+                    className: 'shrink-0',
+                    bodyClassName: 'p-0',
+                    blocks: [
+                      table({
+                        variant: 'app',
+                        rows: f('positions.groups'),
+                        rowKey: item('id'),
+                        empty: { title: f('positions.vacancyEmpty') },
+                        trailing:
+                          data.positions.groups.length > 0
+                            ? [
+                                spanRow({
+                                  label: f('positions.totalLabel'),
+                                  labelColSpan: data.multiSubsidiary ? 2 : 1,
+                                  cells: [
+                                    { cell: text(f('positions.totals.positions')), align: 'right', className: 'font-semibold tabular-nums' },
+                                    { cell: text(f('positions.totals.plannedFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                                    { cell: text(f('positions.totals.fundedFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                                    { cell: text(f('positions.totals.filledFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                                    { cell: text(f('positions.totals.vacantFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                                  ],
+                                }),
+                              ]
+                            : undefined,
+                        columns: [
+                          ...(data.multiSubsidiary ? [column(data.positions.employerColumn, text(item('employer')))] : []),
+                          column(data.positions.departmentColumn, text(item('department'))),
+                          column(data.positions.positionsColumn, text(item('positions')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.plannedColumn, text(item('plannedFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.fundedColumn, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.filledColumn, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.vacantColumn, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
             panel({
               title: f('pendingTitle'),
               iconKey: 'clipboard-check',
@@ -176,94 +231,13 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 }),
               ],
             }),
-            panel({
-              title: f('recentTitle'),
-              iconKey: 'scroll-text',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-recent-changes', {
-                  items: data.recent,
-                  empty: data.recentEmpty,
-                  notAvailable: data.queueNotAvailable,
-                }),
-              ],
-            }),
-            ...(data.leavePanel
-              ? [
-                  panel({
-                    title: data.leavePanel.title,
-                    iconKey: 'calendar',
-                    bodyClassName: 'p-0',
-                    className: 'shrink-0',
-                    blocks: [
-                      widgetBlock('hrm-leave-panel', {
-                        items: data.leavePanel.onLeaveToday,
-                        empty: data.leavePanel.onLeaveEmpty,
-                        pendingCount: data.leavePanel.pendingCount,
-                        pendingLabel: data.leavePanel.pendingLabel,
-                        queueHref: data.leavePanel.queueHref,
-                        viewAllLabel: data.pendingViewAll,
-                      }),
-                    ],
-                  }),
-                ]
-              : []),
-          ]),
-
-          grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
-            panel({
-              title: f('upcomingTitle'),
-              iconKey: 'timer',
-              hint: f('upcomingHint'),
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-upcoming-changes', {
-                  starts: data.starts,
-                  ends: data.ends,
-                  startsTitle: data.startsTitle,
-                  startsEmpty: data.startsEmpty,
-                  endsTitle: data.endsTitle,
-                  endsEmpty: data.endsEmpty,
-                  notAvailable: data.queueNotAvailable,
-                  truncated: data.upcomingTruncated,
-                  truncatedNote: data.upcomingTruncatedNote,
-                }),
-              ],
-            }),
-            panel({
-              title: f('readinessTitle'),
-              iconKey: 'triangle-alert',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('hrm-readiness', {
-                  message: data.readinessMessage,
-                  docHref: data.readinessDocHref,
-                  docLabel: data.readinessDocLabel,
-                  tone: data.readinessTone,
-                }),
-              ],
-            }),
-            widgetBlock('directory-section', {
-              items: data.actions,
-              title: data.actionsTitle,
-            }),
-            // The shared `directory-section` component (purchasing/sections.tsx)
-            // renders the wrapper-or-null pair, so it is reused, not copied.
-            widgetBlock('directory-section', {
-              items: data.directory,
-              title: data.directoryTitle,
-            }),
-            // The onboarding panel is additive: it renders exactly when the
-            // loader resolved it (the viewer holds hrm.process.read).
             ...(data.onboarding
               ? [
                   panel({
                     title: data.onboarding.panelTitle,
-                    iconKey: 'clipboard-check',
+                    iconKey: 'list-checks',
                     bodyClassName: 'p-0',
+                    className: 'shrink-0',
                     blocks: [
                       widgetBlock('hrm-onboarding-panel', {
                         openCount: data.onboarding.openCount,
@@ -280,89 +254,84 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                   }),
                 ]
               : []),
-          ]),
-        ]),
-
-        ...(data.positions
-          ? [
-              panel({
-                title: f('positions.vacancyTitle'),
-                iconKey: 'briefcase',
-                className: 'min-h-0',
-                bodyClassName: 'p-0',
-                blocks: [
-                  table({
-                    variant: 'app',
-                    rows: f('positions.groups'),
-                    rowKey: item('id'),
-                    empty: { title: f('positions.vacancyEmpty') },
-                    trailing:
-                      data.positions.groups.length > 0
-                        ? [
-                            spanRow({
-                              label: f('positions.totalLabel'),
-                              labelColSpan: 2,
-                              cells: [
-                                {
-                                  cell: text(f('positions.totals.positions')),
-                                  align: 'right',
-                                  className: 'font-semibold tabular-nums',
-                                },
-                                {
-                                  cell: text(f('positions.totals.plannedFte')),
-                                  align: 'right',
-                                  className: 'font-semibold tabular-nums',
-                                },
-                                {
-                                  cell: text(f('positions.totals.fundedFte')),
-                                  align: 'right',
-                                  className: 'font-semibold tabular-nums',
-                                },
-                                {
-                                  cell: text(f('positions.totals.filledFte')),
-                                  align: 'right',
-                                  className: 'font-semibold tabular-nums',
-                                },
-                                {
-                                  cell: text(f('positions.totals.vacantFte')),
-                                  align: 'right',
-                                  className: 'font-semibold tabular-nums',
-                                },
-                              ],
-                            }),
-                          ]
-                        : undefined,
-                    columns: [
-                      column(data.positions.employerColumn, text(item('employer'))),
-                      column(data.positions.departmentColumn, text(item('department'))),
-                      column(data.positions.positionsColumn, text(item('positions')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(data.positions.plannedColumn, text(item('plannedFte')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(data.positions.fundedColumn, text(item('fundedFte')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(data.positions.filledColumn, text(item('filledFte')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(data.positions.vacantColumn, text(item('vacantFte')), {
-                        align: 'right',
-                        className: 'tabular-nums',
+            ...(data.leavePanel
+              ? [
+                  panel({
+                    title: data.leavePanel.title,
+                    iconKey: 'timer',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-leave-panel', {
+                        items: data.leavePanel.onLeaveToday,
+                        empty: data.leavePanel.onLeaveEmpty,
+                        pendingCount: data.leavePanel.pendingCount,
+                        pendingLabel: data.leavePanel.pendingLabel,
+                        queueHref: data.leavePanel.queueHref,
+                        viewAllLabel: data.pendingViewAll,
                       }),
                     ],
                   }),
-                ],
-              }),
-            ]
-          : []),
-        ]
-      ),
+                ]
+              : []),
+            panel({
+              title: f('recentTitle'),
+              iconKey: 'scroll-text',
+              bodyClassName: 'p-0',
+              className: 'shrink-0',
+              blocks: [
+                widgetBlock('hrm-recent-changes', {
+                  items: data.recent,
+                  empty: data.recentEmpty,
+                  notAvailable: data.queueNotAvailable,
+                }),
+              ],
+            }),
+          ]),
+
+          // The rail: what needs doing, the workspace as a live directory,
+          // the 30-day starts and ends, and the quick actions — the banking
+          // and purchasing rail, in that order.
+          grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
+            panel({
+              title: f('attentionTitle'),
+              iconKey: 'triangle-alert',
+              bodyClassName: 'p-0',
+              className: 'shrink-0',
+              blocks: [widgetBlock('attention-list', { items: data.attention, allClear: data.attentionAllClear })],
+            }),
+            widgetBlock('directory-section', {
+              items: data.directory,
+              title: data.directoryTitle,
+            }),
+            panel({
+              title: f('upcomingTitle'),
+              iconKey: 'calendar-clock',
+              bodyClassName: 'p-0',
+              className: 'shrink-0',
+              blocks: [
+                widgetBlock('hrm-upcoming-changes', {
+                  starts: data.starts,
+                  ends: data.ends,
+                  startsTitle: data.startsTitle,
+                  startsEmpty: data.startsEmpty,
+                  endsTitle: data.endsTitle,
+                  endsEmpty: data.endsEmpty,
+                  notAvailable: data.queueNotAvailable,
+                  truncated: data.upcomingTruncated,
+                  truncatedNote: data.upcomingTruncatedNote,
+                }),
+                textBlock(f('upcomingHint'), { size: 'xs', className: 'border-t border-slate-100 px-4 py-2.5 text-slate-400 dark:border-slate-800 dark:text-slate-500' }),
+              ],
+            }),
+            widgetBlock('directory-section', {
+              items: data.actions,
+              title: data.actionsTitle,
+            }),
+          ]),
+        ]),
+
+      ]),
     ],
   })
 }

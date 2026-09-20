@@ -274,12 +274,6 @@ export function HrmRecentChanges({
   )
 }
 
-/**
- * The honesty panel: active employee parties without an employment record
- * are named by count, with the sentence that they are not yet migrated
- * and headcount excludes them, plus the migration article. A fully
- * migrated org renders the healthy state, never a blank panel.
- */
 export type HrmLeavePanelItem = {
   workerName: string
   leaveTypeCode: string
@@ -331,38 +325,6 @@ export function HrmLeavePanel({
         className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
       >
         {viewAllLabel} →
-      </Link>
-    </div>
-  )
-}
-
-export function HrmReadiness({
-  message,
-  docHref,
-  docLabel,
-  tone,
-}: {
-  message: string
-  docHref: string
-  docLabel: string
-  tone: 'warning' | 'positive'
-}) {
-  return (
-    <div className="space-y-3 px-4 py-4">
-      <p
-        className={
-          tone === 'warning'
-            ? 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
-            : 'rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'
-        }
-      >
-        {message}
-      </p>
-      <Link
-        href={docHref as never}
-        className="block text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300"
-      >
-        {docLabel} →
       </Link>
     </div>
   )

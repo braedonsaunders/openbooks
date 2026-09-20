@@ -180,7 +180,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-leave-panel',
   'hrm-pending-requests',
   'hrm-position-drawer',
-  'hrm-readiness',
   'hrm-recent-changes',
   'hrm-upcoming-changes',
   'hrm-onboarding-panel',

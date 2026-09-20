@@ -2486,6 +2486,16 @@
         "title": "Urlaubsrichtlinien",
         "singularTitle": "Urlaubsrichtlinie",
         "description": "Wie viel Zeit jede Art ansammelt, für wen sie gilt und wie viel Vorlauf sie braucht. Anspruch in Zeit; der Geldwert wird vom Lohnlauf berechnet."
+      },
+      "hrm-process-templates": {
+        "title": "Prozessvorlagen",
+        "singularTitle": "Prozessvorlage",
+        "description": "Checklisten für Eintritt, Austritt und Versetzung: Schritte, Verantwortliche, Fälligkeitsversatz und Nachweise, mit denen ein Prozess startet."
+      },
+      "hrm-process-template-steps": {
+        "title": "Prozessvorlagen-Schritte",
+        "singularTitle": "Prozessvorlagen-Schritt",
+        "description": "Ein geordneter Schritt einer Prozessvorlage mit Verantwortlichem, Fälligkeitsversatz und Nachweisregel."
       }
     },
     "fields": {

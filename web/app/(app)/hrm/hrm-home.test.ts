@@ -86,10 +86,10 @@ test("cockpit hero is a table block; the bespoke headcount table is gone with th
 });
 
 test("the cockpit keeps its hero and adds the workspace panels", () => {
-  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness', 'directory-section']) {
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'attention-list', 'trend-chart', 'directory-section']) {
     assert.match(view, new RegExp(`'${widget}'`), `cockpit composes the ${widget} body`);
   }
-  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness']) {
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes']) {
     assert.match(hrmWidgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
     assert.match(contracts, new RegExp(`'${widget}': \\{ props: \\[`), `${widget} contract pins the prop surface`);
     assert.match(names, new RegExp(`'${widget}'`), `${widget} name is registered`);
@@ -170,7 +170,8 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
     "home.title",
     "home.vitals.headcount",
     "home.vitals.openPositions",
-    "home.vitals.unfundedFte",
+    "home.trend.title",
+    "home.attention.title",
     "home.groups.title",
     "home.groups.unassigned",
     "home.groups.empty",
