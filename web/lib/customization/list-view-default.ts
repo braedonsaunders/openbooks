@@ -37,19 +37,27 @@ export class AmbiguousListViewDefaultError extends Error {
   }
 }
 
-export async function claimListViewDefaultSlot(
+type ListViewDefaultScope = {
+  orgId: string;
+  recordType: string;
+  scope: "org" | "user";
+  ownerId: string | null;
+  exceptId?: string;
+};
+
+export async function lockListViewDefaultScope(
   tx: ListViewDefaultExecutor,
-  args: {
-    orgId: string;
-    recordType: string;
-    scope: "org" | "user";
-    ownerId: string | null;
-    exceptId?: string;
-  },
+  args: ListViewDefaultScope,
 ): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${listViewDefaultLockKey(args)}, 0))`,
   );
+}
+
+export async function clearSiblingListViewDefaults(
+  tx: ListViewDefaultExecutor,
+  args: ListViewDefaultScope,
+): Promise<void> {
   const except = args.exceptId ? sql`and id <> ${args.exceptId}` : sql``;
   if (args.scope === "org") {
     await tx.execute(sql`
@@ -62,6 +70,14 @@ export async function claimListViewDefaultSlot(
     update list_views set is_default = false, updated_at = now()
      where org_id = ${args.orgId} and record_type = ${args.recordType}
        and scope = 'user' and owner_id = ${args.ownerId} and is_default ${except}`);
+}
+
+export async function claimListViewDefaultSlot(
+  tx: ListViewDefaultExecutor,
+  args: ListViewDefaultScope,
+): Promise<void> {
+  await lockListViewDefaultScope(tx, args);
+  await clearSiblingListViewDefaults(tx, args);
 }
 
 export async function assertSingleListViewDefault(

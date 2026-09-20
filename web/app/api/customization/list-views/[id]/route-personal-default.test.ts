@@ -11,8 +11,10 @@ interface DbState {
   loadRow: Record<string, unknown> | null
   statements: unknown[]
   defaultCount: number
+  /** Empty means the target UPDATE matched nothing (concurrent delete). */
+  updateRows: unknown[]
 }
-const dbState: DbState = { loadRow: null, statements: [], defaultCount: 1 }
+const dbState: DbState = { loadRow: null, statements: [], defaultCount: 1, updateRows: [] }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = dbState
 
 const mockAuthz = `
@@ -115,6 +117,7 @@ function installDb() {
   }
   state.statements = []
   state.defaultCount = 1
+  state.updateRows = [{ id: VIEW_ID }]
   state.db = {
     execute: async () => ({ rows: state.loadRow ? [state.loadRow] : [] }),
     transaction: async (fn) => {
@@ -123,6 +126,11 @@ function installDb() {
           state.statements.push(query)
           const text = haystack([query])
           if (/count\(\*\)/.test(text)) return { rows: [{ n: state.defaultCount }] }
+          // The target UPDATE (not the sibling-default clear) is the write
+          // whose row count decides {ok:true}.
+          if (/update list_views set/.test(text) && /returning/.test(text)) {
+            return { rows: state.updateRows }
+          }
           return { rows: [{ id: VIEW_ID, name: 'Mine' }] }
         },
       }
@@ -163,4 +171,29 @@ test('PATCH refuses a personal default when the write would leave two defaults',
   )
   assert.equal(res.status, 409)
   assert.match(String((await res.json()).error), /default/i)
+})
+
+// loadOwn can still see the row while a concurrent DELETE commits before
+// our UPDATE. A zero-row UPDATE is not a save — {ok:true} would badge a
+// default no read can observe, after clearing siblings and writing audit.
+test('PATCH of a vanished view does not return 200', async () => {
+  installDb()
+  dbState.updateRows = []
+  const res = await PATCH(
+    new Request(`http://x/api/customization/list-views/${VIEW_ID}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ isDefault: true }),
+    }),
+    { params: Promise.resolve({ id: VIEW_ID }) },
+  )
+  assert.notEqual(res.status, 200, 'a vanished row must not report success')
+  assert.equal(res.status, 404)
+  const text = haystack(dbState.statements)
+  assert.doesNotMatch(text, /audit_log/, 'audit must not run after a zero-row UPDATE')
+  assert.doesNotMatch(
+    text,
+    /is_default = false/,
+    'sibling defaults must not be cleared before the target write lands',
+  )
 })
