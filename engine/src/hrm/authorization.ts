@@ -1102,6 +1102,37 @@ export async function requireOwnEmploymentForBenefits(
 }
 
 /**
+ * Me-workspace election gate (HR-10): hrm.self.request plus proof the
+ * employment is the actor's own. Plain employees hold no hrm.benefits.*
+ * grant, so the existing benefits gate would refuse every self-service
+ * election; this gate carries the same structural own-employment proof
+ * (subject loaded from worker_employments on the trusted runner, employer
+ * scope enforced) under the self-service request key every built-in role
+ * carries. HR callers keep the manage path — this gate never widens it.
+ */
+export async function requireOwnEmploymentForBenefitsSelf(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.request"))) {
+    throw new HrmAuthorizationError(
+      "Benefit elections from the Me workspace require the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+  if (!own.includes(employmentId)) {
+    throw new HrmAuthorizationError(
+      "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
+    );
+  }
+  return subject;
+}
+
+/**
  * Aggregate benefits read for list-shaped reads that name no single
  * employment: the hrm.benefits.read grant, then the employer-subsidiary
  * scope for the caller to filter by (null = unrestricted), never a boolean

@@ -5,6 +5,7 @@ import {
   requireHrmBenefitsManage,
   requireHrmBenefitsManageOnEmployment,
   requireOwnEmploymentForBenefits,
+  requireOwnEmploymentForBenefitsSelf,
   type TrustedEmploymentSubject,
 } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
@@ -352,6 +353,12 @@ export interface ElectEnrollmentQuery {
   readonly lifeEventReason?: string | null;
   /** True when the actor elects for themself (structural self scope). */
   readonly selfService?: boolean;
+  /**
+   * True when the actor elects from the Me workspace (HR-10): the
+   * hrm.self.request gate plus own-employment proof instead of the
+   * hrm.benefits.* grants plain employees do not hold.
+   */
+  readonly selfRequest?: boolean;
 }
 
 /**
@@ -383,9 +390,11 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
       : null;
   const coverageLevelKey = query.coverageLevelKey ?? null;
   return withOrgTransaction(orgId, async () => {
-    const subject = query.selfService
-      ? await requireOwnEmploymentForBenefits(db, orgId, actorId, employmentId)
-      : await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
+    const subject = query.selfRequest
+      ? await requireOwnEmploymentForBenefitsSelf(db, orgId, actorId, employmentId)
+      : query.selfService
+        ? await requireOwnEmploymentForBenefits(db, orgId, actorId, employmentId)
+        : await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
     await assertHrmEnabled(db, orgId);
     const versions = await liveEmploymentVersions(db, orgId, employmentId);
     coveringVersion(versions, effectiveFrom);
@@ -541,6 +550,12 @@ export interface ChangeEnrollmentQuery {
   readonly changeDate: string;
   readonly coverageLevelKey?: string | null;
   readonly reason: string;
+  /**
+   * True when the actor changes from the Me workspace (HR-10): the
+   * hrm.self.request gate plus own-employment proof instead of the HR
+   * manage grants. The caller bounds the change to an open window.
+   */
+  readonly selfRequest?: boolean;
 }
 
 /**
@@ -560,10 +575,15 @@ export async function changeEnrollment(query: ChangeEnrollmentQuery): Promise<En
   }
   const coverageLevelKey = query.coverageLevelKey ?? undefined;
   return withOrgTransaction(orgId, async () => {
-    await requireHrmBenefitsManage(db, orgId, actorId);
+    // HR ordering is unchanged: the manage grant refuses before the
+    // enrollment row is touched. The self path authorizes against the
+    // row's own employment instead (it must load first to name it).
+    if (query.selfRequest !== true) await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const current = await loadEnrollment(db, orgId, enrollmentId);
-    const subject = await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, current.employmentId);
+    const subject = query.selfRequest
+      ? await requireOwnEmploymentForBenefitsSelf(db, orgId, actorId, current.employmentId)
+      : await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, current.employmentId);
     if (current.status !== "active") {
       throw new BenefitsError(
         "BAD_STATE",
