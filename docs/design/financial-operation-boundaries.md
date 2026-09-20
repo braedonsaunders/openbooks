@@ -63,3 +63,45 @@ family order; runtime consumers use keyed lookup, name validation compares
 membership, and contract generation sorts keys. Generated prop contracts remain
 byte-identical. Boundary tests enforce a 200-line composition limit, 500-line
 family limits and the absence of reverse imports.
+
+
+## Final mutation evidence
+
+The full database-mode run at `1d6e4fec443071149393ad5545e13fdc1a55d311`
+measured all 32 configured targets, sampling up to 25 mutants per target with
+240-second timeouts. The atomic publisher accepted the report: 539 assertion
+kills, 129 survivors, 3 timeouts, zero errors, zero skipped mutants (671 measured).
+Every existing and inherited floor passed, including when timeout credit is
+excluded. This is sampled regression evidence, not complete branch coverage or
+an independent accounting certification.
+
+Timeouts were posting-effects line 335 (`0` to `1`) and line 239 (`!id` guard
+negation), and sync/applications line 152 (`1` to `0`). The existing scoring
+policy includes timeouts: effects reports 1.0, but assertion kills alone are
+23/25 (0.92), above its 0.20 floor; applications reports 0.40, but assertion
+kills alone are 9/25 (0.36), above its unchanged zero floor. No passing floor
+depends on a timeout. The zero applications floor remains a weak historical
+ratchet; this work does not claim otherwise.
+
+First floors, ratified from this full run only, are Canada statutory 20/23,
+Canada employer levies 15/25, and US statutory 15/23, all in database mode.
+These preserve demonstrated detection as regression minima. The remaining
+3, 10, and 8 survivors respectively remain coverage obligations; these floors
+do not establish adequate statutory coverage by themselves. No prior floor
+was reduced. Each extracted target retains its predecessor's ratified floor.
+
+Five initially low targets were repaired by mapping existing owner tests:
+earning-lines (union/fringe/adjustments), posting-document (deferred effects),
+prepare and commit (atomic posting, inventory, allocations), and replay
+(source correction and expense settlement). Payment-documents separately gained
+a real persisted entity-selection assertion. Employer levies also gained its
+previously omitted existing Quebec HSF suite; US statutory gained its existing
+MFJ/FICA/SUI/GL run scenario. A mapping repair and a new assertion are distinct
+changes and neither implies every branch is now covered.
+
+The run used an isolated template matching the measured checkout, a private
+nonce-marked database, the database-bypass preload, and scratch-owned TypeScript
+resolution. Both database and template were dropped afterwards. CI-form
+workspace typechecks passed on the measured source; targeted mutation harness
+and evidence checks passed 36/36 with zero skips after publication. Combined
+unit and full integration gates remain the integrator's landing obligation.
