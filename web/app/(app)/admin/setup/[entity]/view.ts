@@ -35,6 +35,7 @@ import {
   type SetupColumnKind,
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
+import { resolveLocale } from '../../../../../lib/locale'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 
 /**
@@ -207,7 +208,7 @@ export async function loadSetupEntity(
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
         equipment: featureEnabled(features, 'equipment'),
         fieldTickets: featureEnabled(features, 'fieldTickets'),
-      }))
+      }), await resolveLocale())
     : null
 
   const t = await getTranslations('admin.setup')

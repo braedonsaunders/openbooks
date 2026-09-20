@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 const { resolveDynamicSetupOptions } = (await import('./dynamic-options.ts')) as {
-  resolveDynamicSetupOptions: (entity: unknown) => {
+  resolveDynamicSetupOptions: (entity: unknown, locale: string) => {
     fields?: {
       key: string
       scopedOptions?: {
@@ -50,7 +50,7 @@ function catalogLabel(labelKey: string): string {
 const CANADIAN_MARKERS = /RPP|RRSP|T4127|factor F|\(U1\)|\bF2\b/
 
 test('non-Canadian packs render their own treatment names, not Canadian factors', () => {
-  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'))
+  const entity = resolveDynamicSetupOptions(SETUP_ENTITY_BY_KEY.get('pay-components'), 'en')
   const treatment = entity.fields?.find((field) => field.key === 'taxTreatment')
   assert.ok(treatment?.scopedOptions, 'taxTreatment resolves per-country lists')
   const failures: string[] = []
