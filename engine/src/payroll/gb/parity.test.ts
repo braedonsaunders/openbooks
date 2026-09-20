@@ -245,11 +245,15 @@ test("NIC at an exact half-penny of liability rounds down", () => {
 // Mechanism 3: edition resolution refuses outside 2026/27
 // ---------------------------------------------------------------------------
 
-test("pay dates outside 2026/27 throw, boundary dates compute", () => {
+test("pay dates outside the transcribed years throw, boundary dates resolve", () => {
   assert.equal(gbResolveTaxYear("2026-04-06"), 2026);
   assert.equal(gbResolveTaxYear("2027-04-05"), 2026);
   assert.equal(gbResolveTaxYear("2026-12-25"), 2026);
-  for (const date of ["2026-04-05", "2027-04-06", "2025-04-06", "2028-01-01", "2027-06-06"]) {
+  // Prior years resolve to their own tables (rates-2025.ts, rates-2024.ts);
+  // only dates outside every transcribed year throw.
+  assert.equal(gbResolveTaxYear("2025-04-06"), 2025);
+  assert.equal(gbResolveTaxYear("2024-04-06"), 2024);
+  for (const date of ["2024-04-05", "2027-04-06", "2023-06-06", "2028-01-01", "2027-06-06"]) {
     assert.throws(() => gbResolveTaxYear(date), /no transcribed tables/, date);
   }
 });

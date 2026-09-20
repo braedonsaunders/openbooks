@@ -3,7 +3,8 @@
  * engine/src/payroll/gb/compute-statutory.test.ts`.
  *
  * The arithmetic lives in calculate.ts (see parity.test.ts); these prove the
- * wrapper's plumbing: edition refusal on BOTH sides of 2026/27, the SCT
+ * wrapper's plumbing: edition refusal outside every transcribed year, a
+ * prior-year correction pricing its own tables end to end, the SCT
  * guard, the P6/P9 code requirement, the cumulative completeness gate, and
  * the pushed lines plus GB factor keys. The database is a hand-rolled fake:
  * tests that must not read YTD fail the fake's `execute` loudly, proving
@@ -118,11 +119,36 @@ const NOTICE_1257L = {
   gb_tax_code_notice: { tax_code: "1257L", non_cumulative: null },
 };
 
-test("pay dates before and after 2026/27 throw without touching the database", async () => {
-  for (const payDate of ["2026-04-05", "2025-06-06", "2027-04-06", "2028-01-01"]) {
+test("pay dates outside every transcribed year throw without touching the database", async () => {
+  for (const payDate of ["2024-04-05", "2027-04-06", "2028-01-01"]) {
     const { ctx } = gbContext({ payDate, codes: NOTICE_1257L });
     await assert.rejects(() => computeGbStatutory(ctx), /no transcribed tables/, payDate);
   }
+});
+
+test("a 2025/26 correction prices the 2025 tables end to end", async () => {
+  // Month 1, £4,000, 1257L cumulative from zero priors: free pay 1,047.50
+  // (12,570 × 1/12), taxable 2,952.50 at 20% → £590.50. NIC from the 2025
+  // thresholds at the 15% employer rate: employee (4,000 − 1,048) × 8% =
+  // £236.16; employer (4,000 − 417) × 15% = £537.45.
+  const { ctx, pushed } = gbContext({
+    payDate: "2025-04-06",
+    taxYear: 2025,
+    tx: stubTx(EMPTY_YTD),
+    income: "4000",
+    pensionable: "4000",
+    codes: NOTICE_1257L,
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(factors.GB_TAX, "590.5000");
+  assert.deepEqual(pushed.map((line) => line.amount), ["590.5000", "236.1600", "537.4500"]);
+});
+
+test("a pay date is never priced from another year's tables", async () => {
+  // 2025-06-06 falls in 2025/26: a run filed as tax year 2026 is refused by
+  // name naming both years, not priced from the 2026 tables.
+  const { ctx } = gbContext({ payDate: "2025-06-06", taxYear: 2026, codes: NOTICE_1257L });
+  await assert.rejects(() => computeGbStatutory(ctx), /in 2025 against the run's tax year 2026/);
 });
 
 test("an S-less code on an SCT run is refused by name, never fallen through", async () => {
