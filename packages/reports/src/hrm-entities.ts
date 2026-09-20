@@ -34,6 +34,7 @@ export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
 export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
 export const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
 export const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
+export const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -50,6 +51,7 @@ const HRM_REQUEST_STATUSES = [
 const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
 
 const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
+const HRM_ENROLLMENT_STATUSES = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const
 
 const HRM_REQUISITION_STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
 const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
@@ -575,5 +577,46 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 't.employment_id' },
     ],
     defaultSort: { column: 'terminated_on', direction: 'desc' },
+    key: 'hrm_benefit_enrollments',
+    label: 'Benefit enrolments',
+      'One row per benefit election — person, employer, department at election, plan and coverage tier, status, and the stored per-period employee and employer amounts in plan currency. Requires the HRM benefits permission.',
+    // One row per hrm_benefit_enrollments row with its stored amounts: a
+    // later plan repricing never rewrites these figures, so SUM over a
+    // period is the cost the org actually owes. The department is the
+    // primary assignment effective on the election start — the same
+    // half-open containment the absence entity uses — NULL when no primary
+    // covered the day (an unattributed bucket, never dropped and never
+    // misattributed). This entity never joins the payroll ledger: election
+    // amounts here, money movement in payroll's own entities.
+    from: `hrm_benefit_enrollments e
+      JOIN hrm_benefit_plans p ON p.id = e.plan_id AND p.org_id = e.org_id
+      JOIN worker_employments emp ON emp.id = e.employment_id AND emp.org_id = e.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = e.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id
+      LEFT JOIN hrm_benefit_plan_levels lvl
+        ON lvl.plan_id = e.plan_id AND lvl.org_id = e.org_id AND lvl.level_key = e.coverage_level_key
+        ON pa.employment_id = e.employment_id AND pa.org_id = e.org_id
+       AND pa.effective_from <= e.effective_from
+       AND (pa.effective_to IS NULL OR pa.effective_to > e.effective_from)
+      LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = e.org_id`,
+    orgColumn: 'e.org_id',
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_BENEFITS_READ_PERMISSION,
+    // The election start is the fact: the period picker narrows cost by
+    // the month coverage began, so a mid-year election attributes to its
+    // own period, never to the plan year.
+    defaultPeriodField: 'effective_from',
+      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'e.effective_from' },
+      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.code' },
+      { key: 'plan_name', label: 'Plan name', kind: 'text', expr: 'p.name' },
+      { key: 'coverage', label: 'Coverage', kind: 'text', expr: 'lvl.label' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'e.status', options: HRM_ENROLLMENT_STATUSES },
+      { key: 'employee_amount', label: 'Employee amount', kind: 'number', expr: 'e.employee_amount_per_period' },
+      { key: 'employer_amount', label: 'Employer amount', kind: 'number', expr: 'e.employer_amount_per_period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
+      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'e.effective_to' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
+      { key: 'id', label: 'Enrolment (id)', kind: 'uuid', expr: 'e.id' },
+    defaultSort: { column: 'effective_from', direction: 'desc' },
   },
 ]

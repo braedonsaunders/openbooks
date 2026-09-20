@@ -676,6 +676,10 @@
       "hrm_turnover": {
         "label": "Turnover",
         "description": "One row per leaver — person, termination date, tenure in days, exit reason, and the voluntary and regrettable flags from the exit record. Group by termination month and department for the period-by-department leaver table; rates come from the Retention panel."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Benefit enrolments",
+        "description": "One row per benefit election — person, employer, department at election, plan and coverage tier, status, and stored per-period amounts. Requires the HRM benefits permission."
       }
     },
     "columns": {
@@ -1281,7 +1285,23 @@
         "hours": "Hours",
         "source": "Source",
         "employment_id": "Employment (id)",
-        "id": "Absence (id)"
+        "id": "Absence (id)",
+        "hrm_benefit_enrollments": {
+          "effective_from": "Effective from",
+          "person": "Person",
+          "employer": "Employer",
+          "department": "Department",
+          "plan": "Plan",
+          "plan_name": "Plan name",
+          "coverage": "Coverage",
+          "status": "Status",
+          "employee_amount": "Employee amount",
+          "employer_amount": "Employer amount",
+          "currency": "Currency",
+          "effective_to": "Effective to",
+          "employment_id": "Employment (id)",
+          "id": "Enrolment (id)"
+        }
       },
       "hrm_requisitions": {
         "number": "Number",

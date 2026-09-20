@@ -16,6 +16,7 @@ import { employmentMigration } from './articles/employment-migration'
 import { positionsAndHeadcount } from './articles/positions-and-headcount'
 import { leaveTimeVersusValue } from './articles/leave-time-versus-value'
 import { recruitingFunnel } from './articles/recruiting-funnel'
+import { benefitsEnrollment } from './articles/benefits-enrollment'
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -249,6 +250,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, leaveTimeVersusValue, recruitingFunnel, fieldTickets, subcontractorCompliance,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, leaveTimeVersusValue, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, leaveTimeVersusValue, benefitsEnrollment, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

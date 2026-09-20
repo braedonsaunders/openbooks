@@ -896,6 +896,74 @@ export async function validateEntityIntegrity(
       if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
     }
   }
+  // HRM benefit plans (0197): the coordinator-ruled component validation on
+  // plan save — a side with a cost and no component is refused by name,
+  // the employer component must be kind employer_contribution (so employer
+  // money can never reach net pay), the employee component kind deduction.
+  // prorationBasis carries no drawer default, so a missing rule is refused
+  // here with its remedy, never stored as a guess.
+  if (entity.key === 'benefit-plans') {
+    const proration = (body.prorationBasis ?? null) as string | null
+    if (proration !== 'full_month' && proration !== 'daily') {
+      return 'Declare how partial months pay: full_month carries the whole month, daily scales by covered days — the plan cannot save without it'
+    }
+    for (const side of ['employeeCostBasis', 'employerCostBasis'] as const) {
+      const basis = (body[side] ?? null) as string | null
+      if (basis !== 'per_period' && basis !== 'per_month' && basis !== 'per_year' && basis !== 'percent_of_pay') {
+        return 'Price each side as per_period, per_month, per_year, or percent_of_pay'
+      }
+    }
+    const currency = (body.currency ?? null) as string | null
+    if (currency !== null && !/^[A-Z]{3}$/.test(currency)) {
+      return 'Currency is a 3-letter ISO code in capitals — HR never converts it, the run refuses a mismatch'
+    }
+    const waiting = (body.waitingPeriodDays ?? null) as number | null
+    if (waiting !== null && (!Number.isInteger(waiting) || waiting < 0)) {
+      return 'The waiting period is a non-negative whole number of days'
+    }
+    const employeeComponent = (body.employeePayComponentId ?? null) as string | null
+    const employerComponent = (body.employerPayComponentId ?? null) as string | null
+    const provider = (body.providerPartyId ?? null) as string | null
+    const subsidiary = (body.employerSubsidiaryId ?? null) as string | null
+    const refs = await executor.execute(sql`
+      select
+        ${provider ? sql`exists(select 1 from parties where id = ${provider} and org_id = ${orgId})` : sql`true`} as provider_ok,
+        ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+        ${employeeComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employeeComponent} and org_id = ${orgId})` : sql`null`} as employee_component,
+        ${employerComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employerComponent} and org_id = ${orgId})` : sql`null`} as employer_component
+    `)
+    if (!refs.rows[0]?.provider_ok) return 'The provider party is not visible in this organization'
+    if (!refs.rows[0]?.subsidiary_ok) return 'The employer subsidiary is not visible in this organization'
+    const employeeRow = refs.rows[0]?.employee_component as { kind?: string | null; active?: boolean } | null
+    if (employeeComponent && !employeeRow?.kind) return 'The employee pay component is not visible in this organization'
+    if (employeeComponent && employeeRow?.active !== true) return 'The employee pay component is inactive — reactivate it or link its replacement'
+    if (employeeComponent && employeeRow?.kind !== 'deduction') {
+      return 'The employee component must be kind deduction so a contribution can never inflate net pay'
+    }
+    const employerRow = refs.rows[0]?.employer_component as { kind?: string | null; active?: boolean } | null
+    if (employerComponent && !employerRow?.kind) return 'The employer pay component is not visible in this organization'
+    if (employerComponent && employerRow?.active !== true) return 'The employer pay component is inactive — reactivate it or link its replacement'
+    if (employerComponent && employerRow?.kind !== 'employer_contribution') {
+      return 'The employer component must be kind employer_contribution so employer money can never reach net pay'
+    }
+  }
+  // HRM benefit pricing tiers (0197): the parent plan must live in this
+  // org; keys and labels are non-blank; costs and position are explicit.
+  if (entity.key === 'benefit-plan-levels') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select plan_id as "planId" from hrm_benefit_plan_levels where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit tier not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const plan = (values.planId ?? null) as string | null
+    const planOk = plan
+      ? (await executor.execute(sql`select exists(select 1 from hrm_benefit_plans where id = ${plan} and org_id = ${orgId}) as ok`)).rows[0]?.ok
+      : false
+    if (!planOk) return 'The parent benefit plan is not visible in this organization'
+  }
   // HRM process template steps (0193): named owners must be visible parties
   // (named_party needs exactly one, other owners need none), and the parent
   // template must live in this org.

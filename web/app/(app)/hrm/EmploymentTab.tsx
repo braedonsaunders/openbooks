@@ -69,6 +69,18 @@ type ExitState = {
   status: 'hidden' | 'loading' | 'ready' | 'error'
   record: ExitRecord | null
   message: string | null
+type BenefitElection = {
+  planCode: string
+  planName: string
+  coverageLabel: string | null
+  status: string
+  employeeAmountPerPeriod: string | null
+  employerAmountPerPeriod: string | null
+  currency: string
+
+type BenefitDependent = {
+  displayName: string
+  relationship: string
 }
 
 type RecordState = {
@@ -78,6 +90,9 @@ type RecordState = {
   asOfRefusal: { code: string; message: string } | null
   changeRequests: ChangeRequest[]
   refusalMessage: string | null
+  benefits: 'hidden' | 'loading' | 'ready'
+  benefitElections: BenefitElection[]
+  benefitDependents: BenefitDependent[]
 }
 
 function todayCivil(): string {
@@ -107,6 +122,7 @@ export function EmploymentTab({
   const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
+    benefits: 'loading', benefitElections: [], benefitDependents: [],
   })
   const requestId = useRef(0)
   const reload = (): void => {
@@ -134,7 +150,38 @@ export function EmploymentTab({
           asOfRefusal: record.asOfRefusal ?? null,
           changeRequests: Array.isArray(record.changeRequests) ? record.changeRequests : [],
           refusalMessage: null,
+          benefits: 'loading',
+          benefitElections: [],
+          benefitDependents: [],
         })
+        // Benefits ride the benefits APIs beside the record: a 403 (no
+        // benefits grant) hides the section instead of failing the tab —
+        // the employment record is readable without benefits access.
+        try {
+          const [enrollmentsRes, dependentsRes] = await Promise.all([
+            fetch(`/api/hrm/enrollments?employmentId=${employmentId}`),
+            fetch(`/api/hrm/dependents?employmentId=${employmentId}`),
+          ])
+          if (cancelled || requestId.current !== current) return
+          if (enrollmentsRes.status === 403 || dependentsRes.status === 403) {
+            setState((s) => ({ ...s, benefits: 'hidden' }))
+            return
+          }
+          if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, 'failed to load benefits'))
+          if (!dependentsRes.ok) throw new Error(await readApiErrorMessage(dependentsRes, 'failed to load benefits'))
+          const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
+          const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({
+            ...s,
+            benefits: 'ready',
+            benefitElections: Array.isArray(enrollments.enrollments) ? enrollments.enrollments : [],
+            benefitDependents: Array.isArray(dependents.dependents) ? dependents.dependents : [],
+          }))
+        } catch {
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({ ...s, benefits: 'hidden' }))
+        }
       } catch (e) {
         if (cancelled || requestId.current !== current) return
         const message = (e as Error).message
@@ -394,6 +441,44 @@ export function EmploymentTab({
           </ul>
         )}
       </section>
+      {state.benefits !== 'hidden' ? (
+      <section aria-label={t('employment.benefits.title')}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.benefits.title')}
+          </h3>
+          <Link href="/hrm/benefits" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('employment.benefits.viewAll')}
+          </Link>
+        </div>
+        {state.benefits === 'ready' && state.benefitElections.length === 0 && state.benefitDependents.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.benefits.empty')}</p>
+        ) : null}
+        {state.benefits === 'ready' && state.benefitElections.length > 0 ? (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {state.benefitElections.map((election) => (
+              <li key={election.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {election.planName}
+                  {election.coverageLabel ? ` · ${election.coverageLabel}` : ''}
+                </span>
+                <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">
+                  {election.employeeAmountPerPeriod ?? '–'} / {election.employerAmountPerPeriod ?? '–'} {election.currency}
+                </span>
+                <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {t.has(`benefits.statusNames.${election.status}`) ? t(`benefits.statusNames.${election.status}`) : election.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {state.benefits === 'ready' && state.benefitDependents.length > 0 ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            {t('employment.benefits.dependents', { count: state.benefitDependents.length, names: state.benefitDependents.map((d) => d.displayName).join(', ') })}
+          </p>
+        ) : null}
+      </section>
+      ) : null}
       {proposing && canManageHrm ? (
         <ChangeRequestDrawer
           employmentId={employmentId}

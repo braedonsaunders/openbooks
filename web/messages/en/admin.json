@@ -2450,6 +2450,16 @@
         "title": "Review questions",
         "singularTitle": "Review question",
         "description": "Prompts inside a review template section: rating, text, or both. Required prompts must be answered before submit."
+      },
+      "benefit-plans": {
+        "title": "Benefit plans",
+        "singularTitle": "Benefit plan",
+        "description": "What the org offers beyond pay — health, dental, retirement — with cost figures, the proration rule, and pay-component links. Tax treatment lives on the components, never here."
+      },
+      "benefit-plan-levels": {
+        "title": "Benefit tiers",
+        "singularTitle": "Benefit tier",
+        "description": "Coverage tiers per plan — employee-only, family — with the tier costs copied onto elections at elect time."
       }
     },
     "fields": {
@@ -2747,7 +2757,20 @@
       "answerKind": "Answer kind",
       "ratingScaleMin": "Scale minimum",
       "ratingScaleMax": "Scale maximum",
-      "ratingScaleLabels": "Scale labels"
+      "ratingScaleLabels": "Scale labels",
+      "providerPartyId": "Provider",
+      "employerSubsidiaryId": "Employer subsidiary",
+      "employeeCostBasis": "Employee cost basis",
+      "employeeCost": "Employee cost",
+      "employerCostBasis": "Employer cost basis",
+      "employerCost": "Employer cost",
+      "pretax": "Pre-tax",
+      "prorationBasis": "Proration",
+      "employeePayComponentId": "Employee component",
+      "employerPayComponentId": "Employer component",
+      "waitingPeriodDays": "Waiting period (days)",
+      "requiresApproval": "Requires approval",
+      "levelKey": "Tier key"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2813,7 +2836,20 @@
       "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not.",
       "hrmReviewScaleMin": "Lowest rating the scale accepts, for example 1.",
       "hrmReviewScaleMax": "Highest rating the scale accepts, for example 5.",
-      "hrmReviewScaleLabels": "Optional endpoint labels, lowest first."
+      "hrmReviewScaleLabels": "Optional endpoint labels, lowest first.",
+      "benefitKind": "Org-declared kind — health, dental, vision, life, retirement, wellness, other. Free text, never a closed list.",
+      "benefitProvider": "Vendor or carrier behind the plan, if any.",
+      "benefitSubsidiary": "Employer subsidiary offered the plan; empty means every subsidiary.",
+      "benefitCurrency": "Plan currency, three letters. Stored on every election and never converted.",
+      "benefitCostBasis": "How the cost figure reads: per pay period, per month, per year, or percent of pay.",
+      "benefitCost": "Cost figure in the plan currency. Percent-of-pay figures are percentages.",
+      "benefitPretax": "The org's own pre-tax declaration; payroll packs interpret it.",
+      "benefitProrationBasis": "Required: how a partial month pays. Full month carries the whole month; daily scales by covered days.",
+      "benefitEmployeeComponent": "Deduction component pricing the employee rows. Required when the plan prices an employee cost.",
+      "benefitEmployerComponent": "Employer-contribution component pricing the employer rows. Required when the plan prices an employer cost.",
+      "benefitWaitingPeriod": "Days of service before the plan may be elected.",
+      "benefitRequiresApproval": "Elections land pending until a manager approves them.",
+      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings."
     },
     "options": {
       "payFrequency": {
@@ -3200,6 +3236,16 @@
         "rating": "Rating",
         "text": "Text",
         "ratingAndText": "Rating and text"
+      },
+      "benefitCostBasis": {
+        "per_period": "Per pay period",
+        "per_month": "Per month",
+        "per_year": "Per year",
+        "percent_of_pay": "Percent of pay"
+      },
+      "benefitProrationBasis": {
+        "full_month": "Full month — the whole month whatever the dates",
+        "daily": "Daily — scaled by covered days"
       }
     },
     "payroll": {
@@ -3948,7 +3994,9 @@
       "deductionProtection": "Deduction protection",
       "basisCaps": "Basis caps",
       "holidayElection": "Election on a statutory holiday",
-      "holidayCompanyDay": "Company holiday"
+      "holidayCompanyDay": "Company holiday",
+      "benefitCosts": "Costs and proration",
+      "benefitComponents": "Pay components"
     },
     "guide": {
       "hero": {

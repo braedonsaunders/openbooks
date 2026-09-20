@@ -16,6 +16,7 @@ import { validateCustomQuery } from './validate'
 // the process gate, not the employment one.
 
 const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_benefit_enrollments'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -26,6 +27,7 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_leave_absences: 'hrm.leave.read',
   hrm_requisitions: 'hrm.recruiting.read',
   hrm_applications: 'hrm.recruiting.read',
+  hrm_benefit_enrollments: 'hrm.benefits.read',
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -55,6 +57,7 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_leave_absences: 'a.org_id',
     hrm_requisitions: 'r.org_id',
     hrm_applications: 'a.org_id',
+    hrm_benefit_enrollments: 'e.org_id',
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -65,6 +68,7 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_leave_absences: 'e.employer_subsidiary_id',
     hrm_requisitions: 'r.employer_subsidiary_id',
     hrm_applications: 'r.employer_subsidiary_id',
+    hrm_benefit_enrollments: 'emp.employer_subsidiary_id',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!

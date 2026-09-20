@@ -109,6 +109,9 @@ const READER_PERMS = [
   // read grant so every read tool runs rather than refusing.
   "hrm.performance.read",
   "hrm.retention.read",
+  // Benefits elections (0197) read through the benefits read service;
+  // the harness reader holds the grant so the read tool runs.
+  "hrm.benefits.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

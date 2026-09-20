@@ -17,6 +17,7 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
 import { loadLeavePanel, type LeavePanelData } from './leave'
+import { loadBenefitsPanel, type BenefitsPanelData } from './benefits'
 
 /**
  * Human Resources module home — one read for the workspace landing cockpit:
@@ -195,6 +196,8 @@ export interface HrmHomeData {
   leavePanel: LeavePanelData | null
   /** Recruiting figures; null without hrm.recruiting.read. */
   recruiting: HrmRecruitingPanelData | null
+  /** Open windows, pending approvals, months missing inputs; null without hrm.benefits.read. */
+  benefitsPanel: BenefitsPanelData | null
 }
 
 /**
@@ -699,5 +702,9 @@ export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPa
     interviewsValue: String(overview.interviewsThisWeek),
     viewAll: t('home.recruiting.viewAll'),
     viewAllHref: '/hrm/recruiting',
+    leavePanel: await loadLeavePanel(authz),
+    // Benefits panel: open windows, pending approvals, elections missing
+    // inputs for the current month. Null without the benefits grant.
+    benefitsPanel: await loadBenefitsPanel(authz),
   }
 }
