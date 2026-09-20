@@ -1396,6 +1396,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/compliance': {
+    route: '/hrm/compliance',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compliance/view')
+      return {
+        load: (input) => m.loadCompliancePageData(input.searchParams ?? {}),
+        spec: (data) => m.complianceSpec(data as never),
+      }
+    },
+  },
   '/hrm/leave': {
     route: '/hrm/leave',
     segments: [],

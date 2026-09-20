@@ -181,6 +181,10 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'grant-control-cell',
   'health-hero',
   'hrm-change-request-actions',
+  // HR-13 begin
+  'hrm-compliance-actions',
+  'hrm-compliance-generate',
+  // HR-13 end
   'hrm-cycle-dialog',
   'hrm-cycle-drawer',
   'hrm-exit-drawer',
