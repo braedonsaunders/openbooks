@@ -1,17 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  TAX_BASIS_APPLICABLE_SIDES,
+  TAX_BASIS_APPLICABLE_SIDE_LABELS,
   TAX_BASIS_BUYER_FIELD_NAMES,
   TAX_BASIS_FIELDS,
   TAX_BASIS_REGIMES,
   TAX_BASIS_RELATIONSHIPS,
+  TAX_BASIS_SOURCE_KINDS,
   TaxBasisPolicyError,
+  attachTaxBasisSource,
   caDeemedAcquisitionPayment,
+  caOrdinaryCapitalGainsInclusion,
   caStatutoryProceeds,
+  freezeCaRegimeBasis,
   isTaxBasisCalendarDate,
+  taxBasisApplicableSide,
   taxBasisFieldRequired,
   taxBasisFieldVisible,
+  taxBasisSideApplies,
+  taxBasisSourceOperation,
+  taxBasisSourceRegimes,
+  taxWorkpaperBuyerAddition,
+  taxWorkpaperSellerDisposition,
   usDispositionProceeds,
+  usRegimeWorkpaperOutcome,
   validateTaxRegimeBasis,
   type CaCcaRegimeBasis,
   type TaxBasisDraft,
@@ -81,6 +94,7 @@ test("named buyer fields stay off a customer partial disposal across every regim
           regime,
           relationship,
           sourceOperation: "partial_disposal",
+          applicable: "seller",
           rolloverElection: "none",
           recognition: "nontaxable",
           transferorCharacter: "resident_individual",
@@ -108,6 +122,7 @@ test("seller ITA 69 fair market value stays required on a CA non-arm's-length sa
     regime: "ca_cca",
     relationship: "non_arms_length",
     sourceOperation: "partial_disposal",
+    applicable: "seller",
     rolloverElection: "none",
   };
   assert.equal(taxBasisFieldRequired(field("fairMarketValue"), draft), true);
@@ -121,6 +136,7 @@ test("US related status does not require the transferred asset's FMV as amount r
     regime: "us_macrs",
     relationship: "non_arms_length",
     sourceOperation: "partial_disposal",
+    applicable: "seller",
     recognition: "taxable",
     amountRealizedRule: "amount_realized",
   };
@@ -136,13 +152,17 @@ test("CA buyer capital-cost facts become required on an intercompany non-arm's-l
     regime: "ca_cca",
     relationship: "non_arms_length",
     sourceOperation: "intercompany_transfer",
+    applicable: "both",
     rolloverElection: "none",
     transferorCharacter: "corporation",
   };
   assert.equal(taxBasisFieldRequired(field("payment"), draft), true);
   assert.equal(taxBasisFieldRequired(field("sellerOriginalCapitalCost"), draft), true);
   assert.equal(taxBasisFieldRequired(field("transferorCharacter"), draft), true);
-  assert.equal(taxBasisFieldRequired(field("capitalGainsInclusionRate"), draft), true);
+  assert.equal(
+    TAX_BASIS_FIELDS.some((row) => row.name === "capitalGainsInclusionRate"),
+    false,
+  );
   assert.equal(taxBasisFieldRequired(field("fairMarketValue"), draft), true);
 });
 
@@ -151,6 +171,7 @@ test("NZ commissioner and ATV buyer exceptions are not required on a customer sa
     regime: "nz_pool",
     relationship: "non_arms_length",
     sourceOperation: "partial_disposal",
+    applicable: "seller",
   };
   assert.equal(taxBasisFieldRequired(field("commissionerActualCost"), draft), false);
   assert.equal(taxBasisFieldRequired(field("consolidatingGroupAtv"), draft), false);
@@ -199,6 +220,7 @@ test("validateTaxRegimeBasis refuses a CA intercompany non-arm's-length transfer
         regime: "ca_cca",
         relationship: "non_arms_length",
         sourceOperation: "intercompany_transfer",
+        applicable: "both",
         originalCapitalCost: "10000.00",
         allocationMethod: "ascertainable_amount",
         allocatedCapitalCost: "4000.00",
@@ -327,4 +349,146 @@ test("Pub 544 amount realized is not replaced by the transferred asset's FMV mer
     }),
     "1000.00",
   );
+});
+
+test("full disposal and legacy write-off are tax sources under partial_disposal", () => {
+  assert.deepEqual([...TAX_BASIS_SOURCE_KINDS], [
+    "partially_disposed",
+    "transferred",
+    "disposed",
+    "written_off",
+  ]);
+  assert.equal(taxBasisSourceOperation("disposed"), "partial_disposal");
+  assert.equal(taxBasisSourceOperation("written_off"), "partial_disposal");
+  assert.equal(taxBasisSourceOperation("partially_disposed"), "partial_disposal");
+  assert.equal(taxBasisSourceOperation("transferred"), "intercompany_transfer");
+});
+
+test("ITA 38(a) ordinary inclusion is one-half and freezes on the workpaper", () => {
+  const edition = caOrdinaryCapitalGainsInclusion("2026-06-15");
+  assert.equal(edition.rate, "0.5");
+  assert.match(edition.citation, /^ITA 38\(a\)/);
+  const frozen = freezeCaRegimeBasis(caNal({
+    capitalGainsInclusionRate: undefined,
+    capitalGainsInclusionRateCitation: undefined,
+  }), "2026-06-15");
+  assert.equal(frozen.capitalGainsInclusionRate, "0.5");
+  assert.match(frozen.capitalGainsInclusionRateCitation ?? "", /^ITA 38\(a\)/);
+  const already = freezeCaRegimeBasis(frozen, "2026-06-15");
+  assert.equal(already.capitalGainsInclusionRate, "0.5");
+});
+
+test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () => {
+  const carryover: UsMacrsRegimeBasis = {
+    regime: "us_macrs",
+    relationship: "non_arms_length",
+    dispositionTrigger: "section_168i7b",
+    originalUnadjustedBasis: "10000.00",
+    remainingUnadjustedBasis: "6000.00",
+    disposedUnadjustedBasis: "4000.00",
+    placedInServiceOn: "2024-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    recognition: "nontaxable",
+    relatedPerson: true,
+    carryoverBasis: "4000.00",
+    excessBasis: "250.00",
+  };
+  const computed = usRegimeWorkpaperOutcome(carryover, "intercompany_transfer", "both");
+  assert.equal(computed.amountRealized, null);
+  assert.equal(computed.recognition, "nontaxable");
+  assert.equal(computed.carryoverBasis, "4000.00");
+  assert.equal(taxWorkpaperSellerDisposition("us_macrs", computed), "4000.0000");
+  assert.equal(taxWorkpaperBuyerAddition("us_macrs", computed), "4250.00");
+});
+
+test("classified seller and receiver derive seller, buyer, or both — never an election", () => {
+  assert.deepEqual([...TAX_BASIS_APPLICABLE_SIDES], ["seller", "buyer", "both"]);
+  assert.deepEqual(TAX_BASIS_APPLICABLE_SIDE_LABELS, {
+    seller: "Seller",
+    buyer: "Buyer",
+    both: "Seller and buyer",
+  });
+  assert.equal(taxBasisApplicableSide(true, false), "seller");
+  assert.equal(taxBasisApplicableSide(false, true), "buyer");
+  assert.equal(taxBasisApplicableSide(true, true), "both");
+  assert.equal(taxBasisApplicableSide(false, false), null);
+  assert.equal(taxBasisSideApplies("both", "seller"), true);
+  assert.equal(taxBasisSideApplies("both", "buyer"), true);
+  assert.equal(taxBasisSideApplies("seller", "buyer"), false);
+  assert.equal(taxBasisSideApplies("buyer", "seller"), false);
+  assert.deepEqual(
+    taxBasisSourceRegimes(
+      [{ code: "ca_cca" }],
+      [{ code: "us_macrs" }],
+      true,
+    ).map((row) => [row.code, row.applicable]),
+    [["ca_cca", "seller"], ["us_macrs", "buyer"]],
+  );
+  assert.deepEqual(
+    taxBasisSourceRegimes([{ code: "ca_cca" }], [{ code: "us_macrs" }], false).map((row) => [
+      row.code,
+      row.applicable,
+    ]),
+    [["ca_cca", "seller"]],
+  );
+});
+
+test("buyer-only US hides seller proceeds; seller-only CA hides buyer payment", () => {
+  const buyerOnlyUs = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "arms_length", recognition: "taxable" },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(taxBasisFieldVisible(field("statutoryProceeds"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), buyerOnlyUs), false);
+  assert.equal(taxBasisFieldRequired(field("buyerCost"), buyerOnlyUs), true);
+  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), buyerOnlyUs), true);
+
+  const sellerOnlyCa = attachTaxBasisSource(
+    { regime: "ca_cca", relationship: "non_arms_length", rolloverElection: "none" },
+    { sourceOperation: "intercompany_transfer", applicable: "seller" },
+  );
+  assert.equal(taxBasisFieldRequired(field("originalCapitalCost"), sellerOnlyCa), true);
+  assert.equal(taxBasisFieldRequired(field("statutoryProceeds"), sellerOnlyCa), true);
+  assert.equal(taxBasisFieldVisible(field("payment"), sellerOnlyCa), false);
+  assert.equal(taxBasisFieldRequired(field("payment"), sellerOnlyCa), false);
+});
+
+test("validateTaxRegimeBasis refuses an intercompany row without a classified side", () => {
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis({
+        regime: "ca_cca",
+        relationship: "arms_length",
+        sourceOperation: "intercompany_transfer",
+        originalCapitalCost: "10000.00",
+        allocationMethod: "ascertainable_amount",
+        allocatedCapitalCost: "4000.00",
+        statutoryProceeds: "5000.00",
+        rolloverElection: "none",
+      }),
+    /applicable is derived from the classified seller and receiving assets/,
+    "missing applicable",
+  );
+});
+
+test("validateTaxRegimeBasis accepts buyer-only US taxable cost without seller vintage facts", () => {
+  const row = validateTaxRegimeBasis(
+    {
+      regime: "us_macrs",
+      relationship: "arms_length",
+      recognition: "taxable",
+      relatedPerson: false,
+      placedInServiceOn: "2026-03-15",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+      buyerCost: "4000.00",
+    },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(row.regime, "us_macrs");
+  assert.equal("applicable" in row, false);
+  assert.equal("originalUnadjustedBasis" in row, false);
 });

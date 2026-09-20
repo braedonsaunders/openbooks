@@ -43,8 +43,21 @@ export const TAX_BASIS_REGIME_LABELS: Record<TaxBasisRegime, string> = {
 export const TAX_BASIS_SOURCE_OPERATIONS = ["partial_disposal", "intercompany_transfer"] as const;
 export type TaxBasisSourceOperation = (typeof TAX_BASIS_SOURCE_OPERATIONS)[number];
 
-export const TAX_BASIS_SOURCE_KINDS = ["partially_disposed", "transferred"] as const;
+/** Native full disposal under operation partial_disposal writes kind
+ *  `disposed`. Legacy write-offs are `written_off`. Both are tax sources. */
+export const TAX_BASIS_SOURCE_KINDS = [
+  "partially_disposed",
+  "transferred",
+  "disposed",
+  "written_off",
+] as const;
 export type TaxBasisSourceKind = (typeof TAX_BASIS_SOURCE_KINDS)[number];
+
+export function taxBasisSourceOperation(
+  kind: TaxBasisSourceKind,
+): TaxBasisSourceOperation {
+  return kind === "transferred" ? "intercompany_transfer" : "partial_disposal";
+}
 
 export const TAX_BASIS_RELATIONSHIPS = ["arms_length", "non_arms_length"] as const;
 export type TaxBasisRelationship = (typeof TAX_BASIS_RELATIONSHIPS)[number];
@@ -106,10 +119,12 @@ export const MACRS_CONVENTIONS = ["half_year", "mid_quarter", "mid_month"] as co
 export type MacrsConvention = (typeof MACRS_CONVENTIONS)[number];
 
 /** Client POST body. effectiveOn, requiredSubsidiaryIds and receivingAssetId
- *  are derived from the source financial change and must not be supplied. */
+ *  are derived from the source financial change or legacy event and must not
+ *  be supplied. sourceChangeId is null for a legacy event that has no
+ *  financial_change_id; then sourceEventId is required. */
 export interface TaxAssetBasisInput {
-  sourceChangeId: string;
-  sourceEventId?: string;
+  sourceChangeId?: string | null;
+  sourceEventId?: string | null;
   reason: string;
   assessment: string;
   idempotencyKey: string;
@@ -125,11 +140,75 @@ export interface TaxAssetBasisReversalInput {
   idempotencyKey: string;
 }
 
-export interface TaxBasisValidationContext {
-  sourceOperation: TaxBasisSourceOperation;
+/**
+ * Which classified party a regime workpaper is for. Derived from the seller
+ * and receiving assets' tax classification — not an operator election.
+ * `seller`: seller classified, receiver not (or no receiver).
+ * `buyer`: receiver classified, seller not.
+ * `both`: both classified.
+ */
+export const TAX_BASIS_APPLICABLE_SIDES = ["seller", "buyer", "both"] as const;
+export type TaxBasisApplicableSide = (typeof TAX_BASIS_APPLICABLE_SIDES)[number];
+
+export const TAX_BASIS_APPLICABLE_SIDE_LABELS: Record<TaxBasisApplicableSide, string> = {
+  seller: "Seller",
+  buyer: "Buyer",
+  both: "Seller and buyer",
+};
+
+export function taxBasisApplicableSide(
+  sellerClassified: boolean,
+  receiverClassified: boolean,
+): TaxBasisApplicableSide | null {
+  if (sellerClassified && receiverClassified) return "both";
+  if (sellerClassified) return "seller";
+  if (receiverClassified) return "buyer";
+  return null;
 }
 
-/** GET /assets/:id/tax-basis-sources — operator picks a labelled row.
+export function taxBasisSideApplies(
+  applicable: TaxBasisApplicableSide | undefined,
+  side: "seller" | "buyer",
+): boolean {
+  return applicable === "both" || applicable === side;
+}
+
+/** Union of classified seller/receiver regimes with the derived side. */
+export function taxBasisSourceRegimes(
+  seller: readonly { code: TaxBasisRegime; name?: string }[],
+  receiver: readonly { code: TaxBasisRegime; name?: string }[],
+  transfer: boolean,
+): TaxAssetBasisSourceRegime[] {
+  const out: TaxAssetBasisSourceRegime[] = [];
+  for (const code of TAX_BASIS_REGIMES) {
+    const applicable = taxBasisApplicableSide(
+      seller.some((row) => row.code === code),
+      transfer && receiver.some((row) => row.code === code),
+    );
+    if (!applicable) continue;
+    out.push({ code, name: TAX_BASIS_REGIME_LABELS[code], applicable });
+  }
+  return out;
+}
+
+export interface TaxBasisSourceContext {
+  sourceOperation: TaxBasisSourceOperation;
+  applicable: TaxBasisApplicableSide;
+}
+
+export interface TaxBasisValidationContext extends Partial<TaxBasisSourceContext> {
+  sourceOperation: TaxBasisSourceOperation;
+  applicableByRegime?: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>;
+}
+
+/** One classified regime on a GET source row. `applicable` is server-derived. */
+export interface TaxAssetBasisSourceRegime {
+  code: TaxBasisRegime;
+  name: string;
+  applicable: TaxBasisApplicableSide;
+}
+
+/** GET/POST /api/assets/:id/tax-basis — operator picks a labelled row.
  *  Do not ask them to type a UUID. */
 export interface TaxAssetBasisSourceChoice {
   key: string;
@@ -142,7 +221,7 @@ export interface TaxAssetBasisSourceChoice {
   assetLabel: string;
   subsidiaryLabel: string;
   receivingAssetLabel: string | null;
-  regimes: { code: TaxBasisRegime; name: string }[];
+  regimes: TaxAssetBasisSourceRegime[];
   appliedWorkpaper: {
     changeId: string;
     status: "draft" | "pending" | "approved" | "rejected" | "applied";
@@ -158,11 +237,14 @@ export interface TaxAssetBasisSourcesResponse {
 export interface TaxAssetBasisApplyResult {
   changeId: string;
   workpaperId: string;
-  sourceChangeId: string;
+  workpaperIds: string[];
+  sourceChangeId: string | null;
+  sourceEventId: string | null;
   effectiveOn: string;
   requiredSubsidiaryIds: string[];
   receivingAssetId: string | null;
   regimes: TaxBasisRegime[];
+  computed: Record<string, unknown>;
 }
 
 /** Stable service signatures. Implementations land with the workpaper table;
@@ -216,6 +298,7 @@ export interface CaCcaRegimeBasis extends TaxRegimeBasisBase {
   sellerOriginalCapitalCost?: string;
   transferorCharacter?: CaTransferorCharacter;
   capitalGainsInclusionRate?: string;
+  capitalGainsInclusionRateCitation?: string;
   capitalGainsDeductionClaimed?: string;
   rolloverElection: CaRollover;
   electedAmount?: string;
@@ -289,6 +372,7 @@ export type TaxBasisFieldPredicate =
   | { regime: TaxBasisRegime }
   | { relationship: TaxBasisRelationship }
   | { sourceOperation: TaxBasisSourceOperation }
+  | { side: "seller" | "buyer" }
   | { fieldEquals: { name: string; values: readonly string[] } }
   | { fieldTrue: string }
   | { all: TaxBasisFieldPredicate[] }
@@ -305,7 +389,10 @@ export interface TaxBasisFieldMeta {
   help?: string;
 }
 
-const BUYER: TaxBasisFieldPredicate = { sourceOperation: "intercompany_transfer" };
+const BUYER: TaxBasisFieldPredicate = {
+  all: [{ sourceOperation: "intercompany_transfer" }, { side: "buyer" }],
+};
+const SELLER: TaxBasisFieldPredicate = { side: "seller" };
 
 function labeledChoices<T extends string>(
   values: readonly T[],
@@ -339,8 +426,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "originalCapitalCost",
     label: "Original capital cost of the whole property",
     kind: "decimal",
-    visibleWhen: { regime: "ca_cca" },
-    requiredWhen: { regime: "ca_cca" },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER] },
   },
   {
     name: "allocationMethod",
@@ -352,55 +439,55 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       fmv_prorata: "Fair-market-value pro-rata",
       operator_reasonable: "Other reasonable allocation (must be explained)",
     }),
-    visibleWhen: { regime: "ca_cca" },
-    requiredWhen: { regime: "ca_cca" },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER] },
     help: "Book portion percent and group_component are not the tax allocation.",
   },
   {
     name: "allocatedCapitalCost",
     label: "Allocated capital cost of the part",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_amount", "operator_reasonable"] } }] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_amount", "operator_reasonable"] } }] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_amount", "operator_reasonable"] } }] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_amount", "operator_reasonable"] } }] },
   },
   {
     name: "allocationFraction",
     label: "Ascertainable fraction of capital cost",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_fraction"] } }] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_fraction"] } }] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_fraction"] } }] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["ascertainable_fraction"] } }] },
   },
   {
     name: "allocationReason",
     label: "Reason the allocation is reasonable",
     kind: "text",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata", "operator_reasonable"] } }] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata", "operator_reasonable"] } }] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata", "operator_reasonable"] } }] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata", "operator_reasonable"] } }] },
   },
   {
     name: "partFairMarketValue",
     label: "Fair market value of the part disposed of",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
   },
   {
     name: "retainedFairMarketValue",
     label: "Fair market value of the part retained",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, SELLER, { fieldEquals: { name: "allocationMethod", values: ["fmv_prorata"] } }] },
   },
   {
     name: "statutoryProceeds",
     label: "Actual proceeds / amount realized",
     kind: "decimal",
-    visibleWhen: { any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] },
-    requiredWhen: { any: [
+    visibleWhen: { all: [SELLER, { any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] }] },
+    requiredWhen: { all: [SELLER, { any: [
       { all: [{ regime: "ca_cca" }, { not: { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } } }] },
       { all: [{ regime: "uk_wda" }, { relationship: "arms_length" }] },
       { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
-    ] },
+    ] }] },
     help: "Enter the actual proceeds. ITA 69(1)(b)(i) substitutes FMV only when CA non-arm's-length proceeds are nil or below FMV; above-FMV proceeds are not reduced. US Pub 544 amount realized is money plus FMV of other property or services plus assumed liabilities — not the FMV of the transferred asset merely because related.",
   },
   {
@@ -424,8 +511,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "payment",
     label: "Amount paid (consideration)",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
+    visibleWhen: { all: [{ regime: "ca_cca" }, BUYER] },
+    requiredWhen: { all: [{ regime: "ca_cca" }, BUYER] },
     help: "ITA 69(1)(a) first caps an excessive purchase at FMV. 13(7)(e) then compares that deemed payment to the seller's original cost, not to FMV. Buyer capital cost — not collected on a sale to a customer.",
   },
   {
@@ -449,14 +536,6 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     visibleWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
     requiredWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
     help: "CRA uses the CGE worksheet for resident individuals/certain partnerships and the other worksheet for corporations, non-residents and other partnerships.",
-  },
-  {
-    name: "capitalGainsInclusionRate",
-    label: "Taxable capital-gains inclusion rate",
-    kind: "decimal",
-    visibleWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
-    requiredWhen: { all: [{ regime: "ca_cca" }, { relationship: "non_arms_length" }, BUYER] },
-    help: "Legislative rate for the year. The engine multiplies it by the excess of payment over seller cost. Do not type the taxable gain itself. Buyer capital cost — not collected on a sale to a customer.",
   },
   {
     name: "capitalGainsDeductionClaimed",
@@ -490,43 +569,43 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "qualifyingExpenditure",
     label: "Qualifying expenditure of this person",
     kind: "decimal",
-    visibleWhen: { regime: "uk_wda" },
-    requiredWhen: { regime: "uk_wda" },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER] },
+    requiredWhen: { all: [{ regime: "uk_wda" }, SELLER] },
   },
   {
     name: "allocatedQualifyingExpenditure",
     label: "Qualifying expenditure of the part disposed of",
     kind: "decimal",
-    visibleWhen: { regime: "uk_wda" },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER] },
     requiredWhen: { never: true },
   },
   {
     name: "saleBelowMarket",
     label: "Sold at less than market value",
     kind: "boolean",
-    visibleWhen: { regime: "uk_wda" },
-    requiredWhen: { regime: "uk_wda" },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER] },
+    requiredWhen: { all: [{ regime: "uk_wda" }, SELLER] },
   },
   {
     name: "buyerCanClaimPma",
     label: "Buyer can claim plant and machinery allowances",
     kind: "boolean",
-    visibleWhen: { regime: "uk_wda" },
-    requiredWhen: { regime: "uk_wda" },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER] },
+    requiredWhen: { all: [{ regime: "uk_wda" }, SELLER] },
   },
   {
     name: "connectedChain",
     label: "Acquired in a connected-person chain",
     kind: "boolean",
-    visibleWhen: { regime: "uk_wda" },
-    requiredWhen: { regime: "uk_wda" },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER] },
+    requiredWhen: { all: [{ regime: "uk_wda" }, SELLER] },
   },
   {
     name: "greatestQualifyingExpenditureInChain",
     label: "Greatest qualifying expenditure in the connected chain",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "uk_wda" }, { fieldTrue: "connectedChain" }] },
-    requiredWhen: { all: [{ regime: "uk_wda" }, { fieldTrue: "connectedChain" }] },
+    visibleWhen: { all: [{ regime: "uk_wda" }, SELLER, { fieldTrue: "connectedChain" }] },
+    requiredWhen: { all: [{ regime: "uk_wda" }, SELLER, { fieldTrue: "connectedChain" }] },
     help: "CAA 2001 s.62 / HMRC CA23250. This is the disposal-value cap, not the buyer's price.",
   },
   {
@@ -534,27 +613,27 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     label: "Buyer's qualifying expenditure",
     kind: "decimal",
     visibleWhen: { all: [{ regime: "uk_wda" }, BUYER] },
-    requiredWhen: { never: true },
+    requiredWhen: { all: [{ regime: "uk_wda" }, BUYER] },
   },
   {
     name: "taxableUsePercent",
     label: "Taxable-use percent",
     kind: "decimal",
-    visibleWhen: { regime: "au_pool" },
-    requiredWhen: { regime: "au_pool" },
+    visibleWhen: { all: [{ regime: "au_pool" }, SELLER] },
+    requiredWhen: { all: [{ regime: "au_pool" }, SELLER] },
   },
   {
     name: "terminationValue",
     label: "Termination value (arm's-length proceeds)",
     kind: "decimal",
-    visibleWhen: { regime: "au_pool" },
-    requiredWhen: { all: [{ regime: "au_pool" }, { relationship: "arms_length" }] },
+    visibleWhen: { all: [{ regime: "au_pool" }, SELLER] },
+    requiredWhen: { all: [{ regime: "au_pool" }, SELLER, { relationship: "arms_length" }] },
   },
   {
     name: "allocatedCost",
     label: "Allocated cost of the part",
     kind: "decimal",
-    visibleWhen: { regime: "au_pool" },
+    visibleWhen: { all: [{ regime: "au_pool" }, SELLER] },
     requiredWhen: { never: true },
   },
   {
@@ -562,28 +641,31 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     label: "Buyer's first-element cost",
     kind: "decimal",
     visibleWhen: { all: [{ any: [{ regime: "au_pool" }, { regime: "us_macrs" }] }, BUYER] },
-    requiredWhen: { never: true },
+    requiredWhen: { any: [
+      { all: [{ regime: "au_pool" }, BUYER] },
+      { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    ] },
   },
   {
     name: "consideration",
     label: "Consideration derived on disposal",
     kind: "decimal",
-    visibleWhen: { regime: "nz_pool" },
-    requiredWhen: { regime: "nz_pool" },
+    visibleWhen: { all: [{ regime: "nz_pool" }, SELLER] },
+    requiredWhen: { all: [{ regime: "nz_pool" }, SELLER] },
   },
   {
     name: "disposalExpenditure",
     label: "Expenditure incurred in deriving the consideration",
     kind: "decimal",
-    visibleWhen: { regime: "nz_pool" },
-    requiredWhen: { regime: "nz_pool" },
+    visibleWhen: { all: [{ regime: "nz_pool" }, SELLER] },
+    requiredWhen: { all: [{ regime: "nz_pool" }, SELLER] },
   },
   {
     name: "buyerPrice",
     label: "Price paid by the buyer",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "nz_pool" }, { relationship: "non_arms_length" }, BUYER] },
-    requiredWhen: { all: [{ regime: "nz_pool" }, { relationship: "non_arms_length" }, BUYER] },
+    visibleWhen: { all: [{ regime: "nz_pool" }, BUYER] },
+    requiredWhen: { all: [{ regime: "nz_pool" }, BUYER] },
   },
   {
     name: "associatedPersonCostBasis",
@@ -659,38 +741,38 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       { value: "involuntary_1033", label: "§1033 involuntary conversion of a portion (required)" },
       { value: "elective_other", label: "Other partial disposition (election required)" },
     ],
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
     help: "A native partial_disposal is a sale of a portion. Do not require an election for that trigger.",
   },
   {
     name: "partialDispositionElection",
     label: "Partial disposition election under Treas. Reg. 1.168(i)-8(d)",
     kind: "boolean",
-    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "dispositionTrigger", values: ["elective_other"] } }] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "dispositionTrigger", values: ["elective_other"] } }] },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "dispositionTrigger", values: ["elective_other"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "dispositionTrigger", values: ["elective_other"] } }] },
   },
   {
     name: "originalUnadjustedBasis",
     label: "Original unadjusted depreciable basis",
     kind: "decimal",
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
   },
   {
     name: "remainingUnadjustedBasis",
     label: "Remaining unadjusted basis (same vintage)",
     kind: "decimal",
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
     help: "Continues the original placed-in-service date, method and convention. Do not restart the schedule.",
   },
   {
     name: "disposedUnadjustedBasis",
     label: "Disposed unadjusted basis (same vintage)",
     kind: "decimal",
-    visibleWhen: { regime: "us_macrs" },
-    requiredWhen: { regime: "us_macrs" },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
   },
   {
     name: "placedInServiceOn",
@@ -758,8 +840,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       section_482: "Section 482 deemed-value adjustment (evidenced)",
       other_evidenced: "Other independently evidenced deemed-value adjustment",
     }),
-    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
     help: "Related-person status does not replace amount realized with the FMV of the transferred asset. A §482 or other deemed-value adjustment must be independently evidenced.",
   },
   {
@@ -809,6 +891,8 @@ export type TaxBasisDraft = Record<string, unknown> & {
   relationship?: string;
   /** From the selected source choice — not an operator-typed field. */
   sourceOperation?: TaxBasisSourceOperation;
+  /** From the selected source regime row — classified seller/receiver, not an election. */
+  applicable?: TaxBasisApplicableSide;
 };
 
 /** Buyer capital-cost / first-element / associate-cost facts. Hidden on a
@@ -817,7 +901,6 @@ export const TAX_BASIS_BUYER_FIELD_NAMES = [
   "payment",
   "sellerOriginalCapitalCost",
   "transferorCharacter",
-  "capitalGainsInclusionRate",
   "capitalGainsDeductionClaimed",
   "buyerQualifyingExpenditure",
   "buyerCost",
@@ -836,9 +919,9 @@ export const TAX_BASIS_BUYER_FIELD_NAMES = [
 
 export function attachTaxBasisSource(
   draft: TaxBasisDraft,
-  sourceOperation: TaxBasisSourceOperation,
+  context: TaxBasisSourceContext,
 ): TaxBasisDraft {
-  return { ...draft, sourceOperation };
+  return { ...draft, sourceOperation: context.sourceOperation, applicable: context.applicable };
 }
 
 export function matchTaxBasisPredicate(predicate: TaxBasisFieldPredicate, draft: TaxBasisDraft): boolean {
@@ -847,6 +930,7 @@ export function matchTaxBasisPredicate(predicate: TaxBasisFieldPredicate, draft:
   if ("regime" in predicate) return draft.regime === predicate.regime;
   if ("relationship" in predicate) return draft.relationship === predicate.relationship;
   if ("sourceOperation" in predicate) return draft.sourceOperation === predicate.sourceOperation;
+  if ("side" in predicate) return taxBasisSideApplies(draft.applicable, predicate.side);
   if ("fieldEquals" in predicate) return predicate.fieldEquals.values.includes(String(draft[predicate.fieldEquals.name] ?? ""));
   if ("fieldTrue" in predicate) return draft[predicate.fieldTrue] === true;
   if ("all" in predicate) return predicate.all.every((item) => matchTaxBasisPredicate(item, draft));
@@ -867,8 +951,8 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "regime", "relationship", "originalCapitalCost", "allocationMethod", "allocatedCapitalCost",
     "allocationFraction", "allocationReason", "partFairMarketValue", "retainedFairMarketValue",
     "statutoryProceeds", "fairMarketValue", "payment", "sellerOriginalCapitalCost",
-    "transferorCharacter", "capitalGainsInclusionRate", "capitalGainsDeductionClaimed",
-    "rolloverElection", "electedAmount",
+    "transferorCharacter", "capitalGainsInclusionRate", "capitalGainsInclusionRateCitation",
+    "capitalGainsDeductionClaimed", "rolloverElection", "electedAmount",
   ],
   uk_wda: [
     "regime", "relationship", "qualifyingExpenditure", "allocatedQualifyingExpenditure",
@@ -917,7 +1001,7 @@ function optionalMoney(draft: TaxBasisDraft, name: string): string | undefined {
   return moneyExact(draft[name], name);
 }
 
-const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation"]);
+const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable"]);
 
 /** Calendar date without importing platform (that module pulls the database). */
 export function isTaxBasisCalendarDate(value: unknown): value is string {
@@ -939,8 +1023,32 @@ function resolveSourceOperation(
   return sourceOperation;
 }
 
+function resolveApplicable(
+  draft: TaxBasisDraft,
+  context: TaxBasisValidationContext | undefined,
+  sourceOperation: TaxBasisSourceOperation,
+): TaxBasisApplicableSide {
+  const regime = draft.regime as TaxBasisRegime | undefined;
+  const applicable =
+    (regime ? context?.applicableByRegime?.[regime] : undefined) ??
+    context?.applicable ??
+    draft.applicable;
+  if (applicable && (TAX_BASIS_APPLICABLE_SIDES as readonly string[]).includes(applicable)) {
+    if (sourceOperation === "partial_disposal" && applicable !== "seller") {
+      throw new TaxBasisPolicyError(
+        "a customer partial_disposal has no receiving tax asset; applicable must be seller, derived from the source asset's classification",
+      );
+    }
+    return applicable;
+  }
+  if (sourceOperation === "partial_disposal") return "seller";
+  throw new TaxBasisPolicyError(
+    "applicable is derived from the classified seller and receiving assets — set it from the selected source's regime row (seller, buyer, or both). Do not elect a side",
+  );
+}
+
 function stripDraftContext(draft: TaxBasisDraft): TaxBasisDraft {
-  const { sourceOperation: _sourceOperation, ...rest } = draft;
+  const { sourceOperation: _sourceOperation, applicable: _applicable, ...rest } = draft;
   return rest;
 }
 
@@ -962,7 +1070,12 @@ export function validateTaxRegimeBasis(
   if (unknown.length > 0) {
     throw new TaxBasisPolicyError(`unknown ${regime} workpaper field(s): ${unknown.sort().join(", ")}`);
   }
-  const draft: TaxBasisDraft = { ...raw, sourceOperation: resolveSourceOperation(raw, context) };
+  const sourceOperation = resolveSourceOperation(raw, context);
+  const draft: TaxBasisDraft = {
+    ...raw,
+    sourceOperation,
+    applicable: resolveApplicable(raw, context, sourceOperation),
+  };
   for (const field of TAX_BASIS_FIELDS) {
     if (!taxBasisFieldRequired(field, draft)) continue;
     if (draft[field.name] == null || draft[field.name] === "") {
@@ -987,30 +1100,37 @@ export function validateTaxRegimeBasis(
 }
 
 function validateCa(draft: TaxBasisDraft): CaCcaRegimeBasis {
-  const allocationMethod = draft.allocationMethod as CaAllocationMethod;
-  if (allocationMethod === "ascertainable_fraction") {
-    const fraction = moneyExact(draft.allocationFraction, "allocationFraction");
-    if (cmp(fraction, "0") <= 0 || cmp(fraction, "1") > 0) {
-      throw new TaxBasisPolicyError("allocationFraction must be greater than 0 and at most 1");
+  if (taxBasisSideApplies(draft.applicable, "seller")) {
+    const allocationMethod = draft.allocationMethod as CaAllocationMethod;
+    if (allocationMethod === "ascertainable_fraction") {
+      const fraction = moneyExact(draft.allocationFraction, "allocationFraction");
+      if (cmp(fraction, "0") <= 0 || cmp(fraction, "1") > 0) {
+        throw new TaxBasisPolicyError("allocationFraction must be greater than 0 and at most 1");
+      }
+    }
+    if (draft.relationship === "non_arms_length" && draft.rolloverElection === "none") {
+      if (draft.fairMarketValue == null || draft.fairMarketValue === "") {
+        throw new TaxBasisPolicyError(
+          "a non-arm's-length CCA transfer without a rollover must declare fairMarketValue so ITA 69(1)(b)(i) can lift nil or below-FMV proceeds; above-FMV actual proceeds are not reduced",
+        );
+      }
+      if (draft.statutoryProceeds == null || draft.statutoryProceeds === "") {
+        throw new TaxBasisPolicyError(
+          "a non-arm's-length CCA transfer without a rollover must declare actual statutoryProceeds (0.00 if none) so ITA 69(1)(b)(i) does not silently replace above-FMV proceeds with FMV",
+        );
+      }
     }
   }
-  if (draft.relationship === "non_arms_length" && draft.rolloverElection === "none") {
-    if (draft.fairMarketValue == null || draft.fairMarketValue === "") {
-      throw new TaxBasisPolicyError(
-        "a non-arm's-length CCA transfer without a rollover must declare fairMarketValue so ITA 69(1)(b)(i) can lift nil or below-FMV proceeds; above-FMV actual proceeds are not reduced",
-      );
-    }
-    if (draft.statutoryProceeds == null || draft.statutoryProceeds === "") {
-      throw new TaxBasisPolicyError(
-        "a non-arm's-length CCA transfer without a rollover must declare actual statutoryProceeds (0.00 if none) so ITA 69(1)(b)(i) does not silently replace above-FMV proceeds with FMV",
-      );
-    }
+  if (draft.capitalGainsInclusionRate != null && draft.capitalGainsInclusionRate !== "") {
+    throw new TaxBasisPolicyError(
+      "capitalGainsInclusionRate is ITA 38(a) ordinary one-half, not an operator election; the engine derives and freezes it from the source effective date",
+    );
   }
-  if (draft.relationship === "non_arms_length" && draft.sourceOperation === "intercompany_transfer") {
-    const inclusion = moneyExact(draft.capitalGainsInclusionRate, "capitalGainsInclusionRate");
-    if (cmp(inclusion, "0") <= 0 || cmp(inclusion, "1") > 0) {
-      throw new TaxBasisPolicyError("capitalGainsInclusionRate must be greater than 0 and at most 1");
-    }
+  if (
+    taxBasisSideApplies(draft.applicable, "buyer") &&
+    draft.relationship === "non_arms_length" &&
+    draft.sourceOperation === "intercompany_transfer"
+  ) {
     const character = draft.transferorCharacter as CaTransferorCharacter;
     if (
       (character === "corporation" || character === "nonresident" || character === "other_partnership") &&
@@ -1025,16 +1145,21 @@ function validateCa(draft: TaxBasisDraft): CaCcaRegimeBasis {
 }
 
 function validateUk(draft: TaxBasisDraft): UkWdaRegimeBasis {
-  if (typeof draft.saleBelowMarket !== "boolean" || typeof draft.buyerCanClaimPma !== "boolean" || typeof draft.connectedChain !== "boolean") {
+  if (
+    taxBasisSideApplies(draft.applicable, "seller") &&
+    (typeof draft.saleBelowMarket !== "boolean" || typeof draft.buyerCanClaimPma !== "boolean" || typeof draft.connectedChain !== "boolean")
+  ) {
     throw new TaxBasisPolicyError("UK saleBelowMarket, buyerCanClaimPma and connectedChain must be booleans");
   }
   return stripDraftContext(draft) as unknown as UkWdaRegimeBasis;
 }
 
 function validateAu(draft: TaxBasisDraft): AuPoolRegimeBasis {
-  const percent = moneyExact(draft.taxableUsePercent, "taxableUsePercent");
-  if (cmp(percent, "0") < 0 || cmp(percent, "100") > 0) {
-    throw new TaxBasisPolicyError("taxableUsePercent must be between 0 and 100");
+  if (taxBasisSideApplies(draft.applicable, "seller")) {
+    const percent = moneyExact(draft.taxableUsePercent, "taxableUsePercent");
+    if (cmp(percent, "0") < 0 || cmp(percent, "100") > 0) {
+      throw new TaxBasisPolicyError("taxableUsePercent must be between 0 and 100");
+    }
   }
   return stripDraftContext(draft) as unknown as AuPoolRegimeBasis;
 }
@@ -1049,24 +1174,26 @@ function validateNz(draft: TaxBasisDraft): NzPoolRegimeBasis {
 }
 
 function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
-  const trigger = draft.dispositionTrigger as UsDispositionTrigger;
-  if (trigger === "elective_other" && draft.partialDispositionElection !== true) {
-    throw new TaxBasisPolicyError(
-      "this MACRS partial disposition is elective under Treas. Reg. 1.168(i)-8(d); record the partial disposition election, or it is not a disposition",
-    );
-  }
-  if (US_REQUIRED_PARTIAL_TRIGGERS.includes(trigger) && draft.partialDispositionElection === false) {
-    throw new TaxBasisPolicyError(
-      `a ${trigger} of a portion of MACRS property is a required partial disposition under Treas. Reg. 1.168(i)-8(d)(1) and Pub 544; an election is not required and cannot be used to ignore it`,
-    );
-  }
-  const original = moneyExact(draft.originalUnadjustedBasis, "originalUnadjustedBasis");
-  const remaining = moneyExact(draft.remainingUnadjustedBasis, "remainingUnadjustedBasis");
-  const disposed = moneyExact(draft.disposedUnadjustedBasis, "disposedUnadjustedBasis");
-  if (cmp(add(remaining, disposed), original) !== 0) {
-    throw new TaxBasisPolicyError(
-      `remainingUnadjustedBasis ${remaining} plus disposedUnadjustedBasis ${disposed} must equal originalUnadjustedBasis ${original}; the vintage is split, not restarted`,
-    );
+  if (taxBasisSideApplies(draft.applicable, "seller")) {
+    const trigger = draft.dispositionTrigger as UsDispositionTrigger;
+    if (trigger === "elective_other" && draft.partialDispositionElection !== true) {
+      throw new TaxBasisPolicyError(
+        "this MACRS partial disposition is elective under Treas. Reg. 1.168(i)-8(d); record the partial disposition election, or it is not a disposition",
+      );
+    }
+    if (US_REQUIRED_PARTIAL_TRIGGERS.includes(trigger) && draft.partialDispositionElection === false) {
+      throw new TaxBasisPolicyError(
+        `a ${trigger} of a portion of MACRS property is a required partial disposition under Treas. Reg. 1.168(i)-8(d)(1) and Pub 544; an election is not required and cannot be used to ignore it`,
+      );
+    }
+    const original = moneyExact(draft.originalUnadjustedBasis, "originalUnadjustedBasis");
+    const remaining = moneyExact(draft.remainingUnadjustedBasis, "remainingUnadjustedBasis");
+    const disposed = moneyExact(draft.disposedUnadjustedBasis, "disposedUnadjustedBasis");
+    if (cmp(add(remaining, disposed), original) !== 0) {
+      throw new TaxBasisPolicyError(
+        `remainingUnadjustedBasis ${remaining} plus disposedUnadjustedBasis ${disposed} must equal originalUnadjustedBasis ${original}; the vintage is split, not restarted`,
+      );
+    }
   }
   if (!isTaxBasisCalendarDate(draft.placedInServiceOn)) {
     throw new TaxBasisPolicyError("placedInServiceOn must be a calendar date (YYYY-MM-DD)");
@@ -1092,7 +1219,13 @@ export function validateTaxAssetBasisInput(
   input: TaxAssetBasisInput,
   context?: TaxBasisValidationContext,
 ): TaxAssetBasisInput {
-  if (!input.sourceChangeId) throw new TaxBasisPolicyError("sourceChangeId is required");
+  const sourceChangeId = input.sourceChangeId || null;
+  const sourceEventId = input.sourceEventId || null;
+  if (!sourceChangeId && !sourceEventId) {
+    throw new TaxBasisPolicyError(
+      "select a posted source: sourceChangeId or, for a legacy event with no financial change, sourceEventId",
+    );
+  }
   if (input.reason.trim().length < 8 || input.reason.trim().length > 1000) {
     throw new TaxBasisPolicyError("record a change reason between 8 and 1,000 characters");
   }
@@ -1107,18 +1240,78 @@ export function validateTaxAssetBasisInput(
   }
   const seen = new Set<string>();
   const regimes = input.regimes.map((row) => {
+    if (context?.applicableByRegime && !context.applicableByRegime[row.regime]) {
+      throw new TaxBasisPolicyError(
+        `neither the seller nor the receiving asset is classified for ${row.regime}; assign the tax class on the applicable Tax tab — do not invent a classification to collect inapplicable facts`,
+      );
+    }
     const validated = validateTaxRegimeBasis(row, context);
     if (seen.has(validated.regime)) throw new TaxBasisPolicyError(`regime ${validated.regime} is declared more than once`);
     seen.add(validated.regime);
     return validated;
   });
   return {
-    sourceChangeId: input.sourceChangeId,
-    sourceEventId: input.sourceEventId,
+    sourceChangeId,
+    sourceEventId,
     reason: input.reason.trim(),
     assessment: input.assessment.trim(),
     idempotencyKey: input.idempotencyKey,
     regimes,
+  };
+}
+
+/**
+ * ITA 38(a) supplies one-half of the capital gain as the taxable capital
+ * gain, subject to the named exceptions in that section. The CRA non-arm's-
+ * length worksheet prints the same half multiplier. Ordinary depreciable-
+ * property transfers use this rate; it is not an operator election.
+ * https://laws-lois.justice.gc.ca/eng/acts/I-3.3/section-38.html
+ * https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/sole-proprietorships-partnerships/report-business-income-expenses/claiming-capital-cost-allowance/non-arms-length-transactions.html
+ */
+export const CA_ORDINARY_INCLUSION_RATE_EDITIONS = [
+  {
+    effectiveFrom: "1972-01-01",
+    rate: "0.5",
+    citation: "ITA 38(a)",
+    edition: "https://laws-lois.justice.gc.ca/eng/acts/I-3.3/section-38.html",
+    worksheet:
+      "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/sole-proprietorships-partnerships/report-business-income-expenses/claiming-capital-cost-allowance/non-arms-length-transactions.html",
+  },
+] as const;
+
+export function caOrdinaryCapitalGainsInclusion(effectiveOn: string): {
+  rate: string;
+  citation: string;
+  edition: string;
+  worksheet: string;
+} {
+  if (!isTaxBasisCalendarDate(effectiveOn)) {
+    throw new TaxBasisPolicyError(
+      "a calendar effective date is required to resolve the ITA 38(a) inclusion rate",
+    );
+  }
+  const edition = [...CA_ORDINARY_INCLUSION_RATE_EDITIONS]
+    .reverse()
+    .find((row) => row.effectiveFrom <= effectiveOn);
+  if (!edition) {
+    throw new TaxBasisPolicyError(
+      `no ITA 38(a) ordinary inclusion-rate edition is in force on ${effectiveOn}`,
+    );
+  }
+  return {
+    rate: edition.rate,
+    citation: edition.citation,
+    edition: edition.edition,
+    worksheet: edition.worksheet,
+  };
+}
+
+export function freezeCaRegimeBasis(row: CaCcaRegimeBasis, effectiveOn: string): CaCcaRegimeBasis {
+  const inclusion = caOrdinaryCapitalGainsInclusion(effectiveOn);
+  return {
+    ...row,
+    capitalGainsInclusionRate: inclusion.rate,
+    capitalGainsInclusionRateCitation: `${inclusion.citation} one-half; ${inclusion.edition}`,
   };
 }
 
@@ -1269,6 +1462,87 @@ export function nzBuyerDepreciationCost(row: NzPoolRegimeBasis): string {
     ? moneyExact(row.firstBusinessUseFairMarketValue, "firstBusinessUseFairMarketValue")
     : moneyExact(row.associatedPersonOriginalCost, "associatedPersonOriginalCost");
   return formatMoney(cmp(price, cap) <= 0 ? price : cap, 2);
+}
+
+/** Frozen MACRS workpaper outcome. Nontaxable carryover has no Pub 544
+ *  amount realized and must not call usDispositionProceeds. */
+export function usRegimeWorkpaperOutcome(
+  row: UsMacrsRegimeBasis,
+  sourceOperation: TaxBasisSourceOperation,
+  applicable: TaxBasisApplicableSide = "both",
+): Record<string, unknown> {
+  const seller = taxBasisSideApplies(applicable, "seller");
+  const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
+  const taxable = row.recognition === "taxable";
+  return {
+    amountRealized: seller && taxable ? usDispositionProceeds(row) : null,
+    remainingUnadjustedBasis: seller ? row.remainingUnadjustedBasis : null,
+    disposedUnadjustedBasis: seller ? row.disposedUnadjustedBasis : null,
+    placedInServiceOn: row.placedInServiceOn,
+    method: row.method,
+    convention: row.convention,
+    recognition: row.recognition,
+    carryoverBasis: buyer && !taxable ? row.carryoverBasis ?? null : null,
+    excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
+    buyerCost: buyer && taxable ? row.buyerCost ?? null : null,
+    shortYearMethod: row.shortYearMethod ?? null,
+  };
+}
+
+/** Seller-side pool reduction from a frozen workpaper. Nontaxable MACRS uses
+ *  the disposed unadjusted basis, not amount realized. */
+export function taxWorkpaperSellerDisposition(
+  regime: TaxBasisRegime,
+  computed: Record<string, unknown>,
+): string {
+  if (regime === "us_macrs" && computed.recognition === "nontaxable") {
+    return moneyExact(computed.disposedUnadjustedBasis, "disposedUnadjustedBasis");
+  }
+  const name =
+    regime === "ca_cca"
+      ? "dispositionAmount"
+      : regime === "uk_wda"
+        ? "disposalValue"
+        : regime === "au_pool" || regime === "nz_pool"
+          ? "poolReduction"
+          : "amountRealized";
+  if (computed[name] == null || computed[name] === "") {
+    throw new TaxBasisPolicyError(
+      `frozen ${regime} workpaper is missing ${name}; reverse that workpaper and re-propose it — do not substitute book proceeds`,
+    );
+  }
+  return moneyExact(computed[name], name);
+}
+
+/** Receiving-asset addition from a frozen workpaper. Nontaxable MACRS is
+ *  carryover plus excess; never book buyerAmount. */
+export function taxWorkpaperBuyerAddition(
+  regime: TaxBasisRegime,
+  computed: Record<string, unknown>,
+): string {
+  if (computed.recognition === "nontaxable") {
+    return formatMoney(
+      add(
+        moneyExact(computed.carryoverBasis, "carryoverBasis"),
+        moneyExact(computed.excessBasis, "excessBasis"),
+      ),
+      2,
+    );
+  }
+  const name =
+    regime === "ca_cca"
+      ? "buyerAddition"
+      : regime === "uk_wda"
+        ? "buyerQualifyingExpenditure"
+        : regime === "nz_pool"
+          ? "buyerDepreciationCost"
+          : "buyerCost";
+  if (computed[name] == null || computed[name] === "") {
+    throw new TaxBasisPolicyError(
+      `frozen ${regime} workpaper is missing ${name} for the receiving asset; reverse that workpaper and re-propose it — do not substitute book cost`,
+    );
+  }
+  return moneyExact(computed[name], name);
 }
 
 /** Pub 544 amount realized: money + FMV of other property/services + assumed
