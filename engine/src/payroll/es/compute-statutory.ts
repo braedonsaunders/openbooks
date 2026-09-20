@@ -121,22 +121,38 @@ export async function computeEsStatutory(
 
   // Resolved through the pack's employeeFacts declaration (see the PL
   // adapter): raw values untouched, undeclared keys refused at authoring.
+  // An empty value is not out of range, it is MISSING: now that operators
+  // can supply these fields both causes are reachable, so absence refuses
+  // as absence (naming what was never supplied) while a supplied but
+  // unusable value keeps the band message. Same refusals, sharper names.
   const situacionLaboral = empFact("ES", emp, "es_situacion_laboral");
+  if (situacionLaboral == null || situacionLaboral === "") {
+    fail(
+      "employee es_situacion_laboral is missing: SITUPER was never supplied, "
+      + "and it moves gastos and REDU, so it is never defaulted",
+    );
+  }
   if (situacionLaboral !== "activo" && situacionLaboral !== "pensionista" && situacionLaboral !== "desempleado") {
     fail(
-      `employee es_situacion_laboral "${situacionLaboral ?? ""}" is not activo/pensionista/desempleado: `
+      `employee es_situacion_laboral "${situacionLaboral}" is not activo/pensionista/desempleado: `
       + "SITUPER moves gastos and REDU, so it is never defaulted",
     );
   }
   const grupoRaw = empFact("ES", emp, "es_grupo_cotizacion");
-  const grupo = grupoRaw == null || grupoRaw === "" ? NaN : Number(grupoRaw);
+  if (grupoRaw == null || grupoRaw === "") {
+    fail("employee es_grupo_cotizacion is missing: the TGSS contribution group 1–11 was never supplied");
+  }
+  const grupo = Number(grupoRaw);
   if (!Number.isInteger(grupo) || grupo < 1 || grupo > 11) {
-    fail(`employee es_grupo_cotizacion "${grupoRaw ?? ""}" is not an integer 1–11`);
+    fail(`employee es_grupo_cotizacion "${grupoRaw}" is not an integer 1–11`);
   }
   const anoRaw = empFact("ES", emp, "es_ano_nacimiento");
-  const ano = anoRaw == null || anoRaw === "" ? NaN : Number(anoRaw);
+  if (anoRaw == null || anoRaw === "") {
+    fail("employee es_ano_nacimiento is missing: the birth year (AÑOPER) was never supplied");
+  }
+  const ano = Number(anoRaw);
   if (!Number.isInteger(ano) || ano < 1906 || ano > 2026) {
-    fail(`employee es_ano_nacimiento "${anoRaw ?? ""}" is out of range 1906–2026`);
+    fail(`employee es_ano_nacimiento "${anoRaw}" is out of range 1906–2026`);
   }
   const temporal = empFact("ES", emp, "es_contrato_temporal");
   if (temporal !== undefined && temporal !== null && temporal !== "true" && temporal !== "false") {
