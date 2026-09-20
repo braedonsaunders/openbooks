@@ -235,6 +235,11 @@ export async function loadEntityRole(
                 // Authoring rides the manage grant; readers see the request
                 // list only. The change-request routes re-check this grant.
                 canManageHrm: can(authz, 'hrm.employment.manage'),
+                // The exit section rides the retention read grant (record
+                // display) and the performance manage grant (recording);
+                // the exit routes re-check both.
+                canReadExits: can(authz, 'hrm.retention.read'),
+                canRecordExit: can(authz, 'hrm.performance.manage'),
               }
             : null,
           canReadCrmAccounts,

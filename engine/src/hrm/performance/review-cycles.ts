@@ -689,3 +689,33 @@ export async function listCycles(args: { orgId: string; actorId: string }): Prom
     return rows.map(toCycleDTO);
   });
 }
+
+export type ReviewTemplateOption = {
+  readonly id: string;
+  readonly name: string;
+  readonly isActive: boolean;
+};
+
+/**
+ * Review templates for the cycle create dialog: loader-resolved options,
+ * active first. HR only (performance read grant) — the dialog renders
+ * behind the manage gate, so readers never fetch this.
+ */
+export async function listReviewTemplates(args: {
+  orgId: string;
+  actorId: string;
+}): Promise<ReviewTemplateOption[]> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  return withOrgTransaction(orgId, async () => {
+    await assertPerformanceFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const rows = (await db.execute<ReviewTemplateOption>(sql`
+      select id, name, is_active as "isActive"
+        from hrm_review_templates
+       where org_id = ${orgId}
+       order by is_active desc, name
+    `)).rows;
+    return rows;
+  });
+}

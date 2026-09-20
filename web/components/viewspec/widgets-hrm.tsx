@@ -14,6 +14,13 @@ import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/Propose
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
+import {
+  CycleDialog,
+  CycleDrawer,
+  ExitDrawer,
+  RetentionPanel,
+  ReviewDrawer,
+} from '../../app/(app)/hrm/performance/sections'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -116,6 +123,42 @@ export const HRM_WIDGETS = {
     if (!drawer) return null
     return <ProcessDrawer drawer={drawer} />
   },
+  /** The review-cycle flyout: the loader-resolved cycle with its reviews
+   *  table and calibration island, closing by navigation. */
+  'hrm-cycle-drawer': (props) => (
+    <CycleDrawer
+      detail={(props.detail as ComponentProps<typeof CycleDrawer>['detail']) ?? null}
+      missingDetail={str(props, 'missingDetail') ?? null}
+    />
+  ),
+  /** The review flyout: the snapshot answers with the answer form, the
+   *  goals section, and the lifecycle actions, closing by navigation. */
+  'hrm-review-drawer': (props) => (
+    <ReviewDrawer
+      review={(props.review as ComponentProps<typeof ReviewDrawer>['review']) ?? null}
+      missingReview={str(props, 'missingReview') ?? null}
+    />
+  ),
+  /** The cycle create dialog, opened from the page header through
+   *  `?cycle=new`; closing navigates the param away. */
+  'hrm-cycle-dialog': (props) => (
+    <CycleDialog create={(props.create as ComponentProps<typeof CycleDialog>['create']) ?? null} />
+  ),
+  /** The Retention panel: trailing-twelve-months turnover, regrettable
+   *  leavers, and the exit-record gaps, all loader-resolved. */
+  'hrm-retention-panel': (props) => (
+    <RetentionPanel retention={(props.retention as ComponentProps<typeof RetentionPanel>['retention']) ?? null} />
+  ),
+  /** The exit drawer (?exit=<employmentId>): HR managers record and
+   *  correct through the form; retention readers see the record read-only.
+   *  Null payload renders nothing — the spec's `when` gate already omits
+   *  it, so this is the second half of the same guard. */
+  'hrm-exit-drawer': (props) => (
+    <ExitDrawer
+      exit={(props.exit as ComponentProps<typeof ExitDrawer>['exit']) ?? null}
+      missingExit={str(props, 'missingExit') ?? null}
+    />
+  ),
   /** Leave filing and detail entry point: the existing LeaveDrawer over a
    *  request id (detail) or null (filing), closing by navigating the search
    *  params away. */
