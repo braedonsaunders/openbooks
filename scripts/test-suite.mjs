@@ -6,12 +6,15 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
 
-// Node 24 on macOS can deadlock at process.exit while its background Sparkplug
-// compiler awaits GC and the main thread joins that compiler. Stack sampling
-// also confirmed the same cycle in Maglev, so disable background optimizing
-// compilation as well. Keep test shutdown synchronous on
-// that host; production execution and Linux CI retain their runtime defaults.
-const TEST_RUNTIME_FLAGS = process.platform === 'darwin' ? ['--no-concurrent-sparkplug', '--no-concurrent-recompilation'] : []
+// Node 24 shutdown can join a compiler worker that is awaiting main-thread GC.
+// Confirmed on macOS and Ubuntu x64 / Node 24.20.0 (2026-09-20, diagnostic CI
+// 35514084360): a passing test child entered native exit, then its main thread
+// blocked in NodePlatform::Shutdown/uv_thread_join while Maglev workers waited
+// in CollectionBarrier::AwaitCollectionBackground. This is not platform-local.
+// Disable concurrent compilation in test processes on every platform; retain
+// --test-force-exit and output draining. Production runtime flags are unchanged.
+// Upstream: https://github.com/nodejs/node/issues/54918
+export const TEST_RUNTIME_FLAGS = Object.freeze(['--no-concurrent-sparkplug', '--no-concurrent-recompilation'])
 
 
 // Keep this list in one place. Every CI suite and the developer-facing `npm
