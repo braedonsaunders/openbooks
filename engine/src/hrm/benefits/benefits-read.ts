@@ -377,3 +377,37 @@ export async function employmentBenefitsSection(
     })),
   };
 }
+
+export interface DependentSummary {
+  readonly id: string;
+  readonly displayName: string;
+  readonly relationship: string;
+  readonly birthDate: string | null;
+  readonly isActive: boolean;
+}
+
+/** Dependents of one employment (read gate on the employment). */
+export async function listDependents(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<DependentSummary[]> {
+  await requireHrmBenefitsRead(exec, orgId, actorId, employmentId);
+  const rows = (
+    await exec.execute<Record<string, unknown>>(sql`
+      select id, display_name as "displayName", relationship,
+             birth_date::text as "birthDate", is_active as "isActive"
+        from hrm_benefit_dependents
+       where org_id = ${orgId} and employment_id = ${employmentId}
+       order by display_name
+    `)
+  ).rows;
+  return rows.map((row) => ({
+    id: String(row.id),
+    displayName: String(row.displayName),
+    relationship: String(row.relationship),
+    birthDate: row.birthDate != null ? String(row.birthDate).slice(0, 10) : null,
+    isActive: row.isActive === true,
+  }));
+}
