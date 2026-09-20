@@ -194,3 +194,25 @@ test(
     assert.equal(await layoutCount(f.orgId), 2);
   },
 );
+
+test(
+  "POST refuses an inactive default instead of storing a row resolve cannot see",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Hidden default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+        isActive: false,
+      }),
+    );
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(String(body.error), /inactive form cannot be the default/i);
+    assert.match(String(body.error), /activate it/i);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
