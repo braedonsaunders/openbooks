@@ -171,6 +171,7 @@
         "close",
         "hrm",
         "ledger",
+        "organization",
         "payments",
         "platform",
         "records",
