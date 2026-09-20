@@ -277,7 +277,9 @@ test('a well-formed template id is forwarded to delivery', async () => {
 })
 
 test('a malformed template id is refused exactly like a missing template, before delivery', async () => {
-  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
+  // An explicitly supplied empty field ({"template":""}) is a non-UUID id,
+  // not "use the default" — only an omitted field may fall through.
+  for (const bad of ['', 'not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
     reset()
     state.granted = new Set(['ar.read', 'ar.create'])
 
@@ -286,4 +288,14 @@ test('a malformed template id is refused exactly like a missing template, before
     assert.deepEqual(await response.json(), { error: 'template not found' })
     assert.deepEqual(state.sendCalls, [], `"${bad}" must never reach resolvePdfTemplate or delivery`)
   }
+})
+
+test('an explicitly empty template field is 404 template not found, not the default', async () => {
+  reset()
+  state.granted = new Set(['ar.read', 'ar.create'])
+
+  const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: '' })
+  assert.equal(response.status, 404, 'empty template must not 200 with the default template')
+  assert.deepEqual(await response.json(), { error: 'template not found' })
+  assert.deepEqual(state.sendCalls, [], 'empty template must never reach getPdfTemplate or delivery')
 })

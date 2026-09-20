@@ -165,6 +165,7 @@ test('a well-formed id prints on read authority', async () => {
   const response = await get('00000000-0000-4000-8000-00000000a001')
   assert.equal(response.status, 200)
   assert.equal(state.renderCalls, 1)
+  assert.deepEqual(state.templateCalls, [null], 'omitting the template query still resolves the default')
 })
 
 test('a malformed id is refused exactly like a missing record, before scope or record loads', async () => {
@@ -193,7 +194,9 @@ test('a well-formed unknown template id is a 404 template not found after the st
 
 test('a malformed template id is refused exactly like a missing template, before the store', async () => {
   const recordId = '00000000-0000-4000-8000-00000000a001'
-  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
+  // An explicitly supplied empty query (?template=) is a non-UUID id, not
+  // "use the default" — only an omitted param may fall through.
+  for (const bad of ['', 'not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
     reset()
     const response = await get(recordId, { template: bad })
     assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
@@ -201,4 +204,13 @@ test('a malformed template id is refused exactly like a missing template, before
     assert.deepEqual(state.templateCalls, [], `"${bad}" must never be bound to pdf_templates.id`)
     assert.equal(state.renderCalls, 0)
   }
+})
+
+test('an explicitly empty template query is 404 template not found, not the default', async () => {
+  reset()
+  const response = await get('00000000-0000-4000-8000-00000000a001', { template: '' })
+  assert.equal(response.status, 404, 'empty ?template= must not 200 with the default template')
+  assert.deepEqual(await response.json(), { error: 'template not found' })
+  assert.deepEqual(state.templateCalls, [], 'empty ?template= must never reach getPdfTemplate')
+  assert.equal(state.renderCalls, 0)
 })

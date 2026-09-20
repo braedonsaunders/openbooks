@@ -75,7 +75,7 @@ export async function resolvePdfTemplate(
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
 
-  if (templateId) {
+  if (templateId != null) {
     if (!isUuid(templateId)) return null
     const tpl = await getPdfTemplate(orgId, templateId)
     if (tpl && tpl.recordType === recordType && tpl.isActive) return tpl
