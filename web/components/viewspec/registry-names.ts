@@ -179,6 +179,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-readiness',
   'hrm-recent-changes',
   'hrm-upcoming-changes',
+  'hrm-vacancy-table',
   'identity-cell',
   'identity-record-card',
   'import-statement',

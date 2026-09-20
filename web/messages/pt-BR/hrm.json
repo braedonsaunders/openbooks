@@ -6,7 +6,8 @@
       "overview": "Visão geral",
       "changeRequests": "Solicitações de alteração",
       "departments": "Departamentos",
-      "reports": "Relatórios"
+      "reports": "Relatórios",
+      "positions": "Posições"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -14,7 +15,11 @@
       "employers": "Empregadores",
       "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
       "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
+      "openPositions": "Posições abertas",
+      "openPositionsSub": "{count, plural, one {# estabelecimento recrutando} other {# estabelecimentos recrutando}}",
+      "unfundedFte": "FTE preenchido sem financiamento",
+      "unfundedFteSub": "Preenchido sem financiamento vinculado"
     },
     "groups": {
       "title": "Headcount por empregador e departamento",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "Diretório"
+    },
+    "vacancy": {
+      "title": "Vagas por departamento",
+      "department": "Departamento",
+      "employer": "Empregador",
+      "positions": "Posições",
+      "planned": "FTE planejado",
+      "funded": "FTE financiado",
+      "filled": "FTE preenchido",
+      "vacant": "FTE vago",
+      "unassignedDepartment": "Sem departamento",
+      "empty": "Nenhuma posição está estabelecida em {date}.",
+      "total": "Total"
     }
   },
   "overview": {
@@ -238,12 +256,63 @@
       "updatedToast": "Rascunho atualizado.",
       "submittedToast": "Enviado para aprovação.",
       "withdrawnToast": "Solicitação retirada.",
-      "requestFailed": "Não foi possível salvar a solicitação de alteração."
+      "requestFailed": "Não foi possível salvar a solicitação de alteração.",
+      "kindPositionAssignment": "Atribuição de posição",
+      "positionLabel": "Posição",
+      "positionUnset": "Sem posição",
+      "positionHint": "O quadro financiado que esta atribuição ocupa. A atribuição mantém seu próprio título, departamento e local.",
+      "positionRequired": "Escolha uma posição ou marque a atribuição como não atribuída.",
+      "unassignLabel": "Desatribuir da posição",
+      "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro."
     }
   },
   "directory": {
     "employmentStatus": "Status de emprego",
     "serviceStart": "Início do serviço",
     "noEmployment": "Sem vínculo empregatício"
+  },
+  "positions": {
+    "title": "Posições",
+    "description": "O quadro financiado por trás do plano de headcount: FTE planejado, financiado e preenchido por posição, com suas versões, financiamento por período e titular atual.",
+    "statusAll": "Todos os status",
+    "statusPlanned": "Planejado",
+    "statusOpen": "Aberto",
+    "statusFilled": "Preenchido",
+    "statusFrozen": "Congelado",
+    "statusClosed": "Encerrado",
+    "columns": {
+      "code": "Código",
+      "title": "Título",
+      "status": "Status",
+      "department": "Departamento",
+      "planned": "FTE planejado",
+      "funded": "FTE financiado",
+      "filled": "FTE preenchido",
+      "vacant": "FTE vago",
+      "holder": "Titular",
+      "unassignedHolder": "Vago"
+    },
+    "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
+    "empty": "Nenhuma posição corresponde a este filtro.",
+    "total": "Total",
+    "drawer": {
+      "title": "Posição {code}",
+      "versions": "Versões",
+      "versionNo": "Versão {no}",
+      "effective": "Vigente de {from} até {to}",
+      "effectiveOpen": "Vigente desde {from}, sem data final",
+      "recorded": "Registrado em {at}",
+      "funding": "Financiamento por período",
+      "period": "Período de {from} até {to}",
+      "funded": "{fte} FTE financiado",
+      "costPlan": "Plano de custos {amount} {currency}",
+      "unfunded": "Sem financiamento registrado",
+      "holder": "Titular atual",
+      "holderEmployment": "Emprego {id}",
+      "noHolder": "Sem titular em {date}",
+      "warnings": "Avisos",
+      "refusal": "Requer atenção",
+      "missing": "Esta posição não está mais visível."
+    }
   }
 }

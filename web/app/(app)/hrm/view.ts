@@ -88,6 +88,24 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
             value: f('pendingValue'),
             sub: f('pendingSub'),
           }),
+          ...(data.positions
+            ? [
+                statTile({
+                  iconKey: 'briefcase',
+                  accent: 'amber',
+                  label: f('positions.openPositionsLabel'),
+                  value: f('positions.openPositionsValue'),
+                  sub: f('positions.openPositionsSub'),
+                }),
+                statTile({
+                  iconKey: 'triangle-alert',
+                  accent: 'red',
+                  label: f('positions.unfundedFteLabel'),
+                  value: f('positions.unfundedFteValue'),
+                  sub: f('positions.unfundedFteSub'),
+                }),
+              ]
+            : []),
         ]),
 
         grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
@@ -188,7 +206,34 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
             }),
           ]),
         ]),
-      ]),
+
+        ...(data.positions
+          ? [
+              panel({
+                title: f('positions.vacancyTitle'),
+                iconKey: 'briefcase',
+                className: 'min-h-0',
+                bodyClassName: 'p-0',
+                blocks: [
+                  widgetBlock('hrm-vacancy-table', {
+                    groups: data.positions.groups,
+                    total: data.positions.totals,
+                    departmentColumn: data.positions.departmentColumn,
+                    employerColumn: data.positions.employerColumn,
+                    positionsColumn: data.positions.positionsColumn,
+                    plannedColumn: data.positions.plannedColumn,
+                    fundedColumn: data.positions.fundedColumn,
+                    filledColumn: data.positions.filledColumn,
+                    vacantColumn: data.positions.vacantColumn,
+                    empty: data.positions.vacancyEmpty,
+                    totalLabel: data.positions.totalLabel,
+                  }),
+                ],
+              }),
+            ]
+          : []),
+        ]
+      ),
     ],
   })
 }

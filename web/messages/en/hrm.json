@@ -6,7 +6,8 @@
       "overview": "Overview",
       "changeRequests": "Change requests",
       "departments": "Departments",
-      "reports": "Reports"
+      "reports": "Reports",
+      "positions": "Positions"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -14,7 +15,11 @@
       "employers": "Employers",
       "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
       "departments": "Departments",
-      "departmentsSub": "{count, plural, one {# department} other {# departments}}"
+      "departmentsSub": "{count, plural, one {# department} other {# departments}}",
+      "openPositions": "Open positions",
+      "openPositionsSub": "{count, plural, one {# establishment recruiting} other {# establishments recruiting}}",
+      "unfundedFte": "Unfunded filled FTE",
+      "unfundedFteSub": "Filled with no funding behind it"
     },
     "groups": {
       "title": "Headcount by employer and department",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "Directory"
+    },
+    "vacancy": {
+      "title": "Vacancy by department",
+      "department": "Department",
+      "employer": "Employer",
+      "positions": "Positions",
+      "planned": "Planned FTE",
+      "funded": "Funded FTE",
+      "filled": "Filled FTE",
+      "vacant": "Vacant FTE",
+      "unassignedDepartment": "No department",
+      "empty": "No positions are established as of {date}.",
+      "total": "Total"
     }
   },
   "overview": {
@@ -238,12 +256,64 @@
         "rejected": "Rejected",
         "withdrawn": "Withdrawn",
         "applied": "Applied"
-      }
+      },
+      "kindPositionAssignment": "Position assignment",
+      "positionLabel": "Position",
+      "positionUnset": "No position",
+      "positionHint": "The funded establishment this assignment holds. The assignment keeps its own title, department, and location.",
+      "positionRequired": "Pick a position or mark the assignment as unassigned.",
+      "unassignLabel": "Unassign from the position",
+      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment."
     }
   },
   "directory": {
     "employmentStatus": "Employment status",
     "serviceStart": "Service start",
     "noEmployment": "No employment"
+  },
+  "positions": {
+    "title": "Positions",
+    "description": "The funded establishment behind the headcount plan: planned, funded, and filled FTE per position with its versions, funding by period, and current holder.",
+    "statusAll": "All statuses",
+    "statusPlanned": "Planned",
+    "statusOpen": "Open",
+    "statusFilled": "Filled",
+    "statusFrozen": "Frozen",
+    "statusClosed": "Closed",
+    "columns": {
+      "code": "Code",
+      "title": "Title",
+      "status": "Status",
+      "department": "Department",
+      "planned": "Planned FTE",
+      "funded": "Funded FTE",
+      "filled": "Filled FTE",
+      "vacant": "Vacant FTE",
+      "holder": "Holder",
+      "unassignedHolder": "Vacant",
+      "holdersCount": "{count, plural, one {# holder} other {# holders}}"
+    },
+    "holdersCount": "{count, plural, one {# holder} other {# holders}}",
+    "empty": "No positions match this filter.",
+    "total": "Total",
+    "drawer": {
+      "title": "Position {code}",
+      "versions": "Versions",
+      "versionNo": "Version {no}",
+      "effective": "Effective {from} to {to}",
+      "effectiveOpen": "Effective {from}, open-ended",
+      "recorded": "Recorded {at}",
+      "funding": "Funding by period",
+      "period": "Period {from} to {to}",
+      "funded": "Funded {fte} FTE",
+      "costPlan": "Cost plan {amount} {currency}",
+      "unfunded": "No funding recorded",
+      "holder": "Current holder",
+      "holderEmployment": "Employment {id}",
+      "noHolder": "No holder as of {date}",
+      "warnings": "Warnings",
+      "refusal": "Needs attention",
+      "missing": "This position is no longer visible."
+    }
   }
 }

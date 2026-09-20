@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "变更申请",
         "description": "每条雇用变更申请一行：状态、类型、雇用、申请人、提交与决定时间戳、绑定的审批流程和修订绑定。需要人力资源雇用权限。"
+      },
+      "hrm_positions": {
+        "label": "职位",
+        "description": "报表日期每个已设立职位一行：编码、标题、状态、部门、雇主以及计划 FTE、已拨款 FTE 和已填补 FTE。需要人力资源职位权限。"
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "创建时间",
         "id": "申请（ID）",
         "employment_id": "雇用（ID）"
+      },
+      "hrm_positions": {
+        "code": "编码",
+        "title": "标题",
+        "status": "状态",
+        "employer": "雇主",
+        "department": "部门",
+        "planned_fte": "计划 FTE",
+        "funded_fte": "已拨款 FTE",
+        "filled_fte": "已填补 FTE",
+        "vacant_fte": "空缺 FTE",
+        "position_id": "职位（ID）"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "录用",
       "status_change": "状态变更",
       "assignment_change": "岗位分配变更",
-      "termination": "离职"
+      "termination": "离职",
+      "frozen": "已冻结",
+      "filled": "已填补",
+      "open": "开放中",
+      "planned": "已规划",
+      "position_assignment": "职位任命"
     }
   },
   "operators": {

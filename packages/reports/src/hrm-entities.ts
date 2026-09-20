@@ -28,7 +28,10 @@ import type { ReportEntity } from './entities'
 // limit resolution; it is never CURRENT_DATE.
 
 export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
+export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
 export const HRM_FEATURE_KEY = 'hrm'
+
+const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
 
 const HRM_EMPLOYMENT_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
 const HRM_REQUEST_STATUSES = [
@@ -39,7 +42,7 @@ const HRM_REQUEST_STATUSES = [
   'withdrawn',
   'applied',
 ] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination'] as const
+const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -189,5 +192,75 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
     ],
     defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_positions',
+    label: 'Positions',
+    category: 'hrm',
+    description:
+      'One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission.',
+    // One row per position whose version covers the as-of day (half-open
+    // effective containment, currently-known revisions only — the same
+    // contract the vacancy read resolves through temporal.ts). Filled sums
+    // the live primary assignment versions naming the position; funded sums
+    // the plan rows whose fiscal period contains the as-of day. Funded is
+    // NULL (not zero) when no plan row covers the day: SUM ignores it, so a
+    // missing plan can never deflate the funded total into a
+    // precise-looking wrong number — the unfunded gap stays visible.
+    from: `positions p
+  JOIN LATERAL (
+    SELECT title, status, department_id, employer_subsidiary_id, planned_fte
+      FROM position_versions
+     WHERE org_id = p.org_id AND position_id = p.id AND recorded_until IS NULL
+       AND effective_from <= ${REPORT_AS_OF}
+       AND (effective_to IS NULL OR effective_to > ${REPORT_AS_OF})
+     ORDER BY version_no DESC LIMIT 1
+  ) v ON TRUE
+  JOIN subsidiaries sub ON sub.id = v.employer_subsidiary_id AND sub.org_id = p.org_id
+  LEFT JOIN departments dep ON dep.id = v.department_id AND dep.org_id = p.org_id
+  LEFT JOIN LATERAL (
+    SELECT sum(f.funded_fte) AS funded_fte
+      FROM position_funding f
+      JOIN accounting_periods per ON per.id = f.period_id
+     WHERE f.org_id = p.org_id AND f.position_id = p.id
+       AND per.starts_on <= ${REPORT_AS_OF} AND per.ends_on >= ${REPORT_AS_OF}
+  ) fund ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT sum(av.fte) AS filled_fte
+      FROM employment_assignment_versions av
+     WHERE av.org_id = p.org_id AND av.position_id = p.id AND av.is_primary
+       AND av.recorded_until IS NULL
+       AND av.effective_from <= ${REPORT_AS_OF}
+       AND (av.effective_to IS NULL OR av.effective_to > ${REPORT_AS_OF})
+  ) fill ON TRUE`,
+    orgColumn: 'p.org_id',
+    // The position's employer is the legal-entity boundary: the executor
+    // clamps this to the reader's allowlist, so a restricted reader sees
+    // only their own establishments.
+    subsidiaryScope: { column: 'v.employer_subsidiary_id' },
+    requiredPermission: HRM_POSITION_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // No fiscal window: the as-of date is the sentinel bound to the org
+    // business day, not the period picker. An implicit period on a date
+    // column would silently re-window a point-in-time statement.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'code', label: 'Code', kind: 'text', expr: 'p.position_code' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'v.title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'v.status', options: HRM_POSITION_STATUSES },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'v.planned_fte' },
+      { key: 'funded_fte', label: 'Funded FTE', kind: 'number', expr: 'fund.funded_fte' },
+      { key: 'filled_fte', label: 'Filled FTE', kind: 'number', expr: 'fill.filled_fte' },
+      {
+        key: 'vacant_fte',
+        label: 'Vacant FTE',
+        kind: 'number',
+        expr: 'v.planned_fte - coalesce(fill.filled_fte, 0)',
+      },
+      { key: 'position_id', label: 'Position (id)', kind: 'uuid', expr: 'p.id' },
+    ],
+    defaultSort: { column: 'code', direction: 'asc' },
   },
 ]

@@ -6,7 +6,8 @@
       "overview": "Resumen",
       "changeRequests": "Solicitudes de cambio",
       "departments": "Departamentos",
-      "reports": "Informes"
+      "reports": "Informes",
+      "positions": "Puestos"
     },
     "vitals": {
       "headcount": "Plantilla",
@@ -14,7 +15,11 @@
       "employers": "Empleadores",
       "employersSub": "{count, plural, one {# filial} other {# filiales}}",
       "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
+      "openPositions": "Puestos abiertos",
+      "openPositionsSub": "{count, plural, one {# establecimiento en contratación} other {# establecimientos en contratación}}",
+      "unfundedFte": "FTE cubiertos sin financiación",
+      "unfundedFteSub": "Cubierto sin financiación asignada"
     },
     "groups": {
       "title": "Plantilla por empleador y departamento",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "Directorio"
+    },
+    "vacancy": {
+      "title": "Vacantes por departamento",
+      "department": "Departamento",
+      "employer": "Empleador",
+      "positions": "Puestos",
+      "planned": "FTE planificados",
+      "funded": "FTE financiados",
+      "filled": "FTE cubiertos",
+      "vacant": "FTE vacantes",
+      "unassignedDepartment": "Sin departamento",
+      "empty": "No hay puestos establecidos a {date}.",
+      "total": "Total"
     }
   },
   "overview": {
@@ -238,12 +256,63 @@
       "updatedToast": "Borrador actualizado.",
       "submittedToast": "Enviado para aprobación.",
       "withdrawnToast": "Solicitud retirada.",
-      "requestFailed": "No se pudo guardar la solicitud de cambio."
+      "requestFailed": "No se pudo guardar la solicitud de cambio.",
+      "kindPositionAssignment": "Asignación de puesto",
+      "positionLabel": "Puesto",
+      "positionUnset": "Sin puesto",
+      "positionHint": "La plantilla financiada que ocupa esta asignación. La asignación conserva su propio título, departamento y ubicación.",
+      "positionRequired": "Elija un puesto o marque la asignación como sin asignar.",
+      "unassignLabel": "Desasignar del puesto",
+      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla."
     }
   },
   "directory": {
     "employmentStatus": "Situación laboral",
     "serviceStart": "Inicio del servicio",
     "noEmployment": "Sin empleo"
+  },
+  "positions": {
+    "title": "Puestos",
+    "description": "La plantilla financiada detrás del plan de personal: FTE planificados, financiados y cubiertos por puesto, con sus versiones, financiación por período y titular actual.",
+    "statusAll": "Todos los estados",
+    "statusPlanned": "Planificado",
+    "statusOpen": "Abierto",
+    "statusFilled": "Cubierto",
+    "statusFrozen": "Congelado",
+    "statusClosed": "Cerrado",
+    "columns": {
+      "code": "Código",
+      "title": "Título",
+      "status": "Estado",
+      "department": "Departamento",
+      "planned": "FTE planificados",
+      "funded": "FTE financiados",
+      "filled": "FTE cubiertos",
+      "vacant": "FTE vacantes",
+      "holder": "Titular",
+      "unassignedHolder": "Vacante"
+    },
+    "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
+    "empty": "Ningún puesto coincide con este filtro.",
+    "total": "Total",
+    "drawer": {
+      "title": "Puesto {code}",
+      "versions": "Versiones",
+      "versionNo": "Versión {no}",
+      "effective": "Vigente de {from} a {to}",
+      "effectiveOpen": "Vigente desde {from}, sin fecha de fin",
+      "recorded": "Registrado {at}",
+      "funding": "Financiación por período",
+      "period": "Período de {from} a {to}",
+      "funded": "{fte} FTE financiados",
+      "costPlan": "Plan de costos {amount} {currency}",
+      "unfunded": "Sin financiación registrada",
+      "holder": "Titular actual",
+      "holderEmployment": "Empleo {id}",
+      "noHolder": "Sin titular a {date}",
+      "warnings": "Advertencias",
+      "refusal": "Requiere atención",
+      "missing": "Este puesto ya no está visible."
+    }
   }
 }

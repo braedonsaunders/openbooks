@@ -82,6 +82,7 @@ import {
   HrmUpcomingChanges,
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
+import { VacancyTable } from '../../app/(app)/hrm/positions/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1118,6 +1119,24 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       departmentColumn={str(props, 'departmentColumn') ?? ''}
       headcountColumn={str(props, 'headcountColumn') ?? ''}
       unassigned={str(props, 'unassigned') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+      totalLabel={str(props, 'totalLabel') ?? ''}
+    />
+  ),
+  /** A widget, not a slot: the loader already resolved vacancy through the
+   *  canonical position read service and passes rows plus loader-resolved
+   *  strings as data, so no org id, user id or Authz crosses the spec. */
+  'hrm-vacancy-table': (props) => (
+    <VacancyTable
+      groups={(props.groups as ComponentProps<typeof VacancyTable>['groups']) ?? []}
+      total={(props.total as ComponentProps<typeof VacancyTable>['total']) ?? { positions: 0, plannedFte: '0.0000', fundedFte: '0.0000', filledFte: '0.0000', vacantFte: '0.0000' }}
+      departmentColumn={str(props, 'departmentColumn') ?? ''}
+      employerColumn={str(props, 'employerColumn') ?? ''}
+      positionsColumn={str(props, 'positionsColumn') ?? ''}
+      plannedColumn={str(props, 'plannedColumn') ?? ''}
+      fundedColumn={str(props, 'fundedColumn') ?? ''}
+      filledColumn={str(props, 'filledColumn') ?? ''}
+      vacantColumn={str(props, 'vacantColumn') ?? ''}
       empty={str(props, 'empty') ?? ''}
       totalLabel={str(props, 'totalLabel') ?? ''}
     />

@@ -6,7 +6,8 @@
       "overview": "Übersicht",
       "changeRequests": "Änderungsanträge",
       "departments": "Abteilungen",
-      "reports": "Berichte"
+      "reports": "Berichte",
+      "positions": "Positionen"
     },
     "vitals": {
       "headcount": "Personalbestand",
@@ -14,7 +15,11 @@
       "employers": "Arbeitgeber",
       "employersSub": "{count, plural, one {# Tochtergesellschaft} other {# Tochtergesellschaften}}",
       "departments": "Abteilungen",
-      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}"
+      "departmentsSub": "{count, plural, one {# Abteilung} other {# Abteilungen}}",
+      "openPositions": "Offene Positionen",
+      "openPositionsSub": "{count, plural, one {# einstellende Einrichtung} other {# einstellende Einrichtungen}}",
+      "unfundedFte": "Ungedeckt besetzte FTE",
+      "unfundedFteSub": "Besetzt ohne dahinterstehende Finanzierung"
     },
     "groups": {
       "title": "Personalbestand nach Arbeitgeber und Abteilung",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "Verzeichnis"
+    },
+    "vacancy": {
+      "title": "Vakanzen nach Abteilung",
+      "department": "Abteilung",
+      "employer": "Arbeitgeber",
+      "positions": "Positionen",
+      "planned": "Geplante FTE",
+      "funded": "Finanzierte FTE",
+      "filled": "Besetzte FTE",
+      "vacant": "Offene FTE",
+      "unassignedDepartment": "Keine Abteilung",
+      "empty": "Zum {date} sind keine Positionen eingerichtet.",
+      "total": "Gesamt"
     }
   },
   "overview": {
@@ -238,12 +256,63 @@
       "updatedToast": "Entwurf aktualisiert.",
       "submittedToast": "Zur Genehmigung eingereicht.",
       "withdrawnToast": "Antrag zurückgezogen.",
-      "requestFailed": "Der Änderungsantrag konnte nicht gespeichert werden."
+      "requestFailed": "Der Änderungsantrag konnte nicht gespeichert werden.",
+      "kindPositionAssignment": "Positionszuordnung",
+      "positionLabel": "Position",
+      "positionUnset": "Keine Position",
+      "positionHint": "Der finanzierte Bestand, den diese Zuordnung besetzt. Die Zuordnung behält eigenen Titel, Abteilung und Standort.",
+      "positionRequired": "Wählen Sie eine Position oder markieren Sie die Zuordnung als nicht zugeordnet.",
+      "unassignLabel": "Von der Position lösen",
+      "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand."
     }
   },
   "directory": {
     "employmentStatus": "Beschäftigungsstatus",
     "serviceStart": "Dienstbeginn",
     "noEmployment": "Keine Beschäftigung"
+  },
+  "positions": {
+    "title": "Positionen",
+    "description": "Der finanzierte Stellenbestand hinter dem Personalplan: geplante, finanzierte und besetzte FTE je Position mit ihren Versionen, Finanzierung je Periode und aktuellem Inhaber.",
+    "statusAll": "Alle Status",
+    "statusPlanned": "Geplant",
+    "statusOpen": "Offen",
+    "statusFilled": "Besetzt",
+    "statusFrozen": "Eingefroren",
+    "statusClosed": "Geschlossen",
+    "columns": {
+      "code": "Code",
+      "title": "Titel",
+      "status": "Status",
+      "department": "Abteilung",
+      "planned": "Geplante FTE",
+      "funded": "Finanzierte FTE",
+      "filled": "Besetzte FTE",
+      "vacant": "Offene FTE",
+      "holder": "Inhaber",
+      "unassignedHolder": "Offen"
+    },
+    "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}",
+    "empty": "Keine Positionen entsprechen diesem Filter.",
+    "total": "Gesamt",
+    "drawer": {
+      "title": "Position {code}",
+      "versions": "Versionen",
+      "versionNo": "Version {no}",
+      "effective": "Gültig von {from} bis {to}",
+      "effectiveOpen": "Gültig ab {from}, unbefristet",
+      "recorded": "Erfasst {at}",
+      "funding": "Finanzierung nach Periode",
+      "period": "Periode {from} bis {to}",
+      "funded": "{fte} FTE finanziert",
+      "costPlan": "Kostenplan {amount} {currency}",
+      "unfunded": "Keine Finanzierung erfasst",
+      "holder": "Aktueller Inhaber",
+      "holderEmployment": "Beschäftigung {id}",
+      "noHolder": "Kein Inhaber zum {date}",
+      "warnings": "Warnungen",
+      "refusal": "Erfordert Aufmerksamkeit",
+      "missing": "Diese Position ist nicht mehr sichtbar."
+    }
   }
 }

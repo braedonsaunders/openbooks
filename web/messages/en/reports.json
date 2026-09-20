@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "Change requests",
         "description": "One row per employment change request — status, kind, employment, requester, submission and decision stamps, bound approval run and revision binding. Requires the HRM employment permission."
+      },
+      "hrm_positions": {
+        "label": "Positions",
+        "description": "One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission."
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "Created at",
         "id": "Request (id)",
         "employment_id": "Employment (id)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Title",
+        "status": "Status",
+        "employer": "Employer",
+        "department": "Department",
+        "planned_fte": "Planned FTE",
+        "funded_fte": "Funded FTE",
+        "filled_fte": "Filled FTE",
+        "vacant_fte": "Vacant FTE",
+        "position_id": "Position (id)"
       }
     },
     "enumValues": {
@@ -1244,6 +1260,11 @@
       "status_change": "Status change",
       "assignment_change": "Assignment change",
       "termination": "Termination",
+      "frozen": "Frozen",
+      "filled": "Filled",
+      "open": "Open",
+      "planned": "Planned",
+      "position_assignment": "Position assignment",
       "time_and_materials": "Time & materials",
       "fixed_price": "Fixed price",
       "cost_plus": "Cost plus",

@@ -642,6 +642,10 @@
       "hrm_change_requests": {
         "label": "変更申請",
         "description": "雇用変更申請ごとに1行：ステータス、種類、雇用、申請者、提出・決定のスタンプ、バインドされた承認ラン、リビジョンのバインディング。HRM雇用権限が必要です。"
+      },
+      "hrm_positions": {
+        "label": "ポジション",
+        "description": "レポート日時点で設定済みのポジションごとに1行：コード、タイトル、ステータス、部門、雇用主、計画FTE・財源付きFTE・充足済みFTE。HRMポジション権限が必要です。"
       }
     },
     "columns": {
@@ -1208,6 +1212,18 @@
         "created_at": "作成日時",
         "id": "申請（ID）",
         "employment_id": "雇用（ID）"
+      },
+      "hrm_positions": {
+        "code": "コード",
+        "title": "タイトル",
+        "status": "ステータス",
+        "employer": "雇用主",
+        "department": "部門",
+        "planned_fte": "計画FTE",
+        "funded_fte": "財源付きFTE",
+        "filled_fte": "充足済みFTE",
+        "vacant_fte": "欠員FTE",
+        "position_id": "ポジション（ID）"
       }
     },
     "enumValues": {
@@ -1285,7 +1301,12 @@
       "hire": "採用",
       "status_change": "ステータス変更",
       "assignment_change": "配属変更",
-      "termination": "退職手続き"
+      "termination": "退職手続き",
+      "frozen": "凍結済み",
+      "filled": "充足済み",
+      "open": "募集中",
+      "planned": "計画中",
+      "position_assignment": "ポジション割当"
     }
   },
   "operators": {

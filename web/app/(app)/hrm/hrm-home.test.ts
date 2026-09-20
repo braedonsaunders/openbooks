@@ -97,6 +97,17 @@ test("quick actions stay permission-gated and the readiness panel links migratio
   assert.ok(strings.includes("never list here"), "the upcoming panel states probation ends are not modeled");
 });
 
+test("vacancy rides the same cockpit through the shared vacancy widget", () => {
+  assert.match(view, /hrm-vacancy-table/, "vacancy renders through the shared widget");
+  assert.match(widgets, /'hrm-vacancy-table'/, "widget renders the shared section, never a second copy");
+  assert.match(contracts, /'hrm-vacancy-table': \{ props: \[/, "widget contract pins the prop surface");
+  assert.match(names, /'hrm-vacancy-table'/, "widget name is registered");
+  assert.match(loader, /getVacancyAsOf/, "vacancy resolves through the canonical position read service");
+  assert.ok(!/from positions[^_]/.test(loader), "loader issues no direct position table reads");
+  assert.ok(!/from position_versions/.test(loader), "loader issues no direct version reads");
+  assert.ok(!/from position_funding/.test(loader), "loader issues no direct funding reads");
+});
+
 test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrm: \[/, "the HRM strip is defined once per nav group");
   assert.match(groupTabs, /href: '\/hrm'/, "strip lands on the cockpit");
@@ -133,9 +144,13 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
   for (const key of [
     "home.title",
     "home.vitals.headcount",
+    "home.vitals.openPositions",
+    "home.vitals.unfundedFte",
     "home.groups.title",
     "home.groups.unassigned",
     "home.groups.empty",
+    "home.vacancy.title",
+    "home.vacancy.empty",
     "home.directory.title",
   ]) {
     assert.ok(strings.includes(`"${key.split(".").pop()}"`), `en/hrm carries ${key}`);

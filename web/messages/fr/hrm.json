@@ -6,7 +6,8 @@
       "overview": "Vue d'ensemble",
       "changeRequests": "Demandes de changement",
       "departments": "Services",
-      "reports": "Rapports"
+      "reports": "Rapports",
+      "positions": "Postes"
     },
     "vitals": {
       "headcount": "Effectif",
@@ -14,7 +15,11 @@
       "employers": "Employeurs",
       "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
       "departments": "Services",
-      "departmentsSub": "{count, plural, one {# service} other {# services}}"
+      "departmentsSub": "{count, plural, one {# service} other {# services}}",
+      "openPositions": "Postes ouverts",
+      "openPositionsSub": "{count, plural, one {# établissement qui recrute} other {# établissements qui recrutent}}",
+      "unfundedFte": "ETP pourvus non financés",
+      "unfundedFteSub": "Pourvu sans financement associé"
     },
     "groups": {
       "title": "Effectif par employeur et par service",
@@ -27,6 +32,19 @@
     },
     "directory": {
       "title": "Annuaire"
+    },
+    "vacancy": {
+      "title": "Postes vacants par service",
+      "department": "Service",
+      "employer": "Employeur",
+      "positions": "Postes",
+      "planned": "ETP prévus",
+      "funded": "ETP financés",
+      "filled": "ETP pourvus",
+      "vacant": "ETP vacants",
+      "unassignedDepartment": "Sans service",
+      "empty": "Aucun poste n'est établi au {date}.",
+      "total": "Total"
     }
   },
   "overview": {
@@ -238,12 +256,63 @@
       "updatedToast": "Brouillon mis à jour.",
       "submittedToast": "Soumis pour approbation.",
       "withdrawnToast": "Demande retirée.",
-      "requestFailed": "La demande de changement n'a pas pu être enregistrée."
+      "requestFailed": "La demande de changement n'a pas pu être enregistrée.",
+      "kindPositionAssignment": "Affectation à un poste",
+      "positionLabel": "Poste",
+      "positionUnset": "Sans poste",
+      "positionHint": "L'effectif financé qu'occupe cette affectation. L'affectation conserve son propre intitulé, service et lieu.",
+      "positionRequired": "Choisissez un poste ou marquez l'affectation comme non affectée.",
+      "unassignLabel": "Retirer du poste",
+      "unassignHint": "Enregistre un lien nul explicite : l'emplacement conserve son contenu mais n'occupe aucun effectif."
     }
   },
   "directory": {
     "employmentStatus": "Statut d'emploi",
     "serviceStart": "Début de service",
     "noEmployment": "Sans emploi"
+  },
+  "positions": {
+    "title": "Postes",
+    "description": "L'effectif financé derrière le plan d'effectifs : ETP prévus, financés et pourvus par poste, avec ses versions, son financement par période et son titulaire actuel.",
+    "statusAll": "Tous les statuts",
+    "statusPlanned": "Prévu",
+    "statusOpen": "Ouvert",
+    "statusFilled": "Pourvu",
+    "statusFrozen": "Gelé",
+    "statusClosed": "Clôturé",
+    "columns": {
+      "code": "Code",
+      "title": "Titre",
+      "status": "Statut",
+      "department": "Service",
+      "planned": "ETP prévus",
+      "funded": "ETP financés",
+      "filled": "ETP pourvus",
+      "vacant": "ETP vacants",
+      "holder": "Titulaire",
+      "unassignedHolder": "Vacant"
+    },
+    "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}",
+    "empty": "Aucun poste ne correspond à ce filtre.",
+    "total": "Total",
+    "drawer": {
+      "title": "Poste {code}",
+      "versions": "Versions",
+      "versionNo": "Version {no}",
+      "effective": "En vigueur du {from} au {to}",
+      "effectiveOpen": "En vigueur depuis le {from}, sans fin",
+      "recorded": "Enregistré le {at}",
+      "funding": "Financement par période",
+      "period": "Période du {from} au {to}",
+      "funded": "{fte} ETP financés",
+      "costPlan": "Budget {amount} {currency}",
+      "unfunded": "Aucun financement enregistré",
+      "holder": "Titulaire actuel",
+      "holderEmployment": "Emploi {id}",
+      "noHolder": "Aucun titulaire au {date}",
+      "warnings": "Avertissements",
+      "refusal": "Nécessite une attention",
+      "missing": "Ce poste n'est plus visible."
+    }
   }
 }

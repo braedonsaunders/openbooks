@@ -10,6 +10,8 @@ import {
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -26,7 +28,8 @@ import {
 /**
  * HRM read/search tools for the agentic assistant. Every tool is
  * feature-gated on the hrm switchboard flag and permission-gated with the
- * same key the HRM routes and pages use (`hrm.employment.read`).
+ * same key the HRM routes and pages use (`hrm.employment.read` for the
+ * employment tools, `hrm.position.read` for the headcount-plan tool).
  *
  * Every read reuses the canonical loaders in
  * engine/src/hrm/employment-read.ts — headcount as-of, episodes, the as-of
@@ -55,6 +58,7 @@ const HRM_FEATURE_OFF = "hrm_feature_disabled";
 export function hrmRefusal(error: unknown): ToolResult {
   if (
     error instanceof EmploymentReadError ||
+    error instanceof HrmPositionError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -312,4 +316,80 @@ const hrmChangeRequests: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests];
+const hrmPositionsAsOf: AssistantToolDef = {
+  name: "hrm_positions_as_of",
+  description:
+    "Positions with vacancy as of a date (or preset): planned versus funded versus filled FTE per position, department, and employer subsidiary, with over-filled and under-funded breaches named. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.position.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    asOf: dateInput.optional().describe("Vacancy as of this date; defaults to today"),
+    period: periodPresetInput.optional().describe("Fiscal-calendar preset; the vacancy is taken as of the preset's end date"),
+    status: z
+      .enum(["planned", "open", "filled", "frozen", "closed"])
+      .optional()
+      .describe("Keep only this lifecycle status"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { asOf?: string; period?: string; status?: string };
+    let effectiveDate: string;
+    if (a.period) {
+      const range = await resolveToolRange(authz.user.orgId, { period: a.period });
+      if ("error" in range) return { ok: false, error: range.error };
+      effectiveDate = range.to;
+    } else {
+      effectiveDate = a.asOf ?? (await orgToday(authz.user.orgId));
+    }
+    try {
+      const dto = await getVacancyAsOf({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        effectiveDate,
+        knownAt: new Date().toISOString(),
+        ...(a.status ? { status: a.status } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          asOf: dto.effectiveDate,
+          knownAt: dto.knownAt,
+          totals: dto.totals,
+          byDepartment: dto.byDepartment.map((group) => ({
+            departmentId: group.departmentId,
+            departmentName: group.departmentName,
+            employerSubsidiaryId: group.employerSubsidiaryId,
+            employerSubsidiaryName: group.employerSubsidiaryName,
+            positions: group.positions,
+            plannedFte: group.plannedFte,
+            fundedFte: group.fundedFte,
+            filledFte: group.filledFte,
+            vacantFte: group.vacantFte,
+          })),
+          positions: dto.positions.map((row) => ({
+            id: row.id,
+            positionCode: row.positionCode,
+            title: row.version.title,
+            status: row.version.status,
+            departmentId: row.version.departmentId,
+            employerSubsidiaryId: row.version.employerSubsidiaryId,
+            plannedFte: row.vacancy.plannedFte,
+            fundedFte: row.vacancy.fundedFte,
+            filledFte: row.vacancy.filledFte,
+            vacantFte: row.vacancy.vacantFte,
+            refusal: row.vacancy.refusal,
+            holders: row.holders,
+          })),
+          href: "/hrm/positions",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf];
