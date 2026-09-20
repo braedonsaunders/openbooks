@@ -23,6 +23,11 @@ const refusedLiterals = [
   ["IPv4-mapped unspecified", "http://[::ffff:0:0]/"],
   ["link-local metadata", "http://169.254.169.254/latest/meta-data/"],
   ["unspecified IPv6", "http://[::]/"],
+  ["TEST-NET-1 192.0.2.1", "http://192.0.2.1/"],
+  ["benchmark 198.18.0.1", "http://198.18.0.1/"],
+  ["TEST-NET-2 198.51.100.1", "http://198.51.100.1/"],
+  ["TEST-NET-3 203.0.113.1", "http://203.0.113.1/"],
+  ["IPv6 documentation 2001:db8::1", "http://[2001:db8::1]/"],
   ["file scheme", "file:///etc/passwd"],
 ] as const;
 
@@ -55,6 +60,27 @@ test("a test fails if 10.0.0.1, fd00::1, or 0.0.0.0 is accepted", async () => {
       `${url} must not be accepted by a public-unicast allowlist`,
     );
     assert.equal(isPublicUnicastAddress(new URL(url).hostname), false, `${url} is not public unicast`);
+  }
+});
+
+test("a test fails if 192.0.2.1, 198.18.0.1, 198.51.100.1, 203.0.113.1, or 2001:db8::1 is accepted", async () => {
+  for (const url of [
+    "http://192.0.2.1/",
+    "http://198.18.0.1/",
+    "http://198.51.100.1/",
+    "http://203.0.113.1/",
+    "http://[2001:db8::1]/",
+  ]) {
+    assert.equal(
+      typeof await connectorUrlRefusal(url),
+      "string",
+      `${url} must not be accepted by a public-unicast allowlist`,
+    );
+    assert.equal(
+      isPublicUnicastAddress(new URL(url).hostname),
+      false,
+      `${url} is reserved and not public unicast`,
+    );
   }
 });
 
