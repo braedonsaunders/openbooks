@@ -1,9 +1,18 @@
-import { sql } from "drizzle-orm";
+import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
 import { periodLockBlocksPosting } from "../close/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
-import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "../money/money.ts";
+import {
+  add,
+  fromUnits,
+  isZero,
+  mulPercent,
+  mulRate,
+  neg,
+  sum,
+  toUnits,
+} from "../money/money.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
@@ -96,15 +105,26 @@ type Runner = Pick<typeof db, "execute">;
  * db.transaction deliberately participates in an ambient transaction and would
  * otherwise silently discard the requested SERIALIZABLE isolation.
  */
-async function withOwnershipSourceTransaction<T>(orgId: string, work: (tx: Runner) => Promise<T>): Promise<T> {
+export async function withOwnershipSourceTransaction<T>(
+  orgId: string,
+  work: (tx: Runner) => Promise<T>,
+): Promise<T> {
   if (orgContext.getStore()?.txDb) {
-    throw new ConsolidationError("ownership consolidation must own its source-snapshot transaction", 'invalid');
+    throw new ConsolidationError(
+      "ownership consolidation must own its source-snapshot transaction",
+      "invalid",
+    );
   }
   try {
-    return await withOrgContext(orgId, () => db.transaction(work, { isolationLevel: "serializable" }));
+    return await withOrgContext(orgId, () =>
+      db.transaction(work, { isolationLevel: "serializable" }),
+    );
   } catch (error) {
     if (isSerializationConflict(error)) {
-      throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation", 'conflict-retry');
+      throw new ConsolidationError(
+        "consolidation sources changed concurrently (could not serialize access); retry the complete consolidation",
+        "conflict-retry",
+      );
     }
     throw error;
   }
@@ -147,31 +167,63 @@ type AdjustmentLine = { accountId: string; amount: string; memo: string };
  * adjustments and must never leak into the consolidated ledger — and every
  * produced entry lands in that same book.
  */
-async function runOwnershipConsolidationIn(
+export async function runOwnershipConsolidationIn(
   orgId: string,
   periodId: string,
   userId: string,
   tx: Runner,
+  options: { asOf?: string; interestIds?: string[] } = {},
 ): Promise<{ runId: string; entryIds: string[] }> {
-  if (!userId) throw new ConsolidationError("an attributable actor is required", 'invalid');
+  if (!userId)
+    throw new ConsolidationError(
+      "an attributable actor is required",
+      "invalid",
+    );
   // Journal phases honor the same close fence as rate derivation: a closed GL
   // must refuse with a ConsolidationError here, not with the kernel guard's
   // raw Postgres failure at the first draft→posted flip.
   await assertConsolidatedRatesOpen(orgId, periodId, tx);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`,
+  );
   const context = await loadSubsidiaryContext(tx, orgId);
-  const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
-  if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments", 'not-configured');
-  const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number }>(sql`
-    select id, starts_on, ends_on, name, is_adjustment, fiscal_calendar_id, period_number from accounting_periods where id=${periodId} and org_id=${orgId}
-  `));
+  const elimination = [...context.byId.values()].find(
+    (row) => row.isElimination && row.isActive,
+  );
+  if (!elimination)
+    throw new ConsolidationError(
+      "no active elimination subsidiary for ownership adjustments",
+      "not-configured",
+    );
+  const periodResult = await tx.execute<{
+    id: string;
+    starts_on: string;
+    ends_on: string;
+    name: string;
+    is_adjustment: boolean;
+    fiscal_calendar_id: string;
+    period_number: number;
+  }>(sql`
+    select id, starts_on::text, ends_on::text, name, is_adjustment, fiscal_calendar_id, period_number from accounting_periods where id=${periodId} and org_id=${orgId}
+  `);
   const period = periodResult.rows[0];
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`, 'not-found');
-  const bookResult = (await tx.execute<{ id: string }>(sql`
+  if (!period)
+    throw new ConsolidationError(`period ${periodId} not found`, "not-found");
+  const postingDate = options.asOf ?? period.ends_on;
+  if (postingDate < period.starts_on || postingDate > period.ends_on)
+    throw new ConsolidationError(
+      "ownership cutoff must fall inside the selected period",
+      "invalid",
+    );
+  const bookResult = await tx.execute<{ id: string }>(sql`
     select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl limit 1 for share
-  `));
+  `);
   const bookId = bookResult.rows[0]?.id;
-  if (!bookId) throw new ConsolidationError("no active primary posting book is configured", 'not-configured');
+  if (!bookId)
+    throw new ConsolidationError(
+      "no active primary posting book is configured",
+      "not-configured",
+    );
   // FOR SHARE pins every policy row this generation consumes for the whole
   // transaction: a material policy edit (ownership_interest_guard's
   // immutability tuple) must own the row exclusively, so it waits until the
@@ -179,13 +231,15 @@ async function runOwnershipConsolidationIn(
   // evidence — and under SERIALIZABLE an edit that already committed makes
   // this locking read fail with a serialization error instead of silently
   // computing a generation from superseded terms.
-  const interests = (await tx.execute<OwnershipInterest>(sql`
+  const interests = await tx.execute<OwnershipInterest>(sql`
     select * from subsidiary_ownership_interests
-     where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
+     where org_id=${orgId} and is_active and effective_from <= ${postingDate}
+       ${options.interestIds ? sql`and id in(select jsonb_array_elements_text(${JSON.stringify(options.interestIds)}::jsonb)::uuid)` : sql``}
+       and not exists(select 1 from consolidation_control_losses loss where loss.org_id=${orgId} and loss.reversed_by_change_id is null and (loss.interest_id=subsidiary_ownership_interests.id or loss.measurement->'ownershipInterestIds' ? subsidiary_ownership_interests.id::text))
        and (effective_to is null or effective_to >= ${period.starts_on})
      order by subsidiary_id, effective_from
      for share
-  `));
+  `);
   // Same-acquisition handover continuity: an ownership change closes the used
   // policy and opens a new effective-dated one for the same acquisition, so
   // consecutive policies must be contiguous (successor.from = predecessor.to
@@ -197,10 +251,15 @@ async function runOwnershipConsolidationIn(
   // re-acquisition carries a new date, so only mid-chain handovers are
   // policed — in both directions, since the predecessor or the successor may
   // live outside this run's period.
-  const chain = (await tx.execute<{
-    id: string; subsidiary_id: string; acquisition_date: string;
-    effective_from: string; effective_to: string | null; is_active: boolean;
-  }>(sql`
+  const chain = (
+    await tx.execute<{
+      id: string;
+      subsidiary_id: string;
+      acquisition_date: string;
+      effective_from: string;
+      effective_to: string | null;
+      is_active: boolean;
+    }>(sql`
     select p.id, p.subsidiary_id, p.acquisition_date::text as acquisition_date,
            p.effective_from::text as effective_from, p.effective_to::text as effective_to, p.is_active
       from subsidiary_ownership_interests p
@@ -212,7 +271,8 @@ async function runOwnershipConsolidationIn(
             and (q.effective_to is null or q.effective_to >= ${period.starts_on})
        )
      order by p.subsidiary_id, p.acquisition_date, p.effective_from, p.id
-     for share`)).rows;
+     for share`)
+  ).rows;
   const byChain = new Map<string, typeof chain>();
   for (const row of chain) {
     const key = `${row.subsidiary_id} ${row.acquisition_date}`;
@@ -222,55 +282,85 @@ async function runOwnershipConsolidationIn(
   }
   const nextDay = (iso: string): string => {
     const [y, m, d] = iso.split("-").map(Number);
-    return new Date(Date.UTC(y!, m! - 1, d!) + 86_400_000).toISOString().slice(0, 10);
+    return new Date(Date.UTC(y!, m! - 1, d!) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
   };
   // select * returns DATE columns as Date objects; the chain rows above are
   // ::text. Normalize before keying so the lookup cannot silently miss.
   const isoDate = (value: string | Date): string =>
     typeof value === "string" ? value : value.toISOString().slice(0, 10);
   for (const interest of interests.rows) {
-    const group = byChain.get(`${interest.subsidiary_id} ${isoDate(interest.acquisition_date)}`);
+    const group = byChain.get(
+      `${interest.subsidiary_id} ${isoDate(interest.acquisition_date)}`,
+    );
     if (!group) continue;
     const idx = group.findIndex((row) => row.id === interest.id);
     if (idx < 0) continue;
     const here = group[idx]!;
-    const label = context.byId.get(interest.subsidiary_id)?.name ?? interest.subsidiary_id;
+    const label =
+      context.byId.get(interest.subsidiary_id)?.name ?? interest.subsidiary_id;
     const gap = (from: string, to: string | null, succFrom: string): string =>
       `ownership coverage for ${label} has a gap: the policy ending ${from} is not followed by a policy starting ${to} (next starts ${succFrom}) — close the gap before consolidating`;
     const prev = idx > 0 ? group[idx - 1]! : null;
-    if (prev && prev.effective_from < here.effective_from && prev.effective_to
-        && here.effective_from !== nextDay(prev.effective_to)) {
-      throw new ConsolidationError(gap(prev.effective_to, nextDay(prev.effective_to), here.effective_from), 'ownership-gap');
+    if (
+      prev &&
+      prev.effective_from < here.effective_from &&
+      prev.effective_to &&
+      here.effective_from !== nextDay(prev.effective_to)
+    ) {
+      throw new ConsolidationError(
+        gap(prev.effective_to, nextDay(prev.effective_to), here.effective_from),
+        "ownership-gap",
+      );
     }
     const succ = idx + 1 < group.length ? group[idx + 1]! : null;
-    if (succ && succ.is_active && succ.effective_from > here.effective_from && here.effective_to
-        && succ.effective_from !== nextDay(here.effective_to)) {
-      throw new ConsolidationError(gap(here.effective_to, nextDay(here.effective_to), succ.effective_from), 'ownership-gap');
+    if (
+      succ &&
+      succ.is_active &&
+      succ.effective_from > here.effective_from &&
+      here.effective_to &&
+      succ.effective_from !== nextDay(here.effective_to)
+    ) {
+      throw new ConsolidationError(
+        gap(here.effective_to, nextDay(here.effective_to), succ.effective_from),
+        "ownership-gap",
+      );
     }
   }
-  const run = (await tx.execute<{ id: string }>(sql`
+  const run = await tx.execute<{ id: string }>(sql`
     insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
     values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
-  `));
+  `);
   const runId = run.rows[0]!.id;
   const entryIds: string[] = [];
   let sequence = 0;
 
-  const post = async (interestId: string, kind: "acquisition" | "nci_income" | "equity_income" | "reversal", lines: AdjustmentLine[], reverses?: string) => {
+  const post = async (
+    interestId: string,
+    kind: "acquisition" | "nci_income" | "equity_income" | "reversal",
+    lines: AdjustmentLine[],
+    reverses?: string,
+  ) => {
     const material = lines.filter((line) => !isZero(line.amount));
     if (material.length === 0) return null;
-    assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
+    assertFinalKernelBalance(
+      material.map((line) => ({
+        amount: line.amount,
+        subsidiaryId: elimination.id,
+      })),
+    );
     sequence++;
     // run ids are uuidv7 (time-ordered): their LEADING bytes repeat for
     // every run inside a ~50-day window, so the whole id must salt the
     // entry number to keep reruns unique under journal_entries_org_number.
-    const inserted = (await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
       values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId}-${sequence}`},
-              ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
+              ${postingDate},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
       returning id
-    `));
+    `);
     const entryId = inserted.rows[0]!.id;
     for (let index = 0; index < material.length; index++) {
       const line = material[index]!;
@@ -281,7 +371,9 @@ async function runOwnershipConsolidationIn(
                 ${elimination.baseCurrency},${line.amount},1,${line.memo})
       `);
     }
-    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`);
+    await tx.execute(
+      sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`,
+    );
     if (reverses) {
       await tx.execute(sql`
         update journal_entries
@@ -297,17 +389,38 @@ async function runOwnershipConsolidationIn(
     return entryId;
   };
 
-  const prior = (await tx.execute<{ interest_id: string; id: string; entry_number: string }>(sql`
+  const prior = await tx.execute<{
+    interest_id: string;
+    id: string;
+    entry_number: string;
+  }>(sql`
     select oce.interest_id, je.id, je.entry_number
       from ownership_consolidation_entries oce
       join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
       join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
-     where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal' and je.reverses_entry_id is null
+     where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal'
+       ${options.interestIds ? sql`and oce.interest_id in(select jsonb_array_elements_text(${JSON.stringify(options.interestIds)}::jsonb)::uuid)` : sql``}
+       and not exists(select 1 from consolidation_control_losses loss where loss.org_id=${orgId} and loss.reversed_by_change_id is null and (loss.interest_id=oce.interest_id or loss.measurement->'ownershipInterestIds' ? oce.interest_id::text)) and je.reverses_entry_id is null
        and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
-  `));
+  `);
   for (const old of prior.rows) {
-    const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`));
-    await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
+    const oldLines = await tx.execute<{
+      account_id: string;
+      amount: string;
+      memo: string | null;
+    }>(
+      sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`,
+    );
+    await post(
+      old.interest_id,
+      "reversal",
+      oldLines.rows.map((line) => ({
+        accountId: line.account_id,
+        amount: neg(line.amount),
+        memo: `Reversal of ${old.entry_number}`,
+      })),
+      old.id,
+    );
   }
 
   for (const interest of interests.rows) {
@@ -324,7 +437,11 @@ async function runOwnershipConsolidationIn(
     // rate. A same-currency subsidiary translates at par. A missing rate is
     // refused outright — summing untranslated amounts would silently allocate
     // NCI and equity income in the wrong currency.
-    const periodActivity = (await tx.execute<{ profit: string; distributions: string; missingRate: boolean | null }>(sql`
+    const periodActivity = await tx.execute<{
+      profit: string;
+      distributions: string;
+      missingRate: boolean | null;
+    }>(sql`
       select coalesce(-sum(round(l.amount * translation.rate, 4)) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
              coalesce(sum(round(l.amount * translation.rate, 4)) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions,
              bool_or(translation.rate is null) as "missingRate"
@@ -345,15 +462,16 @@ async function runOwnershipConsolidationIn(
           end as rate
         ) translation
        where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
-         and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
+         and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId} and e.posting_date<=${postingDate}
          and e.posting_date between ${interest.effective_from}
              and coalesce(${interest.effective_to}, 'infinity'::date)
-    `));
+    `);
     if (periodActivity.rows[0]!.missingRate) {
       const source = context.byId.get(interest.subsidiary_id);
       throw new ConsolidationError(
         `no consolidated rate for ${source?.baseCurrency ?? "unknown"}→${elimination.baseCurrency} in period ${periodId} — derive rates first`,
-      'rates-not-derived');
+        "rates-not-derived",
+      );
     }
     const profit = periodActivity.rows[0]!.profit;
     const distributions = periodActivity.rows[0]!.distributions;
@@ -372,7 +490,12 @@ async function runOwnershipConsolidationIn(
       // investment. There is no NCI to recognize — only the owned share is
       // ever combined — and no income allocation: the owned share of profit
       // already arrives through the weighted lines.
-      const acquisitions = (await tx.execute<{ in_scope: boolean; balance: number; future_activity: boolean }>(sql`
+      const acquisitions = (
+        await tx.execute<{
+          in_scope: boolean;
+          balance: number;
+          future_activity: boolean;
+        }>(sql`
         with recursive roots as (
           select e.id,e.period_id,${financialClosePeriodScope(period)} as in_scope
             from ownership_consolidation_entries oce
@@ -397,87 +520,199 @@ async function runOwnershipConsolidationIn(
                bool_or(not p.in_scope and p.balance<>0) as future_activity
           from roots join period_balances p on p.acquisition_id=roots.id
          group by roots.id,roots.in_scope
-      `)).rows;
+      `)
+      ).rows;
       // Follow immutable reversal/restoration lineage, never the original's
       // mutable status alone. Each exact mirror flips its predecessor's sign.
       // A zero balance can be replaced only when later assigned periods carry
       // no remaining movement: otherwise an earlier replacement would duplicate
       // a later acquisition/restoration. Same-period mirrors net to zero and
       // retain the supported controlled-reversal recovery path.
-      const acquisitionExists = acquisitions.filter((row) => row.balance !== 0 || row.future_activity);
+      const acquisitionExists = acquisitions.filter(
+        (row) => row.balance !== 0 || row.future_activity,
+      );
       if (acquisitionExists.some((row) => !row.in_scope || row.balance !== 1)) {
         throw new ConsolidationError(
           "acquisition elimination affects a later period; reconcile its original and reversal period assignments before consolidating the earlier period",
-        'period-conflict');
+          "period-conflict",
+        );
       }
       if (acquisitionExists.length > 1) {
-        throw new ConsolidationError("multiple effective acquisition eliminations require reconciliation before consolidation", 'needs-reconciliation');
+        throw new ConsolidationError(
+          "multiple effective acquisition eliminations require reconciliation before consolidation",
+          "needs-reconciliation",
+        );
       }
-      if (!acquisitionExists[0] && interest.acquisition_date <= period.ends_on) {
-        const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
+      if (
+        !acquisitionExists[0] &&
+        interest.acquisition_date <= period.ends_on
+      ) {
+        const equity = await tx.execute<{
+          account_id: string;
+          amount: string;
+        }>(sql`
           select l.account_id,coalesce(sum(l.amount),0)::text as amount
             from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
             join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
            where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
              and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
            group by l.account_id having sum(l.amount)<>0
-        `));
-        const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
-        const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
+        `);
+        const translatedEquity = equity.rows.map((line) => ({
+          accountId: line.account_id,
+          balance: mulRate(line.amount, interest.acquisition_rate),
+        }));
+        const bookNetAssets = sum(
+          translatedEquity.map((line) => neg(line.balance)),
+        );
         if (interest.method === "proportionate") {
-          const ownedEquity = translatedEquity.map((line) => ({ accountId: line.accountId, balance: mulPercent(line.balance, interest.ownership_percent) }));
+          const ownedEquity = translatedEquity.map((line) => ({
+            accountId: line.accountId,
+            balance: mulPercent(line.balance, interest.ownership_percent),
+          }));
           // Derived from the rounded owned legs, not re-percentaged from the
           // total: per-line rounding must net exactly in the posted entry.
-          const ownedNetAssets = sum(ownedEquity.map((line) => neg(line.balance)));
-          const ownedFairValue = mulPercent(interest.fair_value_net_assets, interest.ownership_percent);
-          const fairValueAdjustment = fromUnits(toUnits(ownedFairValue) - toUnits(ownedNetAssets));
-          const goodwill = fromUnits(toUnits(interest.acquisition_cost) - toUnits(ownedFairValue));
+          const ownedNetAssets = sum(
+            ownedEquity.map((line) => neg(line.balance)),
+          );
+          const ownedFairValue = mulPercent(
+            interest.fair_value_net_assets,
+            interest.ownership_percent,
+          );
+          const fairValueAdjustment = fromUnits(
+            toUnits(ownedFairValue) - toUnits(ownedNetAssets),
+          );
+          const goodwill = fromUnits(
+            toUnits(interest.acquisition_cost) - toUnits(ownedFairValue),
+          );
           await post(interest.id, "acquisition", [
-            ...ownedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate owned share of acquisition-date equity" })),
-            { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
-            { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
-            { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
+            ...ownedEquity.map((line) => ({
+              accountId: line.accountId,
+              amount: neg(line.balance),
+              memo: "Eliminate owned share of acquisition-date equity",
+            })),
+            {
+              accountId: interest.fair_value_adjustment_account_id!,
+              amount: fairValueAdjustment,
+              memo: "Fair-value net asset adjustment",
+            },
+            {
+              accountId: interest.goodwill_account_id!,
+              amount: goodwill,
+              memo: "Acquisition goodwill or bargain purchase",
+            },
+            {
+              accountId: interest.investment_account_id,
+              amount: neg(interest.acquisition_cost),
+              memo: "Eliminate parent investment",
+            },
           ]);
         } else {
-          const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
-          const nci = interest.nci_measurement === "fair_value"
-            ? interest.nci_fair_value!
-            : mulPercent(interest.fair_value_net_assets, nciPercent);
-          const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
-          const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
+          const nciPercent = fromUnits(
+            toUnits("100") - toUnits(interest.ownership_percent),
+          );
+          const nci =
+            interest.nci_measurement === "fair_value"
+              ? interest.nci_fair_value!
+              : mulPercent(interest.fair_value_net_assets, nciPercent);
+          const fairValueAdjustment = fromUnits(
+            toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets),
+          );
+          const goodwill = fromUnits(
+            toUnits(interest.acquisition_cost) +
+              toUnits(nci) -
+              toUnits(interest.fair_value_net_assets),
+          );
           await post(interest.id, "acquisition", [
-            ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
-            { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
-            { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
-            { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
-            ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
+            ...translatedEquity.map((line) => ({
+              accountId: line.accountId,
+              amount: neg(line.balance),
+              memo: "Eliminate acquisition-date equity",
+            })),
+            {
+              accountId: interest.fair_value_adjustment_account_id!,
+              amount: fairValueAdjustment,
+              memo: "Fair-value net asset adjustment",
+            },
+            {
+              accountId: interest.goodwill_account_id!,
+              amount: goodwill,
+              memo: "Acquisition goodwill or bargain purchase",
+            },
+            {
+              accountId: interest.investment_account_id,
+              amount: neg(interest.acquisition_cost),
+              memo: "Eliminate parent investment",
+            },
+            ...(interest.nci_equity_account_id
+              ? [
+                  {
+                    accountId: interest.nci_equity_account_id,
+                    amount: neg(nci),
+                    memo: "Recognize non-controlling interest",
+                  },
+                ]
+              : []),
           ]);
         }
       }
       if (interest.method === "full") {
-        const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+        const nciPercent = fromUnits(
+          toUnits("100") - toUnits(interest.ownership_percent),
+        );
         const nciIncome = mulPercent(profit, nciPercent);
         if (interest.nci_income_account_id && interest.nci_equity_account_id) {
           await post(interest.id, "nci_income", [
-            { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
-            { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
+            {
+              accountId: interest.nci_income_account_id!,
+              amount: nciIncome,
+              memo: "Allocate profit to non-controlling interests",
+            },
+            {
+              accountId: interest.nci_equity_account_id!,
+              amount: neg(nciIncome),
+              memo: "Accumulate non-controlling interest",
+            },
           ]);
         }
       }
     } else if (interest.method === "equity") {
       const shareProfit = mulPercent(profit, interest.ownership_percent);
-      const shareDistribution = mulPercent(distributions, interest.ownership_percent);
+      const shareDistribution = mulPercent(
+        distributions,
+        interest.ownership_percent,
+      );
       await post(interest.id, "equity_income", [
-        { accountId: interest.investment_account_id, amount: shareProfit, memo: "Equity-method share of profit" },
-        { accountId: interest.equity_income_account_id, amount: neg(shareProfit), memo: "Equity-method income" },
-        ...(interest.distribution_income_account_id ? [
-          { accountId: interest.investment_account_id, amount: neg(shareDistribution), memo: "Equity-method distribution reduces investment" },
-          { accountId: interest.distribution_income_account_id, amount: shareDistribution, memo: "Eliminate distribution income" },
-        ] : []),
+        {
+          accountId: interest.investment_account_id,
+          amount: shareProfit,
+          memo: "Equity-method share of profit",
+        },
+        {
+          accountId: interest.equity_income_account_id,
+          amount: neg(shareProfit),
+          memo: "Equity-method income",
+        },
+        ...(interest.distribution_income_account_id
+          ? [
+              {
+                accountId: interest.investment_account_id,
+                amount: neg(shareDistribution),
+                memo: "Equity-method distribution reduces investment",
+              },
+              {
+                accountId: interest.distribution_income_account_id,
+                amount: shareDistribution,
+                memo: "Eliminate distribution income",
+              },
+            ]
+          : []),
       ]);
     }
   }
-  await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`);
+  await tx.execute(
+    sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`,
+  );
   return { runId, entryIds };
 }
 
@@ -730,7 +965,11 @@ export async function runAutoElimination(
   orgId: string,
   periodId: string,
   userId: string,
-): Promise<{ entryId: string | null; lineCount: number }> {
+): Promise<{
+  entryId: string | null;
+  lineCount: number;
+  assetEntryIds?: string[];
+}> {
   // One elimination run per tenant/period at a time. Every read that decides
   // what to reverse or create happens on ONE REPEATABLE READ snapshot inside
   // the run's transaction: a source posting that commits mid-run is excluded
@@ -754,36 +993,111 @@ async function runAutoEliminationIn(
   periodId: string,
   userId: string,
   tx: Runner,
-): Promise<{ entryId: string | null; lineCount: number }> {
-  if (!userId) throw new ConsolidationError("an attributable actor is required", 'invalid');
+): Promise<{
+  entryId: string | null;
+  lineCount: number;
+  assetEntryIds?: string[];
+}> {
+  if (!userId)
+    throw new ConsolidationError(
+      "an attributable actor is required",
+      "invalid",
+    );
   const ctx = await loadSubsidiaryContext(tx, orgId);
-  const elim = [...ctx.byId.values()].find((s) => s.isElimination && s.isActive);
+  const elim = [...ctx.byId.values()].find(
+    (s) => s.isElimination && s.isActive,
+  );
   if (!elim) {
     throw new ConsolidationError(
       "no active elimination subsidiary — create one under Setup → Subsidiaries",
-    'not-configured');
+      "not-configured",
+    );
   }
 
   // Same close fence as rate derivation and the ownership phase: a closed GL
   // refuses with a ConsolidationError, never a raw kernel-guard failure.
   await assertConsolidatedRatesOpen(orgId, periodId, tx);
 
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`,
+  );
 
-  const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
-    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
+  const periodRes = await tx.execute<{ ends_on: string; name: string }>(sql`
+    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`);
   const period = periodRes.rows[0];
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`, 'not-found');
-  const bookRes = (await tx.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`));
+  if (!period)
+    throw new ConsolidationError(`period ${periodId} not found`, "not-found");
+  const bookRes = await tx.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`);
   const book = bookRes.rows[0];
-  if (!book) throw new ConsolidationError("no active primary posting book is configured", 'not-configured');
+  if (!book)
+    throw new ConsolidationError(
+      "no active primary posting book is configured",
+      "not-configured",
+    );
+
+  // A shared due-to/from account cannot identify whether a later balance is
+  // owed to the former subsidiary or to a company still inside the group.
+  // Refuse before eliminating; guessing would erase third-party receivables.
+  const ambiguous = (
+    await tx.execute<{ account_id: string }>(sql`
+    with pair_accounts as (
+      select from_subsidiary_id as subsidiary_id,due_from_account_id as account_id,to_subsidiary_id as counterparty from intercompany_pairs where org_id=${orgId} and is_active
+      union all select to_subsidiary_id,due_to_account_id,from_subsidiary_id from intercompany_pairs where org_id=${orgId} and is_active
+    )
+    select l.account_id from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+    join accounts a on a.org_id=l.org_id and a.id=l.account_id
+    join consolidation_control_losses loss on loss.org_id=e.org_id and loss.reversed_by_change_id is null and e.posting_date>loss.effective_on
+    where e.org_id=${orgId} and e.book_id=${book.id} and e.period_id=${periodId} and e.status in('posted','reversed') and a.eliminate
+    and exists(select 1 from pair_accounts p where p.subsidiary_id=l.subsidiary_id and p.account_id=l.account_id and loss.excluded_subsidiary_ids ? p.counterparty::text)
+    and exists(select 1 from pair_accounts p where p.subsidiary_id=l.subsidiary_id and p.account_id=l.account_id and not(loss.excluded_subsidiary_ids ? p.counterparty::text)) limit 1`)
+  ).rows[0];
+  if (ambiguous)
+    throw new ConsolidationError(
+      "the former subsidiary shares an intercompany control account with a remaining company; configure distinct pair accounts and reclassify the affected balances before auto-elimination",
+      "not-configured",
+    );
+
+  let assetEntryIds: string[];
+  try {
+    assetEntryIds = await consolidateAssetTransfers(
+      tx,
+      orgId,
+      periodId,
+      userId,
+    );
+  } catch (error) {
+    if (error instanceof ConsolidationError) throw error;
+    throw new ConsolidationError(
+      error instanceof Error
+        ? error.message
+        : "Asset transfer consolidation failed",
+      "invalid",
+    );
+  }
+  const assetLineCount = assetEntryIds.length
+    ? (
+        await tx.execute<{ count: number }>(
+          sql`select count(*)::int as count from journal_lines where org_id=${orgId} and entry_id in(select jsonb_array_elements_text(${JSON.stringify(assetEntryIds)}::jsonb)::uuid)`,
+        )
+      ).rows[0]!.count
+    : 0;
+  const finishElimination = (entryId: string | null, lineCount: number) => ({
+    entryId: entryId ?? assetEntryIds.at(-1) ?? null,
+    lineCount: lineCount + assetLineCount,
+    ...(assetEntryIds.length ? { assetEntryIds } : {}),
+  });
 
   // Source scope = the destination book: only primary-book entries feed the
   // consolidated elimination.
   // Flow accounts use the period average rate, while balance-sheet accounts
   // use the period-end current rate, matching statement translation semantics.
-  const activity = (await tx.execute<{ accountId: string; subsidiaryId: string; total: string | null; missingRate: boolean }>(sql`
+  const activity = await tx.execute<{
+    accountId: string;
+    subsidiaryId: string;
+    total: string | null;
+    missingRate: boolean;
+  }>(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
            sum(round(l.amount * case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
@@ -809,61 +1123,93 @@ async function runAutoEliminationIn(
      where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${book.id}
        and e.status in ('posted', 'reversed')
        and a.eliminate and l.subsidiary_id <> ${elim.id}
+       and not exists(select 1 from consolidation_control_losses loss where loss.org_id=e.org_id and loss.reversed_by_change_id is null and e.posting_date>loss.effective_on and (loss.excluded_subsidiary_ids ? l.subsidiary_id::text or exists(select 1 from journal_lines counterpart where counterpart.org_id=e.org_id and counterpart.entry_id=e.id and loss.excluded_subsidiary_ids ? counterpart.subsidiary_id::text) or exists(select 1 from intercompany_pairs pair where pair.org_id=l.org_id and pair.is_active and ((pair.from_subsidiary_id=l.subsidiary_id and pair.due_from_account_id=l.account_id and loss.excluded_subsidiary_ids ? pair.to_subsidiary_id::text) or (pair.to_subsidiary_id=l.subsidiary_id and pair.due_to_account_id=l.account_id and loss.excluded_subsidiary_ids ? pair.from_subsidiary_id::text))))
      group by l.account_id, l.subsidiary_id
-    having sum(l.amount) <> 0`));
+    having sum(l.amount) <> 0`);
 
-  const missing = activity.rows.find((row) => row.missingRate || row.total === null);
+  const missing = activity.rows.find(
+    (row) => row.missingRate || row.total === null,
+  );
   if (missing) {
     const source = ctx.byId.get(missing.subsidiaryId);
     throw new ConsolidationError(
       `no consolidated current rate for ${source?.baseCurrency ?? "unknown"}→${elim.baseCurrency} in period ${periodId}`,
-    'rates-not-derived');
+      "rates-not-derived",
+    );
   }
-  const translatedActivity = activity.rows as { accountId: string; subsidiaryId: string; total: string }[];
+  let translatedActivity = activity.rows as {
+    accountId: string;
+    subsidiaryId: string;
+    total: string;
+  }[];
+
+  // A disposal pins any attributed generation. New runs post only the
+  // difference from that retained generation, not a second full elimination.
+  const pinned = (
+    await tx.execute<{ account_id: string; amount: string }>(
+      sql`select l.account_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.period_id=${periodId} and e.book_id=${book.id} and e.origin='intercompany' and e.status in('posted','reversed') and e.subsidiary_id=${elim.id} and exists(select 1 from consolidation_control_losses loss where loss.org_id=e.org_id and loss.reversed_by_change_id is null and exists(select 1 from jsonb_array_elements(loss.measurement->'manualEvidence') evidence where evidence->>'entryId'=e.id::text)) group by l.account_id`,
+    )
+  ).rows;
+  for (const kept of pinned) {
+    const row = translatedActivity.find((r) => r.accountId === kept.account_id);
+    if (row) row.total = add(row.total, kept.amount);
+    else
+      translatedActivity.push({
+        accountId: kept.account_id,
+        subsidiaryId: elim.id,
+        total: kept.amount,
+      });
+  }
+  translatedActivity = translatedActivity.filter((row) => !isZero(row.total));
 
   // Prior effective elimination entries are reversed on a re-run. Posted
   // ledger rows are never deleted or rewritten.
-  const prior = (await tx.execute<{ id: string; entryNumber: string }>(sql`
+  const prior = await tx.execute<{ id: string; entryNumber: string }>(sql`
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}
        and original.book_id = ${book.id}
        and original.subsidiary_id = ${elim.id}
        and original.origin = 'intercompany' and original.status = 'posted'
+       and not exists(select 1 from consolidation_control_losses loss where loss.org_id=original.org_id and loss.reversed_by_change_id is null and exists(select 1 from jsonb_array_elements(loss.measurement->'manualEvidence') evidence where evidence->>'entryId'=original.id::text))
        and original.reverses_entry_id is null
        and not exists (
          select 1 from journal_entries reversal
           where reversal.org_id = original.org_id
             and reversal.reverses_entry_id = original.id
             and reversal.status = 'posted'
-       )`));
+       )`);
 
   if (translatedActivity.length === 0 && prior.rows.length === 0) {
-    return { entryId: null, lineCount: 0 };
+    return finishElimination(null, 0);
   }
 
   const residual = sum(translatedActivity.map((r) => r.total));
   if (!isZero(residual)) {
     throw new ConsolidationError(
       `intercompany activity does not net to zero for the period (residual ${residual}) — reconcile due-to/due-from before eliminating`,
-    'out-of-balance');
+      "out-of-balance",
+    );
   }
 
   if (translatedActivity.length > 0) {
     assertFinalKernelBalance(
-      translatedActivity.map((row) => ({ amount: neg(row.total), subsidiaryId: elim.id })),
+      translatedActivity.map((row) => ({
+        amount: neg(row.total),
+        subsidiaryId: elim.id,
+      })),
     );
   }
 
   let lastReversalId: string | null = null;
   for (const p of prior.rows) {
-    const rev = (await tx.execute<{ id: string }>(sql`
+    const rev = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
          memo, status, origin, reverses_entry_id, created_by)
       values (${orgId}, ${book.id}, ${elim.id}, ${`${p.entryNumber}-R`}, ${period.ends_on},
               ${periodId}, ${`Reversal of ${p.entryNumber}`}, 'draft', 'intercompany', ${p.id}, ${userId ?? null})
-      returning id`));
+      returning id`);
     const reversalId = rev.rows[0]!.id;
     await tx.execute(sql`
       insert into journal_lines
@@ -882,27 +1228,29 @@ async function runAutoEliminationIn(
     `);
     lastReversalId = reversalId;
   }
-  if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
+  if (translatedActivity.length === 0)
+    return finishElimination(lastReversalId, 0);
 
   // Reversed generations keep their rows (posted ledgers are never
   // rewritten), so the replacement's number must advance past every prior
   // generation to satisfy journal_entries_org_number.
-  const generations = (await tx.execute<{ n: number }>(sql`
+  const generations = await tx.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
      where org_id = ${orgId} and period_id = ${periodId}
        and book_id = ${book.id}
        and subsidiary_id = ${elim.id} and origin = 'intercompany'
        and reverses_entry_id is null
-       and entry_number like ${`ELIM-${period.name}%`}`));
+       and entry_number like ${`ELIM-${period.name}%`}`);
   const genN = (generations.rows[0]?.n ?? 0) + 1;
-  const elimEntryNumber = genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
-  const ins = (await tx.execute<{ id: string }>(sql`
+  const elimEntryNumber =
+    genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
+  const ins = await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
        memo, status, origin, created_by)
     values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
             ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
-    returning id`));
+    returning id`);
   const entryId = ins.rows[0]!.id;
 
   let n = 0;
@@ -932,7 +1280,7 @@ async function runAutoEliminationIn(
       ${userId}, 'auto_elimination'
     )
   `);
-  return { entryId, lineCount: n };
+  return finishElimination(entryId, n);
 }
 
 /**
@@ -959,13 +1307,15 @@ export async function runCombinedConsolidation(
 ): Promise<{
   ratesWritten: number;
   ownership: { runId: string; entryIds: string[] };
-  elimination: { entryId: string | null; lineCount: number };
+  elimination: {
+    entryId: string | null;
+    lineCount: number;
+    assetEntryIds?: string[];
+  };
 }> {
-  return withOwnershipSourceTransaction(orgId,
-    async (tx) => ({
-      ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx, userId),
-      ownership: await runOwnershipConsolidationIn(orgId, periodId, userId, tx),
-      elimination: await runAutoEliminationIn(orgId, periodId, userId, tx),
-    }),
-  );
+  return withOwnershipSourceTransaction(orgId, async (tx) => ({
+    ratesWritten: await deriveConsolidatedRatesIn(orgId, periodId, tx, userId),
+    ownership: await runOwnershipConsolidationIn(orgId, periodId, userId, tx),
+    elimination: await runAutoEliminationIn(orgId, periodId, userId, tx),
+  }));
 }

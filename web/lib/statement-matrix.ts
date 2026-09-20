@@ -90,11 +90,18 @@ export type StatementSubsidiaryRateSet = {
  * (single-subsidiary orgs, unchanged behavior).
  */
 export type StatementSubsidiaryContext = {
-  ids: string[]
-  rates?: StatementSubsidiaryRateSet[]
+  ids: string[];
+  rates?: StatementSubsidiaryRateSet[];
   /** Exact ownership multiplier. Equity-method entities are excluded upstream;
    * proportionately consolidated entities carry a factor below one. */
-  weights?: { subsidiaryId: string; factor: string }[]
+  weights?: { subsidiaryId: string; factor: string }[];
+  /** Losing control stops later source activity, not pre-disposal income. */
+  controlLosses?: {
+    subsidiaryId: string;
+    through: string;
+    closingRate: string;
+    factor: string;
+  }[];
   /**
    * Server-set by resolveSubsidiaryView: the caller is unrestricted AND the
    * viewed set contains the org root, so document-side readers built from
@@ -102,8 +109,8 @@ export type StatementSubsidiaryContext = {
    * readers ignore it (journal legs are never null). Restricted callers
    * never receive it — their nulls fail closed.
    */
-  includeNullSubsidiary?: boolean
-}
+  includeNullSubsidiary?: boolean;
+};
 
 export type StatementColumnKind = 'amount' | 'variance_abs' | 'variance_pct'
 export type StatementColumn = {
@@ -224,9 +231,17 @@ function rateSetsBySubsidiary(
  * multi-period columns (YTD, equal-length comparatives) legitimate while any
  * true calendar gap fails loudly.
  */
-function assertRateCoverage(subsidiary: StatementSubsidiaryContext, required: { from: string; to: string }[]): void {
+function assertRateCoverage(
+  subsidiary: StatementSubsidiaryContext,
+  required: { from: string; to: string }[],
+  mode: StatementMode,
+): void {
   for (const [subsidiaryId, sets] of rateSetsBySubsidiary(subsidiary.rates!)) {
-    const sorted = [...sets].sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
+    const sorted = [...sets].sort(
+      (a, b) =>
+        a.periodFrom.localeCompare(b.periodFrom) ||
+        a.periodTo.localeCompare(b.periodTo),
+    );
     const merged: { from: string; to: string }[] = [];
     let previous: StatementSubsidiaryRateSet | undefined;
     for (const w of sorted) {
@@ -238,7 +253,7 @@ function assertRateCoverage(subsidiary: StatementSubsidiaryContext, required: { 
         throw new Error(
           `Consolidated rate windows overlap for ${w.currency} (subsidiary ${subsidiaryId}): ` +
             `${previous.periodFrom}..${previous.periodTo} and ${w.periodFrom}..${w.periodTo}. ` +
-            'Rate windows must be one per regular accounting period.',
+            "Rate windows must be one per regular accounting period.",
         );
       }
       previous = w;
@@ -250,7 +265,20 @@ function assertRateCoverage(subsidiary: StatementSubsidiaryContext, required: { 
         merged.push({ from: w.periodFrom, to: w.periodTo });
       }
     }
-    for (const need of required) {
+    const cutoff = subsidiary.controlLosses?.find(
+      (loss) => loss.subsidiaryId === subsidiaryId,
+    )?.through;
+    for (const window of required) {
+      // Disposal freezes balance translation, while post-disposal flows are
+      // outside the group. Neither requires rates from a future ownership window.
+      if (mode === "flow" && cutoff && window.from > cutoff) continue;
+      const need = cutoff
+        ? {
+            from:
+              mode === "balance" && window.from > cutoff ? cutoff : window.from,
+            to: window.to > cutoff ? cutoff : window.to,
+          }
+        : window;
       if (!merged.some((m) => m.from <= need.from && need.to <= m.to)) {
         throw new MissingRatesError(
           `No consolidated exchange rates for ${sorted[0]!.currency} covering ${need.from}..${need.to} ` +
@@ -303,40 +331,64 @@ function translationMultiplier(
   subsidiary?: StatementSubsidiaryContext,
   asOf?: string,
 ): SQL {
-  const rates = subsidiary?.rates
-  const weights = subsidiary?.weights
-  let rateExpr = sql`1::numeric`
+  const rates = subsidiary?.rates;
+  const weights = subsidiary?.weights;
+  let rateExpr = sql`1::numeric`;
   if (rates?.length) {
     // The reference date selects the window: the line's own posting date for
     // flows, the column's as-of date for balances.
-    const reference = mode === 'flow' ? sql`e.posting_date` : sql`${asOf!}::date`
+    const reference =
+      mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
     const pick =
-      mode === 'flow'
+      mode === "flow"
         ? sql`w.average_rate`
-        : sql`case when a.type = 'equity' then w.historical_rate else w.current_rate end`
-    rateExpr = sql`case l.subsidiary_id`
+        : sql`case when a.type = 'equity' then w.historical_rate else w.current_rate end`;
+    rateExpr = sql`case l.subsidiary_id`;
     for (const [subsidiaryId, sets] of rateSetsBySubsidiary(rates)) {
+      const loss = subsidiary?.controlLosses?.find(
+        (value) => value.subsidiaryId === subsidiaryId,
+      );
+      const entityReference =
+        mode === "balance" && loss && asOf! >= loss.through
+          ? sql`${loss.through}::date`
+          : reference;
       const windows = sql.join(
         sets.map(
           (r) =>
             sql`(${r.periodFrom}::date, ${r.periodTo}::date, ${r.averageRate}::numeric, ${r.currentRate}::numeric, ${r.historicalRate}::numeric)`,
         ),
         sql`, `,
-      )
+      );
       rateExpr = sql`${rateExpr} when ${subsidiaryId}::uuid then (
         select ${pick}
           from (values ${windows}) as w(period_from, period_to, average_rate, current_rate, historical_rate)
-         where ${reference} >= w.period_from and ${reference} <= w.period_to)`
+         where ${entityReference} >= w.period_from and ${entityReference} <= w.period_to)`;
     }
-    rateExpr = sql`${rateExpr} else 1 end`
+    rateExpr = sql`${rateExpr} else 1 end`;
   }
-  let weightExpr = sql`1::numeric`
+  let weightExpr = sql`1::numeric`;
   if (weights?.length) {
-    weightExpr = sql`case l.subsidiary_id`
-    for (const weight of weights) weightExpr = sql`${weightExpr} when ${weight.subsidiaryId}::uuid then ${weight.factor}::numeric`
-    weightExpr = sql`${weightExpr} else 1 end`
+    weightExpr = sql`case l.subsidiary_id`;
+    for (const weight of weights)
+      weightExpr = sql`${weightExpr} when ${weight.subsidiaryId}::uuid then ${weight.factor}::numeric`;
+    weightExpr = sql`${weightExpr} else 1 end`;
   }
-  return sql`(${rateExpr}) * (${weightExpr})`
+  let controlExpr = sql`1::numeric`;
+  if (subsidiary?.controlLosses?.length) {
+    controlExpr = sql`case`;
+    for (const loss of subsidiary.controlLosses)
+      controlExpr = sql`${controlExpr} when l.subsidiary_id=${loss.subsidiaryId}::uuid and e.posting_date>${loss.through}::date then 0::numeric`;
+    controlExpr = sql`${controlExpr} else 1::numeric end`;
+  }
+  if (mode === "balance" && subsidiary?.controlLosses?.length) {
+    let frozen = sql`case`;
+    for (const loss of subsidiary.controlLosses)
+      frozen = sql`${frozen} when l.subsidiary_id=${loss.subsidiaryId}::uuid and ${asOf!}::date>=${loss.through}::date and a.type<>'equity' then ${loss.closingRate}::numeric`;
+    rateExpr = sql`${frozen} else (${rateExpr}) end`;
+  }
+  // CASE is outside multiplication: excluded activity must not demand a
+  // post-disposal rate (NULL * 0 remains NULL in SQL).
+  return sql`case when (${controlExpr})=0 then 0::numeric else (${rateExpr}) * (${weightExpr}) end`;
 }
 
 /** One column's FILTER predicate: its date window + optional dimension slice. */
@@ -665,29 +717,29 @@ function treeifyMatrix(
  * Appends variance columns when `compare` yields a current+prior pair.
  */
 export async function statementMatrix(opts: {
-  orgId?: string
-  types: string[]
-  mode: StatementMode
+  orgId?: string;
+  types: string[];
+  mode: StatementMode;
   /** Translation-rate class when it differs from the date-window mode. */
-  translationMode?: StatementMode
-  period: { from: string; to: string }
-  periodLabel: string
-  breakout?: StatementBreakout
-  compare?: StatementCompare
-  basis?: StatementBasis
-  dims?: StatementDimFilter
-  subsidiary?: StatementSubsidiaryContext
-  showZero?: boolean
+  translationMode?: StatementMode;
+  period: { from: string; to: string };
+  periodLabel: string;
+  breakout?: StatementBreakout;
+  compare?: StatementCompare;
+  basis?: StatementBasis;
+  dims?: StatementDimFilter;
+  subsidiary?: StatementSubsidiaryContext;
+  showZero?: boolean;
   /** Which accounting book to report (the org's primary book when omitted). */
-  bookId?: string | null
+  bookId?: string | null;
   /** Emit variance columns for a compare pair (default true when comparing). */
-  variance?: boolean
+  variance?: boolean;
 }): Promise<StatementMatrix> {
-  const orgId = await resolveOrgId(opts.orgId)
-  const breakout = opts.breakout ?? 'none'
-  const compare = opts.compare ?? 'none'
-  const basis = opts.basis ?? 'accrual'
-  const showZero = opts.showZero ?? false
+  const orgId = await resolveOrgId(opts.orgId);
+  const breakout = opts.breakout ?? "none";
+  const compare = opts.compare ?? "none";
+  const basis = opts.basis ?? "accrual";
+  const showZero = opts.showZero ?? false;
 
   const { cols, truncated } = await buildAmountColumns({
     orgId,
@@ -699,25 +751,29 @@ export async function statementMatrix(opts: {
     subsidiary: opts.subsidiary,
     periodLabel: opts.periodLabel,
     bookId: opts.bookId,
-  })
+  });
 
   // A dimension or segment breakout can legitimately have no groups when the
   // selected period has no qualifying activity. There is no value column (or
   // SQL aggregate) to build in that case, so return an empty matrix rather
   // than generating a malformed select list below.
-  if (cols.length === 0) return { columns: [], rows: [], truncated }
+  if (cols.length === 0) return { columns: [], rows: [], truncated };
 
   // Overall window spanning every column, used to bound the base join.
-  const froms = cols.map((c) => c.from).filter((x): x is string => !!x)
-  const overallFrom = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : opts.period.from
-  const overallTo = cols.length ? cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b)) : opts.period.to
+  const froms = cols.map((c) => c.from).filter((x): x is string => !!x);
+  const overallFrom = froms.length
+    ? froms.reduce((a, b) => (a < b ? a : b))
+    : opts.period.from;
+  const overallTo = cols.length
+    ? cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b))
+    : opts.period.to;
   // Every report answers for exactly one accounting book — journal entries are
   // book-mandatory and an unscoped read would fuse parallel books.
-  const baseBook = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
+  const baseBook = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`;
   const baseDate =
-    opts.mode === 'balance'
+    opts.mode === "balance"
       ? sql`e.posting_date <= ${overallTo}`
-      : sql`e.posting_date >= ${overallFrom} and e.posting_date <= ${overallTo}`
+      : sql`e.posting_date >= ${overallFrom} and e.posting_date <= ${overallTo}`;
   // Cash basis. Entries that themselves move money through a bank account
   // report every line as-is. Accrual documents (invoices, bills) enter through
   // their settlements instead: each live application whose source entry is
@@ -731,7 +787,7 @@ export async function statementMatrix(opts: {
   // half-applied. CTEs AND joins are cash-only — accrual statements must not
   // reference them.
   const cashCtes =
-    basis === 'cash'
+    basis === "cash"
       ? sql`
         ,
         bank_entries as materialized (
@@ -776,57 +832,62 @@ export async function statementMatrix(opts: {
                 where sb.entry_id = src.entry_id and sb.org_id = src.org_id
                   and sba.type = 'asset_bank')
         )`
-      : sql``
+      : sql``;
   const cashJoins =
-    basis === 'cash'
+    basis === "cash"
       ? sql`
             left join bank_entries bn on bn.entry_id = e.id
             left join cash_settled cs on cs.entry_id = e.id
             left join settlement_fx_entries sf on sf.entry_id = e.id`
-      : sql``
+      : sql``;
 
   // Fast path: no line-level dimension slices, accrual basis, no per-line FX
   // translation — every column is a plain date window, answerable from the
   // gl_month_activity summary (whole months) plus a bounded line scan for
   // months a column boundary cuts in half.
   const summaryEligible =
-    basis === 'accrual' &&
+    basis === "accrual" &&
     glSummaryEligibleDims(opts.dims) &&
     !opts.subsidiary?.rates?.length &&
     !opts.subsidiary?.weights?.length &&
-    cols.every((c) => !c.dimCol && !c.segmentKey)
+    !opts.subsidiary?.controlLosses?.length &&
+    cols.every((c) => !c.dimCol && !c.segmentKey);
 
-  let res: { rows: Record<string, unknown>[] }
+  let res: { rows: Record<string, unknown>[] };
   if (summaryEligible) {
-    const boundaries: ActivityBoundary[] = []
+    const boundaries: ActivityBoundary[] = [];
     for (const c of cols) {
-      boundaries.push({ date: c.to, kind: 'end' })
-      if (opts.mode !== 'balance' && c.from) boundaries.push({ date: c.from, kind: 'start' })
+      boundaries.push({ date: c.to, kind: "end" });
+      if (opts.mode !== "balance" && c.from)
+        boundaries.push({ date: c.from, kind: "start" });
     }
     const buckets = glActivityBuckets(orgId, {
-      minDate: opts.mode === 'balance' ? null : overallFrom,
+      minDate: opts.mode === "balance" ? null : overallFrom,
       maxDate: overallTo,
       boundaries,
       bookId: opts.bookId,
-    })
+    });
     const bucketCols = sql.join(
       cols.map((c, i) => {
         const pred =
-          opts.mode === 'balance'
+          opts.mode === "balance"
             ? sql`b.d <= ${c.to}`
-            : sql`b.d >= ${c.from} and b.d <= ${c.to}`
-        return sql`coalesce(sum(b.amount) filter (where ${pred}), 0) as ${sql.raw(`c${i}`)}`
+            : sql`b.d >= ${c.from} and b.d <= ${c.to}`;
+        return sql`coalesce(sum(b.amount) filter (where ${pred}), 0) as ${sql.raw(`c${i}`)}`;
       }),
       sql`, `,
-    )
+    );
     const outCols = sql.join(
-      cols.map((_, i) => sql`coalesce(s.${sql.raw(`c${i}`)}, 0) as ${sql.raw(`c${i}`)}`),
+      cols.map(
+        (_, i) =>
+          sql`coalesce(s.${sql.raw(`c${i}`)}, 0) as ${sql.raw(`c${i}`)}`,
+      ),
       sql`, `,
-    )
+    );
     // Aggregate the buckets first, then join accounts to the tiny per-account
     // result — joining accounts against the raw union invites a plan that
     // re-executes the union once per account.
-    res = (await db.execute<Record<string, unknown>>(sql`
+    res = await db.execute<Record<string, unknown>>(sql`
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${outCols}
         from accounts a
         left join (
@@ -837,20 +898,33 @@ export async function statementMatrix(opts: {
         ) s on s.account_id = a.id
        where a.org_id = ${orgId}
        order by a.number nulls last, a.name
-    `))
+    `);
   } else {
     // Windowed translation: prove every column's window is covered by a
     // derived rate set BEFORE reading rows — a missing historical rate must
     // fail loudly and side-effect-free, never fall back to another period's
     // rates. Cumulative balance-mode flow buckets additionally refuse activity
     // predating the earliest derived set.
-    const translationKind = opts.translationMode ?? opts.mode
+    const translationKind = opts.translationMode ?? opts.mode;
     if (opts.subsidiary?.rates?.length) {
-      if (translationKind === 'flow') {
-        assertRateCoverage(opts.subsidiary, [{ from: overallFrom, to: overallTo }])
-        if (opts.mode === 'balance') await assertNoUntranslatedHistory(orgId, opts.bookId, opts.subsidiary)
+      if (translationKind === "flow") {
+        assertRateCoverage(
+          opts.subsidiary,
+          [{ from: overallFrom, to: overallTo }],
+          translationKind,
+        );
+        if (opts.mode === "balance")
+          await assertNoUntranslatedHistory(
+            orgId,
+            opts.bookId,
+            opts.subsidiary,
+          );
       } else {
-        assertRateCoverage(opts.subsidiary, cols.map((c) => ({ from: c.to, to: c.to })))
+        assertRateCoverage(
+          opts.subsidiary,
+          cols.map((c) => ({ from: c.to, to: c.to })),
+          translationKind,
+        );
       }
     }
     // Flow columns share one posting-date-driven expression; balance columns
@@ -859,26 +933,26 @@ export async function statementMatrix(opts: {
     // and settlement FX entries count in full, a settled document counts at
     // its settled share (capped at whole), everything else contributes zero.
     const cashLineValue =
-      basis === 'cash'
+      basis === "cash"
         ? sql`(case
                 when bn.entry_id is not null or sf.entry_id is not null then l.amount
                 else l.amount * least(coalesce(cs.share, 0::numeric), 1::numeric)
               end)`
-        : sql`l.amount`
-    const amountByAsOf = new Map<string, SQL>()
+        : sql`l.amount`;
+    const amountByAsOf = new Map<string, SQL>();
     const amountFor = (col: AmountColumn): SQL => {
-      const key = translationKind === 'balance' ? col.to : '*'
-      let amount = amountByAsOf.get(key)
+      const key = translationKind === "balance" ? col.to : "*";
+      let amount = amountByAsOf.get(key);
       if (!amount) {
         amount = sql`${cashLineValue} * ${translationMultiplier(
           translationKind,
           opts.subsidiary,
-          translationKind === 'balance' ? col.to : undefined,
-        )}`
-        amountByAsOf.set(key, amount)
+          translationKind === "balance" ? col.to : undefined,
+        )}`;
+        amountByAsOf.set(key, amount);
       }
-      return amount
-    }
+      return amount;
+    };
     // Column sums are rounded to ledger scale (4dp) once, in SQL: the
     // translated (rate × amount) and cash-basis (amount × settled share)
     // products carry digits far past 4dp, which the exact-decimal tree
@@ -886,16 +960,17 @@ export async function statementMatrix(opts: {
     // the rounding drift to half a unit per account-column.
     const filterCols = sql.join(
       cols.map(
-        (c, i) => sql`coalesce(round(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 4), 0) as ${sql.raw(`c${i}`)}`,
+        (c, i) =>
+          sql`coalesce(round(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 4), 0) as ${sql.raw(`c${i}`)}`,
       ),
       sql`, `,
-    )
+    );
 
     // The posted-entry set materializes once (index-only scan over
     // (org_id, status, posting_date)) and hash-joins to the lines; joining the
     // entries table per line re-fetched the entry heap for every journal line
     // in the tenant on every statement render.
-    res = (await db.execute<Record<string, unknown>>(sql`
+    res = await db.execute<Record<string, unknown>>(sql`
       with e as materialized (
         select id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
@@ -908,7 +983,7 @@ export async function statementMatrix(opts: {
        where a.org_id = ${orgId}
        group by a.id
        order by a.number nulls last, a.name
-    `))
+    `);
   }
 
   const parsed = res.rows.map((r) => ({
@@ -918,16 +993,16 @@ export async function statementMatrix(opts: {
     name: r.name as string,
     type: r.type as string,
     is_summary: r.is_summary as boolean,
-    vals: cols.map((_, i) => String(r[`c${i}`] ?? '0')),
-  }))
+    vals: cols.map((_, i) => String(r[`c${i}`] ?? "0")),
+  }));
 
-  const rows = treeifyMatrix(parsed, opts.types, showZero)
+  const rows = treeifyMatrix(parsed, opts.types, showZero);
 
   // Assemble display columns; append variance for a compare pair.
   const columns: StatementColumn[] = cols.map((c) => ({
     key: c.key,
     label: c.label,
-    kind: 'amount',
+    kind: "amount",
     from: c.from,
     to: c.to,
     dimField: c.dimField,
@@ -935,18 +1010,25 @@ export async function statementMatrix(opts: {
     segmentKey: c.segmentKey,
     ...(c.segmentKey ? { dimValue: c.dimVal } : {}),
     group: c.group,
-  }))
-  const wantVariance = (opts.variance ?? true) && compare !== 'none' && cols.length === 2
+  }));
+  const wantVariance =
+    (opts.variance ?? true) && compare !== "none" && cols.length === 2;
   if (wantVariance) {
-    columns.push({ key: 'var_abs', label: 'Variance', kind: 'variance_abs' })
-    columns.push({ key: 'var_pct', label: 'Variance %', kind: 'variance_pct' })
+    columns.push({ key: "var_abs", label: "Variance", kind: "variance_abs" });
+    columns.push({ key: "var_pct", label: "Variance %", kind: "variance_pct" });
     for (const row of rows) {
-      const [cur, prior] = [row.values[0] ?? '0.0000', row.values[1] ?? '0.0000']
-      row.values.push(decimalAdd(cur, decimalNeg(prior)), decimalPercentChange(cur, prior))
+      const [cur, prior] = [
+        row.values[0] ?? "0.0000",
+        row.values[1] ?? "0.0000",
+      ];
+      row.values.push(
+        decimalAdd(cur, decimalNeg(prior)),
+        decimalPercentChange(cur, prior),
+      );
     }
   }
 
-  return { columns, rows, truncated }
+  return { columns, rows, truncated };
 }
 
 /** Recompute the variance columns of a values vector from its first two amount

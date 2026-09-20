@@ -120,6 +120,7 @@ export const subsidiaryOwnershipInterests = pgTable(
     id: id(),
     orgId: orgRef(),
     parentSubsidiaryId: uuid("parent_subsidiary_id").notNull(),
+    lastChangeId: uuid("last_change_id"),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     /** Inclusive ownership window. Active policies may not overlap for one
      *  consolidated subsidiary (storage constraint 0051). */
@@ -193,3 +194,34 @@ export type SubsidiaryRestriction =
   | { mode: "all" }
   | { mode: "subtree"; subsidiaryId: string }
   | { mode: "list"; subsidiaryIds: string[] };
+
+/** Applied loss of control: closing balances are derecognized through journals,
+ * later subsidiary activity is excluded without rewriting historical reports. */
+export const consolidationControlLosses = pgTable(
+  "consolidation_control_losses",
+  {
+    id: id(),
+    orgId: orgRef(),
+    changeId: uuid("change_id").notNull(),
+    interestId: uuid("interest_id").notNull(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    parentSubsidiaryId: uuid("parent_subsidiary_id").notNull(),
+    eliminationSubsidiaryId: uuid("elimination_subsidiary_id").notNull(),
+    bookId: uuid("book_id").notNull(),
+    periodId: uuid("period_id").notNull(),
+    effectiveOn: date("effective_on").notNull(),
+    excludedSubsidiaryIds: jsonb("excluded_subsidiary_ids").notNull(),
+    measurement: jsonb("measurement").notNull(),
+    parentJournalEntryId: uuid("parent_journal_entry_id"),
+    journalEntryId: uuid("journal_entry_id"),
+    retainedMethod: text("retained_method", {
+      enum: ["none", "equity", "financial_asset"],
+    }).notNull(),
+    retainedInterestId: uuid("retained_interest_id"),
+    reversedByChangeId: uuid("reversed_by_change_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+  },
+);

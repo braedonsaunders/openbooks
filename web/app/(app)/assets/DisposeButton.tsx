@@ -36,8 +36,8 @@ export function DisposeButton({ assetId, accountOptions }: { assetId: string; ac
           proceedsAccountId: writeOff ? undefined : account || undefined,
         }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string; gainLoss?: string; status?: string }
-      if (!res.ok) throw new Error(d.error)
+      if (!res.ok) { const failure = await res.json().catch(() => ({})); throw new Error(failure.error ?? tCommon('feedback.saveFailed')) }
+      const d = (await res.json()) as { gainLoss?: string; status?: string }
       toast.success(t('dispose.done', { gainLoss: d.gainLoss ?? '0' }))
       setOpen(false)
       router.refresh()

@@ -1,4 +1,10 @@
+import { applyAssetGroupValuation } from "@openbooks/engine/src/assets/group-valuations.ts";
+import {
+  applyLossOfControl,
+  applyLossOfControlReversal,
+} from "@openbooks/engine/src/consolidation/loss-of-control.ts";
 import { NextResponse } from "next/server";
+import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
 import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { authorizeChange } from "../../_authorization";
@@ -11,6 +17,22 @@ export async function POST(
     gate = await authorizeChange(id);
   if (gate instanceof NextResponse) return gate;
   try {
+    if (gate.domain === "consolidation")
+      return NextResponse.json(
+        await (
+          gate.operation === "reversal"
+            ? applyLossOfControlReversal
+            : applyLossOfControl
+        )(gate.auth.user.orgId, id, gate.auth.user.id),
+      );
+    if (gate.domain === "asset")
+      return NextResponse.json(
+        await (
+          gate.operation === "group_valuation"
+            ? applyAssetGroupValuation
+            : applyAssetChange
+        )(gate.auth.user.orgId, id, gate.auth.user.id),
+      );
     if (gate.domain === "revenue")
       return NextResponse.json(
         await applyRevenueModification(

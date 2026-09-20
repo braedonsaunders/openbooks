@@ -103,6 +103,7 @@ export interface AssetPayload {
     expense: string | null
   }
   totals: {
+    remainingCost: string
     accumulated: string
     netBookValue: string
     posted: string
@@ -198,56 +199,67 @@ export async function loadAssetWithRunner(
   orgId: string,
   options: AssetReadOptions = {},
 ): Promise<AssetPayload | null> {
-  const assetRes = (await tx.execute<AssetRow>(sql`
+  const assetRes = await tx.execute<AssetRow>(sql`
     select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from fixed_assets where id = ${id} and org_id = ${orgId} for share
-  `))
-  const asset = assetRes.rows[0]
-  if (!asset) return null
+  `);
+  const asset = assetRes.rows[0];
+  if (!asset) return null;
 
   const catRes = asset.category_id
-    ? ((await tx.execute<AssetCategoryRow>(sql`
+    ? await tx.execute<AssetCategoryRow>(sql`
         select * from asset_categories where id = ${asset.category_id} and org_id = ${orgId}
-      `)))
-    : { rows: [] }
-  const category = catRes.rows[0] ?? null
+      `)
+    : { rows: [] };
+  const category = catRes.rows[0] ?? null;
 
   // Effective accounts (asset override → category).
   const eff = category
     ? resolveAssetAccounts(
         {
           assetAccountId: asset.asset_account_id,
-          accumulatedDepreciationAccountId: asset.accumulated_depreciation_account_id,
+          accumulatedDepreciationAccountId:
+            asset.accumulated_depreciation_account_id,
           depreciationExpenseAccountId: asset.depreciation_expense_account_id,
         },
         {
           assetAccountId: category.asset_account_id,
-          accumulatedDepreciationAccountId: category.accumulated_depreciation_account_id,
-          depreciationExpenseAccountId: category.depreciation_expense_account_id,
+          accumulatedDepreciationAccountId:
+            category.accumulated_depreciation_account_id,
+          depreciationExpenseAccountId:
+            category.depreciation_expense_account_id,
         },
       )
-    : { assetAccountId: '', accumulatedDepreciationAccountId: '', depreciationExpenseAccountId: '' }
+    : {
+        assetAccountId: "",
+        accumulatedDepreciationAccountId: "",
+        depreciationExpenseAccountId: "",
+      };
 
   const ids = [
     eff.assetAccountId,
     eff.accumulatedDepreciationAccountId,
     eff.depreciationExpenseAccountId,
-  ].filter(Boolean)
+  ].filter(Boolean);
   const acctRes = ids.length
-    ? ((await tx.execute<AssetAccountRow>(sql`
+    ? await tx.execute<AssetAccountRow>(sql`
         select id, number, name from accounts
          where org_id = ${orgId} and id = any(${sql`array[${sql.join(
            ids.map((i) => sql`${i}::uuid`),
            sql`, `,
          )}]`})
-      `)))
-    : { rows: [] }
-  const byId = new Map(acctRes.rows.map((r) => [r.id, r]))
+      `)
+    : { rows: [] };
+  const byId = new Map(acctRes.rows.map((r) => [r.id, r]));
 
-  const page = Number.isInteger(options.page) && options.page! > 0 ? options.page! : 1
-  const perPage = Number.isInteger(options.perPage) && options.perPage! > 0 ? Math.min(options.perPage!, 100) : 25
-  const query = (options.query ?? '').trim()
-  const bookId = options.bookId ?? null
+  const page =
+    Number.isInteger(options.page) && options.page! > 0 ? options.page! : 1;
+  const perPage =
+    Number.isInteger(options.perPage) && options.perPage! > 0
+      ? Math.min(options.perPage!, 100)
+      : 25;
+  const query = (options.query ?? "").trim();
+  const bookId = options.bookId ?? null;
   const bookRows = await tx.execute<AssetBookRow>(sql`
       select b.id, b.code, b.name, b.is_primary, b.posts_gl,
              s.method, s.depreciation_method_id, m.name as method_name
@@ -255,7 +267,7 @@ export async function loadAssetWithRunner(
         left join depreciation_schedules s on s.book_id=b.id and s.asset_id=${id} and s.org_id=b.org_id
         left join depreciation_methods m on m.id=s.depreciation_method_id and m.org_id=s.org_id
        where b.org_id=${orgId} and b.is_active
-       order by b.is_primary desc, b.code`)
+       order by b.is_primary desc, b.code`);
   const totalRows = await tx.execute<{ n: number }>(sql`
       select count(*)::int as n
         from depreciation_schedule_lines l
@@ -264,8 +276,12 @@ export async function loadAssetWithRunner(
         join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id
        where s.asset_id=${id} and l.org_id=${orgId}
          ${bookId ? sql`and s.book_id=${bookId}` : sql``}
-         ${query ? sql`and (p.name ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`)
-  const primaryTotals = await tx.execute<{ posted: string; planned: string; has_evidence: boolean }>(sql`
+         ${query ? sql`and (p.name ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`);
+  const primaryTotals = await tx.execute<{
+    posted: string;
+    planned: string;
+    has_evidence: boolean;
+  }>(sql`
       select coalesce(sum(l.posted_amount),0)::text as posted,
              coalesce(sum(l.planned_amount),0)::text as planned,
              exists (
@@ -277,10 +293,11 @@ export async function loadAssetWithRunner(
         from depreciation_schedules s
         join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary
         left join depreciation_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id
-       where s.asset_id=${id} and s.org_id=${orgId}`)
-  const lifecycle = (await tx.execute<LifecycleValueRow>(sql`
+       where s.asset_id=${id} and s.org_id=${orgId}`);
+  const lifecycle = (
+    await tx.execute<LifecycleValueRow>(sql`
     select event.id, entry.book_id, book.is_primary, event.occurred_on::text,
-           event.kind, event.amount::text, source.kind as source_kind,
+           case when event.financial_change_id is not null then 'basis_changed' else event.kind end as kind, event.amount::text, source.kind as source_kind,
            source.amount::text as source_amount
       from asset_events event
       join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
@@ -288,8 +305,31 @@ export async function loadAssetWithRunner(
       left join asset_events source on source.id = event.reverses_event_id and source.org_id = event.org_id
      where event.org_id = ${orgId} and event.asset_id = ${id}
        and entry.status in ('posted', 'reversed')
-  `)).rows
-  const linesRes = (await tx.execute<AssetScheduleLineRow>(sql`
+  `)
+  ).rows;
+  const basisChanges = (
+    await tx.execute<{
+      book_id: string;
+      effective_on: string;
+      cost_delta: string;
+      accumulated_delta: string;
+    }>(
+      sql`select book_id,effective_on::text,cost_delta::text,accumulated_delta::text from asset_basis_changes where org_id=${orgId} and asset_id=${id} order by effective_on,id`,
+    )
+  ).rows;
+  const basisAt = (book: string, through?: string) =>
+    basisChanges
+      .filter(
+        (x) => x.book_id === book && (!through || x.effective_on <= through),
+      )
+      .reduce(
+        (a, x) => ({
+          cost: a.cost + toUnits(x.cost_delta),
+          accumulated: a.accumulated + toUnits(x.accumulated_delta),
+        }),
+        { cost: 0n, accumulated: 0n },
+      );
+  const linesRes = await tx.execute<AssetScheduleLineRow>(sql`
     with schedule_rows as (
       select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source,
              s.book_id, b.code as book_code, b.name as book_name,
@@ -314,16 +354,25 @@ export async function loadAssetWithRunner(
        ${query ? sql`and (period_name ilike ${`%${query}%`} or book_name ilike ${`%${query}%`} or source ilike ${`%${query}%`})` : sql``}
      order by book_code, period_starts_on, sequence
      limit ${perPage} offset ${(page - 1) * perPage}
-  `))
+  `);
 
-  const cost = toUnits(String(asset.acquisition_cost ?? '0'))
+  const cost = toUnits(String(asset.acquisition_cost ?? "0"));
   // Continue-from-accumulated (migration 0156): the running schedule starts
   // after cutover, so every line's accumulated and NBV carries the opening
   // figure the legacy system recognised before the first scheduled month.
-  const opening = toUnits(String(asset.opening_accumulated_depreciation ?? '0'))
+  const opening = toUnits(
+    String(asset.opening_accumulated_depreciation ?? "0"),
+  );
   const schedule = linesRes.rows.map((l) => {
-    const accumulated = fromUnits(toUnits(String(l.accumulated ?? '0')) + opening)
-    const valuation = lifecycleValue(lifecycle, String(l.book_id), String(l.period_ends_on))
+    const basis = basisAt(String(l.book_id), String(l.period_ends_on));
+    const accumulated = fromUnits(
+      toUnits(String(l.accumulated ?? "0")) + opening + basis.accumulated,
+    );
+    const valuation = lifecycleValue(
+      lifecycle,
+      String(l.book_id),
+      String(l.period_ends_on),
+    );
     return {
       id: l.id as string,
       sequence: Number(l.sequence),
@@ -335,33 +384,62 @@ export async function loadAssetWithRunner(
       plannedAmount: String(l.planned_amount),
       postedAmount: l.posted_amount != null ? String(l.posted_amount) : null,
       accumulated,
-      netBookValue: valuation.disposed ? '0.0000' : fromUnits(cost + valuation.delta - toUnits(accumulated)),
+      netBookValue: valuation.disposed
+        ? "0.0000"
+        : fromUnits(cost + basis.cost + valuation.delta - toUnits(accumulated)),
       journalEntryId: (l.journal_entry_id as string | null) ?? null,
-      source: l.source as 'formula' | 'manual' | 'production_usage' | 'imported',
-      input: l.input_id ? {
-        id: l.input_id as string,
-        kind: l.input_kind as 'manual' | 'production_usage',
-        productionUnits: l.production_units != null ? String(l.production_units) : null,
-        memo: String(l.input_memo),
-        evidenceFileId: String(l.evidence_file_id),
-        evidenceFileName: String(l.evidence_file_name),
-      } : null,
-    }
-  })
+      source: l.source as
+        "formula" | "manual" | "production_usage" | "imported",
+      input: l.input_id
+        ? {
+            id: l.input_id as string,
+            kind: l.input_kind as "manual" | "production_usage",
+            productionUnits:
+              l.production_units != null ? String(l.production_units) : null,
+            memo: String(l.input_memo),
+            evidenceFileId: String(l.evidence_file_id),
+            evidenceFileName: String(l.evidence_file_name),
+          }
+        : null,
+    };
+  });
 
-  const postedTotal = String(primaryTotals.rows[0]?.posted ?? '0')
-  const plannedTotal = String(primaryTotals.rows[0]?.planned ?? '0')
-  const valuation = lifecycleValue(lifecycle)
-  const disposed = valuation.disposed || asset.status === 'disposed' || asset.status === 'written_off'
-  const accumulated = disposed ? '0.0000' : fromUnits(toUnits(postedTotal) + opening - valuation.delta)
-  const netBookValue = disposed ? '0.0000' : fromUnits(cost + valuation.delta - toUnits(postedTotal) - opening)
+  const postedTotal = String(primaryTotals.rows[0]?.posted ?? "0");
+  const plannedTotal = String(primaryTotals.rows[0]?.planned ?? "0");
+  const valuation = lifecycleValue(lifecycle);
+  const disposed =
+    valuation.disposed ||
+    asset.status === "disposed" ||
+    asset.status === "written_off";
+  const primaryBasis = basisAt(
+    bookRows.rows.find((b) => b.is_primary)?.id ?? "",
+  );
+  const accumulated = disposed
+    ? "0.0000"
+    : fromUnits(
+        toUnits(postedTotal) +
+          opening +
+          primaryBasis.accumulated -
+          valuation.delta,
+      );
+  const netBookValue = disposed
+    ? "0.0000"
+    : fromUnits(
+        cost +
+          primaryBasis.cost +
+          valuation.delta -
+          toUnits(postedTotal) -
+          opening -
+          primaryBasis.accumulated,
+      );
 
   return {
     asset,
     category,
     accounts: {
       assetAccountId: eff.assetAccountId || null,
-      accumulatedDepreciationAccountId: eff.accumulatedDepreciationAccountId || null,
+      accumulatedDepreciationAccountId:
+        eff.accumulatedDepreciationAccountId || null,
       depreciationExpenseAccountId: eff.depreciationExpenseAccountId || null,
     },
     accountNames: {
@@ -370,20 +448,36 @@ export async function loadAssetWithRunner(
       expense: acctName(byId.get(eff.depreciationExpenseAccountId)),
     },
     totals: {
+      remainingCost: disposed ? "0.0000" : fromUnits(cost+primaryBasis.cost),
       accumulated,
       netBookValue,
       posted: postedTotal,
       planned: plannedTotal,
     },
     books: bookRows.rows.map((row) => ({
-      id: String(row.id), code: String(row.code), name: String(row.name),
-      isPrimary: Boolean(row.is_primary), postsGl: Boolean(row.posts_gl),
+      id: String(row.id),
+      code: String(row.code),
+      name: String(row.name),
+      isPrimary: Boolean(row.is_primary),
+      postsGl: Boolean(row.posts_gl),
       method: row.method == null ? null : String(row.method),
-      depreciationMethodId: row.depreciation_method_id == null ? null : String(row.depreciation_method_id),
+      depreciationMethodId:
+        row.depreciation_method_id == null
+          ? null
+          : String(row.depreciation_method_id),
       methodName: row.method_name == null ? null : String(row.method_name),
     })),
-    schedulePage: { total: Number(totalRows.rows[0]?.n ?? 0), page, perPage, bookId, query },
-    hasAccountingEvidence: Boolean(primaryTotals.rows[0]?.has_evidence) || lifecycle.length > 0,
+    schedulePage: {
+      total: Number(totalRows.rows[0]?.n ?? 0),
+      page,
+      perPage,
+      bookId,
+      query,
+    },
+    hasAccountingEvidence:
+      Boolean(primaryTotals.rows[0]?.has_evidence) ||
+      lifecycle.length > 0 ||
+      basisChanges.length > 0,
     schedule,
-  }
+  };
 }

@@ -13,9 +13,21 @@ import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { ChangeEvidence } from "./ChangeEvidence";
+import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 export const dynamic = "force-dynamic";
 const fieldNames: Record<string, string> = {
+  groupCarryingBefore: "Group carrying amount before valuation",
+  groupCarryingAfter: "Group carrying amount after valuation",
+  groupValuationDelta: "Group valuation adjustment",
+  netAssets: "Consolidated net assets removed",
+  nci: "Non-controlling interests removed",
+  parentGain: "Separate-book gain or loss",
+  groupGain: "Group disposal gain or loss",
+  recycledOci: "OCI reclassified to profit or loss",
+  transferredOci: "OCI transferred to retained earnings",
+  totalGroupGain: "Total group gain or loss",
+  retainedFairValue: "Retained interest fair value",
   carryingLiability: "Liability before change",
   carryingRou: "ROU before change",
   stubInterest: "Elapsed-period interest",
@@ -92,7 +104,7 @@ export default async function AccountingChanges({
   const scopePredicate = sql`fc.domain in (${sql.join(
     domains.map((domain) => sql`${domain}`),
     sql`, `,
-  )})`;
+  )}) ${auth.allowedSubsidiaryIds ? sql`and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${JSON.stringify([...auth.allowedSubsidiaryIds])}::jsonb)))` : sql``}`;
   const sp = await searchParams,
     orgId = auth.user.orgId;
   const id =
@@ -121,6 +133,7 @@ export default async function AccountingChanges({
   if (row) {
     collect(row.payload);
     collect(row.before_state.preview);
+    collect(row.before_state.previews);
   }
   const references = referenceIds.size
     ? (
@@ -198,11 +211,13 @@ export default async function AccountingChanges({
                   </h3>
                   <ChangeEvidence value={row.payload} names={referenceNames} />
                 </section>
-                {row.domain === "revenue" ? (
+                {["revenue", "asset", "consolidation"].includes(row.domain) ? (
                   <section className="space-y-2">
                     <h3 className="font-semibold">Book-specific allocations</h3>
                     <ChangeEvidence
-                      value={row.before_state.preview}
+                      value={
+                        row.before_state.preview ?? row.before_state.previews
+                      }
                       names={referenceNames}
                     />
                   </section>
@@ -233,12 +248,45 @@ export default async function AccountingChanges({
                     Open revenue contract
                   </Link>
                 ) : null}
+                {row.domain === "asset" ? (
+                  <Link
+                    className="underline"
+                    href={`/assets?asset=${row.subject_id}`}
+                  >
+                    Open asset and depreciation history
+                  </Link>
+                ) : null}
                 {row.domain === "lease" ? (
                   <Link
                     className="underline"
                     href={`/assets/leases?lease=${row.subject_id}`}
                   >
                     Open lease and schedule history
+                  </Link>
+                ) : null}
+                {row.domain === "asset" &&
+                row.status === "applied" &&
+                ["partial_disposal", "intercompany_transfer"].includes(
+                  row.operation,
+                ) &&
+                can(auth, "assets.manage") ? (
+                  <ReverseAssetChange
+                    id={row.id}
+                    effectiveOn={row.effective_on}
+                  />
+                ) : null}
+                {row.domain === "consolidation" &&
+                row.operation === "loss_of_control" &&
+                row.status === "applied" &&
+                can(auth, "close.run") ? (
+                  <ReverseAssetChange id={row.id} domain="consolidation" />
+                ) : null}
+                {row.domain === "consolidation" ? (
+                  <Link
+                    className="underline"
+                    href={`/admin/setup/subsidiary-ownership-interests?row=${row.subject_id}`}
+                  >
+                    Open ownership policy
                   </Link>
                 ) : null}
                 <ChangeActions

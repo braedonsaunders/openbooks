@@ -170,6 +170,15 @@ async function assertGateSubsidiaryScope(
   allowedSubsidiaryIds: GateSubsidiaryScope,
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
+  if (gate.subjectKind === "financial_change") {
+    const required = (
+      await db.execute<{ ids: string[] }>(
+        sql`select coalesce(payload->'requiredSubsidiaryIds',jsonb_build_array(subsidiary_id)) as ids from financial_changes where org_id=${gate.orgId} and id=${gate.subjectId}`,
+      )
+    ).rows[0]?.ids;
+    if (!required || required.some((id) => !allowedSubsidiaryIds.has(id)))
+      throw new GateError("approval not found");
+  }
   const subsidiaryId = await gateSubjectSubsidiaryId(gate);
   if (!gateSubsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) {
     throw new GateError("approval not found");
@@ -874,6 +883,7 @@ function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
     or (g.subject_kind='financial_change' and exists (
       select 1 from financial_changes fc where fc.org_id=g.org_id and fc.id=g.subject_id
       and fc.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+      and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${ids}::jsonb)))
     ))
   )`;
 }
