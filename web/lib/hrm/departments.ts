@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { employeeDirectoryLinkForDepartment } from './employee-directory-link'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import type { HrmHeadcountGroup } from './home'
 
@@ -53,8 +54,9 @@ export async function loadHrmDepartments(authz: Authz): Promise<HrmDepartmentsDa
     knownAt: new Date().toISOString(),
   })
 
+  const canReadParties = can(authz, 'parties.read')
   const directory: DirectoryItem[] = []
-  if (can(authz, 'parties.read')) {
+  if (canReadParties) {
     directory.push({
       href: '/entities/employees',
       label: t('departments.employeesLink'),
@@ -80,10 +82,14 @@ export async function loadHrmDepartments(authz: Authz): Promise<HrmDepartmentsDa
     unassigned: t('home.groups.unassigned'),
     groupsEmpty: t('home.groups.empty', { date: headcount.effectiveDate }),
     totalLabel: t('home.groups.total'),
+    // Each row drills through to the employee directory filtered to its
+    // department (null = the unassigned roster) — only when the viewer may
+    // open that list, the same parties.read gate as the directory link.
     groups: headcount.groups.map((group) => ({
       subsidiary: group.employerSubsidiaryName,
       department: group.departmentName,
       headcount: group.headcount,
+      href: canReadParties ? employeeDirectoryLinkForDepartment(group.departmentId) : null,
     })),
     total: headcount.total,
     linksTitle: t('departments.linksTitle'),

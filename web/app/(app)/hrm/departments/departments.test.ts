@@ -36,6 +36,12 @@ test("every board figure comes from the canonical read service", () => {
   assert.ok(!/from worker_employment_versions/.test(loader), "loader issues no direct version reads");
   assert.ok(!/from hrm_employment_change_requests/.test(loader), "loader issues no direct request reads");
   assert.match(loader, /unassigned/i, "assignments without a department stay explicitly unattributed");
+  // Drill-through: every row links to the employee directory through the
+  // ONE URL contract (department id, or the unassigned roster), gated by
+  // the same parties.read the directory link uses — never a hand-built URL.
+  assert.match(loader, /employeeDirectoryLinkForDepartment\(group\.departmentId\)/, "rows drill through via the shared URL contract");
+  assert.match(loader, /canReadParties \? employeeDirectoryLinkForDepartment/, "drill-through is gated by parties.read");
+  assert.doesNotMatch(loader, /entities\/employees\?department=/, "no hand-built directory URL beside the contract");
 });
 
 test("drill-through and Setup management are explicit, never faked", () => {

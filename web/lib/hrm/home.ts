@@ -26,6 +26,8 @@ export interface HrmHeadcountGroup {
   subsidiary: string
   department: string | null
   headcount: number
+  /** Employee-directory drill-through for the row (departments board). */
+  href?: string | null
 }
 
 export interface PendingRequestItem {
