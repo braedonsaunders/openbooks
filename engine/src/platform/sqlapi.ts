@@ -10,6 +10,9 @@ import { connectGovernedReadClient } from "./db.ts";
  *   - the user query is submitted as an extended-protocol statement with an
  *     empty parameter list, so PostgreSQL refuses a second command in that
  *     message even if the UX checker is wrong
+ *   - collected rows are refused by name once their JSON size exceeds
+ *     USER_SQL_MAX_RESULT_BYTES, so callers (ob.query, /api/query) never
+ *     receive a host-memory-sized payload to stringify
  * The single-statement/SELECT prefix check is defense-in-depth UX, not the
  * security boundary. That checker still has to see the same tokens PostgreSQL
  * would: comments and quotes are walked left-to-right, dollar-quote tags must
@@ -22,7 +25,15 @@ export interface UserSqlOptions {
   orgId: string;
   maxRows?: number;
   timeoutMs?: number;
+  /**
+   * Hard ceiling on JSON-serialized result bytes returned to the caller.
+   * May only tighten the default; it cannot raise USER_SQL_MAX_RESULT_BYTES.
+   */
+  maxBytes?: number;
 }
+
+/** Host-side result budget for runUserSql. Callers cannot raise this. */
+export const USER_SQL_MAX_RESULT_BYTES = 8 * 1024 * 1024;
 
 export interface UserSqlResult {
   columns: string[];
@@ -143,6 +154,34 @@ export function validateUserSql(sqlText: string): string {
   return sqlText.trim().replace(/;\s*$/, "");
 }
 
+function jsonBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function collectBoundedRows(
+  rows: Record<string, unknown>[],
+  maxRows: number,
+  maxBytes: number,
+): { rows: Record<string, unknown>[]; truncated: boolean } {
+  const kept: Record<string, unknown>[] = [];
+  let bytes = 2;
+  for (const row of rows) {
+    if (kept.length >= maxRows) {
+      return { rows: kept, truncated: true };
+    }
+    const piece = jsonBytes(row);
+    const extra = kept.length === 0 ? piece : piece + 1;
+    if (bytes + extra > maxBytes) {
+      throw new Error(
+        `query result exceeds ${maxBytes} bytes; add a tighter LIMIT, project fewer columns, or avoid wide text expressions`,
+      );
+    }
+    bytes += extra;
+    kept.push(row);
+  }
+  return { rows: kept, truncated: false };
+}
+
 async function prepareQueryContext(client: import('pg').PoolClient, orgId: string): Promise<void> {
   // The tenant identity is connection-local and owned by the application role.
   // openbooks_read runs inside READ ONLY and has no privilege on this temp table;
@@ -194,6 +233,13 @@ async function beginGovernedReadTransaction(
 export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise<UserSqlResult> {
   const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
   const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
+  const requestedBytes = opts.maxBytes ?? USER_SQL_MAX_RESULT_BYTES;
+  const maxBytes = Math.min(
+    Number.isSafeInteger(requestedBytes) && requestedBytes > 0
+      ? requestedBytes
+      : USER_SQL_MAX_RESULT_BYTES,
+    USER_SQL_MAX_RESULT_BYTES,
+  );
 
   const body = validateUserSql(sqlText);
   const wrapped = `select * from (${body}) __q limit ${maxRows + 1}`;
@@ -207,13 +253,12 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
     // simple protocol, which will run every statement after the first.
     const res = await client.query({ text: wrapped, values: [] });
     await client.query("rollback");
-    const truncated = res.rows.length > maxRows;
-    const rows = truncated ? res.rows.slice(0, maxRows) : res.rows;
+    const bounded = collectBoundedRows(res.rows, maxRows, maxBytes);
     return {
       columns: res.fields.map((f) => f.name),
-      rows,
-      rowCount: rows.length,
-      truncated,
+      rows: bounded.rows,
+      rowCount: bounded.rows.length,
+      truncated: bounded.truncated || res.rows.length > maxRows,
       durationMs: Date.now() - started,
     };
   } catch (e) {

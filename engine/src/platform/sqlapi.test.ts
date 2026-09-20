@@ -35,6 +35,13 @@ class GovernedPoolHarness {
             rowCount: 2,
           };
         }
+        if (normalized.startsWith("select * from (select 'wide' as payload) __q limit ")) {
+          return {
+            rows: [{ payload: "x".repeat(200) }],
+            fields: [{ name: "payload" }],
+            rowCount: 1,
+          };
+        }
         if (normalized.includes("from information_schema.columns")) {
           return {
             rows: [{
@@ -216,4 +223,21 @@ test("SQL API operations use only the isolated governed pool", async () => {
       && params?.[0] === "00000000-0000-4000-8000-000000000001").length,
     2,
   );
+});
+
+test("runUserSql refuses a result that exceeds the caller byte budget", async () => {
+  harness.reset();
+  await assert.rejects(
+    runUserSql("select 'wide' as payload", {
+      orgId: "00000000-0000-4000-8000-000000000001",
+      maxBytes: 40,
+    }),
+    /query result exceeds 40 bytes/,
+  );
+  const allowed = await runUserSql("select 'wide' as payload", {
+    orgId: "00000000-0000-4000-8000-000000000001",
+    maxBytes: 4_096,
+  });
+  assert.equal(allowed.rowCount, 1);
+  assert.equal(typeof allowed.rows[0]?.payload, "string");
 });
