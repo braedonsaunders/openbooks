@@ -27,7 +27,13 @@ const PL_NATIONAL_HOLIDAYS: PayrollCountryPack["jurisdictions"][number]["holiday
 
 export const PL_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
   {
-    key: "PL",
+    // The key is the profile-resolved jurisdiction, not the bare country:
+    // jurisdictionKey("PL", "PL") is "PL-PL" (the profile always names
+    // the single national region, so the bare country never resolves). A
+    // bare "PL" key declares a calendar no employee can ever reach, and
+    // the undeclared-jurisdiction gate then refuses every period containing
+    // a mandatory holiday.
+    key: "PL-PL",
     name: "Polska",
     scope: "employment",
     citation: "Ustawa z dnia 18 stycznia 1951 r. o dniach wolnych od pracy (dni wolne od pracy)",
