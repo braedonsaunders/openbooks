@@ -523,7 +523,8 @@ test("movement costing snapshots are locked inside their transaction", () => {
   // locking its position; a pre-transaction profile read can race a policy PUT.
   assert.match(source, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/g);
   assert.match(source, /const profile = await resolveProfile\(orgId, target\.itemId, tx, true\)/);
-  assert.match(source, /subsidiaryIds\?: readonly string\[\] \| null/);
+  const tracking = readFileSync(new URL("./tracking.ts", import.meta.url), "utf8");
+  assert.match(tracking, /subsidiaryIds\?: readonly string\[\] \| null/);
 });
 
 test("the costing profile PUT revalues open layers when a standard cost is revised", () => {
