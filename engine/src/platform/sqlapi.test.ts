@@ -28,17 +28,26 @@ class GovernedPoolHarness {
         const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
         this.queries.push({ text, params: values });
         const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
-        if (normalized === "select * from (select 42 as answer) __q limit 2") {
+        if (normalized.includes("from (select 42 as answer) __q") && normalized.includes("__ob_row_bytes")) {
           return {
-            rows: [{ answer: 42 }, { answer: 43 }],
-            fields: [{ name: "answer" }],
+            rows: [
+              { __ob_row_bytes: 13, __ob_row: { answer: 42 } },
+              { __ob_row_bytes: 13, __ob_row: { answer: 43 } },
+            ],
+            fields: [{ name: "__ob_row_bytes" }, { name: "__ob_row" }],
             rowCount: 2,
           };
         }
-        if (normalized.startsWith("select * from (select 'wide' as payload) __q limit ")) {
+        if (normalized.includes("from (select 'wide' as payload) __q") && normalized.includes("__ob_row_bytes")) {
+          const maxBytes = Number(values?.[1] ?? 0);
+          const payload = { payload: "x".repeat(200) };
+          const size = Buffer.byteLength(JSON.stringify(payload), "utf8");
           return {
-            rows: [{ payload: "x".repeat(200) }],
-            fields: [{ name: "payload" }],
+            rows: [{
+              __ob_row_bytes: size,
+              __ob_row: size > maxBytes ? null : payload,
+            }],
+            fields: [{ name: "__ob_row_bytes" }, { name: "__ob_row" }],
             rowCount: 1,
           };
         }
@@ -109,6 +118,7 @@ const {
   ensureReadRole,
   listSchema,
   runUserSql,
+  USER_SQL_MAX_RESULT_BYTES,
   validateUserSql,
 } = await import(sqlapiUrl) as typeof import("./sqlapi.ts");
 hooks.deregister();
@@ -159,6 +169,23 @@ test("query validation refuses set_config when the name is a quoted identifier",
   );
 });
 
+test("query validation refuses set_config hidden in a Unicode-escaped identifier", () => {
+  assert.throws(
+    () => validateUserSql(`select U&"set_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select pg_catalog.U&"\\0073et_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select U&"!0073et_config" UESCAPE '!'('app.bypass_rls', 'on', true)`),
+    /set_config/,
+  );
+  const unicodeString = `select U&'set_config(' as payload`;
+  assert.equal(validateUserSql(unicodeString), unicodeString);
+});
+
 test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
   assert.throws(
     () => validateUserSql("select $x$ /* $x$ ) __q; set search_path to public; select 1 */"),
@@ -205,13 +232,13 @@ test("SQL API operations use only the isolated governed pool", async () => {
     2,
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
-  assert.ok(statements.includes("select * from (select 42 as answer) __q limit 2"));
-  assert.equal(
-    harness.queries.find(({ text }) =>
-      text.replace(/\s+/g, " ").trim().toLowerCase() === "select * from (select 42 as answer) __q limit 2",
-    )?.params?.length,
-    0,
-  );
+  const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes"));
+  assert.ok(userQuery, "governed user SQL must go through the measured wrapper");
+  assert.match(userQuery!.text, /row_to_json/);
+  assert.match(userQuery!.text, /limit \$1::pg_catalog\.int4/);
+  assert.match(userQuery!.text, /\$2::pg_catalog\.int8/);
+  assert.match(userQuery!.text, /then null/);
+  assert.deepEqual(userQuery!.params, [2, USER_SQL_MAX_RESULT_BYTES]);
   assert.equal(statements.filter((text) => text === "rollback").length, 2);
   assert.equal(
     statements.filter((text) => text === "truncate table pg_temp.openbooks_query_context").length,

@@ -154,6 +154,13 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
       ),
       /set_config\(\) is not allowed|permission denied for function set_config/,
     )
+    await assert.rejects(
+      runUserSql(
+        `select U&"\\0073et_config"('app.current_org', '${second.orgId}', true)`,
+        { orgId: first.orgId },
+      ),
+      /set_config\(\) is not allowed/,
+    )
     const executableDefiners = await runUserSql(
       `select procedure.proname as name
          from pg_catalog.pg_proc procedure
