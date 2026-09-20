@@ -11,6 +11,8 @@ import {
   timeBalanceAsOf,
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
+import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
 import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
@@ -90,7 +92,8 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmPerformanceError ||
     error instanceof BenefitsError ||
     error instanceof HrmAuthorizationError ||
-    error instanceof TemporalError
+    error instanceof TemporalError ||
+    error instanceof SelfServiceError
   ) {
     return { ok: false, error: error.message };
   }
@@ -882,6 +885,26 @@ const hrmTurnover: AssistantToolDef = {
             medianTenureDays: row.medianTenureDays,
           })),
           href: "/hrm/performance",
+const hrmMe: AssistantToolDef = {
+  name: "hrm_me",
+    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  inputSchema: z.object({}),
+      // No employment parameter exists to forge: the read scopes by the
+      // party behind the login, so a second person's rows can never be
+      // returned no matter what the model puts in the (empty) input.
+      const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
+          displayName: profile.displayName,
+          employments: profile.employments.map((summary) => ({
+            employmentId: summary.employmentId,
+            status: summary.status,
+            jobTitle: summary.jobTitle,
+            departmentName: summary.departmentName,
+            employerName: summary.employerName,
+            managerNames: [...summary.managerNames],
+            serviceStart: summary.serviceStart,
+          href: "/me",
         },
       };
     } catch (error) {
@@ -981,3 +1004,4 @@ const hrmBenefits: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmMe];

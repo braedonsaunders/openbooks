@@ -27,7 +27,13 @@
       "startingSoon": "即将入职",
       "startingSoonSub": "{count, plural, other {未来30天内 # 人离职}}",
       "onLeave": "今日休假",
-      "onLeaveSub": "{count, plural, other {# 项待审批}}"
+      "onLeaveSub": "{count, plural, other {# 项待审批}}",
+      "employers": "雇主",
+      "employersSub": "{count, plural, other {# 家子公司}}",
+      "departments": "部门",
+      "departmentsSub": "{count, plural, other {# 个部门}}",
+      "unfundedFte": "无资金来源的已填补 FTE",
+      "unfundedFteSub": "已填补但没有对应资金"
     },
     "groups": {
       "title": "按部门统计人员",
@@ -795,6 +801,155 @@
       "active": "有效",
       "ended": "已结束",
       "cancelled": "已取消"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "概览",
+      "profile": "档案",
+      "leave": "休假",
+      "checklists": "清单",
+      "team": "团队"
+    },
+    "refusedTitle": "自助服务不可用",
+    "overview": {
+      "title": "我",
+      "description": "您的雇佣、申请和余额 — 此处仅显示这些内容。",
+      "notAvailable": "暂无",
+      "employmentsTitle": "我的雇佣",
+      "employmentsEmpty": "暂无雇佣记录",
+      "employmentsEmptyDescription": "人事部尚未为您登记雇佣记录。",
+      "employer": "雇主",
+      "jobTitle": "职位",
+      "department": "部门",
+      "status": "状态",
+      "manager": "上级",
+      "serviceStart": "入职日期",
+      "stepsTitle": "我的待办步骤",
+      "stepsEmpty": "暂无待办步骤",
+      "stepsEmptyDescription": "分配给您的清单步骤将显示在这里。",
+      "viewChecklists": "打开清单",
+      "requestsTitle": "我的待处理申请",
+      "requestsEmpty": "暂无待处理申请",
+      "requestsEmptyDescription": "您提交的提案在决定之前将显示在这里。",
+      "balancesTitle": "余额",
+      "balancesEmpty": "没有启用的休假类型。",
+      "viewLeave": "打开休假",
+      "extensionsTitle": "更多"
+    },
+    "profile": {
+      "title": "我的档案",
+      "description": "您的联系人记录。修改将作为审批申请提交。",
+      "contactTitle": "联系方式",
+      "addressTitle": "地址",
+      "noAddress": "暂无地址记录。",
+      "emergencyTitle": "紧急联系人",
+      "noEmergency": "暂无紧急联系人记录。",
+      "edit": "编辑档案",
+      "phone": "电话",
+      "email": "个人邮箱",
+      "addressLabel": "标签",
+      "line1": "街道",
+      "line2": "街道（第二行）",
+      "city": "城市",
+      "region": "地区",
+      "postalCode": "邮编",
+      "country": "国家",
+      "employment": "雇佣",
+      "emergencyName": "姓名",
+      "emergencyRelationship": "关系",
+      "emergencyPhone": "电话",
+      "reason": "原因",
+      "reasonPlaceholder": "说明变更内容，供审批人参考",
+      "clearHint": "清空此字段",
+      "submit": "提交审批",
+      "cancel": "取消",
+      "submitFailed": "档案申请提交失败。",
+      "dialogTitle": "编辑档案",
+      "dialogDescription": "修改将作为申请提交 — 审批通过后更新记录。",
+      "pendingTitle": "待处理的档案申请",
+      "pendingMessage": "档案变更状态为{status}。审批通过后更新记录。"
+    },
+    "checklists": {
+      "title": "我的清单",
+      "description": "分配给您的步骤，可在此完成。",
+      "listTitle": "待办步骤",
+      "columns": {
+        "title": "步骤",
+        "process": "清单",
+        "due": "截止",
+        "required": "是否必需",
+        "evidence": "证明",
+        "status": "状态"
+      },
+      "required": "必需",
+      "optional": "可选",
+      "complete": "完成",
+      "completeFailed": "该步骤完成失败。",
+      "overdue": "已逾期",
+      "emptyTitle": "暂无待办步骤",
+      "emptyDescription": "分配给您的步骤将显示在这里。"
+    },
+    "requests": {
+      "columns": {
+        "kind": "类型",
+        "status": "状态",
+        "submitted": "已提交"
+      }
+    },
+    "requestKinds": {
+      "hire": "入职",
+      "status_change": "状态变更",
+      "assignment_change": "分配变更",
+      "termination": "离职",
+      "position_assignment": "岗位分配",
+      "profile_change": "档案变更",
+      "unknown": "未知"
+    },
+    "requestStatus": {
+      "draft": "草稿",
+      "pending_approval": "待审批",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "withdrawn": "已撤回",
+      "applied": "已应用"
+    },
+    "employmentStatus": {
+      "offered": "已发offer",
+      "active": "在职",
+      "on_leave": "休假中",
+      "suspended": "已暂停",
+      "terminated": "已离职"
+    },
+    "stepStatus": {
+      "pending": "待办",
+      "done": "已完成",
+      "skipped": "已跳过"
+    },
+    "evidenceKinds": {
+      "none": "无",
+      "acknowledgement": "确认",
+      "attachment": "附件"
+    },
+    "team": {
+      "title": "我的团队",
+      "description": "截至今日的直接下属 — 名单、步骤和待定事项。",
+      "rosterTitle": "直接下属",
+      "columns": {
+        "name": "姓名",
+        "title": "职位",
+        "department": "部门",
+        "status": "状态",
+        "serviceStart": "入职日期"
+      },
+      "rosterEmpty": "暂无直接下属",
+      "stepsTitle": "分配给我的步骤",
+      "stepsEmpty": "该团队中暂无分配给您的步骤。",
+      "leaveTitle": "待定休假",
+      "leaveEmpty": "暂无待决定的休假申请。",
+      "decideInApprovals": "前往审批决定",
+      "changesTitle": "待定变更申请",
+      "changesEmpty": "暂无待决定的变更申请。"
     }
   }
 }

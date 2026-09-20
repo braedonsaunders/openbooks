@@ -1,6 +1,7 @@
 {
   "modules": {
     "hrm": "Recursos humanos",
+    "me": "Yo",
     "dashboard": "Panel",
     "assistant": "Asistente de IA",
     "continuous-close": "Agentes",

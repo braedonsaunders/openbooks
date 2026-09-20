@@ -977,7 +977,11 @@
     "hrm_performance_manage": "Mener les cycles, calibrer et partager les évaluations",
     "hrm_retention_read": "Voir les fiches de sortie et la rotation",
     "hrm_benefits_read": "Consulter les régimes avantages et les adhésions",
-    "hrm_benefits_manage": "Gérer les régimes, les fenêtres et les adhésions"
+    "hrm_benefits_manage": "Gérer les régimes, les fenêtres et les adhésions",
+    "hrm_self_read": "Voir son résumé d'emploi",
+    "hrm_self_request": "Déposer ses modifications de profil",
+    "hrm_team_read": "Voir ses subordonnés directs aujourd'hui",
+    "hrm_team_manage": "Traiter les étapes assignées par le responsable"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",

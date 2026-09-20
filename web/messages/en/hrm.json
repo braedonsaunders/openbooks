@@ -27,7 +27,13 @@
       "startingSoon": "Starting soon",
       "startingSoonSub": "{count, plural, one {# ending in the next 30 days} other {# ending in the next 30 days}}",
       "onLeave": "On leave today",
-      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}"
+      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}",
+      "employers": "Employers",
+      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
+      "departments": "Departments",
+      "departmentsSub": "{count, plural, one {# department} other {# departments}}",
+      "unfundedFte": "Unfunded filled FTE",
+      "unfundedFteSub": "Filled with no funding behind it"
     },
     "groups": {
       "title": "Headcount by department",
@@ -796,6 +802,155 @@
       "active": "Active",
       "ended": "Ended",
       "cancelled": "Cancelled"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "Overview",
+      "profile": "Profile",
+      "leave": "Leave",
+      "checklists": "Checklists",
+      "team": "Team"
+    },
+    "refusedTitle": "Self-service is unavailable",
+    "overview": {
+      "title": "Me",
+      "description": "Your employment, requests, and balances — nothing else lists here.",
+      "notAvailable": "—",
+      "employmentsTitle": "My employment",
+      "employmentsEmpty": "No employment record",
+      "employmentsEmptyDescription": "HR has not recorded an employment for your person yet.",
+      "employer": "Employer",
+      "jobTitle": "Title",
+      "department": "Department",
+      "status": "Status",
+      "manager": "Manager",
+      "serviceStart": "Service start",
+      "stepsTitle": "My open steps",
+      "stepsEmpty": "No open steps",
+      "stepsEmptyDescription": "Checklist steps assigned to you list here.",
+      "viewChecklists": "Open checklists",
+      "requestsTitle": "My pending requests",
+      "requestsEmpty": "No pending requests",
+      "requestsEmptyDescription": "Profile and employment proposals you file list here until decided.",
+      "balancesTitle": "Balances",
+      "balancesEmpty": "No active leave types.",
+      "viewLeave": "Open leave",
+      "extensionsTitle": "More"
+    },
+    "profile": {
+      "title": "My profile",
+      "description": "Your contact record. Edits file a request for HR approval.",
+      "contactTitle": "Contact",
+      "addressTitle": "Address",
+      "noAddress": "No address on file.",
+      "emergencyTitle": "Emergency contact",
+      "noEmergency": "No emergency contact on file.",
+      "edit": "Edit profile",
+      "phone": "Phone",
+      "email": "Personal email",
+      "addressLabel": "Label",
+      "line1": "Street",
+      "line2": "Street (2nd line)",
+      "city": "City",
+      "region": "Region",
+      "postalCode": "Postal code",
+      "country": "Country",
+      "employment": "Employment",
+      "emergencyName": "Name",
+      "emergencyRelationship": "Relationship",
+      "emergencyPhone": "Phone",
+      "reason": "Reason",
+      "reasonPlaceholder": "What changed, for the HR approver",
+      "clearHint": "Clear this field",
+      "submit": "Submit for approval",
+      "cancel": "Cancel",
+      "submitFailed": "The profile request could not be filed.",
+      "dialogTitle": "Edit profile",
+      "dialogDescription": "Changes file as a request — HR approves before anything updates.",
+      "pendingTitle": "Pending profile request",
+      "pendingMessage": "A profile change is {status}. HR approval updates the record."
+    },
+    "checklists": {
+      "title": "My checklists",
+      "description": "Checklist steps assigned to you, with completion.",
+      "listTitle": "Open steps",
+      "columns": {
+        "title": "Step",
+        "process": "Checklist",
+        "due": "Due",
+        "required": "Required",
+        "evidence": "Evidence",
+        "status": "Status"
+      },
+      "required": "Required",
+      "optional": "Optional",
+      "complete": "Complete",
+      "completeFailed": "The step could not be completed.",
+      "overdue": "Overdue",
+      "emptyTitle": "No open steps",
+      "emptyDescription": "Checklist steps assigned to you list here."
+    },
+    "requests": {
+      "columns": {
+        "kind": "Kind",
+        "status": "Status",
+        "submitted": "Submitted"
+      }
+    },
+    "requestKinds": {
+      "hire": "Hire",
+      "status_change": "Status change",
+      "assignment_change": "Assignment change",
+      "termination": "Termination",
+      "position_assignment": "Position assignment",
+      "profile_change": "Profile change",
+      "unknown": "Unknown"
+    },
+    "requestStatus": {
+      "draft": "Draft",
+      "pending_approval": "Pending approval",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
+      "applied": "Applied"
+    },
+    "employmentStatus": {
+      "offered": "Offered",
+      "active": "Active",
+      "on_leave": "On leave",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "done": "Done",
+      "skipped": "Skipped"
+    },
+    "evidenceKinds": {
+      "none": "None",
+      "acknowledgement": "Acknowledgement",
+      "attachment": "Attachment"
+    },
+    "team": {
+      "title": "My team",
+      "description": "Direct reports as of today — roster, steps, and pending decisions.",
+      "rosterTitle": "Direct reports",
+      "columns": {
+        "name": "Name",
+        "title": "Title",
+        "department": "Department",
+        "status": "Status",
+        "serviceStart": "Service start"
+      },
+      "rosterEmpty": "No direct reports",
+      "stepsTitle": "Steps assigned to me",
+      "stepsEmpty": "No steps assigned to you on this team.",
+      "leaveTitle": "Pending leave",
+      "leaveEmpty": "No leave requests awaiting decision.",
+      "decideInApprovals": "Decide in Approvals",
+      "changesTitle": "Pending change requests",
+      "changesEmpty": "No change requests awaiting decision."
     }
   }
 }

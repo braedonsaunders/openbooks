@@ -42,6 +42,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 const tools = read("./tools-hrm.ts");
 
 const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_me"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -63,11 +64,15 @@ const TOOL_PERMS: Record<string, string> = {
   // interviews and offers are governed by hrm.recruiting.read at every
   // surface, and contact PII never leaves through it.
   hrm_recruiting: "hrm.recruiting.read",
+  // The self-service summary scopes by the party behind the login, so it
+  // carries the self grant every built-in role holds — never employment.read.
+  hrm_me: "hrm.self.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
 test("the module exports exactly the ten HRM read tools", () => {
+test("the module exports exactly the seven HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 

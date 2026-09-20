@@ -977,7 +977,11 @@
     "hrm_performance_manage": "Run review cycles, calibrate and share reviews",
     "hrm_retention_read": "View exit records and turnover",
     "hrm_benefits_read": "View benefit plans and elections",
-    "hrm_benefits_manage": "Manage benefit plans, windows, and elections"
+    "hrm_benefits_manage": "Manage benefit plans, windows, and elections",
+    "hrm_self_read": "View own employment summary",
+    "hrm_self_request": "File profile changes for own party",
+    "hrm_team_read": "View direct reports as of today",
+    "hrm_team_manage": "Work manager-assigned team steps"
   },
   "ai": {
     "metaTitle": "AI providers",

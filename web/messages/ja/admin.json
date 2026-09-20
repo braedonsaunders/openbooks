@@ -977,7 +977,11 @@
     "hrm_performance_manage": "レビューサイクルの実行、レビューの調整と共有",
     "hrm_retention_read": "退職記録と離職率を閲覧",
     "hrm_benefits_read": "福利厚生プランと加入の表示",
-    "hrm_benefits_manage": "福利厚生プラン、加入期間、加入の管理"
+    "hrm_benefits_manage": "福利厚生プラン、加入期間、加入の管理",
+    "hrm_self_read": "自分の雇用サマリーを閲覧",
+    "hrm_self_request": "自分のプロフィール変更を申請",
+    "hrm_team_read": "今日時点の直属の部下を閲覧",
+    "hrm_team_manage": "マネージャー割当のチームステップを処理"
   },
   "ai": {
     "metaTitle": "AI設定",
