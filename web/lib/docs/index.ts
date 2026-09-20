@@ -11,6 +11,7 @@ import { laborCosting } from './articles/labor-costing'
 import { laborPricing } from './articles/labor-pricing'
 import { hrmProcesses } from './articles/hrm-processes'
 import { performanceAndRetention } from './articles/performance-and-retention'
+import { selfService } from './articles/self-service'
 import { payroll } from './articles/payroll'
 import { employmentMigration } from './articles/employment-migration'
 import { positionsAndHeadcount } from './articles/positions-and-headcount'
@@ -249,6 +250,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, selfService, leaveTimeVersusValue, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

@@ -977,7 +977,11 @@
     "hrm_performance_manage": "Dirigir ciclos de evaluación, calibrar y compartir evaluaciones",
     "hrm_retention_read": "Ver registros de salida y rotación",
     "hrm_benefits_read": "Ver planes de beneficios e inscripciones",
-    "hrm_benefits_manage": "Gestionar planes de beneficios, ventanas e inscripciones"
+    "hrm_benefits_manage": "Gestionar planes de beneficios, ventanas e inscripciones",
+    "hrm_self_read": "Ver el resumen del empleo propio",
+    "hrm_self_request": "Presentar cambios de perfil propios",
+    "hrm_team_read": "Ver reportes directos hoy",
+    "hrm_team_manage": "Trabajar pasos asignados por el responsable"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",

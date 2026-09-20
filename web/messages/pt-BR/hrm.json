@@ -27,7 +27,13 @@
       "startingSoon": "Começam em breve",
       "startingSoonSub": "{count, plural, one {# termina nos próximos 30 dias} other {# terminam nos próximos 30 dias}}",
       "onLeave": "De licença hoje",
-      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}"
+      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}",
+      "employers": "Empregadores",
+      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
+      "departments": "Departamentos",
+      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
+      "unfundedFte": "FTE preenchido sem financiamento",
+      "unfundedFteSub": "Preenchido sem financiamento vinculado"
     },
     "groups": {
       "title": "Quadro de pessoal por departamento",
@@ -795,6 +801,155 @@
       "active": "Ativa",
       "ended": "Encerrada",
       "cancelled": "Cancelada"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "Visão geral",
+      "profile": "Perfil",
+      "leave": "Licenças",
+      "checklists": "Checklists",
+      "team": "Equipe"
+    },
+    "refusedTitle": "O autoatendimento está indisponível",
+    "overview": {
+      "title": "Eu",
+      "description": "Seu vínculo, solicitações e saldos — nada mais aparece aqui.",
+      "notAvailable": "não informado",
+      "employmentsTitle": "Meu vínculo",
+      "employmentsEmpty": "Sem registro de vínculo",
+      "employmentsEmptyDescription": "O RH ainda não registrou um vínculo para a sua pessoa.",
+      "employer": "Empregador",
+      "jobTitle": "Cargo",
+      "department": "Departamento",
+      "status": "Situação",
+      "manager": "Gestor",
+      "serviceStart": "Início do vínculo",
+      "stepsTitle": "Minhas etapas abertas",
+      "stepsEmpty": "Sem etapas abertas",
+      "stepsEmptyDescription": "As etapas atribuídas a você aparecem aqui.",
+      "viewChecklists": "Abrir checklists",
+      "requestsTitle": "Minhas solicitações pendentes",
+      "requestsEmpty": "Sem solicitações pendentes",
+      "requestsEmptyDescription": "As propostas que você apresenta aparecem aqui até a decisão.",
+      "balancesTitle": "Saldos",
+      "balancesEmpty": "Sem tipos de licença ativos.",
+      "viewLeave": "Abrir licenças",
+      "extensionsTitle": "Mais"
+    },
+    "profile": {
+      "title": "Meu perfil",
+      "description": "Seu registro de contato. Alterações são apresentadas como solicitação de aprovação.",
+      "contactTitle": "Contato",
+      "addressTitle": "Endereço",
+      "noAddress": "Sem endereço registrado.",
+      "emergencyTitle": "Contato de emergência",
+      "noEmergency": "Sem contato de emergência registrado.",
+      "edit": "Editar perfil",
+      "phone": "Telefone",
+      "email": "E-mail pessoal",
+      "addressLabel": "Rótulo",
+      "line1": "Logradouro",
+      "line2": "Complemento",
+      "city": "Cidade",
+      "region": "Estado",
+      "postalCode": "CEP",
+      "country": "País",
+      "employment": "Vínculo",
+      "emergencyName": "Nome",
+      "emergencyRelationship": "Parentesco",
+      "emergencyPhone": "Telefone",
+      "reason": "Motivo",
+      "reasonPlaceholder": "O que mudou, para quem aprova",
+      "clearHint": "Limpar este campo",
+      "submit": "Enviar para aprovação",
+      "cancel": "Cancelar",
+      "submitFailed": "Não foi possível apresentar a solicitação de perfil.",
+      "dialogTitle": "Editar perfil",
+      "dialogDescription": "Alterações são apresentadas como solicitação — a aprovação atualiza o registro.",
+      "pendingTitle": "Solicitação de perfil pendente",
+      "pendingMessage": "Uma alteração de perfil está {status}. A aprovação atualiza o registro."
+    },
+    "checklists": {
+      "title": "Meus checklists",
+      "description": "Etapas atribuídas a você, com conclusão.",
+      "listTitle": "Etapas abertas",
+      "columns": {
+        "title": "Etapa",
+        "process": "Checklist",
+        "due": "Prazo",
+        "required": "Obrigatória",
+        "evidence": "Evidência",
+        "status": "Situação"
+      },
+      "required": "Obrigatória",
+      "optional": "Opcional",
+      "complete": "Concluir",
+      "completeFailed": "Não foi possível concluir a etapa.",
+      "overdue": "Atrasada",
+      "emptyTitle": "Sem etapas abertas",
+      "emptyDescription": "As etapas atribuídas a você aparecem aqui."
+    },
+    "requests": {
+      "columns": {
+        "kind": "Tipo",
+        "status": "Situação",
+        "submitted": "Enviada"
+      }
+    },
+    "requestKinds": {
+      "hire": "Admissão",
+      "status_change": "Mudança de situação",
+      "assignment_change": "Mudança de lotação",
+      "termination": "Desligamento",
+      "position_assignment": "Designação de cargo",
+      "profile_change": "Alteração de perfil",
+      "unknown": "Desconhecido"
+    },
+    "requestStatus": {
+      "draft": "Rascunho",
+      "pending_approval": "Aprovação pendente",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "withdrawn": "Retirada",
+      "applied": "Aplicada"
+    },
+    "employmentStatus": {
+      "offered": "Proposto",
+      "active": "Ativo",
+      "on_leave": "Afastado",
+      "suspended": "Suspenso",
+      "terminated": "Encerrado"
+    },
+    "stepStatus": {
+      "pending": "Pendente",
+      "done": "Concluída",
+      "skipped": "Ignorada"
+    },
+    "evidenceKinds": {
+      "none": "Nenhuma",
+      "acknowledgement": "Confirmação",
+      "attachment": "Anexo"
+    },
+    "team": {
+      "title": "Minha equipe",
+      "description": "Subordinados diretos hoje — relação, etapas e decisões pendentes.",
+      "rosterTitle": "Subordinados diretos",
+      "columns": {
+        "name": "Nome",
+        "title": "Cargo",
+        "department": "Departamento",
+        "status": "Situação",
+        "serviceStart": "Início do vínculo"
+      },
+      "rosterEmpty": "Sem subordinados diretos",
+      "stepsTitle": "Etapas atribuídas a mim",
+      "stepsEmpty": "Sem etapas atribuídas a você nesta equipe.",
+      "leaveTitle": "Licenças pendentes",
+      "leaveEmpty": "Sem solicitações de licença para decidir.",
+      "decideInApprovals": "Decidir em Aprovações",
+      "changesTitle": "Solicitações de alteração pendentes",
+      "changesEmpty": "Sem solicitações de alteração para decidir."
     }
   }
 }

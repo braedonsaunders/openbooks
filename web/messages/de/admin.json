@@ -977,7 +977,11 @@
     "hrm_performance_manage": "Überprüfungszyklen durchführen, Beurteilungen kalibrieren und teilen",
     "hrm_retention_read": "Austrittsdatensätze und Fluktuation einsehen",
     "hrm_benefits_read": "Leistungspläne und Anmeldungen anzeigen",
-    "hrm_benefits_manage": "Leistungspläne, Anmeldefenster und Anmeldungen verwalten"
+    "hrm_benefits_manage": "Leistungspläne, Anmeldefenster und Anmeldungen verwalten",
+    "hrm_self_read": "Eigene Anstellungsübersicht ansehen",
+    "hrm_self_request": "Profiländerungen für die eigene Person einreichen",
+    "hrm_team_read": "Direkte Mitarbeitende heute ansehen",
+    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",

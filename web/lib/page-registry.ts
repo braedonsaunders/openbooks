@@ -1552,6 +1552,54 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me': {
+    route: '/me',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/view')
+      return {
+        load: () => m.loadMePage(),
+        spec: (data) => m.meSpec(data as never),
+      }
+    },
+  },
+  '/me/checklists': {
+    route: '/me/checklists',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/checklists/view')
+      return {
+        load: () => m.loadMeChecklistsPage(),
+        spec: (data) => m.meChecklistsSpec(data as never),
+      }
+    },
+  },
+  '/me/profile': {
+    route: '/me/profile',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/profile/view')
+      return {
+        load: (input) => m.loadMeProfilePage(input.searchParams ?? {}),
+        spec: (data) => m.meProfileSpec(data as never),
+      }
+    },
+  },
+  '/me/team': {
+    route: '/me/team',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/team/view')
+      return {
+        load: () => m.loadMeTeamPage(),
+        spec: (data) => m.meTeamSpec(data as never),
+      }
+    },
+  },
   '/notifications': {
     route: '/notifications',
     segments: [],

@@ -112,6 +112,9 @@ const READER_PERMS = [
   // Benefits elections (0197) read through the benefits read service;
   // the harness reader holds the grant so the read tool runs.
   "hrm.benefits.read",
+  // HR-9 self-service: the harness reader holds the self read grant so
+  // the own-employment summary tool runs rather than refusing.
+  "hrm.self.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

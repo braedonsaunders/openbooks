@@ -27,7 +27,13 @@
       "startingSoon": "まもなく入社",
       "startingSoonSub": "{count, plural, other {今後30日以内に # 名が退社}}",
       "onLeave": "本日休暇中",
-      "onLeaveSub": "{count, plural, other {承認待ち # 件}}"
+      "onLeaveSub": "{count, plural, other {承認待ち # 件}}",
+      "employers": "雇用主",
+      "employersSub": "{count, plural, other {# 子会社}}",
+      "departments": "部門",
+      "departmentsSub": "{count, plural, other {# 部門}}",
+      "unfundedFte": "財源のない充足済みFTE",
+      "unfundedFteSub": "充足済みだが財源の割り当てがない"
     },
     "groups": {
       "title": "部門別人員数",
@@ -795,6 +801,155 @@
       "active": "有効",
       "ended": "終了済",
       "cancelled": "取消済"
+    }
+  },
+  "me": {
+    "tabs": {
+      "overview": "概要",
+      "profile": "プロフィール",
+      "leave": "休暇",
+      "checklists": "チェックリスト",
+      "team": "チーム"
+    },
+    "refusedTitle": "セルフサービスは利用できません",
+    "overview": {
+      "title": "自分",
+      "description": "あなたの雇用、申請、残高 — ここに表示されるのはそれだけです。",
+      "notAvailable": "未設定",
+      "employmentsTitle": "私の雇用",
+      "employmentsEmpty": "雇用記録がありません",
+      "employmentsEmptyDescription": "人事部があなたの雇用をまだ登録していません。",
+      "employer": "雇用主",
+      "jobTitle": "職名",
+      "department": "部門",
+      "status": "ステータス",
+      "manager": "上長",
+      "serviceStart": "勤務開始日",
+      "stepsTitle": "未完了のステップ",
+      "stepsEmpty": "未完了のステップはありません",
+      "stepsEmptyDescription": "あなたに割り当てられたチェックリストのステップがここに表示されます。",
+      "viewChecklists": "チェックリストを開く",
+      "requestsTitle": "処理中の申請",
+      "requestsEmpty": "処理中の申請はありません",
+      "requestsEmptyDescription": "あなたが提出した提案は決定までここに表示されます。",
+      "balancesTitle": "残高",
+      "balancesEmpty": "有効な休暇種別がありません。",
+      "viewLeave": "休暇を開く",
+      "extensionsTitle": "その他"
+    },
+    "profile": {
+      "title": "マイプロフィール",
+      "description": "あなたの連絡先記録です。変更は承認申請として提出されます。",
+      "contactTitle": "連絡先",
+      "addressTitle": "住所",
+      "noAddress": "住所が登録されていません。",
+      "emergencyTitle": "緊急連絡先",
+      "noEmergency": "緊急連絡先が登録されていません。",
+      "edit": "プロフィールを編集",
+      "phone": "電話番号",
+      "email": "個人メール",
+      "addressLabel": "ラベル",
+      "line1": "住所1",
+      "line2": "住所2",
+      "city": "市区町村",
+      "region": "都道府県",
+      "postalCode": "郵便番号",
+      "country": "国",
+      "employment": "雇用",
+      "emergencyName": "氏名",
+      "emergencyRelationship": "続柄",
+      "emergencyPhone": "電話番号",
+      "reason": "理由",
+      "reasonPlaceholder": "承認者向けに変更内容を記入",
+      "clearHint": "この項目をクリア",
+      "submit": "承認申請する",
+      "cancel": "キャンセル",
+      "submitFailed": "プロフィール申請を提出できませんでした。",
+      "dialogTitle": "プロフィールを編集",
+      "dialogDescription": "変更は申請として提出され、承認後に記録が更新されます。",
+      "pendingTitle": "処理中のプロフィール申請",
+      "pendingMessage": "プロフィール変更は{status}です。承認後に記録が更新されます。"
+    },
+    "checklists": {
+      "title": "マイチェックリスト",
+      "description": "あなたに割り当てられたステップと完了処理。",
+      "listTitle": "未完了のステップ",
+      "columns": {
+        "title": "ステップ",
+        "process": "チェックリスト",
+        "due": "期限",
+        "required": "必須",
+        "evidence": "証跡",
+        "status": "ステータス"
+      },
+      "required": "必須",
+      "optional": "任意",
+      "complete": "完了する",
+      "completeFailed": "ステップを完了できませんでした。",
+      "overdue": "期限切れ",
+      "emptyTitle": "未完了のステップはありません",
+      "emptyDescription": "あなたに割り当てられたステップがここに表示されます。"
+    },
+    "requests": {
+      "columns": {
+        "kind": "種類",
+        "status": "ステータス",
+        "submitted": "提出日"
+      }
+    },
+    "requestKinds": {
+      "hire": "採用",
+      "status_change": "ステータス変更",
+      "assignment_change": "配置変更",
+      "termination": "退職",
+      "position_assignment": "役職割当",
+      "profile_change": "プロフィール変更",
+      "unknown": "不明"
+    },
+    "requestStatus": {
+      "draft": "下書き",
+      "pending_approval": "承認待ち",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "withdrawn": "取下げ",
+      "applied": "適用済み"
+    },
+    "employmentStatus": {
+      "offered": "内定",
+      "active": "在職",
+      "on_leave": "休職中",
+      "suspended": "停止中",
+      "terminated": "退職済み"
+    },
+    "stepStatus": {
+      "pending": "未完了",
+      "done": "完了",
+      "skipped": "スキップ"
+    },
+    "evidenceKinds": {
+      "none": "なし",
+      "acknowledgement": "確認",
+      "attachment": "添付"
+    },
+    "team": {
+      "title": "マイチーム",
+      "description": "今日時点の直属の部下 — 名簿、ステップ、未決定事項。",
+      "rosterTitle": "直属の部下",
+      "columns": {
+        "name": "氏名",
+        "title": "職名",
+        "department": "部門",
+        "status": "ステータス",
+        "serviceStart": "勤務開始日"
+      },
+      "rosterEmpty": "直属の部下はいません",
+      "stepsTitle": "自分に割り当てられたステップ",
+      "stepsEmpty": "このチームであなたに割り当てられたステップはありません。",
+      "leaveTitle": "未決定の休暇申請",
+      "leaveEmpty": "決定待ちの休暇申請はありません。",
+      "decideInApprovals": "承認画面で決定する",
+      "changesTitle": "未決定の変更申請",
+      "changesEmpty": "決定待ちの変更申請はありません。"
     }
   }
 }
