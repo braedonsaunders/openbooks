@@ -14,6 +14,7 @@ import {
   loadRecord,
   loadRecordTypeByKey,
   recordVisibleInSubsidiaryFence,
+  retainStoredSubsidiaryId,
 } from '../../../../../lib/records'
 import {
   lintRecordFields,
@@ -250,10 +251,15 @@ export async function PATCH(
     }
 
     // Value validation: supplied values must always be VALID; required fields
-    // are enforced whenever the record is (or is becoming) active.
-    const effectiveData = nextData ?? stripUnknownData(sections, record.data)
+    // are enforced whenever the record is (or is becoming) active. Persist the
+    // retained bag so a dropped subsidiary_id field cannot erase the stored
+    // JSON fence token (same as writers.ts).
+    const strippedData = nextData ?? stripUnknownData(sections, record.data)
+    const persistedData = retainStoredSubsidiaryId(sections, record.data as FieldValueMap, strippedData)
+    if (nextData !== undefined) nextData = persistedData
+    const effectiveData = strippedData
     const effectiveStatus = nextStatus ?? record.status
-    if (!recordVisibleInSubsidiaryFence(sections, effectiveData, gate.allowedSubsidiaryIds)) {
+    if (!recordVisibleInSubsidiaryFence(sections, persistedData, gate.allowedSubsidiaryIds)) {
       return { kind: 'not_found' as const }
     }
     const stage = effectiveStatus === 'active' ? 'submit' : 'draft'
