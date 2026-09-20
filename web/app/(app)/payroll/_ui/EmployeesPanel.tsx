@@ -386,6 +386,12 @@ export function ProfileEditor(props: {
   const choiceLabel = (column: string, value: string, fallback: string): string =>
     textOf(`${columnLocaleBase(column)}.${value}`, fallback)
 
+  // Declared above `save`: both the save path and the render path below
+  // read it, and a const arrow used before its declaration trips the
+  // hooks-immutability gate.
+  const columnOf = (field: DeclaredProfileField): string | null =>
+    field.storage?.kind === 'column' ? field.storage.column : null
+
   async function save() {
     setBusy(true)
     try {
@@ -505,9 +511,6 @@ export function ProfileEditor(props: {
       </Button>
     </div>
   )
-
-  const columnOf = (field: DeclaredProfileField): string | null =>
-    field.storage?.kind === 'column' ? field.storage.column : null
 
   /**
    * One non-flag certificate field, whichever storage it uses. The input
