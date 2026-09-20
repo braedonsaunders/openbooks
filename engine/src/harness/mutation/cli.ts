@@ -6,8 +6,8 @@
  *     [--report-dir <dir>] [--unit-only] [--list-targets] \
  *     [--write-checked-in] [--max-per-operator N]
  *
- * Unit-only mutants run without a database; DB-backed mapped files self-skip
- * and their mutants report `skipped`. With OPENBOOKS_DB_URL set (and without
+ * Unit-only mutants run without a database; targets with an audited database
+ * requirement report unmeasured with their reason. With OPENBOOKS_DB_URL set (and without
  * --unit-only) the same run measures DB mutants too. The production database
  * is refused outright (see runner.assertNotProduction).
  */
@@ -85,6 +85,7 @@ function renderMarkdown(report: MutationReport): string {
   for (const t of report.targets) {
     lines.push(`## ${t.target} (${t.status}, score ${formatRatio(t.ratio)})`);
     lines.push("");
+    if (t.unmeasuredReason) lines.push(`Unmeasured: ${t.unmeasuredReason}`, "");
     const survivors = t.mutants.filter((m) => m.status === "survived").slice(0, 8);
     if (survivors.length > 0) {
       lines.push("Top surviving mutants (the suite cannot see these behavior changes):");
@@ -113,6 +114,7 @@ function renderMarkdown(report: MutationReport): string {
 export interface CheckedInTarget {
   readonly target: string;
   readonly needsDb: boolean;
+  readonly unmeasuredReason?: string;
   readonly status: TargetResult["status"];
   readonly killed: number;
   readonly survived: number;
@@ -151,6 +153,7 @@ export function toCheckedInReport(report: MutationReport): CheckedInReport {
     targets: report.targets.map((t) => ({
       target: t.target,
       needsDb: t.needsDb,
+      ...(t.unmeasuredReason ? { unmeasuredReason: t.unmeasuredReason } : {}),
       status: t.status,
       killed: t.killed,
       survived: t.survived,

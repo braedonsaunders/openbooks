@@ -17,6 +17,8 @@ export interface MutationTargetConfig {
   readonly tests: readonly string[];
   readonly lineRanges?: readonly LineRange[];
   readonly needsDb?: boolean;
+  /** Why the selected runtime behavior requires the database partition. */
+  readonly needsDbReason?: string;
 }
 
 export interface MutationConfig {
@@ -67,11 +69,14 @@ export function parseMutationConfig(raw: string): MutationConfig {
       }
       lineRanges = entry.lineRanges;
     }
+    if (entry.needsDb === true && (typeof entry.needsDbReason !== "string" || !entry.needsDbReason.trim())) {
+      throw new Error(`mutation target ${entry.path} needs a non-empty needsDbReason grounded in its selected code`);
+    }
     targets.push({
       path: entry.path,
       tests: [...entry.tests].sort(),
       ...(lineRanges ? { lineRanges } : {}),
-      ...(entry.needsDb === true ? { needsDb: true as const } : {}),
+      ...(entry.needsDb === true ? { needsDb: true as const, needsDbReason: entry.needsDbReason as string } : {}),
     });
   }
   return { version: 1, targets };

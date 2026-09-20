@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Curated mutation scope (fleet item 3). Each target maps to the test files that cover it: fast unit files first so unit-only runs measure something, DB-backed files after so nightly runs with OPENBOOKS_DB_URL measure the rest. lineRanges restrict generation to the assigned math (payments allocation/application, payroll stub assembly + employer accruals). needsDb marks targets whose mapped tests all require a database: in unit mode their mutants report skipped-with-cause instead of silently vanishing.",
+  "comment": "Curated mutation scope. Each target maps to tests of its owning behavior. lineRanges preserve selected financial math after decomposition. needsDb plus needsDbReason declares that measurement requires persisted database state: unit runs report it unmeasured even when neighboring mapped pure tests pass. Pure calculation evidence, policies and scripted-IO tests remain independently measured. Contract-only scopes with no runtime operators are excluded.",
   "targets": [
     {
       "path": "engine/src/money/money.ts",
@@ -62,7 +62,9 @@
         "engine/src/payments/payments.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/payments/payments.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "Selected lines48-73 insert the payment document and return its persisted row; this scope excludes the pure isPaymentKind predicate."
     },
     {
       "path": "engine/src/payments/payment-queries.ts",
@@ -80,7 +82,9 @@
         "engine/src/payments/payments.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/payments/payments.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "Selected application and credit-selection paths read persisted open items and accounting book context before allocation; standalone settlement math is measured separately."
     },
     {
       "path": "engine/src/payroll/run-calculation-evidence.ts",
@@ -136,7 +140,8 @@
       "tests": [
         "engine/src/payroll/run.test.ts",
         "engine/src/payroll/agnostic-core.test.ts"
-      ]
+      ],
+      "needsDbReason": "Selected stub-capture and calculation paths consume persisted pay-stub rows and run a payroll transaction; evidence parsing is measured separately without a database."
     },
     {
       "path": "engine/src/payroll/run-earning-lines.ts",
@@ -170,7 +175,8 @@
       "tests": [
         "engine/src/payroll/run.test.ts",
         "engine/src/payroll/agnostic-core.test.ts"
-      ]
+      ],
+      "needsDbReason": "Selected earning builders resolve persisted retro settlements, schedules and employee balances on the transaction executor before appending lines."
     },
     {
       "path": "engine/src/payroll/canada/t4127.ts",
@@ -187,14 +193,16 @@
         "engine/src/payroll/opening-balances.test.ts",
         "engine/src/payroll/employer-taxes.integration.test.ts",
         "engine/src/payroll/quebec.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Statutory computation loads employee profile and year-to-date payroll state; the mapped behavior suites require disposable database fixtures."
     },
     {
       "path": "engine/src/payroll/canada/employer-levies.ts",
       "needsDb": true,
       "tests": [
         "engine/src/payroll/employer-taxes.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Employer levy calculation resolves organization rates and year-to-date remuneration from persisted payroll state."
     },
     {
       "path": "engine/src/payroll/us/pub15t.ts",
@@ -214,7 +222,8 @@
       "tests": [
         "engine/src/payroll/controls.test.ts",
         "engine/src/payroll/us-state-withholding.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Statutory computation resolves employee withholding certificates and year-to-date payroll state from the database."
     },
     {
       "path": "engine/src/tax/tax.ts",
@@ -240,7 +249,8 @@
         "engine/src/consolidation/proportionate.integration.test.ts",
         "engine/src/consolidation/consolidation.integration.test.ts",
         "engine/src/consolidation/elimination-fx.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Journal, rate-derivation and neededPairs paths resolve persisted subsidiary hierarchy, period locks and primary-book activity; the unit serialization-error predicate does not measure these paths."
     },
     {
       "path": "engine/src/assets/depreciation.ts",
@@ -263,7 +273,9 @@
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "postDocument coordinates database preparation, atomic commit and durable effect dispatch; neighboring pure posting rules do not execute this coordinator."
     },
     {
       "path": "engine/src/ledger/posting-prepare.ts",
@@ -276,7 +288,9 @@
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "prepareDocumentPosting resolves locked document, tax, account and inventory state before projection; the mapped pure rule tests do not execute this database coordinator."
     },
     {
       "path": "engine/src/ledger/posting-commit.ts",
@@ -289,7 +303,9 @@
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "commitDocumentPosting writes and locks journal/document/effect rows atomically; its transaction and row-count behavior requires the database partition."
     },
     {
       "path": "engine/src/ledger/posting-replay.ts",
@@ -302,7 +318,9 @@
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "regenerateGlImpactTx reads and reverses persisted posted entries under transaction locks before regenerating journal state."
     },
     {
       "path": "engine/src/ledger/posting-projection.ts",
@@ -374,6 +392,7 @@
     {
       "path": "engine/src/ledger/posting-period.ts",
       "tests": [
+        "engine/src/ledger/posting-period.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",

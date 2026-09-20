@@ -94,3 +94,13 @@ test("unmapped targets fall back to same-directory tests, never the harness itse
   // Curated entries win over the fallback.
   assert.deepEqual(resolveTargetTests(config, "engine/src/money/money.ts", REPO_ROOT), ["engine/src/money/money.test.ts"]);
 });
+
+
+test("database requirements need a code-grounded reason, never a bare exemption", () => {
+  for (const reason of [undefined, "", "   "]) {
+    assert.throws(() => parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] })), /needsDbReason/);
+  }
+  const reason = "Coordinates journal writes and locked persisted source rows";
+  const config = parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] }));
+  assert.equal(config.targets[0]?.needsDbReason, reason);
+});
