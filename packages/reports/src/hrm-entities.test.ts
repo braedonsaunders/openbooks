@@ -16,6 +16,11 @@ import { validateCustomQuery } from './validate'
 // the process gate, not the employment one.
 
 const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'automations', 'automation_runs', 'hrm_action_reasons'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover',
+  // HR-13 begin: construction-compliance entities (0223/0224).
+  'hrm_rate_schedule_lines', 'hrm_per_diem_entries', 'hrm_comp_class_split', 'hrm_certified_runs', 'hrm_compliance_findings',
+  // HR-13 end
+] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -36,6 +41,13 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   automation_runs: 'automations.read',
   hrm_action_reasons: 'hrm.employment.read',
   // HR-16 end
+  // HR-13 begin
+  hrm_rate_schedule_lines: 'hrm.construction.read',
+  hrm_per_diem_entries: 'hrm.construction.read',
+  hrm_comp_class_split: 'hrm.construction.read',
+  hrm_certified_runs: 'hrm.construction.read',
+  hrm_compliance_findings: 'hrm.construction.read',
+  // HR-13 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -61,6 +73,30 @@ test('workforce entities refuse without their gate and their own read permission
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, HRM_FEATURES[key], key)
+test('workforce entities refuse without the hrm gate and their own read permission', () => {
+  // HR-13 begin: construction entities sit behind the construction
+  // switch, not the bare hrm switch — a general-business org never sees
+  // them. The map below pins each entity's feature alongside its grant.
+  const HRM_FEATURE_KEYS: Record<(typeof HRM_KEYS)[number], string> = {
+    hrm_headcount: 'hrm',
+    hrm_employment_history: 'hrm',
+    hrm_change_requests: 'hrm',
+    hrm_positions: 'hrm',
+    hrm_processes: 'hrm',
+    hrm_leave_absences: 'hrm',
+    hrm_benefit_enrollments: 'hrm',
+    hrm_requisitions: 'hrm',
+    hrm_applications: 'hrm',
+    hrm_reviews: 'hrm',
+    hrm_goals: 'hrm',
+    hrm_turnover: 'hrm',
+    hrm_rate_schedule_lines: 'hrmConstructionCompliance',
+    hrm_per_diem_entries: 'hrmConstructionCompliance',
+    hrm_comp_class_split: 'hrmConstructionCompliance',
+    hrm_certified_runs: 'hrmConstructionCompliance',
+    hrm_compliance_findings: 'hrmConstructionCompliance',
+  // HR-13 end
+    assert.equal(entity.featureKey, HRM_FEATURE_KEYS[key], key)
   }
   // HR-16 end
 })
@@ -84,6 +120,13 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     automation_runs: 'r.org_id',
     hrm_action_reasons: 'r.org_id',
     // HR-16 end
+    // HR-13 begin
+    hrm_rate_schedule_lines: 'l.org_id',
+    hrm_per_diem_entries: 'e.org_id',
+    hrm_comp_class_split: 'r.org_id',
+    hrm_certified_runs: 'r.org_id',
+    hrm_compliance_findings: 'f.org_id',
+    // HR-13 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -104,6 +147,14 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     automation_runs: null,
     hrm_action_reasons: null,
     // HR-16 end
+    // HR-13 begin: employment-anchored rows clamp to the employer
+    // subsidiary; org-level configuration declares no clamp (null).
+    hrm_rate_schedule_lines: null,
+    hrm_per_diem_entries: 'w.employer_subsidiary_id',
+    hrm_comp_class_split: null,
+    hrm_certified_runs: 'p.subsidiary_id',
+    hrm_compliance_findings: 'w.employer_subsidiary_id',
+    // HR-13 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
@@ -116,6 +167,7 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
       assert.deepEqual(entity.subsidiaryScope, { column: scope }, `${key} subsidiary scope`)
     }
     // HR-16 end
+    assert.deepEqual(entity.subsidiaryScope, scopeColumns[key] === null ? null : { column: scopeColumns[key] }, `${key} subsidiary scope`)
     // Every table join is pinned to the base org: an unpinned join is how a
     // report leaks rows across tenants. The decided-at lateral reads the
     // request's own snapshot, not another table, so it carries no pin.

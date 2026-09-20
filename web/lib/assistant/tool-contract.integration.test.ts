@@ -119,6 +119,10 @@ const READER_PERMS = [
   // the automation status tool runs rather than refusing.
   "automations.read",
   // HR-16 end
+  // HR-13 begin: construction reads run through the construction read
+  // service; the harness reader holds the grant so both tools run.
+  "hrm.construction.read",
+  // HR-13 end
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -161,6 +165,10 @@ const FEATURE_OFF = new Set([
   "budgets_feature_disabled",
   "allocations_feature_disabled",
   "hrm_feature_disabled",
+  // HR-13 begin: the construction switch is its own documented off-code —
+  // pack-has-none and feature-off are never collapsed.
+  "hrm_construction_feature_disabled",
+  // HR-13 end
   "api_access_feature_disabled",
   // HR-16 begin: the contract scratch org never enables automations.
   "automations_feature_disabled",

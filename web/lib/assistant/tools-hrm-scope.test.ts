@@ -42,6 +42,11 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 const tools = read("./tools-hrm.ts");
 
 const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me",
+  // HR-13 begin: read-only construction-compliance tools.
+  "hrm_compliance_findings", "hrm_certified_payroll",
+  // HR-13 end
+];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -70,6 +75,11 @@ const TOOL_PERMS: Record<string, string> = {
   // grant behind the automations switch — never an HR key.
   automations_status: "automations.read",
   // HR-16 end
+  // HR-13 begin: compliance reads carry the construction grant at every
+  // surface, never the employment one.
+  hrm_compliance_findings: "hrm.construction.read",
+  hrm_certified_payroll: "hrm.construction.read",
+  // HR-13 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
@@ -94,6 +104,17 @@ test("inbox_items is the core own-scope tool: self grant, no feature, read-only"
   tool.inputSchema.parse({ filter: "notices", limit: 10 });
   assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
   assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
+test("the module exports exactly the thirteen HRM read tools", () => {
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
+
+// HR-13 begin: construction tools sit behind the construction switch, not
+// the bare hrm switch — a general-business org never sees them.
+const TOOL_FEATURES: Record<string, string> = {
+  hrm_compliance_findings: "hrmConstructionCompliance",
+  hrm_certified_payroll: "hrmConstructionCompliance",
+};
+// HR-13 end
+
 for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
@@ -102,6 +123,8 @@ for (const name of TOOL_NAMES) {
     // other slice tool rides hrm.
     assert.equal(tool.feature, name === "automations_status" ? "automations" : "hrm");
     // HR-16 end
+    // HR-13: construction tools carry their own switch (TOOL_FEATURES above).
+    assert.equal(tool.feature, TOOL_FEATURES[name] ?? "hrm");
     assert.equal(tool.tier, "module");
     assert.ok(
       tool.category === "read" || tool.category === "search",
@@ -272,12 +295,22 @@ test("the registry gate admits only each tool's grant holders while its feature 
   const featureState = (name: string, on: boolean): Record<string, boolean> =>
     name === "automations_status" ? { automations: on } : { hrm: on };
   // HR-16 end
+  // HR-13 begin: construction tools need their full switch path resolved
+  // (parent hrm plus the payroll/projects/time-tracking requirements).
+  const TOOL_FEATURE_STATE: Record<string, Record<string, boolean>> = {
+    hrm_compliance_findings: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
+    hrm_certified_payroll: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
+  };
+  // HR-13 end
   for (const name of TOOL_NAMES) {
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
     const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, true)), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, false)), false, `${name} must hide while its feature is off`);
+    const state = TOOL_FEATURE_STATE[name] ?? { hrm: true };
+    assert.equal(canRunTool(reader, byName.get(name)!, state), true, `${name} must run for a gated reader`);
+    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
     assert.equal(
       canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, featureState(name, true)),
       false,

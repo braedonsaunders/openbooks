@@ -472,6 +472,16 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     let second = ''
     await withBypass(async () => {
       await enableHrm(scratch.orgId)
+      // HR-13 begin: the construction switch needs its payroll, projects
+      // and time-tracking requirements resolved before the new entities
+      // run for the permitted reader below.
+      await db.execute(sql`
+        update orgs set settings = coalesce(settings, '{}'::jsonb)
+          || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
+            || '{"payroll": true, "projects": true, "timeTracking": true, "hrmConstructionCompliance": true}'::jsonb)
+         where id = ${scratch.orgId}
+      `)
+      // HR-13 end
       second = await mkSubsidiary(scratch.orgId, 'Second Co', scratch.subsidiaryId)
       const empA = await mkEmployment(scratch.orgId, await mkWorker(scratch.orgId, 'Worker Ada'), scratch.subsidiaryId)
       await addVersion(scratch.orgId, empA, 1, 'active', '2026-01-01', null, T0)
@@ -521,9 +531,17 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // ambient test bypass.
     // A reader holding every HRM read grant sees every HRM entity: scope
     // clamping bounds ROWS, never the catalogue.
-    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read', 'hrm.position.read', 'hrm.process.read', 'hrm.leave.read', 'hrm.recruiting.read', 'hrm.performance.read', 'hrm.retention.read', 'hrm.benefits.read'], null)
+    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read', 'hrm.position.read', 'hrm.process.read', 'hrm.leave.read', 'hrm.recruiting.read', 'hrm.performance.read', 'hrm.retention.read', 'hrm.benefits.read',
+      // HR-13 begin: the construction grant, so the five new entities run.
+      'hrm.construction.read',
+      // HR-13 end
+    ], null)
     await withOrgContext(scratch.orgId, async () => {
-      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'hrm_benefit_enrollments'] as const) {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'hrm_benefit_enrollments',
+        // HR-13 begin
+        'hrm_rate_schedule_lines', 'hrm_per_diem_entries', 'hrm_comp_class_split', 'hrm_certified_runs', 'hrm_compliance_findings',
+        // HR-13 end
+      ] as const) {
         assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
       }
       assert.ok(!(await hiddenReportEntityKeys(reader)).some((key) => key.startsWith('hrm_')), 'hrm entities stay listed')
@@ -533,7 +551,15 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
-      assert.deepEqual(hiddenHrm, ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_goals', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'], 'only the entities whose grants are missing hide')
+      assert.deepEqual(hiddenHrm, ['hrm_applications', 'hrm_benefit_enrollments',
+        // HR-13 begin: construction entities hide without their grant.
+        'hrm_certified_runs', 'hrm_comp_class_split', 'hrm_compliance_findings',
+        // HR-13 end
+        'hrm_goals', 'hrm_leave_absences', 'hrm_per_diem_entries', 'hrm_positions', 'hrm_processes',
+        // HR-13 begin
+        'hrm_rate_schedule_lines',
+        // HR-13 end
+        'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'], 'only the entities whose grants are missing hide')
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
@@ -546,6 +572,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       assert.deepEqual(
         (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
         ['hrm_action_reasons', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_change_requests', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
+        ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_certified_runs', 'hrm_change_requests', 'hrm_comp_class_split', 'hrm_compliance_findings', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_per_diem_entries', 'hrm_positions', 'hrm_processes', 'hrm_rate_schedule_lines', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
       )
     })
 
@@ -558,6 +585,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
         ['hrm_action_reasons', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_change_requests', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
+        ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_certified_runs', 'hrm_change_requests', 'hrm_comp_class_split', 'hrm_compliance_findings', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_leave_absences', 'hrm_per_diem_entries', 'hrm_positions', 'hrm_processes', 'hrm_rate_schedule_lines', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
       )
     })
   } finally {
