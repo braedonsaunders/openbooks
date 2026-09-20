@@ -1,26 +1,13 @@
+import { transferInventoryTx } from "./transfers.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { allocateDocumentNumber } from "../records/numbering.ts";
 import { cmp, isZero, neg, sum } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { resolveProfile, assertInventoryFeature } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, persistReceiptMoney, assertInventoryDate } from "./position.ts";
-
-// ---------------------------------------------------------------------------
-// Transfer orders — two-step (ship → in-transit → receive) location moves
-// ---------------------------------------------------------------------------
-
-export async function nextSequenceNumber(
-  orgId: string,
-  kind: string,
-  prefix: string,
-  runner: Runner = db,
-): Promise<string> {
-  return allocateDocumentNumber(runner, orgId, kind, prefix);
-}
-
+import { nextSequenceNumber } from "./document-numbering.ts";
 export interface TransferOrderLineInput {
   itemId: string;
   quantity: string;

@@ -9,19 +9,6 @@
       ]
     },
     {
-      "path": "engine/src/ledger/posting.ts",
-      "tests": [
-        "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
-        "engine/src/ledger/posting-project-charge.test.ts",
-        "engine/src/receivables/dunning.test.ts",
-        "engine/src/payments/direct-debit.test.ts",
-        "engine/src/ledger/posting.test.ts",
-        "engine/src/ledger/posting-tax-guards.test.ts",
-        "engine/src/ledger/posting-period.integration.test.ts"
-      ]
-    },
-    {
       "path": "engine/src/ledger/posting-rules.ts",
       "tests": [
         "engine/src/ledger/posting-replay.test.ts",

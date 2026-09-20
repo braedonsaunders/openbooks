@@ -16,7 +16,8 @@ import {
 import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
-import { InventoryError, reverseInventoryMovement } from "../inventory/inventory.ts";
+import { InventoryError } from "../inventory/contracts.ts";
+import { reverseInventoryMovement } from "../inventory/reversal.ts";
 
 /**
  * Machine-readable void refusal reasons (F-t06-021). The human message

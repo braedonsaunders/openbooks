@@ -19,15 +19,15 @@ const moduleSource = (source: string) => ({
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      ['@openbooks/engine/src/payments/payment-accounts.ts', '@openbooks/engine/src/payments/payment-contracts.ts', '@openbooks/engine/src/payments/payment-documents.ts', '@openbooks/engine/src/payments/payment-errors.ts', '@openbooks/engine/src/payments/payment-posting.ts', '@openbooks/engine/src/payments/payment-queries.ts', '@openbooks/engine/src/payments/payment-return.ts', '@openbooks/engine/src/payments/rail-formatters.ts', '@openbooks/engine/src/payments/rail-settings.ts', '@openbooks/engine/src/payments/run-cancellation.ts', '@openbooks/engine/src/payments/run-creation.ts', '@openbooks/engine/src/payments/run-files.ts', '@openbooks/engine/src/payments/run-posting.ts', '@openbooks/engine/src/payments/run-readiness.ts', '@openbooks/engine/src/payments/settlement-policy.ts'].includes(specifier) &&
+      specifier === '@openbooks/engine/src/payments/payment-queries.ts' &&
       context.parentURL &&
       decodeURIComponent(context.parentURL).includes(
         '/api/payments/[id]/route.ts',
       )
     )
       return moduleSource(`
-      export * from ${JSON.stringify(root + 'engine/src/payments/payments.ts')};
-      import { loadPaymentDocument as load } from ${JSON.stringify(root + 'engine/src/payments/payments.ts')};
+      export * from ${JSON.stringify(root + 'engine/src/payments/payment-queries.ts')};
+      import { loadPaymentDocument as load } from ${JSON.stringify(root + 'engine/src/payments/payment-queries.ts')};
       export async function loadPaymentDocument(...args) {
         const snapshot = await load(...args);
         await globalThis.__paymentVisibilityState.afterPaymentLoad?.();

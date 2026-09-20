@@ -27,7 +27,7 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
       const scoped = operation.startsWith('scope-');
       const id = scoped ? org.items.standard : org.items.fifo;
       if (scoped) {
-        const { receiveInventory } = await import('@openbooks/engine/src/inventory/inventory.ts');
+        const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
         await receiveInventory(org.orgId,actor,{itemId:id,stockLocationId:org.stockLocationId,quantity:'5',unitCost:'2',subsidiaryId:org.subsidiaryId,offsetAccountId:org.accounts.clearing,date:org.date});
         if(operation!=='scope-all') await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:operation==='scope-visible'?[org.subsidiaryId]:[]})}::jsonb where org_id=${org.orgId} and key='reviewer'`);
       }

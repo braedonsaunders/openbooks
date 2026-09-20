@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
-import { receiveInventory, issueInventory } from "../inventory/inventory.ts";
+import { receiveInventory, issueInventory } from "../inventory/movements.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,

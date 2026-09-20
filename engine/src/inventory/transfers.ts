@@ -105,7 +105,7 @@ async function restoreLegacyTransitProvenance(
   return true;
 }
 
-async function transferInventoryTx(
+export async function transferInventoryTx(
   tx: Runner,
   orgId: string,
   actorId: string | null,

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { type Doc, PostingError } from "./posting-rules.ts";
+import { type Doc, PostingError } from "./posting-contracts.ts";
 /**
  * Resolve the authoritative accounting period independently from transaction
  * date when the document carries an explicit override. This is required for

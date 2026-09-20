@@ -3,7 +3,9 @@ import { db, schema } from "../platform/db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { applyInventoryReturnsForVendorCredit, applyInventoryIssuesForInvoice, applyInventoryReceiptsForBill } from "../inventory/inventory.ts";
+import { applyInventoryReturnsForVendorCredit } from "../inventory/documents-vendor-credits.ts";
+import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
+import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**

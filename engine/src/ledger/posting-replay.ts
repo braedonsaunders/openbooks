@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period-policy.ts";
-import { resolveBillInventoryAccounts } from "../inventory/inventory.ts";
+import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { type PostingDeps, PostingError, assertFinalKernelBalance } from "./posting-rules.ts";
@@ -10,7 +10,6 @@ import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDe
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
 import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
-export { glProjectionScopeUnchanged, glProjectionKey } from "./posting-projection.ts";
 export interface SourceCorrectionAuthorization {
   /** Active organization user who explicitly authorized the bounded repair. */
   actorId: string;

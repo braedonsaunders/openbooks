@@ -1376,17 +1376,17 @@ test('the surfaces this test was written for are covered', () => {
     'invoice posting must credit income, not deferred, when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-sales.ts'),
     /export async function applyInventoryIssuesForInvoice[\s\S]{0,400}inventoryFeatureEnabled\(db, orgId\)/,
     'invoice posting must not mint inventory movements when Inventory is off — existing layers stay',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-purchasing.ts'),
     /export async function applyBillInventoryReceipts[\s\S]{0,200}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must not mint inventory receipts when Inventory is off',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-purchasing.ts'),
     /export async function resolveBillInventoryAccounts[\s\S]{0,350}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must debit the line account, not inventory, when Inventory is off',
   )

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import { receiveInventory } from "../inventory/inventory.ts";
+import { receiveInventory } from "../inventory/movements.ts";
 import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import {
@@ -451,10 +451,8 @@ test("a purchase order converted into a vendor bill receives its inventory at th
     } from "./engine/src/testing/fixtures.ts";
     import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
-    import {
-      inventoryPostingEffectKey,
-      receiveInventory,
-    } from "./engine/src/inventory/inventory.ts";
+    import { inventoryPostingEffectKey } from "./engine/src/inventory/document-lines.ts";
+import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { convertOrder, createOrderDraft } from "./web/lib/order-cycle.ts";
 
     // Web modules install the normal request resolver during evaluation.

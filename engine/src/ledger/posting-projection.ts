@@ -1,5 +1,6 @@
 import { isZero, normalizeDecimal, sum, toUnits } from "../money/money.ts";
-import { type Doc, type DocLine, type KernelLine, type PostingDeps, RULES, PostingError } from "./posting-rules.ts";
+import { type Doc, type DocLine, type KernelLine, type PostingDeps, PostingError } from "./posting-contracts.ts";
+import { RULES } from "./posting-rules.ts";
 export function glProjectionScopeUnchanged(
   existing: { periodId: string; postingDate: string },
   next: { periodId: string; postingDate: string },

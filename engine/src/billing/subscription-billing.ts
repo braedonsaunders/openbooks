@@ -16,7 +16,7 @@ import {
   prepareAdvancedSubscriptionBilling,
   type AdvancedBillingLine,
 } from "./advanced-subscriptions.ts";
-import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
+import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its

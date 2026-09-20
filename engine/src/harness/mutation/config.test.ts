@@ -9,7 +9,9 @@ const REPO_ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/
 // The assignment's curated scope: every one of these areas must be covered.
 const REQUIRED_COVERAGE = [
   "engine/src/money/money.ts",
-  "engine/src/ledger/posting.ts",
+  "engine/src/ledger/posting-prepare.ts",
+  "engine/src/ledger/posting-commit.ts",
+  "engine/src/ledger/posting-replay.ts",
   "engine/src/ledger/posting-effects.ts",
   "engine/src/sync/applications.ts",
   "engine/src/payments/payment-documents.ts",

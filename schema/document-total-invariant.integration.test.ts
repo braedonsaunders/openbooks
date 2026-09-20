@@ -29,7 +29,7 @@ function pgMessage(error: unknown): string {
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 type EngineDb = typeof import("../engine/src/platform/db.ts");
-type EnginePosting = typeof import("../engine/src/ledger/posting.ts");
+type EnginePosting = typeof import("../engine/src/ledger/posting-document.ts");
 type EngineFixtures = typeof import("../engine/src/testing/fixtures.ts");
 type Tx = Parameters<Parameters<EngineDb["db"]["transaction"]>[0]>[0];
 
@@ -46,7 +46,7 @@ async function ctx(): Promise<Harness> {
   if (!harness) {
     const [{ db }, { postDocument }, { createScratchOrg }] = await Promise.all([
       import("../engine/src/platform/db.ts"),
-      import("../engine/src/ledger/posting.ts"),
+      import("../engine/src/ledger/posting-document.ts"),
       import("../engine/src/testing/fixtures.ts"),
     ]);
     const org = await createScratchOrg();

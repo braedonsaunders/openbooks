@@ -2,9 +2,6 @@
 import { add, cmp, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "./posting-contracts.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
-export { assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-invariants.ts";
-export { componentsForLine, validateTaxControlAccounts } from "./posting-tax-policy.ts";
-export { type PostingDocument, type PostingDocumentLine, type Doc, type DocLine, type KernelLine, type PostingDeps, type TaxPostingComponent, type ExpenseSettlement, PostingError } from "./posting-contracts.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
  * the customer/vendor whose balance it changes. source platform permits direct GL
