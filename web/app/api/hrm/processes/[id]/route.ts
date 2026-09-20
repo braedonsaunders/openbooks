@@ -3,7 +3,7 @@ import { getProcess } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
-import { processErrorResponse } from "../_lib";
+import { processErrorResponse } from "../../compensation/_lib";
 
 export const runtime = "nodejs";
 

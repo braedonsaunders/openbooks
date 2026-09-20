@@ -10,7 +10,7 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../benefits/_lib";
-import { enrollmentPatchBody } from "../bodies";
+import { enrollmentPatchBody } from "../../compensation/bodies";
 
 export const runtime = "nodejs";
 
