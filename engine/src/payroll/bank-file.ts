@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, type CemtexPayment, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, validateSepaSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
+import { buildCpa005File, type Cpa005Payment } from "../payments/rail-cpa005.ts";
+import { buildNachaFile, type NachaEntry, type NachaSettings } from "../payments/rail-nacha.ts";
+import { buildSepaFile, validateSepaSettings, type SepaSettings } from "../payments/rail-sepa.ts";
+import { buildCemtexFile, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, type CemtexPayment, type CemtexSettings } from "../payments/rail-cemtex.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -82,7 +85,7 @@ export interface PayRunBankFileFormatSpec {
  *   and "F" (69–112), filler to 1464.
  * - Appendix 1 (Data Element Dictionary) pp.6–7, ITEM TRACE NUMBER, and
  *   pp.3–4, DESTINATION DATA CENTRE / FILE CREATION NUMBER / LOGICAL RECORD
- *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-formatters.ts.
+ *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-cpa005.ts.
  * - Transaction codes against *Standard 007* (2026 ed., Appendix I — codes
  *   moved out of Standard 005 in 2016): 200 = Payroll Deposit, 460 = Accounts
  *   Payable.
@@ -97,7 +100,7 @@ export interface PayRunBankFileFormatSpec {
  * (b) the originating direct clearer's 5-digit allocated data centre, (c) the
  * 4-digit file creation number as per the A record, and (d) a 9-digit item
  * sequence number, where (b), (c) and (d) must each be greater than zero or
- * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-formatters.ts)
+ * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-cpa005.ts)
  * now composes exactly that via `itemTraceNumber`, shared with the AP payment
  * files. Both data centres are institution-assigned tenant configuration on
  * the payment bank profile (`dataCentre`, `originatingDataCentre`; validated
@@ -120,7 +123,7 @@ export interface PayRunBankFileFormatSpec {
  *
  * ── SEPA (Eurozone) — ON ──────────────────────────────────────────────────
  * pain.001.001.03 Customer Credit Transfer Initiation (EUR), rendered by the
- * shared AP builder (`buildSepaFile`, engine/src/payments/rail-formatters.ts)
+ * shared AP builder (`buildSepaFile`, engine/src/payments/rail-sepa.ts)
  * with the shared ISO 13616 mod-97 IBAN gate — payroll maps its EFT
  * population onto the builder's generic payment rows and adds nothing of its
  * own. The originator triple (debtor name, debtor IBAN, debtor BIC) is tenant
@@ -135,7 +138,7 @@ export interface PayRunBankFileFormatSpec {
  * The Australian direct-credit file (120-character records: descriptive type
  * 0, detail type 1, file-total type 7; BSBs as NNN-NNN; amounts in implied
  * cents; transaction code 53 = Pay), rendered by the shared AP builder
- * (`buildCemtexFile`, engine/src/payments/rail-formatters.ts) — payroll maps
+ * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — payroll maps
  * its EFT population onto the builder's generic payment rows and adds
  * nothing of its own, so AP can originate the same rail later with no fork.
  * The name is `cemtex`, never `aba`: ABA already means the US 9-digit
@@ -153,7 +156,9 @@ export interface PayRunBankFileFormatSpec {
  * digit account number is a named refusal, never a silent drop and never a
  * coerced account (a coerced BSB pays a stranger).
  *
- * All four writers are the audited AP ones in engine/src/payments/rail-formatters.ts
+ * All four writers are the audited AP ones in engine/src/payments/rail-cpa005.ts,
+ * engine/src/payments/rail-nacha.ts, engine/src/payments/rail-sepa.ts and
+ * engine/src/payments/rail-cemtex.ts
  * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
  */
@@ -1157,7 +1162,7 @@ function localDateTime(d: Date): string {
 
 /**
  * Render payroll credits through the SHARED AP pain.001 builder
- * (`buildSepaFile`, engine/src/payments/rail-formatters.ts) — the same
+ * (`buildSepaFile`, engine/src/payments/rail-sepa.ts) — the same
  * function, the same IBAN mod-97 gate, the same XML. Payroll only maps its
  * own population onto the builder's generic payment rows; there is no second
  * SEPA implementation here.
@@ -1200,7 +1205,7 @@ function buildSepaPayroll(
 
 /**
  * Render payroll credits through the SHARED AP Cemtex builder
- * (`buildCemtexFile`, engine/src/payments/rail-formatters.ts) — the same
+ * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — the same
  * function, the same BSB shape gate, the same 120-character records. Payroll
  * only maps its own population onto the builder's generic payment rows;
  * there is no second Cemtex implementation here.
