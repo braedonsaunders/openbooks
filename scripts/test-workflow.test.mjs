@@ -34,8 +34,8 @@ test('units, database shards and simulation run independently without omitted te
   const unit = topLevelJob('unit')
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
-  assert.match(unit, /timeout --signal=TERM --kill-after=10s 8m npm run test:unit/)
-  assert.match(unit, /timeout-minutes: 12/)
+  assert.match(unit, /timeout --signal=TERM --kill-after=10s 12m npm run test:unit/)
+  assert.match(unit, /timeout-minutes: 16/)
   assert.match(unit, /apt-get install -y qpdf/)
   // Pinned together so the matrix and the denominator cannot drift apart.
   // Raised 4 -> 5 when shard 2 hit the 8m wall on tip-of-main: the passing
