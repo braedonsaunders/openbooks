@@ -900,3 +900,85 @@ test("contradictory mapped dates are refused without a role", () => {
   assert.notEqual(row.classification, "ready");
   assert.equal(row.candidate, null);
 });
+
+// Activity after the recorded termination is a conflict the collector
+// reports as status unknown WITH both facts. The verdict must name them and
+// send the operator to reconcile, never to assert a state over them: the
+// observation is present, so "missing" would be the wrong claim and its
+// remedy would paper over a payroll-integrity problem.
+test("post-termination activity is its own verdict, naming both facts and a reconcile remedy", () => {
+  const report = preflightEmploymentMigration([
+    baseRow({
+      role: {
+        present: true,
+        isActive: false,
+        hiredOn: "2020-01-15",
+        terminatedOn: "2026-04-30",
+        dateProvenance: "role-ev-hire",
+        countryContext: "CTX-1",
+        evidenceIds: ["role-ev-1"],
+      },
+      observation: {
+        status: "unknown",
+        observedAt: "2026-06-15T00:00:00Z",
+        provenance: "conflicting-employment-evidence terminated_on:2026-04-30 vs timesheet_weeks:week-77@2026-06-15",
+        conflict: {
+          terminatedOn: "2026-04-30",
+          activityAnchor: "timesheet_weeks:week-77@2026-06-15",
+          activityDate: "2026-06-15",
+        },
+      },
+    }),
+  ]);
+  const row = onlyRow(report);
+  assert.equal(row.classification, "requires_review");
+  assert.equal(row.candidate, null, "no status is asserted over a conflict");
+  const verdict = row.issues.find((issue) => issue.code === "post_termination_activity");
+  assert.ok(verdict, "the conflict is a named verdict, not a missing observation");
+  assert.match(verdict.detail, /terminated_on 2026-04-30/, "the detail names the termination date");
+  assert.match(verdict.detail, /timesheet_weeks:week-77@2026-06-15 is dated 2026-06-15/, "the detail names the later activity");
+  assert.match(verdict.remedy, /correct the termination date/);
+  assert.match(verdict.remedy, /void or reassign the later activity \(timesheet_weeks:week-77@2026-06-15\)/);
+  assert.match(verdict.remedy, /Do not assert a current observation over this conflict/);
+  assert.ok(
+    !row.issues.some((issue) => issue.code === "missing_current_observation"),
+    "the observation is present; it is never reported as missing",
+  );
+});
+
+test("evidence collected before the conflict was structured classifies under the same verdict", () => {
+  const report = preflightEmploymentMigration([
+    baseRow({
+      role: {
+        present: true,
+        isActive: false,
+        hiredOn: "2020-01-15",
+        terminatedOn: "2026-04-30",
+        dateProvenance: "role-ev-hire",
+        countryContext: "CTX-1",
+        evidenceIds: ["role-ev-1"],
+      },
+      observation: {
+        status: "unknown",
+        observedAt: "2026-06-15T00:00:00Z",
+        provenance: "conflicting-employment-evidence terminated_on:2026-04-30 vs pay_stubs:stub-1@2026-06-15",
+      },
+    }),
+  ]);
+  const row = onlyRow(report);
+  const verdict = row.issues.find((issue) => issue.code === "post_termination_activity");
+  assert.ok(verdict);
+  assert.match(verdict.detail, /terminated_on 2026-04-30, but pay_stubs:stub-1@2026-06-15 is dated 2026-06-15/);
+});
+
+test("an unknown observation with no conflict stays silent for the executor's missing-observation refusal", () => {
+  const report = preflightEmploymentMigration([
+    baseRow({
+      observation: { status: "unknown", observedAt: "2026-06-15T00:00:00Z", provenance: "operator-unsure" },
+    }),
+  ]);
+  const row = onlyRow(report);
+  assert.equal(row.candidate, null);
+  assert.ok(!row.issues.some((issue) => issue.code === "post_termination_activity"));
+});
+

@@ -320,10 +320,20 @@ test("post-termination activity is reported as a conflict, never preferred", { s
       "provenance names the later activity",
     );
 
-    // The frozen classifier has no post-termination-activity rule, so the
-    // pipeline refuses at the executor: no candidate, no invented status.
+    assert.equal(row.observation?.conflict?.terminatedOn, "2026-04-30", "the conflict carries the termination date");
+    assert.equal(row.observation?.conflict?.activityDate, "2026-06-15", "the conflict carries the later activity date");
+    assert.match(row.observation?.conflict?.activityAnchor ?? "", /^pay_stubs:[^@]+@2026-06-15$/, "the conflict names the later anchor");
+
+    // The classifier names the conflict as its own verdict: the observation
+    // is present, so it is never reported as missing, and the remedy is to
+    // reconcile the facts, never to assert a state over them.
     const preflight = preflightEmploymentMigration(collected.rows);
     assert.equal(preflight.rows[0]?.candidate, null);
+    assert.equal(preflight.rows[0]?.classification, "requires_review");
+    const verdict = preflight.rows[0]?.issues.find((issue) => issue.code === "post_termination_activity");
+    assert.ok(verdict, "post-termination activity is a named verdict");
+    assert.match(verdict.detail, /terminated_on 2026-04-30, but pay_stubs:.*@2026-06-15 is dated 2026-06-15/);
+    assert.match(verdict.remedy, /correct the termination date/);
     const refusal = await withOrg(org.orgId, () =>
       executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows }),
     ).then(
@@ -338,8 +348,12 @@ test("post-termination activity is reported as a conflict, never preferred", { s
     const refused = refusal.report.persons[0]!;
     assert.equal(refused.outcome, "refused");
     assert.ok(
-      refused.issues.some((issue) => issue.code === "missing_current_observation"),
-      "unresolved status refuses instead of migrating either side",
+      refused.issues.some((issue) => issue.code === "post_termination_activity"),
+      "unresolved status refuses under its own verdict instead of migrating either side",
+    );
+    assert.ok(
+      !refused.issues.some((issue) => issue.code === "missing_current_observation"),
+      "a present-but-conflicting observation is never reported as missing",
     );
   } finally {
     await dropScratchOrg(org.orgId);
