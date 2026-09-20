@@ -47,6 +47,16 @@
         "platform"
       ]
     },
+    "automations": {
+      "description": "HRM automation recipes: triggers, rules, conditions, actions, exception-only approval, simulator, run log, action reasons and change event verbs.",
+      "dependsOn": [
+        "flows",
+        "hrm",
+        "organization",
+        "platform",
+        "scheduling"
+      ]
+    },
     "backup": {
       "description": "Organization backup and restore, local and stored, with CLIs.",
       "dependsOn": [
