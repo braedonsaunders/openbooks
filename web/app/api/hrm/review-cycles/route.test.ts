@@ -83,11 +83,6 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return { id: 'cycle-1', name: args.name }
       }
-      export async function listCycles(args) {
-        state.calls.push({ fn: 'list', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return [{ id: 'cycle-1' }]
-      }
     `,
   ],
   [
@@ -195,16 +190,14 @@ if (isVitest) {
     assert.deepEqual(routeState.calls, []);
   });
 
-  test("grant holders list through the full loader, others through their slice", async () => {
+  test("listing fans out to the privacy-scoped loader with the caller's identity", async () => {
     reset();
-    const full = await collectionRoute!.GET();
-    assert.equal(full.status, 200);
-    assert.deepEqual(await full.json(), { cycles: [{ id: "cycle-1" }] });
-    routeState.canRead = false;
-    const sliced = await collectionRoute!.GET();
-    assert.equal(sliced.status, 200);
-    assert.deepEqual(await sliced.json(), { cycles: [{ id: "cycle-1", scoped: true }] });
-    assert.deepEqual(routeState.calls.map((c) => c.fn), ["list", "progress"]);
+    const response = await collectionRoute!.GET();
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { cycles: [{ id: "cycle-1", scoped: true }] });
+    assert.deepEqual(routeState.calls, [
+      { fn: "progress", args: { orgId: "org-1", actorId: "user-1" } },
+    ]);
   });
 
   test("create validates the body through the real parser before the service runs", async () => {
