@@ -7,7 +7,8 @@
       "changeRequests": "Demandes de changement",
       "departments": "Services",
       "reports": "Rapports",
-      "positions": "Postes"
+      "positions": "Postes",
+      "processes": "Processus"
     },
     "vitals": {
       "headcount": "Effectif",
@@ -45,6 +46,14 @@
       "unassignedDepartment": "Sans service",
       "empty": "Aucun poste n'est établi au {date}.",
       "total": "Total"
+    },
+    "onboarding": {
+      "title": "Intégration",
+      "openLabel": "Listes ouvertes",
+      "overdueLabel": "En retard",
+      "upcomingLabel": "Bientôt dû",
+      "empty": "Aucune liste ouverte.",
+      "viewAll": "Voir tous les processus"
     }
   },
   "overview": {
@@ -313,6 +322,67 @@
       "warnings": "Avertissements",
       "refusal": "Nécessite une attention",
       "missing": "Ce poste n'est plus visible."
+    }
+  },
+  "processes": {
+    "title": "Listes de processus",
+    "description": "Listes d'intégration, de départ et de transfert avec responsables, échéances et preuves.",
+    "listTitle": "Listes",
+    "listFailed": "Impossible de charger les processus.",
+    "detailTitle": "Liste",
+    "detailFailed": "Impossible de charger la liste.",
+    "actionFailed": "Impossible d'exécuter l'action.",
+    "loading": "Chargement…",
+    "empty": "Aucune liste dans ce segment.",
+    "overdueBadge": "{count} en retard",
+    "progressLine": "{done} étapes requises sur {required} · effet {effective}",
+    "dueOn": "Dû {date}",
+    "required": "Requis",
+    "completeStep": "Terminer l'étape",
+    "skipStep": "Ignorer l'étape",
+    "completeProcess": "Terminer la liste",
+    "cancelProcess": "Annuler la liste",
+    "attachmentLabel": "Fichier de preuve",
+    "attachmentUnset": "Taper pour rechercher",
+    "skipReasonLabel": "Motif",
+    "skipReasonPlaceholder": "Pourquoi cette étape est-elle ignorée ?",
+    "cancelReasonLabel": "Motif d'annulation",
+    "cancelReasonPlaceholder": "Pourquoi cette liste est-elle annulée ?",
+    "confirmReason": "Confirmer",
+    "cancelReasonAbort": "Retour",
+    "segments": {
+      "open": "Ouvertes",
+      "overdue": "En retard",
+      "completed": "Terminées",
+      "cancelled": "Annulées"
+    },
+    "columns": {
+      "employee": "Employé",
+      "kind": "Type",
+      "effective": "Effet",
+      "progress": "Progrès",
+      "nextDue": "Prochaine échéance"
+    },
+    "kinds": {
+      "onboarding": "Intégration",
+      "offboarding": "Départ",
+      "transfer": "Transfert"
+    },
+    "owners": {
+      "manager": "Manager",
+      "hr": "RH",
+      "employee": "Employé",
+      "named_party": "Personne désignée"
+    },
+    "evidence": {
+      "none": "Aucune",
+      "acknowledgement": "Accusé de réception",
+      "attachment": "Pièce jointe"
+    },
+    "stepStatus": {
+      "pending": "En attente",
+      "done": "Terminé",
+      "skipped": "Ignoré"
     }
   }
 }

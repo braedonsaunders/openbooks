@@ -964,7 +964,9 @@
     "compliance_manage": "记录证书、豁免与申报",
     "compliance_verify": "核验证书",
     "compliance_waive": "授予合规例外",
-    "compliance_file": "定稿并报送信息申报表"
+    "compliance_file": "定稿并报送信息申报表",
+    "hrm_process_read": "查看流程清单",
+    "hrm_process_manage": "创建、完成和取消流程清单"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2668,7 +2670,17 @@
       "dateBasis": "日期基准",
       "unitsTotal": "总单位数",
       "network": "卡组织",
-      "lastFour": "后四位"
+      "lastFour": "后四位",
+      "templateId": "模板",
+      "position": "顺序",
+      "title": "标题",
+      "ownerKind": "负责人",
+      "ownerPartyId": "负责人（方）",
+      "dueOffsetDays": "到期偏移（天）",
+      "required": "必需",
+      "evidenceKind": "凭证",
+      "appliesEmployerSubsidiaryId": "适用子公司",
+      "appliesDepartmentId": "适用部门"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2720,7 +2732,9 @@
       "holidayObservance": "法定假日保留原日期，法律另给补休。只有真正调休的公司假日才需选择调班。",
       "equipmentUnitId": "仅对一台具名机械计薪。留空并改用收费项目，一条规则即可覆盖整类设备。",
       "itemId": "对经由此目录项目收费的所有单元计薪——“所有挖掘机”一条规则，而非一机一条。",
-      "payScheduleAnchor": "任一期间的截止日期；其余期间由此推导。半月薪按月中日期读取：20 日表示截止 5 日和 20 日的期间，15 日（或 30/31 天月份的末日）表示 15 日和月末。14 日与 2 月末日不对应任何日历，会被拒绝。"
+      "payScheduleAnchor": "任一期间的截止日期；其余期间由此推导。半月薪按月中日期读取：20 日表示截止 5 日和 20 日的期间，15 日（或 30/31 天月份的末日）表示 15 日和月末。14 日与 2 月末日不对应任何日历，会被拒绝。",
+      "hrmProcessAppliesSubsidiary": "留空表示模板适用于所有子公司。",
+      "hrmProcessAppliesDepartment": "留空表示模板适用于所有部门。"
     },
     "options": {
       "payFrequency": {
@@ -3057,6 +3071,22 @@
         "none": "保留原日期",
         "nextMonday": "顺延至下一工作日",
         "nearestWeekday": "调至最近的工作日"
+      },
+      "hrmProcessKind": {
+        "onboarding": "入职",
+        "offboarding": "离职",
+        "transfer": "调动"
+      },
+      "hrmStepOwner": {
+        "manager": "经理",
+        "hr": "人力资源",
+        "employee": "员工",
+        "namedParty": "指定人员"
+      },
+      "hrmStepEvidence": {
+        "none": "无",
+        "acknowledgement": "确认",
+        "attachment": "附件"
       }
     },
     "payroll": {

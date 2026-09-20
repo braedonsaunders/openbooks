@@ -964,7 +964,9 @@
     "compliance_manage": "Record certificates, waivers and filings",
     "compliance_verify": "Verify certificates",
     "compliance_waive": "Grant compliance exceptions",
-    "compliance_file": "Finalize and file information returns"
+    "compliance_file": "Finalize and file information returns",
+    "hrm_process_read": "View process checklists",
+    "hrm_process_manage": "Open, complete, and cancel process checklists"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2668,7 +2670,17 @@
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
       "network": "Network",
-      "lastFour": "Last four"
+      "lastFour": "Last four",
+      "templateId": "Template",
+      "position": "Position",
+      "title": "Title",
+      "ownerKind": "Owner",
+      "ownerPartyId": "Owner party",
+      "dueOffsetDays": "Due offset (days)",
+      "required": "Required",
+      "evidenceKind": "Evidence",
+      "appliesEmployerSubsidiaryId": "Applies to subsidiary",
+      "appliesDepartmentId": "Applies to department"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2720,7 +2732,9 @@
       "holidayObservance": "Statutory holidays keep their date and the law grants a substitute day off instead. Choose a shift only for a company holiday you actually move.",
       "equipmentUnitId": "Pay on one named machine only. Leave it empty and use the charge item instead to cover a whole class of equipment with a single rule.",
       "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine.",
-      "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused."
+      "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused.",
+      "hrmProcessAppliesSubsidiary": "Empty means the template applies to every subsidiary.",
+      "hrmProcessAppliesDepartment": "Empty means the template applies to every department."
     },
     "options": {
       "payFrequency": {
@@ -3057,6 +3071,22 @@
         "none": "Keep the date",
         "nextMonday": "Move to the next working day",
         "nearestWeekday": "Move to the nearest weekday"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Onboarding",
+        "offboarding": "Offboarding",
+        "transfer": "Transfer"
+      },
+      "hrmStepOwner": {
+        "manager": "Manager",
+        "hr": "HR",
+        "employee": "Employee",
+        "namedParty": "Named person"
+      },
+      "hrmStepEvidence": {
+        "none": "None",
+        "acknowledgement": "Acknowledgement",
+        "attachment": "Attachment"
       }
     },
     "payroll": {
