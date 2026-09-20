@@ -497,3 +497,141 @@ export function checkApprovalIdentitySeparation(args: {
     );
   }
 }
+
+/** Leave and attendance duties (HR-5). Confidential like employment. */
+export const HRM_LEAVE_PERMISSIONS = [
+  "hrm.leave.read",
+  "hrm.leave.request",
+  "hrm.leave.approve",
+  "hrm.leave.manage",
+] as const;
+
+export type HrmLeavePermission = (typeof HRM_LEAVE_PERMISSIONS)[number];
+
+async function requireHrmLeaveAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmLeavePermission,
+): Promise<TrustedEmploymentSubject> {
+  // Same hardwiring as employment: live grant set, subject loaded from
+  // worker_employments on the trusted runner, employer scope enforced.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Leave access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** See leave records scoped to an employment. */
+export async function requireHrmLeaveRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.read");
+}
+
+/** File a leave request against an employment. */
+export async function requireHrmLeaveRequest(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.request");
+}
+
+/** Permission/scope half of leave approval; identity half is the shared SoD invariant. */
+export async function requireHrmLeaveApprove(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.approve");
+}
+
+/**
+ * Org-level leave configuration (types, policies): permission only, no
+ * subsidiary scope — a type or policy is org configuration, and scoping it
+ * by one employer would let two managers define the same code differently.
+ */
+export async function requireHrmLeaveManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
+    throw new HrmAuthorizationError(
+      "Leave configuration requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/**
+ * The actor's own employments, resolved from users.party_id on the trusted
+ * runner. The second self-service touch: an employee files and reads only
+ * through these ids — the service never accepts a caller-supplied worker.
+ */
+export async function loadOwnEmploymentIds(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<string[]> {
+  const person = await loadApprovalPerson(exec, orgId, actorId);
+  if (!person.partyId) return [];
+  const rows = (await exec.execute<{ id: string }>(sql`
+    select id from worker_employments
+     where org_id = ${orgId} and worker_party_id = ${person.partyId}
+  `)).rows;
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Manager file gate: hrm.leave.manage plus the same employer scope as every
+ * employment gate, for filing on behalf of another worker. The short-notice
+ * override lives here: a manager files with a reason where the worker is
+ * refused.
+ */
+export async function requireHrmLeaveManageOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
+    throw new HrmAuthorizationError(
+      "Leave access requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/**
+ * Self-service file gate: hrm.leave.request plus proof the employment is
+ * the actor's own. Throws HrmAuthorizationError naming the refused shape —
+ * the caller must not learn whether the id exists elsewhere.
+ */
+export async function requireOwnEmploymentForRequest(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  const subject = await requireHrmLeaveRequest(exec, orgId, actorId, employmentId);
+  const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+  if (!own.includes(employmentId)) {
+    throw new HrmAuthorizationError(
+      "Leave requests file only against your own employment — ask a manager holding hrm.leave.manage to file on your behalf.",
+    );
+  }
+  return subject;
+}

@@ -202,6 +202,7 @@
       "dependsOn": [
         "flows",
         "organization",
+        "payroll",
         "platform"
       ]
     },
