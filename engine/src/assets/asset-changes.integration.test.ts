@@ -502,6 +502,133 @@ test(
         ),
         [],
       );
+
+      // A separately identified part carries different legal and group ratios.
+      const requestComponent = input(f, {
+        effectiveOn: "2026-09-01",
+        proceeds: "250",
+        portion: {
+          books: [
+            {
+              bookId: f.org.bookId,
+              cost: "600",
+              accumulated: "400",
+              salvage: "0",
+              group: {
+                cost: "1200",
+                accumulated: "900",
+                salvage: "0",
+                remainingPlan: [{ date: "2026-09-30", amount: "700" }],
+              },
+            },
+          ],
+        },
+      });
+      const component = await proposeAssetChange(
+        f.org.orgId,
+        received,
+        f.actors.submitterId,
+        requestComponent,
+      );
+      await approve(f, component);
+      await applyAssetChange(f.org.orgId, component, f.actors.submitterId);
+      const frozen = (
+        await db.execute<{
+          group_component: { removedCost: string; removedAccumulated: string };
+        }>(
+          sql`select group_component from asset_basis_changes where org_id=${f.org.orgId} and change_id=${component} and book_id=${f.org.bookId}`,
+        )
+      ).rows[0]!.group_component;
+      assert.equal(frozen.removedCost, "1200.0000");
+      assert.equal(frozen.removedAccumulated, "900.0000");
+      const september = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_periods where org_id=${f.org.orgId} and name='2026-09'`,
+        )
+      ).rows[0]!.id;
+      const componentEntries = await db.transaction((tx) =>
+        consolidateAssetTransfers(
+          tx,
+          f.org.orgId,
+          september,
+          f.actors.adminId,
+          "2026-09-01",
+        ),
+      );
+      const componentTarget = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${componentEntries[0]}`,
+        )
+      ).rows[0]!.target_balances;
+      assert.equal(
+        componentTarget[f.org.accounts.invAsset],
+        "0.0000",
+        "group retains 1800 cost, not 2250 inferred from buyer's fraction",
+      );
+      assert.equal(
+        componentTarget[f.org.accounts.recognized],
+        "400.0000",
+        "the disposed component releases its independently measured margin",
+      );
+      assert.deepEqual(
+        await db.transaction((tx) =>
+          consolidateAssetTransfers(
+            tx,
+            f.org.orgId,
+            september,
+            f.actors.adminId,
+            "2026-09-01",
+          ),
+        ),
+        [],
+      );
+      const { proposeAssetReversal } =
+        await import("./asset-change-reversals.ts");
+      const correcting = await proposeAssetReversal(
+        f.org.orgId,
+        component,
+        f.actors.submitterId,
+        {
+          effectiveOn: "2026-09-01",
+          reason: "Correct identified sale before subsequent asset use",
+          idempotencyKey: randomUUID(),
+        },
+      );
+      await approve(f, correcting);
+      await applyAssetChange(f.org.orgId, correcting, f.actors.submitterId);
+      const { assetGroupHistory } =
+        await import("../organization/asset-group-history.ts");
+      const transfer = (
+        await db.execute<{ id: string }>(
+          sql`select id from asset_transfer_bases where org_id=${f.org.orgId} and receiving_asset_id=${received} and book_id=${f.org.bookId}`,
+        )
+      ).rows[0]!.id;
+      const correctedHistory = await assetGroupHistory(
+        db,
+        f.org.orgId,
+        transfer,
+        "2026-09-01",
+      );
+      assert.ok(
+        correctedHistory.every((e) => e.kind !== "component"),
+        "linked correction removes the component only from effective history",
+      );
+      const correctedEntries = await db.transaction((tx) =>
+        consolidateAssetTransfers(
+          tx,
+          f.org.orgId,
+          september,
+          f.actors.adminId,
+          "2026-09-01",
+        ),
+      );
+      const correctedTarget = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${correctedEntries[0]}`,
+        )
+      ).rows[0]!.target_balances;
+      assert.equal(correctedTarget[f.org.accounts.invAsset], "600.0000");
+      assert.equal(correctedTarget[f.org.accounts.recognized], "300.0000");
     }),
 );
 

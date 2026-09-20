@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS asset_basis_changes (
  asset_id uuid NOT NULL REFERENCES fixed_assets(id), book_id uuid NOT NULL REFERENCES accounting_books(id),
  change_id uuid NOT NULL REFERENCES financial_changes(id), effective_on date NOT NULL,
  units_remaining numeric(19,4) CHECK(units_remaining>=0),depreciable_after numeric(19,4) CHECK(depreciable_after>=0),
+ group_component jsonb,
  impairment_released numeric(19,4) NOT NULL DEFAULT 0,
  cost_delta numeric(19,4) NOT NULL, accumulated_delta numeric(19,4) NOT NULL, salvage_delta numeric(19,4) NOT NULL,
  journal_entry_id uuid REFERENCES journal_entries(id), stub_journal_entry_id uuid REFERENCES journal_entries(id),
@@ -27,6 +28,7 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM fixed_assets a WHERE a.id=NEW.asset_id AND a.org_id=NEW.org_id) OR NOT EXISTS(SELECT 1 FROM accounting_books b WHERE b.id=NEW.book_id AND b.org_id=NEW.org_id) THEN RAISE EXCEPTION 'asset basis references another organization'; END IF;
  IF NEW.journal_entry_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM journal_entries e WHERE e.id=NEW.journal_entry_id AND e.org_id=NEW.org_id AND e.book_id=NEW.book_id AND e.status='posted' AND e.posting_date=NEW.effective_on AND e.subsidiary_id=(SELECT a.subsidiary_id FROM fixed_assets a WHERE a.org_id=NEW.org_id AND a.id=NEW.asset_id)) THEN RAISE EXCEPTION 'asset basis requires its posted book journal'; END IF;
  IF NEW.stub_journal_entry_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM journal_entries e WHERE e.id=NEW.stub_journal_entry_id AND e.org_id=NEW.org_id AND e.book_id=NEW.book_id AND e.status='posted' AND e.posting_date=NEW.effective_on AND e.subsidiary_id=(SELECT a.subsidiary_id FROM fixed_assets a WHERE a.org_id=NEW.org_id AND a.id=NEW.asset_id)) THEN RAISE EXCEPTION 'elapsed depreciation must reference its posted book journal'; END IF;
+ IF NEW.group_component IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM asset_transfer_bases t WHERE t.org_id=NEW.org_id AND t.receiving_asset_id=NEW.asset_id AND t.book_id=NEW.book_id AND t.reversed_by_change_id IS NULL) OR NEW.group_component IS DISTINCT FROM (SELECT f.before_state->'groupComponents'->NEW.book_id::text FROM financial_changes f WHERE f.org_id=NEW.org_id AND f.id=NEW.change_id AND f.operation IN('partial_disposal','intercompany_transfer'))) THEN RAISE EXCEPTION 'group component basis must match its independently approved retained and removed measurements'; END IF;
  IF NEW.effective_on<>(SELECT f.effective_on FROM financial_changes f WHERE f.org_id=NEW.org_id AND f.id=NEW.change_id) THEN RAISE EXCEPTION 'basis date differs from the approved effective date'; END IF;
  RETURN NEW;
 END $$;

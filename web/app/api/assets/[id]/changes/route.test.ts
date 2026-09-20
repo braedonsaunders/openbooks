@@ -104,3 +104,40 @@ test("asset refusals survive the boundary and permission denial cannot call the 
   state.allowed = true;
   state.refusal = "";
 });
+
+test("group component amounts and service reach the actual proposal schema without coercion", async () => {
+  state.calls = [];
+  state.allowed = true;
+  state.refusal = "";
+  const group = {
+    cost: "1200.0000",
+    accumulated: "900.0000",
+    salvage: "0.0000",
+    remainingPlan: [{ date: "2026-09-30", amount: "700.0000" }],
+  };
+  const body = {
+    ...valid,
+    portion: {
+      books: [
+        {
+          bookId: id,
+          cost: "600.0000",
+          accumulated: "400.0000",
+          salvage: "0.0000",
+          group,
+        },
+      ],
+    },
+  };
+  assert.equal((await route.POST(request(body), context)).status, 200);
+  assert.deepEqual(state.calls[0]![3], body);
+  state.calls = [];
+  const invalid = {
+    ...body,
+    portion: {
+      books: [{ ...body.portion.books[0], group: { ...group, cost: "1,200" } }],
+    },
+  };
+  assert.equal((await route.POST(request(invalid), context)).status, 422);
+  assert.equal(state.calls.length, 0);
+});

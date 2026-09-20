@@ -89,3 +89,11 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER control_loss_asset_measurement_guard BEFORE INSERT ON asset_transfer_measurements FOR EACH ROW EXECUTE FUNCTION control_loss_asset_measurement_guard();
+
+-- A component workpaper changes group basis even when its book has no GL.
+CREATE OR REPLACE FUNCTION control_loss_component_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.group_component IS NOT NULL AND EXISTS(SELECT 1 FROM asset_transfer_bases b JOIN consolidation_control_losses loss ON loss.org_id=b.org_id AND loss.reversed_by_change_id IS NULL AND (loss.excluded_subsidiary_ids ? b.buyer_subsidiary_id::text OR loss.excluded_subsidiary_ids ? b.seller_subsidiary_id::text) WHERE b.org_id=NEW.org_id AND b.receiving_asset_id=NEW.asset_id AND b.book_id=NEW.book_id AND NEW.effective_on<=loss.effective_on) THEN RAISE EXCEPTION 'the component measurement changes an approved loss-of-control basis; correct that disposal through Accounting changes first'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER control_loss_component_guard BEFORE INSERT ON asset_basis_changes FOR EACH ROW EXECUTE FUNCTION control_loss_component_guard();

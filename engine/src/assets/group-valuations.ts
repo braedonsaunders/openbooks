@@ -1,3 +1,4 @@
+import { assetGroupHistory } from "../organization/asset-group-history.ts";
 import { sql } from "drizzle-orm";
 import {
   db,
@@ -199,11 +200,12 @@ async function snapshot(
     throw new Error(
       "approve the earlier source valuation group assessment first; group service history must be measured in order",
     );
-  const valuations = (
-    await tx.execute<{ measurement: GroupAssetValuation }>(
-      sql`select m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${s.transfer.id} and m.effective_on<=${input.effectiveOn} and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) order by m.effective_on,m.ordinal`,
-    )
-  ).rows.map((r) => r.measurement);
+  const valuations = await assetGroupHistory(
+    tx,
+    orgId,
+    s.transfer.id,
+    input.effectiveOn,
+  );
   const current = groupAssetPlan(s.transfer.basis.groupPlan, valuations);
   const postedThrough = (
     await tx.execute<{ date: string | null }>(
@@ -219,11 +221,13 @@ async function snapshot(
   const accrued = splitDepreciationPlan(current.plan, serviceFrom).accrued;
   const heldOriginal = (amount: string) =>
     mulRatio(amount, toUnits(held), toUnits(s.row.acquisition_cost));
-  const cost = heldOriginal(s.transfer.basis.groupCost),
-    salvage = heldOriginal(s.transfer.basis.groupSalvage);
+  const cost = heldOriginal(add(s.transfer.basis.groupCost, current.costDelta)),
+    salvage = heldOriginal(
+      add(s.transfer.basis.groupSalvage, current.salvageDelta),
+    );
   const before = heldOriginal(
     add(
-      s.transfer.basis.groupCost,
+      add(s.transfer.basis.groupCost, current.costDelta),
       neg(
         add(
           add(s.transfer.basis.groupAccumulated, current.accumulatedDelta),
@@ -244,24 +248,26 @@ async function snapshot(
     );
   const delta = add(normalized, neg(before));
   const framework = await orgReportingFramework(orgId);
-  const netImpairment = cmp(current.accumulatedDelta, "0") > 0;
+  const ceiling = heldOriginal(
+    add(
+      add(s.transfer.basis.groupCost, current.costDelta),
+      neg(
+        add(
+          add(
+            s.transfer.basis.groupAccumulated,
+            current.unimpairedAccumulatedDelta,
+          ),
+          splitDepreciationPlan(current.unimpairedPlan, serviceFrom).accrued,
+        ),
+      ),
+    ),
+  );
+  const netImpairment = cmp(before, ceiling) < 0;
   if (cmp(delta, "0") > 0 && netImpairment) {
     if (framework === "us_gaap")
       throw new Error(
         "US GAAP prohibits restoring a held-and-used group impairment",
       );
-    const ceiling = heldOriginal(
-      add(
-        s.transfer.basis.groupCost,
-        neg(
-          add(
-            s.transfer.basis.groupAccumulated,
-            splitDepreciationPlan(s.transfer.basis.groupPlan, serviceFrom)
-              .accrued,
-          ),
-        ),
-      ),
-    );
     if (cmp(normalized, ceiling) > 0)
       throw new Error(
         `group impairment reversal exceeds the unimpaired carrying amount ${mulRate(divRate(ceiling, s.transfer.basis.buyerToGroupRate), input.buyerToGroupRate)}`,

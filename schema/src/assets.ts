@@ -337,6 +337,7 @@ export const assetBasisChanges = pgTable("asset_basis_changes", {
   bookId: uuid("book_id").notNull(),
   changeId: uuid("change_id").notNull(),
   effectiveOn: date("effective_on").notNull(),
+  groupComponent: jsonb("group_component"),
   impairmentReleased: money("impairment_released").notNull().default("0"),
   costDelta: money("cost_delta").notNull(),
   accumulatedDelta: money("accumulated_delta").notNull(),

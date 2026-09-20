@@ -1,3 +1,4 @@
+import { assetGroupHistory } from "../organization/asset-group-history.ts";
 import {
   groupAssetPlan,
   type GroupAssetValuation,
@@ -70,6 +71,7 @@ export function measureAssetTransferElimination(
     realizedMargin?: string;
     valuationAdjustment?: string;
     groupAccumulatedDelta?: string;
+    groupCostDelta?: string;
     groupPlan?: DatedDepreciation[];
     reversed?: boolean;
   },
@@ -97,7 +99,11 @@ export function measureAssetTransferElimination(
   const translate = (value: string) =>
     mulRate(divRate(value, basis.buyerToGroupRate), currentRate);
   const groupCost = translate(
-    mulRatio(basis.groupCost, fraction.numerator, fraction.denominator),
+    mulRatio(
+      add(basis.groupCost, args.groupCostDelta ?? "0"),
+      fraction.numerator,
+      fraction.denominator,
+    ),
   );
   const depreciation = splitDepreciationPlan(
     args.groupPlan ?? basis.groupPlan,
@@ -316,14 +322,15 @@ export async function consolidateAssetTransfers(
         date: string;
         removed_cost: string;
         removed_accumulated: string;
+        group_component: GroupAssetValuation | null;
       }>(sql`
       select x.effective_on::text as date,(-x.cost_delta)::text as removed_cost,
-       (coalesce((select (case when f.operation='reversal' then -1 else 1 end)*(p->>'stub')::numeric from jsonb_array_elements(coalesce(case when f.operation='reversal' then f.before_state->'source'->'before_state'->'previews' else f.before_state->'previews' end,'[]'::jsonb)) p where p->>'bookId'=x.book_id::text),0)-x.accumulated_delta)::text as removed_accumulated
+       (coalesce((select (case when f.operation='reversal' then -1 else 1 end)*(p->>'stub')::numeric from jsonb_array_elements(coalesce(case when f.operation='reversal' then f.before_state->'source'->'before_state'->'previews' else f.before_state->'previews' end,'[]'::jsonb)) p where p->>'bookId'=x.book_id::text),0)-x.accumulated_delta)::text as removed_accumulated,x.group_component
        from asset_basis_changes x join financial_changes f on f.org_id=x.org_id and f.id=x.change_id
-       where x.org_id=${orgId} and x.asset_id=${transfer.receiving_asset_id} and x.book_id=${transfer.book_id} and x.effective_on<=${cutoff}
+       where x.org_id=${orgId} and x.asset_id=${transfer.receiving_asset_id} and x.book_id=${transfer.book_id} and x.effective_on<=${cutoff} and f.operation<>'reversal' and not exists(select 1 from financial_changes correction where correction.org_id=x.org_id and correction.domain='asset' and correction.operation='reversal' and correction.status='applied' and correction.payload->>'sourceChangeId'=x.change_id::text and correction.effective_on<=${cutoff})
       union all
       select v.occurred_on::text,(-sum(case when l.account_id=coalesce(a.asset_account_id,c.asset_account_id) then l.amount else 0 end))::text,
-       sum(case when l.account_id=coalesce(a.accumulated_depreciation_account_id,c.accumulated_depreciation_account_id) then l.amount else 0 end)::text
+       sum(case when l.account_id=coalesce(a.accumulated_depreciation_account_id,c.accumulated_depreciation_account_id) then l.amount else 0 end)::text,null::jsonb
        from asset_events v join fixed_assets a on a.id=v.asset_id and a.org_id=v.org_id join asset_categories c on c.id=a.category_id and c.org_id=a.org_id
        join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
        where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('disposed','written_off') and v.financial_change_id is null and v.occurred_on<=${cutoff}
@@ -333,7 +340,7 @@ export async function consolidateAssetTransfers(
     ).rows;
     const valuationRows = (
       await tx.execute<{ amount: string; date: string; id: string }>(
-        sql`select v.id,v.amount::text,v.occurred_on::text as date from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('impaired','revalued') and v.occurred_on<=${cutoff} and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) order by v.occurred_on,v.created_at,v.id`,
+        sql`select v.id,v.amount::text,v.occurred_on::text as date from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('impaired','revalued') and v.occurred_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by v.occurred_on,v.created_at,v.id`,
       )
     ).rows;
     const groupRows = (
@@ -341,7 +348,7 @@ export async function consolidateAssetTransfers(
         source_event_id: string;
         measurement: GroupAssetValuation;
       }>(
-        sql`select m.source_event_id,m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${transfer.id} and m.effective_on<=${cutoff} and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) order by m.effective_on,m.ordinal`,
+        sql`select m.source_event_id,m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${transfer.id} and m.effective_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by m.effective_on,m.ordinal`,
       )
     ).rows;
     if (
@@ -352,7 +359,7 @@ export async function consolidateAssetTransfers(
       throw new Error(
         "the transferred asset has a legal-book valuation without an approved group measurement; open the receiving asset and propose its Group valuation before consolidation",
       );
-    const valuations = groupRows.map((row) => row.measurement);
+    const valuations = await assetGroupHistory(tx, orgId, transfer.id, cutoff);
     const group = groupAssetPlan(transfer.basis.groupPlan, valuations);
     const valuationAdjustment = add(
       valuationRows.reduce(
@@ -360,24 +367,26 @@ export async function consolidateAssetTransfers(
         "0",
       ),
       neg(
-        valuations.reduce(
-          (sum, v) =>
-            add(
-              sum,
-              mulRate(
-                divRate(
-                  mulRatio(
-                    v.fullDelta,
-                    toUnits(v.heldNumerator),
-                    toUnits(v.heldDenominator),
+        valuations
+          .filter((v) => v.kind !== "component")
+          .reduce(
+            (sum, v) =>
+              add(
+                sum,
+                mulRate(
+                  divRate(
+                    mulRatio(
+                      v.fullDelta,
+                      toUnits(v.heldNumerator),
+                      toUnits(v.heldDenominator),
+                    ),
+                    transfer.basis.buyerToGroupRate,
                   ),
-                  transfer.basis.buyerToGroupRate,
+                  rate(v.effectiveOn, "average_rate"),
                 ),
-                rate(v.effectiveOn, "average_rate"),
               ),
-            ),
-          "0",
-        ),
+            "0",
+          ),
       ),
     );
     const originalCost = toUnits(asset.acquisition_cost);
@@ -433,7 +442,7 @@ export async function consolidateAssetTransfers(
         valuations.filter((v) => v.effectiveOn <= m.date),
       );
       const groupAt = add(
-        transfer.basis.groupCost,
+        add(transfer.basis.groupCost, atMovement.costDelta),
         neg(
           add(
             add(transfer.basis.groupAccumulated, atMovement.accumulatedDelta),
@@ -443,7 +452,12 @@ export async function consolidateAssetTransfers(
       );
       const groupRemoved = mulRate(
         divRate(
-          mulRatio(groupAt, toUnits(m.removed_cost), originalCost),
+          m.group_component
+            ? add(
+                m.group_component.removedCost!,
+                neg(m.group_component.removedAccumulated!),
+              )
+            : mulRatio(groupAt, toUnits(m.removed_cost), originalCost),
           transfer.basis.buyerToGroupRate,
         ),
         rate(m.date, "current_rate"),
@@ -470,6 +484,7 @@ export async function consolidateAssetTransfers(
       realizedMargin,
       valuationAdjustment,
       groupAccumulatedDelta: group.accumulatedDelta,
+      groupCostDelta: group.costDelta,
       groupPlan: group.plan,
       reversed: transfer.reversed_on !== null && transfer.reversed_on <= cutoff,
       buyerCost: String(value.cost),
