@@ -11,7 +11,18 @@ import {
   requireHrmEmploymentManage,
   requireHrmEmploymentRead,
 } from "./authorization.ts";
-import { intervalsOverlap, makeEffectiveInterval, parseCivilDate } from "./temporal.ts";
+import {
+  HrmPositionError,
+  positionDisagreements,
+  recordPositionAssignmentEvent,
+} from "./positions.ts";
+import {
+  intervalsOverlap,
+  makeEffectiveInterval,
+  NoRevisionError,
+  parseCivilDate,
+  resolveAsOf,
+} from "./temporal.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -184,17 +195,48 @@ const terminationPayloadSchema = z
   })
   .strict();
 
-const CHANGE_KINDS = ["hire", "status_change", "assignment_change", "termination"] as const;
+/**
+ * Employment-to-position assignment (0192). Carries ONLY the position link
+ * (plus the window it takes effect on): title, department, location, FTE
+ * and primary stay on the assignment version and are never rewritten here.
+ * positionId null unassigns the slot. Disagreement with the position
+ * version is a warning in evidence, never a rewrite.
+ */
+const positionAssignmentPayloadSchema = z
+  .object({
+    kind: z.literal("position_assignment"),
+    assignmentKey: z.string().trim().min(1, "assignmentKey must not be blank").max(120),
+    positionId: uuidField("positionId").nullable(),
+    effectiveFrom: civilDate("effectiveFrom").optional(),
+    effectiveTo: civilDate("effectiveTo").nullable().optional(),
+  })
+  .strict()
+  .superRefine((payload, ctx) => {
+    if (payload.effectiveFrom !== undefined || payload.effectiveTo !== undefined) {
+      try {
+        makeEffectiveInterval(
+          payload.effectiveFrom ?? "0001-01-01",
+          payload.effectiveTo ?? null,
+        );
+      } catch (error) {
+        ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  });
+
+const CHANGE_KINDS = ["hire", "status_change", "assignment_change", "termination", "position_assignment"] as const;
 
 export type HirePayload = z.infer<typeof hirePayloadSchema>;
 export type StatusChangePayload = z.infer<typeof statusChangePayloadSchema>;
 export type AssignmentChangePayload = z.infer<typeof assignmentChangePayloadSchema>;
 export type TerminationPayload = z.infer<typeof terminationPayloadSchema>;
+export type PositionAssignmentPayload = z.infer<typeof positionAssignmentPayloadSchema>;
 export type ChangeRequestPayload =
   | HirePayload
   | StatusChangePayload
   | AssignmentChangePayload
-  | TerminationPayload;
+  | TerminationPayload
+  | PositionAssignmentPayload;
 
 function formatIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>): string {
   return issues
@@ -213,14 +255,14 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new HrmChangeRequestError(
       "INVALID_PAYLOAD",
-      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, or termination",
+      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, termination, or position_assignment",
     );
   }
   const kind = (raw as { kind?: unknown }).kind;
   if (kind === undefined || typeof kind !== "string" || !(CHANGE_KINDS as readonly string[]).includes(kind)) {
     throw new HrmChangeRequestError(
       "UNKNOWN_KIND",
-      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, or termination`,
+      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, or position_assignment`,
     );
   }
   const schema =
@@ -230,7 +272,9 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
         ? statusChangePayloadSchema
         : kind === "assignment_change"
           ? assignmentChangePayloadSchema
-          : terminationPayloadSchema;
+          : kind === "position_assignment"
+            ? positionAssignmentPayloadSchema
+            : terminationPayloadSchema;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     throw new HrmChangeRequestError(
@@ -464,6 +508,17 @@ async function assertKindPreconditions(
       "BAD_STATE",
       "this employment is already terminated — a second termination is a duplicate, not an update",
     );
+  }
+  if (payload.kind === "position_assignment" && payload.positionId !== null) {
+    const position = (await exec.execute(sql`
+      select 1 as one from positions where org_id = ${orgId} and id = ${payload.positionId}
+    `)).rows[0];
+    if (!position) {
+      throw new HrmChangeRequestError(
+        "INVALID_PAYLOAD",
+        "the position is not visible in this organization — name a position of this organization",
+      );
+    }
   }
 }
 
@@ -978,6 +1033,7 @@ type ClosureElement = {
 type AssignmentSlotVersion = {
   id: string;
   version_no: number;
+  position_id: string | null;
   job_title: string | null;
   department_id: string | null;
   location_id: string | null;
@@ -1059,6 +1115,8 @@ async function applyApprovedRequest(
     await applyHire(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
     await applyEmploymentVersionChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+  } else if (payload.kind === "position_assignment") {
+    await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else {
     await applyAssignmentChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   }
@@ -1275,9 +1333,12 @@ async function applyAssignmentChange(
       "no live assignment version overlaps the change window — reload the assignment and file a new request",
     );
   }
-  // Content carry-over comes from the newest overlapping slice.
+  // Content carry-over comes from the newest overlapping slice — including
+  // the position link (0192): an assignment change never moves the holder
+  // off its establishment; only a position_assignment request does that.
   const base = overlapping.reduce((a, b) => (a.version_no > b.version_no ? a : b));
   const successor = {
+    positionId: base.position_id,
     jobTitle: payload.jobTitle !== undefined ? payload.jobTitle : base.job_title,
     departmentId: payload.departmentId !== undefined ? payload.departmentId : base.department_id,
     locationId: payload.locationId !== undefined ? payload.locationId : base.location_id,
@@ -1370,10 +1431,10 @@ async function applyAssignmentChange(
   }
   await exec.execute(sql`
     insert into employment_assignment_versions
-      (org_id, assignment_id, employment_id, version_no, job_title, department_id,
+      (org_id, assignment_id, employment_id, position_id, version_no, job_title, department_id,
        location_id, fte, is_primary, effective_from, effective_to,
        recorded_at, created_by, updated_by)
-    values (${orgId}, ${slotId}, ${request.employment_id}, ${successorNo},
+    values (${orgId}, ${slotId}, ${request.employment_id}, ${successor.positionId}, ${successorNo},
             ${successor.jobTitle}, ${successor.departmentId}, ${successor.locationId},
             ${successor.fte}, ${successor.isPrimary},
             ${windowStart}::date, ${windowEnd}::date,
@@ -1382,6 +1443,353 @@ async function applyAssignmentChange(
   await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+}
+
+/**
+ * (e) Position assignment (0192): move an assignment slot onto a funded
+ * position (or off it, when positionId is null). Only the position link
+ * moves — title, department, location, FTE and primary carry over from the
+ * newest overlapping slice, and disagreement with the position version is
+ * recorded as a warning in BOTH ledgers' evidence (employment_changes
+ * prior_snapshot and the position_changes 'assigned' event), never applied
+ * as a rewrite.
+ *
+ * Evidenced as 'assignment_superseded' ('assignment_issued' on a new slot):
+ * the employment_changes change_kind vocabulary is unchanged. The position
+ * side is evidenced by recordPositionAssignmentEvent in the same
+ * transaction. The target position row locks BEFORE any assignment write
+ * (and closePosition locks the same row before its held-check), so a close
+ * racing this application cannot miss the new holder.
+ */
+async function applyPositionAssignment(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    request: RequestRow;
+    payload: PositionAssignmentPayload;
+    newRevision: number;
+    recordedAt: Date;
+  },
+): Promise<void> {
+  const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
+  // Lock the target position first (when there is one): the revision read
+  // here feeds the position-side event, and the row lock serializes against
+  // concurrent closes and assignments on the same establishment.
+  let target: { id: string; position_code: string; revision: number } | null = null;
+  if (payload.positionId !== null) {
+    const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
+      select id, position_code, revision from positions
+       where org_id = ${orgId} and id = ${payload.positionId} for update
+    `)).rows[0];
+    if (!found) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "the position is gone — withdraw this request; a proposal about a deleted establishment never applies",
+      );
+    }
+    target = found;
+  }
+
+  const slotRows = (await exec.execute<{ id: string }>(sql`
+    select id from employment_assignments
+     where org_id = ${orgId} and employment_id = ${request.employment_id}
+       and assignment_key = ${payload.assignmentKey}
+  `)).rows;
+  const slotId = slotRows[0]?.id ?? null;
+
+  if (slotId === null) {
+    if (payload.effectiveFrom === undefined) {
+      throw new HrmChangeRequestError(
+        "INVALID_PAYLOAD",
+        "a new assignment needs effectiveFrom — name the date the slot takes effect",
+      );
+    }
+    const windowStart = payload.effectiveFrom;
+    const windowEnd = payload.effectiveTo ?? null;
+    makeEffectiveInterval(windowStart, windowEnd);
+    await assertNoPrimaryConflict(exec, {
+      orgId,
+      employmentId: request.employment_id,
+      slotId: null,
+      isPrimary: false,
+      windowStart,
+      windowEnd,
+    });
+    const issuedId = (await exec.execute<{ id: string }>(sql`
+      insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
+      values (${orgId}, ${request.employment_id}, ${payload.assignmentKey}, ${actorId}, ${actorId})
+      returning id
+    `)).rows[0]?.id;
+    if (!issuedId) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "the assignment slot was not stored — nothing applied; retry the decision",
+      );
+    }
+    await exec.execute(sql`
+      insert into employment_assignment_versions
+        (org_id, assignment_id, employment_id, position_id, version_no,
+         job_title, department_id, location_id, fte, is_primary,
+         effective_from, effective_to, recorded_at, created_by, updated_by)
+      values (${orgId}, ${issuedId}, ${request.employment_id}, ${payload.positionId}, 1,
+              null, null, null, '1', false,
+              ${windowStart}::date, ${windowEnd}::date,
+              ${recordedAt}, ${actorId}, ${actorId})
+    `);
+    const warnings = await positionLinkWarnings(exec, {
+      orgId,
+      target,
+      windowStart,
+      recordedAt,
+      assignment: { title: null, departmentId: null, locationId: null },
+    });
+    const changeId = await insertEmploymentChange(exec, {
+      orgId,
+      employmentId: request.employment_id,
+      assignmentId: issuedId,
+      revision: newRevision,
+      changeKind: "assignment_issued",
+      priorSnapshot: {
+        slot: payload.assignmentKey,
+        issued: true,
+        positionId: payload.positionId,
+        positionWarnings: warnings,
+      },
+      closedVersions: [],
+      reason: request.reason ?? "",
+      actorId,
+    });
+    await recordPositionAssignmentEvent(exec, {
+      orgId,
+      actorId,
+      positionId: payload.positionId,
+      employmentId: request.employment_id,
+      assignmentKey: payload.assignmentKey,
+      priorPositionId: null,
+      disagreementWarnings: warnings,
+      reason: request.reason ?? "",
+      positionRevision: target?.revision ?? 0,
+    });
+    await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+    await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+    return;
+  }
+
+  const live = await liveAssignmentVersions(exec, orgId, slotId);
+  let windowStart: string;
+  let windowEnd: string | null;
+  if (payload.effectiveFrom !== undefined || payload.effectiveTo !== undefined) {
+    if (live.length === 0) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "this assignment has no live version to re-date — withdraw this request and file for the recorded slot state",
+      );
+    }
+    const base = live.reduce((a, b) => (a.version_no > b.version_no ? a : b));
+    windowStart = payload.effectiveFrom ?? base.effective_from;
+    windowEnd = payload.effectiveTo ?? base.effective_to;
+    makeEffectiveInterval(windowStart, windowEnd);
+  } else {
+    if (live.length !== 1) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "this assignment holds several live slices and the proposal names no effective window — name effectiveFrom/effectiveTo explicitly",
+      );
+    }
+    windowStart = live[0]!.effective_from;
+    windowEnd = live[0]!.effective_to;
+  }
+  const overlapping = live.filter((version) => effectiveOverlaps(version, windowStart, windowEnd));
+  if (overlapping.length === 0) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "no live assignment version overlaps the change window — reload the assignment and file a new request",
+    );
+  }
+  const base = overlapping.reduce((a, b) => (a.version_no > b.version_no ? a : b));
+  if (payload.positionId === null && base.position_id === null) {
+    throw new HrmChangeRequestError(
+      "BAD_STATE",
+      "this assignment names no position — an unassignment changes nothing; file a new request only when the position link actually changes",
+    );
+  }
+  if (
+    overlapping.length === 1 &&
+    (overlapping[0]!.position_id ?? null) === payload.positionId &&
+    overlapping[0]!.effective_from === windowStart &&
+    (overlapping[0]!.effective_to ?? null) === windowEnd
+  ) {
+    throw new HrmChangeRequestError(
+      "BAD_STATE",
+      "the proposal changes nothing — file a new request only when the position link or dates actually change",
+    );
+  }
+  await assertNoPrimaryConflict(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    slotId,
+    isPrimary: base.is_primary,
+    windowStart,
+    windowEnd,
+  });
+  const successorNo = Math.max(...live.map((version) => version.version_no)) + 1;
+  const warnings = await positionLinkWarnings(exec, {
+    orgId,
+    target,
+    windowStart,
+    recordedAt,
+    assignment: { title: base.job_title, departmentId: base.department_id, locationId: base.location_id },
+  });
+  const changeId = await insertEmploymentChange(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    assignmentId: slotId,
+    revision: newRevision,
+    changeKind: "assignment_superseded",
+    priorSnapshot: {
+      slot: payload.assignmentKey,
+      priorPositionId: base.position_id,
+      positionId: payload.positionId,
+      positionWarnings: warnings,
+      closed: overlapping.map((version) => ({
+        versionNo: version.version_no,
+        positionId: version.position_id,
+        effectiveFrom: version.effective_from,
+        effectiveTo: version.effective_to,
+      })),
+    },
+    closedVersions: overlapping.map((version) => ({
+      table: "employment_assignment_versions",
+      identity: slotId,
+      version_no: version.version_no,
+      row_id: version.id,
+      before: version.before,
+    })),
+    reason: request.reason ?? "",
+    actorId,
+  });
+  for (const version of overlapping) {
+    const closed = (await exec.execute(sql`
+      update employment_assignment_versions
+         set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
+             closed_by_change_id = ${changeId}
+       where org_id = ${orgId} and id = ${version.id} and recorded_until is null
+      returning id
+    `)).rows;
+    if (closed.length !== 1) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "an assignment version changed while the approval was applying — retry the decision",
+      );
+    }
+  }
+  await exec.execute(sql`
+    insert into employment_assignment_versions
+      (org_id, assignment_id, employment_id, position_id, version_no,
+       job_title, department_id, location_id, fte, is_primary,
+       effective_from, effective_to, recorded_at, created_by, updated_by)
+    values (${orgId}, ${slotId}, ${request.employment_id}, ${payload.positionId}, ${successorNo},
+            ${base.job_title}, ${base.department_id}, ${base.location_id},
+            ${base.fte}, ${base.is_primary},
+            ${windowStart}::date, ${windowEnd}::date,
+            ${recordedAt}, ${actorId}, ${actorId})
+  `);
+  await recordPositionAssignmentEvent(exec, {
+    orgId,
+    actorId,
+    positionId: payload.positionId,
+    employmentId: request.employment_id,
+    assignmentKey: payload.assignmentKey,
+    priorPositionId: base.position_id,
+    disagreementWarnings: warnings,
+    reason: request.reason ?? "",
+    positionRevision: target?.revision ?? 0,
+  });
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+}
+
+/**
+ * No-silent-inheritance preflight for a position link: compare the carried
+ * assignment content against the target position's version as of the
+ * successor window start. A position covering no version at that date
+ * warns (the link still applies); an ambiguous position chain propagates
+ * and fails the whole application. Position-side errors arrive as
+ * HrmPositionError and are rehomed here so the change-request boundary
+ * speaks one error type with the message intact.
+ */
+async function positionLinkWarnings(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    target: { id: string; position_code: string; revision: number } | null;
+    windowStart: string;
+    recordedAt: Date;
+    assignment: { title: string | null; departmentId: string | null; locationId: string | null };
+  },
+): Promise<string[]> {
+  if (args.target === null) return [];
+  try {
+    const versions = (await exec.execute<{
+      title: string;
+      department_id: string | null;
+      location_id: string | null;
+      effective_from: string;
+      effective_to: string | null;
+      recorded_at: string;
+      recorded_until: string | null;
+    }>(sql`
+      select title, department_id::text as department_id, location_id::text as location_id,
+             effective_from::text as effective_from,
+             effective_to::text as effective_to,
+             to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as recorded_at,
+             to_char(recorded_until at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as recorded_until
+        from position_versions
+       where org_id = ${args.orgId} and position_id = ${args.target.id}
+         and recorded_until is null
+       order by version_no
+    `)).rows;
+    // resolveAsOf, NoRevisionError and parseCivilDate are the static
+    // temporal imports at the top of this file — the same primitives the
+    // employment paths resolve through.
+    let covered;
+    try {
+      covered = resolveAsOf(
+        versions.map((row) => ({
+          effective: {
+            start: parseCivilDate(row.effective_from),
+            end: row.effective_to === null ? null : parseCivilDate(row.effective_to),
+          },
+          recordedAt: row.recorded_at,
+          recordedUntil: row.recorded_until,
+          payload: row,
+        })),
+        { effective: args.windowStart, asKnown: args.recordedAt.toISOString() },
+      );
+    } catch (resolveError) {
+      if (resolveError instanceof NoRevisionError) {
+        return [
+          `position ${args.target.position_code} covers no version at ${args.windowStart} — the assignment keeps its own title, department and location`,
+        ];
+      }
+      throw resolveError;
+    }
+    return positionDisagreements(
+      args.target.position_code,
+      {
+        title: covered.payload.title,
+        departmentId: covered.payload.department_id,
+        locationId: covered.payload.location_id,
+      },
+      args.assignment,
+    );
+  } catch (error) {
+    if (error instanceof HrmPositionError) {
+      throw new HrmChangeRequestError("REFUSED", error.message);
+    }
+    throw error;
+  }
 }
 
 /** First version on a brand-new slot ('assignment_issued', no closures). */
@@ -1466,7 +1874,8 @@ async function liveAssignmentVersions(
   slotId: string,
 ): Promise<AssignmentSlotVersion[]> {
   const rows = (await exec.execute<AssignmentSlotVersion & { before: unknown }>(sql`
-    select id, version_no, job_title, department_id, location_id, fte::text as fte,
+    select id, version_no, position_id::text as position_id,
+           job_title, department_id, location_id, fte::text as fte,
            is_primary, effective_from::text as effective_from,
            effective_to::text as effective_to,
            to_jsonb(employment_assignment_versions) as before

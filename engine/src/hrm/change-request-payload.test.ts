@@ -31,7 +31,7 @@ test("unknown kinds are refused by name", () => {
   assert.equal(codeOf(() => validateChangePayload([])), "INVALID_PAYLOAD");
   assert.throws(
     () => validateChangePayload({ kind: "promotion" }),
-    /hire, status_change, assignment_change, or termination/,
+    /hire, status_change, assignment_change, termination, or position_assignment/,
     "the refusal lists the governed kinds",
   );
 });

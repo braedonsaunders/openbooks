@@ -35,9 +35,24 @@ export const HRM_EMPLOYMENT_PERMISSIONS = [
 
 export type HrmEmploymentPermission = (typeof HRM_EMPLOYMENT_PERMISSIONS)[number];
 
+/**
+ * Headcount-plan duties (0192). read = see positions, funding and vacancy;
+ * manage = create, revise, fund and close positions. Assignment of an
+ * employment onto a position rides the employment change-request path, so
+ * its approval stays hrm.employment.approve — there is deliberately no
+ * position approve key.
+ */
+export const HRM_POSITION_PERMISSIONS = [
+  "hrm.position.read",
+  "hrm.position.manage",
+] as const;
+
+export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
+
 // Module-private brand: a real symbol, so a forged record built without
 // this module cannot satisfy the type, and loading is the only producer.
-const trustedEmploymentSubject = Symbol("trustedEmploymentSubject");
+// One brand for every HRM subject (employments and positions alike).
+const trustedHrmSubject = Symbol("trustedHrmSubject");
 
 /**
  * Employment identity loaded from worker_employments on the trusted runner,
@@ -56,7 +71,7 @@ export interface TrustedEmploymentSubject {
   readonly workerPartyId: string;
   readonly employerSubsidiaryId: string;
   readonly revision: number;
-  readonly [trustedEmploymentSubject]: true;
+  readonly [trustedHrmSubject]: true;
 }
 
 async function loadTrustedEmploymentSubject(
@@ -97,7 +112,7 @@ async function loadTrustedEmploymentSubject(
     workerPartyId: rows.workerPartyId,
     employerSubsidiaryId: rows.employerSubsidiaryId,
     revision: rows.revision,
-    [trustedEmploymentSubject]: true,
+    [trustedHrmSubject]: true,
   };
 }
 
@@ -197,6 +212,161 @@ export async function loadApprovalPerson(
     );
   }
   return { userId: row.id, partyId: row.partyId };
+}
+
+/**
+ * Position identity loaded from positions on the trusted runner,
+ * org-scoped, with the employer of the CURRENT live version (highest
+ * version_no among recorded-live rows). The establishment code is stable
+ * but carries no legal entity; scope must come from a version, and the
+ * current one is the only defensible choice for a gate that names no
+ * as-of date. A position with no live version has no employer to scope
+ * by and is refused outright — never treated as globally visible.
+ */
+export interface TrustedPositionSubject {
+  readonly id: string;
+  readonly orgId: string;
+  readonly positionCode: string;
+  readonly employerSubsidiaryId: string;
+  readonly revision: number;
+  readonly [trustedHrmSubject]: true;
+}
+
+async function loadTrustedPositionSubject(
+  exec: SqlExecutor,
+  orgId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  const rows = (await exec.execute<{
+    id: string;
+    orgId: string;
+    positionCode: string;
+    employerSubsidiaryId: string | null;
+    revision: number;
+  }>(sql`
+    select p.id,
+           p.org_id as "orgId",
+           p.position_code as "positionCode",
+           (select v.employer_subsidiary_id
+              from position_versions v
+             where v.org_id = p.org_id and v.position_id = p.id
+               and v.recorded_until is null
+             order by v.version_no desc
+             limit 1) as "employerSubsidiaryId",
+           p.revision
+      from positions p
+     where p.org_id = ${orgId} and p.id = ${positionId}
+  `)).rows[0];
+  // Zero rows is a failure: unknown id, or an id from another organization
+  // (the org_id predicate is the org-isolation enforcement).
+  if (!rows) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  if (!rows.employerSubsidiaryId) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return {
+    id: rows.id,
+    orgId: rows.orgId,
+    positionCode: rows.positionCode,
+    employerSubsidiaryId: rows.employerSubsidiaryId,
+    revision: rows.revision,
+    [trustedHrmSubject]: true,
+  };
+}
+
+async function requireHrmPositionAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+  permission: HrmPositionPermission,
+): Promise<TrustedPositionSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Position access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedPositionSubject(exec, orgId, positionId);
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return subject;
+}
+
+/** See a position, its funding and its vacancy. Read-only. */
+export async function requireHrmPositionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.read");
+}
+
+/**
+ * Create, revise, fund or close a position. The caller MUST pass its write
+ * transaction's runner so this check and the subsequent write are atomic.
+ */
+export async function requireHrmPositionManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.manage");
+}
+
+/**
+ * The aggregate half of position authority for creates (which name no
+ * position yet) and list-shaped reads: the hrm.position.manage/read grant,
+ * then the employer-subsidiary scope. Creation validates against the
+ * DECLARED employer — the subsidiary the new position will belong to — so
+ * a caller cannot plant headcount in a legal entity they cannot see.
+ */
+export async function requirePositionManageForEmployer(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employerSubsidiaryId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.manage"))) {
+    throw new HrmAuthorizationError(
+      "Position access requires the hrm.position.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return allowed;
+}
+
+/**
+ * The aggregate half of position read authority, lifted to list-shaped
+ * reads that name no single position. Returns the allowed employer set
+ * (null = unrestricted) for the caller to filter by, never a boolean.
+ */
+export async function requireAggregatePositionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.read"))) {
+    throw new HrmAuthorizationError(
+      "Position access requires the hrm.position.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
 /** Actor identity as the SoD legs see it: super-admin flag travels with the login. */

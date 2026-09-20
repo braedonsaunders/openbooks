@@ -59,13 +59,20 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
 });
 
 /**
- * HRM employment foundation slice: read sees records, manage authors
- * changes, approve decides them (self-approval refused in
- * engine/src/hrm/authorization.ts). Confidential like payroll — no duty
- * outside admin holds these.
+ * HRM employment foundation slice plus the headcount-plan slice: read sees
+ * records, manage authors changes, approve decides them (self-approval
+ * refused in engine/src/hrm/authorization.ts); position read sees the
+ * establishment and vacancy, position manage writes it. Confidential like
+ * payroll — no duty outside admin holds these.
  */
 test("hrm employment permissions are catalogued, grouped, and held by admin only", () => {
-  const keys: CataloguePermission[] = ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"];
+  const keys: CataloguePermission[] = [
+    "hrm.employment.read",
+    "hrm.employment.manage",
+    "hrm.employment.approve",
+    "hrm.position.read",
+    "hrm.position.manage",
+  ];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
