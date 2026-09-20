@@ -17,6 +17,7 @@ import {
   customFieldDefKey,
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
+import { AmbiguousListViewDefaultError } from "./list-view-default.ts";
 
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
@@ -326,6 +327,12 @@ export const resolveListView = cache(
 
     const byId = (id: string) => rows.rows.find((r) => r.id === id);
 
+    // Leftover duplicate personal defaults are overlapping configuration.
+    // Writes already 409 a second default; falling through to org/system
+    // would leave those stored flags unobserved.
+    const personalDefaults = rows.rows.filter((r) => r.scope === "user" && r.isDefault);
+    if (personalDefaults.length > 1) throw new AmbiguousListViewDefaultError();
+
     // 1. explicit ?view=<id>
     let chosen: (ListViewRow & { config: unknown }) | undefined;
     if (viewId && isUuid(viewId)) chosen = byId(viewId);
@@ -344,9 +351,6 @@ export const resolveListView = cache(
         if (pid && isUuid(pid)) chosen = byId(pid);
       } else {
         // 3. unique personal default — designer "default for its scope".
-        // Two stored personal defaults are overlapping configuration; do
-        // not guess which one the race meant.
-        const personalDefaults = rows.rows.filter((r) => r.scope === "user" && r.isDefault);
         if (personalDefaults.length === 1) chosen = personalDefaults[0];
       }
     }
