@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import React from 'react'
 
-// This test IMPORTS the queue island and renders it. The sibling queue.test.ts
-// pins copy and contracts by reading source as text, which cannot fail on a
-// broken import path or an identifier that was typed but never destructured
-// — exactly the two defects the gate found in this file. A render is the
-// cheapest check that reaches them.
+// These tests IMPORT the dialog and row-actions islands and render them. The
+// sibling queue.test.ts pins copy and contracts by reading source as text,
+// which cannot fail on a broken import path or an identifier that was typed
+// but never destructured — exactly the defects the gate found in this file's
+// predecessor. A render is the cheapest check that reaches them.
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
@@ -22,69 +22,63 @@ registerHooks({
 })
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
-const { ChangeRequestQueue } = await import('./QueueClient')
-// tsx compiles JSX classic: the component never imports React (Next provides
+const { ProposeChangeDialog } = await import('./ProposeChangeDialog')
+const { ChangeRequestRowActions } = await import('./ChangeRequestRowActions')
+// tsx compiles JSX classic: the components never import React (Next provides
 // the automatic runtime in production), so the test bridges it.
 Object.assign(globalThis, { React })
 const hrmMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
 
-function render(overrides: Partial<React.ComponentProps<typeof ChangeRequestQueue>> = {}): string {
-  const props: React.ComponentProps<typeof ChangeRequestQueue> = {
-    rows: [
-      {
-        id: 'cr-1',
-        employmentId: 'emp-1',
-        employeeName: 'Fixture Employee',
-        partyId: 'party-1',
-        kind: 'transfer',
-        effectiveFrom: '2026-10-01',
-        effectiveTo: null,
-        status: 'submitted',
-        requesterName: 'Fixture Requester',
-        submittedAt: '2026-09-20T00:00:00Z',
-        createdAt: '2026-09-19T00:00:00Z',
-      },
-    ],
-    columns: { employee: 'Employee', kind: 'Kind', effective: 'Effective', requester: 'Requester', submitted: 'Submitted' },
-    canManage: false,
-    departmentOptions: [],
-    proposeTitle: 'Propose',
-    proposeButton: 'Propose a change',
-    proposeEmploymentLabel: 'Employment',
-    proposeEmploymentPlaceholder: 'Pick an employment',
-    proposeEmpty: 'No employments',
-    proposeFailed: 'Could not load',
-    draftBadge: 'Draft',
-    openEmployee: 'Open employee',
-    notAvailable: 'n/a',
-    emptyTitle: 'No requests',
-    emptyDescription: 'Nothing here',
-    truncated: false,
-    truncatedNote: 'Showing the first 500 requests',
-    ...overrides,
-  }
-  return renderToStaticMarkup(
+function provider(children: React.ReactNode): React.ReactNode {
+  return (
     <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages }}>
-      <ChangeRequestQueue {...props} />
-    </NextIntlClientProvider>,
+      {children}
+    </NextIntlClientProvider>
   )
 }
 
-test('the queue renders its rows through the real module', () => {
-  const html = render()
-  assert.match(html, /Fixture Employee/)
-  assert.match(html, /Fixture Requester/)
-  assert.doesNotMatch(html, /Showing the first 500 requests/, 'no truncation note while the read is complete')
+test('the propose dialog renders its employment picker shell without fetching', () => {
+  const html = renderToStaticMarkup(
+    provider(
+      <ProposeChangeDialog
+        departmentOptions={[]}
+        employmentLabel="Employment"
+        employmentPlaceholder="Search employments…"
+        emptyLabel="No employments match."
+        requestFailed="Could not load"
+        closeHref="/hrm/change-requests"
+      />,
+    ),
+  )
+  assert.match(html, /Employment/)
+  assert.match(html, /role="dialog"/, 'the picker is exposed as a dialog')
 })
 
-test('a truncated read renders its note (the prop must reach the JSX)', () => {
-  const html = render({ truncated: true })
-  assert.match(html, /Showing the first 500 requests/)
+test('a terminal row renders no lifecycle actions', () => {
+  const html = renderToStaticMarkup(
+    provider(
+      <ChangeRequestRowActions
+        requestId="cr-1"
+        requestStatus="approved"
+        employmentId="emp-1"
+        departmentOptions={[]}
+      />,
+    ),
+  )
+  assert.equal(html, '', 'an approved request shows no actions')
 })
 
-test('an empty queue renders the empty state', () => {
-  const html = render({ rows: [] })
-  assert.match(html, /No requests/)
-  assert.match(html, /Nothing here/)
+test('a draft row renders its lifecycle actions through the real module', () => {
+  const html = renderToStaticMarkup(
+    provider(
+      <ChangeRequestRowActions
+        requestId="cr-1"
+        requestStatus="draft"
+        employmentId="emp-1"
+        departmentOptions={[]}
+      />,
+    ),
+  )
+  assert.match(html, /button/i, 'a draft request offers actions')
 })

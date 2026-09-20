@@ -9,24 +9,18 @@ import test from "node:test";
 
 const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
-const button = readFileSync(new URL("./AddPositionButton.tsx", import.meta.url), "utf8");
 const form = readFileSync(new URL("./PositionCreateForm.tsx", import.meta.url), "utf8");
-const widgets = readFileSync(new URL("../../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
-const names = readFileSync(new URL("../../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
 
 test("the header carries Add position first, then the strip, behind the manage ref", () => {
-  const add = view.indexOf("widget('hrm-add-position-button'");
+  const add = view.indexOf("widget('link-button'");
   const tabs = view.indexOf("widget('module-home-tabs'");
   assert.ok(add > 0 && tabs > add, "the primary action precedes the tab strip");
-  assert.match(view, /widget\('hrm-add-position-button', \{ basePath: data\.basePath, label: data\.addLabel \}, f\('canManage'\)\)/);
+  // The shared header action (the Button rendered by the link-button widget
+  // every other list page uses), opening the form through the URL so the
+  // drawer is shareable and closes by navigation — no bespoke button.
+  assert.match(view, /widget\('link-button', \{ href: f\('addHref'\), label: f\('addLabel'\), iconKey: 'plus' \}, f\('canManage'\)\)/);
+  assert.match(view, /addHref: hrefFor\(effectiveDate, status, 'new'\)/, "the href keeps the as-of date and segment");
   assert.match(view, /canManage = can\(authz, 'hrm\.position\.manage'\)/, "the ref is the same grant the POST route enforces");
-});
-
-test("the button is the shared Button and opens the form through the URL", () => {
-  assert.match(button, /from '@openbooks\/ui'/);
-  assert.match(button, /<Button onClick=\{open\}>/);
-  assert.match(button, /params\.set\('position', 'new'\)/, "the drawer is shareable and closes by navigation");
-  assert.doesNotMatch(button, /className="[^"]*(bg-|rounded-|px-)/, "no bespoke button styling");
 });
 
 test("the create form uses the house form primitives and the real API", () => {
@@ -39,9 +33,7 @@ test("the create form uses the house form primitives and the real API", () => {
   assert.match(view, /sp\.position === 'new' && canManage/, "only a manager gets the form");
 });
 
-test("the widget is registered once and its copy ships in every locale", () => {
-  assert.match(widgets, /'hrm-add-position-button': \(props\) =>/);
-  assert.match(names, /'hrm-add-position-button',/);
+test("the create copy ships in every locale", () => {
   for (const locale of ["de", "en", "es", "fr", "ja", "pt-BR", "zh"]) {
     const catalog = JSON.parse(readFileSync(new URL(`../../../../messages/${locale}/hrm.json`, import.meta.url), "utf8")) as {
       positions: { add?: string; create?: Record<string, string> };

@@ -12,7 +12,12 @@ export async function generateMetadata() {
  * only. Renders only when the hrm feature gate is on and the actor holds
  * hrm.leave.request — the view 404s otherwise.
  */
-export default async function MyLeavePage() {
-  const data = await loadMyLeavePage()
-  return <ModuleView spec={myLeaveSpec(data)} data={data} searchParams={{}} trusted />
+export default async function MyLeavePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
+  const sp = await searchParams
+  const data = await loadMyLeavePage(sp)
+  return <ModuleView spec={myLeaveSpec(data)} data={data} searchParams={sp} trusted />
 }

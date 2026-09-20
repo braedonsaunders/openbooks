@@ -70,6 +70,8 @@ export interface PositionsPageData {
   /** hrm.position.manage: the header's Add position button and the create form. */
   canManage: boolean
   addLabel: string
+  /** The create form through the URL (`?position=new`), keeping the as-of date and segment. */
+  addHref: string
   basePath: string
   effectiveDate: string
   segments: PositionSegment[]
@@ -126,7 +128,7 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
         actions: [
           // The primary action first, the strip last — the house order on
           // every list page, so the switcher never moves between siblings.
-          widget('hrm-add-position-button', { basePath: data.basePath, label: data.addLabel }, f('canManage')),
+          widget('link-button', { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' }, f('canManage')),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -343,6 +345,7 @@ export async function loadPositionsPage(
     tabs,
     canManage,
     addLabel: t('positions.add'),
+    addHref: hrefFor(effectiveDate, status, 'new'),
     basePath: '/hrm/positions',
     effectiveDate,
     segments,

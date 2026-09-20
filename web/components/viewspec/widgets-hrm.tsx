@@ -8,35 +8,37 @@ import {
   OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
-import { AddPositionButton } from '../../app/(app)/hrm/positions/AddPositionButton'
-import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
+import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
+import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
+import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
-import { LeaveQueue } from '../../app/(app)/hrm/leave/LeaveQueue'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
-  'hrm-change-request-queue': (props) => (
-    <ChangeRequestQueue
-      rows={(props.rows as ComponentProps<typeof ChangeRequestQueue>['rows']) ?? []}
-      columns={props.columns as ComponentProps<typeof ChangeRequestQueue>['columns']}
-      canManage={props.canManage === true}
-      departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestQueue>['departmentOptions']) ?? []}
-      proposeTitle={str(props, 'proposeTitle') ?? ''}
-      proposeButton={str(props, 'proposeButton') ?? ''}
-      proposeEmploymentLabel={str(props, 'proposeEmploymentLabel') ?? ''}
-      proposeEmploymentPlaceholder={str(props, 'proposeEmploymentPlaceholder') ?? ''}
-      proposeEmpty={str(props, 'proposeEmpty') ?? ''}
-      proposeFailed={str(props, 'proposeFailed') ?? ''}
-      draftBadge={str(props, 'draftBadge') ?? ''}
-      openEmployee={str(props, 'openEmployee') ?? ''}
-      notAvailable={str(props, 'notAvailable') ?? ''}
-      emptyTitle={str(props, 'emptyTitle') ?? ''}
-      emptyDescription={str(props, 'emptyDescription') ?? ''}
-      truncated={props.truncated === true}
-      truncatedNote={str(props, 'truncatedNote') ?? ''}
+  /** One row's lifecycle actions inside the shared queue table: the existing
+   *  ChangeRequestActions island over loader-resolved ids, refreshing the
+   *  list after every transition. Terminal rows render nothing. */
+  'hrm-change-request-actions': (props) => (
+    <ChangeRequestRowActions
+      requestId={str(props, 'requestId') ?? ''}
+      requestStatus={str(props, 'requestStatus') ?? ''}
+      employmentId={str(props, 'employmentId') ?? ''}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
+    />
+  ),
+  /** The propose-change dialog, opened from the page header through the
+   *  `propose` search param; closing navigates the param away. */
+  'hrm-propose-change-dialog': (props) => (
+    <ProposeChangeDialog
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof ProposeChangeDialog>['departmentOptions']) ?? []}
+      employmentLabel={str(props, 'employmentLabel') ?? ''}
+      employmentPlaceholder={str(props, 'employmentPlaceholder') ?? ''}
+      emptyLabel={str(props, 'emptyLabel') ?? ''}
+      requestFailed={str(props, 'requestFailed') ?? ''}
+      closeHref={str(props, 'closeHref') ?? '/hrm/change-requests'}
     />
   ),
   'hrm-pending-requests': (props) => (
@@ -75,15 +77,6 @@ export const HRM_WIDGETS = {
       notAvailable={str(props, 'notAvailable') ?? ''}
       truncated={props.truncated === true}
       truncatedNote={str(props, 'truncatedNote') ?? ''}
-    />
-  ),
-  /** The positions page's header primary action: the house Button opening
-   *  the create form through `?position=new`. Placement grants nothing — the
-   *  spec's `when` is the manage ref and POST /api/hrm/positions re-checks it. */
-  'hrm-add-position-button': (props) => (
-    <AddPositionButton
-      basePath={str(props, 'basePath') ?? '/hrm/positions'}
-      label={str(props, 'label') ?? ''}
     />
   ),
   /** Status segments: server-side filter pills with per-status counts over
@@ -182,26 +175,13 @@ export const HRM_WIDGETS = {
     if (!drawer) return null
     return <ProcessDrawer drawer={drawer} />
   },
-  /** The leave queue body: loader-resolved rows (newest start first) plus
-   *  loader-resolved strings. Withdraw/cancel ride the existing LeaveDrawer
-   *  and API routes inside the island; decisions stay in native Approvals.
-   *  No org id, user id or Authz crosses the spec. */
-  'hrm-leave-queue': (props) => (
-    <LeaveQueue
-      rows={(props.rows as ComponentProps<typeof LeaveQueue>['rows']) ?? []}
-      columns={props.columns as ComponentProps<typeof LeaveQueue>['columns']}
-      canFile={props.canFile === true}
-      canRecord={props.canRecord === true}
-      fileTitle={str(props, 'fileTitle') ?? ''}
-      fileButton={str(props, 'fileButton') ?? ''}
-      recordTitle={str(props, 'recordTitle') ?? ''}
-      recordButton={str(props, 'recordButton') ?? ''}
-      emptyTitle={str(props, 'emptyTitle') ?? ''}
-      emptyDescription={str(props, 'emptyDescription') ?? ''}
-      truncated={props.truncated === true}
-      truncatedNote={str(props, 'truncatedNote') ?? ''}
-      notAvailable={str(props, 'notAvailable') ?? ''}
-      openEmployee={str(props, 'openEmployee') ?? ''}
+  /** Leave filing and detail entry point: the existing LeaveDrawer over a
+   *  request id (detail) or null (filing), closing by navigating the search
+   *  params away. */
+  'hrm-leave-dialog': (props) => (
+    <LeaveDialog
+      requestId={str(props, 'requestId') ?? null}
+      closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
     />
   ),
   /** Department leave calendar: loader-resolved absence days grouped by
