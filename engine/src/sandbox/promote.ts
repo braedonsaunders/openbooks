@@ -117,9 +117,11 @@ async function assertActiveActor(actorId: string, orgId: string): Promise<void> 
   if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
 }
 
-/** Freeze the applying actor's authority before any item can change a role.
- * User administration takes the user write lock; role edits take the role write
- * lock. Holding both here orders revocations with the whole promotion. */
+/** Freeze the lifecycle actor's sandbox-management authority. Review and
+ * approval consult this before any status write; apply also uses the returned
+ * set to gate per-table writes and role grants. User administration takes the
+ * user write lock; role edits take the role write lock. Holding both here
+ * orders revocations with the whole promotion. */
 async function promotionAuthority(actorId: string, orgId: string): Promise<Set<string>> {
   const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
     select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`)).rows[0];
@@ -311,7 +313,7 @@ export async function buildChangeSet(
   });
 }
 
-/** Mark a complete capture as reviewed by an independent production actor. */
+/** Mark a complete capture as reviewed by an independent production actor who holds admin.sandboxes.manage. */
 export async function reviewChangeSet(changeSetId: string, reviewerId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(reviewerId, "change-set review");
@@ -323,6 +325,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
     if (!c) throw new Error(`change set not found: ${id}`);
     const prod = assertUuid(c.org_id);
     await assertActiveActor(actor, prod);
+    await promotionAuthority(actor, prod);
     if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
     await assertDistinctActors(actor, [["creator", c.created_by]]);
@@ -339,7 +342,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
   });
 }
 
-/** Approve a reviewed capture by a second independent production actor. */
+/** Approve a reviewed capture by a second independent production actor who holds admin.sandboxes.manage. */
 export async function approveChangeSet(changeSetId: string, approverId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(approverId, "change-set approval");
@@ -351,6 +354,7 @@ export async function approveChangeSet(changeSetId: string, approverId?: string 
     if (!c) throw new Error(`change set not found: ${id}`);
     const prod = assertUuid(c.org_id);
     await assertActiveActor(actor, prod);
+    await promotionAuthority(actor, prod);
     if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
     await assertDistinctActors(actor, [["creator", c.created_by], ["reviewer", c.reviewed_by]]);
