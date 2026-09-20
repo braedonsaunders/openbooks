@@ -35,21 +35,9 @@
       ]
     },
     {
-      "path": "engine/src/ledger/posting-contracts.ts",
-      "tests": [
-        "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
-        "engine/src/ledger/posting-project-charge.test.ts",
-        "engine/src/receivables/dunning.test.ts",
-        "engine/src/payments/direct-debit.test.ts",
-        "engine/src/ledger/posting.test.ts",
-        "engine/src/ledger/posting-tax-guards.test.ts",
-        "engine/src/ledger/posting-period.integration.test.ts"
-      ]
-    },
-    {
       "path": "engine/src/ledger/posting-effects.ts",
       "tests": [
+        "engine/src/ledger/posting-effects-behavior.test.ts",
         "engine/src/ledger/posting-effects.test.ts",
         "engine/src/ledger/posting-effects.integration.test.ts",
         "engine/src/ledger/posting-effects-idempotency.integration.test.ts"
@@ -68,24 +56,6 @@
         {
           "start": 48,
           "end": 73
-        }
-      ],
-      "tests": [
-        "engine/src/payments/payments.test.ts",
-        "engine/src/payments/direct-debit.test.ts",
-        "engine/src/payments/payments.integration.test.ts"
-      ]
-    },
-    {
-      "path": "engine/src/payments/payment-contracts.ts",
-      "lineRanges": [
-        {
-          "start": 51,
-          "end": 60
-        },
-        {
-          "start": 62,
-          "end": 70
         }
       ],
       "tests": [
@@ -114,7 +84,6 @@
     },
     {
       "path": "engine/src/payroll/run-calculation-evidence.ts",
-      "needsDb": true,
       "lineRanges": [
         {
           "start": 80,
@@ -134,6 +103,7 @@
         }
       ],
       "tests": [
+        "engine/src/payroll/run-calculation-evidence.unit.test.ts",
         "engine/src/payroll/run.test.ts",
         "engine/src/payroll/agnostic-core.test.ts"
       ]
@@ -337,6 +307,7 @@
     {
       "path": "engine/src/ledger/posting-projection.ts",
       "tests": [
+        "engine/src/ledger/posting-projection.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
@@ -376,6 +347,7 @@
     {
       "path": "engine/src/ledger/posting-provider-tax.ts",
       "tests": [
+        "engine/src/ledger/posting-provider-tax.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",

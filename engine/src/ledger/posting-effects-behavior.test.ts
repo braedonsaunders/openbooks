@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { db } from "../platform/db.ts";
 import {
   claimPostingEffectsForDocument,
@@ -28,48 +30,28 @@ async function withStubbedDb<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const target = db as unknown as Record<string, unknown>;
+  const executeDescriptor = Object.getOwnPropertyDescriptor(target, "execute");
+  const transactionDescriptor = Object.getOwnPropertyDescriptor(target, "transaction");
   if (options.execute !== undefined) target.execute = options.execute;
   if (options.transaction !== undefined) target.transaction = options.transaction;
   try {
     return await fn();
   } finally {
-    if (options.execute !== undefined) delete target.execute;
-    if (options.transaction !== undefined) delete target.transaction;
+    if (options.execute !== undefined) {
+      if (executeDescriptor) Object.defineProperty(target, "execute", executeDescriptor);
+      else delete target.execute;
+    }
+    if (options.transaction !== undefined) {
+      if (transactionDescriptor) Object.defineProperty(target, "transaction", transactionDescriptor);
+      else delete target.transaction;
+    }
   }
 }
 
-// Collect every value the code binds into its statement: Param payloads and
-// statement fragments, recursing through nested drizzle SQL chunks.
+// Compile with the real dialect: inspect exactly the parameters PostgreSQL
+// receives, without reimplementing Drizzle's chunk traversal.
 function boundParams(query: unknown): unknown[] {
-  const params: unknown[] = [];
-  const seen = new Set<object>();
-  const visit = (node: unknown): void => {
-    if (node === null || typeof node !== "object") return;
-    if (seen.has(node)) return;
-    seen.add(node);
-    const record = node as { queryChunks?: unknown; value?: unknown };
-    if (Array.isArray(record.queryChunks)) {
-      for (const chunk of record.queryChunks) visit(chunk);
-      return;
-    }
-    if ("value" in record) {
-      const value = record.value;
-      if (
-        typeof value === "string" ||
-        typeof value === "boolean" ||
-        typeof value === "number" ||
-        value instanceof Date
-      ) {
-        params.push(value);
-      } else if (Array.isArray(value)) {
-        for (const item of value) visit(item);
-      } else {
-        visit(value);
-      }
-    }
-  };
-  visit(query);
-  return params;
+  return new PgDialect().sqlToQuery(query as SQL).params;
 }
 
 const claim: PostingEffectsRow = {
@@ -158,7 +140,7 @@ test("a document claim reports terminal poison distinctly from retryable work", 
   const runClaim = async (scripted: StubRows[]): Promise<unknown> => {
     let call = 0;
     return withStubbedDb(
-      { execute: async () => scripted[Math.min(call++, scripted.length - 1)] },
+      { execute: async () => (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()) },
       async () => claimPostingEffectsForDocument("33333333-3333-4333-8333-333333333333", NOW),
     );
   };
@@ -246,7 +228,7 @@ test("replay names an inactive actor and a non-terminal row", async () => {
     },
   ];
   let call = 0;
-  const txState: TxStub = { execute: async () => scripted[Math.min(call++, scripted.length - 1)] };
+  const txState: TxStub = { execute: async () => (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()) };
   await withStubbedDb({ transaction: async (fn) => fn(txState) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /only terminal-failed/);
   });
