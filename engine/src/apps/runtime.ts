@@ -120,6 +120,11 @@ const FORBIDDEN = "__OB_FORBIDDEN__";
 const GOVERNANCE = "__OB_GOV__";
 const TIMEOUT = "__OB_TIMEOUT__";
 const HOST_TIMEOUT = Symbol("host-timeout");
+// QuickJS raises "stack overflow"; the asyncify boundary sometimes
+// surfaces the same guest limit as V8's RangeError instead.
+const GUEST_STACK_OVERFLOW = /stack overflow|Maximum call stack size exceeded/i;
+const GUEST_STACK_OVERFLOW_MESSAGE =
+  "guest stack overflow: the handler exceeded the sandbox stack limit";
 
 export async function runAppEndpoint(opts: {
   source: string;
@@ -182,11 +187,36 @@ export async function runAppEndpoint(opts: {
 
   let vmDisposed = false;
   let cleanupDeferred = false;
+  // After a guest stack overflow, JS_FreeRuntime asserts
+  // list_empty(&rt->gc_obj_list). The browser-asyncify Emscripten
+  // abort() throws WebAssembly.RuntimeError from dispose — and a
+  // throw from this finally replaces the already-computed
+  // AppEndpointResult, taking the Node process down with it.
+  let runtimeUnfreeable = false;
+  const isWasmRuntimeAbort = (error: unknown): boolean =>
+    error instanceof WebAssembly.RuntimeError ||
+    (error instanceof Error && error.name === "RuntimeError");
+  const noteGuestFault = (message: string): string => {
+    if (GUEST_STACK_OVERFLOW.test(message)) {
+      runtimeUnfreeable = true;
+      return GUEST_STACK_OVERFLOW_MESSAGE;
+    }
+    return message;
+  };
   const disposeVm = (): void => {
     if (vmDisposed) return;
     vmDisposed = true;
-    vm.dispose();
-    runtime.dispose();
+    const release = (fn: () => void): void => {
+      try {
+        fn();
+      } catch (e) {
+        if (!isWasmRuntimeAbort(e)) throw e;
+        runtimeUnfreeable = true;
+      }
+    };
+    release(() => vm.dispose());
+    if (runtimeUnfreeable) return;
+    release(() => runtime.dispose());
   };
 
   /** Charge units; throw a governance error handle when over budget. */
@@ -534,6 +564,7 @@ export async function runAppEndpoint(opts: {
         typeof err === "object" && err && "message" in err
           ? String((err).message)
           : String(err);
+      const guestMsg = noteGuestFault(msg);
       if (msg.startsWith(FORBIDDEN)) {
         return {
           status: "forbidden",
@@ -563,7 +594,7 @@ export async function runAppEndpoint(opts: {
       }
       return {
         status: "error",
-        error: msg.startsWith(GOVERNANCE) ? msg.slice(GOVERNANCE.length) : msg,
+        error: msg.startsWith(GOVERNANCE) ? msg.slice(GOVERNANCE.length) : guestMsg,
         logs,
         units,
         durationMs: Date.now() - started,
@@ -583,6 +614,8 @@ export async function runAppEndpoint(opts: {
       durationMs: Date.now() - started,
     };
   } catch (e) {
+    if (isWasmRuntimeAbort(e)) runtimeUnfreeable = true;
+    const guestMsg = noteGuestFault((e as Error).message ?? String(e));
     if (Date.now() > deadline) {
       return {
         status: "timeout",
@@ -594,7 +627,7 @@ export async function runAppEndpoint(opts: {
     }
     return {
       status: "error",
-      error: (e as Error).message,
+      error: guestMsg,
       logs,
       units,
       durationMs: Date.now() - started,
