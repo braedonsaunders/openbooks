@@ -3,7 +3,10 @@
     "title": "人事",
     "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。",
     "tabs": {
-      "overview": "概要"
+      "overview": "概要",
+      "changeRequests": "変更申請",
+      "departments": "部門",
+      "reports": "レポート"
     },
     "vitals": {
       "headcount": "人員数",

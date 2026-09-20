@@ -1,6 +1,9 @@
 {
   "modules": {
     "hrm": "人力资源",
+    "hrm-change-requests": "变更申请",
+    "hrm-departments": "部门",
+    "hrm-reports": "人事报表",
     "dashboard": "仪表板",
     "assistant": "AI 助手",
     "continuous-close": "结账监控",

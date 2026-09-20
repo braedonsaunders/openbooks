@@ -3,7 +3,10 @@
     "title": "Recursos humanos",
     "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração.",
     "tabs": {
-      "overview": "Visão geral"
+      "overview": "Visão geral",
+      "changeRequests": "Solicitações de alteração",
+      "departments": "Departamentos",
+      "reports": "Relatórios"
     },
     "vitals": {
       "headcount": "Headcount",
