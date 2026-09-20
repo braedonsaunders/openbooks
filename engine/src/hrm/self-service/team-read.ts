@@ -91,6 +91,41 @@ export async function actorHasTeam(query: {
   });
 }
 
+/**
+ * The actor's direct-report employment ids that belong to ONE worker party
+ * — the employment drawer's structural fallback for a manager who lacks
+ * hrm.employment.read. An empty list is a fact (the party holds none of
+ * the actor's reports; the tab hides), never a refusal: the NO_TEAM
+ * refusal belongs to the Team tab, not to another person's record.
+ */
+export async function findTeamEmploymentIdsForParty(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly workerPartyId: string;
+}): Promise<string[]> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  if (typeof query.workerPartyId !== "string" || query.workerPartyId.length === 0) {
+    throw new SelfServiceError("REFUSED", "workerPartyId must be a non-empty string");
+  }
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    await requireHrmSelfRead(db, orgId, actorId);
+    const today = await businessToday(orgId);
+    const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
+    if (reports.length === 0) return [];
+    const rows = (await db.execute<{ id: string }>(sql`
+      select e.id::text as id
+        from worker_employments e
+       where e.org_id = ${orgId}
+         and e.worker_party_id = ${query.workerPartyId}
+         and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reports])}::jsonb)::uuid)
+       order by e.id
+    `)).rows;
+    return rows.map((row) => row.id);
+  });
+}
+
 export interface TeamRosterEntry extends MyEmploymentSummary {
   readonly workerPartyId: string;
   readonly workerName: string;

@@ -27,13 +27,7 @@
       "startingSoon": "Arrivées prochaines",
       "startingSoonSub": "{count, plural, one {# départ dans les 30 prochains jours} other {# départs dans les 30 prochains jours}}",
       "onLeave": "En congé aujourd'hui",
-      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}",
-      "employers": "Employeurs",
-      "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
-      "departments": "Services",
-      "departmentsSub": "{count, plural, one {# service} other {# services}}",
-      "unfundedFte": "ETP pourvus non financés",
-      "unfundedFteSub": "Pourvu sans financement associé"
+      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}"
     },
     "groups": {
       "title": "Effectif par service",

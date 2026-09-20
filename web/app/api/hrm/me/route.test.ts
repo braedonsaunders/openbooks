@@ -138,11 +138,16 @@ if (!isVitest) {
       return nextLoad(url);
     },
   });
-  profileRoute = (await import("./profile/route.ts?hrm-me-profile")) as typeof import("./profile/route.ts");
-  stepsRoute = (await import("./steps/route.ts?hrm-me-steps")) as typeof import("./steps/route.ts");
-  requestsRoute = (await import("./requests/route.ts?hrm-me-requests")) as typeof import("./requests/route.ts");
-  teamRoute = (await import("./team/route.ts?hrm-me-team")) as typeof import("./team/route.ts");
-  fileRoute = (await import("./profile-changes/route.ts?hrm-me-file")) as typeof import("./profile-changes/route.ts");
+  const profileRouteUrl = "./profile/route.ts?hrm-me-profile";
+  profileRoute = (await import(profileRouteUrl)) as typeof import("./profile/route.ts");
+  const stepsRouteUrl = "./steps/route.ts?hrm-me-steps";
+  stepsRoute = (await import(stepsRouteUrl)) as typeof import("./steps/route.ts");
+  const requestsRouteUrl = "./requests/route.ts?hrm-me-requests";
+  requestsRoute = (await import(requestsRouteUrl)) as typeof import("./requests/route.ts");
+  const teamRouteUrl = "./team/route.ts?hrm-me-team";
+  teamRoute = (await import(teamRouteUrl)) as typeof import("./team/route.ts");
+  const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
+  fileRoute = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
   hooks.deregister();
 }
 

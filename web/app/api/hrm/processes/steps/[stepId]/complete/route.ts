@@ -21,7 +21,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request, ctx: { params: Promise<{ stepId: string }> }) {
   const processGate = await guardPermission("hrm.process.read");
   const gate = processGate instanceof NextResponse ? await guardPermission("hrm.self.read") : processGate;
-  if (gate instanceof NextResponse) return processGate;
+  if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
