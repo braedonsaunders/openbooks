@@ -531,6 +531,20 @@ test(
         requestComponent,
       );
       await approve(f, component);
+      await assert.rejects(
+        () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
+              insert into asset_basis_changes
+                (org_id,asset_id,book_id,change_id,effective_on,cost_delta,
+                 accumulated_delta,salvage_delta,group_component,created_by)
+              values (${f.org.orgId},${received},${f.org.bookId},${component},
+                      '2026-09-01',-600,-400,0,null,${f.actors.submitterId})
+            `);
+          }),
+        /group component basis must match its independently approved/,
+        "publishing the approved legal disposal without its group measurement must fail",
+      );
       await applyAssetChange(f.org.orgId, component, f.actors.submitterId);
       const frozen = (
         await db.execute<{
