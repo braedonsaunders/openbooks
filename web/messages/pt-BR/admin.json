@@ -986,7 +986,10 @@
     "automations_manage": "Criar automações e ajustes de aprovação",
     "automations_run": "Executar automações agora",
     "hrm_construction_read": "Ver conformidade de construção",
-    "hrm_construction_manage": "Gerenciar conformidade de construção"
+    "hrm_construction_manage": "Gerenciar conformidade de construção",
+    "hrm_compensation_read": "Ver faixas, arquitetura e ciclos",
+    "hrm_compensation_manage": "Executar ciclos, transferir taxas e criar planos e medições",
+    "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2498,6 +2501,21 @@
         "title": "Regras de proporção",
         "singularTitle": "Regra de proporção",
         "description": "Proporções oficial-aprendiz por tabela, medidas diária ou semanalmente. A violação é precificada a oficial."
+      },
+      "hrm-job-families": {
+        "title": "Famílias de cargos",
+        "singularTitle": "Família de cargos",
+        "description": "Os ofícios da organização — códigos estáveis que agrupam níveis."
+      },
+      "hrm-job-levels": {
+        "title": "Níveis",
+        "singularTitle": "Nível",
+        "description": "Um degrau por escala com posto e critérios de igual valor declarados."
+      },
+      "hrm-pay-bands": {
+        "title": "Faixas",
+        "singularTitle": "Faixa",
+        "description": "Linhas versionadas de salário DEVE por escopo: mudanças são linhas novas."
       }
     },
     "fields": {
@@ -2830,7 +2848,17 @@
       "scheduleId": "Tabela",
       "ratioJourney": "Oficial",
       "ratioApprentice": "Aprendiz",
-      "measured": "Medição"
+      "measured": "Medição",
+      "rank": "Posto",
+      "familyId": "Família",
+      "skillsWeight": "Peso de habilidades",
+      "effortWeight": "Peso de esforço",
+      "responsibilityWeight": "Peso de responsabilidade",
+      "workingConditionsWeight": "Peso de condições",
+      "levelId": "Nível",
+      "min": "Mínimo",
+      "target": "Meta",
+      "max": "Máximo"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3349,6 +3377,10 @@
       "hrmRatioMeasured": {
         "daily": "Diária",
         "weekly": "Semanal"
+      },
+      "payBandBasis": {
+        "annual": "Anual",
+        "hourly": "Por hora"
       }
     },
     "payroll": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "Diárias",
       "description": "Calcular diárias e viagens do tempo aprovado para a folha."
+    },
+    "hrmCompensation": {
+      "title": "Remuneração",
+      "description": "Arquitetura e faixas: o que os cargos devem pagar e onde cada pessoa está."
+    },
+    "hrmMeritCycles": {
+      "title": "Ciclos de mérito",
+      "description": "Rodadas que congelam a verdade da folha, decidem aumentos e transferem taxas."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Planos de headcount",
+      "description": "Cenários custeados das faixas que abrem requisições ao aprovar."
+    },
+    "hrmPayTransparency": {
+      "title": "Transparência salarial",
+      "description": "Medições congeladas da folha e pedidos de informação."
     }
   },
   "backupsManager": {

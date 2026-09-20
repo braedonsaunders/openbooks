@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "Constats",
         "description": "Marqueurs préalables par type : ratios, taux manquants, classes non résolues."
+      },
+      "hrm_pay_bands": {
+        "label": "Fourchettes",
+        "description": "Une ligne par fourchette active : niveau, périmètre, devise, base et min/cible/max."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Lignes de mérite",
+        "description": "Une ligne par décision : personne, employeur, taux figé, proposition et statut."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Lignes du plan",
+        "description": "Une ligne par mouvement : plan, nature, titre, ETP, coût chiffré et statut."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Mesures d'écart",
+        "description": "Une ligne par mesure et catégorie : niveau, effectifs, écarts et marque."
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "Jour",
         "status": "Statut",
         "project_id": "Projet (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Niveau",
+        "family": "Famille",
+        "employer": "Employeur",
+        "currency": "Devise",
+        "basis": "Base",
+        "min": "Minimum",
+        "target": "Cible",
+        "max": "Maximum",
+        "effective_from": "Effet",
+        "effective_to": "Fin",
+        "id": "Fourchette (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Campagne",
+        "person": "Personne",
+        "employer": "Employeur",
+        "current_rate": "Taux actuel",
+        "currency": "Devise",
+        "compa_ratio": "Ratio compa",
+        "proposed_pct": "Proposé %",
+        "proposed_rate": "Taux proposé",
+        "status": "Statut",
+        "effective_on": "Effet",
+        "employment_id": "Emploi (id)",
+        "id": "Ligne (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Programme",
+        "kind": "Nature",
+        "title": "Titre",
+        "employer": "Employeur",
+        "planned_fte": "ETP prévu",
+        "start_on": "Début",
+        "est_annual_cost": "Coût annuel est.",
+        "currency": "Devise",
+        "status": "Statut",
+        "id": "Ligne (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Date",
+        "employer": "Employeur",
+        "level": "Niveau",
+        "count_a": "Effectifs A",
+        "count_b": "Effectifs B",
+        "mean_gap_pct": "Écart moyen %",
+        "median_gap_pct": "Écart médian %",
+        "unexplained_gap_pct": "Écart inexpliqué %",
+        "method": "Méthode",
+        "joint_assessment_due": "Examen conjoint",
+        "id": "Mesure (id)"
       }
     },
     "enumValues": {

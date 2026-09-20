@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "Hallazgos",
         "description": "Marcas previas solo-agregar por tipo: proporciones, tarifas faltantes, clases sin resolver."
+      },
+      "hrm_pay_bands": {
+        "label": "Bandas",
+        "description": "Una fila por banda vigente: nivel, ámbito, moneda, base y mínimo/objetivo/máximo."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Líneas de mérito",
+        "description": "Una fila por decisión: persona, empleador, tarifa congelada, propuesta y estado."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Líneas del plan",
+        "description": "Una fila por movimiento: plan, tipo, título, ETC, coste calculado y estado."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Mediciones de brecha",
+        "description": "Una fila por medición y categoría: nivel, personas, brechas y marca."
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "Día",
         "status": "Estado",
         "project_id": "Proyecto (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Nivel",
+        "family": "Familia",
+        "employer": "Empleador",
+        "currency": "Moneda",
+        "basis": "Base",
+        "min": "Mínimo",
+        "target": "Objetivo",
+        "max": "Máximo",
+        "effective_from": "Vigencia",
+        "effective_to": "Fin",
+        "id": "Banda (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Ciclo",
+        "person": "Persona",
+        "employer": "Empleador",
+        "current_rate": "Tarifa actual",
+        "currency": "Moneda",
+        "compa_ratio": "Ratio compa",
+        "proposed_pct": "Propuesto %",
+        "proposed_rate": "Tarifa propuesta",
+        "status": "Estado",
+        "effective_on": "Vigencia",
+        "employment_id": "Empleo (id)",
+        "id": "Línea (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Programa",
+        "kind": "Tipo",
+        "title": "Título",
+        "employer": "Empleador",
+        "planned_fte": "ETC planificado",
+        "start_on": "Inicio",
+        "est_annual_cost": "Coste anual est.",
+        "currency": "Moneda",
+        "status": "Estado",
+        "id": "Línea (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Fecha",
+        "employer": "Empleador",
+        "level": "Nivel",
+        "count_a": "Personas A",
+        "count_b": "Personas B",
+        "mean_gap_pct": "Brecha media %",
+        "median_gap_pct": "Brecha mediana %",
+        "unexplained_gap_pct": "Brecha sin explicar %",
+        "method": "Método",
+        "joint_assessment_due": "Evaluación conjunta",
+        "id": "Medición (id)"
       }
     },
     "enumValues": {

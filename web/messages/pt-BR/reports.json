@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "Achados",
         "description": "Sinalizadores prévios por tipo: proporções, taxas ausentes, classes sem solução."
+      },
+      "hrm_pay_bands": {
+        "label": "Faixas",
+        "description": "Uma linha por faixa vigente: nível, escopo, moeda, base e mínimo/meta/máximo."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Linhas de mérito",
+        "description": "Uma linha por decisão: pessoa, empregador, taxa congelada, proposta e status."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Linhas do plano",
+        "description": "Uma linha por movimento: plano, tipo, título, FTE, custo calculado e status."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Medições de diferença",
+        "description": "Uma linha por medição e categoria: nível, pessoas, diferenças e marca."
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "Dia",
         "status": "Status",
         "project_id": "Projeto (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Nível",
+        "family": "Família",
+        "employer": "Empregador",
+        "currency": "Moeda",
+        "basis": "Base",
+        "min": "Mínimo",
+        "target": "Meta",
+        "max": "Máximo",
+        "effective_from": "Vigência",
+        "effective_to": "Fim",
+        "id": "Faixa (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Ciclo",
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "current_rate": "Taxa atual",
+        "currency": "Moeda",
+        "compa_ratio": "Ratio compa",
+        "proposed_pct": "Proposto %",
+        "proposed_rate": "Taxa proposta",
+        "status": "Situação",
+        "effective_on": "Vigência",
+        "employment_id": "Emprego (id)",
+        "id": "Linha (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Plano",
+        "kind": "Tipo",
+        "title": "Título",
+        "employer": "Empregador",
+        "planned_fte": "FTE planejado",
+        "start_on": "Início",
+        "est_annual_cost": "Custo anual est.",
+        "currency": "Moeda",
+        "status": "Situação",
+        "id": "Linha (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Data",
+        "employer": "Empregador",
+        "level": "Nível",
+        "count_a": "Pessoas A",
+        "count_b": "Pessoas B",
+        "mean_gap_pct": "Diferença média %",
+        "median_gap_pct": "Diferença mediana %",
+        "unexplained_gap_pct": "Diferença não explicada %",
+        "method": "Método",
+        "joint_assessment_due": "Avaliação conjunta",
+        "id": "Medição (id)"
       }
     },
     "enumValues": {

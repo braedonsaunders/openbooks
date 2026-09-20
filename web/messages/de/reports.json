@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "Feststellungen",
         "description": "Append-only Vorlaufkennzeichen je Art: Quotenverstöße, fehlende Sätze, ungeklärte Klassen."
+      },
+      "hrm_pay_bands": {
+        "label": "Bänder",
+        "description": "Je eine Zeile pro aktivem Band: Ebene, Geltung, Währung, Basis und Minimum/Ziel/Maximum."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Meritzeilen",
+        "description": "Je eine Zeile pro Entscheidung: Person, Arbeitgeber, eingefrorener Satz, Vorschlag und Status."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Planzeilen",
+        "description": "Je eine Zeile pro geplanter Bewegung: Plan, Art, Titel, VZÄ, kalkulierte Kosten und Status."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Entgeltkennzahlen",
+        "description": "Je eine Zeile pro Kennzahl und Kategorie: Ebene, Köpfe, Lücken und Prüfkennzeichen."
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "Tag",
         "status": "Status",
         "project_id": "Projekt (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "Ebene",
+        "family": "Familie",
+        "employer": "Arbeitgeber",
+        "currency": "Währung",
+        "basis": "Grundlage",
+        "min": "Minimum",
+        "target": "Ziel",
+        "max": "Maximum",
+        "effective_from": "Gültig ab",
+        "effective_to": "Gültig bis",
+        "id": "Band (ID)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Runde",
+        "person": "Mitarbeiter",
+        "employer": "Arbeitgeber",
+        "current_rate": "Aktueller Satz",
+        "currency": "Währung",
+        "compa_ratio": "Compa-Ratio",
+        "proposed_pct": "Vorgeschlagen %",
+        "proposed_rate": "Vorgeschlagener Satz",
+        "status": "Stand",
+        "effective_on": "Wirksam",
+        "employment_id": "Anstellung (ID)",
+        "id": "Zeile (ID)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Vorhaben",
+        "kind": "Art",
+        "title": "Titel",
+        "employer": "Arbeitgeber",
+        "planned_fte": "Geplante VZÄ",
+        "start_on": "Beginn",
+        "est_annual_cost": "Kalk. Jahreskosten",
+        "currency": "Währung",
+        "status": "Stand",
+        "id": "Zeile (ID)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Stichtag",
+        "employer": "Arbeitgeber",
+        "level": "Ebene",
+        "count_a": "Köpfe A",
+        "count_b": "Köpfe B",
+        "mean_gap_pct": "Mittlere Lücke %",
+        "median_gap_pct": "Mediane Lücke %",
+        "unexplained_gap_pct": "Unerklärte Lücke %",
+        "method": "Methode",
+        "joint_assessment_due": "Gemeinsam prüfen",
+        "id": "Kennzahl (ID)"
       }
     },
     "enumValues": {

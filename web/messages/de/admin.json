@@ -986,7 +986,10 @@
     "automations_manage": "Automatisierungen und Genehmigungseinstellungen verfassen",
     "automations_run": "Automatisierungen jetzt ausführen",
     "hrm_construction_read": "Bau-Compliance einsehen",
-    "hrm_construction_manage": "Bau-Compliance verwalten"
+    "hrm_construction_manage": "Bau-Compliance verwalten",
+    "hrm_compensation_read": "Bänder, Architektur und Runden einsehen",
+    "hrm_compensation_manage": "Runden durchführen, Sätze übertragen, Pläne und Kennzahlen erstellen",
+    "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2566,6 +2569,21 @@
         "title": "Quotenregeln",
         "singularTitle": "Quotenregel",
         "description": "Geselle-zu-Azubi-Quoten je Tafel, täglich oder wöchentlich gemessen. Verstöße werden zum Gesellensatz bepreist."
+      },
+      "hrm-job-families": {
+        "title": "Berufsfamilien",
+        "singularTitle": "Berufsfamilie",
+        "description": "Die Gewerke des Unternehmens — stabile Codes, die Ebenen zu Leitern bündeln."
+      },
+      "hrm-job-levels": {
+        "title": "Ebenen",
+        "singularTitle": "Ebene",
+        "description": "Je eine Sprosse pro Leiter mit Rang und erklärten Gleichwertigkeitskriterien."
+      },
+      "hrm-pay-bands": {
+        "title": "Bänder",
+        "singularTitle": "Band",
+        "description": "Versionierte SOLL-Sätze je Geltung: Änderungen sind neue Zeilen, nie Überschreibungen."
       }
     },
     "fields": {
@@ -2898,7 +2916,17 @@
       "scheduleId": "Tafel",
       "ratioJourney": "Geselle",
       "ratioApprentice": "Azubi",
-      "measured": "Messung"
+      "measured": "Messung",
+      "rank": "Rang",
+      "familyId": "Familie",
+      "skillsWeight": "Gewichtung Können",
+      "effortWeight": "Gewichtung Aufwand",
+      "responsibilityWeight": "Gewichtung Verantwortung",
+      "workingConditionsWeight": "Gewichtung Bedingungen",
+      "levelId": "Ebene",
+      "min": "Minimum",
+      "target": "Ziel",
+      "max": "Maximum"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3417,6 +3445,10 @@
       "hrmRatioMeasured": {
         "daily": "Täglich",
         "weekly": "Wöchentlich"
+      },
+      "payBandBasis": {
+        "annual": "Jährlich",
+        "hourly": "Stündlich"
       }
     },
     "bankFeeds": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "Tagegeld",
       "description": "Tagegeld und Fahrtkosten aus genehmigten Zeiten in die Lohnschnittstelle rechnen."
+    },
+    "hrmCompensation": {
+      "title": "Vergütung",
+      "description": "Stellenarchitektur und Bänder: was Rollen zahlen sollten und wo Personen liegen."
+    },
+    "hrmMeritCycles": {
+      "title": "Meritrunden",
+      "description": "Runden, die die Abrechnungswahrheit einfrieren, Erhöhungen entscheiden und Sätze übertragen."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Personalpläne",
+      "description": "Szenarien, kalkuliert aus Bändern, die bei Genehmigung Ausschreibungen öffnen."
+    },
+    "hrmPayTransparency": {
+      "title": "Entgelttransparenz",
+      "description": "Eingefrorene Kennzahlen aus der Abrechnungswahrheit und Auskunftsersuchen."
     }
   },
   "extensions": {

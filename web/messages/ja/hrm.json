@@ -11,7 +11,8 @@
       "recruiting": "採用",
       "performance": "パフォーマンス",
       "benefits": "福利厚生",
-      "compliance": "コンプライアンス"
+      "compliance": "コンプライアンス",
+      "compensation": "報酬"
     },
     "recruiting": {
       "title": "採用",
@@ -826,7 +827,8 @@
       "checklists": "チェックリスト",
       "reviews": "評価",
       "benefits": "福利厚生",
-      "team": "チーム"
+      "team": "チーム",
+      "compensation": "報酬"
     },
     "refusedTitle": "セルフサービスは利用できません",
     "overview": {
@@ -1194,6 +1196,174 @@
       "format": "形式",
       "generate": "生成",
       "cancel": "キャンセル"
+    }
+  },
+  "compensation": {
+    "title": "報酬",
+    "description": "役割の適正給与、バンド内の位置、昇給の決定方法。",
+    "tiles": {
+      "belowMin": "バンド下限未満",
+      "openCyclePacing": " cycle進捗",
+      "awaitingPlans": "承認待ちプラン",
+      "jointFlags": "共同評価対象"
+    },
+    "bandsTitle": "レベル別バンド",
+    "bandsEmpty": "バンドがありません — レベルにバンドを設定してください。",
+    "cyclesTitle": "昇給サイクル",
+    "cyclesEmpty": "サイクルがありません — ラウンドを開いてください。",
+    "plansTitle": "人員計画",
+    "plansEmpty": "プランがありません — シナリオを作成してください。",
+    "architectureTitle": "職務体系",
+    "newCycle": "新規サイクル",
+    "newPlan": "新規プラン",
+    "equity": "給与の公平性",
+    "back": "戻る",
+    "pacing": "予算進捗",
+    "pacingNone": "予算枠が未設定",
+    "pacingNote": "枠の{pct}%を提案済み",
+    "linesTitle": "チーム表",
+    "linesEmpty": "明細がありません — サイクルを開いてください。",
+    "totalCost": "積算合計",
+    "planLinesTitle": "プラン明細",
+    "planLinesEmpty": "明細がありません。",
+    "approveLine": "承認",
+    "columns": {
+      "level": "レベル",
+      "range": "バンド",
+      "headcount": "人数",
+      "placement": "位置",
+      "name": "名前",
+      "status": "状態",
+      "effective": "適用日",
+      "cost": "コスト",
+      "employee": "従業員",
+      "current": "現行",
+      "rating": "評価",
+      "guideline": "ガイドライン",
+      "proposed": "提案",
+      "title": "件名",
+      "kind": "種別",
+      "fte": "常勤換算",
+      "start": "開始"
+    },
+    "placement": {
+      "below_min": "下限未満",
+      "in_range": "範囲内",
+      "above_max": "上限超過",
+      "no_band": "バンドなし"
+    },
+    "cycleKind": {
+      "merit": "昇給",
+      "promotion": "昇進",
+      "adjustment": "調整",
+      "cola": "物価調整"
+    },
+    "cycleStatus": {
+      "draft": "下書き",
+      "open": "公開中",
+      "in_review": "審査中",
+      "approved": "承認済み",
+      "pushed": "反映済み",
+      "closed": "終了",
+      "cancelled": "取消"
+    },
+    "lineStatus": {
+      "pending": "未処理",
+      "proposed": "提案済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "pushed": "反映済み"
+    },
+    "planStatus": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "closed": "終了"
+    },
+    "planLineStatus": {
+      "proposed": "提案済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "opened": "募集中",
+      "filled": "充足済み",
+      "cancelled": "取消"
+    },
+    "lineKind": {
+      "create": "新設",
+      "backfill": "補充",
+      "change": "変更",
+      "terminate": "廃止"
+    },
+    "eventKind": {
+      "opened": "公開",
+      "proposed": "提案",
+      "reopened": "再開",
+      "approved": "承認",
+      "rejected": "却下",
+      "budget_changed": "予算変更",
+      "pushed": "反映",
+      "closed": "終了",
+      "cancelled": "取消"
+    },
+    "drawer": {
+      "proposeTitle": "提案",
+      "decideTitle": "決定",
+      "historyTitle": "履歴",
+      "pctLabel": "昇給 %",
+      "rateLabel": "新レート",
+      "reasonLabel": "理由",
+      "failed": "変更は拒否されました",
+      "submit": "保存",
+      "cancel": "キャンセル",
+      "approve": "承認",
+      "reject": "却下",
+      "reopen": "再開"
+    },
+    "historyColumns": {
+      "event": "イベント",
+      "reason": "理由",
+      "at": "日時"
+    },
+    "emptyHistory": "イベントがありません。"
+  },
+  "equity": {
+    "title": "給与の公平性",
+    "description": "給与実績から算出した確定済み格差指標（等価カテゴリー別）。",
+    "meanGap": "平均格差",
+    "medianGap": "中央値格差",
+    "variableGap": "変動給格差",
+    "jointFlags": "共同評価対象",
+    "categoriesTitle": "カテゴリー別格差",
+    "categoriesEmpty": "測定済みカテゴリーがありません。",
+    "columns": {
+      "category": "カテゴリー",
+      "counts": "人数 A / B",
+      "mean": "平均格差",
+      "median": "中央値格差",
+      "unexplained": "未説明格差",
+      "flag": "フラグ"
+    },
+    "jointDue": "共同で評価",
+    "generate": "スナップショット生成",
+    "emptyTitle": "スナップショットなし",
+    "emptyDescription": "スナップショットを生成して格差を測定してください。"
+  },
+  "myComp": {
+    "title": "自分の報酬",
+    "description": "バンド内の位置、明細、給与情報。",
+    "placement": "バンド内の位置",
+    "statementsTitle": "明細",
+    "columns": {
+      "period": "期間",
+      "generated": "生成日"
+    },
+    "statementsEmpty": "明細がありません。",
+    "requestPayInfo": "給与情報を請求",
+    "requestFailed": "請求は拒否されました",
+    "requestSubmit": "保存",
+    "requestCancel": "キャンセル",
+    "requestStatus": {
+      "open": "受付中"
     }
   }
 }

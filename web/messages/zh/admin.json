@@ -986,7 +986,10 @@
     "automations_manage": "编写自动化和审批设置",
     "automations_run": "立即运行自动化",
     "hrm_construction_read": "查看建筑合规",
-    "hrm_construction_manage": "管理建筑合规"
+    "hrm_construction_manage": "管理建筑合规",
+    "hrm_compensation_read": "查看带宽、体系与周期",
+    "hrm_compensation_manage": "运行周期、推送标准、编写规划与快照",
+    "hrm_compensation_approve": "经审批流决定明细"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2498,6 +2501,21 @@
         "title": "比例规则",
         "singularTitle": "比例规则",
         "description": "每个工资表的熟练工与学徒比例，按日或按周衡量。违规按熟练工标准计价。"
+      },
+      "hrm-job-families": {
+        "title": "岗位族",
+        "singularTitle": "岗位族",
+        "description": "组织的工种 — 将级别分组的稳定编码。"
+      },
+      "hrm-job-levels": {
+        "title": "级别",
+        "singularTitle": "级别",
+        "description": "每条阶梯的一级，含排序与等值标准声明。"
+      },
+      "hrm-pay-bands": {
+        "title": "薪酬带宽",
+        "singularTitle": "薪酬带宽",
+        "description": "按范围版本化的应付标准：变更一律新增行。"
       }
     },
     "fields": {
@@ -2830,7 +2848,17 @@
       "scheduleId": "工资表",
       "ratioJourney": "熟练工",
       "ratioApprentice": "学徒",
-      "measured": "衡量方式"
+      "measured": "衡量方式",
+      "rank": "排序",
+      "familyId": "岗位族",
+      "skillsWeight": "技能权重",
+      "effortWeight": "努力权重",
+      "responsibilityWeight": "责任权重",
+      "workingConditionsWeight": "条件权重",
+      "levelId": "级别",
+      "min": "下限",
+      "target": "目标",
+      "max": "上限"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3349,6 +3377,10 @@
       "hrmRatioMeasured": {
         "daily": "按日",
         "weekly": "按周"
+      },
+      "payBandBasis": {
+        "annual": "年薪",
+        "hourly": "时薪"
       }
     },
     "payroll": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "每日津贴",
       "description": "根据已批准考勤计算每日津贴和差旅费并传入工资。"
+    },
+    "hrmCompensation": {
+      "title": "薪酬",
+      "description": "岗位体系与带宽：岗位应付薪酬与人员位置。"
+    },
+    "hrmMeritCycles": {
+      "title": "调薪周期",
+      "description": "冻结薪酬事实、决定加薪并推送标准的轮次。"
+    },
+    "hrmHeadcountPlans": {
+      "title": "人力规划",
+      "description": "按带宽测算的方案，批准后开启招聘。"
+    },
+    "hrmPayTransparency": {
+      "title": "薪酬透明",
+      "description": "根据薪酬事实冻结的指标与员工信息请求。"
     }
   },
   "backupsManager": {

@@ -11,7 +11,8 @@
       "recruiting": "Recrutamento",
       "performance": "Desempenho",
       "benefits": "Benefícios",
-      "compliance": "Conformidade"
+      "compliance": "Conformidade",
+      "compensation": "Remuneração"
     },
     "recruiting": {
       "title": "Recrutamento",
@@ -826,7 +827,8 @@
       "checklists": "Checklists",
       "reviews": "Avaliações",
       "benefits": "Benefícios",
-      "team": "Equipe"
+      "team": "Equipe",
+      "compensation": "Remuneração"
     },
     "refusedTitle": "O autoatendimento está indisponível",
     "overview": {
@@ -1194,6 +1196,174 @@
       "format": "Formato",
       "generate": "Gerar",
       "cancel": "Cancelar"
+    }
+  },
+  "compensation": {
+    "title": "Remuneração",
+    "description": "O que os cargos devem pagar, se as pessoas estão na faixa e como os aumentos são decididos.",
+    "tiles": {
+      "belowMin": "Abaixo do mínimo",
+      "openCyclePacing": "Ritmo do ciclo",
+      "awaitingPlans": "Planos aguardando",
+      "jointFlags": "Avaliações conjuntas"
+    },
+    "bandsTitle": "Faixas por nível",
+    "bandsEmpty": "Sem faixas — declare uma faixa para um nível.",
+    "cyclesTitle": "Ciclos de mérito",
+    "cyclesEmpty": "Sem ciclos — abra uma rodada.",
+    "plansTitle": "Planos de headcount",
+    "plansEmpty": "Sem planos — elabore um cenário.",
+    "architectureTitle": "Arquitetura de cargos",
+    "newCycle": "Novo ciclo",
+    "newPlan": "Novo plano",
+    "equity": "Equidade salarial",
+    "back": "Voltar",
+    "pacing": "Ritmo orçamentário",
+    "pacingNone": "Sem dotação definida",
+    "pacingNote": "{pct}% da dotação proposto",
+    "linesTitle": "Grade da equipe",
+    "linesEmpty": "Sem linhas — abra o ciclo.",
+    "totalCost": "Custo calculado",
+    "planLinesTitle": "Linhas do plano",
+    "planLinesEmpty": "Sem linhas.",
+    "approveLine": "Aprovar",
+    "columns": {
+      "level": "Nível",
+      "range": "Faixa",
+      "headcount": "Pessoas",
+      "placement": "Posição",
+      "name": "Nome",
+      "status": "Situação",
+      "effective": "Vigência",
+      "cost": "Custo",
+      "employee": "Pessoa",
+      "current": "Atual",
+      "rating": "Avaliação",
+      "guideline": "Diretriz",
+      "proposed": "Proposto",
+      "title": "Título",
+      "kind": "Tipo",
+      "fte": "ETC",
+      "start": "Início"
+    },
+    "placement": {
+      "below_min": "Abaixo do mínimo",
+      "in_range": "Na faixa",
+      "above_max": "Acima do máximo",
+      "no_band": "Sem faixa"
+    },
+    "cycleKind": {
+      "merit": "Mérito",
+      "promotion": "Promoção",
+      "adjustment": "Ajuste",
+      "cola": "Custo de vida"
+    },
+    "cycleStatus": {
+      "draft": "Rascunho",
+      "open": "Aberto",
+      "in_review": "Em revisão",
+      "approved": "Aprovado",
+      "pushed": "Transferido",
+      "closed": "Encerrado",
+      "cancelled": "Cancelado"
+    },
+    "lineStatus": {
+      "pending": "Pendente",
+      "proposed": "Proposto",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado",
+      "pushed": "Transferido"
+    },
+    "planStatus": {
+      "draft": "Rascunho",
+      "submitted": "Enviado",
+      "approved": "Aprovado",
+      "closed": "Encerrado"
+    },
+    "planLineStatus": {
+      "proposed": "Proposto",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado",
+      "opened": "Aberto",
+      "filled": "Preenchido",
+      "cancelled": "Cancelado"
+    },
+    "lineKind": {
+      "create": "Criação",
+      "backfill": "Reposição",
+      "change": "Alteração",
+      "terminate": "Extinção"
+    },
+    "eventKind": {
+      "opened": "Aberto",
+      "proposed": "Proposto",
+      "reopened": "Reaberto",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado",
+      "budget_changed": "Orçamento alterado",
+      "pushed": "Transferido",
+      "closed": "Encerrado",
+      "cancelled": "Cancelado"
+    },
+    "drawer": {
+      "proposeTitle": "Propor",
+      "decideTitle": "Decidir",
+      "historyTitle": "Histórico",
+      "pctLabel": "Aumento %",
+      "rateLabel": "Nova taxa",
+      "reasonLabel": "Motivo",
+      "failed": "A alteração foi recusada",
+      "submit": "Salvar",
+      "cancel": "Cancelar",
+      "approve": "Aprovar",
+      "reject": "Rejeitar",
+      "reopen": "Reabrir"
+    },
+    "historyColumns": {
+      "event": "Evento",
+      "reason": "Motivo",
+      "at": "Data"
+    },
+    "emptyHistory": "Sem eventos."
+  },
+  "equity": {
+    "title": "Equidade salarial",
+    "description": "Métricas congeladas calculadas da verdade da folha, por categoria de igual valor.",
+    "meanGap": "Diferença média",
+    "medianGap": "Diferença mediana",
+    "variableGap": "Diferença variável",
+    "jointFlags": "Avaliação conjunta",
+    "categoriesTitle": "Diferenças por categoria",
+    "categoriesEmpty": "Sem categorias medidas.",
+    "columns": {
+      "category": "Categoria",
+      "counts": "Pessoas A / B",
+      "mean": "Diferença média",
+      "median": "Diferença mediana",
+      "unexplained": "Não explicada",
+      "flag": "Marca"
+    },
+    "jointDue": "Avaliar em conjunto",
+    "generate": "Gerar medição",
+    "emptyTitle": "Sem medição",
+    "emptyDescription": "Gere uma medição para medir diferenças."
+  },
+  "myComp": {
+    "title": "Minha remuneração",
+    "description": "Sua posição na faixa, demonstrativos e informações salariais.",
+    "placement": "Posição na faixa",
+    "statementsTitle": "Demonstrativos",
+    "columns": {
+      "period": "Período",
+      "generated": "Gerado"
+    },
+    "statementsEmpty": "Sem demonstrativos.",
+    "requestPayInfo": "Solicitar informações salariais",
+    "requestFailed": "A solicitação foi recusada",
+    "requestSubmit": "Salvar",
+    "requestCancel": "Cancelar",
+    "requestStatus": {
+      "open": "Aberta"
     }
   }
 }

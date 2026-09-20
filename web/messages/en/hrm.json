@@ -11,7 +11,8 @@
       "recruiting": "Recruiting",
       "performance": "Performance",
       "benefits": "Benefits",
-      "compliance": "Compliance"
+      "compliance": "Compliance",
+      "compensation": "Compensation"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -827,7 +828,8 @@
       "checklists": "Checklists",
       "reviews": "Reviews",
       "benefits": "Benefits",
-      "team": "Team"
+      "team": "Team",
+      "compensation": "Compensation"
     },
     "refusedTitle": "Self-service is unavailable",
     "overview": {
@@ -1195,6 +1197,174 @@
       "format": "Format",
       "generate": "Generate",
       "cancel": "Cancel"
+    }
+  },
+  "compensation": {
+    "title": "Compensation",
+    "description": "What roles should pay, whether people sit in range, and how raises are decided.",
+    "tiles": {
+      "belowMin": "Below band min",
+      "openCyclePacing": "Open cycle pacing",
+      "awaitingPlans": "Plans awaiting approval",
+      "jointFlags": "Joint assessment flags"
+    },
+    "bandsTitle": "Pay bands by level",
+    "bandsEmpty": "No bands yet — declare a band for a level to price it.",
+    "cyclesTitle": "Merit cycles",
+    "cyclesEmpty": "No cycles yet — open a round to price raises.",
+    "plansTitle": "Headcount plans",
+    "plansEmpty": "No plans yet — draft a workforce scenario.",
+    "architectureTitle": "Job architecture",
+    "newCycle": "New cycle",
+    "newPlan": "New plan",
+    "equity": "Pay equity",
+    "back": "Back",
+    "pacing": "Budget pacing",
+    "pacingNone": "No budget envelope set",
+    "pacingNote": "{pct}% of envelope proposed",
+    "linesTitle": "Team grid",
+    "linesEmpty": "No lines — open the cycle to snapshot the team.",
+    "totalCost": "Costed total",
+    "planLinesTitle": "Plan lines",
+    "planLinesEmpty": "No lines yet.",
+    "approveLine": "Approve",
+    "columns": {
+      "level": "Level",
+      "range": "Range",
+      "headcount": "Headcount",
+      "placement": "Placement",
+      "name": "Name",
+      "status": "Status",
+      "effective": "Effective",
+      "cost": "Cost",
+      "employee": "Employee",
+      "current": "Current",
+      "rating": "Rating",
+      "guideline": "Guideline",
+      "proposed": "Proposed",
+      "title": "Title",
+      "kind": "Kind",
+      "fte": "FTE",
+      "start": "Start"
+    },
+    "placement": {
+      "below_min": "Below min",
+      "in_range": "In range",
+      "above_max": "Above max",
+      "no_band": "No band"
+    },
+    "cycleKind": {
+      "merit": "Merit",
+      "promotion": "Promotion",
+      "adjustment": "Adjustment",
+      "cola": "COLA"
+    },
+    "cycleStatus": {
+      "draft": "Draft",
+      "open": "Open",
+      "in_review": "In review",
+      "approved": "Approved",
+      "pushed": "Pushed",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
+    "lineStatus": {
+      "pending": "Pending",
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "pushed": "Pushed"
+    },
+    "planStatus": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "closed": "Closed"
+    },
+    "planLineStatus": {
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "opened": "Opened",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    },
+    "lineKind": {
+      "create": "Create",
+      "backfill": "Backfill",
+      "change": "Change",
+      "terminate": "Terminate"
+    },
+    "eventKind": {
+      "opened": "Opened",
+      "proposed": "Proposed",
+      "reopened": "Reopened",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "budget_changed": "Budget changed",
+      "pushed": "Pushed",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
+    "drawer": {
+      "proposeTitle": "Propose",
+      "decideTitle": "Decide",
+      "historyTitle": "History",
+      "pctLabel": "Raise %",
+      "rateLabel": "New rate",
+      "reasonLabel": "Reason",
+      "failed": "The change was refused",
+      "submit": "Save",
+      "cancel": "Cancel",
+      "approve": "Approve",
+      "reject": "Reject",
+      "reopen": "Reopen"
+    },
+    "historyColumns": {
+      "event": "Event",
+      "reason": "Reason",
+      "at": "At"
+    },
+    "emptyHistory": "No events yet."
+  },
+  "equity": {
+    "title": "Pay equity",
+    "description": "Frozen gap metrics computed from payroll truth, by equal-value category.",
+    "meanGap": "Mean gap",
+    "medianGap": "Median gap",
+    "variableGap": "Variable pay gap",
+    "jointFlags": "Joint assessment due",
+    "categoriesTitle": "Gaps by category",
+    "categoriesEmpty": "No categories measured.",
+    "columns": {
+      "category": "Category",
+      "counts": "Headcount A / B",
+      "mean": "Mean gap",
+      "median": "Median gap",
+      "unexplained": "Unexplained",
+      "flag": "Flag"
+    },
+    "jointDue": "Assess jointly",
+    "generate": "Generate snapshot",
+    "emptyTitle": "No snapshot yet",
+    "emptyDescription": "Compute a snapshot to measure gaps."
+  },
+  "myComp": {
+    "title": "My compensation",
+    "description": "Your band placement, statements, and pay information.",
+    "placement": "Band placement",
+    "statementsTitle": "Statements",
+    "columns": {
+      "period": "Period",
+      "generated": "Generated"
+    },
+    "statementsEmpty": "No statements yet.",
+    "requestPayInfo": "Request pay information",
+    "requestFailed": "The request was refused",
+    "requestSubmit": "Save",
+    "requestCancel": "Cancel",
+    "requestStatus": {
+      "open": "Open"
     }
   }
 }

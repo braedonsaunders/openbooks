@@ -986,7 +986,10 @@
     "automations_manage": "Créer des automatisations et régler les approbations",
     "automations_run": "Exécuter les automatisations",
     "hrm_construction_read": "Voir la conformité construction",
-    "hrm_construction_manage": "Gérer la conformité construction"
+    "hrm_construction_manage": "Gérer la conformité construction",
+    "hrm_compensation_read": "Voir fourchettes, architecture et cycles",
+    "hrm_compensation_manage": "Mener les cycles, transférer les taux, créer plans et mesures",
+    "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2453,6 +2456,21 @@
         "title": "Règles de ratio",
         "singularTitle": "Règle de ratio",
         "description": "Ratios compagnon-apprenti par grille, mesurés quotidiennement ou hebdomadairement. L'écart se paie au taux compagnon."
+      },
+      "hrm-job-families": {
+        "title": "Familles d'emplois",
+        "singularTitle": "Famille d'emplois",
+        "description": "Les métiers de l'organisation — codes stables regroupant les niveaux."
+      },
+      "hrm-job-levels": {
+        "title": "Niveaux",
+        "singularTitle": "Niveau",
+        "description": "Un échelon par grille avec rang et critères d'égale valeur déclarés."
+      },
+      "hrm-pay-bands": {
+        "title": "Fourchettes",
+        "singularTitle": "Fourchette",
+        "description": "Lignes versionnées de salaire CIBLE par périmètre : tout changement est une ligne nouvelle."
       }
     },
     "fields": {
@@ -2785,7 +2803,17 @@
       "scheduleId": "Grille",
       "ratioJourney": "Compagnon",
       "ratioApprentice": "Apprenti",
-      "measured": "Mesure"
+      "measured": "Mesure",
+      "rank": "Rang",
+      "familyId": "Famille",
+      "skillsWeight": "Poids des compétences",
+      "effortWeight": "Poids de l'effort",
+      "responsibilityWeight": "Poids des responsabilités",
+      "workingConditionsWeight": "Poids des conditions",
+      "levelId": "Niveau",
+      "min": "Minimum",
+      "target": "Cible",
+      "max": "Maximum"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3304,6 +3332,10 @@
       "hrmRatioMeasured": {
         "daily": "Quotidienne",
         "weekly": "Hebdomadaire"
+      },
+      "payBandBasis": {
+        "annual": "Annuel",
+        "hourly": "Horaire"
       }
     },
     "laborCosting": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "Journalières",
       "description": "Calculer journalières et déplacements depuis les temps approuvés vers la paie."
+    },
+    "hrmCompensation": {
+      "title": "Rémunération",
+      "description": "Architecture et fourchettes : ce que les rôles devraient payer et où chacun se situe."
+    },
+    "hrmMeritCycles": {
+      "title": "Cycles de mérite",
+      "description": "Tours qui figent la vérité de paie, décident les hausses et transfèrent les taux."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Plans d'effectifs",
+      "description": "Scénarios chiffrés depuis les fourchettes, ouvrant des requisitions à l'approbation."
+    },
+    "hrmPayTransparency": {
+      "title": "Transparence salariale",
+      "description": "Mesures figées depuis la paie et demandes d'information des salariés."
     }
   },
   "backupsManager": {

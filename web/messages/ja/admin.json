@@ -986,7 +986,10 @@
     "automations_manage": "自動化と承認設定を作成",
     "automations_run": "自動化を今すぐ実行",
     "hrm_construction_read": "建設コンプライアンスを表示",
-    "hrm_construction_manage": "建設コンプライアンスを管理"
+    "hrm_construction_manage": "建設コンプライアンスを管理",
+    "hrm_compensation_read": "バンド・体系・サイクルを閲覧",
+    "hrm_compensation_manage": "サイクル実行、レート反映、プランとスナップショット作成",
+    "hrm_compensation_approve": "承認フローを通じて明細を決定"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2566,6 +2569,21 @@
         "title": "比率ルール",
         "singularTitle": "比率ルール",
         "description": "賃金表ごとの熟練・見習い比率を日次・週次で測定。違反は熟練単価で計算。"
+      },
+      "hrm-job-families": {
+        "title": "職種ファミリー",
+        "singularTitle": "職種ファミリー",
+        "description": "組織の職種 — レベルを束ねる安定コード。"
+      },
+      "hrm-job-levels": {
+        "title": "レベル",
+        "singularTitle": "レベル",
+        "description": "ラダーごとの段位。ランクと等価基準を宣言。"
+      },
+      "hrm-pay-bands": {
+        "title": "バンド",
+        "singularTitle": "バンド",
+        "description": "範囲別のバージョン管理された想定給与。変更は新規行。"
       }
     },
     "fields": {
@@ -2898,7 +2916,17 @@
       "scheduleId": "賃金表",
       "ratioJourney": "熟練",
       "ratioApprentice": "見習い",
-      "measured": "測定"
+      "measured": "測定",
+      "rank": "ランク",
+      "familyId": "ファミリー",
+      "skillsWeight": "スキルの重み",
+      "effortWeight": "努力の重み",
+      "responsibilityWeight": "責任の重み",
+      "workingConditionsWeight": "労働条件の重み",
+      "levelId": "レベル",
+      "min": "最小",
+      "target": "目標",
+      "max": "最大"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3417,6 +3445,10 @@
       "hrmRatioMeasured": {
         "daily": "日次",
         "weekly": "週次"
+      },
+      "payBandBasis": {
+        "annual": "年額",
+        "hourly": "時給"
       }
     },
     "invoicing": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "日当",
       "description": "承認済み勤怠から日当・旅費を給与シームへ計算。"
+    },
+    "hrmCompensation": {
+      "title": "報酬",
+      "description": "職務体系とバンド：役割の適正給与と各人の位置。"
+    },
+    "hrmMeritCycles": {
+      "title": "昇給サイクル",
+      "description": "給与実績を確定し昇給を決定して反映するラウンド。"
+    },
+    "hrmHeadcountPlans": {
+      "title": "人員計画",
+      "description": "バンドから積算したシナリオ。承認で求人を開く。"
+    },
+    "hrmPayTransparency": {
+      "title": "給与の透明性",
+      "description": "給与実績からの確定済み指標と従業員の情報請求。"
     }
   },
   "extensions": {

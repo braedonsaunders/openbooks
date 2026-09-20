@@ -712,6 +712,22 @@
       "hrm_compliance_findings": {
         "label": "指摘事項",
         "description": "種類別の追加専用事前フラグ：比率違反、賃金未設定、未解決クラス。"
+      },
+      "hrm_pay_bands": {
+        "label": "バンド",
+        "description": "有効バンドごとに1行：レベル、範囲、通貨、基準、最小/目標/最大。"
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "昇給明細",
+        "description": "決定ごとに1行：本人、雇用主、確定レート、提案、状態。"
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "プラン明細",
+        "description": "移動ごとに1行：プラン、種別、件名、FTE、積算コスト、状態。"
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "格差スナップショット",
+        "description": "スナップショット×カテゴリーごとに1行：レベル、人数、格差、フラグ。"
       }
     },
     "columns": {
@@ -1425,6 +1441,58 @@
         "worked_on": "日",
         "status": "状態",
         "project_id": "プロジェクト (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "レベル",
+        "family": "ファミリー",
+        "employer": "雇用主",
+        "currency": "通貨",
+        "basis": "基準",
+        "min": "最小",
+        "target": "目標",
+        "max": "最大",
+        "effective_from": "適用開始",
+        "effective_to": "適用終了",
+        "id": "バンド (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "サイクル",
+        "person": "本人",
+        "employer": "雇用主",
+        "current_rate": "現行レート",
+        "currency": "通貨",
+        "compa_ratio": "コンパレシオ",
+        "proposed_pct": "提案 %",
+        "proposed_rate": "提案レート",
+        "status": "状態",
+        "effective_on": "適用日",
+        "employment_id": "雇用 (id)",
+        "id": "明細 (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "プラン",
+        "kind": "種別",
+        "title": "件名",
+        "employer": "雇用主",
+        "planned_fte": "計画FTE",
+        "start_on": "開始",
+        "est_annual_cost": "推定年額",
+        "currency": "通貨",
+        "status": "状態",
+        "id": "明細 (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "基準日",
+        "employer": "雇用主",
+        "level": "レベル",
+        "count_a": "人数 A",
+        "count_b": "人数 B",
+        "mean_gap_pct": "平均格差 %",
+        "median_gap_pct": "中央値格差 %",
+        "unexplained_gap_pct": "未説明格差 %",
+        "method": "手法",
+        "joint_assessment_due": "共同評価",
+        "id": "スナップショット (id)"
       }
     },
     "enumValues": {

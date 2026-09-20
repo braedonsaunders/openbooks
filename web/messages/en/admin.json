@@ -986,7 +986,10 @@
     "automations_manage": "Author automations and approval settings",
     "automations_run": "Run automations now",
     "hrm_construction_read": "See construction compliance",
-    "hrm_construction_manage": "Manage construction compliance"
+    "hrm_construction_manage": "Manage construction compliance",
+    "hrm_compensation_read": "View bands, architecture, and cycles",
+    "hrm_compensation_manage": "Run cycles, push rates, and author plans and snapshots",
+    "hrm_compensation_approve": "Decide cycle lines through the approval run"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2498,6 +2501,21 @@
         "title": "Ratio rules",
         "singularTitle": "Ratio rule",
         "description": "Journey-to-apprentice ratios per schedule, measured daily or weekly. A breach reprices apprentice hours at the journey line."
+      },
+      "hrm-job-families": {
+        "title": "Job families",
+        "singularTitle": "Job family",
+        "description": "The org's crafts — stable per-org codes grouping job levels into ladders."
+      },
+      "hrm-job-levels": {
+        "title": "Job levels",
+        "singularTitle": "Job level",
+        "description": "One rung per ladder with rank and the declared equal-value criteria."
+      },
+      "hrm-pay-bands": {
+        "title": "Pay bands",
+        "singularTitle": "Pay band",
+        "description": "Versioned SHOULD-pay rows per scope: a band change is a new row, never an overwrite."
       }
     },
     "fields": {
@@ -2830,7 +2848,17 @@
       "scheduleId": "Schedule",
       "ratioJourney": "Journey",
       "ratioApprentice": "Apprentice",
-      "measured": "Measured"
+      "measured": "Measured",
+      "rank": "Rank",
+      "familyId": "Family",
+      "skillsWeight": "Skills weight",
+      "effortWeight": "Effort weight",
+      "responsibilityWeight": "Responsibility weight",
+      "workingConditionsWeight": "Working conditions weight",
+      "levelId": "Level",
+      "min": "Min",
+      "target": "Target",
+      "max": "Max"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3349,6 +3377,10 @@
       "hrmRatioMeasured": {
         "daily": "Daily",
         "weekly": "Weekly"
+      },
+      "payBandBasis": {
+        "annual": "Annual",
+        "hourly": "Hourly"
       }
     },
     "payroll": {
@@ -4646,6 +4678,22 @@
     "hrmPerDiem": {
       "title": "Per diem",
       "description": "Compute per-diem and travel pay from approved time into the payroll seam."
+    },
+    "hrmCompensation": {
+      "title": "Compensation",
+      "description": "Job architecture and pay bands: what roles should pay and where people sit in range."
+    },
+    "hrmMeritCycles": {
+      "title": "Merit cycles",
+      "description": "merit rounds that snapshot payroll truth, decide raises, and push approved rates to payroll."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Headcount plans",
+      "description": "Workforce scenarios costed from bands before approval, opening requisitions on approval."
+    },
+    "hrmPayTransparency": {
+      "title": "Pay transparency",
+      "description": "Frozen equity snapshots from payroll truth and worker pay-information requests."
     }
   },
   "backupsManager": {
