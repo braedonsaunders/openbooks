@@ -1391,6 +1391,98 @@ export function incomeTaxWithholdingSystemKeys(): readonly string[] {
   return [...keys].sort();
 }
 
+/**
+ * System keys of every statutory EMPLOYEE SOCIAL-INSURANCE contribution,
+ * derived from the pack declarations — never a hand-maintained key list.
+ *
+ * The predicate is `kind === "deduction"` and `assessedOn === "earnings"`,
+ * the exact complement of {@link incomeTaxWithholdingSystemKeys} over the
+ * statutory deduction set, and each half is load-bearing:
+ *
+ * - `deduction` (not `employer_contribution`, not `credit`) keeps the figure
+ *   to amounts withheld from the employee's pay. The employer shares ride the
+ *   same system keys (CPP, EI, QPIP, INPS, PRSI …) but accrue at employer
+ *   cost — counting them would overstate the withholding — and the Italian
+ *   refundable credits (`ti_payout`, `somma_payout`) INCREASE net, so counting
+ *   them would understate it.
+ * - `earnings` (not `taxable_income`) keeps income-tax withholding OUT.
+ *   The two sets are disjoint and jointly exhaustive over every statutory
+ *   deduction: a component the packs declare as withheld from pay lands in
+ *   exactly one of the two buckets, so no withheld money is invisible and
+ *   none is counted twice.
+ *
+ * What this INCLUDES is then a judgement the declarations already made:
+ * CPP/CPP2, EI and QPIP (Québec parental insurance — the register's old
+ * `cpp_fica`/`ei` factor buckets dropped it entirely, so real withheld money
+ * never appeared), NIC, PRSI, USC, the four ZUS contributions, INPS, the six
+ * French cotisations, the four German Sozialversicherung branches, Japan's
+ * pension and health, Spain's four Seguridad Social lines, Brazil's INSS,
+ * Singapore's CPF employee share, and US Social Security / Medicare (both
+ * tranches). Australia and the Netherlands correctly contribute NOTHING:
+ * their packs declare no earnings-assessed employee deduction (PAYG and
+ * loonheffing are income-tax withholding), so an empty per-pack slice is
+ * the true figure, not a silent zero.
+ *
+ * A new pack is covered on the day it registers: its employee social
+ * contributions are `earnings`-assessed deductions by construction (the
+ * fixpoint needs that declaration to re-derive them), so they land in this
+ * set with no generic-layer edit. The payroll register's `cpp_fica` and
+ * `ei` columns (packages/reports, bound at the report catalog) are the
+ * consumers: `ei` counts {@link eiColumnSystemKeys}, `cpp_fica` counts the
+ * structural complement. The register once carried a CA/US factor literal
+ * (`C + C2 + SS + MED + MED2` and `EI`) that printed 0.00 for eleven packs
+ * and dropped QPIP everywhere — never restore one.
+ */
+export function employeeSocialInsuranceSystemKeys(): readonly string[] {
+  const keys = new Set<string>();
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    for (const component of packStatutoryComponents(pack.country)) {
+      if (component.kind === "deduction" && component.assessedOn === "earnings") {
+        keys.add(component.systemKey);
+      }
+    }
+  }
+  return [...keys].sort();
+}
+
+/**
+ * System keys the payroll register counts in its EI column: `ei` and `qpip`.
+ *
+ * This pair is a STATED RULE, not a derivation, and it is documented as one
+ * because the alternative — pretending the declarations choose it — would be
+ * the load-bearing-prose defect (a claim about an absent mechanism). No
+ * pack attribute distinguishes an "EI-family" contribution: slots are a
+ * per-pack vocabulary, sequences order within a pack, and nothing marks a
+ * contribution short-term versus pension. So the declarations support one
+ * social bucket ({@link employeeSocialInsuranceSystemKeys}), while the
+ * register — its `CPP / FICA (employee)` and `EI (employee)` labels frozen
+ * by owner ruling — keeps two columns. Splitting one derived bucket across
+ * two frozen jurisdiction labels needs a rule, and this is it:
+ *
+ * - `ei` keeps legacy continuity: the old column read the EI factor, so EI
+ *   stays EI.
+ * - `qpip` joins it as the mandated fold: Québec parental insurance was in
+ *   NEITHER register bucket, a silent drop of real withheld money corrected
+ *   in this same change. EI is its truthful home, not CPP/FICA: QPIP is
+ *   Québec's EI-system counterpart (the CA pack maps both slots to the same
+ *   `eiPayableAccountId` fallback, declares them adjacently at sequences
+ *   140/150, and Québec employees pay reduced EI precisely because QPIP
+ *   covers parental benefits).
+ * - Everything else in the derived social set lands in `cpp_fica` by
+ *   STRUCTURAL COMPLEMENT (the binder subtracts this pair from the full
+ *   set), never by enumeration: a present or future pack's contributions
+ *   are visible in one of the two columns with no per-pack configuration,
+ *   and a future short-term-insurance contribution defaulting to `cpp_fica`
+ *   is mislabelled but VISIBLE — the failure this rule refuses is
+ *   invisibility, not imperfect taxonomy under frozen labels.
+ *
+ * The binder refuses an `ei` key outside the derived social set, so this
+ * pair can never count money the declarations do not put in the bucket.
+ */
+export function eiColumnSystemKeys(): readonly string[] {
+  return ["ei", "qpip"];
+}
+
 // ---------------------------------------------------------------------------
 // The jurisdiction chain, resolved ONCE
 // ---------------------------------------------------------------------------
