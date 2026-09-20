@@ -71,3 +71,46 @@ test('header and footer chrome HTML cannot produce a network request', () => {
     inlineRequests.every((request) => isAllowedPdfRequest(request.resourceType, request.url)),
   )
 })
+
+test('header chrome CSS image-set and escaped url() cannot produce a network request', () => {
+  // image-set() accepts a string URL without url(); a regex that only
+  // rewrites url() leaves Chromium a fetchable candidate. CSS identifier
+  // escapes (`\75rl` = url) hide the function from a literal /url(/ match.
+  const imageSet = preparePdfChromeHtml(
+    '<div style="background-image:image-set(&quot;https://static.example/logo.png&quot; 1x)">Acme</div>',
+  )
+  const escapedFn = preparePdfChromeHtml(
+    '<div style="background:\\75rl(https://static.example/logo.png)">Acme</div>',
+  )
+  const escapedUrl = preparePdfChromeHtml(
+    '<div style="background:url(\\68ttps://static.example/logo.png)">Acme</div>',
+  )
+  const styleBlock = preparePdfChromeHtml(
+    '<style>p{background-image:image-set(url(https://static.example/logo.png) 1x)}</style>Page {{page}}',
+  )
+  const webkitSet = preparePdfChromeHtml(
+    '<div style="background-image:-webkit-image-set(&quot;https://static.example/logo.png&quot; 1x)">Acme</div>',
+  )
+  const escapedSet = preparePdfChromeHtml(
+    '<div style="background-image:\\69mage-set(&quot;https://static.example/logo.png&quot; 1x)">Acme</div>',
+  )
+
+  for (const html of [imageSet, escapedFn, escapedUrl, styleBlock, webkitSet, escapedSet]) {
+    assert.match(html, /Acme|pageNumber/)
+    assert.doesNotMatch(html, /static\.example/i)
+    assert.doesNotMatch(html, /https?:\/\//i)
+    const requests = pdfChromeSubresourceRequests(html)
+    assert.equal(requests.filter((request) => /^https?:/i.test(request.url)).length, 0)
+    assert.ok(requests.every((request) => isAllowedPdfRequest(request.resourceType, request.url)))
+  }
+
+  const inlineSet = preparePdfChromeHtml(
+    '<div style="background-image:image-set(url(data:image/png;base64,AAAA) 1x)">Acme</div>',
+  )
+  assert.match(inlineSet, /data:image\/png;base64,AAAA/)
+  assert.ok(
+    pdfChromeSubresourceRequests(inlineSet).every((request) =>
+      isAllowedPdfRequest(request.resourceType, request.url),
+    ),
+  )
+})
