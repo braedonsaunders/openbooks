@@ -5,7 +5,7 @@ import {
   countVariance,
   parseCountStatus,
 } from "./stock-counts.ts";
-import { InventoryError } from "./inventory.ts";
+import { InventoryError } from "./contracts.ts";
 
 /**
  * Stock-count lifecycle guards, proved without a database: variance math and
