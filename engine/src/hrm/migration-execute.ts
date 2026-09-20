@@ -303,10 +303,23 @@ export function finalizeEmploymentMigrationReport(
  * CLI exit contract. Non-zero when any person was refused unless partial
  * application was explicitly allowed; an empty inventory is never clean;
  * already_migrated needs no operator action so it never blocks.
+ *
+ * allowPartial means "accept the ready SUBSET". An empty subset is not a
+ * partial success: when every person was refused, nothing advanced and the
+ * shell must see a failure (the constructed rehearsal caught exit 0 on
+ * "4 persons, 0 migrated, 4 refused, 0 rows written"). A run where everyone
+ * was already settled is a clean re-run and stays 0; a dry run counts what
+ * it would migrate the same way.
  */
 export function migrationExitCode(report: EmploymentMigrationReport): number {
   if (report.status === "empty_not_evaluated") return 1;
   if (report.totals.refused > 0 && !report.allowPartial) return 1;
+  if (report.totals.refused > 0) {
+    const advanced = report.dryRun
+      ? report.totals.wouldMigrate + report.totals.alreadyMigrated
+      : report.totals.migrated + report.totals.alreadyMigrated;
+    if (advanced === 0) return 1;
+  }
   return 0;
 }
 
