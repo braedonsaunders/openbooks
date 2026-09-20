@@ -78,8 +78,16 @@ async function linkPerson(orgId: string, userId: string, partyId?: string): Prom
   return id;
 }
 
+async function enableHrm(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
+     where id = ${orgId}`);
+}
+
 async function setupHarness(): Promise<Harness> {
   const org = await createScratchOrg();
+  await enableHrm(org.orgId);
   const employeeId = await createScratchUser(org.orgId, "Leave Employee", "leave_employee");
   const managerId = await createScratchUser(org.orgId, "Leave Manager", "leave_manager");
   const approverId = await createScratchUser(org.orgId, "Leave Approver", "leave_approver");

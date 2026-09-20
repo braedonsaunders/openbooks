@@ -2875,6 +2875,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // English except for reviewed cognates, pinned to the exact term.
   // F-coord-008 grew the source to 3362 keys (allocatedThrough, dateBasis,
   // unitsTotal, depreciationMethodId); all four ship translated in zh/pt-BR.
+  // HR-5 grew it to 3416 (leave-types/leave-policies entities, leave fields,
+  // fieldHelp, leaveValueCrossing options, hrm.leave.* permission labels);
+  // all 24 ship translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2994,6 +2997,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
   assert.equal(wanted.length, 3418, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3416, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3230,6 +3234,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'de:admin.setup.entities.sftp.title',
     'de:admin.setup.fieldHelp.expiryWarningDaysHint',
     'de:admin.setup.fieldHelp.graceDaysHint',
+    // HR-5: genuine German prose whose only English-looking words are the
+    // JSON accrual-kind/field identifiers that must stay exact (kind,
+    // per_year, hours, none, per_period, periods_per_year, unlimited).
+    'de:admin.setup.fieldHelp.leaveAccrualRule',
     'de:admin.setup.fields.basis',
     'de:admin.setup.fields.code',
     'de:admin.setup.fields.dimension',
@@ -3332,6 +3340,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   const ADMIN_I2_SOURCE_COUNT = 3418
   const ADMIN_I2_SOURCE_HASH = '967677a1aaa665c32afb8e616d2c72dbe90fa6c867ddc9aab86fd3040bc0e64d'
+  const ADMIN_I2_SOURCE_COUNT = 3416
+  const ADMIN_I2_SOURCE_HASH = 'a2a898364d8d6a02b2a440cc40ba56a3a8a84cd25028fa7fba78a8c6ab7eb3f7'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4853,6 +4863,10 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "fr:reports.run.csvSection|Section",
   "fr:reports.run.subtotal|{level} — total",
   "fr:reports.run.summarySource|Source",
+  "fr:reports.catalog.columns.hrm_leave_absences.on_date|Date",
+  "fr:reports.catalog.columns.hrm_leave_absences.source|Source",
+  "fr:reports.catalog.columns.hrm_leave_absences.id|Absence (id)",
+  "de:reports.catalog.columns.hrm_leave_absences.person|Person",
   "fr:reports.run.summaryTotal|Total {measure}",
   "fr:reports.schedule.recipientsPlaceholder|finance@example.com, cfo@example.com",
   "fr:reports.statement.sectionTotal|Total {section}",
@@ -5094,6 +5108,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
   "reports": 1277,
+  "reports": 1254,
   "sync": 172,
   "login": 33,
   "accounts": 82,
