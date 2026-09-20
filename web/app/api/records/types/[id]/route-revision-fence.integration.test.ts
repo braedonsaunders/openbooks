@@ -84,6 +84,21 @@ function patch(id: string, body: unknown) {
   )
 }
 
+async function openedRevision(id: string): Promise<string> {
+  const opened = await GET(
+    new Request(`http://localhost/api/records/types/${id}`),
+    { params: Promise.resolve({ id }) },
+  )
+  assert.equal(opened.status, 200, await opened.clone().text())
+  const token = ((await opened.json()) as { type: { updated_at: string } }).type.updated_at
+  assert.match(token, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+  return token
+}
+
+function fieldsStillDeclareSubsidiary(fields: unknown): boolean {
+  return JSON.stringify(fields).includes('subsidiary_id')
+}
+
 test(
   'a fenced type PATCH that drops subsidiary_id is refused by name and leaves the field',
   { skip: !env.OPENBOOKS_DB_URL },
@@ -105,7 +120,8 @@ test(
     state.authz = authz(actorId, org.orgId, new Set([org.subsidiaryId]))
     try {
       await withOrgContext(org.orgId, async () => {
-        const response = await patch(typeId, { fields: unscopeFields })
+        const token = await openedRevision(typeId)
+        const response = await patch(typeId, { fields: unscopeFields, expectedUpdatedAt: token })
         assert.equal(response.status, 422, await response.clone().text())
         const body = (await response.json()) as { error?: string }
         assert.match(body.error ?? '', /subsidiary_id/)
@@ -114,7 +130,7 @@ test(
           select fields from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
         `)).rows[0]
         assert.equal(
-          JSON.stringify(stored?.fields).includes('subsidiary_id'),
+          fieldsStillDeclareSubsidiary(stored?.fields),
           true,
           'the live definition still declares subsidiary_id',
         )
@@ -147,13 +163,7 @@ test(
     state.authz = authz(actorId, org.orgId, null)
     try {
       await withOrgContext(org.orgId, async () => {
-        const opened = await GET(
-          new Request(`http://localhost/api/records/types/${typeId}`),
-          { params: Promise.resolve({ id: typeId }) },
-        )
-        assert.equal(opened.status, 200, await opened.clone().text())
-        const stale = ((await opened.json()) as { type: { updated_at: string } }).type.updated_at
-        assert.match(stale, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        const stale = await openedRevision(typeId)
 
         const first = await patch(typeId, { name: 'Tab A', expectedUpdatedAt: stale })
         assert.equal(first.status, 200, await first.clone().text())
@@ -173,19 +183,88 @@ test(
         assert.equal(live?.name, 'Tab A', 'the stale writer must not persist')
 
         const tokenless = await patch(typeId, { name: 'Autosave' })
-        assert.equal(tokenless.status, 200, await tokenless.clone().text())
-        const afterAutosave = ((await tokenless.json()) as { type: { name: string; updated_at: string } }).type
-        assert.equal(afterAutosave.name, 'Autosave')
+        assert.equal(tokenless.status, 409, await tokenless.clone().text())
+        const tokenlessBody = (await tokenless.json()) as { error?: string; code?: string }
+        assert.equal(tokenlessBody.code, 'revision_conflict')
+        assert.match(tokenlessBody.error ?? '', /reload/i)
+        const afterTokenless = (await db.execute<{ name: string }>(sql`
+          select name from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
+        `)).rows[0]
+        assert.equal(afterTokenless?.name, 'Tab A', 'a tokenless full-state PATCH must not persist')
 
         const [winner, loser] = await Promise.all([
-          patch(typeId, { name: 'Concurrent A', expectedUpdatedAt: afterAutosave.updated_at }),
-          patch(typeId, { name: 'Concurrent B', expectedUpdatedAt: afterAutosave.updated_at }),
+          patch(typeId, { name: 'Concurrent A', expectedUpdatedAt: afterFirst.updated_at }),
+          patch(typeId, { name: 'Concurrent B', expectedUpdatedAt: afterFirst.updated_at }),
         ])
         const statuses = [winner.status, loser.status].sort()
         assert.deepEqual(statuses, [200, 409])
         const conflict = winner.status === 409 ? winner : loser
         const conflictBody = (await conflict.json()) as { error?: string }
         assert.match(conflictBody.error ?? '', /reload/i)
+      })
+    } finally {
+      state.authz = null
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'a fenced drop is judged on the locked row so a concurrently added subsidiary_id stays',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeId = randomUUID()
+    const { org, actorId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+        values
+          (${typeId}, ${created.orgId}, ${`race-${typeId.slice(0, 8)}`}, 'Race Type', 'Race Types',
+           ${JSON.stringify(unscopeFields)}::jsonb, 'draft', ${actor}, ${actor})
+      `)
+      return { org: created, actorId: actor }
+    })
+
+    try {
+      await withOrgContext(org.orgId, async () => {
+        state.authz = authz(actorId, org.orgId, new Set([org.subsidiaryId]))
+        const openedWithoutField = await openedRevision(typeId)
+
+        state.authz = authz(actorId, org.orgId, null)
+        const added = await patch(typeId, {
+          fields: scopedFields,
+          expectedUpdatedAt: openedWithoutField,
+        })
+        assert.equal(added.status, 200, await added.clone().text())
+        const afterAdd = ((await added.json()) as { type: { updated_at: string } }).type.updated_at
+        assert.notEqual(afterAdd, openedWithoutField)
+
+        state.authz = authz(actorId, org.orgId, new Set([org.subsidiaryId]))
+        const tokenlessDrop = await patch(typeId, { fields: unscopeFields })
+        assert.equal(tokenlessDrop.status, 409, await tokenlessDrop.clone().text())
+        const staleDrop = await patch(typeId, {
+          fields: unscopeFields,
+          expectedUpdatedAt: openedWithoutField,
+        })
+        assert.equal(staleDrop.status, 409, await staleDrop.clone().text())
+        const currentDrop = await patch(typeId, {
+          fields: unscopeFields,
+          expectedUpdatedAt: afterAdd,
+        })
+        assert.equal(currentDrop.status, 422, await currentDrop.clone().text())
+        const currentBody = (await currentDrop.json()) as { error?: string }
+        assert.match(currentBody.error ?? '', /Keep the subsidiary_id field/)
+
+        const stored = (await db.execute<{ fields: unknown }>(sql`
+          select fields from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
+        `)).rows[0]
+        assert.equal(
+          fieldsStillDeclareSubsidiary(stored?.fields),
+          true,
+          'tokenless or stale drop must not remove a concurrently added subsidiary_id',
+        )
       })
     } finally {
       state.authz = null

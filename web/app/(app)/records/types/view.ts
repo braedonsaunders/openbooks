@@ -244,6 +244,7 @@ function serializeType(t: RecordTypeRow) {
     showInNav: t.show_in_nav,
     allowedRoles: t.allowed_roles,
     sortOrder: t.sort_order,
+    updated_at: t.updated_at,
   }
 }
 
