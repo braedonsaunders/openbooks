@@ -20,7 +20,8 @@
  * 122.295; Circ. 27/2026: FPLD 33%) with the 9,19/23,81 split carried from
  * Tabella 1/2025 (labeled in the module); the CU half-up rule and the ratio
  * truncation carried pending CU 2027 / 730-2027. The 2026-only 5%/15%
- * substitute regimes are refused by name (no engine inputs for them).
+ * substitute regimes and the tourism-sector integrativo (c. 18–21) are
+ * refused by name (no engine inputs for them).
  * Sourcing outcomes per host are recorded in tax-year-2026.ts.
  */
 import type { PayrollPackRates } from "../statutory-rates.ts";
@@ -47,7 +48,7 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
       label: IT_2026_EDITION_LABEL,
       effectiveFrom: "2026-01-01",
       citation:
-        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4, 7, 10–11 "
+        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4, 7, 10–11, 18–21 "
         + "(GU n. 301 del 30/12/2025, S.O.); AdE IRPEF rates page "
         + "(upd. 16/01/2026); AdE Circ. 2/E del 24 febbraio 2026 + FAQ Circ. "
         + "3/E/2026 (2026 substitute regimes, refused); L. 207/2024 art. 1 "

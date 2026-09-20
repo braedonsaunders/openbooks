@@ -28,10 +28,12 @@
  *   (full texts via the MEF portal, "In vigore dal 01/01/2025"), the c. 2
  *   art. 13 amendment and the c. 3 D.L. 3/2020 amendment are textual TUIR
  *   amendments, and no L. 199/2025 comma touches art. 13.
- * - Two NEW 2026-only substitute-tax regimes (5% on contractual-renewal
- *   increases, 15% on night/holiday/shift allowances) are REFUSED by name:
- *   the engine has no CCNL-increase or allowance inputs, so there is nothing
- *   to price them on. See IT_REFUSED_2026.
+ * - Three NEW 2026-only measures (5% on contractual-renewal increases,
+ *   15% on night/holiday/shift allowances, 15% trattamento integrativo
+ *   speciale for tourism/hospitality night and festive-holiday overtime,
+ *   L. 199/2025 c. 18–21 for prestazioni 1 Jan–30 Sep 2026) are REFUSED by
+ *   name: the engine has no CCNL-increase, allowance, or sector inputs, so
+ *   there is nothing to price them on. See IT_REFUSED_2026.
  *
  * Sourcing outcomes per host (recorded distinctly):
  * - agenziaentrate.gov.it: 200, full text — the EN IRPEF rates page (last
@@ -375,9 +377,9 @@ export const IT_2026_SURTAX_MODEL = "tenant-declared-rate" as const;
 /**
  * Named refusals: everything the 2026 engine does not compute, with the
  * reason. The engine quotes these names back. Carries the full 2025 list
- * (same gaps, same law) plus the three 2026-specific entries at the end:
- * the two 2026-only substitute-tax regimes and the 200k sterilizzazione
- * recording.
+ * (same gaps, same law) plus the four 2026-specific entries at the end:
+ * the two 2026-only substitute-tax regimes, the tourism-sector integrativo,
+ * and the 200k sterilizzazione recording.
  */
 export const IT_REFUSED_2026: readonly string[] = [
   "art. 12 TUIR family detrazioni (coniuge/figli/ascendenti: needs ages, disability status and ripartizione the pack does not carry)",
@@ -400,6 +402,7 @@ export const IT_REFUSED_2026: readonly string[] = [
   "TFR accrual, tredicesima/quattordicesima timing, CU/770 population, INAIL",
   "L. 199/2025 art. 1 c. 7 imposta sostitutiva 5% on 2026 contractual-renewal increases (private-sector, 2025 lavoro income ≤ 33.000; AdE Circ. 2/E/2026): the engine carries no CCNL-increase input, so no line can be priced under it",
   "L. 199/2025 art. 1 c. 10–11 imposta sostitutiva 15% on 2026 night/holiday/rest-day/shift allowances (cap 1.500/year; AdE FAQ Circ. 3/E/2026): the engine carries no allowance inputs, so no line can be priced under it",
+  "L. 199/2025 art. 1 c. 18–21 trattamento integrativo speciale 15% for tourism/hospitality/food-service night work and festive-holiday overtime (prestazioni 1 Jan–30 Sep 2026): a sector- and date-gated credit the engine has no sector input to gate on, so no line can be priced under it",
 ];
 
 /** Edition stamp for IT_TAX_YEARS. */
