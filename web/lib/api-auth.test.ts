@@ -144,8 +144,8 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     "hrm.benefits.read",
     "hrm.benefits.manage",
     // 0198 HRM self-service: self.read/request scope to the party behind
-    // the login; team.read/manage resolve structurally by holding direct
-    // reports. Post-snapshot like the rest of HRM.
+    // the login and ride on every built-in role; team.read/manage resolve
+    // structurally by holding direct reports. Post-snapshot like the rest.
     "hrm.self.read",
     "hrm.self.request",
     "hrm.team.read",

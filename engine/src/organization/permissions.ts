@@ -683,6 +683,12 @@ export const BUILT_IN_ROLES: Record<
       "scripts.execute",
       "flows.manage",
       "flows.approve",
+      // HR-9 self-service: every login is a person — seeing one's own
+      // employment summary and filing one's own profile change ride the
+      // structural scope (party behind the login), so every built-in role
+      // carries both self keys. Team keys stay structural with no grant.
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   accountant: {
@@ -735,6 +741,9 @@ export const BUILT_IN_ROLES: Record<
       "data.import",
       "apps.use",
       "scripts.execute",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   approver: {
@@ -767,12 +776,15 @@ export const BUILT_IN_ROLES: Record<
       "feedback.use",
       "data.export",
       "apps.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -784,6 +796,8 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read", "hrm.self.request",
     ],
   },
   sales_rep: {
@@ -796,6 +810,8 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read", "hrm.self.request",
     ],
   },
 };

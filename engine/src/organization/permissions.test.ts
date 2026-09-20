@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BUILT_IN_ROLES,
+  BUILT_IN_ROLE_KEYS,
   PERMISSION_CATALOGUE,
   PERMISSION_GROUPS,
   permissionLabelKey,
@@ -74,14 +75,14 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
  * people, so performance read/manage and retention read stay admin-only
  * like the employment keys.
  * employment read/manage keys (admin only, via the catalogue spread).
- * The HR-5 leave keys and the HR-9 self-service keys ride it too: the
- * self/team keys scope every read to the party behind the login (or to
- * holding direct reports), so granting them to a broad built-in role
- * would still be safe row-wise — but no built-in role represents an
- * employee login, and employee logins receive hrm.self.read/request by
- * explicit grant exactly like hrm.leave.request today.
+ * The HR-5 leave keys ride it too.
+ * HR-9 splits the grant: the employment/position/process/leave/team keys
+ * stay admin-only, while hrm.self.read and hrm.self.request ride on EVERY
+ * built-in role — the structural scope (party behind the login, or a
+ * named NO_LINK refusal) already makes them safe, and per-person grants
+ * would gate a person's own record behind admin busywork.
  */
-test("hrm employment permissions are catalogued, grouped, and held by admin only", () => {
+test("hrm permissions are catalogued, grouped, and split between admin-only and every-role self keys", () => {
   const keys: CataloguePermission[] = [
     "hrm.employment.read",
     "hrm.employment.manage",
@@ -106,7 +107,11 @@ test("hrm employment permissions are catalogued, grouped, and held by admin only
     "hrm.team.read",
     "hrm.team.manage",
   ];
-  for (const perm of keys) {
+  // HR-9 self keys: every login is a person, so every built-in role
+  // carries them (admin via the catalogue spread, the rest explicitly).
+  // Structural scope — never a role grant — is what makes them safe.
+  const selfKeys: CataloguePermission[] = ["hrm.self.read", "hrm.self.request"];
+  for (const perm of [...keys, ...selfKeys]) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
       `${perm} must be seeded so someone can hold it`,
@@ -116,12 +121,21 @@ test("hrm employment permissions are catalogued, grouped, and held by admin only
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "hrm");
   assert.ok(group, "hrm needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.hrm");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(group.permissions.map((entry) => entry.key), [
+    ...keys.slice(0, 11),
+    ...selfKeys,
+    ...keys.slice(11),
+  ]);
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   for (const perm of keys) {
     assert.equal(holds("admin", perm), true, `admin must hold ${perm}`);
+  }
+  for (const perm of selfKeys) {
+    for (const role of BUILT_IN_ROLE_KEYS) {
+      assert.equal(holds(role, perm), true, `${role} must hold ${perm}: every login is a person`);
+    }
   }
   for (const role of ["controller", "accountant", "approver", "viewer", "sales_manager", "sales_rep"]) {
     for (const perm of keys) {
