@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   buildSource,
-  getConnection,
+  type ConnectionRow,
 } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
@@ -12,28 +12,28 @@ import { connectionConfigUrlRefusal } from "../../_connector-guard";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type ConnectionVersion = {
-  updatedAt: Date | string | null;
-  config: unknown;
-  secrets: string | null;
-};
+type ProbeRow = ConnectionRow & { updatedAt: Date | string | null };
 
-async function loadConnectionVersion(
-  orgId: string,
-  id: string,
-): Promise<ConnectionVersion | null> {
-  const snapshot = await db.execute<ConnectionVersion>(sql`
-    select updated_at as "updatedAt", config, secrets
+async function loadProbeRow(orgId: string, id: string): Promise<ProbeRow | null> {
+  const loaded = await db.execute<ProbeRow>(sql`
+    select id, org_id as "orgId", source, display_name as "displayName",
+           auth_kind as "authKind", status, config, secrets,
+           mirror_enabled as "mirrorEnabled", mirror_schedule as "mirrorSchedule",
+           posted_change_policy as "postedChangePolicy",
+           posted_change_authorized_by as "postedChangeAuthorizedBy",
+           posted_change_authorized_at as "postedChangeAuthorizedAt",
+           cursor, last_run_at as "lastRunAt", last_error as "lastError",
+           updated_at as "updatedAt"
       from connections
      where id = ${id} and org_id = ${orgId}
   `);
-  return snapshot.rows[0] ?? null;
+  return loaded.rows[0] ?? null;
 }
 
 async function writeProbeOutcome(
   orgId: string,
   id: string,
-  version: ConnectionVersion,
+  row: ProbeRow,
   status: string,
   lastError: string | null,
 ): Promise<boolean> {
@@ -44,9 +44,9 @@ async function writeProbeOutcome(
            updated_at = now()
      where id = ${id}
        and org_id = ${orgId}
-       and updated_at is not distinct from ${version.updatedAt}
-       and config is not distinct from ${JSON.stringify(version.config ?? {})}::jsonb
-       and secrets is not distinct from ${version.secrets}
+       and updated_at is not distinct from ${row.updatedAt}
+       and config is not distinct from ${JSON.stringify(row.config ?? {})}::jsonb
+       and secrets is not distinct from ${row.secrets}
      returning id
   `);
   return Boolean(written.rows[0]);
@@ -54,8 +54,8 @@ async function writeProbeOutcome(
 
 /**
  * Test a connection's credentials and persist the probe outcome onto that
- * same version of the row (status / last_error). A concurrent config or
- * credential change leaves the new row untouched.
+ * same version of the row (status / last_error). Probe target and version
+ * token come from one read; a concurrent change leaves the new row untouched.
  */
 export async function POST(
   _req: Request,
@@ -64,20 +64,18 @@ export async function POST(
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  const conn = await getConnection(gate.user.orgId, id).catch((e) => {
+  const row = await loadProbeRow(gate.user.orgId, id).catch((e) => {
     if (storageIdentityError(e)) return null;
     throw e;
   });
-  if (!conn) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const urlError = connectionConfigUrlRefusal(conn.config);
+  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const urlError = await connectionConfigUrlRefusal(row.config);
   if (urlError) {
     return NextResponse.json(
       { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
       { status: 404 },
     );
   }
-  const version = await loadConnectionVersion(gate.user.orgId, id);
-  if (!version) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const stale = () =>
     NextResponse.json(
@@ -90,7 +88,7 @@ export async function POST(
     );
 
   try {
-    const source = buildSource(conn);
+    const source = buildSource(row);
     if (source.ping) {
       const r = await source.ping();
       const status = r.ok ? "active" : "error";
@@ -98,7 +96,7 @@ export async function POST(
       const matched = await writeProbeOutcome(
         gate.user.orgId,
         id,
-        version,
+        row,
         status,
         lastError,
       );
@@ -112,7 +110,7 @@ export async function POST(
     const matched = await writeProbeOutcome(
       gate.user.orgId,
       id,
-      version,
+      row,
       "active",
       null,
     );
@@ -126,7 +124,7 @@ export async function POST(
     const matched = await writeProbeOutcome(
       gate.user.orgId,
       id,
-      version,
+      row,
       "error",
       message,
     );

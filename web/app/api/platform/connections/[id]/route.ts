@@ -55,7 +55,7 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const urlError = connectionConfigUrlRefusal(body.config);
+    const urlError = await connectionConfigUrlRefusal(body.config);
     if (urlError) {
       return NextResponse.json(
         { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },

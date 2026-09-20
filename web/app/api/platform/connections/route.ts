@@ -153,7 +153,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const urlError = connectionConfigUrlRefusal(suppliedConfig);
+  const urlError = await connectionConfigUrlRefusal(suppliedConfig);
   if (urlError) {
     return NextResponse.json(
       { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },

@@ -126,6 +126,9 @@ const refused = [
   ["NetSuite host loopback", "netsuite", { host: "https://127.0.0.1" }],
   ["IPv4-mapped IPv6 hex", "odoo", { url: "http://[::ffff:7f00:1]/" }],
   ["IPv4-mapped IPv6 dotted", "odoo", { url: "http://[::ffff:127.0.0.1]/" }],
+  ["RFC1918 10.0.0.1", "odoo", { url: "http://10.0.0.1/" }],
+  ["IPv6 ULA fd00::1", "odoo", { url: "http://[fd00::1]/" }],
+  ["unspecified 0.0.0.0", "odoo", { url: "http://0.0.0.0/" }],
 ] as const;
 
 for (const [name, source, config] of refused) {

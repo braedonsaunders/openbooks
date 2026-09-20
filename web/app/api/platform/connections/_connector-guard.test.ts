@@ -6,26 +6,90 @@ import {
   connectionConfigUrlRefusal,
   connectorUrlRefusal,
   declaredSourceConfig,
+  isPublicUnicastAddress,
 } from "./_connector-guard.ts";
 
-test("IPv4-mapped IPv6 loopback ::ffff:7f00:1 is refused", () => {
-  const hex = connectorUrlRefusal("http://[::ffff:7f00:1]/");
-  const dotted = connectorUrlRefusal("http://[::ffff:127.0.0.1]/");
+const refusedLiterals = [
+  ["RFC1918 10.0.0.1", "http://10.0.0.1/"],
+  ["IPv6 ULA fd00::1", "http://[fd00::1]/"],
+  ["unspecified 0.0.0.0", "http://0.0.0.0/"],
+  ["RFC1918 192.168.1.1", "http://192.168.1.1/"],
+  ["RFC1918 172.16.0.1", "http://172.16.0.1/"],
+  ["loopback IPv4", "http://127.0.0.1/"],
+  ["loopback IPv6", "http://[::1]/"],
+  ["IPv4-mapped hex loopback", "http://[::ffff:7f00:1]/"],
+  ["IPv4-mapped dotted loopback", "http://[::ffff:127.0.0.1]/"],
+  ["IPv4-mapped RFC1918", "http://[::ffff:0a00:1]/"],
+  ["IPv4-mapped unspecified", "http://[::ffff:0:0]/"],
+  ["link-local metadata", "http://169.254.169.254/latest/meta-data/"],
+  ["unspecified IPv6", "http://[::]/"],
+  ["file scheme", "file:///etc/passwd"],
+] as const;
+
+test("IPv4-mapped IPv6 loopback ::ffff:7f00:1 is refused", async () => {
+  const hex = await connectorUrlRefusal("http://[::ffff:7f00:1]/");
+  const dotted = await connectorUrlRefusal("http://[::ffff:127.0.0.1]/");
   assert.equal(typeof hex, "string", "Node's ::ffff:7f00:1 form must be refused");
   assert.equal(typeof dotted, "string", "::ffff:127.0.0.1 must be refused");
   assert.equal(
-    connectionConfigUrlRefusal({ url: "http://[::ffff:7f00:1]/" }),
+    await connectionConfigUrlRefusal({ url: "http://[::ffff:7f00:1]/" }),
     hex,
   );
 });
 
-test("link-local metadata and non-http(s) connector URLs are refused", () => {
-  assert.equal(typeof connectorUrlRefusal("http://169.254.169.254/latest/meta-data/"), "string");
-  assert.equal(typeof connectorUrlRefusal("http://127.0.0.1/"), "string");
-  assert.equal(typeof connectorUrlRefusal("http://localhost:8069"), "string");
-  assert.equal(typeof connectorUrlRefusal("http://[::1]/"), "string");
-  assert.equal(typeof connectorUrlRefusal("file:///etc/passwd"), "string");
-  assert.equal(connectorUrlRefusal("https://odoo.example.com"), null);
+test("public-unicast allowlist refuses RFC1918, ULA, unspecified, loopback, and non-http(s)", async () => {
+  for (const [name, url] of refusedLiterals) {
+    const error = await connectorUrlRefusal(url);
+    assert.equal(typeof error, "string", `${name} must be refused, got ${String(error)}`);
+  }
+  assert.equal(typeof await connectorUrlRefusal("http://localhost:8069"), "string");
+  assert.equal(await connectorUrlRefusal("https://1.1.1.1"), null);
+  assert.equal(await connectorUrlRefusal("https://[2606:4700:4700::1111]"), null);
+});
+
+test("a test fails if 10.0.0.1, fd00::1, or 0.0.0.0 is accepted", async () => {
+  for (const url of ["http://10.0.0.1/", "http://[fd00::1]/", "http://0.0.0.0/"]) {
+    assert.equal(
+      typeof await connectorUrlRefusal(url),
+      "string",
+      `${url} must not be accepted by a public-unicast allowlist`,
+    );
+    assert.equal(isPublicUnicastAddress(new URL(url).hostname), false, `${url} is not public unicast`);
+  }
+});
+
+test("DNS A/AAAA results fail closed unless every address is public unicast", async () => {
+  assert.equal(
+    typeof await connectorUrlRefusal("http://evil.example/", async () => ["10.0.0.1"]),
+    "string",
+  );
+  assert.equal(
+    typeof await connectorUrlRefusal("http://ula.example/", async () => ["fd00::1"]),
+    "string",
+  );
+  assert.equal(
+    typeof await connectorUrlRefusal("http://any.example/", async () => ["0.0.0.0"]),
+    "string",
+  );
+  assert.equal(
+    typeof await connectorUrlRefusal("http://mix.example/", async () => ["1.1.1.1", "10.0.0.1"]),
+    "string",
+    "one private A/AAAA must refuse the whole name",
+  );
+  assert.equal(
+    typeof await connectorUrlRefusal("http://empty.example/", async () => []),
+    "string",
+  );
+  assert.equal(
+    typeof await connectorUrlRefusal("http://nx.example/", async () => {
+      throw new Error("ENOTFOUND");
+    }),
+    "string",
+  );
+  assert.equal(
+    await connectorUrlRefusal("http://ok.example/", async () => ["1.1.1.1"]),
+    null,
+  );
 });
 
 test("callback-owned OAuth identity keys are refused by name", () => {
@@ -34,13 +98,13 @@ test("callback-owned OAuth identity keys are refused by name", () => {
     assert.match(String(error), new RegExp(key));
     assert.match(String(error), /Connect flow/);
   }
-  assert.equal(callerOwnedConfigRefusal({ url: "https://odoo.example.com" }), null);
+  assert.equal(callerOwnedConfigRefusal({ url: "https://1.1.1.1" }), null);
 });
 
 test("declaredSourceConfig keeps only manifest keys", () => {
   const declared = declaredSourceConfig(
     { configFields: [{ key: "url" }, { key: "environment" }] },
-    { url: "https://odoo.example.com", realmId: "should-not-persist", extra: 1 },
+    { url: "https://1.1.1.1", realmId: "should-not-persist", extra: 1 },
   );
-  assert.deepEqual(declared, { url: "https://odoo.example.com" });
+  assert.deepEqual(declared, { url: "https://1.1.1.1" });
 });

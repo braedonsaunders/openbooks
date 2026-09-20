@@ -4,8 +4,11 @@
  * so the predicates cannot drift.
  */
 
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 export const CONNECTOR_URL_REFUSED =
-  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
+  "Connector URL must use http or https and every resolved address must be public unicast. RFC1918, loopback, link-local, metadata, ULA, unspecified, and non-http(s) URLs are refused.";
 
 export const CALLBACK_OWNED_CONFIG_KEYS = [
   "realmId",
@@ -13,6 +16,13 @@ export const CALLBACK_OWNED_CONFIG_KEYS = [
   "companyId",
   "companyName",
 ] as const;
+
+export type AddressLookup = (hostname: string) => Promise<string[]>;
+
+async function defaultLookup(hostname: string): Promise<string[]> {
+  const records = await lookup(hostname, { all: true, verbatim: true });
+  return records.map((record) => record.address);
+}
 
 function stripIpv6Brackets(host: string): string {
   return host.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
@@ -39,35 +49,84 @@ function ipv4FromMapped6(host: string): string | null {
   return null;
 }
 
-function isRefusedIpv4(ipv4: string): boolean {
-  const parts = ipv4.split(".").map((part) => Number(part));
-  if (
-    parts.length !== 4 ||
-    parts.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
-  ) {
-    return false;
+function parseIpv4(ip: string): number[] | null {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return null;
   }
-  if (parts[0] === 127) return true;
-  if (parts[0] === 169 && parts[1] === 254) return true;
+  return octets;
+}
+
+function isPublicUnicastIpv4(ip: string): boolean {
+  const octets = parseIpv4(ip);
+  if (!octets) return false;
+  const [a, b] = octets;
+  if (a === 0) return false;
+  if (a === 10) return false;
+  if (a === 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a >= 224) return false;
+  return true;
+}
+
+function expandIpv6(host: string): number[] | null {
+  if (host.includes(".")) return null;
+  const parseSide = (side: string): number[] => {
+    if (side === "") return [];
+    return side.split(":").map((group) => Number.parseInt(group, 16));
+  };
+  let groups: number[];
+  if (host.includes("::")) {
+    if (host.indexOf("::") !== host.lastIndexOf("::")) return null;
+    const [head, tail] = host.split("::");
+    const left = parseSide(head ?? "");
+    const right = parseSide(tail ?? "");
+    const fill = 8 - left.length - right.length;
+    if (fill < 0) return null;
+    groups = [...left, ...Array<number>(fill).fill(0), ...right];
+  } else {
+    groups = host.split(":").map((group) => Number.parseInt(group, 16));
+  }
+  if (groups.length !== 8) return null;
+  if (groups.some((group) => !Number.isInteger(group) || group < 0 || group > 0xffff)) {
+    return null;
+  }
+  return groups;
+}
+
+function isPublicUnicastIpv6(host: string): boolean {
+  const mapped = ipv4FromMapped6(host);
+  if (mapped) return isPublicUnicastIpv4(mapped);
+  const groups = expandIpv6(host);
+  if (!groups) return false;
+  if (groups.every((group) => group === 0)) return false;
+  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) return false;
+  const first = groups[0]!;
+  if ((first & 0xffc0) === 0xfe80) return false;
+  if ((first & 0xfe00) === 0xfc00) return false;
+  if ((first & 0xff00) === 0xff00) return false;
+  return (first & 0xe000) === 0x2000;
+}
+
+export function isPublicUnicastAddress(address: string): boolean {
+  const host = stripIpv6Brackets(address);
+  const kind = isIP(host);
+  if (kind === 4) return isPublicUnicastIpv4(host);
+  if (kind === 6) return isPublicUnicastIpv6(host);
+  const mapped = ipv4FromMapped6(host);
+  if (mapped) return isPublicUnicastIpv4(mapped);
   return false;
 }
 
-function isRefusedHost(host: string): boolean {
-  const normalized = stripIpv6Brackets(host);
-  if (
-    normalized === "localhost" ||
-    normalized.endsWith(".localhost") ||
-    normalized === "::1"
-  ) {
-    return true;
-  }
-  if (normalized.startsWith("fe80:")) return true;
-  const mapped = ipv4FromMapped6(normalized);
-  if (mapped && isRefusedIpv4(mapped)) return true;
-  return isRefusedIpv4(normalized);
-}
-
-export function connectorUrlRefusal(value: unknown): string | null {
+export async function connectorUrlRefusal(
+  value: unknown,
+  lookupAddresses: AddressLookup = defaultLookup,
+): Promise<string | null> {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -80,14 +139,35 @@ export function connectorUrlRefusal(value: unknown): string | null {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return CONNECTOR_URL_REFUSED;
   }
-  if (isRefusedHost(url.hostname)) return CONNECTOR_URL_REFUSED;
+  const host = stripIpv6Brackets(url.hostname);
+  if (!host) return CONNECTOR_URL_REFUSED;
+  const kind = isIP(host);
+  if (kind === 4 || kind === 6) {
+    return isPublicUnicastAddress(host) ? null : CONNECTOR_URL_REFUSED;
+  }
+  let addresses: string[];
+  try {
+    addresses = await lookupAddresses(host);
+  } catch {
+    return CONNECTOR_URL_REFUSED;
+  }
+  if (addresses.length === 0) return CONNECTOR_URL_REFUSED;
+  if (!addresses.every((address) => isPublicUnicastAddress(address))) {
+    return CONNECTOR_URL_REFUSED;
+  }
   return null;
 }
 
-export function connectionConfigUrlRefusal(config: unknown): string | null {
+export async function connectionConfigUrlRefusal(
+  config: unknown,
+  lookupAddresses?: AddressLookup,
+): Promise<string | null> {
   if (!config || typeof config !== "object" || Array.isArray(config)) return null;
   const row = config as Record<string, unknown>;
-  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
+  return (
+    (await connectorUrlRefusal(row.url, lookupAddresses)) ??
+    (await connectorUrlRefusal(row.host, lookupAddresses))
+  );
 }
 
 export function callerOwnedConfigRefusal(config: unknown): string | null {
