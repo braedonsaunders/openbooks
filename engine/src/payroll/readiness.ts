@@ -585,7 +585,11 @@ export async function payRunReadiness(
       flag(
         "blocker", "statutory.taxYear",
         people.filter((p) => p.country === country && (region === null || p.province === region)),
-        { detail: problem.message, href: `${setupHref}?tab=packs` },
+        // Operator text: the packs tab shows each pack's published coverage
+        // but offers no action that loads an unpublished year, so the detail
+        // must not prescribe the developer's scaffold script. The developer
+        // remedy stays on `problem.message` for engine throws and logs.
+        { detail: problem.operatorMessage, href: `${setupHref}?tab=packs` },
       );
     }
 
