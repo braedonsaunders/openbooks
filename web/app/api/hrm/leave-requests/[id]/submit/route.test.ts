@@ -17,7 +17,7 @@ interface RouteState {
   serviceThrow: unknown;
 }
 
-const stateKey = Symbol.for("openbooks.hrm-leave-withdraw-route-test");
+const stateKey = Symbol.for("openbooks.hrm-leave-submit-route-test");
 const isVitest = process.env.VITEST === "true";
 type TestFn = typeof nodeTest;
 const vitestPackage = "vitest";
@@ -37,11 +37,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `
-      const state = globalThis[Symbol.for('openbooks.hrm-leave-withdraw-route-test')]
+      const state = globalThis[Symbol.for('openbooks.hrm-leave-submit-route-test')]
       export async function guardPermission(permission) {
         if (permission !== 'hrm.leave.request') throw new Error('unexpected permission ' + permission)
         if (state.gate && 'status' in state.gate) {
-          const NextResponse = globalThis.openbooksHrmLeaveWithdrawRouteNextResponse
+          const NextResponse = globalThis.openbooksHrmLeaveSubmitRouteNextResponse
           return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
         }
         return state.gate
@@ -51,7 +51,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:features",
     `
-      const state = globalThis[Symbol.for('openbooks.hrm-leave-withdraw-route-test')]
+      const state = globalThis[Symbol.for('openbooks.hrm-leave-submit-route-test')]
       export async function isFeatureEnabled(orgId, key) {
         if (key !== 'hrm') throw new Error('unexpected feature ' + key)
         return state.featureOn
@@ -61,17 +61,17 @@ const mockSources = new Map<string, string>([
   [
     "mock:service",
     `
-      const state = globalThis[Symbol.for('openbooks.hrm-leave-withdraw-route-test')]
-      export async function withdrawLeaveRequest(args) {
-        state.calls.push({ fn: 'withdraw', args })
+      const state = globalThis[Symbol.for('openbooks.hrm-leave-submit-route-test')]
+      export async function submitLeaveRequest(args) {
+        state.calls.push({ fn: 'submit', args })
         if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.requestId, status: 'withdrawn' }
+        return { id: args.requestId, status: 'submitted' }
       }
     `,
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveWithdrawRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveSubmitRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
@@ -79,7 +79,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
 ]);
 
-let withdrawRoute: typeof import("./route.ts") | undefined;
+let submitRoute: typeof import("./route.ts") | undefined;
 if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
@@ -96,8 +96,8 @@ if (!isVitest) {
       return nextLoad(url);
     },
   });
-  const routeUrl = "./route.ts?hrm-leave-withdraw";
-  withdrawRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const routeUrl = "./route.ts?hrm-leave-submit";
+  submitRoute = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 }
 
@@ -112,50 +112,46 @@ function reset(): void {
 }
 
 function jsonRequest(body: unknown): Request {
-  return new Request("http://x/api/hrm/leave-requests/x/withdraw", {
+  return new Request("http://x/api/hrm/leave-requests/x/submit", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
-test("withdraw records the reason through the real body parser", async () => {
+test("submit refuses hostile payloads at the real boundary before the service runs", async () => {
   reset();
-  const res = await withdrawRoute!.POST(jsonRequest({ reason: "dates wrong" }), ctx);
+  // Submit takes no body, but it still parses one: malformed JSON and
+  // non-object payloads are refused at the shared boundary — the service
+  // never sees them. parseJsonBody here is the real one (never mocked
+  // above), so this is a test of the refusal, not of a double.
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await submitRoute!.POST(jsonRequest(body), ctx);
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("submit reaches the service with the request id after an empty body", async () => {
+  reset();
+  const res = await submitRoute!.POST(jsonRequest({}), ctx);
   assert.equal(res.status, 200);
   assert.deepEqual(routeState.calls[0], {
-    fn: "withdraw",
-    args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "dates wrong" },
+    fn: "submit",
+    args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID },
   });
 });
 
-test("withdraw refuses a missing reason with 400 before the service", async () => {
+test("submit refuses a malformed id before the service", async () => {
   reset();
-  const res = await withdrawRoute!.POST(jsonRequest({}), ctx);
+  const res = await submitRoute!.POST(jsonRequest({}), { params: Promise.resolve({ id: "nope" }) });
   assert.equal(res.status, 400);
-  const body = (await res.json()) as { issues: Array<{ path: string; message: string }> };
-  assert.ok(body.issues.some((issue) => issue.path === "reason"), JSON.stringify(body.issues));
-  assert.equal(routeState.calls.length, 0);
+  assert.deepEqual(routeState.calls, []);
 });
 
-test("withdraw maps a terminal-state refusal with message intact", async () => {
+test("submit maps a service refusal to its status", async () => {
   reset();
-  routeState.serviceThrow = new LeaveError(
-    "BAD_STATE",
-    "a approved request cannot be withdrawn — cancel it instead",
-  );
-  const res = await withdrawRoute!.POST(jsonRequest({ reason: "too late" }), ctx);
+  routeState.serviceThrow = new LeaveError("BAD_STATE", "the request is not in a submittable state — reopen it first");
+  const res = await submitRoute!.POST(jsonRequest({}), ctx);
   assert.equal(res.status, 409);
-  assert.ok(!res.ok);
-  assert.match(((await res.json()) as { error: string }).error, /cancel it instead/);
-});
-
-test("withdraw forwards a non-uuid id and the gate", async () => {
-  reset();
-  const bad = await withdrawRoute!.POST(jsonRequest({ reason: "x" }), { params: Promise.resolve({ id: "nope" }) });
-  assert.equal(bad.status, 400);
-  reset();
-  routeState.gate = { status: 403 };
-  const denied = await withdrawRoute!.POST(jsonRequest({ reason: "x" }), ctx);
-  assert.equal(denied.status, 403);
 });

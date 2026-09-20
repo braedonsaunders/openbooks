@@ -146,7 +146,7 @@ const draftBody = {
   reason: "rest",
 };
 
-test("GET lists one employment with status pass-through", { skip: !collectionRoute }, async () => {
+test("GET lists one employment with status pass-through", async () => {
   reset();
   const res = await collectionRoute!.GET(
     new Request(`http://x/api/hrm/leave-requests?employmentId=${EMPLOYMENT_ID}&status=submitted`),
@@ -160,14 +160,14 @@ test("GET lists one employment with status pass-through", { skip: !collectionRou
   });
 });
 
-test("GET mine reads the self-service inbox with no caller-supplied worker", { skip: !collectionRoute }, async () => {
+test("GET mine reads the self-service inbox with no caller-supplied worker", async () => {
   reset();
   const res = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
   assert.equal(res.status, 200);
   assert.deepEqual(routeState.calls[0], { fn: "mine", args: { orgId: "org-1", actorId: "user-1" } });
 });
 
-test("GET refuses unknown status and non-uuid employment before the service", { skip: !collectionRoute }, async () => {
+test("GET refuses unknown status and non-uuid employment before the service", async () => {
   reset();
   const badStatus = await collectionRoute!.GET(
     new Request(`http://x/api/hrm/leave-requests?employmentId=${EMPLOYMENT_ID}&status=taken`),
@@ -178,7 +178,7 @@ test("GET refuses unknown status and non-uuid employment before the service", { 
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
 
-test("GET forwards the gate and the feature switch", { skip: !collectionRoute }, async () => {
+test("GET forwards the gate and the feature switch", async () => {
   reset();
   routeState.gate = { status: 403 };
   const denied = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
@@ -189,7 +189,7 @@ test("GET forwards the gate and the feature switch", { skip: !collectionRoute },
   assert.equal(off.status, 404);
 });
 
-test("POST files a draft through the real body parser", { skip: !collectionRoute }, async () => {
+test("POST files a draft through the real body parser", async () => {
   reset();
   const res = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", draftBody));
   assert.equal(res.status, 200);
@@ -201,7 +201,7 @@ test("POST files a draft through the real body parser", { skip: !collectionRoute
   });
 });
 
-test("POST refuses a malformed body with 400 and never calls the service", { skip: !collectionRoute }, async () => {
+test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
   const malformed = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", "{oops"));
   assert.equal(malformed.status, 400);
@@ -214,7 +214,7 @@ test("POST refuses a malformed body with 400 and never calls the service", { ski
   assert.equal(routeState.calls.length, 0);
 });
 
-test("POST maps computed refusals with message intact — status first, body second", { skip: !collectionRoute }, async () => {
+test("POST maps computed refusals with message intact — status first, body second", async () => {
   reset();
   routeState.serviceThrow = new LeaveError("REFUSED", "policy time balance is 4 hours but the request needs 16 — shorten it");
   const refused = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", draftBody));
