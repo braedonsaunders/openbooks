@@ -98,14 +98,66 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
     'every workflow suite needs its own pristine database; the suites are not order-independent',
   )
 
+  // A spec may also be claimed by a DISPATCH-ONLY workflow instead of the
+  // gating matrix: the payroll browser walk is the longest suite in the
+  // repository and runs on demand rather than on every commit. That is a
+  // deliberate decision, not drift — but "runs on demand" and "runs nowhere"
+  // look identical from the matrix alone, so the claim has to be counted from
+  // both places or this guard would pass while a suite quietly stopped
+  // running. Parsed from the dispatch workflow's own `suites` input default,
+  // never hardcoded here: that input exists so more packs can be added without
+  // editing CI, and a literal in this test would go stale the first time
+  // somebody uses it.
+  const dispatchWorkflows = readdirSync(new URL('../.github/workflows', import.meta.url))
+    .filter((entry) => entry.endsWith('.yml') && entry !== 'test.yml')
+    .map((entry) => ({
+      file: entry,
+      source: readFileSync(new URL(`../.github/workflows/${entry}`, import.meta.url), 'utf8'),
+    }))
+    .filter(({ source }) => /^on:\s*\n\s+workflow_dispatch:/m.test(source))
+
+  const dispatchClaims = []
+  for (const { file, source } of dispatchWorkflows) {
+    // Scope to the trigger block so a `suites:` env elsewhere cannot be read as
+    // a claim, then take the default of the `suites` input.
+    const triggers = source.slice(source.indexOf('on:'), source.indexOf('\njobs:'))
+    const suites = /suites:\s*\n(?:[^\n]*\n)*?\s*default:\s*"([^"]+)"/.exec(triggers)
+    if (!suites) continue
+    // A dispatch workflow must not also be a gate; otherwise "on demand" is a
+    // fiction and the suite is back on every push under another name.
+    assert.doesNotMatch(
+      triggers,
+      /\n\s+(push|pull_request):/,
+      `${file} claims suites on workflow_dispatch, so it must not also trigger on push or pull_request`,
+    )
+    for (const pair of suites[1].split(' ')) dispatchClaims.push({ file, pair })
+  }
+
+  const dispatchSpecs = dispatchClaims.map(({ pair }) => pair.split(':')[0])
+  const dispatchDatabases = dispatchClaims.map(({ pair }) => pair.split(':')[1])
+  assert.equal(
+    new Set(dispatchDatabases).size,
+    dispatchDatabases.length,
+    'every dispatch suite needs its own pristine database too',
+  )
+
+  const claimed = [...specs, ...dispatchSpecs]
+  assert.equal(
+    new Set(claimed).size,
+    claimed.length,
+    'a spec claimed by the gating matrix must not also be claimed by a dispatch workflow',
+  )
+
   const onDisk = readdirSync(new URL('../e2e/workflows', import.meta.url))
     .filter((entry) => entry.endsWith('.spec.ts'))
     .map((entry) => entry.replace(/\.spec\.ts$/, ''))
     .sort()
   assert.deepEqual(
-    [...specs].sort(),
+    [...claimed].sort(),
     onDisk,
-    'every e2e/workflows spec must be claimed by exactly one matrix group',
+    'every e2e/workflows spec must be claimed exactly once, either by a test.yml matrix group '
+      + `(currently: ${[...specs].sort().join(', ')}) or by a workflow_dispatch workflow's suites input `
+      + `(currently: ${dispatchClaims.map(({ file, pair }) => `${pair} in ${file}`).join(', ') || 'none'})`,
   )
 })
 
