@@ -323,7 +323,8 @@
       "reasonPlaceholder": "Pourquoi ce poste existe — enregistré avec sa première version",
       "submit": "Créer le poste",
       "failed": "Le poste n'a pas pu être créé."
-    }
+    },
+    "segmentsLabel": "Statut"
   },
   "processes": {
     "title": "Listes de processus",
@@ -362,7 +363,8 @@
       "kind": "Type",
       "effective": "Effet",
       "progress": "Progrès",
-      "nextDue": "Prochaine échéance"
+      "nextDue": "Prochaine échéance",
+      "status": "Statut"
     },
     "kinds": {
       "onboarding": "Intégration",
@@ -384,7 +386,8 @@
       "pending": "En attente",
       "done": "Terminé",
       "skipped": "Ignoré"
-    }
+    },
+    "segmentsLabel": "Afficher"
   },
   "leave": {
     "title": "Congés",

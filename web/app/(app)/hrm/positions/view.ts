@@ -3,10 +3,17 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import {
+  badge,
+  column,
+  field,
   grid,
+  link,
   page,
   pageHeader,
   ref,
+  spanRow,
+  table,
+  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -47,12 +54,19 @@ export interface PositionSegment {
   count: number
 }
 
+export interface PositionSegmentOption {
+  value: string
+  label: string
+  count: number
+}
+
 export interface PositionRow {
   id: string
   code: string
   title: string
   status: string
   statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   department: string | null
   plannedFte: string
   fundedFte: string
@@ -75,7 +89,21 @@ export interface PositionsPageData {
   basePath: string
   effectiveDate: string
   segments: PositionSegment[]
-  columns: Record<string, string>
+  segmentsLabel: string
+  allLabel: string
+  segmentOptions: PositionSegmentOption[]
+  currentParams: Record<string, string | string[] | undefined>
+  columns: {
+    code: string
+    title: string
+    status: string
+    department: string
+    planned: string
+    funded: string
+    filled: string
+    vacant: string
+    holder: string
+  }
   rows: PositionRow[]
   empty: string
   totalLabel: string
@@ -114,6 +142,7 @@ export interface PositionsPageData {
 }
 
 const f = ref<PositionsPageData>()
+const item = field
 
 export function positionsSpec(data: PositionsPageData): PageSpec {
   return page({
@@ -135,16 +164,49 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
-        widgetBlock('hrm-position-segments', {
-          ariaLabel: data.title,
-          segments: data.segments,
+        widgetBlock('filter-chips', {
+          basePath: '/hrm/positions',
+          currentParams: data.currentParams,
+          paramKey: 'status',
+          label: data.segmentsLabel,
+          allLabel: data.allLabel,
+          options: data.segmentOptions,
         }),
-        widgetBlock('hrm-positions-table', {
-          columns: data.columns,
-          rows: data.rows,
-          empty: data.empty,
-          totals: data.totals,
-          totalLabel: data.totalLabel,
+        table({
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          empty: { title: f('empty') },
+          // Totals only beside rows: with no rows the `empty` state
+          // renders instead, so a filtered-empty list never shows the
+          // org-wide totals under it. A present-but-empty `trailing`
+          // array would suppress the empty state, so this is undefined.
+          trailing:
+            data.rows.length > 0
+              ? [
+                  spanRow({
+                    label: f('totalLabel'),
+                    labelColSpan: 4,
+                    cells: [
+                      { cell: text(f('totals.plannedFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                      { cell: text(f('totals.fundedFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                      { cell: text(f('totals.filledFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                      { cell: text(f('totals.vacantFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                    ],
+                  }),
+                ]
+              : undefined,
+          columns: [
+            column(data.columns.code, link(item('code'), item('href'))),
+            column(data.columns.title, text(item('title'))),
+            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(data.columns.department, text(item('department'), { fallback: '—' })),
+            column(data.columns.planned, text(item('plannedFte')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.funded, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.filled, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.vacant, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.holder, text(item('holderLabel'))),
+          ],
         }),
       ]),
       // URL-backed drawer, portaled to <body> wherever it renders.
@@ -209,6 +271,12 @@ export async function loadPositionsPage(
     : value === 'filled' ? t('positions.statusFilled')
     : value === 'frozen' ? t('positions.statusFrozen')
     : t('positions.statusClosed')
+  const statusVariant = (value: string): PositionRow['statusVariant'] =>
+    value === 'open' ? 'success'
+    : value === 'planned' ? 'secondary'
+    : value === 'frozen' ? 'warning'
+    : value === 'closed' ? 'outline'
+    : 'default'
 
   const allRows = vacancy.positions
   const counts = new Map<string, number>()
@@ -236,6 +304,7 @@ export async function loadPositionsPage(
       title: row.version.title,
       status: row.version.status,
       statusLabel: statusLabel(row.version.status),
+      statusVariant: statusVariant(row.version.status),
       department: row.version.departmentId === null ? null : (departmentNames.get(row.version.departmentId) ?? row.version.departmentId),
       plannedFte: row.vacancy.plannedFte,
       fundedFte: row.vacancy.fundedFte,
@@ -349,6 +418,17 @@ export async function loadPositionsPage(
     basePath: '/hrm/positions',
     effectiveDate,
     segments,
+    segmentsLabel: t('positions.segmentsLabel'),
+    allLabel: t('positions.statusAll'),
+    segmentOptions: STATUSES.map((value) => ({
+      value,
+      label: statusLabel(value),
+      count: counts.get(value) ?? 0,
+    })),
+    // The as-of date survives a segment change; the status param itself is
+    // driven by the filter, and the drawer selection closes like the native
+    // pills did (hrefFor dropped it too).
+    currentParams: status === null ? { effectiveDate } : { effectiveDate, status },
     columns: {
       code: t('positions.columns.code'),
       title: t('positions.columns.title'),

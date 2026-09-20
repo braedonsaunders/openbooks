@@ -24,14 +24,18 @@ test("processes page carries the gate where the route-gate scanner reads it", ()
   assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
 });
 
-test("processes spec composes shared widgets: segments, table, URL drawer", () => {
+test("processes spec composes shared primitives: filter chips, table, URL drawer", () => {
   assert.match(view, /route: '\/hrm\/processes'/, "the spec names its own route for the registry");
-  assert.match(view, /widgetBlock\('hrm-process-segments'/, "segments render through the shared widget");
-  assert.match(view, /widgetBlock\('hrm-processes-table'/, "the list renders through the shared widget");
+  assert.match(view, /widgetBlock\('filter-chips'/, "segments render through the shared filter chips");
+  assert.match(view, /paramKey: 'segment'/, "segments filter over the segment search param");
+  assert.match(view, /table\(\{/, "the list renders through the shared table block");
+  assert.match(view, /variant: 'app'/, "the list uses the shared app table primitives");
+  assert.match(view, /badge\(item\('statusLabel'\)/, "status renders through the shared badge cell");
   assert.match(view, /widgetBlock\('hrm-process-drawer'/, "the drawer renders through the shared widget");
   assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
   assert.match(sections, /from '\.\.\/processes-client'/, "the drawer body is the shared client component, never a copy");
   assert.match(sections, /UrlDrawer/, "the drawer closes by navigation");
+  assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the process sections");
 });
 
 test("segments filter server-side and rows resolve through the read service", () => {
@@ -40,6 +44,9 @@ test("segments filter server-side and rows resolve through the read service", ()
   assert.match(loader, /sp\.segment/, "the active segment comes from the query string");
   assert.match(loader, /sp\.process/, "the open checklist comes from the query string");
   assert.match(loader, /closeHref/, "the drawer closes by navigation to the segment href");
+  assert.match(loader, /segmentOptions/, "filter options resolve in the loader with counts");
+  assert.match(loader, /currentParams/, "the active segment survives inside the filter params");
+  assert.match(loader, /statusVariant/, "badge presentation resolves in the loader, never in render");
   assert.ok(!/from hrm_processes /.test(loader), "loader issues no direct process-table reads");
   assert.ok(!/from hrm_process_steps/.test(loader), "loader issues no direct step-table reads");
 });

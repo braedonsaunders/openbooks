@@ -3,12 +3,18 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import {
+  column,
+  field,
   grid,
+  link,
   page,
   pageHeader,
   panel,
   ref,
+  spanRow,
   statTile,
+  table,
+  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -25,17 +31,17 @@ import { loadHrmHome, type HrmHomeData } from '../../../lib/hrm/home'
  * by the page and the widget registry via ./sections so they cannot drift
  * (see ../../purchasing/view.ts for the division and its rationale).
  *
- * The headcount hero is a `stat-tile` vitals strip plus one
- * `hrm-headcount-table` widget over loader-resolved rows and strings — a
- * widget, not a slot, because there is no capability left to re-derive: the
- * loader already resolved headcount through the canonical HRM read service.
- * The rail carries the pending queue, the 30-day starts and ends, the
+ * The headcount hero is a `stat-tile` vitals strip plus a `table` block
+ * over loader-resolved rows and strings — a block, not a widget, because
+ * there is no capability left to re-derive: the loader already resolved
+ * headcount through the canonical HRM read service. The rail carries the pending queue, the 30-day starts and ends, the
  * recent change evidence, the readiness panel, and the quick actions —
  * every empty section states what is empty and why, so zero never renders
  * as a blank cockpit.
  */
 
 const f = ref<HrmHomeData>()
+const item = field
 
 export function hrmSpec(data: HrmHomeData): PageSpec {
   return page({
@@ -116,15 +122,41 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
               className: 'min-h-0',
               bodyClassName: 'p-0',
               blocks: [
-                widgetBlock('hrm-headcount-table', {
-                  groups: data.groups,
-                  total: data.total,
-                  employerColumn: data.employerColumn,
-                  departmentColumn: data.departmentColumn,
-                  headcountColumn: data.headcountColumn,
-                  unassigned: data.unassigned,
-                  empty: data.groupsEmpty,
-                  totalLabel: data.totalLabel,
+                table({
+                  variant: 'app',
+                  rows: f('groups'),
+                  rowKey: item('id'),
+                  empty: { title: f('groupsEmpty') },
+                  // Totals only beside rows: with no groups the `empty`
+                  // state renders instead. A present-but-empty `trailing`
+                  // array would suppress the empty state, so this is
+                  // undefined.
+                  trailing:
+                    data.groups.length > 0
+                      ? [
+                          spanRow({
+                            label: f('totalLabel'),
+                            labelColSpan: 2,
+                            cells: [
+                              {
+                                cell: text(f('totalValue')),
+                                align: 'right',
+                                className: 'font-semibold tabular-nums',
+                              },
+                            ],
+                          }),
+                        ]
+                      : undefined,
+                  columns: [
+                    column(data.employerColumn, text(item('subsidiary'))),
+                    // No href today, so the link degrades to text; the day
+                    // the loader resolves a drill-through it renders a link.
+                    column(data.departmentColumn, link(item('departmentLabel'), item('href'))),
+                    column(data.headcountColumn, text(item('headcountLabel')), {
+                      align: 'right',
+                      className: 'tabular-nums',
+                    }),
+                  ],
                 }),
               ],
             }),
@@ -259,18 +291,71 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 className: 'min-h-0',
                 bodyClassName: 'p-0',
                 blocks: [
-                  widgetBlock('hrm-vacancy-table', {
-                    groups: data.positions.groups,
-                    total: data.positions.totals,
-                    departmentColumn: data.positions.departmentColumn,
-                    employerColumn: data.positions.employerColumn,
-                    positionsColumn: data.positions.positionsColumn,
-                    plannedColumn: data.positions.plannedColumn,
-                    fundedColumn: data.positions.fundedColumn,
-                    filledColumn: data.positions.filledColumn,
-                    vacantColumn: data.positions.vacantColumn,
-                    empty: data.positions.vacancyEmpty,
-                    totalLabel: data.positions.totalLabel,
+                  table({
+                    variant: 'app',
+                    rows: f('positions.groups'),
+                    rowKey: item('id'),
+                    empty: { title: f('positions.vacancyEmpty') },
+                    trailing:
+                      data.positions.groups.length > 0
+                        ? [
+                            spanRow({
+                              label: f('positions.totalLabel'),
+                              labelColSpan: 2,
+                              cells: [
+                                {
+                                  cell: text(f('positions.totals.positions')),
+                                  align: 'right',
+                                  className: 'font-semibold tabular-nums',
+                                },
+                                {
+                                  cell: text(f('positions.totals.plannedFte')),
+                                  align: 'right',
+                                  className: 'font-semibold tabular-nums',
+                                },
+                                {
+                                  cell: text(f('positions.totals.fundedFte')),
+                                  align: 'right',
+                                  className: 'font-semibold tabular-nums',
+                                },
+                                {
+                                  cell: text(f('positions.totals.filledFte')),
+                                  align: 'right',
+                                  className: 'font-semibold tabular-nums',
+                                },
+                                {
+                                  cell: text(f('positions.totals.vacantFte')),
+                                  align: 'right',
+                                  className: 'font-semibold tabular-nums',
+                                },
+                              ],
+                            }),
+                          ]
+                        : undefined,
+                    columns: [
+                      column(data.positions.employerColumn, text(item('employer'))),
+                      column(data.positions.departmentColumn, text(item('department'))),
+                      column(data.positions.positionsColumn, text(item('positions')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                      column(data.positions.plannedColumn, text(item('plannedFte')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                      column(data.positions.fundedColumn, text(item('fundedFte')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                      column(data.positions.filledColumn, text(item('filledFte')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                      column(data.positions.vacantColumn, text(item('vacantFte')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                    ],
                   }),
                 ],
               }),

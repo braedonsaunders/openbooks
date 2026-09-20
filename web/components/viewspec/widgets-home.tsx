@@ -14,7 +14,6 @@ import { CardNameCell, VizCell } from '../../app/(app)/insights/sections'
 import { NewCardButton } from '../../app/(app)/insights/NewCardButton'
 import { CardStudio } from '../../app/(app)/insights/CardStudio'
 import { NewTypeButton } from '../../app/(app)/records/types/NewTypeButton'
-import { HrmHeadcountTable } from '../../app/(app)/hrm/sections'
 import { QueryConsole } from '../../app/(app)/query/sections'
 import { HealthHero } from '../../app/(app)/accounting/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
@@ -109,22 +108,6 @@ export const HOME_WIDGETS = {
       fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
     />
   ),
-  /** A widget, not a slot: the loader already resolved headcount through the
-   *  canonical read service and passes rows plus loader-resolved strings as
-   *  data, so no org id, user id or Authz crosses the spec. */
-  'hrm-headcount-table': (props) => (
-    <HrmHeadcountTable
-      groups={(props.groups as ComponentProps<typeof HrmHeadcountTable>['groups']) ?? []}
-      total={num(props, 'total') ?? 0}
-      employerColumn={str(props, 'employerColumn') ?? ''}
-      departmentColumn={str(props, 'departmentColumn') ?? ''}
-      headcountColumn={str(props, 'headcountColumn') ?? ''}
-      unassigned={str(props, 'unassigned') ?? ''}
-      empty={str(props, 'empty') ?? ''}
-      totalLabel={str(props, 'totalLabel') ?? ''}
-    />
-  ),
-
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
    *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */
   'build-hub-card': (props) => (

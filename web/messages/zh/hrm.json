@@ -323,7 +323,8 @@
       "reasonPlaceholder": "设立此职位的原因（随首个版本一并记录）",
       "submit": "创建职位",
       "failed": "无法创建职位。"
-    }
+    },
+    "segmentsLabel": "状态"
   },
   "processes": {
     "title": "流程清单",
@@ -362,7 +363,8 @@
       "kind": "类型",
       "effective": "生效日期",
       "progress": "进度",
-      "nextDue": "下个到期日"
+      "nextDue": "下个到期日",
+      "status": "状态"
     },
     "kinds": {
       "onboarding": "入职",
@@ -384,7 +386,8 @@
       "pending": "待处理",
       "done": "已完成",
       "skipped": "已跳过"
-    }
+    },
+    "segmentsLabel": "显示"
   },
   "leave": {
     "title": "休假",

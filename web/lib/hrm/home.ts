@@ -26,9 +26,15 @@ import { loadLeavePanel, type LeavePanelData } from './leave'
  */
 
 export interface HrmHeadcountGroup {
+  /** Stable row key for the shared table block; resolved by loaders that render one. */
+  id?: string
   subsidiary: string
   department: string | null
+  /** Department display value with the unassigned fallback resolved. */
+  departmentLabel?: string
   headcount: number
+  /** Locale-formatted headcount; the table renders strings, never raw numbers. */
+  headcountLabel?: string
   /** Employee-directory drill-through for the row (departments board). */
   href?: string | null
 }
@@ -57,6 +63,8 @@ export interface RecentChangeItem {
 }
 
 export interface HrmVacancyGroup {
+  /** Stable row key: the employer/department pair the engine grouped by. */
+  id: string
   department: string
   employer: string
   positions: number
@@ -130,6 +138,8 @@ export interface HrmHomeData {
   totalLabel: string
   groups: HrmHeadcountGroup[]
   total: number
+  /** Locale-formatted total; the table renders strings, never raw numbers. */
+  totalValue: string
   directoryTitle: string
   directory: DirectoryItem[]
   pendingTitle: string
@@ -245,6 +255,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       totalLabel: t('home.vacancy.total'),
       unassignedDepartment,
       groups: vacancy.byDepartment.map((group) => ({
+        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
         department: group.departmentName ?? unassignedDepartment,
         employer: group.employerSubsidiaryName,
         positions: group.positions,
@@ -505,11 +516,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     groupsEmpty: t('home.groups.empty', { date: headcount.effectiveDate }),
     totalLabel: t('home.groups.total'),
     groups: headcount.groups.map((group) => ({
+      id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
       subsidiary: group.employerSubsidiaryName,
       department: group.departmentName,
+      departmentLabel: group.departmentName ?? t('home.groups.unassigned'),
       headcount: group.headcount,
+      headcountLabel: group.headcount.toLocaleString(),
     })),
     total: headcount.total,
+    totalValue: headcount.total.toLocaleString(),
     directoryTitle: t('home.directory.title'),
     directory,
     pendingTitle: t('overview.pending.title'),
