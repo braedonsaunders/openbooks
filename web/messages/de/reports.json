@@ -664,6 +664,18 @@
       "hrm_applications": {
         "label": "Bewerbungen",
         "description": "Eine Zeile pro Kandidatur mit Funnel-Stufe sowie Zeit bis zur Besetzung. Kontaktdaten erscheinen nie — nur Namen. Erfordert die Recruiting-Berechtigung."
+      },
+      "hrm_reviews": {
+        "label": "Beurteilungen",
+        "description": "Eine Zeile pro Leistungsbeurteilung — Zyklus und Zeitraum, Person, Art, Status sowie Autoren- und kalibrierte Bewertung nebeneinander. Nur HR: Ausführende haben die Leistungsberechtigung, sodass ungeteilte Beurteilungen den HR-Bereich nie verlassen."
+      },
+      "hrm_goals": {
+        "label": "Ziele",
+        "description": "Eine Zeile pro Leistungsziel — Person, Titel, Status, Fortschritt und Fälligkeitsdatum."
+      },
+      "hrm_turnover": {
+        "label": "Fluktuation",
+        "description": "Eine Zeile pro Abgang — Person, Beendigungsdatum, Betriebszugehörigkeit in Tagen, Austrittsgrund sowie Freiwilligkeits- und Bedauerns-Kennzeichen aus dem Austrittsdatensatz. Gruppieren nach Beendigungsmonat und Abteilung für die Abgangstabelle; Quoten kommen aus dem Bindungs-Panel."
       }
     },
     "columns": {
@@ -1294,6 +1306,39 @@
         "hired_on": "Eingestellt",
         "days_to_fill": "Tage bis Besetzung",
         "application_id": "Bewerbung (ID)"
+      },
+      "hrm_reviews": {
+        "cycle": "Zyklus",
+        "period_end_on": "Periodenende",
+        "employee": "Beschäftigte Person",
+        "employer": "Arbeitgeber",
+        "kind": "Art",
+        "status": "Stand",
+        "overall_rating": "Bewertung",
+        "calibrated_rating": "Kalibrierte Bewertung",
+        "employment_id": "Anstellung (ID)",
+        "id": "Beurteilung (ID)"
+      },
+      "hrm_goals": {
+        "employee": "Beschäftigte Person",
+        "employer": "Arbeitgeber",
+        "title": "Titel",
+        "status": "Stand",
+        "progress": "Fortschritt",
+        "due_on": "Fällig am",
+        "employment_id": "Anstellung (ID)",
+        "id": "Ziel (ID)"
+      },
+      "hrm_turnover": {
+        "person": "Abgangsperson",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "terminated_on": "Beendet am",
+        "tenure_days": "Zugehörigkeit (Tage)",
+        "reason": "Grund",
+        "voluntary": "Freiwillig",
+        "regrettable": "Bedauerlich",
+        "employment_id": "Anstellung (ID)"
       }
     },
     "enumValues": {

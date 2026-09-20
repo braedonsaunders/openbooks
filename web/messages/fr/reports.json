@@ -664,6 +664,18 @@
       "hrm_applications": {
         "label": "Candidatures",
         "description": "Une ligne par candidature avec son étape du parcours et le délai de pourvoi. Les coordonnées n'apparaissent jamais — noms uniquement. Requiert la permission de recrutement."
+      },
+      "hrm_reviews": {
+        "label": "Évaluations",
+        "description": "Une ligne par évaluation de performance — cycle et période, personne, type, statut, et la note de l’auteur à côté de la note calibrée. RH uniquement : les exécutants détiennent l’autorisation performance, donc les évaluations non partagées ne quittent jamais le périmètre RH."
+      },
+      "hrm_goals": {
+        "label": "Objectifs",
+        "description": "Une ligne par objectif de performance — personne, titre, statut, progression et échéance."
+      },
+      "hrm_turnover": {
+        "label": "Rotation",
+        "description": "Une ligne par départ — personne, date de fin, ancienneté en jours, motif de sortie et indicateurs volontaire et regretté issus de la fiche de sortie. Regroupez par mois de fin et service pour le tableau des départs ; les taux viennent du panneau de rétention."
       }
     },
     "columns": {
@@ -1294,6 +1306,39 @@
         "hired_on": "Embauché",
         "days_to_fill": "Délai de pourvoi",
         "application_id": "Candidature (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Intitulé du cycle",
+        "period_end_on": "Fin de période",
+        "employee": "Personne employée",
+        "employer": "Employeur",
+        "kind": "Type",
+        "status": "Statut",
+        "overall_rating": "Note",
+        "calibrated_rating": "Note calibrée",
+        "employment_id": "Emploi (id)",
+        "id": "Évaluation (id)"
+      },
+      "hrm_goals": {
+        "employee": "Personne employée",
+        "employer": "Employeur",
+        "title": "Titre",
+        "status": "Statut",
+        "progress": "Progression",
+        "due_on": "Échéance",
+        "employment_id": "Emploi (id)",
+        "id": "Objectif (id)"
+      },
+      "hrm_turnover": {
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "terminated_on": "Fin le",
+        "tenure_days": "Ancienneté (jours)",
+        "reason": "Motif",
+        "voluntary": "Volontaire",
+        "regrettable": "Regretté",
+        "employment_id": "Emploi (id)"
       }
     },
     "enumValues": {

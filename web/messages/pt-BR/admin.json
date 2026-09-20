@@ -972,7 +972,10 @@
     "compliance_waive": "Conceder exceções de conformidade",
     "compliance_file": "Finalizar e entregar declarações informativas",
     "hrm_process_read": "Ver listas de processos",
-    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos"
+    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos",
+    "hrm_performance_read": "Ver ciclos de avaliação e avaliações no escopo de privacidade",
+    "hrm_performance_manage": "Conduzir ciclos de avaliação, calibrar e compartilhar avaliações",
+    "hrm_retention_read": "Ver registros de saída e rotatividade"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2430,6 +2433,21 @@
         "title": "Etapas de modelo de processo",
         "singularTitle": "Etapa de modelo de processo",
         "description": "Uma etapa ordenada de um modelo de processo com responsável, prazo e regra de evidência."
+      },
+      "hrm-review-templates": {
+        "title": "Modelos de avaliação",
+        "singularTitle": "Modelo de avaliação",
+        "description": "O formulário de avaliação por organização: nome, escala de notas e seções ordenadas com perguntas."
+      },
+      "hrm-review-template-sections": {
+        "title": "Seções de avaliação",
+        "singularTitle": "Seção de avaliação",
+        "description": "Seções ordenadas de um modelo de avaliação: competência, metas ou texto livre, com peso opcional."
+      },
+      "hrm-review-template-questions": {
+        "title": "Perguntas de avaliação",
+        "singularTitle": "Pergunta de avaliação",
+        "description": "Perguntas de uma seção do modelo: nota, texto ou ambos. Perguntas obrigatórias devem ser respondidas antes do envio."
       }
     },
     "fields": {
@@ -2720,7 +2738,14 @@
       "accrualPeriodsPerYear": "Períodos de acúmulo por ano",
       "carryoverKind": "Transferência",
       "carryoverHours": "Limite de transferência (horas)",
-      "carryoverExpiresAfterDays": "A transferência expira após (dias)"
+      "carryoverExpiresAfterDays": "A transferência expira após (dias)",
+      "sectionId": "Seção",
+      "weight": "Peso",
+      "prompt": "Pergunta",
+      "answerKind": "Tipo de resposta",
+      "ratingScaleMin": "Mínimo da escala",
+      "ratingScaleMax": "Máximo da escala",
+      "ratingScaleLabels": "Rótulos da escala"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2783,7 +2808,10 @@
       "leaveAccrualPeriodsPerYear": "Períodos inteiros em um ano de acúmulo (obrigatório para o acúmulo por período).",
       "leaveCarryoverKind": "O que acontece com o tempo não usado no fim do ano: nada, transferir tudo ou até um limite.",
       "leaveCarryoverHours": "Máximo de horas transferidas (obrigatório para «até um limite»).",
-      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram."
+      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram.",
+      "hrmReviewScaleMin": "Nota mais baixa que a escala aceita, por exemplo 1.",
+      "hrmReviewScaleMax": "Nota mais alta que a escala aceita, por exemplo 5.",
+      "hrmReviewScaleLabels": "Rótulos opcionais das extremidades, o menor primeiro."
     },
     "options": {
       "payFrequency": {
@@ -3160,6 +3188,16 @@
         "offer": "Oferta",
         "hired": "Contratado",
         "rejected": "Recusado"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competência",
+        "goals": "Metas",
+        "freeText": "Texto livre"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Nota",
+        "text": "Texto",
+        "ratingAndText": "Nota e texto"
       }
     },
     "payroll": {

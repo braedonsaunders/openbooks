@@ -664,6 +664,18 @@
       "hrm_applications": {
         "label": "Candidaturas",
         "description": "Uma linha por candidatura com sua etapa do funil e o tempo de preenchimento. Dados de contato nunca aparecem — só nomes. Requer a permissão de recrutamento."
+      },
+      "hrm_reviews": {
+        "label": "Avaliações",
+        "description": "Uma linha por avaliação de desempenho — ciclo e período, pessoa, tipo, situação e a nota do autor ao lado da calibrada. Somente RH: quem executa tem a permissão de desempenho, então avaliações não compartilhadas nunca saem do escopo do RH."
+      },
+      "hrm_goals": {
+        "label": "Metas",
+        "description": "Uma linha por meta de desempenho — pessoa, título, situação, progresso e prazo."
+      },
+      "hrm_turnover": {
+        "label": "Rotatividade",
+        "description": "Uma linha por saída — pessoa, data de desligamento, tempo de casa em dias, motivo de saída e os indicadores voluntário e lamentado do registro de saída. Agrupe por mês de desligamento e departamento para a tabela de saídas; as taxas vêm do painel de retenção."
       }
     },
     "columns": {
@@ -1294,6 +1306,39 @@
         "hired_on": "Contratado",
         "days_to_fill": "Dias de preenchimento",
         "application_id": "Candidatura (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Ciclo",
+        "period_end_on": "Fim do período",
+        "employee": "Pessoa empregada",
+        "employer": "Empregador",
+        "kind": "Tipo",
+        "status": "Situação",
+        "overall_rating": "Nota",
+        "calibrated_rating": "Nota calibrada",
+        "employment_id": "Vínculo (id)",
+        "id": "Avaliação (id)"
+      },
+      "hrm_goals": {
+        "employee": "Pessoa empregada",
+        "employer": "Empregador",
+        "title": "Título",
+        "status": "Situação",
+        "progress": "Progresso",
+        "due_on": "Prazo",
+        "employment_id": "Vínculo (id)",
+        "id": "Meta (id)"
+      },
+      "hrm_turnover": {
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "terminated_on": "Desligado em",
+        "tenure_days": "Tempo de casa (dias)",
+        "reason": "Motivo",
+        "voluntary": "Voluntária",
+        "regrettable": "Lamentada",
+        "employment_id": "Vínculo (id)"
       }
     },
     "enumValues": {

@@ -972,7 +972,10 @@
     "payroll_read": "Ver ciclos de nómina y recibos de pago",
     "payroll_run": "Crear, calcular y confirmar ciclos de nómina",
     "hrm_process_read": "Ver listas de procesos",
-    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos"
+    "hrm_process_manage": "Abrir, completar y cancelar listas de procesos",
+    "hrm_performance_read": "Ver ciclos de evaluación y evaluaciones en el ámbito de privacidad",
+    "hrm_performance_manage": "Dirigir ciclos de evaluación, calibrar y compartir evaluaciones",
+    "hrm_retention_read": "Ver registros de salida y rotación"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2385,6 +2388,21 @@
         "title": "Pasos de plantilla de proceso",
         "singularTitle": "Paso de plantilla de proceso",
         "description": "Un paso ordenado de una plantilla de proceso con su responsable, plazo y regla de evidencia."
+      },
+      "hrm-review-templates": {
+        "title": "Plantillas de evaluación",
+        "singularTitle": "Plantilla de evaluación",
+        "description": "El formulario de evaluación por organización: nombre, escala de calificación y secciones ordenadas con preguntas."
+      },
+      "hrm-review-template-sections": {
+        "title": "Secciones de evaluación",
+        "singularTitle": "Sección de evaluación",
+        "description": "Secciones ordenadas de una plantilla de evaluación: competencia, objetivos o texto libre, con ponderación opcional."
+      },
+      "hrm-review-template-questions": {
+        "title": "Preguntas de evaluación",
+        "singularTitle": "Pregunta de evaluación",
+        "description": "Preguntas dentro de una sección de la plantilla: calificación, texto o ambas. Las obligatorias deben responderse antes de enviar."
       }
     },
     "fields": {
@@ -2675,7 +2693,14 @@
       "accrualPeriodsPerYear": "Períodos de devengo por año",
       "carryoverKind": "Arrastre",
       "carryoverHours": "Tope de arrastre (horas)",
-      "carryoverExpiresAfterDays": "El arrastre vence a los (días)"
+      "carryoverExpiresAfterDays": "El arrastre vence a los (días)",
+      "sectionId": "Sección",
+      "weight": "Ponderación",
+      "prompt": "Pregunta",
+      "answerKind": "Tipo de respuesta",
+      "ratingScaleMin": "Mínimo de la escala",
+      "ratingScaleMax": "Máximo de la escala",
+      "ratingScaleLabels": "Etiquetas de la escala"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2738,7 +2763,10 @@
       "leaveAccrualPeriodsPerYear": "Períodos completos en un año de devengo (obligatorio para el devengo por período).",
       "leaveCarryoverKind": "Qué pasa con el tiempo no usado al cierre del año: nada, arrastrar todo o hasta un tope.",
       "leaveCarryoverHours": "Máximo de horas arrastradas (obligatorio para «hasta un tope»).",
-      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen."
+      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen.",
+      "hrmReviewScaleMin": "Calificación más baja que acepta la escala, por ejemplo 1.",
+      "hrmReviewScaleMax": "Calificación más alta que acepta la escala, por ejemplo 5.",
+      "hrmReviewScaleLabels": "Etiquetas opcionales de los extremos, la menor primero."
     },
     "options": {
       "timeClassification": {
@@ -3115,6 +3143,16 @@
         "offer": "Oferta",
         "hired": "Contratado",
         "rejected": "Rechazado"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competencia",
+        "goals": "Objetivos",
+        "freeText": "Texto libre"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Calificación",
+        "text": "Texto",
+        "ratingAndText": "Calificación y texto"
       }
     },
     "laborCosting": {
