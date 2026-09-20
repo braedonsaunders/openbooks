@@ -288,10 +288,16 @@ export function midQuarterDeemedServiceDate(
   }
   const days = inclusiveDayCount(start, end);
   const offset = Math.max(0, inclusiveDayCount(start, placed) - 1);
-  const quarter = Math.min(3, Math.floor((offset * 4) / days));
+  // Rev. Proc. 89-15 table 2 assigns a 31-day December to days 1–8,
+  // 9–15, 16–23, and 24–31. Classify the whole calendar day by its
+  // midpoint; using midnight (offset * 4 / days) puts December 16 in Q2
+  // and falsely deems it placed on December 1 instead of December 15.
+  const quarter = Math.min(3, Math.floor(((offset * 2 + 1) * 2) / days));
+  const firstQuarterDay = Math.ceil((days * quarter) / 4 - 0.5) + 1;
+  const lastQuarterDay = Math.ceil((days * (quarter + 1)) / 4 - 0.5);
   const midpoint = addCalendarDays(
     start,
-    Math.ceil((days * (2 * quarter + 1)) / 8) - 1,
+    Math.ceil((firstQuarterDay + lastQuarterDay) / 2) - 1,
   );
   return nearestPrecedingFirstOrMidpoint(midpoint);
 }
