@@ -224,11 +224,11 @@ export async function consolidateAssetTransfers(
       basis: AssetTransferBasis;
       reversed_on: string | null;
     }>(
-      sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id and b.posts_gl and b.is_active where t.org_id=${orgId} ${bookId ? sql`and t.book_id=${bookId}` : sql``} and t.effective_on<=${cutoff} ${buyerSubsidiaryIds ? sql`and t.buyer_subsidiary_id=any(${uuidArray(buyerSubsidiaryIds)}::uuid[])` : sql``} and not exists(select 1 from consolidation_control_losses loss where loss.org_id=t.org_id and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text) order by t.id for share of t,b`,
+      sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id and b.posts_gl and b.is_active where t.org_id=${orgId} ${bookId ? sql`and t.book_id=${bookId}` : sql``} and t.effective_on<=${cutoff} ${buyerSubsidiaryIds ? sql`and t.buyer_subsidiary_id=any(${uuidArray(buyerSubsidiaryIds)}::uuid[])` : sql``} and not exists(select 1 from consolidation_control_losses loss where loss.org_id=t.org_id and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text) order by t.receiving_asset_id,t.book_id,t.id`,
     )
   ).rows;
   const entries: string[] = [];
-  for (const transfer of transfers) {
+  for (let transfer of transfers) {
     const asset = (
       await tx.execute<{
         acquisition_cost: string;
@@ -239,6 +239,28 @@ export async function consolidateAssetTransfers(
       )
     ).rows[0];
     if (!asset) throw new Error("receiving asset evidence is unavailable");
+    // Asset edits and controlled corrections lock the asset before the frozen
+    // transfer row. Use that same order: holding t FOR SHARE while waiting on
+    // the asset would deadlock a correction upgrading its transfer-row lock.
+    const current = (
+      await tx.execute<(typeof transfers)[number]>(
+        sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id where t.org_id=${orgId} and t.id=${transfer.id} and b.is_active and b.posts_gl for share of t,b`,
+      )
+    ).rows[0];
+    if (!current)
+      throw new Error(
+        "the asset transfer accounting book changed during consolidation; restore the active book before retrying",
+      );
+    transfer = current;
+    if (
+      (
+        await tx.execute(
+          sql`select 1 from consolidation_control_losses loss join asset_transfer_bases t on t.org_id=loss.org_id and t.id=${transfer.id} where loss.org_id=${orgId} and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text limit 1`,
+        )
+      ).rows.length
+    )
+      continue;
+
     const later = (
       await tx.execute(
         sql`select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.posting_date>${cutoff} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,

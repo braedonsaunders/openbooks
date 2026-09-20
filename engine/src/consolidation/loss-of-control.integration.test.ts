@@ -1,3 +1,4 @@
+import { consolidationHistory } from "./consolidation-history.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -35,11 +36,12 @@ async function post(
   subsidiaryId: string,
   date: string,
   lines: { accountId: string; amount: string }[],
+  reversesEntryId: string | null = null,
 ) {
   return db.transaction(async (tx) => {
     const id = randomUUID();
     await tx.execute(
-      sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values(${id},${f.org.orgId},${f.org.bookId},${subsidiaryId},${id},${date},${f.org.periodId},'draft','manual')`,
+      sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,reverses_entry_id) values(${id},${f.org.orgId},${f.org.bookId},${subsidiaryId},${id},${date},${f.org.periodId},'draft','manual',${reversesEntryId})`,
     );
     for (const [i, l] of lines.entries())
       await tx.execute(
@@ -418,5 +420,67 @@ test(
           ),
         );
       }
+    }),
+);
+
+test(
+  "generic correcting journals remain automatic source evidence, never manual disposal inputs",
+  { skip: !DB },
+  async () =>
+    fixture(async (f) => {
+      const initial = await runOwnershipConsolidation(
+        f.org.orgId,
+        f.org.periodId,
+        f.actors.adminId,
+      );
+      assert.ok(
+        initial.entryIds.length > 0,
+        "fixture must create a real ownership consolidation generation",
+      );
+      const original = initial.entryIds[0]!;
+      const originalLines = (
+        await db.execute<{ account_id: string; amount: string }>(
+          sql`select account_id,(-amount)::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} order by line_number`,
+        )
+      ).rows;
+      const correction = await post(
+        f,
+        f.elimination,
+        "2026-07-31",
+        originalLines.map((l) => ({
+          accountId: l.account_id,
+          amount: l.amount,
+        })),
+        original,
+      );
+      const history = (
+        await db.execute<{ id: string }>(
+          sql`${consolidationHistory(f.org.orgId)} select id from history where id in(${original},${correction})`,
+        )
+      ).rows;
+      assert.deepEqual(
+        history.map((r) => r.id).sort(),
+        [original, correction].sort(),
+        "a correcting journal occurs once in the automatic lineage",
+      );
+      const correctingLine = (
+        await db.execute<{ id: string; amount: string }>(
+          sql`select id,amount::text from journal_lines where org_id=${f.org.orgId} and entry_id=${correction} order by line_number limit 1`,
+        )
+      ).rows[0]!;
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, {
+            effectiveOn: "2026-07-31",
+            additionalConsolidationLines: [
+              { lineId: correctingLine.id, amount: correctingLine.amount },
+            ],
+          }),
+        ),
+        /already included automatically/,
+      );
     }),
 );

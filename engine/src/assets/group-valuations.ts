@@ -352,6 +352,42 @@ export async function proposeAssetGroupValuation(
 ) {
   return withOrg(orgId, () =>
     withTransactionSavepoint(db, async () => {
+      // An identical retry still resolves after the source valuation has been
+      // corrected. Authorize against the frozen workpaper first; only a NEW
+      // proposal needs the source event to remain active.
+      const replay = (
+        await db.execute<{
+          subsidiary_id: string;
+          payload: Record<string, unknown>;
+        }>(
+          sql`select subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`,
+        )
+      ).rows[0];
+      if (replay) {
+        const required = (replay.payload.requiredSubsidiaryIds ?? [
+          replay.subsidiary_id,
+        ]) as string[];
+        await assertFinancialChangeAccess(db, {
+          orgId,
+          actorId,
+          subsidiaryIds: required,
+          permission: "assets.manage",
+          feature: "fixedAssets",
+        });
+        const id = await existingFinancialChange(db, {
+          orgId,
+          subsidiaryId: replay.subsidiary_id,
+          domain: "asset",
+          subjectId: assetId,
+          operation: "group_valuation",
+          effectiveOn: input.effectiveOn,
+          reason: input.reason,
+          actorId,
+          idempotencyKey: input.idempotencyKey,
+          payload: { ...input, requiredSubsidiaryIds: required },
+        });
+        if (id) return id;
+      }
       const s = await subject(db, orgId, assetId, actorId, input);
       const args = {
         orgId,

@@ -1,3 +1,4 @@
+import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import {
   groupAssetPlan,
   type GroupAssetValuation,
@@ -636,10 +637,6 @@ async function snapshot(
     throw new Error(
       "all books must identify the same physical portion as fully or partially disposed",
     );
-  if (previews.some((p) => p.full !== previews[0]!.full))
-    throw new Error(
-      "a whole-asset disposal must remove the full asset in every accounting book",
-    );
   let buyerCategory: Category | null = null;
   if (input.transfer && buyer) {
     if (
@@ -997,6 +994,11 @@ export async function applyAssetChange(
         throw new Error("this is not an asset change");
       if (change.operation === "reversal")
         return applyAssetReversal(orgId, changeId, actorId);
+      await lockAssetTaxLifecycle(
+        tx,
+        orgId,
+        change.payload.requiredSubsidiaryIds as string[],
+      );
       const input = change.payload as unknown as AssetChangeInput;
       validate(input);
       await access(
@@ -1084,7 +1086,7 @@ export async function applyAssetChange(
           sql`insert into asset_basis_changes(org_id,asset_id,book_id,change_id,effective_on,cost_delta,accumulated_delta,salvage_delta,impairment_released,units_remaining,depreciable_after,journal_entry_id,stub_journal_entry_id,created_by) values(${orgId},${change.subject_id},${preview.bookId},${changeId},${input.effectiveOn},${neg(preview.removedCost)},${add(preview.stub, neg(preview.removedAccumulated))},${neg(preview.removedSalvage)},${preview.impairmentReleased},${preview.unitsRemaining},${add(add(preview.remainingCost, neg(preview.remainingAccumulated)), neg(preview.remainingSalvage))},${entryId},${stubId},${actorId})`,
         );
         await tx.execute(
-          sql`insert into asset_events(org_id,asset_id,kind,occurred_on,amount,journal_entry_id,financial_change_id,memo,created_by,updated_by) values(${orgId},${change.subject_id},${input.transfer ? "transferred" : preview.full ? "disposed" : "partially_disposed"},${input.effectiveOn},${input.proceeds},${entryId},${changeId},${`${preview.full ? "Full" : "Partial"} ${input.operation}: ${input.reason}`},${actorId},${actorId})`,
+          sql`insert into asset_events(org_id,asset_id,kind,occurred_on,amount,journal_entry_id,book_id,financial_change_id,memo,created_by,updated_by) values(${orgId},${change.subject_id},${input.transfer ? "transferred" : preview.full ? "disposed" : "partially_disposed"},${input.effectiveOn},${input.proceeds},${entryId},${preview.bookId},${changeId},${`${preview.full ? "Full" : "Partial"} ${input.operation}: ${input.reason}`},${actorId},${actorId})`,
         );
       }
       const full = state.previews[0]!.full;
@@ -1149,7 +1151,7 @@ export async function applyAssetChange(
             : null;
           if (entryId) entries.push(entryId);
           await tx.execute(
-            sql`insert into asset_events(org_id,asset_id,kind,occurred_on,amount,journal_entry_id,financial_change_id,memo,created_by,updated_by) values(${orgId},${receivingAssetId},'acquired',${input.effectiveOn},${t.buyerAmount},${entryId},${changeId},${input.reason},${actorId},${actorId})`,
+            sql`insert into asset_events(org_id,asset_id,kind,occurred_on,amount,journal_entry_id,book_id,financial_change_id,memo,created_by,updated_by) values(${orgId},${receivingAssetId},'acquired',${input.effectiveOn},${t.buyerAmount},${entryId},${preview.bookId},${changeId},${input.reason},${actorId},${actorId})`,
           );
           let groupCost = mulRate(preview.removedCost, t.sellerToGroupRate),
             groupAccumulated = mulRate(

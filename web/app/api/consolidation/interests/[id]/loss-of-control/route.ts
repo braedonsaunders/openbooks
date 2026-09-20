@@ -1,3 +1,4 @@
+import { consolidationHistory } from "@openbooks/engine/src/consolidation/consolidation-history.ts";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -129,7 +130,7 @@ export async function GET(
           amount: string;
           memo: string | null;
         }>(
-          sql`select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from ownership_consolidation_entries c where c.org_id=e.org_id and c.journal_entry_id=e.id) and not exists(select 1 from asset_transfer_consolidation_entries c where c.org_id=e.org_id and c.journal_entry_id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
+          sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
         )
       ).rows
     : [];

@@ -684,6 +684,7 @@ export async function reverseAssetLifecycleEvent(
       asset_id: string;
       kind: string;
       journal_entry_id: string;
+      financial_change_id: string | null;
       created_at: string;
       asset_number: string;
       status: string;
@@ -700,7 +701,7 @@ export async function reverseAssetLifecycleEvent(
       occurred_on: string;
       posting_date: string;
     }>(sql`
-      select event.id, event.asset_id, event.kind, event.journal_entry_id,
+      select event.id, event.asset_id, event.kind, event.journal_entry_id,event.financial_change_id,
              event.created_at::text as created_at, asset.asset_number, asset.status,
              asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
              asset.department_id, asset.project_id, asset.location_id,
@@ -717,6 +718,11 @@ export async function reverseAssetLifecycleEvent(
     const source = sourceResult.rows[0];
     if (!source)
       throw new AssetLifecycleError("asset lifecycle event not found");
+
+    if (source.financial_change_id)
+      throw new AssetLifecycleError(
+        "This event belongs to an approved multi-book change; reverse it from Accounting changes to preserve every book and transfer link.",
+      );
 
     const prior = await tx.execute<{
       id: string;

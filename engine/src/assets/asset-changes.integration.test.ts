@@ -1,3 +1,4 @@
+import { runTaxPool } from "../tax-returns/pool-run.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -564,6 +565,43 @@ test(
         )
       ).rows[0]!;
       assert.equal(original.status, "reversed");
+      const links = (
+        await db.execute<{
+          source_id: string;
+          reversal_id: string | null;
+          book_id: string;
+          reversed_book: string | null;
+        }>(
+          sql`select e.id as source_id,r.id as reversal_id,e.book_id,r.book_id as reversed_book from asset_events e left join asset_events r on r.org_id=e.org_id and r.reverses_event_id=e.id where e.org_id=${f.org.orgId} and e.financial_change_id=${id}`,
+        )
+      ).rows;
+      assert.ok(
+        links.length > 0 &&
+          links.every((e) => e.reversal_id && e.book_id === e.reversed_book),
+        "each original event must have exactly linked book reversal evidence",
+      );
+      await db.execute(
+        sql`update asset_categories set tax_attributes=jsonb_build_object('ca_cca_class','8') where org_id=${f.org.orgId} and id=${f.categoryId}`,
+      );
+      const restoredTax = await runTaxPool(
+        f.org.orgId,
+        f.org.bookId,
+        f.org.subsidiaryId,
+        "ca_cca",
+        2026,
+        {
+          yearStart: "2026-01-01",
+          yearEnd: "2026-12-31",
+          actorId: f.actors.submitterId,
+        },
+      );
+      assert.equal(
+        restoredTax.lines[0]!.dispositions,
+        "0.00",
+        "a corrected disposal is not an active tax disposition",
+      );
+      assert.equal(restoredTax.lines[0]!.allowance, "300.00");
+
       const future = await runDepreciation(
         f.org.orgId,
         "2026-09-30",
@@ -708,3 +746,131 @@ for (const impair of [false, true])
         );
       }, false),
   );
+
+test(
+  "tax depreciation cannot silently omit an approved partial disposal",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      await db.execute(
+        sql`update asset_categories set tax_attributes=jsonb_build_object('ca_cca_class','8') where org_id=${f.org.orgId} and id=${f.categoryId}`,
+      );
+      // A pre-event historical run is unaffected by the future book change.
+      const id = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        input(f),
+      );
+      await approve(f, id);
+      await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
+      await runTaxPool(
+        f.org.orgId,
+        f.org.bookId,
+        f.org.subsidiaryId,
+        "ca_cca",
+        2025,
+        {
+          yearStart: "2025-01-01",
+          yearEnd: "2025-12-31",
+          actorId: f.actors.submitterId,
+        },
+      );
+      const before = (
+        await db.execute(
+          sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`,
+        )
+      ).rows;
+      await assert.rejects(
+        runTaxPool(
+          f.org.orgId,
+          f.org.bookId,
+          f.org.subsidiaryId,
+          "ca_cca",
+          2026,
+          {
+            yearStart: "2026-01-01",
+            yearEnd: "2026-12-31",
+            actorId: f.actors.submitterId,
+          },
+        ),
+        /requires native statutory basis treatment.*no tax result has been produced/,
+      );
+      assert.deepEqual(
+        (
+          await db.execute(
+            sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`,
+          )
+        ).rows,
+        before,
+        "refusal must persist no calculated tax period",
+      );
+    }),
+);
+
+test(
+  "approved corrections retain non-posting book events without manufacturing GL entries",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      const secondary = randomUUID();
+      await db.execute(
+        sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${f.org.orgId},'ALT','Alternate non-posting',false,true,false)`,
+      );
+      await buildSchedule(
+        f.assetId,
+        f.org.orgId,
+        f.actors.submitterId,
+        secondary,
+      );
+      await runDepreciation(
+        f.org.orgId,
+        "2026-07-31",
+        f.actors.submitterId,
+        f.assetId,
+      );
+      const change = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        input(f),
+      );
+      await approve(f, change);
+      await applyAssetChange(f.org.orgId, change, f.actors.submitterId);
+      const { proposeAssetReversal } =
+        await import("./asset-change-reversals.ts");
+      const reverse = await proposeAssetReversal(
+        f.org.orgId,
+        change,
+        f.actors.submitterId,
+        {
+          effectiveOn: "2026-08-01",
+          reason: "Correction of the approved sale before further use",
+          idempotencyKey: randomUUID(),
+        },
+      );
+      await approve(f, reverse);
+      await applyAssetChange(f.org.orgId, reverse, f.actors.submitterId);
+      const rows = (
+        await db.execute<{
+          book_id: string;
+          journal_entry_id: string | null;
+          reverses_event_id: string | null;
+        }>(
+          sql`select book_id,journal_entry_id,reverses_event_id from asset_events where org_id=${f.org.orgId} and financial_change_id=${reverse} order by book_id`,
+        )
+      ).rows;
+      assert.equal(rows.length, 2);
+      assert.ok(rows.every((r) => r.reverses_event_id));
+      assert.equal(
+        rows.find((r) => r.book_id === secondary)!.journal_entry_id,
+        null,
+      );
+      const basis = (
+        await db.execute<{ cost: string }>(
+          sql`select cost::text from asset_book_carrying_values where org_id=${f.org.orgId} and asset_id=${f.assetId} and book_id=${secondary}`,
+        )
+      ).rows[0]!;
+      assert.equal(basis.cost, "3000.0000");
+    }),
+);
