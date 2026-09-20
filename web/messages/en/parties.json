@@ -28,6 +28,13 @@
     "viewStatement": "View statement",
     "activated": "Party activated",
     "deactivated": "Party deactivated",
+    "payrollTabs": {
+      "ariaLabel": "Payroll sections",
+      "general": "General",
+      "tax": "Tax and withholding",
+      "banks": "Pay banks",
+      "accounts": "Bank accounts"
+    },
     "tabs": {
       "ariaLabel": "Party record sections",
       "overview": "Overview",

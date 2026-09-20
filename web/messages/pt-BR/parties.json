@@ -31,6 +31,13 @@
     "holdReason": "Motivo do bloqueio",
     "activated": "Parte ativada",
     "deactivated": "Parte desativada",
+    "payrollTabs": {
+      "ariaLabel": "Seções da folha",
+      "general": "Geral",
+      "tax": "Impostos e retenções",
+      "banks": "Bancos",
+      "accounts": "Contas bancárias"
+    },
     "tabs": {
       "employment": "Emprego",
       "ariaLabel": "Seções do registro da parte",

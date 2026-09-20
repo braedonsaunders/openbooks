@@ -7,6 +7,7 @@ import { ChevronDown } from 'lucide-react'
 import { Button, Popover, UrlDrawer } from '@openbooks/ui'
 import { AttachmentPanel } from './attachment-panel'
 import { AuditTrailPanel } from './audit-trail-panel'
+import { DrawerTabStrip } from './drawer-tab-strip'
 
 interface TransactionDrawerProps {
   closeHref: string
@@ -119,27 +120,15 @@ export function TransactionDrawer({
       title={title}
       description={description}
       subtabs={
-        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('auditTrail.ariaLabel')}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.key}
-              onClick={() => {
-                setLocalActiveTab(tab.key)
-                onActiveTabChange?.(tab.key)
-              }}
-              className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <DrawerTabStrip
+          tabs={tabs}
+          activeKey={activeTab}
+          onSelect={(key) => {
+            setLocalActiveTab(key)
+            onActiveTabChange?.(key)
+          }}
+          ariaLabel={t('auditTrail.ariaLabel')}
+        />
       }
       headerActions={primaryAction != null || hasActions ? (
         <div className="flex items-center gap-1.5">

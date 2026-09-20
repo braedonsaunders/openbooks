@@ -28,6 +28,13 @@
     "viewStatement": "Voir le relevé",
     "activated": "Tiers activé",
     "deactivated": "Tiers désactivé",
+    "payrollTabs": {
+      "ariaLabel": "Sections de paie",
+      "general": "Général",
+      "tax": "Impôts et retenues",
+      "banks": "Banques de paie",
+      "accounts": "Comptes bancaires"
+    },
     "tabs": {
       "employment": "Emploi",
       "ariaLabel": "Sections du dossier du tiers",

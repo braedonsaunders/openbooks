@@ -30,6 +30,7 @@ const code = source
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|\s)\/\/.*$/gm, '$1')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
+const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
 
 // Country packs DECLARE; the generic layer branches on NOTHING. A third pack
 // must be expressible through the served declarations with no edit here, so no
@@ -140,12 +141,15 @@ function render(
   countries: string[] = ['XX'],
   storedCertificates: StoredCertificateRow[] = [],
   derivedColumns: Record<string, string> = {},
+  editor: { readOnly?: boolean; section?: 'general' | 'tax' } = {},
 ): string {
   const profileCountry = (overrides.country as string | undefined) ?? countries[0]!
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{ 'payroll': messages }}>
+    <NextIntlClientProvider locale="en" messages={{ 'payroll': messages, 'common': commonMessages }}>
       <ProfileEditor
         inline
+        readOnly={editor.readOnly}
+        section={editor.section}
         profile={{
           id: '',
           employee_party_id: 'emp',
@@ -457,4 +461,78 @@ test('profile editor renders a column it has never bound', () => {
   // The unbound flag renders as a checkbox, checked from the derived hint.
   assert.match(html, /id="pp-zz_bio-standing"/)
   assert.match(html, /id="pp-zz_bio-standing"[^>]*checked/)
+})
+
+// The employee drawer honours its edit mode exactly like its Overview tab:
+// read mode renders values, never inputs, and offers no Save.
+test('read mode renders values with no form controls and no save', () => {
+  const html = render(
+    { federal_claim_code: 3, tax_exempt: true },
+    { XX: xxPack },
+    ['XX'],
+    [],
+    {},
+    { readOnly: true },
+  )
+  assert.doesNotMatch(html, /<input/)
+  assert.doesNotMatch(html, /<select/)
+  assert.doesNotMatch(html, /<textarea/)
+  // No Save offer. (The shared Label's help affordance is a button, exactly
+  // as on the Overview tab's read mode — it opens help, it edits nothing.)
+  assert.doesNotMatch(html, />Save</)
+  // Generic facts read as values: the schedule and country names, not ids.
+  assert.match(html, /Monthly/)
+  assert.match(html, /Exemplia/)
+  // Pack-declared withholding reads back the stored answers: labels resolve
+  // through the locale for the data concept (like edit mode), answered Yes.
+  assert.match(html, /Federal claim code/)
+  assert.match(html, />3</)
+  assert.match(html, /Income tax exempt/)
+  assert.match(html, />Yes</)
+  // The identifier never leaks: with nothing on file only the pack's label
+  // and an em dash render.
+  assert.match(html, /Fixture payroll number/)
+  assert.doesNotMatch(html, /id="pp-sin"/)
+})
+
+test('edit mode renders the inputs and the save button', () => {
+  const html = render({ federal_claim_code: 3, tax_exempt: true })
+  assert.match(html, /<select/)
+  assert.match(html, /<input/)
+  assert.match(html, /id="pp-schedule"/)
+  assert.match(html, />Save</)
+})
+
+// One mounted editor serves both sub-tabs: the section prop decides which
+// half renders, so typed values in state survive the switch.
+test('the general section edits generic facts without withholding', () => {
+  const html = render({}, { XX: xxPack }, ['XX'], [], {}, { section: 'general' })
+  assert.match(html, /id="pp-schedule"/)
+  assert.match(html, /id="pp-vac-pct"/)
+  assert.match(html, /id="pp-active"/)
+  assert.doesNotMatch(html, /XX-1 · Fixture withholding certificate/)
+  assert.doesNotMatch(html, /id="pp-sin"/)
+  assert.doesNotMatch(html, /id="pp-xx_form-codes"/)
+})
+
+test('the tax section edits withholding without generic facts', () => {
+  const html = render({}, { XX: xxPack }, ['XX'], [], {}, { section: 'tax' })
+  assert.match(html, /id="pp-sin"/)
+  assert.match(html, /XX-1 · Fixture withholding certificate/)
+  assert.match(html, /id="pp-xx_form-codes"/)
+  assert.match(html, /id="pp-xx_form-free"/)
+  assert.doesNotMatch(html, /id="pp-schedule"/)
+  assert.doesNotMatch(html, /id="pp-vac-pct"/)
+  assert.doesNotMatch(html, /id="pp-active"/)
+})
+
+test('read mode respects the section split', () => {
+  const general = render({}, { XX: xxPack }, ['XX'], [], {}, { readOnly: true, section: 'general' })
+  assert.match(general, /Monthly/)
+  assert.doesNotMatch(general, /<select/)
+  assert.doesNotMatch(general, /XX-1 · Fixture withholding certificate/)
+  const tax = render({}, { XX: xxPack }, ['XX'], [], {}, { readOnly: true, section: 'tax' })
+  assert.match(tax, /XX-1 · Fixture withholding certificate/)
+  assert.doesNotMatch(tax, /<select/)
+  assert.doesNotMatch(tax, /Monthly/)
 })
