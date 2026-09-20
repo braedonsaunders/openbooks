@@ -31,6 +31,7 @@ export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
 export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
 export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
 export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
+export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -47,6 +48,9 @@ const HRM_REQUEST_STATUSES = [
 const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
 
 const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
+
+const HRM_REQUISITION_STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
+const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
 
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
@@ -360,5 +364,89 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'id', label: 'Absence (id)', kind: 'uuid', expr: 'a.id' },
     ],
     defaultSort: { column: 'on_date', direction: 'desc' },
+  },
+  {
+    key: 'hrm_requisitions',
+    label: 'Requisitions',
+    category: 'hrm',
+    description:
+      'One row per vacancy opening: number, title, status, employer, department, position, and headcount versus filled count. Requires the HRM recruiting permission.',
+    // One row per requisition with its establishment and placement. The
+    // fill itself is hire-driven (filled_count moves only in the hire
+    // transaction), so the register reads the stored counters, never a
+    // computed join that could disagree with the hire evidence.
+    from: `hrm_requisitions r
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = r.org_id
+  LEFT JOIN departments dep ON dep.id = r.department_id AND dep.org_id = r.org_id
+  LEFT JOIN positions p ON p.id = r.position_id AND p.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // The opening's employer is the legal-entity boundary: the executor
+    // clamps this to the reader's allowlist, so a restricted reader sees
+    // only their own vacancies.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // A register, not a point-in-time statement: no as-of sentinel and no
+    // implicit period — the opened_on column below carries the fact.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'number', label: 'Number', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'r.title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REQUISITION_STATUSES },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'position', label: 'Position', kind: 'text', expr: 'p.position_code' },
+      { key: 'headcount', label: 'Headcount', kind: 'number', expr: 'r.headcount' },
+      { key: 'filled_count', label: 'Filled', kind: 'number', expr: 'r.filled_count' },
+      { key: 'opened_on', label: 'Opened', kind: 'date', expr: 'r.opened_on' },
+      { key: 'closed_on', label: 'Closed', kind: 'date', expr: 'r.closed_on' },
+      { key: 'requisition_id', label: 'Requisition (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'number', direction: 'asc' },
+  },
+  {
+    key: 'hrm_applications',
+    label: 'Applications',
+    category: 'hrm',
+    description:
+      'One row per candidacy with its funnel stage, plus the funnel-per-stage counts and time-to-fill from opening to hire. Candidate contact PII never leaves through reports — names only. Requires the HRM recruiting permission.',
+    // One row per application on its requisition's funnel: the stage name
+    // resolves through the same-org stage join, and the hire day resolves
+    // through the append-only event ledger (the first hired event), never
+    // through a mutable column — so the funnel and the time-to-fill read
+    // the same evidence the services wrote.
+    from: `hrm_applications a
+  JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = a.org_id
+  JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = a.org_id
+  JOIN hrm_pipeline_stages s ON s.id = a.stage_id AND s.org_id = a.org_id
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = a.org_id
+  LEFT JOIN LATERAL (
+    SELECT min(e.recorded_at)::date AS hired_on
+      FROM hrm_application_events e
+     WHERE e.org_id = a.org_id AND e.application_id = a.id AND e.kind = 'hired'
+  ) hire ON TRUE`,
+    orgColumn: 'a.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    defaultPeriodField: null,
+    columns: [
+      { key: 'requisition_number', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'stage', label: 'Stage', kind: 'text', expr: 's.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: HRM_APPLICATION_STATUSES },
+      { key: 'applied_on', label: 'Applied', kind: 'date', expr: 'a.applied_on' },
+      { key: 'opened_on', label: 'Requisition opened', kind: 'date', expr: 'r.opened_on' },
+      { key: 'hired_on', label: 'Hired', kind: 'date', expr: 'hire.hired_on' },
+      {
+        key: 'days_to_fill',
+        label: 'Days to fill',
+        kind: 'number',
+        expr: 'hire.hired_on - r.opened_on',
+      },
+      { key: 'application_id', label: 'Application (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'applied_on', direction: 'desc' },
   },
 ]

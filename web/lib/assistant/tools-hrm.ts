@@ -20,6 +20,11 @@ import {
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
+import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import {
+  getRequisitionDetail,
+  listRequisitions,
+} from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -69,6 +74,7 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmPositionError ||
     error instanceof HrmProcessError ||
     error instanceof LeaveError ||
+    error instanceof RecruitingError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -623,4 +629,93 @@ const hrmLeave: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave];
+const requisitionSegments = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
+
+const hrmRecruiting: AssistantToolDef = {
+  name: "hrm_recruiting",
+  description:
+    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Candidate contact PII never leaves through this tool, names only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.recruiting.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
+    segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { requisitionId?: string; segment?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      if (a.requisitionId) {
+        const detail = await getRequisitionDetail({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          requisitionId: a.requisitionId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
+            requisitionNumber: detail.requisitionNumber,
+            title: detail.title,
+            status: detail.status,
+            headcount: detail.headcount,
+            filledCount: detail.filledCount,
+            timeToFillDays: detail.timeToFillDays,
+            funnel: detail.funnel,
+            applications: detail.applications.map((application) => ({
+              id: application.id,
+              candidate: application.candidate.displayName,
+              stageKey: application.stageKey,
+              stageName: application.stageName,
+              status: application.status,
+              appliedOn: application.appliedOn,
+              lastEventKind: application.lastEventKind,
+              interviewsCount: application.interviewsCount,
+              liveOfferStatus: application.liveOfferStatus,
+            })),
+            href: "/hrm/recruiting",
+          },
+        };
+      }
+      const segment = a.segment ?? "open";
+      const openings = await listRequisitions({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        status: segment,
+      });
+      const page = compactRows(
+        openings.map((row) => ({
+          id: row.id,
+          requisitionNumber: row.requisitionNumber,
+          title: row.title,
+          status: row.status,
+          headcount: row.headcount,
+          filledCount: row.filledCount,
+          hiringManagerName: row.hiringManagerName,
+          openedOn: row.openedOn,
+        })),
+        { limit },
+      );
+      return {
+        ok: true,
+        data: {
+          segment,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
+          requisitions: page.items,
+          href: "/hrm/recruiting",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting];

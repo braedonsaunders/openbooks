@@ -40,7 +40,7 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting"];
 
 const TOOL_PERMS: Record<string, string> = {
   hrm_headcount: "hrm.employment.read",
@@ -51,11 +51,15 @@ const TOOL_PERMS: Record<string, string> = {
   // checklist state is governed by hrm.process.read at every surface.
   hrm_processes: "hrm.process.read",
   hrm_leave: "hrm.leave.read",
+  // The funnel tool carries the recruiting gate: requisitions, candidates,
+  // interviews and offers are governed by hrm.recruiting.read at every
+  // surface, and contact PII never leaves through it.
+  hrm_recruiting: "hrm.recruiting.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the six HRM read tools", () => {
+test("the module exports exactly the seven HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
@@ -114,6 +118,12 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_leave")!.inputSchema.parse({ employmentId: UUID, asOf: "2026-06-15" });
   assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ status: "taken" }));
   assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_recruiting")!.inputSchema.parse({});
+  byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: UUID });
+  byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "filled", limit: 10 });
+  assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "archived" }));
+  assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: "nope" }));
+  assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ limit: 0 }));
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -129,6 +139,8 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listProcesses(",
     "listLeaveRequests(",
     "listLeaveTypes(",
+    "listRequisitions(",
+    "getRequisitionDetail(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",

@@ -103,6 +103,8 @@ const READER_PERMS = [
   "hrm.position.read",
   "hrm.process.read",
   "hrm.leave.read",
+  // The funnel (0195) has its own read grant for the same reason.
+  "hrm.recruiting.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
