@@ -73,6 +73,13 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
  * 0196 performance and retention keys ride it too: reviews assess named
  * people, so performance read/manage and retention read stay admin-only
  * like the employment keys.
+ * employment read/manage keys (admin only, via the catalogue spread).
+ * The HR-5 leave keys and the HR-9 self-service keys ride it too: the
+ * self/team keys scope every read to the party behind the login (or to
+ * holding direct reports), so granting them to a broad built-in role
+ * would still be safe row-wise — but no built-in role represents an
+ * employee login, and employee logins receive hrm.self.read/request by
+ * explicit grant exactly like hrm.leave.request today.
  */
 test("hrm employment permissions are catalogued, grouped, and held by admin only", () => {
   const keys: CataloguePermission[] = [
@@ -94,6 +101,10 @@ test("hrm employment permissions are catalogued, grouped, and held by admin only
     "hrm.retention.read",
     "hrm.benefits.read",
     "hrm.benefits.manage",
+    "hrm.self.read",
+    "hrm.self.request",
+    "hrm.team.read",
+    "hrm.team.manage",
   ];
   for (const perm of keys) {
     assert.ok(
