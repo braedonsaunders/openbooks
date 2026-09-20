@@ -218,3 +218,43 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     /intrinsically monthly/,
   );
 });
+
+test("ES employee facts refuse absence as missing and bad values as out-of-band", async () => {
+  // Both causes are reachable now that operators supply these fields: an
+  // empty value is not out of range, it is missing. Statuses unchanged —
+  // every case still refuses — only the absent name sharpens.
+  const pushed: Array<{ key: string; amount: string }> = [];
+  const base = {
+    taxYear: 2026,
+    region: "MD",
+    run: { pay_date: "2026-03-15" },
+    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990" },
+    income: "2000.00",
+    nonPeriodic: "",
+    pensionable: "2000.00",
+    insurable: "2000.00",
+    periodsPerYear: 12,
+    pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
+      pushed.push({ key, amount });
+    },
+    certificateFor: () => null,
+    assertRegionSupported: () => {},
+  } as unknown as Parameters<typeof computeEsStatutory>[0];
+  const factCases = [
+    ["es_situacion_laboral", /es_situacion_laboral is missing/, /is not activo\/pensionista\/desempleado/],
+    ["es_grupo_cotizacion", /es_grupo_cotizacion is missing/, /is not an integer 1–11/],
+    ["es_ano_nacimiento", /es_ano_nacimiento is missing/, /is out of range 1906–2026/],
+  ] as const;
+  for (const [fact, missing, band] of factCases) {
+    await assert.rejects(
+      () => computeEsStatutory({ ...base, emp: { ...base.emp, [fact]: "" } }),
+      missing,
+      `${fact}: an empty value refuses as missing`,
+    );
+    await assert.rejects(
+      () => computeEsStatutory({ ...base, emp: { ...base.emp, [fact]: "XX-not-a-value" } }),
+      band,
+      `${fact}: a supplied but unusable value keeps the band message`,
+    );
+  }
+});
