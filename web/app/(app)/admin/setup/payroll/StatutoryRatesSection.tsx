@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/u
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 import { countryName } from '../../../../../lib/countries'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { formatRateFieldValue } from './statutory-rates-format'
 
 /**
@@ -134,16 +135,19 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   // response), never synchronously in the effect body.
   const load = useCallback((forYear: number | null) => {
     const query = forYear ? `?year=${forYear}` : ''
-    return fetch(`/api/payroll/settings/rates${query}`)
-      .then((res) => res.json().then((payload: Payload & { error?: string }) => {
-        if (!res.ok) {
-          setFailure(payload.error ?? 'failed')
-          return
-        }
-        setFailure(null)
-        setData(payload)
-        setYear(payload.year)
-      }))
+    return fetch(`/api/payroll/settings/rates${query}`).then(async (res) => {
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) {
+        setFailure(await readApiErrorMessage(res, 'failed'))
+        return
+      }
+      const payload: Payload & { error?: string } = await res.json()
+      setFailure(null)
+      setData(payload)
+      setYear(payload.year)
+    })
   }, [])
 
   useEffect(() => {
@@ -185,8 +189,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           values: draft.values,
         }),
       })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error ?? 'failed')
+      // The status is checked before the body is parsed (see load above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(label('saved', 'Saved'))
       setDraft(null)
       await load(year)

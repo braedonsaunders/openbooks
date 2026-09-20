@@ -345,8 +345,8 @@ export function PayrollOnboardingWizard(props: {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'seed-components', country }),
         })
-        const j = await res.json()
-        if (!res.ok) throw new Error(j.error ?? 'failed')
+        // The status is checked before the body is parsed (see reload above).
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to seed the ${country} payroll components`))
       }
       setStepIdx(steps.indexOf('done'))
       setTimeout(() => {

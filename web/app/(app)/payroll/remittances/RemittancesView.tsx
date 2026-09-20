@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
 import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useMoney } from '../../../../components/money-provider'
 
 /**
@@ -55,8 +56,11 @@ export function RemittancesView({
           to: range.to,
         }),
       })
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to create the remittance bill'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       toast.success(t('billCreated', { number: j.documentNumber }))
       router.refresh()
     } catch (e) {

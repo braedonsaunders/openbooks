@@ -34,6 +34,7 @@ import type {
   PayRunCalculationError,
   PayRunRefusalAcknowledgement,
 } from '@openbooks/engine/src/payroll/run.ts'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
@@ -443,13 +444,16 @@ export function RunWizard(props: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'preview-gl' }),
     })
-      .then((res) => res.json().then((j) => {
+      .then(async (res) => {
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json().
         if (!res.ok) {
-          setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: j.error ?? 'failed' })
+          setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: await readApiErrorMessage(res, 'failed') })
           return
         }
+        const j = await res.json()
         setGl({ state: 'ready', legs: j.legs ?? [], debitTotal: j.debitTotal ?? '0', error: '' })
-      }))
+      })
       .catch((e: unknown) => {
         setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: (e as Error).message })
       })
@@ -473,8 +477,10 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       })
+      // The status is checked before the body is parsed: a non-JSON error body
+      // must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       if (action === 'calculate') {
         const freshErrors: PayRunCalculationError[] = Array.isArray(j.errors) ? j.errors : []
         applyRefusalState(j)
@@ -516,8 +522,9 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'acknowledge-refusals' }),
       })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       if (j.acknowledgement) {
         setAcknowledgement(j.acknowledgement)
         setRefusalsAcked(true)
@@ -543,8 +550,9 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'dry-run' }),
       })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       setDry({
         employees: j.employees ?? 0,
         gross: j.gross ?? '0',
@@ -569,16 +577,16 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set-scope', employeePartyIds: includedPartyIds, rosterPartyIds }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       if (calculated) {
         const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'calculate' }),
         })
+        if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
         const rj = await recalc.json()
-        if (!recalc.ok) throw new Error(rj.error ?? 'failed')
         applyRefusalState(rj)
         setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       }
@@ -599,15 +607,15 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'calculate' }),
       })
+      if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
       const rj = await recalc.json()
-      if (!recalc.ok) throw new Error(rj.error ?? 'failed')
       applyRefusalState(rj)
       setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       toast.success(t('wizard.adjust.applied'))
@@ -627,8 +635,9 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'email-stubs' }),
       })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       const skipped = [...(j.noEmail ?? []), ...(j.failed ?? []).map((f: { name: string }) => f.name)]
       if (skipped.length > 0) {
         toast.warning(t('wizard.finish.stubsEmailedPartial', { sent: j.sent, skipped: skipped.join(', ') }))
@@ -650,8 +659,8 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'record-payment', bankAccountId }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('wizard.finish.paymentRecorded'))
       router.refresh()
     } catch (e) {
@@ -669,8 +678,8 @@ export function RunWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'post', documentId: run.document_id }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('run.postDone'))
       router.refresh()
     } catch (e) {
@@ -691,8 +700,8 @@ export function RunWizard(props: {
     setBusy(true)
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, { method: 'DELETE' })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('run.discardDone'))
       router.push('/payroll/runs')
     } catch (e) {

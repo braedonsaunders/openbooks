@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { BadgeCheck, Check, Download, Globe2, Search, Trash2 } from 'lucide-react'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import {
   Badge,
@@ -84,8 +85,10 @@ export function PayrollCountryPacks({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'install-pack', country }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to install the ${country} payroll pack`))
       setInstalled((current) => new Set(current).add(country))
       toast.success(t('installSuccess'))
       router.refresh()
@@ -111,8 +114,8 @@ export function PayrollCountryPacks({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'uninstall-pack', country }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see install above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to uninstall the ${country} payroll pack`))
       setInstalled((current) => {
         const next = new Set(current)
         next.delete(country)
