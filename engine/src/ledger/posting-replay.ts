@@ -5,7 +5,8 @@ import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period
 import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
-import { type PostingDeps, PostingError, assertFinalKernelBalance } from "./posting-rules.ts";
+import { type PostingDeps, PostingError } from "./posting-contracts.ts";
+import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
