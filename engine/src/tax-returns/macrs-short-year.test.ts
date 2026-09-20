@@ -108,6 +108,49 @@ test("midpoint service retains the half month rather than charging a full month"
   );
 });
 
+test("Rev. Proc. 89-15 table 2 gives December 16 the third quarter of a one-month year", () => {
+  // Test both sides of every published boundary, not only quarter interiors.
+  for (const [placed, deemed] of [
+    ["1988-12-01", "1988-12-01"],
+    ["1988-12-08", "1988-12-01"],
+    ["1988-12-09", "1988-12-01"],
+    ["1988-12-15", "1988-12-01"],
+    ["1988-12-16", "1988-12-15"],
+    ["1988-12-23", "1988-12-15"],
+    ["1988-12-24", "1988-12-15"],
+    ["1988-12-31", "1988-12-15"],
+  ]) {
+    assert.equal(
+      formatCalendarDay(
+        midQuarterDeemedServiceDate("1988-12-01", "1988-12-31", placed!),
+      ),
+      deemed,
+      placed,
+    );
+  }
+});
+
+test("Rev. Proc. 89-15 table 1 preserves all 73-day quarter boundaries", () => {
+  for (const [placed, deemed] of [
+    ["1988-03-15", "1988-04-15"],
+    ["1988-05-26", "1988-04-15"],
+    ["1988-05-27", "1988-07-01"],
+    ["1988-08-07", "1988-07-01"],
+    ["1988-08-08", "1988-09-01"],
+    ["1988-10-19", "1988-09-01"],
+    ["1988-10-20", "1988-11-15"],
+    ["1988-12-31", "1988-11-15"],
+  ]) {
+    assert.equal(
+      formatCalendarDay(
+        midQuarterDeemedServiceDate("1988-03-15", "1988-12-31", placed!),
+      ),
+      deemed,
+      placed,
+    );
+  }
+});
+
 test("rate and factor precision is not rounded to ledger money precision", () => {
   assert.equal(decliningBalanceRate("200_db", "7"), "0.2857142857");
   assert.equal(
