@@ -753,12 +753,15 @@ export async function endEnrollmentsForTermination(
 ): Promise<number> {
   const { orgId, actorId, employmentId, terminatedOn } = args;
   const lastCovered = addDaysCivil(terminatedOn, -1);
+  // Only rows still covering at termination: already-lapsed rows keep
+  // their history untouched.
   const live = (
     await exec.execute<{ id: string; effective_from: string }>(sql`
       select id, effective_from::text as effective_from
         from hrm_benefit_enrollments
        where org_id = ${orgId} and employment_id = ${employmentId}
          and status in ('elected', 'pending_approval', 'active')
+         and (effective_to is null or effective_to >= ${terminatedOn}::date)
     `)
   ).rows;
   for (const row of live) {

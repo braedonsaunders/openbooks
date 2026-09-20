@@ -296,16 +296,18 @@ async function upsertInputRow(
     `)
   ).rows.map(toInputDTO)[0];
   if (existing) {
-    if (existing.consumedByRunDocumentId !== null) {
-      throw new BenefitsError(
-        "REFUSED",
-        `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is already consumed by pay run ${existing.consumedByRunDocumentId} — recalculate the run; HR never rewrites a consumed month`,
-      );
-    }
+    // Voided wins over consumed: a voided-after-consume row carries both,
+    // and its answer is always that a voided month stays voided.
     if (existing.status === "voided") {
       throw new BenefitsError(
         "REFUSED",
         `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is voided and stays voided — change or end the enrolment and regenerate so the correction carries a new election`,
+      );
+    }
+    if (existing.consumedByRunDocumentId !== null) {
+      throw new BenefitsError(
+        "REFUSED",
+        `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is already consumed by pay run ${existing.consumedByRunDocumentId} — recalculate the run; HR never rewrites a consumed month`,
       );
     }
     if (
