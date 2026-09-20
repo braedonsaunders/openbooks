@@ -116,6 +116,13 @@ export async function applyFeatureChanges(
     // existing rows, so retries converge without duplicating defaults.
     for (const [key, enabled] of Object.entries(clean)) {
       if (enabled) await provisionFeatureDefaults(orgId, actorId, key)
+      // HR-6 recruiting: enabling hrm installs the default hiring funnel
+      // (idempotent — tenant edits win, a missing default is seeded). An
+      // org enabled before HR-6 still gets its funnel lazily on open.
+      if (key === 'hrm' && enabled) {
+        const { ensureDefaultPipelineTemplate } = await import('@openbooks/engine/src/hrm/recruiting/pipeline.ts')
+        await ensureDefaultPipelineTemplate(db, orgId, actorId)
+      }
     }
     return { ok: true, before: currentState, after }
   })
