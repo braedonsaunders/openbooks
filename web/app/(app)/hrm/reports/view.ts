@@ -12,9 +12,9 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { loadHrmReports, type HrmReportCard, type HrmReportsData } from '../../../lib/hrm/reports'
+import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { loadHrmReports, type HrmReportCard, type HrmReportsData } from '../../../../lib/hrm/reports'
 
 /**
  * The workforce reports launch pad, split into a loader and a spec.
@@ -69,7 +69,7 @@ export function hrmReportsSpec(data: HrmReportsData): PageSpec {
           className: 'shrink-0',
           blocks: [
             grid('grid grid-cols-1 gap-3 sm:grid-cols-2', [
-              ...data.entities.map((entity) => card(entity)),
+              ...data.entities.map((entity: HrmReportCard) => card(entity)),
               card(data.hubCard),
             ]),
           ],

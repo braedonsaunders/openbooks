@@ -26,7 +26,7 @@ const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/
 // the same provider the drawer gives it in production.
 function renderReadOnly(element: React.ReactElement): string {
   return renderToStaticMarkup(
-    React.createElement(NextIntlClientProvider, { locale: 'en', messages: { common: commonMessages } }, element),
+    <NextIntlClientProvider locale="en" messages={{ common: commonMessages }}>{element}</NextIntlClientProvider>,
   )
 }
 // Side effect: publishes the built-in packs' certificate sources, the same

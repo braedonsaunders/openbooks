@@ -40,8 +40,10 @@ export const SEEDED_DEFAULT_MARK = "seededDefault";
 export interface SeededViewRow {
   scope: "org" | "user" | string;
   config: unknown;
-  createdAt: Date | string | null | undefined;
-  updatedAt: Date | string | null | undefined;
+  /** Optional on the row type: a caller that did not select the stamps
+   *  cannot prove untouched, so the rule fails closed to "edited". */
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 }
 
 function timestampsEqual(createdAt: SeededViewRow["createdAt"], updatedAt: SeededViewRow["updatedAt"]): boolean {

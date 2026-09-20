@@ -1,4 +1,4 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { changeRequestQueueSpec, changeRequestQueueTitle, loadChangeRequestQueuePage } from './view'
 
 export const dynamic = 'force-dynamic'

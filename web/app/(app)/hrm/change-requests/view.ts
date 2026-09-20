@@ -12,9 +12,9 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { loadChangeRequestQueue, type ChangeRequestQueueData } from '../../../lib/hrm/change-requests'
+import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { loadChangeRequestQueue, type ChangeRequestQueueData } from '../../../../lib/hrm/change-requests'
 
 /**
  * The org-wide employment change-request queue, split into a loader and a
