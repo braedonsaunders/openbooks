@@ -266,22 +266,64 @@ export async function insertEmailLog(row: {
   return r.rows[0]!.id;
 }
 
+function refuseZeroRowWrite(label: string): never {
+  throw new Error(
+    `${label} — the update matched no row, so nothing was written. ` +
+      "Confirm the row exists and is visible in this organization before treating the write as recorded.",
+  );
+}
+
+function refuseUnwrittenEmailLog(updatedRows: number, id: string, intended: string): void {
+  if (updatedRows > 0) return;
+  refuseZeroRowWrite(`email_log ${id} was not marked ${intended}`);
+}
+
+/**
+ * Guarded transitions may legally match zero rows when the durable row is
+ * already outside `writableStatuses`. A missing row, or a still-writable row
+ * whose UPDATE wrote nothing, is a lost write and must refuse.
+ */
+async function requireGuardedStatusTransition(
+  table: "email_log" | "payment_remittances",
+  updated: { rows: unknown[] },
+  orgId: string,
+  id: string,
+  intended: string,
+  writableStatuses: readonly string[],
+): Promise<void> {
+  if ((updated.rows?.length ?? 0) > 0) return;
+  const existing = await db.execute<{ status: string }>(
+    table === "email_log"
+      ? sql`select status from email_log where id = ${id} and org_id = ${orgId}`
+      : sql`select status from payment_remittances where id = ${id} and org_id = ${orgId}`,
+  );
+  const status = existing.rows[0]?.status;
+  if (status && !writableStatuses.includes(status)) return;
+  const subject = table === "email_log" ? "email_log" : "payment remittance";
+  refuseZeroRowWrite(`${subject} ${id} was not marked ${intended}`);
+}
+
 export async function markEmailSent(orgId: string, id: string, providerMessageId: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'sent', provider_message_id = ${providerMessageId}, sent_at = now(), updated_at = now()
      where id = ${id} and org_id = ${orgId}
+    returning id
   `);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "sent");
 }
 
 export async function markEmailFailed(orgId: string, id: string, error: string): Promise<void> {
   // Guarded transition: confirmed acceptance (`sent`) and unresolved
   // uncertainty must never be overwritten by a later failure mark — a retried
   // attempt that fails after its predecessor was accepted has no authority to
-  // rewrite the outcome (audit finding #52).
-  await db.execute(sql`
+  // rewrite the outcome (audit finding #52). A zero-row match is success only
+  // when that guard held; a missing or still-open row is a lost write.
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+    returning id
   `);
+  await requireGuardedStatusTransition("email_log", updated, orgId, id, "failed", ["queued", "failed"]);
 }
 
 /**
@@ -289,10 +331,12 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
  * is the reconciliation trigger: nothing re-sends while it stands open.
  */
 export async function markEmailUncertain(orgId: string, id: string, reason: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'uncertain', error_message = ${reason.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+    returning id
   `);
+  await requireGuardedStatusTransition("email_log", updated, orgId, id, "uncertain", ["queued", "failed"]);
 }
 
 /** Acknowledge provider acceptance; legal from any non-suppressed state, so a late reconciliation can still complete a delivery idempotently. */
@@ -314,10 +358,19 @@ export async function confirmEmailSentGuarded(orgId: string, id: string, provide
 
 /** Record the terminal suppression reason on an open row without touching final states. */
 export async function markEmailSuppressed(orgId: string, id: string, reason: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'suppressed', error_message = ${reason.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
+    returning id
   `);
+  await requireGuardedStatusTransition(
+    "email_log",
+    updated,
+    orgId,
+    id,
+    "suppressed",
+    ["queued", "failed", "uncertain"],
+  );
 }
 
 /** Record one queued payment-remittance attempt without claiming delivery. */
@@ -326,12 +379,21 @@ export async function markPaymentRemittanceAttempt(
   id: string,
   attempt: number,
 ): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update payment_remittances
        set attempt_count = greatest(attempt_count, ${attempt}),
            last_attempt_at = now(), error = null, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status = 'pending'
+    returning id
   `);
+  await requireGuardedStatusTransition(
+    "payment_remittances",
+    updated,
+    orgId,
+    id,
+    "attempted",
+    ["pending"],
+  );
 }
 
 /**
@@ -346,13 +408,22 @@ export async function markPaymentRemittanceFailed(
   attempt: number,
   terminal: boolean,
 ): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update payment_remittances
        set status = case when ${terminal} then 'failed' else status end,
            attempt_count = greatest(attempt_count, ${attempt}),
            last_attempt_at = now(), error = ${error.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status = 'pending'
+    returning id
   `);
+  await requireGuardedStatusTransition(
+    "payment_remittances",
+    updated,
+    orgId,
+    id,
+    "failed",
+    ["pending"],
+  );
 }
 
 /**
@@ -410,12 +481,16 @@ export async function appendEmailAttemptEvent(orgId: string, id: string, event: 
   detail?: string | null;
 }): Promise<AttemptRecord[]> {
   const payload = { at: new Date().toISOString(), ...event };
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log
        set meta = jsonb_set(meta, '{attempts}', coalesce(meta -> 'attempts', '[]'::jsonb) || ${JSON.stringify(payload)}::jsonb),
            updated_at = now()
      where id = ${id} and org_id = ${orgId}
+    returning id
   `);
+  if ((updated.rows?.length ?? 0) === 0) {
+    refuseZeroRowWrite(`email_log ${id} attempt lineage was not appended`);
+  }
   return readAttemptLineage(orgId, id);
 }
 
