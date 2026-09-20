@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, type SetupEntity } from '../setup/registry'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { DOC_KINDS, docKindConfig } from '../document-kinds'
-import { isDocKindEnabled } from '../documents'
+import { isDocKindEnabled } from "../documents.ts";
 import { loadRecordTypeByKey } from '../records'
 import {
   PAYROLL_OPENING_BALANCES_DESCRIPTOR,

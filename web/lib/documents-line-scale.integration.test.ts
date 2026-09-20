@@ -27,7 +27,7 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { applyDocumentEdit, DocumentEditError, loadDocumentEditCurrent } = await import("./documents.ts");
+const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

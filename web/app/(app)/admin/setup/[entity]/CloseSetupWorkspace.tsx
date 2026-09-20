@@ -48,7 +48,7 @@ import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { mergeHref, pickString } from "../../../../../lib/list-params";
 import type { ReportDescriptor } from "../../../../../lib/close/report-descriptor";
-import type { Opt } from "../../../../../lib/documents";
+import type { Opt } from "../../../../../lib/documents.ts";
 
 /**
  * Config-list rows. Each tab reads a different table, so every list has its

@@ -38,7 +38,7 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import('../../../../lib/documents.ts')
+const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 

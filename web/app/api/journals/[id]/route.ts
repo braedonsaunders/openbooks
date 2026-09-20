@@ -6,12 +6,8 @@ import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
-import {
-  DocumentEditError,
-  documentRevisionCounterSql,
-  requireDocumentEditRevision,
-  runDocumentVersionedTransaction,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { loadJournalDoc } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'

@@ -12,7 +12,7 @@ import {
   loadTaxComponentConfig,
   persistLineTaxComponents,
 } from '@openbooks/engine/src/tax/persist.ts'
-import { nextDocumentNumber } from './bills'
+import { nextDocumentNumber } from "./bills.ts";
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'

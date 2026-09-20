@@ -23,7 +23,8 @@ import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/contin
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
-import { documentRevisionCounterSql, isDocKindEnabled } from "../documents";
+import { documentRevisionCounterSql } from "../../../engine/src/records/revision.ts";
+import { isDocKindEnabled } from "../documents.ts";
 import { isFeatureEnabled } from "../features";
 
 /**

@@ -1,6 +1,6 @@
 /** Framework-independent revision and correction policy shared by document adapters. */
 import { sql, type SQL } from 'drizzle-orm'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '../document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from './revision.ts'
 
 const DOCUMENT_REVISION_ALIAS = '__documentRevision'
 
@@ -49,7 +49,7 @@ export class DocumentEditError extends Error {
 export const DOCUMENT_EDIT_VERSION_REQUIRED =
   'the document revision is required; reload and review the latest revision'
 
-const DOCUMENT_EDIT_REVISION_CONFLICT =
+export const DOCUMENT_EDIT_REVISION_CONFLICT =
   'this document changed after you opened it; reload and review the latest revision'
 
 const DOCUMENT_CORRECTION_CONFLICT =
@@ -142,7 +142,7 @@ export function validateCorrectionReason(value: string | undefined | null): stri
  * them (document_links_reversal_evidence CHECK) and submission of the
  * replacement stays gated on the linked void either way
  * (engine/src/flows/submit.ts). This is the same evidence the engine's own
- * correction writer records (engine/src/document-correction.ts); the web draft
+ * correction writer records (engine/src/ledger/document-correction.ts); the web draft
  * path composes it instead of hand-rolling a bare edge. Fails closed: an edge
  * without admissible evidence cannot be constructed here at all.
  *

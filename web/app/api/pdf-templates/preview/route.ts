@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { can, guardPermission } from "../../../../lib/authz";
-import { isDocKindEnabled } from "../../../../lib/documents";
+import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../lib/pdf-templates/render";

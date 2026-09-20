@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '../db.ts'
-import { createScratchOrg, dropScratchOrg } from '../test-fixtures.ts'
+import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
+import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
 import { loadDocument, loadDocumentEditCurrent } from './document-service.ts'
 
 const DB = !!process.env.OPENBOOKS_DB_URL

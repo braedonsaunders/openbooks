@@ -35,7 +35,7 @@ registerHooks({
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import('../../../../lib/documents.ts')
+const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
 // The route's web/lib chain re-registers the app RLS resolver at import
 // time (see route-recall); re-install the test boundary after the imports.

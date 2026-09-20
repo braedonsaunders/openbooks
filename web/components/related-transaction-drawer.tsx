@@ -17,22 +17,9 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveFormLayout } from '../lib/customization/resolve'
 import { isFeatureEnabled } from '../lib/features'
 import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
-import {
-  DOC_KINDS,
-  accountOptions,
-  bankAccountOptions,
-  cardLiabilityAccountOptions,
-  cardOptions,
-  createPermission,
-  dimensionOptions,
-  isDocKindEnabled,
-  loadDocument,
-  partyOptions,
-  postPermission,
-  readPermission,
-  taxCodeOptions,
-  taxGroupOptions,
-} from '../lib/documents'
+import { DOC_KINDS, createPermission, postPermission, readPermission } from "../lib/document-kinds.ts";
+import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, dimensionOptions, isDocKindEnabled, partyOptions, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
+import { loadDocument } from "../../engine/src/ledger/document-service.ts";
 import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
 import { customSegmentOptions } from '../lib/segments'
@@ -318,7 +305,7 @@ export async function loadRelatedTransactionDrawerData({
   const config = DOC_KINDS[kind]
   const readPerm = kind === 'project_charge' ? 'projects.read' : readPermission(kind)
   if (!config || !can(authz, readPerm)) return null
-  const payload = await loadDocument(id)
+  const payload = await loadDocument(id, authz.user.orgId)
   if (!payload || !canSeeDocument((payload.doc), partyId, authz)) return null
   const [headerDefs, lineDefs] = await Promise.all([
     loadFieldDefs('documents', kind),

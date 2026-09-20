@@ -20,18 +20,8 @@ registerHooks({
   },
 })
 
-const {
-  applyDocumentEdit,
-  buildReversalLinkEvidence,
-  createPostedCorrectionDraft,
-  DocumentEditError,
-  loadDocumentEditCurrent,
-  runDocumentVersionedTransaction,
-  runPostedCorrectionDraftFlows,
-  validateCorrectionReason,
-  validateEditableDocumentLines,
-} = await import('./documents.ts')
-const { computeBillTotals } = await import('./bills.ts')
+const { applyDocumentEdit, createPostedCorrectionDraft, runPostedCorrectionDraftFlows, validateEditableDocumentLines } = await import("./documents.ts"), { buildReversalLinkEvidence, DocumentEditError, runDocumentVersionedTransaction, validateCorrectionReason } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+const { computeBillTotals } = await import("./bills.ts");
 const { createRecord } = await import('./api/writers.ts')
 const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax/rate-providers.ts')
 const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')

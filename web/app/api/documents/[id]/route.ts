@@ -8,19 +8,12 @@ import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.t
 import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
-import {
-  applyDocumentEdit,
-  DOCUMENT_EDIT_VERSION_REQUIRED,
-  DocumentEditError,
-  documentRevisionCounterSql,
-  loadDocument,
-  DOC_KINDS,
-  createPermission,
-  isDocKindEnabled,
-  readPermission,
-  type DocumentEditCurrent,
-  type DocumentEditInput,
-} from '../../../../lib/documents'
+import { applyDocumentEdit, isDocKindEnabled } from "../../../../lib/documents.ts";
+import { DOCUMENT_EDIT_VERSION_REQUIRED, DocumentEditError } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
+import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
+import { DOC_KINDS, createPermission, readPermission } from "../../../../lib/document-kinds.ts";
+import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
 
 export const runtime = 'nodejs'
 

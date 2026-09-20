@@ -1,5 +1,5 @@
 /** Transport-neutral edit contracts; monetary values remain exact decimal strings. */
-import type { TaxQuoteRequest, TaxQuoteResult } from '../tax-rate-providers.ts'
+import type { TaxQuoteRequest, TaxQuoteResult } from '../tax/rate-providers.ts'
 
 export interface BillLineInput {
   accountId: string

@@ -7,7 +7,7 @@ import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/payab
 import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { isDocKindEnabled } from '../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'

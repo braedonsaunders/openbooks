@@ -9,10 +9,7 @@ import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contrac
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import {
-  DocumentEditError,
-  requireDocumentEditRevision,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
 
