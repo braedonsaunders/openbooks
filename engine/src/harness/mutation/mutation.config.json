@@ -310,6 +310,7 @@
     {
       "path": "engine/src/ledger/posting-replay.ts",
       "tests": [
+        "engine/src/ledger/gl-regeneration.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
