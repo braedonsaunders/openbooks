@@ -102,6 +102,8 @@ export const paymentSchedules = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Exact organization and id key required by tenant-coherent references (0210).
+    uniqueIndex("payment_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("payment_schedules_org_name").on(t.orgId, t.name),
     index("payment_schedules_due").on(t.isActive, t.nextRunAt),
   ],
