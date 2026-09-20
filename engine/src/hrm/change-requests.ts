@@ -23,7 +23,6 @@ import {
   parseCivilDate,
   resolveAsOf,
 } from "./temporal.ts";
-import { intervalsOverlap, makeEffectiveInterval, parseCivilDate } from "./temporal.ts";
 import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
 
 /**

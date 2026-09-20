@@ -99,7 +99,7 @@ export function ProcessesPanel() {
             key={next}
             role="tab"
             aria-selected={segment === next}
-            variant={segment === next ? 'primary' : 'ghost'}
+            variant={segment === next ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setSegment(next)}
           >
@@ -250,7 +250,7 @@ function ProcessDrawer({
   const isOpen = detail !== null && detail.status === 'open'
 
   return (
-    <Drawer title={detail ? `${detail.workerName} · ${t(`processes.kinds.${detail.kind}`)}` : t('processes.detailTitle')} onClose={onClose} wide>
+    <Drawer open title={detail ? `${detail.workerName} · ${t(`processes.kinds.${detail.kind}`)}` : t('processes.detailTitle')} onClose={onClose} size="xl">
       {error !== null ? <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {loading || detail === null ? (
         <p className="py-6 text-center text-sm text-slate-400">{t('processes.loading')}</p>
@@ -338,7 +338,7 @@ function ProcessDrawer({
           </ol>
           {isOpen ? (
             <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-              <Button size="sm" variant="primary" disabled={busy} onClick={() => void mutate(`/api/hrm/processes/${detail.id}/complete`, {})}>
+              <Button size="sm" variant="default" disabled={busy} onClick={() => void mutate(`/api/hrm/processes/${detail.id}/complete`, {})}>
                 {t('processes.completeProcess')}
               </Button>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => setReasonFor({ action: 'cancel' })}>
@@ -363,7 +363,7 @@ function ProcessDrawer({
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  variant="primary"
+                  variant="default"
                   disabled={busy || reason.trim().length === 0}
                   onClick={() =>
                     void mutate(
