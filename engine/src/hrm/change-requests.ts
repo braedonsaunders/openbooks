@@ -23,6 +23,8 @@ import {
   parseCivilDate,
   resolveAsOf,
 } from "./temporal.ts";
+import { intervalsOverlap, makeEffectiveInterval, parseCivilDate } from "./temporal.ts";
+import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -1168,6 +1170,20 @@ async function applyHire(
     reason: request.reason ?? "",
     actorId,
   });
+  // The hire owes its onboarding checklist in this same transaction: a throw
+  // (no template, duplicate open) rolls the version back with it, so a hire
+  // without its checklist cannot exist while hrm is on. No-op while hrm is
+  // off (payroll stays independent of the checklist module).
+  const hireTrigger = processTriggerForApply({ kind: "hire", effectiveFrom: payload.effectiveFrom });
+  if (hireTrigger !== null) {
+    await autoOpenProcessForChange(exec, {
+      orgId,
+      actorId,
+      employmentId: request.employment_id,
+      changeId,
+      trigger: hireTrigger,
+    });
+  }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }
@@ -1266,6 +1282,23 @@ async function applyEmploymentVersionChange(
             ${windowStart}::date, ${windowEnd}::date,
             ${recordedAt}, ${actorId}, ${actorId})
   `);
+  // A termination owes its offboarding checklist in this same transaction
+  // (same all-or-nothing contract as the hire above). A status_change rides
+  // the hire's onboarding episode — it opens nothing on its own.
+  const versionTrigger = processTriggerForApply(
+    payload.kind === "termination"
+      ? { kind: "termination", effectiveDate: payload.effectiveDate }
+      : { kind: "status_change" },
+  );
+  if (versionTrigger !== null) {
+    await autoOpenProcessForChange(exec, {
+      orgId,
+      actorId,
+      employmentId: request.employment_id,
+      changeId,
+      trigger: versionTrigger,
+    });
+  }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }
@@ -1445,6 +1478,25 @@ async function applyAssignmentChange(
             ${recordedAt}, ${actorId}, ${actorId})
   `);
   await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
+  // A real department move owes its transfer checklist in this same
+  // transaction. A new slot ('assignment_issued' below) is not a move, and
+  // neither is a repoint that carries the department over unchanged.
+  const assignmentTrigger = processTriggerForApply({
+    kind: "assignment_change",
+    departmentChanged:
+      payload.departmentId !== undefined &&
+      (successor.departmentId ?? null) !== (base.department_id ?? null),
+    windowStart,
+  });
+  if (assignmentTrigger !== null) {
+    await autoOpenProcessForChange(exec, {
+      orgId,
+      actorId,
+      employmentId: request.employment_id,
+      changeId,
+      trigger: assignmentTrigger,
+    });
+  }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }
