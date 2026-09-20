@@ -272,8 +272,19 @@ export const assetEvents = pgTable(
     orgId: orgRef(),
     assetId: uuid("asset_id").notNull(),
     financialChangeId: uuid("financial_change_id"),
+    bookId: uuid("book_id"),
     kind: text("kind", {
-      enum: ["acquired", "placed_in_service", "revalued", "impaired", "transferred", "partially_disposed", "disposed", "written_off", "reversed"],
+      enum: [
+        "acquired",
+        "placed_in_service",
+        "revalued",
+        "impaired",
+        "transferred",
+        "partially_disposed",
+        "disposed",
+        "written_off",
+        "reversed",
+      ],
     }).notNull(),
     occurredOn: date("occurred_on").notNull(),
     amount: money("amount"), // proceeds for disposal, delta for revaluation

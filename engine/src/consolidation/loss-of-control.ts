@@ -1,3 +1,4 @@
+import { consolidationHistory } from "./consolidation-history.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { randomUUID } from "node:crypto";
@@ -327,15 +328,6 @@ async function scope(
   };
 }
 type Scope = Awaited<ReturnType<typeof scope>>;
-/** Include controlled and generic reversal descendants once. The source link
- * belongs to the root generation, not necessarily to its correcting journal. */
-function consolidationHistory(orgId: string) {
-  return sql`with recursive history(id,interest_id,subject_id,parent_id,buyer_id,seller_id) as (
- select e.id,c.interest_id,p.subsidiary_id,p.parent_subsidiary_id,null::uuid,null::uuid from ownership_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id join subsidiary_ownership_interests p on p.org_id=c.org_id and p.id=c.interest_id where c.org_id=${orgId} and e.reverses_entry_id is null
- union all select e.id,null::uuid,null::uuid,null::uuid,b.buyer_subsidiary_id,b.seller_subsidiary_id from asset_transfer_consolidation_entries c join asset_transfer_bases b on b.org_id=c.org_id and b.id=c.transfer_id join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and e.reverses_entry_id is null
- union all select e.id,h.interest_id,h.subject_id,h.parent_id,h.buyer_id,h.seller_id from journal_entries e join history h on e.reverses_entry_id=h.id where e.org_id=${orgId}
-)`;
-}
 async function measure(
   tx: SqlExecutor,
   orgId: string,
@@ -423,7 +415,7 @@ async function measure(
         name: string;
         amount: string;
       }>(
-        sql`select e.id as entry_id,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from ownership_consolidation_entries c where c.org_id=e.org_id and c.journal_entry_id=e.id) and not exists(select 1 from asset_transfer_consolidation_entries c where c.org_id=e.org_id and c.journal_entry_id=e.id)`,
+        sql`${consolidationHistory(orgId)} select e.id as entry_id,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
       )
     ).rows[0];
     if (!line)

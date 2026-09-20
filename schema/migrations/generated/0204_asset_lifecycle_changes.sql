@@ -31,7 +31,7 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER asset_basis_change_guard BEFORE INSERT OR UPDATE OR DELETE ON asset_basis_changes FOR EACH ROW EXECUTE FUNCTION asset_basis_change_guard();
-ALTER TABLE asset_events ADD COLUMN IF NOT EXISTS financial_change_id uuid REFERENCES financial_changes(id);
+ALTER TABLE asset_events ADD COLUMN IF NOT EXISTS financial_change_id uuid REFERENCES financial_changes(id),ADD COLUMN IF NOT EXISTS book_id uuid REFERENCES accounting_books(id);
 ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS transferred_from_asset_id uuid REFERENCES fixed_assets(id);
 
 CREATE OR REPLACE VIEW asset_book_carrying_values WITH (security_invoker=true) AS
@@ -106,7 +106,8 @@ BEGIN
  IF TG_TABLE_NAME='fixed_assets' THEN
   IF NEW.transferred_from_asset_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM fixed_assets a WHERE a.org_id=NEW.org_id AND a.id=NEW.transferred_from_asset_id AND a.id<>NEW.id) THEN RAISE EXCEPTION 'the source asset must belong to the same organization'; END IF;
  ELSE
-  IF NEW.financial_change_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM financial_changes f WHERE f.org_id=NEW.org_id AND f.id=NEW.financial_change_id AND f.domain='asset' AND f.status='approved') THEN RAISE EXCEPTION 'asset event requires an approved change in this organization'; END IF;
+  IF NEW.financial_change_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM financial_changes f JOIN fixed_assets a ON a.org_id=f.org_id AND a.id=NEW.asset_id WHERE f.org_id=NEW.org_id AND f.id=NEW.financial_change_id AND f.domain='asset' AND f.status='approved' AND f.effective_on=NEW.occurred_on AND (f.subject_id=a.id OR (a.transferred_from_asset_id=f.subject_id AND (NEW.kind='acquired' AND f.operation='intercompany_transfer' OR NEW.kind='reversed' AND f.operation='reversal')))) THEN RAISE EXCEPTION 'asset event requires independent approval for this asset and effective date'; END IF;
+  IF NEW.book_id IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM accounting_books b WHERE b.org_id=NEW.org_id AND b.id=NEW.book_id) OR (NEW.journal_entry_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM journal_entries e WHERE e.org_id=NEW.org_id AND e.id=NEW.journal_entry_id AND e.book_id=NEW.book_id))) THEN RAISE EXCEPTION 'asset event book must match its tenant and journal'; END IF;
  END IF;
  RETURN NEW;
 END $$;
@@ -137,3 +138,31 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER asset_transfer_measurement_guard BEFORE INSERT OR UPDATE OR DELETE ON asset_transfer_measurements FOR EACH ROW EXECUTE FUNCTION asset_transfer_measurement_guard();
+
+-- A governed multi-book correction reverses its EVENTS as well as its ledger.
+-- Non-posting books and zero-valued journals still have valid approved basis
+-- evidence; do not invent a zero GL entry merely to record their correction.
+ALTER TABLE asset_events DROP CONSTRAINT asset_events_reversal_shape;
+ALTER TABLE asset_events ADD CONSTRAINT asset_events_reversal_shape CHECK (
+ (kind='reversed' AND reverses_event_id IS NOT NULL AND (journal_entry_id IS NOT NULL OR (financial_change_id IS NOT NULL AND book_id IS NOT NULL)) AND reversal_reason IS NOT NULL AND length(btrim(reversal_reason)) BETWEEN 8 AND 500)
+ OR (kind<>'reversed' AND reverses_event_id IS NULL AND reversal_reason IS NULL)
+);
+CREATE OR REPLACE FUNCTION asset_event_append_only_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE source record;
+BEGIN
+ IF TG_OP IN('UPDATE','DELETE') THEN
+  IF openbooks_sandbox_wipe_allowed(OLD.org_id) THEN RETURN coalesce(NEW,OLD); END IF;
+  RAISE EXCEPTION 'asset lifecycle evidence is append-only; post a linked reversal event';
+ END IF;
+ IF NEW.kind='reversed' THEN
+  SELECT * INTO source FROM asset_events WHERE id=NEW.reverses_event_id FOR SHARE;
+  IF source.id IS NULL OR source.org_id<>NEW.org_id OR source.asset_id<>NEW.asset_id OR source.kind NOT IN('revalued','impaired','disposed','written_off','partially_disposed','transferred','acquired') THEN RAISE EXCEPTION 'an asset reversal must reference a reversible event for the same tenant and asset'; END IF;
+  IF source.financial_change_id IS NOT NULL THEN
+   IF NEW.book_id IS DISTINCT FROM source.book_id OR NOT EXISTS(SELECT 1 FROM financial_changes f WHERE f.org_id=NEW.org_id AND f.id=NEW.financial_change_id AND f.domain='asset' AND f.operation='reversal' AND f.status='approved' AND f.payload->>'sourceChangeId'=source.financial_change_id::text) THEN RAISE EXCEPTION 'governed asset events require the approved correction of their original change and book'; END IF;
+  ELSIF source.kind IN('acquired','partially_disposed','transferred') THEN
+   RAISE EXCEPTION 'this acquisition or transfer has no governed correction evidence';
+  END IF;
+  IF source.financial_change_id IS NOT NULL AND ((source.journal_entry_id IS NULL) IS DISTINCT FROM (NEW.journal_entry_id IS NULL) OR (source.journal_entry_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM journal_entries e WHERE e.org_id=NEW.org_id AND e.id=NEW.journal_entry_id AND e.reverses_entry_id=source.journal_entry_id AND e.status='posted'))) THEN RAISE EXCEPTION 'asset correction event must link the exact reversing journal'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;

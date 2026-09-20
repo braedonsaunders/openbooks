@@ -1,3 +1,4 @@
+import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { sql } from "drizzle-orm";
 import {
@@ -131,6 +132,18 @@ async function state(
       sql`select entry_id,account_id,amount::text,currency,txn_amount::text,fx_rate::text from journal_lines where org_id=${orgId} and entry_id in(select jsonb_array_elements_text(${JSON.stringify(entryIds)}::jsonb)::uuid) order by entry_id,line_number`,
     )
   ).rows;
+  const events = (
+    await tx.execute<{
+      id: string;
+      asset_id: string;
+      book_id: string;
+      journal_entry_id: string | null;
+    }>(
+      sql`select id,asset_id,book_id,journal_entry_id from asset_events where org_id=${orgId} and financial_change_id=${source.id} order by id for share`,
+    )
+  ).rows;
+  if (!events.length || events.some((e) => !e.book_id))
+    throw new Error("the source asset event book evidence is missing");
   const transfers = (
     await tx.execute(
       sql`select * from asset_transfer_bases where org_id=${orgId} and change_id=${source.id} order by book_id for share`,
@@ -143,6 +156,7 @@ async function state(
     journals,
     lines,
     transfers,
+    events,
     required,
     receiver,
   };
@@ -153,6 +167,10 @@ export async function proposeAssetReversal(
   actorId: string,
   input: Omit<ReversalInput, "sourceChangeId">,
 ): Promise<string> {
+  if (input.reason.trim().length < 8 || input.reason.trim().length > 500)
+    throw new Error(
+      "a reversal reason between 8 and 500 characters is required",
+    );
   return withOrg(orgId, () =>
     withTransactionSavepoint(db, async () => {
       const payload = { ...input, sourceChangeId },
@@ -204,6 +222,11 @@ export async function applyAssetReversal(
         feature: "fixedAssets",
       });
       if (change.status === "applied") return change.result!;
+      await lockAssetTaxLifecycle(
+        db,
+        orgId,
+        change.payload.requiredSubsidiaryIds as string[],
+      );
       const input = change.payload as unknown as ReversalInput,
         now = await state(db, orgId, actorId, input);
       assertFinancialChangeApproved(change, {
@@ -226,6 +249,7 @@ export async function applyAssetReversal(
           "the approver no longer covers every legal entity; obtain a new scoped approval",
         );
       const entryIds: string[] = [];
+      const reversingEntries = new Map<string, string>();
       for (const entry of now.journals) {
         const id = await postAssetLifecycleEntry(db, {
           orgId,
@@ -249,7 +273,10 @@ export async function applyAssetReversal(
               fxRate: l.fx_rate,
             })),
         });
-        if (id) entryIds.push(id);
+        if (!id)
+          throw new Error("the source asset journal reversal was not posted");
+        entryIds.push(id);
+        reversingEntries.set(entry.id, id);
         const changed = await db.execute(
           sql`update journal_entries set status='reversed',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${entry.id} and status='posted' returning id`,
         );
@@ -257,6 +284,20 @@ export async function applyAssetReversal(
           throw new Error(
             "source asset journal could not be linked to its reversal",
           );
+      }
+      for (const event of now.events) {
+        const journal = event.journal_entry_id
+          ? reversingEntries.get(event.journal_entry_id)
+          : null;
+        if (event.journal_entry_id && !journal)
+          throw new Error(
+            "asset reversal event is missing its correcting journal",
+          );
+        const recorded = await db.execute(
+          sql`insert into asset_events(org_id,asset_id,book_id,kind,occurred_on,journal_entry_id,financial_change_id,reverses_event_id,reversal_reason,memo,created_by,updated_by) values(${orgId},${event.asset_id},${event.book_id},'reversed',${input.effectiveOn},${journal ?? null},${changeId},${event.id},${input.reason.trim()},'Approved asset change correction',${actorId},${actorId}) returning id`,
+        );
+        if (recorded.rows.length !== 1)
+          throw new Error("asset reversal event was not recorded");
       }
       for (const basis of now.basis) {
         const original = (
