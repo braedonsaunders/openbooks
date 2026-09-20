@@ -34,8 +34,18 @@ test('units, database shards and simulation run independently without omitted te
   const unit = topLevelJob('unit')
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
-  assert.match(unit, /timeout --signal=TERM --kill-after=10s 12m npm run test:unit/)
-  assert.match(unit, /timeout-minutes: 16/)
+  // The INNER timeout must stay strictly below the job timeout. It fires first,
+  // so `tee unit.txt` still produces an artifact and the shard exits 124 — a
+  // diagnosable failure. If the JOB timeout wins instead, the runner is killed
+  // with no output and the only evidence is "the job timed out".
+  // Raised 12m -> 16m (job 16 -> 20) after shard 5 hit the 12m wall on
+  // 30f3f660d while shards 1-4 finished in 3m44s-6m06s. That spread is
+  // IMBALANCE, not growth: scripts/test-timings.json predicts all five shards
+  // at an identical 13.4 min, which is both wrong about the spread AND already
+  // above the 12m budget it was being held to. The timings need refreshing;
+  // until they are, the budget must at least exceed the balancer's own estimate.
+  assert.match(unit, /timeout --signal=TERM --kill-after=10s 16m npm run test:unit/)
+  assert.match(unit, /timeout-minutes: 20/)
   assert.match(unit, /apt-get install -y qpdf/)
   // Pinned together so the matrix and the denominator cannot drift apart.
   // Raised 4 -> 5 when shard 2 hit the 8m wall on tip-of-main: the passing
