@@ -53,6 +53,11 @@ export async function POST(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+  // PATCH refuses a non-boolean isDefault. POST used to coerce with !! so a
+  // truthy string (including "false") cleared sibling defaults and stored true.
+  if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
+    return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
+  }
   const scope: "org" | "user" = body.scope === "org" ? "org" : "user";
   // org-scope views require the admin permission; personal views are self-service.
   if (scope === "org" && !can(authz, "admin.customization.manage"))
@@ -73,14 +78,14 @@ export async function POST(req: Request) {
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
     const row = await db.transaction(async (tx) => {
       const defaultScope = { orgId: user.orgId, recordType: body.recordType!, scope, ownerId };
-      if (body.isDefault) await claimListViewDefaultSlot(tx, defaultScope);
+      if (body.isDefault === true) await claimListViewDefaultSlot(tx, defaultScope);
       const inserted = (await tx.execute<{ id: string; name: string }>(sql`
         insert into list_views (org_id, record_type, name, scope, owner_id, is_default, is_active,
                                 config, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${scope}, ${ownerId},
-                ${!!body.isDefault}, true, ${config}, ${user.id}, ${user.id})
+                ${body.isDefault === true}, true, ${config}, ${user.id}, ${user.id})
         returning id, name`)).rows[0]!;
-      if (body.isDefault) await assertSingleListViewDefault(tx, defaultScope);
+      if (body.isDefault === true) await assertSingleListViewDefault(tx, defaultScope);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name, scope })}, ${user.id})`);

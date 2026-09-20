@@ -55,9 +55,11 @@ export async function POST(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-  // isDefault is coerced with !! below, but isActive rode straight into the
-  // boolean column: a non-boolean either throws 22P02 (raw 500) or coerces
-  // silently. An explicit value outside the domain is refused instead.
+  // An explicit value outside the boolean domain is refused instead of
+  // coercing isDefault with !! or riding isActive into the column (22P02 / silent coerce).
+  if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
+    return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
+  }
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
   }
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
     const row = await db.transaction(async (tx) => {
-      if (isDefault)
+      if (body.isDefault === true)
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
@@ -102,7 +104,7 @@ export async function POST(req: Request) {
         insert into form_layouts (org_id, record_type, name, description, is_default, is_active,
                                   allowed_roles, layout, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
-                ${isDefault}, ${isActive},
+                ${body.isDefault === true}, ${isActive},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
         returning id, name
       `));
