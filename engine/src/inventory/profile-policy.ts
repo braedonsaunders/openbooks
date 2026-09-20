@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { type InventoryProfile, InventoryError, InventoryOwnershipError, CostingPolicyChangeBlockedError, type Runner } from "./contracts.ts";
 /**
@@ -228,4 +229,32 @@ export async function assertCostingPolicyChangeAllowed(
     );
   }
   return { changed: true, historyExisted: true };
+}
+
+/** Every movement books into exactly one active legal entity. */
+export function assertMovementOwner(ctx: SubsidiaryContext, subsidiaryId: string): void {
+  const owner = ctx.byId.get(subsidiaryId);
+  if (!owner) throw new InventoryError(`subsidiary ${subsidiaryId} does not exist`);
+  if (!owner.isActive) {
+    throw new InventoryError(`subsidiary "${owner.name}" is inactive`);
+  }
+}
+
+/** Registry default is on — absence must not disable inventory. */
+export async function inventoryFeatureEnabled(
+  runner: Runner,
+  orgId: string,
+): Promise<boolean> {
+  const result = await runner.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'inventory')::boolean, true) as enabled
+      from orgs where id = ${orgId}
+  `);
+  return result.rows[0]?.enabled === true;
+}
+
+/** New stock activity holds the authoritative feature through its write transaction. */
+export async function assertInventoryFeature(runner: Runner, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(runner, orgId, "inventory"))) {
+    throw new InventoryError("inventory feature is disabled");
+  }
 }

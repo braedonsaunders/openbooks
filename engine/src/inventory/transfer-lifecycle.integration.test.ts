@@ -4,7 +4,10 @@ import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from '../testing/fixtures.ts';
-import { receiveInventory, createTransferOrder, shipTransferOrder, receiveTransferOrder, getOnHand, InventoryError } from './inventory.ts';
+import { InventoryError } from "./contracts.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory } from "./movements.ts";
+import { createTransferOrder, shipTransferOrder, receiveTransferOrder } from "./transfer-orders.ts";
 import { addCalendarDays } from '../platform/business-date.ts';
 
 for (const scenario of ['chronology','transit identity','legacy transit identity'] as const) {

@@ -6,10 +6,11 @@ import { db } from "../platform/db.ts";
 import { exactCostFragments, extendCost } from "./costing.ts";
 import { sum } from "../money/money.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import {
-  createTransferOrder, getOnHand, receiveInventory, receiveTransferOrder,
-  shipTransferOrder, transferInventory, reverseInventoryMovement, issueInventory,
-} from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory, issueInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
+import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
 
 test("moving-average withdrawal after exhaustion and old issue reversal remains weighted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();

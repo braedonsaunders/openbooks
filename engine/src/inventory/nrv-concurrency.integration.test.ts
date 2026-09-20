@@ -5,7 +5,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { db, env } from "../platform/db.ts";
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
-import { receiveInventory, issueInventory, getOnHand } from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory, issueInventory } from "./movements.ts";
 import { writeDownInventoryToNrv, reverseInventoryWritedown } from "./nrv.ts";
 
 test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

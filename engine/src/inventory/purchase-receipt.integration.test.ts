@@ -169,7 +169,7 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
       assert.equal(toUnits(await accountBalance(org.accounts.ap)), toUnits("-23"));
 
       // ---- Replaying the posting effect drain never books PPV twice --------
-      const { applyInventoryReceiptsForBill } = await import("./engine/src/inventory/inventory.ts");
+      const { applyInventoryReceiptsForBill } = await import("./engine/src/inventory/documents-purchasing.ts");
       const entry = (await db.execute(sql\`
         select posted_entry_id as id from documents
          where id = \${secondBill.id} and org_id = \${org.orgId}

@@ -3,7 +3,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
-import { receiveInventory, issueInventory, transferInventory, buildAssembly, postLandedCostVoucher, reverseInventoryMovement, reverseAssemblyBuild, reverseLandedCostVoucher, InventoryError } from "./inventory.ts";
+import { InventoryError } from "./contracts.ts";
+import { receiveInventory, issueInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
+import { buildAssembly, reverseAssemblyBuild } from "./assembly.ts";
+import { postLandedCostVoucher, reverseLandedCostVoucher } from "./landed-cost.ts";
 
 for (const operation of ["receipt", "issue", "transfer", "assembly", "landed cost"] as const) {
   for (const timing of ["before source", "same day", "later day", "invalid calendar"] as const) {
