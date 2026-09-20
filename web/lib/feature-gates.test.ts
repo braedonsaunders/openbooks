@@ -1371,7 +1371,7 @@ test('the surfaces this test was written for are covered', () => {
     'percent-complete sync must not write revenue contracts when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/ledger/posting.ts'),
+    read('../engine/src/ledger/posting-accounts.ts'),
     /async function resolveDeferralAccounts[\s\S]{0,350}revenueRecognitionFeatureEnabled\(runner, orgId\)/,
     'invoice posting must credit income, not deferred, when Revenue Recognition is off',
   )

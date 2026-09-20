@@ -4,7 +4,9 @@
   "targets": [
     {
       "path": "engine/src/money/money.ts",
-      "tests": ["engine/src/money/money.test.ts"]
+      "tests": [
+        "engine/src/money/money.test.ts"
+      ]
     },
     {
       "path": "engine/src/ledger/posting.ts",
@@ -76,9 +78,18 @@
     {
       "path": "engine/src/payments/payments.ts",
       "lineRanges": [
-        { "start": 196, "end": 322 },
-        { "start": 576, "end": 622 },
-        { "start": 857, "end": 897 }
+        {
+          "start": 196,
+          "end": 322
+        },
+        {
+          "start": 576,
+          "end": 622
+        },
+        {
+          "start": 857,
+          "end": 897
+        }
       ],
       "tests": [
         "engine/src/payments/payments.test.ts",
@@ -186,15 +197,21 @@
     {
       "path": "engine/src/payroll/canada/employer-levies.ts",
       "needsDb": true,
-      "tests": ["engine/src/payroll/employer-taxes.integration.test.ts"]
+      "tests": [
+        "engine/src/payroll/employer-taxes.integration.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/us/pub15t.ts",
-      "tests": ["engine/src/payroll/us/pub15t.test.ts"]
+      "tests": [
+        "engine/src/payroll/us/pub15t.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/us/withholding.ts",
-      "tests": ["engine/src/payroll/us/withholding-current-fit.test.ts"]
+      "tests": [
+        "engine/src/payroll/us/withholding-current-fit.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/us/compute-statutory.ts",
@@ -238,6 +255,149 @@
         "engine/src/assets/depreciation-conventions.test.ts",
         "engine/src/assets/depreciation-bounds.test.ts",
         "engine/src/assets/depreciation.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-document.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-prepare.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-commit.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-replay.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-projection.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-dispatch.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-accounts.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-provider-tax.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-subsidiaries.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-period.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-invariants.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
       ]
     }
   ]

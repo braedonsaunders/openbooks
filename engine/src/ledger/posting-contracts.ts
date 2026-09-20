@@ -114,3 +114,12 @@ export interface TaxPostingComponent {
 export type ExpenseSettlement = "out_of_pocket" | "company_paid" | "personal";
 
 export class PostingError extends Error {}
+
+/** Automation and audit controls applied across the posting phases. */
+export type PostDocumentOptions = {
+    deferEffects?: boolean;
+    /** Source-authoritative replay runs the accounting kernel and product
+     * subledgers without re-firing tenant-authored UI scripts or flows. */
+    suppressAutomation?: boolean;
+    audit?: { actorId: string | null; source: string };
+  };
