@@ -36,6 +36,8 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
  *   ob.abort("reason")       veto the operation (before_* triggers only)
  *   ob.query(sql)            run a SELECT through the read-only role -> rows[]
  *                            (ob.record.load / ob.search are sugar over it).
+ *                            Unavailable in deterministic custom_gl_lines;
+ *                            read from the supplied posting context instead.
  *                            Raw SQL over the governed catalog cannot apply a
  *                            subsidiary allowlist, so an ATTRIBUTED caller must
  *                            satisfy exactly what /api/query demands: the
@@ -208,9 +210,44 @@ export interface RunScriptOptions {
   strict?: boolean;
   /** Refuse ob.journal.create: the trigger answers with a return value. */
   forbidJournalCreate?: boolean;
-  /** Remove clock and randomness (Date, Math.random) for deterministic triggers. */
+  /** Block ambient clock, randomness, and live SQL reads before source executes. */
   deterministic?: boolean;
 }
+
+/**
+ * Run in a separate evaluation BEFORE user source: a prefix in the same
+ * program can still be shadowed by that program's hoisted declarations.
+ * Accessors refuse captures as well as calls; non-configurable properties
+ * prevent replacement/deletion, and the Math binding cannot be swapped out.
+ * Capture Error while the realm is pristine so later user declarations cannot
+ * replace the refusal constructor. Other Math operations remain available.
+ */
+const DETERMINISTIC_SCRIPT_GLOBALS = `
+  (() => {
+    const RefusalError = Error;
+    const refuse = (name) => () => {
+      throw new RefusalError(
+        "custom_gl_lines is deterministic: " + name + " is not available; use values supplied in ctx"
+      );
+    };
+    Object.defineProperty(globalThis, "Date", {
+      get: refuse("Date"),
+      set: refuse("Date"),
+      configurable: false,
+    });
+    const scriptMath = Math;
+    Object.defineProperty(scriptMath, "random", {
+      get: refuse("Math.random"),
+      set: refuse("Math.random"),
+      configurable: false,
+    });
+    Object.defineProperty(globalThis, "Math", {
+      value: scriptMath,
+      writable: false,
+      configurable: false,
+    });
+  })()
+`;
 
 export async function runScript(
   source: string,
@@ -243,6 +280,16 @@ export async function runScript(
     // on first use so ob.search loops do not re-read roles per statement.
     let queryRefusal: Promise<string | null> | undefined;
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
+      // A SELECT-only role still exposes now()/random() and mutable data.
+      // The host boundary covers ob.query, its load/search helpers, and the
+      // raw __query bridge, including calls made before main starts.
+      if (opts.deterministic) {
+        return {
+          error: vm.newError(
+            "query is not available in custom_gl_lines; use document, lines, and kernelLines supplied in ctx",
+          ),
+        };
+      }
       const sqlText = String(vm.dump(sqlH));
       queryRefusal ??= scriptQueryRefusal(ctx);
       const refusal = await queryRefusal;
@@ -334,8 +381,6 @@ export async function runScript(
         const ctx = ${JSON.stringify(ctx)};
         const deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(deepFreeze); Object.freeze(o); } return o; };
         deepFreeze(ctx);
-        ${opts.deterministic ? `Date = function () { throw new Error("custom_gl_lines is deterministic: Date is not available"); }; Math.random = function () { throw new Error("custom_gl_lines is deterministic: Math.random is not available"); };` : ""}
-
         ob.runtime = Object.freeze({
           org: ctx.org,
           trigger: ctx.trigger,
@@ -383,7 +428,18 @@ export async function runScript(
       })()
     `;
 
-    const result = await vm.evalCodeAsync(program);
+    const preparation = opts.deterministic
+      ? vm.evalCode(DETERMINISTIC_SCRIPT_GLOBALS)
+      : null;
+    // A preparation failure must reach the same error outcome as a script
+    // failure. Never execute user source with partially installed controls.
+    let result: Awaited<ReturnType<typeof vm.evalCodeAsync>>;
+    if (preparation?.error) {
+      result = preparation;
+    } else {
+      preparation?.value.dispose();
+      result = await vm.evalCodeAsync(program);
+    }
     if (result.error) {
       const err = vm.dump(result.error);
       result.error.dispose();
