@@ -41,7 +41,8 @@
       "employeesHint": "en service aujourd'hui",
       "positionsHint": "ouverts",
       "processesHint": "{count, plural, one {# étape en retard} other {# étapes en retard}}",
-      "leaveHint": "{count, plural, one {# en attente d'approbation} other {# en attente d'approbation}}"
+      "leaveHint": "{count, plural, one {# en attente d'approbation} other {# en attente d'approbation}}",
+      "recruitingHint": "{count, plural, one {# offre en attente de réponse} other {# offres en attente de réponse}}"
     },
     "vacancy": {
       "title": "Postes vacants par service",

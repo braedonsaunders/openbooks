@@ -41,7 +41,8 @@
       "employeesHint": "heute im Dienst",
       "positionsHint": "offen",
       "processesHint": "{count, plural, one {# Schritt überfällig} other {# Schritte überfällig}}",
-      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}"
+      "leaveHint": "{count, plural, one {# wartet auf Genehmigung} other {# warten auf Genehmigung}}",
+      "recruitingHint": "{count, plural, one {# Angebot wartet auf Antwort} other {# Angebote warten auf Antwort}}"
     },
     "vacancy": {
       "title": "Vakanzen nach Abteilung",

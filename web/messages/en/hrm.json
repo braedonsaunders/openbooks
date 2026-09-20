@@ -41,7 +41,8 @@
       "employeesHint": "in service today",
       "positionsHint": "open",
       "processesHint": "{count, plural, one {# step overdue} other {# steps overdue}}",
-      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}"
+      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}",
+      "recruitingHint": "{count, plural, one {# offer awaiting response} other {# offers awaiting response}}"
     },
     "vacancy": {
       "title": "Vacancy by department",

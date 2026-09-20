@@ -41,7 +41,8 @@
       "employeesHint": "en servicio hoy",
       "positionsHint": "abiertos",
       "processesHint": "{count, plural, one {# paso vencido} other {# pasos vencidos}}",
-      "leaveHint": "{count, plural, one {# pendiente de aprobación} other {# pendientes de aprobación}}"
+      "leaveHint": "{count, plural, one {# pendiente de aprobación} other {# pendientes de aprobación}}",
+      "recruitingHint": "{count, plural, one {# oferta pendiente de respuesta} other {# ofertas pendientes de respuesta}}"
     },
     "vacancy": {
       "title": "Vacantes por departamento",

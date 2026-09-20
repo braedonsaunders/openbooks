@@ -41,7 +41,8 @@
       "employeesHint": "em serviço hoje",
       "positionsHint": "abertas",
       "processesHint": "{count, plural, one {# etapa atrasada} other {# etapas atrasadas}}",
-      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}"
+      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}",
+      "recruitingHint": "{count, plural, one {# oferta aguardando resposta} other {# ofertas aguardando resposta}}"
     },
     "vacancy": {
       "title": "Vagas por departamento",
