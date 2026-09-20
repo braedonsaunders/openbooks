@@ -19,6 +19,7 @@ import type {
   LegacyRateRow, PayrollPackRates, PayrollStatutoryRateSlot,
 } from "../statutory-rates.ts";
 import { CA_EXTRA_EDITIONS } from "./editions.ts";
+import { RATES_2025_JUL } from "./rates-2025.ts";
 import { QC_EDITIONS } from "./quebec/rates.ts";
 
 export type Province =
@@ -85,6 +86,13 @@ export interface ProvincialRates {
   lowestRate: string;
   /** TD1 default when none filed: a flat amount or a formula BPA. */
   tcpDefault: string | "BPAF" | "BPAMB";
+  /**
+   * Manitoba's income-tested BPAMB parameters for this edition, in the
+   * guide's own form (BPAMB = max − (NI − phaseStart) × slopeNum/slopeDen).
+   * Absent means the 2026 parameters (15,780 over 200,000–400,000), which is
+   * exactly what the landed 2026 module carries by not setting it.
+   */
+  bpamb?: BpaPhaseOut;
   claimCodes: string[]; // TCP for claim codes 1..10
   lcp?: { cap: string; rate: string };
   /** Ontario surtax V1. */
@@ -427,7 +435,7 @@ export const RATES_2026_JUL: EditionRates = {
  * scripts/payroll-new-tax-year.ts). Newest first.
  */
 export const CA_EDITIONS: readonly EditionRates[] = [
-  ...CA_EXTRA_EDITIONS, RATES_2026_JUL, RATES_2026_JAN,
+  ...CA_EXTRA_EDITIONS, RATES_2026_JUL, RATES_2026_JAN, RATES_2025_JUL,
 ].slice().sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
 
 /**
