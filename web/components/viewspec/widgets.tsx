@@ -84,7 +84,7 @@ import {
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
-import { ProcessesPanel } from '../../app/(app)/hrm/processes-client'
+import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1190,9 +1190,35 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
     />
   ),
-  /** The interactive processes list: segments and the checklist drawer fetch
-   *  the processes collection behind the page's own double gate. */
-  'hrm-processes': () => <ProcessesPanel />,
+  /** Segment pills over loader-resolved hrefs: the active segment filters
+   *  server-side through listProcesses, so switching is navigation, not
+   *  state. A widget, not `filter-chips`: the pills carry per-segment
+   *  counts resolved in the loader rather than rebuilt from a param key. */
+  'hrm-process-segments': (props) => (
+    <ProcessSegments
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      segments={(props.segments as ComponentProps<typeof ProcessSegments>['segments']) ?? []}
+    />
+  ),
+  /** The checklist table over loader-resolved rows plus loader-resolved
+   *  strings — the same ProcessesTable the native page renders, so the two
+   *  cannot drift. */
+  'hrm-processes-table': (props) => (
+    <ProcessesTable
+      columns={(props.columns as ComponentProps<typeof ProcessesTable>['columns']) ?? {}}
+      rows={(props.rows as ComponentProps<typeof ProcessesTable>['rows']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+    />
+  ),
+  /** The checklist flyout: a URL drawer around the shared client checklist
+   *  body that closes by navigation. Null payload renders nothing — the
+   *  spec's `when` gate already omits it, so this is the second half of the
+   *  same guard. */
+  'hrm-process-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ProcessDrawer>['drawer']
+    if (!drawer) return null
+    return <ProcessDrawer drawer={drawer} />
+  },
 
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
    *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */
