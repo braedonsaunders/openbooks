@@ -88,7 +88,7 @@ export const NAV_MODULES: NavModule[] = [
   // HR-15 begin: Inbox is core — every leader lands here. Unpermissioned
   // by design (like notifications): every query self-scopes to the actor.
   // The module key stays `approvals` (identifiers are stable); only the
-  // place label (catalog) and target changed. The /approvals route stays
+  // place label (catalog) and target changed. The /inbox route stays
   // as a permanent redirect for deep links.
   {
     key: 'approvals',
@@ -99,17 +99,10 @@ export const NAV_MODULES: NavModule[] = [
     badgeCountHref: '/api/inbox?count=1',
   },
   // HR-15 end
-  {
-    // Deliberately ungated: the inbox shows only the signed-in user's own
-    // notifications, and every query self-scopes to (org_id, user_id). If a
-    // permission is ever added here, this comment must go with it —
-    // Notifications.scope.test.ts pins both the scoping and this shape.
-    key: 'notifications',
-    href: '/notifications',
-    label: 'Notifications',
-    iconKey: 'bell',
-    group: 'my-work',
-  },
+  // HR-15 rebrand: the notifications NAV ENTRY is removed — My Work shows
+  // one Inbox entry and notices surface as its Notices filter. The
+  // /notifications ROUTE, page, and API stay (deep links, hrefs, the scope
+  // test's query pins), reachable directly but no longer a nav module.
   {
     key: 'documents',
     href: '/documents',

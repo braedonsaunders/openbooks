@@ -140,7 +140,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     // Bank details render inside the party flyout, which needs the party id —
     // not derivable synchronously here. The approvals worklist row still
     // shows the label; the hub is the landing surface.
-    return "/approvals";
+    return "/inbox";
   },
 
   async getStatus(subjectId: string): Promise<string | null> {

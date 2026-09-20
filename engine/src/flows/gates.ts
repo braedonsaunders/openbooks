@@ -1047,7 +1047,7 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
       userId: toUserId,
       kind: "approval",
       title: `Approval delegated to you: ${gate.title}`,
-      href: "/approvals",
+      href: "/inbox",
     });
 
     await db.execute(sql`
@@ -1184,7 +1184,7 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
         ? `Reminder — approval pending: ${gate.title}`
         : `Escalated approval: ${gate.title}`,
     body: subjectLabel,
-    href: "/approvals",
+    href: "/inbox",
   });
 
   try {
@@ -1289,7 +1289,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
           kind: "approval",
           title: `Overdue approval could not be escalated: ${gate.title}`,
           body: "No escalation target resolved — please review.",
-          href: "/approvals",
+          href: "/inbox",
         })),
       );
     }

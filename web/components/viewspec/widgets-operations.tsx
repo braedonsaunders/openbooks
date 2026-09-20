@@ -5,9 +5,9 @@ import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienW
 import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
-import { KindChips, ApprovalTabs, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/approvals/sections'
-import { ApprovalsTable } from '../../app/(app)/approvals/ApprovalsTable'
-import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/approvals/DelegationControls'
+import { KindChips, ApprovalTabs, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
+import { ApprovalsTable } from '../../app/(app)/inbox/ApprovalsTable'
+import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/inbox/DelegationControls'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
 import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarchyTable'
 import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
@@ -70,7 +70,7 @@ export const OPERATIONS_WIDGETS = {
   ),
   'approvals-pagination': (props) => (
     <Pagination
-      basePath="/approvals"
+      basePath="/inbox"
       currentParams={stringRecord(props, 'params') ?? {}}
       total={num(props, 'total') ?? 0}
       page={num(props, 'page') ?? 1}

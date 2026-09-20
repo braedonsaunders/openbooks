@@ -69,7 +69,7 @@ export function WidgetCard({
     case 'kpi-entries-today':
       return <MetricTile icon={<FileText size={15} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" tone="teal" hint={t('metricContext.today')} />
     case 'kpi-pending-approvals':
-      return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals?tab=all" tone="amber" hint={t('metricContext.awaitingDecision')} />
+      return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/inbox?tab=all" tone="amber" hint={t('metricContext.awaitingDecision')} />
     case 'kpi-agent-findings': {
       const parts: string[] = []
       if (data.agentFindingsProposals > 0) parts.push(t('metricContext.agentProposals', { count: data.agentFindingsProposals }))
@@ -182,7 +182,7 @@ export function WidgetCard({
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
-      return <PendingApprovalsList approvals={data.pendingApprovalList} href="/approvals?tab=all" />
+      return <PendingApprovalsList approvals={data.pendingApprovalList} href="/inbox?tab=all" />
     case 'personal-in-progress':
       return <InProgressList documents={data.draftDocuments} />
     case 'personal-inbox':
@@ -418,7 +418,7 @@ function RecentEntriesList({
 function PendingApprovalsList({
   approvals,
   title,
-  href = '/approvals',
+  href = '/inbox',
 }: {
   approvals: DashboardMetrics['pendingApprovalList']
   title?: string

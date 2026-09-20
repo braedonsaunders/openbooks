@@ -636,7 +636,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       hours: t('leave.columns.hours'),
     },
     leaveEmpty: t('me.team.leaveEmpty'),
-    approvalsHref: '/approvals',
+    approvalsHref: '/inbox',
     decideInApprovals: t('me.team.decideInApprovals'),
     changesTitle: t('me.team.changesTitle'),
     changesColumns: {
@@ -694,7 +694,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         rangeLabel: `${request.startsOn} → ${request.endsOn}`,
         hours: request.hours,
         decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/approvals',
+        decideHref: '/inbox',
       })),
       pendingChanges: team.pendingChanges.map((request) => ({
         id: request.id,
@@ -703,7 +703,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         statusLabel: statusLabel(t, 'me.requestStatus', request.status),
         statusVariant: statusVariant(request.status),
         decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/approvals',
+        decideHref: '/inbox',
       })),
       owedReviews: owed.map((row) => ({
         reviewId: row.reviewId,

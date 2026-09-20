@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { countInbox, listInbox, type InboxKind } from "@openbooks/engine/src/inbox/index.ts";
 import { approvalWorklistPageForAuthz } from "../../../lib/application/approvals";
 import { getAuthz } from "../../../lib/authz";
-import { inboxContext, maySeeUnion } from "../../../lib/inbox-context";
-import { INBOX_FILTER_KINDS } from "./act/route";
+import { inboxContext, INBOX_FILTER_KINDS, maySeeUnion } from "../../../lib/inbox-context";
 import { pickString } from "../../../lib/list-params";
 
 export const runtime = "nodejs";
