@@ -17,10 +17,17 @@
 # Usage:
 #   scripts/testdb.sh up                 start the container and build the template
 #   scripts/testdb.sh new [name]         create a fresh database, print its env exports
-#   scripts/testdb.sh drop <name>        drop one database
+#   scripts/testdb.sh drop [--dry-run] <name>
+#                                        drop one test database (name with or
+#                                        without the ob_ prefix; refuses anything
+#                                        else; a miss is an error, never a success)
 #   scripts/testdb.sh env <name>         print exports for an existing database
 #   scripts/testdb.sh status             show the container, template and databases
-#   scripts/testdb.sh gc                 drop databases unused for over a day
+#   scripts/testdb.sh gc [--dry-run] [--older-than <interval>] [--include-unstamped]
+#                                        drop test databases copied more than
+#                                        <interval> ago (default 1 day) that hold
+#                                        no live connection; --dry-run prints the
+#                                        plan and drops nothing
 #   scripts/testdb.sh reset              rebuild the template from the current schema
 #
 # Typical use from a worktree:
@@ -256,6 +263,20 @@ print_env() {
   echo "export ORG_CURRENCY='${ORG_CURRENCY:-USD}'"
 }
 
+# Every test database is named ob_<sanitised>. `new` builds the name this way
+# and `drop` must resolve a caller's name identically, or a drop of the name a
+# shard was HANDED silently misses (drop used to take the raw argument while
+# new prefixed it, and `if exists` turned that miss into a printed success).
+test_db_name() {
+  local raw=$1
+  case "$raw" in ob_*) raw=${raw#ob_} ;; esac
+  printf '%s' "ob_$raw" | tr -c 'a-zA-Z0-9_' '_' | cut -c1-60 | tr 'A-Z' 'a-z'
+}
+
+db_exists() {
+  [ "$(psql_super -tAc "select 1 from pg_database where datname = '$1'" 2>/dev/null | tr -d ' ')" = "1" ]
+}
+
 worktree_identity() {
   # Hash the canonical checkout path so separate worktrees still get separate
   # databases without exposing local filesystem paths in PostgreSQL names.
@@ -288,9 +309,9 @@ case "$cmd" in
     repo_name=$(basename "$repo_root")
     head=$(git rev-parse --short HEAD 2>/dev/null || echo local)
     raw=${2:-${repo_name}_${head}_$(worktree_identity "$repo_root")}
-    # printf, not echo: `tr -c` would turn echo's trailing newline into an
-    # underscore and silently create a database nobody asked for.
-    db=$(printf '%s' "ob_$raw" | tr -c 'a-zA-Z0-9_' '_' | cut -c1-60 | tr 'A-Z' 'a-z')
+    # printf, not echo (inside test_db_name): `tr -c` would turn echo's trailing
+    # newline into an underscore and silently create a database nobody asked for.
+    db=$(test_db_name "$raw")
     psql_super -c "drop database if exists ${db} with (force)" >/dev/null
     psql_super -c "create database ${db} template ${TEMPLATE}" >/dev/null
     # Prove the copy carries the schema the template advertised. A suite that
@@ -302,6 +323,10 @@ case "$cmd" in
       echo "testdb: the copy did not match the template it came from; refusing to hand it back." >&2
       exit 1
     fi
+    # Stamp the copy with its own creation time: `gc` ages a database from this
+    # stamp (a template's built_at says nothing about when the copy was made).
+    psql_super -d "$db" -c "alter table openbooks_testdb_meta add column if not exists copied_at timestamptz;
+      update openbooks_testdb_meta set copied_at = now();" >/dev/null
     release_lock
     echo "testdb: $db ready (copied from $TEMPLATE)" >&2
     print_env "$db"
@@ -314,9 +339,27 @@ case "$cmd" in
 
   drop)
     require_docker
+    dry_run=0
+    if [ "${2:-}" = "--dry-run" ]; then dry_run=1; shift; fi
     [ $# -ge 2 ] || { echo "testdb: drop needs a database name" >&2; exit 1; }
-    psql_super -c "drop database if exists $2 with (force)" >/dev/null
-    echo "testdb: dropped $2" >&2
+    # test_db_name always yields ob_<name>, so the template, postgres, and
+    # anything not created by `new` can never be the target of a typo here.
+    db=$(test_db_name "$2")
+    if ! db_exists "$db"; then
+      echo "testdb: $db does not exist — nothing dropped (asked for '$2')" >&2
+      exit 1
+    fi
+    if [ "$dry_run" = 1 ]; then
+      echo "testdb: would drop $db (dry run; nothing dropped)" >&2
+      exit 0
+    fi
+    psql_super -c "drop database ${db} with (force)" >/dev/null
+    # Claim the drop only after the catalog no longer lists it.
+    if db_exists "$db"; then
+      echo "testdb: $db still exists after drop" >&2
+      exit 1
+    fi
+    echo "testdb: dropped $db" >&2
     ;;
 
   status)
@@ -341,20 +384,73 @@ case "$cmd" in
 
   gc)
     require_docker
-    # Test databases are disposable; anything untouched for a day is abandoned.
-    mapfile -t stale < <(psql_super -tAc "
+    # POLICY (stated so the code can be checked against it): a test database is
+    # disposable once it was COPIED more than --older-than ago (default 1 day)
+    # AND holds no live connection. Age is read from the copy's own stamp
+    # (openbooks_testdb_meta.copied_at, written by `new`); a copy without a
+    # stamp has an unknown age and is skipped unless --include-unstamped. The
+    # template is never a candidate. --dry-run prints the plan and drops
+    # nothing — run it first; it is the only evidence the policy above matches
+    # what would happen.
+    #
+    # History: the previous predicate used greatest(stats_reset, now() - 999 days)
+    # and PostgreSQL's GREATEST ignores NULLs, so every idle database evaluated as
+    # 999 days old and the "untouched for a day" comment described nothing.
+    dry_run=0; older_than="1 day"; include_unstamped=0
+    shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --dry-run) dry_run=1 ;;
+        --older-than) shift; [ $# -gt 0 ] || { echo "testdb: --older-than needs an interval (e.g. '1 day', '6 hours')" >&2; exit 1; }; older_than=$1 ;;
+        --include-unstamped) include_unstamped=1 ;;
+        *) echo "testdb: gc: unknown option '$1'" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    # Validate the interval as PostgreSQL does, before any candidate is touched.
+    psql_super -tAc "select interval '${older_than}'" >/dev/null 2>&1 || { echo "testdb: --older-than '${older_than}' is not a valid interval" >&2; exit 1; }
+    mapfile -t idle < <(psql_super -tAc "
       select d.datname from pg_database d
        where d.datname like 'ob\\_%'
+         and d.datname <> '${TEMPLATE}'
          and not exists (select 1 from pg_stat_activity a where a.datname = d.datname)
-         and coalesce((select max(greatest(s.stats_reset, now() - interval '999 days'))
-                         from pg_stat_database s where s.datname = d.datname), now())
-             < now() - interval '1 day'")
-    if [ ${#stale[@]} -eq 0 ]; then echo "testdb: nothing to collect"; exit 0; fi
-    for db in "${stale[@]}"; do
+       order by d.datname")
+    to_drop=(); skipped=0; kept=0
+    for db in "${idle[@]}"; do
       [ -n "$db" ] || continue
-      psql_super -c "drop database if exists ${db} with (force)" >/dev/null
-      echo "testdb: dropped stale $db"
+      stamp=$(psql_super -d "$db" -tAc "select coalesce(to_char(copied_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'), '') from openbooks_testdb_meta limit 1" 2>/dev/null | tr -d ' ' || true)
+      if [ -z "$stamp" ]; then
+        if [ "$include_unstamped" = 1 ]; then
+          echo "testdb: $db — no copy stamp; included by --include-unstamped" >&2
+          to_drop+=("$db")
+        else
+          echo "testdb: $db — no copy stamp (age unknown); skipped, pass --include-unstamped to collect it" >&2
+          skipped=$((skipped + 1))
+        fi
+        continue
+      fi
+      old=$(psql_super -d "$db" -tAc "select (copied_at < now() - interval '${older_than}')::text from openbooks_testdb_meta limit 1" 2>/dev/null | tr -d ' ' || true)
+      if [ "$old" = "true" ]; then
+        echo "testdb: $db — copied ${stamp}Z, older than ${older_than}, idle" >&2
+        to_drop+=("$db")
+      else
+        kept=$((kept + 1))
+      fi
     done
+    if [ ${#to_drop[@]} -eq 0 ]; then
+      echo "testdb: nothing to collect (${kept} recent, ${skipped} unstamped skipped)" >&2
+      exit 0
+    fi
+    if [ "$dry_run" = 1 ]; then
+      echo "testdb: dry run — would drop ${#to_drop[@]} database(s): ${to_drop[*]} (${kept} recent kept, ${skipped} unstamped skipped); nothing dropped" >&2
+      exit 0
+    fi
+    for db in "${to_drop[@]}"; do
+      psql_super -c "drop database ${db} with (force)" >/dev/null
+      if db_exists "$db"; then echo "testdb: $db still exists after drop" >&2; exit 1; fi
+      echo "testdb: dropped stale $db" >&2
+    done
+    echo "testdb: collected ${#to_drop[@]} database(s) (${kept} recent kept, ${skipped} unstamped skipped)" >&2
     ;;
 
   reset)
