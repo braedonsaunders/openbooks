@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { readFileSync } from "node:fs";
+import { TaxBasisFields } from "./TaxBasisFields";
+
+// The test runner uses classic JSX; the production compiler supplies it.
+Object.assign(globalThis, { React });
+const common = JSON.parse(
+  readFileSync(
+    new URL("../../../messages/en/common.json", import.meta.url),
+    "utf8",
+  ),
+);
+const ui = JSON.parse(
+  readFileSync(
+    new URL("../../../messages/en/ui.json", import.meta.url),
+    "utf8",
+  ),
+);
+
+function render(draft: Parameters<typeof TaxBasisFields>[0]["draft"]) {
+  return renderToStaticMarkup(
+    <NextIntlClientProvider
+      locale="en"
+      timeZone="UTC"
+      messages={{ common, ui }}
+    >
+      <TaxBasisFields
+        draft={{
+          sourceOperation: "partial_disposal",
+          applicable: "seller",
+          ...draft,
+        }}
+        onChange={() => {}}
+      />
+    </NextIntlClientProvider>,
+  );
+}
+
+test("tax relationship is an explicit choice with native option children", () => {
+  const markup = render({ regime: "ca_cca" });
+  assert.match(markup, /<option value="arms_length">/);
+  assert.match(markup, /<option value="non_arms_length">/);
+  assert.doesNotMatch(
+    markup,
+    /value="(?:arms_length|non_arms_length)" selected/,
+  );
+});
+
+test("unanswered tax facts do not render as false, while an explicit no remains selected", () => {
+  const unanswered = render({ regime: "uk_wda" });
+  assert.doesNotMatch(unanswered, /value="false" selected/);
+  const answered = render({
+    regime: "uk_wda",
+    relationship: "arms_length",
+    saleBelowMarket: false,
+    buyerCanClaimPma: false,
+    connectedChain: false,
+  });
+  assert.match(answered, /value="false" selected=""/);
+});
+
+test("changing a tax allocation method replaces the irrelevant input", () => {
+  const amount = render({
+    regime: "ca_cca",
+    allocationMethod: "ascertainable_amount",
+    allocatedCapitalCost: "750.0000",
+  });
+  assert.match(amount, /value="750\.0000"/);
+  assert.doesNotMatch(amount, /-allocationFraction"/);
+  const fraction = render({
+    regime: "ca_cca",
+    allocationMethod: "ascertainable_fraction",
+    allocationFraction: "0.25",
+    allocatedCapitalCost: "750.0000",
+  });
+  assert.match(fraction, /value="0\.25"/);
+  assert.doesNotMatch(fraction, /value="750\.0000"/);
+});
+
+test("a MACRS service date uses a date control and preserves the original vintage", () => {
+  const markup = render({
+    regime: "us_macrs",
+    placedInServiceOn: "2024-02-29",
+  });
+  assert.match(markup, /<input[^>]*type="date"[^>]*value="2024-02-29"/);
+});
+
+test("seller-only Canadian transfer asks for seller allocation without a buyer cost worksheet", () => {
+  const markup = render({
+    regime: "ca_cca",
+    sourceOperation: "intercompany_transfer",
+    applicable: "seller",
+    relationship: "non_arms_length",
+    allocationMethod: "ascertainable_amount",
+    allocatedCapitalCost: "750.0000",
+  });
+  assert.match(markup, /value="750\.0000"/);
+  assert.doesNotMatch(markup, /-payment"/);
+  assert.doesNotMatch(markup, /-sellerOriginalCapitalCost"/);
+  assert.doesNotMatch(markup, /-transferorCharacter"/);
+});
+
+test("buyer-only US transfer asks for acquisition facts without seller disposal amounts", () => {
+  const markup = render({
+    regime: "us_macrs",
+    sourceOperation: "intercompany_transfer",
+    applicable: "buyer",
+    relationship: "non_arms_length",
+    recognition: "taxable",
+    buyerCost: "925.0000",
+  });
+  assert.match(markup, /-buyerCost"/);
+  assert.match(markup, /value="925\.0000"/);
+  assert.doesNotMatch(markup, /-originalUnadjustedBasis"/);
+  assert.doesNotMatch(markup, /-disposedUnadjustedBasis"/);
+  assert.doesNotMatch(markup, /-statutoryProceeds"/);
+  assert.doesNotMatch(markup, /-amountRealizedRule"/);
+});
+
+test("both classified parties receive both statutory worksheets with no applicability election", () => {
+  const markup = render({
+    regime: "ca_cca",
+    sourceOperation: "intercompany_transfer",
+    applicable: "both",
+    relationship: "non_arms_length",
+    allocationMethod: "ascertainable_amount",
+    allocatedCapitalCost: "750.0000",
+    payment: "600.0000",
+  });
+  assert.match(markup, /value="750\.0000"/);
+  assert.match(markup, /value="600\.0000"/);
+  assert.match(markup, /-sellerOriginalCapitalCost"/);
+  assert.doesNotMatch(markup, /-(?:applicable|sourceOperation)"/);
+});
