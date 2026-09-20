@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildCpa005File, buildNachaFile, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, type EftSettings, type NachaSettings } from "../payments/rail-settings.ts";
+import { buildCpa005File, buildNachaFile, buildSepaFile, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, validateSepaSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -37,7 +37,7 @@ import { unsealJson } from "../platform/secrets.ts";
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
 
-export type PayRunBankFileFormat = "cpa005" | "nacha";
+export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa";
 
 export interface PayRunBankFileFormatSpec {
   /** Off means: do not emit these bytes, and say why. */
@@ -53,7 +53,7 @@ export interface PayRunBankFileFormatSpec {
 }
 
 /**
- * The two rails this product can originate payroll on, and the published
+ * The three rails this product can originate payroll on, and the published
  * standards their layouts were verified against.
  *
  * ── CPA-005 (Canada) — ON ─────────────────────────────────────────────────
@@ -82,7 +82,7 @@ export interface PayRunBankFileFormatSpec {
  *   and "F" (69–112), filler to 1464.
  * - Appendix 1 (Data Element Dictionary) pp.6–7, ITEM TRACE NUMBER, and
  *   pp.3–4, DESTINATION DATA CENTRE / FILE CREATION NUMBER / LOGICAL RECORD
- *   COUNT — see below and `itemTraceNumber` in engine/src/payments/payments.ts.
+ *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-formatters.ts.
  * - Transaction codes against *Standard 007* (2026 ed., Appendix I — codes
  *   moved out of Standard 005 in 2016): 200 = Payroll Deposit, 460 = Accounts
  *   Payable.
@@ -97,7 +97,7 @@ export interface PayRunBankFileFormatSpec {
  * (b) the originating direct clearer's 5-digit allocated data centre, (c) the
  * 4-digit file creation number as per the A record, and (d) a 9-digit item
  * sequence number, where (b), (c) and (d) must each be greater than zero or
- * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/payments.ts)
+ * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-formatters.ts)
  * now composes exactly that via `itemTraceNumber`, shared with the AP payment
  * files. Both data centres are institution-assigned tenant configuration on
  * the payment bank profile (`dataCentre`, `originatingDataCentre`; validated
@@ -118,8 +118,21 @@ export interface PayRunBankFileFormatSpec {
  * records, alphanumerics left-justified space-padded and numerics unsigned
  * right-justified zero-padded, amounts in implied cents.
  *
- * Both writers are the audited AP ones in engine/src/payments/payments.ts
- * (`buildCpa005File`, `buildNachaFile`) — payroll deliberately does not fork a
+ * ── SEPA (Eurozone) — ON ──────────────────────────────────────────────────
+ * pain.001.001.03 Customer Credit Transfer Initiation (EUR), rendered by the
+ * shared AP builder (`buildSepaFile`, engine/src/payments/rail-formatters.ts)
+ * with the shared ISO 13616 mod-97 IBAN gate — payroll maps its EFT
+ * population onto the builder's generic payment rows and adds nothing of its
+ * own. The originator triple (debtor name, debtor IBAN, debtor BIC) is tenant
+ * configuration on the `sepa_credit` payment bank profile, validated by the
+ * shared `validateSepaSettings`; an employee row without a mod-97-valid IBAN
+ * is a named refusal, never a silent drop and never a coerced account number.
+ * The message identification is the artifact's own `number_sequences`
+ * allocation (payroll-bank-file-artifact.ts) — the bank deduplicates on
+ * MsgId, so it must be unique per file and is never re-derived.
+ *
+ * All three writers are the audited AP ones in engine/src/payments/rail-formatters.ts
+ * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
@@ -138,6 +151,13 @@ export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankF
     rails: ["nacha_credit"],
     extension: "ach",
     contentType: "text/plain; charset=us-ascii",
+  },
+  sepa: {
+    enabled: true,
+    currency: "EUR",
+    rails: ["sepa_credit"],
+    extension: "xml",
+    contentType: "application/xml",
   },
 };
 
@@ -253,6 +273,7 @@ export interface PayrollOriginatorConfig {
   lineEnding: "lf" | "crlf";
   cpa005?: EftSettings & { transactionCode: string };
   nacha?: NachaSettings & { entryClassCode: "PPD" | "CCD"; entryDescription: string };
+  sepa?: SepaSettings;
 }
 
 export type PayrollOriginatorResult =
@@ -267,9 +288,10 @@ type ProfileRow = {
   originator_secrets_encrypted: string | null;
 };
 
-/** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI. */
+/** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI; SEPA pain.001 is LF-terminated XML. */
 function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "crlf" {
   if (format === "cpa005") return "crlf";
+  if (format === "sepa") return "lf";
   return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
 }
 
@@ -458,8 +480,47 @@ function resolveNacha(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * SEPA originator validation.
+ *
+ * The originator half of a pain.001 credit transfer is three values the
+ * employer's bank assigned: the debtor name as it must appear on employee
+ * statements, the IBAN the EFT debit will draw, and the debtor agent's BIC.
+ * All three are tenant configuration on the payment bank profile (Setup →
+ * Payment operations, `sepa_credit` rail) and all three are validated here —
+ * the shared `validateSepaSettings` refuses a malformed originator IBAN
+ * (mod-97) or BIC by name rather than emitting XML the bank will reject.
+ */
+function resolveSepa(row: ProfileRow): PayrollOriginatorResult {
+  const raw = unsealJson<Partial<SepaSettings>>(row.originator_secrets_encrypted) ?? {};
+  const checked = validateSepaSettings(raw);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: checked.missing.map(
+        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+      ),
+    };
+  }
+  return {
+    ok: true,
+    config: {
+      paymentBankProfileId: row.id,
+      profileName: row.name,
+      format: "sepa",
+      currency: row.currency ?? "EUR",
+      lineEnding: "lf",
+      sepa: checked.settings,
+    },
+  };
+}
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
-  const resolved = format === "cpa005" ? resolveCpa005(row) : resolveNacha(row);
+  // Branch on the profile's rail-mapped format, never on a country: packs
+  // declare which rail they settle on and this resolver only reads it.
+  const resolved =
+    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : resolveNacha(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -499,9 +560,52 @@ export async function payrollOriginatorConfig(
 export interface PayRunBankFileCredit extends PayRunBankFileEntry {
   /** employee_roles.employee_number, or a stable fallback. */
   employeeNumber: string;
-  /** CA: { institution, transit }. US: 9-digit ABA. */
+  /** CA: { institution, transit }. US: 9-digit ABA. SEPA: { iban, bic }. */
   routing: Record<string, string>;
   accountNumber: string;
+  /** SEPA only: the validated creditor IBAN this credit will be paid to. */
+  iban?: string;
+  /** SEPA only: the creditor agent BIC, when the employee's bank row carries one. */
+  bic?: string | null;
+}
+
+/**
+ * The SEPA address of one payroll credit, resolved purely.
+ *
+ * Split out from `loadCredits` so the refusal logic is unit-testable with no
+ * database: an IBAN that fails the ISO 13616 mod-97 check (or is missing
+ * entirely) is a typed refusal naming the employee and the remedy, never a
+ * silent drop and never a coerced account number. The BIC is optional in
+ * pain.001 — but a supplied one that fails ISO 9362 is refused the same way.
+ */
+export function resolveSepaCreditor(
+  employeeName: string,
+  routing: Record<string, string>,
+  accountNumber: string,
+): { ok: true; iban: string; bic: string | null } | { ok: false; reason: string } {
+  // Same precedence as the AP rail (run-readiness.ts): the bank row's own
+  // IBAN field wins, the stored account number is the fallback.
+  const raw = (routing.iban ?? accountNumber).replace(/\s/g, "");
+  if (raw === "") {
+    return {
+      ok: false,
+      reason: `${employeeName}: SEPA needs an IBAN on the employee's approved bank account — add one in Setup → Payment operations or pay this employee by cheque`,
+    };
+  }
+  if (!isValidIban(raw)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: "${raw}" is not a valid IBAN (ISO 13616 mod-97 check failed) — correct it on the employee's approved bank account or pay this employee by cheque`,
+    };
+  }
+  const bic = (routing.bic ?? "").trim().toUpperCase() || null;
+  if (bic && !isValidBic(bic)) {
+    return {
+      ok: false,
+      reason: `${employeeName}: BIC "${routing.bic}" is not a valid ISO 9362 BIC — correct it on the employee's approved bank account or remove it (the BIC is optional)`,
+    };
+  }
+  return { ok: true, iban: raw.toUpperCase(), bic };
 }
 
 /**
@@ -555,6 +659,7 @@ export async function loadCredits(
       problems.push(`${entry.employeeName}: no approved bank account number`);
       continue;
     }
+    const accountNumber = decryptAccountNumber(row.account_number_encrypted);
     if (format === "cpa005") {
       if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
         problems.push(
@@ -562,6 +667,26 @@ export async function loadCredits(
         );
         continue;
       }
+    } else if (format === "sepa") {
+      // A SEPA credit is addressed by IBAN, not by account number: the IBAN
+      // lives on the employee's bank row (`routing.iban`, falling back to the
+      // stored account number the way the AP rail does), and a value that
+      // fails the ISO 13616 mod-97 check is a named refusal — never silently
+      // dropped, never coerced into a differently-numbered account.
+      const resolved = resolveSepaCreditor(entry.employeeName, routing, accountNumber);
+      if (!resolved.ok) {
+        problems.push(resolved.reason);
+        continue;
+      }
+      credits.push({
+        ...entry,
+        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+        routing,
+        accountNumber,
+        iban: resolved.iban,
+        bic: resolved.bic,
+      });
+      continue;
     } else {
       const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
       if (!/^\d{9}$/.test(aba)) {
@@ -581,7 +706,7 @@ export async function loadCredits(
       ...entry,
       employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
       routing,
-      accountNumber: decryptAccountNumber(row.account_number_encrypted),
+      accountNumber,
     });
   }
   if (problems.length > 0) {
@@ -614,6 +739,8 @@ export interface TrailerTotals {
  * digits, cents), positions 61–68 total number of credit transactions (8).
  * NACHA File Control "9" record: positions 14–21 entry/addenda count (8),
  * positions 44–55 total credit entry dollar amount (12, cents).
+ * SEPA pain.001: the GrpHdr `<NbOfTxs>` and `<CtrlSum>` the builder wrote —
+ * parsed back out of the produced XML, never assumed from the inputs.
  */
 export function readTrailerTotals(format: PayRunBankFileFormat, content: string): TrailerTotals {
   // Split on either terminator: the terminator is per-institution and never
@@ -627,6 +754,22 @@ export function readTrailerTotals(format: PayRunBankFileFormat, content: string)
     return {
       totalCents: BigInt(trailer.slice(46, 60)),
       count: Number(trailer.slice(60, 68)),
+    };
+  }
+  if (format === "sepa") {
+    // GrpHdr carries the file's own totals; the FIRST NbOfTxs/CtrlSum in the
+    // document is the header's (each CdtTrfTxInf carries amounts but no
+    // counts). CtrlSum is exact 2dp euros, so whole cents by construction —
+    // and the render refuses sub-cent credits before writing, so the parse
+    // below cannot hide a fraction the ledger still carries.
+    const count = content.match(/<NbOfTxs>(\d+)<\/NbOfTxs>/);
+    const sum = content.match(/<CtrlSum>(\d+\.\d{2})<\/CtrlSum>/);
+    if (!count || !sum) {
+      throw new PayrollError("generated SEPA file has no readable GrpHdr totals");
+    }
+    return {
+      totalCents: toUnits(sum[1]!) / 100n,
+      count: Number(count[1]),
     };
   }
   const trailer = records.find((line) => line[0] === "9" && !/^9{94}$/.test(line));
@@ -643,12 +786,17 @@ export function readTrailerTotals(format: PayRunBankFileFormat, content: string)
  * Apply the tenant's record terminator and assert every record is still its
  * exact fixed width. A terminator that leaked into a record, or a record that
  * came out the wrong length, means every field after it has shifted.
+ *
+ * Fixed-width rails only: a pain.001 document is length-delimited by markup,
+ * not by offsets, so there is no width to assert and the builder's own bytes
+ * pass through untouched.
  */
 function applyLineEnding(
   content: string,
   lineEnding: "lf" | "crlf",
-  recordLength: number,
+  recordLength: number | null,
 ): string {
+  if (recordLength == null) return content;
   const records = content.split(/\r?\n/).filter((line) => line.length > 0);
   for (const record of records) {
     if (record.length !== recordLength) {
@@ -675,6 +823,12 @@ export interface PayRunBankFileBuildInput {
   fileCreationNumber?: number;
   /** NACHA file ID modifier (A–Z, 0–9), allocated by the artifact module. */
   fileIdModifier?: string;
+  /**
+   * SEPA message identification (MsgId/PmtInfId), allocated by the artifact
+   * module from the same number sequence. The bank deduplicates on it, so it
+   * must be unique per file — never re-derived at download time.
+   */
+  messageId?: string;
   /** The date the money must be in employees' accounts (the run's pay date). */
   fundsDate: string;
   /** File creation instant. Explicit so a golden test is reproducible. */
@@ -787,9 +941,13 @@ export function renderPayRunBankFile(
   }
 
   const content = applyLineEnding(
-    format === "cpa005" ? buildCpa005Payroll(input, credits) : buildNachaPayroll(input, credits),
+    format === "cpa005"
+      ? buildCpa005Payroll(input, credits)
+      : format === "sepa"
+        ? buildSepaPayroll(input, credits)
+        : buildNachaPayroll(input, credits),
     input.originator.lineEnding,
-    format === "cpa005" ? 1464 : 94,
+    format === "cpa005" ? 1464 : format === "nacha" ? 94 : null,
   );
 
   // Everything below is read back out of the produced characters.
@@ -848,6 +1006,55 @@ function buildCpa005Payroll(
     fileCreationNumber: input.fileCreationNumber,
     fileCreationDate: input.createdAt,
     payments,
+  });
+}
+
+/** Local datetime `YYYY-MM-DDTHH:mm:ss`, matching the AP SEPA writer's `${today}T00:00:00` shape. */
+function localDateTime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/**
+ * Render payroll credits through the SHARED AP pain.001 builder
+ * (`buildSepaFile`, engine/src/payments/rail-formatters.ts) — the same
+ * function, the same IBAN mod-97 gate, the same XML. Payroll only maps its
+ * own population onto the builder's generic payment rows; there is no second
+ * SEPA implementation here.
+ */
+function buildSepaPayroll(
+  input: PayRunBankFileBuildInput,
+  credits: PayRunBankFileCredit[],
+): string {
+  const settings = input.originator.sepa;
+  if (!settings) throw new PayrollError("SEPA originator configuration is missing");
+  if (!input.messageId) {
+    throw new PayrollError("SEPA requires an allocated message identification");
+  }
+  return buildSepaFile({
+    settings,
+    messageId: input.messageId,
+    creationDateTime: localDateTime(input.createdAt),
+    executionDate: input.fundsDate,
+    payments: credits.map((credit) => {
+      if (!credit.iban) {
+        throw new PayrollError(
+          `payroll bank file refuses ${credit.employeeName}: no validated IBAN was resolved for this credit`,
+        );
+      }
+      return {
+        // End-to-end id (≤35 chars) — what the employer reconciles the bank
+        // reporting by. The message id keeps it unique per file.
+        endToEndId: `${input.messageId}-${credit.employeeNumber}`.slice(0, 35),
+        amount: credit.amount,
+        creditorName: credit.employeeName,
+        creditorIban: credit.iban,
+        creditorBic: credit.bic,
+        // Unstructured remittance (≤140) — what the employee sees. Mirrors
+        // the CPA-005 cross-reference `PAY ${employeeNumber}`.
+        remittance: `PAY ${credit.employeeNumber}`,
+      };
+    }),
   });
 }
 
