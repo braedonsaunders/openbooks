@@ -102,6 +102,7 @@ const READER_PERMS = [
   // holds every read grant so every read tool runs rather than refusing.
   "hrm.position.read",
   "hrm.process.read",
+  "hrm.leave.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

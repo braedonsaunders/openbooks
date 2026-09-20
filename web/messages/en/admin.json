@@ -2408,6 +2408,16 @@
       "extension-settings": {
         "title": "App settings",
         "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates."
+      },
+      "leave-types": {
+        "title": "Leave types",
+        "singularTitle": "Leave type",
+        "description": "Time-off kinds your org grants — vacation, sick, unpaid — and which pay-run movement each raises, if any. Payroll banks are not configured here."
+      },
+      "leave-policies": {
+        "title": "Leave policies",
+        "singularTitle": "Leave policy",
+        "description": "How much time each type accrues, who it covers, and how much notice it needs. Entitlement in time; payroll value is computed by the pay run."
       }
     },
     "fields": {
@@ -2684,7 +2694,14 @@
       "required": "Required",
       "evidenceKind": "Evidence",
       "appliesEmployerSubsidiaryId": "Applies to subsidiary",
-      "appliesDepartmentId": "Applies to department"
+      "appliesDepartmentId": "Applies to department",
+      "paid": "Paid",
+      "valueCrossing": "Raises in payroll",
+      "requiresAttachment": "Requires attachment",
+      "leaveTypeId": "Leave type",
+      "minimumNoticeDays": "Minimum notice (days)",
+      "accrualRule": "Accrual rule (JSON)",
+      "carryoverRule": "Carryover rule (JSON)"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2738,7 +2755,11 @@
       "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine.",
       "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused.",
       "hrmProcessAppliesSubsidiary": "Empty means the template applies to every subsidiary.",
-      "hrmProcessAppliesDepartment": "Empty means the template applies to every department."
+      "hrmProcessAppliesDepartment": "Empty means the template applies to every department.",
+      "leaveValueCrossing": "Which pay-run input an approved absence day raises. None never touches the payroll ledger; payout and bank_in cross as hours the run prices.",
+      "leaveAppliesTo": "Scope pins as JSON, e.g. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null pins mean org-wide; the engine resolves overlaps by specificity.",
+      "leaveAccrualRule": "Accrual as JSON, e.g. {\"kind\": \"per_year\", \"hours\": \"120\"}. Kinds: none, per_period (needs hours and periods_per_year), per_year (needs hours), unlimited.",
+      "leaveCarryoverRule": "Carryover as JSON, e.g. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Kinds: none, carry_all, carry_up_to (needs hours). Optional expires_after_days."
     },
     "options": {
       "payFrequency": {
@@ -3091,6 +3112,11 @@
         "none": "None",
         "acknowledgement": "Acknowledgement",
         "attachment": "Attachment"
+      },
+      "leaveValueCrossing": {
+        "none": "None — unpaid or salary-paid",
+        "payout": "Payout from the bank",
+        "bankIn": "Bank in lieu"
       }
     },
     "payroll": {

@@ -2363,6 +2363,16 @@
       "extension-settings": {
         "title": "Paramètres des applications",
         "description": "Configurez les paramètres déclarés par les applications installées. Les modifications conservent les valeurs antérieures et leurs dates d’effet."
+      },
+      "leave-types": {
+        "title": "Types de congé",
+        "singularTitle": "Type de congé",
+        "description": "Les absences accordées par votre organisation — vacances, maladie, sans solde — et le mouvement de paie éventuel de chacune. Les compteurs de paie ne se configurent pas ici."
+      },
+      "leave-policies": {
+        "title": "Politiques de congé",
+        "singularTitle": "Politique de congé",
+        "description": "Le temps accumulé par chaque type, qui il couvre et le préavis requis. Droit en temps ; la valeur est calculée par la paie."
       }
     },
     "fields": {
@@ -2639,7 +2649,14 @@
       "required": "Requis",
       "evidenceKind": "Preuve",
       "appliesEmployerSubsidiaryId": "Filiale concernée",
-      "appliesDepartmentId": "Service concerné"
+      "appliesDepartmentId": "Service concerné",
+      "paid": "Payé",
+      "valueCrossing": "Génère en paie",
+      "requiresAttachment": "Justificatif requis",
+      "leaveTypeId": "Type de congé",
+      "minimumNoticeDays": "Préavis minimum (jours)",
+      "accrualRule": "Règle d'accumulation (JSON)",
+      "carryoverRule": "Règle de report (JSON)"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2693,7 +2710,11 @@
       "protectionPriority": "Quel ordre l’emporte quand plusieurs retenues protégées se disputent la même paie. Au plus petit d’abord ; les ordonnances alimentaires priment normalement sur les créanciers ordinaires.",
       "stateCode": "Requis pour, et seulement pour, les types de programme inscrits par État ou région (comme les comptes d’assurance-chômage d’État) — validé contre la déclaration de l’ensemble réglementaire du pays quand le compte est enregistré.",
       "hrmProcessAppliesSubsidiary": "Vide : le modèle s'applique à toutes les filiales.",
-      "hrmProcessAppliesDepartment": "Vide : le modèle s'applique à tous les services."
+      "hrmProcessAppliesDepartment": "Vide : le modèle s'applique à tous les services.",
+      "leaveValueCrossing": "Quelle entrée de paie un jour d'absence approuvé génère. Aucune ne touche jamais le livre de paie ; paiement et accumulation transitent en heures que le calcul valorise.",
+      "leaveAppliesTo": "Portée en JSON, p. ex. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null signifie toute l'organisation ; le moteur résout les chevauchements par spécificité.",
+      "leaveAccrualRule": "Accumulation en JSON, p. ex. {\"kind\": \"per_year\", \"hours\": \"120\"}. Genres : none, per_period (exige hours et periods_per_year), per_year (exige hours), unlimited.",
+      "leaveCarryoverRule": "Report en JSON, p. ex. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Genres : none, carry_all, carry_up_to (exige hours). expires_after_days facultatif."
     },
     "options": {
       "timeClassification": {
@@ -3046,6 +3067,11 @@
         "none": "Aucune",
         "acknowledgement": "Accusé de réception",
         "attachment": "Pièce jointe"
+      },
+      "leaveValueCrossing": {
+        "none": "Aucun — sans solde ou sur salaire",
+        "payout": "Paiement depuis le compteur",
+        "bankIn": "Compter en temps accumulé"
       }
     },
     "laborCosting": {

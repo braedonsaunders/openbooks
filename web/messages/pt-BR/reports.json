@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "Listas de processos",
         "description": "Uma linha por etapa de lista de processos — tipo e status do processo, colaborador, modelo, responsável pela etapa, vencimento, tipo de evidência e status da etapa com sua evidência. Requer a permissão de processos de RH."
+      },
+      "hrm_leave_absences": {
+        "label": "Ausências",
+        "description": "Uma linha por dia de ausência — pessoa, empregador, departamento da época, tipo e horas. Reversões são linhas próprias; somas liquidam. Requer a permissão de licença."
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "Motivo",
         "process_id": "Processo (id)",
         "employment_id": "Emprego (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Data",
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "leave_type": "Tipo de licença",
+        "hours": "Horas",
+        "source": "Origem",
+        "employment_id": "Emprego (id)",
+        "id": "Ausência (id)"
       }
     },
     "enumValues": {

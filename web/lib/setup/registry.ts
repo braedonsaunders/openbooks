@@ -18,6 +18,7 @@
 import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciation-limits.ts'
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
+import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
 
 export type SetupFieldKind =
   | 'text'
@@ -1737,6 +1738,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // Elections on the country pack's OPTIONAL statutory holidays, plus company
   // closures. Declared in ./payroll-holidays.ts; an ordinary registry entity.
   PAYROLL_HOLIDAYS_ENTITY,
+  // HR leave taxonomy and time-entitlement policies. Declared in
+  // ./hrm-leave.ts; ordinary registry entities behind the hrm switch.
+  LEAVE_TYPES_ENTITY,
+  LEAVE_POLICIES_ENTITY,
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

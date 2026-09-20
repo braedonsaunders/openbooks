@@ -1,18 +1,20 @@
 import { REPORT_AS_OF } from './report-as-of'
 import type { ReportEntity } from './entities'
 
-// Workforce reports over the HRM employment foundation (0184) and the
-// employment change-request ledger (0185).
+// Workforce reports over the HRM employment foundation (0184), the
+// employment change-request ledger (0185), and the leave absence record
+// (0194).
 //
-// The three entities below are the report-catalog face of the engine HRM
-// read path (engine/src/hrm/employment-read.ts, temporal.ts,
+// The four entities below are the report-catalog face of the engine HRM
+// read path (engine/src/hrm/employment-read.ts, leave-read.ts, temporal.ts,
 // authorization.ts), which they never call and never re-implement: the
 // catalog carries the same temporal predicates as SQL so the shared
 // executor, the builder, saved views and the insights card studio all read
 // governed employment state through one list. Permission and the Features
 // switch ride on the catalog fields every run path already enforces
-// (web/lib/report-authz.ts): `hrm.employment.read` refuses with 403 and a
-// switched-off `hrm` feature 404s — a refusal, never empty rows.
+// (web/lib/report-authz.ts): the slice permission refuses with 403 and a
+// switched-off `hrm` feature 404s — a refusal, never empty rows. The leave
+// entity carries TIME only; payroll VALUE lives in payroll's own entities.
 //
 // Temporal contract (mirrors temporal.ts containsDate and the
 // assembleEmploymentAsOf resolution the headcount service applies in JS):
@@ -30,6 +32,7 @@ import type { ReportEntity } from './entities'
 export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
 export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
 export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
+export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -50,6 +53,8 @@ const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
+const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination'] as const
+const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -312,5 +317,48 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'p.employment_id' },
     ],
     defaultSort: { column: 'due_on', direction: 'asc' },
+    key: 'hrm_leave_absences',
+    label: 'Leave absences',
+    category: 'hrm',
+    description:
+      'One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission.',
+    // One row per hrm_absences day row (request approvals and after-the-fact
+    // recordings alike). The department is the primary assignment effective
+    // on the absence day — the same half-open containment the calendar
+    // reads use — NULL when no primary covered the day (an unattributed
+    // bucket, never dropped and never misattributed). Reversals are
+    // negative rows of their own, so SUM(hours) nets while the evidence
+    // stays row-visible. This entity never joins the payroll ledger: TIME
+    // here, VALUE in payroll's own entities.
+    from: `hrm_absences a
+      JOIN hrm_leave_types t ON t.id = a.leave_type_id AND t.org_id = a.org_id
+      JOIN worker_employments e ON e.id = a.employment_id AND e.org_id = a.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = a.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = a.org_id
+      LEFT JOIN employment_assignment_versions pa
+        ON pa.employment_id = a.employment_id AND pa.org_id = a.org_id
+       AND pa.is_primary AND pa.recorded_until IS NULL
+       AND pa.effective_from <= a.on_date
+       AND (pa.effective_to IS NULL OR pa.effective_to > a.on_date)
+      LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_LEAVE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The absence day is the fact: the period picker narrows on it, so a
+    // request spanning a boundary splits by the fact, never by the window.
+    defaultPeriodField: 'on_date',
+    columns: [
+      { key: 'on_date', label: 'Date', kind: 'date', expr: 'a.on_date' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'leave_type', label: 'Leave type', kind: 'text', expr: 't.code' },
+      { key: 'hours', label: 'Hours', kind: 'number', expr: 'a.hours' },
+      { key: 'source', label: 'Source', kind: 'enum', expr: 'a.source', options: HRM_ABSENCE_SOURCES },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'a.employment_id' },
+      { key: 'id', label: 'Absence (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'on_date', direction: 'desc' },
   },
 ]

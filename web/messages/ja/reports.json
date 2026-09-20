@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "プロセスチェックリスト",
         "description": "プロセスチェックリストの手順ごと1行 — プロセス種別とステータス、従業員、テンプレート、手順担当者、期限、証跡種別、手順ステータスとその証跡。HRMプロセス権限が必要です。"
+      },
+      "hrm_leave_absences": {
+        "label": "休暇欠勤",
+        "description": "欠勤日ごとに1行 — 氏名、雇用主、当時の部門、休暇種別、時間。取消は別行のため、合計は相殺されます。休暇権限が必要です。"
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "スキップ理由",
         "process_id": "プロセス（ID）",
         "employment_id": "雇用（ID）"
+      },
+      "hrm_leave_absences": {
+        "on_date": "日付",
+        "person": "氏名",
+        "employer": "雇用主",
+        "department": "部門",
+        "leave_type": "休暇種別",
+        "hours": "時間",
+        "source": "出所",
+        "employment_id": "雇用 (ID)",
+        "id": "欠勤 (ID)"
       }
     },
     "enumValues": {

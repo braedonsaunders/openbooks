@@ -2408,6 +2408,16 @@
       "extension-settings": {
         "title": "Configurações de aplicativos",
         "description": "Configure definições declaradas pelos apps instalados. Alterações preservam valores anteriores e suas vigências."
+      },
+      "leave-types": {
+        "title": "Tipos de licença",
+        "singularTitle": "Tipo de licença",
+        "description": "As ausências que sua organização concede — férias, doença, não remuneradas — e qual movimento de folha cada uma gera. Bancos de folha não se configuram aqui."
+      },
+      "leave-policies": {
+        "title": "Políticas de licença",
+        "singularTitle": "Política de licença",
+        "description": "Quanto tempo cada tipo acumula, quem cobre e quanta antecedência exige. Direito em tempo; o valor é calculado pela folha."
       }
     },
     "fields": {
@@ -2684,7 +2694,14 @@
       "required": "Obrigatório",
       "evidenceKind": "Evidência",
       "appliesEmployerSubsidiaryId": "Subsidiária aplicável",
-      "appliesDepartmentId": "Departamento aplicável"
+      "appliesDepartmentId": "Departamento aplicável",
+      "paid": "Remunerada",
+      "valueCrossing": "Gera na folha",
+      "requiresAttachment": "Requer anexo",
+      "leaveTypeId": "Tipo de licença",
+      "minimumNoticeDays": "Antecedência mínima (dias)",
+      "accrualRule": "Regra de acúmulo (JSON)",
+      "carryoverRule": "Regra de transferência (JSON)"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2738,7 +2755,11 @@
       "itemId": "Pague sobre cada unidade que cobra por este item de catálogo — \"todas as escavadeiras\" como uma regra em vez de uma por máquina.",
       "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados.",
       "hrmProcessAppliesSubsidiary": "Vazio: o modelo se aplica a todas as subsidiárias.",
-      "hrmProcessAppliesDepartment": "Vazio: o modelo se aplica a todos os departamentos."
+      "hrmProcessAppliesDepartment": "Vazio: o modelo se aplica a todos os departamentos.",
+      "leaveValueCrossing": "Qual insumo de folha um dia de ausência aprovado gera. Nenhum nunca toca o razão de folha; pagamento e acúmulo cruzam como horas que o cálculo avalia.",
+      "leaveAppliesTo": "Escopo como JSON, ex. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null significa toda a organização; o motor resolve sobreposições por especificidade.",
+      "leaveAccrualRule": "Acúmulo como JSON, ex. {\"kind\": \"per_year\", \"hours\": \"120\"}. Tipos: none, per_period (precisa de hours e periods_per_year), per_year (precisa de hours), unlimited.",
+      "leaveCarryoverRule": "Transferência como JSON, ex. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Tipos: none, carry_all, carry_up_to (precisa de hours). expires_after_days opcional."
     },
     "options": {
       "payFrequency": {
@@ -3091,6 +3112,11 @@
         "none": "Nenhuma",
         "acknowledgement": "Ciência",
         "attachment": "Anexo"
+      },
+      "leaveValueCrossing": {
+        "none": "Nenhum — não remunerado ou em salário",
+        "payout": "Pagamento do banco",
+        "bankIn": "Acumular como tempo"
       }
     },
     "payroll": {

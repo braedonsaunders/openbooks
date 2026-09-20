@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "Listas de procesos",
         "description": "Una fila por paso de lista de procesos: tipo y estado del proceso, empleado, plantilla, responsable del paso, vencimiento, tipo de evidencia y estado del paso con su evidencia. Requiere el permiso de procesos de RR. HH."
+      },
+      "hrm_leave_absences": {
+        "label": "Ausencias",
+        "description": "Una fila por día de ausencia — persona, empleador, departamento de entonces, tipo y horas. Las reversiones son filas propias; las sumas netean. Requiere el permiso de ausencias."
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "Motivo de omisión",
         "process_id": "Proceso (id)",
         "employment_id": "Empleo (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Fecha",
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "leave_type": "Tipo de ausencia",
+        "hours": "Horas",
+        "source": "Origen",
+        "employment_id": "Empleo (id)",
+        "id": "Ausencia (id)"
       }
     },
     "enumValues": {

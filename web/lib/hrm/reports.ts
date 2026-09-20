@@ -50,6 +50,7 @@ const ENTITY_ICONS: Record<string, string> = {
   hrm_headcount: 'users',
   hrm_employment_history: 'database',
   hrm_change_requests: 'workflow',
+  hrm_leave_absences: 'calendar',
 }
 
 export async function loadHrmReports(authz: Authz): Promise<HrmReportsData> {

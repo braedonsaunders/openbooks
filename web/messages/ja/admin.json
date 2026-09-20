@@ -2476,6 +2476,16 @@
       "extension-settings": {
         "title": "アプリ設定",
         "description": "インストール済みアプリが宣言した設定を構成します。変更時は以前の値と発効日を保持します。"
+      },
+      "leave-types": {
+        "title": "休暇種別",
+        "singularTitle": "休暇種別",
+        "description": "組織が付与する休暇の種類（年次休暇、病気休暇、無給休暇）と、それぞれが生じさせる給与計算の動き。給与残高はここでは設定しません。"
+      },
+      "leave-policies": {
+        "title": "休暇ポリシー",
+        "singularTitle": "休暇ポリシー",
+        "description": "各休暇種別の付与時間、適用対象、必要な事前通知。時間としての権利であり、金額は給与計算で算出されます。"
       }
     },
     "fields": {
@@ -2752,7 +2762,14 @@
       "required": "必須",
       "evidenceKind": "証跡",
       "appliesEmployerSubsidiaryId": "対象子会社",
-      "appliesDepartmentId": "対象部門"
+      "appliesDepartmentId": "対象部門",
+      "paid": "有給",
+      "valueCrossing": "給与計算への連動",
+      "requiresAttachment": "添付必須",
+      "leaveTypeId": "休暇種別",
+      "minimumNoticeDays": "最小通知日数",
+      "accrualRule": "付与ルール (JSON)",
+      "carryoverRule": "繰越ルール (JSON)"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2806,7 +2823,11 @@
       "requiresVerification": "証明書を記録した本人が検証することはできません。",
       "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。",
       "hrmProcessAppliesSubsidiary": "空欄はすべての子会社に適用されます。",
-      "hrmProcessAppliesDepartment": "空欄はすべての部門に適用されます。"
+      "hrmProcessAppliesDepartment": "空欄はすべての部門に適用されます。",
+      "leaveValueCrossing": "承認された休暇日が生じさせる給与計算インプット。「なし」は給与台帳に触れません。支払いと積立は、計算が評価する時間として渡されます。",
+      "leaveAppliesTo": "適用範囲をJSONで指定（例：{\"employer_subsidiary_id\": null, \"department_id\": null}）。nullは組織全体。重複はエンジンが詳細度で解決します。",
+      "leaveAccrualRule": "付与をJSONで指定（例：{\"kind\": \"per_year\", \"hours\": \"120\"}）。種類：none、per_period（hoursとperiods_per_yearが必要）、per_year（hoursが必要）、unlimited。",
+      "leaveCarryoverRule": "繰越をJSONで指定（例：{\"kind\": \"carry_up_to\", \"hours\": \"40\"}）。種類：none、carry_all、carry_up_to（hoursが必要）。expires_after_daysは任意。"
     },
     "options": {
       "timeClassification": {
@@ -3159,6 +3180,11 @@
         "none": "なし",
         "acknowledgement": "確認",
         "attachment": "添付ファイル"
+      },
+      "leaveValueCrossing": {
+        "none": "なし — 無給または給与扱い",
+        "payout": "残高からの支払い",
+        "bankIn": "代替時間として積立"
       }
     },
     "invoicing": {

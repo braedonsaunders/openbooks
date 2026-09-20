@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "Listes de processus",
         "description": "Une ligne par étape de liste de processus — type et statut du processus, employé, modèle, responsable de l’étape, échéance, type de preuve, et statut de l’étape avec sa preuve. Requiert la permission de processus RH."
+      },
+      "hrm_leave_absences": {
+        "label": "Absences",
+        "description": "Une ligne par jour d'absence — personne, employeur, service d'alors, type de congé et heures. Les contre-passations sont des lignes propres ; les totaux sont nets. Requiert la permission congés."
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "Motif",
         "process_id": "Processus (id)",
         "employment_id": "Emploi (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Date",
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "leave_type": "Type de congé",
+        "hours": "Heures",
+        "source": "Source",
+        "employment_id": "Emploi (id)",
+        "id": "Absence (id)"
       }
     },
     "enumValues": {

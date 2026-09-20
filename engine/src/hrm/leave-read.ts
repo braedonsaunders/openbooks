@@ -264,6 +264,24 @@ export async function leaveToday(orgId: string): Promise<string> {
   return businessToday(orgId);
 }
 
+export interface LeaveTypeSummary {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly paid: boolean;
+  readonly valueCrossing: "none" | "payout" | "bank_in";
+  readonly isActive: boolean;
+}
+
+/** Leave-type taxonomy for an org, in code order. Authorization rides on the caller. */
+export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<LeaveTypeSummary[]> {
+  const rows = (await exec.execute<LeaveTypeSummary>(sql`
+    select id, code, name, paid, value_crossing as "valueCrossing", is_active as "isActive"
+      from hrm_leave_types where org_id = ${orgId} order by code
+  `)).rows;
+  return rows;
+}
+
 // --- Request reads ----------------------------------------------------------
 
 export interface LeaveRequestSummary {
