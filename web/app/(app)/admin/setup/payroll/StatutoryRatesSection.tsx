@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
+import { countryName } from '../../../../../lib/format'
 import { formatRateFieldValue } from './statutory-rates-format'
 
 /**
@@ -120,6 +121,7 @@ interface DraftRate {
 
 export function StatutoryRatesSection({ initialYear }: { initialYear?: number }) {
   const t = useTranslations('payroll.settingsPage')
+  const locale = useLocale()
   const today = useBusinessToday()
   const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
   const [data, setData] = useState<Payload | null>(null)
@@ -285,7 +287,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           className="rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-slate-900 dark:text-slate-100">{entry.country}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">{countryName(entry.country, locale)}</span>
             <span className="text-slate-500 dark:text-slate-400">
               {label('rates.tablesLoaded', 'Statutory tables loaded for')}
             </span>
@@ -391,7 +393,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
             key: 'levy',
             header: label('rates.columns.levy', 'Rate'),
             cell: (row) => slotOf(row.country, row.rateKey)?.label ?? row.rateKey,
-            search: (row) => `${row.country} ${slotOf(row.country, row.rateKey)?.label ?? row.rateKey}`,
+            search: (row) => `${row.country} ${countryName(row.country, locale)} ${slotOf(row.country, row.rateKey)?.label ?? row.rateKey}`,
           },
           {
             key: 'scope',
@@ -451,6 +453,7 @@ function RateDrawer({
   onSave: () => void
   onRemove: (id: string) => void
 }) {
+  const locale = useLocale()
   const pack = data?.packs.find((entry) => entry.country === draft?.country)
   const slot = pack?.slots.find((entry) => entry.key === draft?.rateKey)
   const regions = slot?.regions ?? pack?.knownRegions ?? []
@@ -501,7 +504,7 @@ function RateDrawer({
                   }}
                 >
                   {data.packs.map((entry) => (
-                    <option key={entry.country} value={entry.country}>{entry.country}</option>
+                    <option key={entry.country} value={entry.country}>{countryName(entry.country, locale)}</option>
                   ))}
                 </Select>
               </div>
