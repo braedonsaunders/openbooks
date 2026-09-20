@@ -4372,6 +4372,18 @@
       "title": "Human resources",
       "description": "Employment records with as-of history, headcount, and change-request tracking. Reads the HRM foundation; it never drives payroll."
     },
+    "hrmCelebrations": {
+      "title": "Workplace celebrations",
+      "description": "Birthdays, work anniversaries, and new joiners on the employee home."
+    },
+    "hrmManagerNudges": {
+      "title": "Manager nudges",
+      "description": "Attrition and 1:1 prompts on the manager home, scoped to the manager's team."
+    },
+    "homeAnnouncements": {
+      "title": "Home announcements",
+      "description": "Admin-authored announcements card on the home page, with audience scope and dates."
+    },
     "projectScheduling": {
       "title": "Project Scheduling",
       "description": "Gantt charts, critical path, and resource leveling for project schedules."

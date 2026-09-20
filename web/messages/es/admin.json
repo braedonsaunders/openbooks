@@ -4344,6 +4344,18 @@
       "title": "Recursos humanos",
       "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio. Lee la base de RR. HH.; nunca dirige la nómina."
     },
+    "hrmCelebrations": {
+      "title": "Celebraciones del equipo",
+      "description": "Cumpleaños, aniversarios laborales y nuevas incorporaciones en la página de inicio."
+    },
+    "hrmManagerNudges": {
+      "title": "Avisos para responsables",
+      "description": "Avisos de rotación y de reuniones 1:1 en la página de inicio del responsable, limitados a su equipo."
+    },
+    "homeAnnouncements": {
+      "title": "Anuncios en el inicio",
+      "description": "Tarjeta de anuncios redactados por la administración en la página de inicio, con audiencia y fechas."
+    },
     "crm": {
       "title": "CRM",
       "description": "Prospectos, oportunidades, actividades y pronósticos de ventas."

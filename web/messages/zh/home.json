@@ -1,0 +1,39 @@
+{
+  "title": "首页",
+  "greeting": "很高兴见到您，{name}",
+  "sections": {
+    "myTasks": "我的任务",
+    "openInbox": "打开收件箱",
+    "pay": "薪酬",
+    "timeOff": "休假",
+    "requestTimeOff": "申请休假",
+    "whosOut": "本周缺勤",
+    "upcoming": "近期安排",
+    "celebrations": "庆祝",
+    "announcements": "公告",
+    "ask": "提问",
+    "askPlaceholder": "询问薪酬、休假或制度…",
+    "teamApprovals": "等待我的审批",
+    "teamOut": "团队缺勤",
+    "teamSteps": "逾期的团队清单",
+    "teamQualifications": "即将到期的资质",
+    "oneOnOnes": "1:1提醒",
+    "headcount": "我的团队",
+    "attention": "需要处理",
+    "workflows": "工作流错误",
+    "compliance": "合规日历"
+  },
+  "empty": {
+    "tasks": "暂无等待事项。",
+    "out": "本周无人缺勤。",
+    "upcoming": "暂无安排。",
+    "celebrations": "本周暂无庆祝。",
+    "announcements": "暂无公告。",
+    "attention": "一切正常。"
+  },
+  "pay": {
+    "nextPay": "下次发薪日",
+    "lastSlip": "上期工资单",
+    "viewSlip": "查看工资单"
+  }
+}

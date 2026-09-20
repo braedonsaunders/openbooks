@@ -24,6 +24,7 @@ export type InboxKind =
   | "field_ticket_signature"
   | "timesheet_week"
   | "expense_report"
+  | "notification"
   | "document_signature";
 
 export type InboxActionStyle = "primary" | "secondary" | "danger";
@@ -54,6 +55,19 @@ export interface InboxListContext {
   readonly orgId: string;
   readonly actorId: string;
   readonly asOf: string;
+  /**
+   * Authz-derived union scope for the flows leg (roles, subsidiary
+   * boundary, budget/pay-run legs). Built by web callers from the session;
+   * absent means flows legs only with no subsidiary restriction beyond the
+   * reader's own gates. Never trust client input here — only the session.
+   */
+  readonly scope?: {
+    readonly roles?: readonly string[];
+    readonly allowedSubsidiaryIds?: readonly string[] | null;
+    readonly includeBudgets?: boolean;
+    readonly includePayRuns?: boolean;
+    readonly payDirections?: readonly string[];
+  };
 }
 
 /** Priority from an optional due date relative to asOf (day-granular). */

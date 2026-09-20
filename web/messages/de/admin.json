@@ -4344,6 +4344,18 @@
       "title": "Personalwesen",
       "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen. Liest die HRM-Grundlage; steuert nie die Lohnabrechnung."
     },
+    "hrmCelebrations": {
+      "title": "Feiern am Arbeitsplatz",
+      "description": "Geburtstage, Jubiläen und neue Kollegen auf der Startseite."
+    },
+    "hrmManagerNudges": {
+      "title": "Anstöße für Führungskräfte",
+      "description": "Fluktuations- und 1:1-Hinweise auf der Startseite für Führungskräfte, begrenzt auf das eigene Team."
+    },
+    "homeAnnouncements": {
+      "title": "Ankündigungen auf der Startseite",
+      "description": "Von Admins verfasste Ankündigungen auf der Startseite, mit Zielgruppe und Zeitraum."
+    },
     "bankFeeds": {
       "title": "Bankfeeds",
       "description": "Automatisierte Bankanbindung – SFTP-Dateiablagen und Live-Feeds von Plaid, GoCardless und TrueLayer."

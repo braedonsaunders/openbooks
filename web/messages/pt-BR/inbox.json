@@ -1,0 +1,43 @@
+{
+  "title": "Caixa de entrada",
+  "description": "Aprovações, etapas de listas, solicitações e assinaturas que aguardam você — conclua tudo aqui.",
+  "filters": {
+    "all": "Tudo",
+    "approvals": "Aprovações",
+    "myTasks": "Minhas tarefas",
+    "signatures": "Assinaturas",
+    "overdue": "Atrasado"
+  },
+  "columns": {
+    "task": "Tarefa",
+    "detail": "Detalhe",
+    "due": "Vence",
+    "priority": "Prioridade",
+    "actions": "Ações"
+  },
+  "priorities": {
+    "overdue": "Atrasado",
+    "dueSoon": "Quase vencendo",
+    "normal": "Normal"
+  },
+  "kinds": {
+    "flows_approval": "Aprovação",
+    "hrm_process_step": "Etapa de lista",
+    "hrm_leave_request": "Licença",
+    "hrm_change_request": "Solicitação de alteração",
+    "hrm_review": "Avaliação",
+    "hrm_benefit_enrollment_window": "Benefícios",
+    "hrm_qualification_alert": "Qualificação",
+    "field_ticket_signature": "Assinatura",
+    "timesheet_week": "Folha de ponto",
+    "expense_report": "Despesa",
+    "document_signature": "Assinatura"
+  },
+  "emptyTitle": "Tudo em dia",
+  "emptyDescription": "Nada aguarda você no momento.",
+  "open": "Abrir",
+  "acted": "Concluído",
+  "refused": "Não foi possível concluir: {message}",
+  "delegatePlaceholder": "Delegar para…",
+  "count": "{count, plural, one {# item} other {# itens}}"
+}

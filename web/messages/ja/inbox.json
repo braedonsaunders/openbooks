@@ -1,0 +1,43 @@
+{
+  "title": "受信トレイ",
+  "description": "承認・チェックリスト・申請・署名など、あなたを待つ仕事をここで片付けます。",
+  "filters": {
+    "all": "すべて",
+    "approvals": "承認",
+    "myTasks": "自分のタスク",
+    "signatures": "署名",
+    "overdue": "期限切れ"
+  },
+  "columns": {
+    "task": "タスク",
+    "detail": "詳細",
+    "due": "期限",
+    "priority": "優先度",
+    "actions": "操作"
+  },
+  "priorities": {
+    "overdue": "期限切れ",
+    "dueSoon": "期限間近",
+    "normal": "通常"
+  },
+  "kinds": {
+    "flows_approval": "承認",
+    "hrm_process_step": "チェック項目",
+    "hrm_leave_request": "休暇",
+    "hrm_change_request": "変更申請",
+    "hrm_review": "評価",
+    "hrm_benefit_enrollment_window": "福利厚生",
+    "hrm_qualification_alert": "資格",
+    "field_ticket_signature": "署名",
+    "timesheet_week": "タイムシート",
+    "expense_report": "経費",
+    "document_signature": "署名"
+  },
+  "emptyTitle": "すべて完了",
+  "emptyDescription": "今あなたを待つものはありません。",
+  "open": "開く",
+  "acted": "完了",
+  "refused": "完了できませんでした: {message}",
+  "delegatePlaceholder": "委任先…",
+  "count": "{count}件"
+}

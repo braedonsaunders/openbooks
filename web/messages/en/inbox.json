@@ -1,0 +1,43 @@
+{
+  "title": "Inbox",
+  "description": "Approvals, checklist steps, requests, and signatures waiting on you — complete them here.",
+  "filters": {
+    "all": "All",
+    "approvals": "Approvals",
+    "myTasks": "My tasks",
+    "signatures": "Signatures",
+    "overdue": "Overdue"
+  },
+  "columns": {
+    "task": "Task",
+    "detail": "Detail",
+    "due": "Due",
+    "priority": "Priority",
+    "actions": "Actions"
+  },
+  "priorities": {
+    "overdue": "Overdue",
+    "dueSoon": "Due soon",
+    "normal": "Normal"
+  },
+  "kinds": {
+    "flows_approval": "Approval",
+    "hrm_process_step": "Checklist step",
+    "hrm_leave_request": "Leave",
+    "hrm_change_request": "Change request",
+    "hrm_review": "Review",
+    "hrm_benefit_enrollment_window": "Benefits",
+    "hrm_qualification_alert": "Qualification",
+    "field_ticket_signature": "Signature",
+    "timesheet_week": "Timesheet",
+    "expense_report": "Expense",
+    "document_signature": "Signature"
+  },
+  "emptyTitle": "All clear",
+  "emptyDescription": "Nothing waits on you right now.",
+  "open": "Open",
+  "acted": "Done",
+  "refused": "Could not complete: {message}",
+  "delegatePlaceholder": "Delegate to…",
+  "count": "{count, plural, one {# item} other {# items}}"
+}

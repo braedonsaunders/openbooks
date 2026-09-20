@@ -4344,6 +4344,18 @@
       "title": "Recursos humanos",
       "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração. Lê a base de RH; nunca conduz a folha de pagamento."
     },
+    "hrmCelebrations": {
+      "title": "Celebrações da equipe",
+      "description": "Aniversários, aniversários de empresa e novos colegas na página inicial."
+    },
+    "hrmManagerNudges": {
+      "title": "Lembretes do gestor",
+      "description": "Alertas de rotatividade e de 1:1 na página inicial do gestor, limitados à sua equipe."
+    },
+    "homeAnnouncements": {
+      "title": "Avisos na página inicial",
+      "description": "Cartão de avisos redigidos pela administração na página inicial, com público e datas."
+    },
     "crm": {
       "title": "CRM",
       "description": "Leads, prospects, oportunidades, atividades e previsões de vendas."
