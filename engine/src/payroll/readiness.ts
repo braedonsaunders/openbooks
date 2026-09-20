@@ -306,6 +306,30 @@ export interface PayrollSetupState {
  * installedPayrollCountries, the pack vendor declarations) is the same one
  * the run pre-flight reads, so the two surfaces cannot disagree.
  */
+/**
+ * One installed pack's statutory-table setup check: the CHECK the setup
+ * surface reads (code, verdict, detail, href as one object), so tests can
+ * assert on what the operator sees rather than on the composer's fields.
+ * Pure in (country, today) — no database — which is what makes that
+ * assertion possible outside the DB partition.
+ */
+export function setupTaxYearCheck(
+  country: string,
+  today: string,
+  setupHref: string,
+): PayrollSetupCheck {
+  const { taxYear, problem } = payrollTaxYearForDate(country, today);
+  return {
+    severity: "blocker", code: "setup.taxYear", ok: problem === null,
+    // Operator text: the packs tab shows each pack's published coverage but
+    // offers no action that loads an unpublished year, so the detail must
+    // not prescribe the developer's scaffold script. The developer remedy
+    // stays on `problem.message` for engine throws and logs.
+    detail: problem ? problem.operatorMessage : `${country} · ${taxYear}`,
+    href: `${setupHref}?tab=packs`,
+  };
+}
+
 export async function payrollSetupState(
   orgId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
@@ -397,12 +421,7 @@ export async function payrollSetupState(
   // and January is exactly when nobody wants to discover that mid-payroll.
   const today = await businessToday(orgId);
   for (const country of installed) {
-    const { taxYear, problem } = payrollTaxYearForDate(country, today);
-    checks.push({
-      severity: "blocker", code: "setup.taxYear", ok: problem === null,
-      detail: problem ? problem.message : `${country} · ${taxYear}`,
-      href: `${setupHref}?tab=packs`,
-    });
+    checks.push(setupTaxYearCheck(country, today, setupHref));
   }
 
   // Destination remittance schedules: the frequency each scheduled
@@ -580,8 +599,12 @@ export async function payRunReadiness(
     const taxYearFailures = new Set<string>();
     for (const { country, region } of jurisdictionsInRun.values()) {
       const problem = payrollTaxYearProblem(country, run.tax_year, region);
-      if (!problem || taxYearFailures.has(problem.message)) continue;
-      taxYearFailures.add(problem.message);
+      // Dedup on the DISPLAYED string: entries rendering identical operator
+      // text are one blocker to the operator even when the developer strings
+      // differ (the undeclared message names no year, so two years of it
+      // would otherwise collapse callers that do pass a year along).
+      if (!problem || taxYearFailures.has(problem.operatorMessage)) continue;
+      taxYearFailures.add(problem.operatorMessage);
       flag(
         "blocker", "statutory.taxYear",
         people.filter((p) => p.country === country && (region === null || p.province === region)),
