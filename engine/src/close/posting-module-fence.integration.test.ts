@@ -224,7 +224,7 @@ test("postDocument holds the period fence before its module check", () => {
   // of this fix is fence-before-check inside postDocument. If the fence call
   // moves below the module validation (or disappears), the race reopens while
   // the behavioral test above keeps passing against its replica prologue.
-  const source = readFileSync(new URL("../ledger/posting.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../ledger/posting-commit.ts", import.meta.url), "utf8");
   const fence = source.indexOf("period_posting_fence(${doc.orgId}, ${period.id}, ${book.id})");
   assert.ok(fence >= 0, "postDocument must acquire the shared period fence");
   const check = source.indexOf("assertPeriodModulesOpen(tx, {");

@@ -37,27 +37,21 @@ test("failed-effects listing requires its tenant scope up front", async () => {
 });
 
 test("posting writes a posting_effects row inside the transaction and drains via runPostDocumentEffects", () => {
-  const posting = source("./posting.ts");
-  assert.match(posting, /enqueuePostingEffects\(tx/);
-  assert.match(posting, /createObligationsFromInvoice/);
-  assert.match(posting, /applyInventoryIssuesForInvoice/);
-  assert.match(posting, /applyInventoryReceiptsForBill/);
-  assert.match(posting, /alreadyClaimed/);
-
-  const postDocument = posting.slice(
-    posting.indexOf("export async function postDocument"),
-    posting.indexOf("export async function runPostDocumentEffects"),
-  );
-  assert.match(postDocument, /enqueuePostingEffects\(tx/);
-  assert.doesNotMatch(postDocument, /createObligationsFromInvoice/);
-  assert.doesNotMatch(postDocument, /applyInventoryIssuesForInvoice/);
-  assert.doesNotMatch(postDocument, /applyInventoryReceiptsForBill/);
-  assert.match(postDocument, /runPostDocumentEffects/);
-
-  const drain = posting.slice(posting.indexOf("export async function runPostDocumentEffects"));
+  const coordinator = source("./posting-document.ts");
+  const commit = source("./posting-commit.ts");
+  const drain = source("./posting-dispatch.ts");
+  assert.match(commit, /return await inDbTransaction\(async \(tx\) =>/);
+  assert.match(commit, /enqueuePostingEffects\(tx/);
+  assert.doesNotMatch(commit, /createObligationsFromInvoice/);
+  assert.doesNotMatch(commit, /applyInventoryIssuesForInvoice/);
+  assert.doesNotMatch(commit, /applyInventoryReceiptsForBill/);
+  const committed = coordinator.indexOf("await commitDocumentPosting(");
+  const dispatched = coordinator.indexOf("await runPostDocumentEffects(");
+  assert.ok(committed >= 0 && dispatched > committed, "effects drain only after the accounting commit resolves");
   assert.match(drain, /createObligationsFromInvoice/);
   assert.match(drain, /applyInventoryIssuesForInvoice/);
   assert.match(drain, /applyInventoryReceiptsForBill/);
+  assert.match(drain, /alreadyClaimed/);
   assert.match(drain, /claimPostingEffectsForDocument/);
 
   const outbox = source("./posting-effects.ts");
