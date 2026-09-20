@@ -5,17 +5,15 @@ import type { SqlExecutor } from "../platform/db.ts";
 
 // Static imports evaluate before the module body, so in-file assignments
 // cannot guard the import-time database-environment resolution in db.ts.
-// The unit launch command sets OPENBOOKS_DB_URL=. Keep a supplied URL so
-// the missing-user and cross-org super-admin cases can run against an
-// isolated testdb; re-assert emptiness only when nothing was supplied.
-// actorIdentity falls back to the global db when the local row is absent,
-// so a unit fake cannot prove those two cases without planting a local
-// user (which would hide a local-only precheck regression).
-const integrationDbUrl = process.env.OPENBOOKS_DB_URL?.trim() ?? "";
-if (!integrationDbUrl) {
-  process.env.OPENBOOKS_DB_URL = "";
-  process.env.OPENBOOKS_MIGRATION_DB_URL = "";
-}
+// The launch command MUST set OPENBOOKS_DB_URL= (and the migration URL)
+// explicitly; these assignments only re-assert that for anything resolved
+// lazily afterwards. These tests never touch a real database — a
+// missing-user or cross-org super-admin case cannot be proven on this
+// fake (actorIdentity falls back to the global db when its local row is
+// absent). Those cases live in authorization.integration.test.ts so the
+// integration partition selects them.
+process.env.OPENBOOKS_DB_URL = "";
+process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
 const {
   checkApprovalIdentitySeparation,
@@ -319,73 +317,4 @@ test("person loaders fail closed on unknown or inactive identity", async () => {
   await assert.rejects(loadActorPerson(exec, ORG, actor), HrmAuthorizationError);
   const person = await loadApprovalPerson(exec, ORG, actor);
   assert.equal(person.partyId, state.users.get(actor)!.partyId);
-});
-
-async function seedTargetEmployment(orgId: string, subsidiaryId: string, label: string): Promise<string> {
-  const { sql } = await import("drizzle-orm");
-  const { db } = await import("../platform/db.ts");
-  const partyId = (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name)
-    values (${orgId}, 'person', ${label})
-    returning id
-  `)).rows[0]!.id;
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId})
-    returning id
-  `)).rows[0]!.id;
-}
-
-test("nonexistent actor id is refused against a real organization", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { createScratchOrg, dropScratchOrg } = await import("../testing/fixtures.ts");
-  const { db } = await import("../platform/db.ts");
-  const org = await createScratchOrg();
-  try {
-    const employmentId = await seedTargetEmployment(org.orgId, org.subsidiaryId, "Missing-actor worker");
-    const missing = randomUUID();
-    // Employment exists. Fail-open would return that subject instead of refusing.
-    await assert.rejects(
-      requireHrmEmploymentRead(db, org.orgId, missing, employmentId),
-      /identity behind this action is not established/,
-    );
-    await assert.rejects(
-      requireHrmEmploymentManage(db, org.orgId, missing, employmentId),
-      /identity behind this action is not established/,
-    );
-    await assert.rejects(
-      requireHrmEmploymentApprove(db, org.orgId, missing, employmentId),
-      /identity behind this action is not established/,
-    );
-    await assert.rejects(
-      loadActorPerson(db, org.orgId, missing),
-      /identity behind this action is not established/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("home-org platform super-admin can read employment in another organization", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { sql } = await import("drizzle-orm");
-  const { db } = await import("../platform/db.ts");
-  const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("../testing/fixtures.ts");
-  const home = await createScratchOrg();
-  const target = await createScratchOrg();
-  try {
-    const admin = await createScratchUser(home.orgId, "Platform administrator", "admin");
-    await db.execute(sql`update users set is_super_admin=true where id=${admin}`);
-    const clerk = await createScratchUser(home.orgId, "Home clerk", "clerk");
-    const employmentId = await seedTargetEmployment(target.orgId, target.subsidiaryId, "Target worker");
-    // No target-org users row for admin. A local-only precheck refuses this.
-    const subject = await requireHrmEmploymentRead(db, target.orgId, admin, employmentId);
-    assert.equal(subject.id, employmentId);
-    assert.equal(subject.orgId, target.orgId);
-    await assert.rejects(
-      requireHrmEmploymentRead(db, target.orgId, clerk, employmentId),
-      HrmAuthorizationError,
-    );
-  } finally {
-    await dropScratchOrg(target.orgId);
-    await dropScratchOrg(home.orgId);
-  }
 });
