@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadOwnEmploymentIds, requireHrmSelfRead } from "../authorization.ts";
+import {
+  loadOwnEmploymentIds,
+  loadTeamEmploymentIdsForManager,
+  requireHrmSelfRead,
+} from "../authorization.ts";
 import { actorPartyOf, SelfServiceError } from "./actor.ts";
 import { loadMyEmploymentSummaries, type MyEmploymentSummary } from "./self-read.ts";
 
@@ -58,21 +62,14 @@ export async function resolveTeamEmploymentIds(
   const partyId = await actorPartyOf(exec, orgId, actorId);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (own.length === 0) return [];
-  const rows = (await exec.execute<{ id: string }>(sql`
-    select distinct r.employment_id::text as id
-      from reporting_relationships r
-     where r.org_id = ${orgId}
-       and r.manager_employment_id in (select jsonb_array_elements_text(${JSON.stringify(own)}::jsonb)::uuid)
-       and r.kind = 'line'
-       and r.recorded_until is null
-       and r.effective_from <= ${today}::date
-       and (r.effective_to is null or r.effective_to > ${today}::date)
-     order by id
-  `)).rows;
+  // The predicate lives in authorization.ts (the single definition the
+  // record fallback shares); this service pairs it with the NO_LINK
+  // refusal above and the NO_TEAM refusal at the public boundary.
+  const reports = await loadTeamEmploymentIdsForManager(exec, orgId, own, today);
   // The party proves personhood for the no-link refusal above; the ids
   // prove structure. A linked person who manages nobody holds no team.
   void partyId;
-  return rows.map((row) => row.id);
+  return reports;
 }
 
 /**

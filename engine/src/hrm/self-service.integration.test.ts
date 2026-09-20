@@ -317,6 +317,40 @@ test("team scope: a manager of A is not a manager of B, and a report's report is
   });
 });
 
+test("a manager reads a direct report's employment record, and nothing else", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { getEmploymentRecord } = await import("./employment-read.ts");
+    const record = await getEmploymentRecord({
+      orgId: h.org.orgId, actorId: h.managerId, employmentId: h.employmentA,
+      effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
+    });
+    assert.equal(record.employmentId, h.employmentA);
+    assert.equal(record.workerPartyId, h.partyA);
+    assert.equal(record.asOf?.version.status, "active");
+    // B is not M's report: the fallback rethrows the original employment
+    // refusal, so the error shape never changes for strangers.
+    await assert.rejects(
+      getEmploymentRecord({
+        orgId: h.org.orgId, actorId: h.managerId, employmentId: h.employmentB,
+        effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmAuthorizationError);
+        assert.match(error.message, /hrm\.employment\.read/);
+        return true;
+      },
+    );
+    // A stranger with no grants keeps the same refusal.
+    await assert.rejects(
+      getEmploymentRecord({
+        orgId: h.org.orgId, actorId: h.noLinkId, employmentId: h.employmentA,
+        effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
+      }),
+      /hrm\.employment\.read/,
+    );
+  });
+});
+
 test("profile_change files, approves, and applies onto the party with evidence", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.hrId);
