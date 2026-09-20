@@ -11,10 +11,12 @@ const stateKey = Symbol.for("openbooks.xero-oauth-start-test");
 interface StartState {
   source: string;
   secrets: string;
+  identityError: string | null;
 }
 const state: StartState = {
   source: "xero",
   secrets: sealJson({ clientId: "xero-client" }),
+  identityError: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -32,6 +34,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for("openbooks.xero-oauth-start-test")]
       export async function getConnection() {
+        if (state.identityError) {
+          const error = new Error("invalid input syntax for type uuid")
+          error.code = state.identityError
+          throw error
+        }
         return {
           id: "conn-1",
           orgId: "org-1",
@@ -126,6 +133,20 @@ test("Xero start mints a one-time nonce in sealed state and the CSRF cookie", as
 
 test("the Xero start route never reads origin from the request URL", () => {
   assert.match(routeSource, /connectionOauthRedirectUri\('xero'\)/);
+  assert.match(routeSource, /storageIdentityError/);
   assert.doesNotMatch(routeSource, /new URL\(req\.url\)\.origin/);
   assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
+});
+
+test("a Postgres 22P02 connection id is 404, not an unhandled 500", async () => {
+  state.identityError = "22P02";
+  try {
+    const res = await GET(
+      new Request("https://books.example/api/platform/connections/oauth/xero/start?connectionId=not-a-uuid"),
+    );
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: "not found" });
+  } finally {
+    state.identityError = null;
+  }
 });

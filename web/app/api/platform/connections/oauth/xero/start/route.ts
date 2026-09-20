@@ -3,6 +3,7 @@ import { authorizeUrl, type XeroApp } from '@openbooks/engine/src/connectors/xer
 import { unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import { storageIdentityError } from '../../../_storage-identity'
 import {
   attachConnectionOauthCookie,
   connectionOauthRedirectUri,
@@ -23,7 +24,10 @@ export async function GET(req: Request) {
   const connectionId = new URL(req.url).searchParams.get('connectionId')
   if (!connectionId) return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
 
-  const conn = await getConnection(gate.user.orgId, connectionId)
+  const conn = await getConnection(gate.user.orgId, connectionId).catch((e) => {
+    if (storageIdentityError(e)) return null
+    throw e
+  })
   if (!conn || conn.source !== 'xero') return NextResponse.json({ error: 'not found' }, { status: 404 })
   const secret = unsealJson<{ clientId?: string }>(conn.secrets)
   if (!secret?.clientId) {

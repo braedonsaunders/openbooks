@@ -7,11 +7,13 @@ import { QboClient, exchangeCode, type QboApp } from '@openbooks/engine/src/conn
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
   connectionOauthBounce,
   connectionOauthCookieValue,
   connectionOauthRedirectUri,
+  realmIdFromAccessToken,
 } from '../../_flow'
 
 export const runtime = 'nodejs'
@@ -37,7 +39,10 @@ export async function GET(req: Request) {
   const st = acceptConnectionOauthState(state, connectionOauthCookieValue(req))
   if (!st) return connectionOauthBounce('badstate')
   if (st.orgId !== gate.user.orgId) return connectionOauthBounce('badstate')
-  const conn = await getConnection(st.orgId, st.connectionId)
+  const conn = await getConnection(st.orgId, st.connectionId).catch((e) => {
+    if (storageIdentityError(e)) return null
+    throw e
+  })
   if (!conn || conn.source !== 'qbo') return connectionOauthBounce('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
   if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
@@ -51,12 +56,22 @@ export async function GET(req: Request) {
   }
   try {
     const tokens = await exchangeCode(app, code)
-    let displayName = conn.displayName
+    const tokenRealm = realmIdFromAccessToken(tokens.accessToken)
+    const client = new QboClient(app, realmId, tokens)
+    let info: { CompanyName?: string }[]
     try {
-      const client = new QboClient(app, realmId, tokens)
-      const info = await client.queryAll<{ CompanyName?: string }>('CompanyInfo')
-      if (info[0]?.CompanyName) displayName = `${info[0].CompanyName} (${realmId})`
-    } catch { /* best-effort label */ }
+      info = await client.queryAll<{ CompanyName?: string }>('CompanyInfo')
+    } catch {
+      info = []
+    }
+    if (tokenRealm) {
+      if (tokenRealm !== realmId) return connectionOauthBounce('realm')
+    } else if (!info[0]) {
+      return connectionOauthBounce('realm')
+    }
+    const displayName = info[0]?.CompanyName
+      ? `${info[0].CompanyName} (${realmId})`
+      : conn.displayName
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const connected = await db.transaction(async (tx) => {

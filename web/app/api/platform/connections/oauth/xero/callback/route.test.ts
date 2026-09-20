@@ -12,6 +12,7 @@ interface CallbackState {
   tenants: { tenantId: string; tenantName: string }[];
   connection: Record<string, unknown>;
   updated: Record<string, unknown> | null;
+  identityError: string | null;
 }
 const secrets = sealJson({ clientId: "xero-client", clientSecret: "xero-secret" });
 const state: CallbackState = {
@@ -29,6 +30,7 @@ const state: CallbackState = {
     status: "pending",
   },
   updated: null,
+  identityError: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -45,7 +47,14 @@ const mockSources = new Map<string, string>([
     "mock:connection",
     `
       const state = globalThis[Symbol.for("openbooks.xero-oauth-callback-test")]
-      export async function getConnection() { return state.connection }
+      export async function getConnection() {
+        if (state.identityError) {
+          const error = new Error("invalid input syntax for type uuid")
+          error.code = state.identityError
+          throw error
+        }
+        return state.connection
+      }
     `,
   ],
   [
@@ -143,6 +152,7 @@ function reset(): void {
     status: "pending",
   };
   state.updated = null;
+  state.identityError = null;
 }
 
 async function callback(init: { state: string; cookie?: string | null }): Promise<Response> {
@@ -199,6 +209,15 @@ test("Xero callback pins a prior stored tenantId instead of tenants[0]", async (
   assert.equal((state.updated?.config as { tenantId?: string } | undefined)?.tenantId, "stored-tenant");
 });
 
+test("a Postgres 22P02 connection id in state is notfound, not an unhandled 500", async () => {
+  reset();
+  state.identityError = "22P02";
+  const { state: sealed, nonce } = mintConnectionOauthState("org-1", "not-a-uuid");
+  const res = await callback({ state: sealed, cookie: nonce });
+  assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=notfound");
+  assert.equal(state.updated, null);
+});
+
 test("the Xero callback never reads origin from the request URL", () => {
   assert.match(routeSource, /connectionOauthRedirectUri\('xero'\)/);
   assert.match(routeSource, /connectionOauthBounce/);
@@ -207,4 +226,5 @@ test("the Xero callback never reads origin from the request URL", () => {
   assert.doesNotMatch(routeSource, /url\.origin/);
   assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
   assert.match(routeSource, /pinProviderChoice\(tenants,/);
+  assert.match(routeSource, /storageIdentityError/);
 });

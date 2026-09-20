@@ -7,6 +7,7 @@ import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
   connectionOauthBounce,
@@ -38,7 +39,10 @@ export async function GET(req: Request) {
   const st = acceptConnectionOauthState(state, connectionOauthCookieValue(req))
   if (!st) return connectionOauthBounce('badstate')
   if (st.orgId !== gate.user.orgId) return connectionOauthBounce('badstate')
-  const conn = await getConnection(st.orgId, st.connectionId)
+  const conn = await getConnection(st.orgId, st.connectionId).catch((e) => {
+    if (storageIdentityError(e)) return null
+    throw e
+  })
   if (!conn || conn.source !== 'dynamics') return connectionOauthBounce('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
   const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string }
