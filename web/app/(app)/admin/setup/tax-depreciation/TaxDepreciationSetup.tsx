@@ -154,6 +154,7 @@ export function TaxDepreciationSetup({
           <SetupLink href="/admin/setup/tax-depreciation?tab=regimes" title={t('links.regimes.title')} description={t('links.regimes.description')} />
           <SetupLink href="/admin/setup/tax-depreciation?tab=classes" title={t('links.classes.title')} description={t('links.classes.description')} />
           <SetupLink href="/admin/setup/tax-depreciation?tab=first-year" title={t('links.firstYear.title')} description={t('links.firstYear.description')} />
+          <SetupLink href="/admin/setup/tax-depreciation?tab=cessation" title={t('links.cessation.title')} description={t('links.cessation.description')} />
           <SetupLink href="/admin/setup/asset-categories" title={t('links.assignments.title')} description={t('links.assignments.description')} />
         </div>
       </section>

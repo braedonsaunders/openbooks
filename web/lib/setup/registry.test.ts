@@ -51,6 +51,7 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     'tax-regimes',
     'tax-pool-classes',
     'tax-first-year-rules',
+    'tax-qualifying-activity-cessations',
     'depreciation-methods',
     'depreciation-book-policies',
     'pay-schedules',

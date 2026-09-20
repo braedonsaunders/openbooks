@@ -1732,6 +1732,7 @@
         "regimes": "税制",
         "classes": "税務クラス",
         "firstYear": "初年度ルール",
+        "cessation": "適格活動",
         "methods": "方法",
         "books": "帳簿ポリシー"
       },
@@ -1767,6 +1768,10 @@
         "firstYear": {
           "title": "初年度ルール",
           "description": "適用日付きの加速償却と初年度の適格性。"
+        },
+        "cessation": {
+          "title": "CAA 55(4) の終了",
+          "description": "英国の適格活動が終了した日を記録します。balancing allowance はこの日以降にのみ生じます。最後の資産を処分しただけでは終了になりません。"
         },
         "assignments": {
           "title": "資産カテゴリの割り当て",
@@ -2285,6 +2290,11 @@
         "title": "初年度ルール",
         "description": "制度・区分ごとの日付付き初年度ルール（半年ルール、加速投資優遇、即時費用化）です。",
         "singularTitle": "初年度ルール"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "適格活動の終了",
+        "singularTitle": "適格活動の終了",
+        "description": "CAA 55(4) に基づき、法人ごとの英国適格活動の終了日を記録します。balancing allowance はこの日以降にのみ生じます。プールが空であることだけでは足りません。"
       },
       "pay-schedules": {
         "title": "給与スケジュール",

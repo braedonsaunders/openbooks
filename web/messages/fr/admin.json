@@ -1415,6 +1415,7 @@
         "regimes": "Régimes fiscaux",
         "classes": "Classes fiscales",
         "firstYear": "Règles de première année",
+        "cessation": "Activité admissible",
         "methods": "Méthodes",
         "books": "Politiques par livre"
       },
@@ -1450,6 +1451,10 @@
         "firstYear": {
           "title": "Règles de première année",
           "description": "Accélération et admissibilité de première année, avec dates d’effet."
+        },
+        "cessation": {
+          "title": "Cessation CAA 55(4)",
+          "description": "Enregistrez la date à laquelle une activité admissible britannique cesse pour qu’une balancing allowance soit disponible. Céder le dernier actif n’est pas une cessation."
         },
         "assignments": {
           "title": "Affectations par catégorie d’actifs",
@@ -2295,6 +2300,11 @@
         "title": "Règles de première année",
         "description": "Règles de première année datées par régime et catégorie (règle de la demi-année, incitatif à l’investissement accéléré, passation en charges immédiate).",
         "singularTitle": "Règle de première année"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Cessations d’activité admissible",
+        "singularTitle": "Cessation d’activité admissible",
+        "description": "Cessation à date d’effet d’une activité admissible britannique par entité juridique, selon CAA 55(4). La balancing allowance n’existe qu’après cette date ; vider le groupe ne suffit pas."
       },
       "pay-schedules": {
         "title": "Calendriers de paie",

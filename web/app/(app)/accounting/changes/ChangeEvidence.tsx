@@ -6,6 +6,11 @@ import {
   TableHeader,
   TableRow,
 } from "@openbooks/ui";
+import {
+  TAX_BASIS_FIELDS,
+  TAX_BASIS_REGIME_LABELS,
+} from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
+const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
 const labels: Record<string, string> = {
   existingId: "Existing performance obligation",
   existingObligationIds: "Promises affected",
@@ -37,8 +42,12 @@ const labels: Record<string, string> = {
   newRou: "Revised right-of-use asset",
   rouDelta: "Right-of-use adjustment",
 };
-function label(key: string) {
+function label(key: string, taxBasis: boolean) {
   return (
+    (taxBasis
+      ? (taxFields.get(key)?.label ??
+        TAX_BASIS_REGIME_LABELS[key as keyof typeof TAX_BASIS_REGIME_LABELS])
+      : undefined) ??
     labels[key] ??
     key
       .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -51,9 +60,13 @@ function label(key: string) {
 export function ChangeEvidence({
   value,
   names = {},
+  taxBasis = false,
+  field,
 }: {
   value: unknown;
   names?: Record<string, string>;
+  taxBasis?: boolean;
+  field?: string;
 }) {
   if (value === null || value === undefined)
     return <span className="text-muted-foreground">Not supplied</span>;
@@ -61,7 +74,13 @@ export function ChangeEvidence({
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
-        {names[String(value)] ?? String(value).replaceAll("_", " ")}
+        {names[String(value)] ??
+          (taxBasis && field
+            ? taxFields
+                .get(field === "regimes" ? "regime" : field)
+                ?.choices?.find((choice) => choice.value === value)?.label
+            : undefined) ??
+          String(value)}
       </span>
     );
   if (Array.isArray(value))
@@ -69,7 +88,12 @@ export function ChangeEvidence({
       <div className="space-y-3">
         {value.map((v, i) => (
           <div key={i} className="rounded border p-3">
-            <ChangeEvidence value={v} names={names} />
+            <ChangeEvidence
+              value={v}
+              names={names}
+              taxBasis={taxBasis}
+              field={field}
+            />
           </div>
         ))}
       </div>
@@ -88,9 +112,16 @@ export function ChangeEvidence({
             .filter(([key]) => key !== "idempotencyKey")
             .map(([key, v]) => (
               <TableRow key={key}>
-                <TableCell className="align-top">{label(key)}</TableCell>
+                <TableCell className="align-top">
+                  {label(key, taxBasis)}
+                </TableCell>
                 <TableCell>
-                  <ChangeEvidence value={v} names={names} />
+                  <ChangeEvidence
+                    value={v}
+                    names={names}
+                    taxBasis={taxBasis}
+                    field={key}
+                  />
                 </TableCell>
               </TableRow>
             ))}

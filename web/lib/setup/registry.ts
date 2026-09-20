@@ -2225,6 +2225,32 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    key: 'tax-qualifying-activity-cessations',
+    rehomed: true,
+    table: 'tax_qualifying_activity_cessations',
+    singularTitleKey: 'entities.tax-qualifying-activity-cessations.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, ceased_on',
+    hasActive: false,
+    docSlug: 'setup-assets-group',
+    columns: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'regime', kind: 'text' },
+      { key: 'ceasedOn', kind: 'date' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
+      { key: 'regime', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'ceasedOn', kind: 'date', required: true },
+      { key: 'resumedOn', kind: 'date' },
+      { key: 'evidence', kind: 'textarea', required: true },
+    ],
+  },
+  {
     // The depreciation formula builder — user-authored methods (formula over the
     // depreciation variable set: NB, OC, RV, AL, CP, …). Referenced by code from
     // an asset category's Default method.

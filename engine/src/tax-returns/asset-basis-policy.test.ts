@@ -26,7 +26,9 @@ import {
   usDispositionProceeds,
   usRegimeWorkpaperOutcome,
   validateTaxRegimeBasis,
+  nzPoolReduction,
   type CaCcaRegimeBasis,
+  type NzPoolRegimeBasis,
   type TaxBasisDraft,
   type TaxBasisFieldPredicate,
   type UsMacrsRegimeBasis,
@@ -491,4 +493,70 @@ test("validateTaxRegimeBasis accepts buyer-only US taxable cost without seller v
   assert.equal(row.regime, "us_macrs");
   assert.equal("applicable" in row, false);
   assert.equal("originalUnadjustedBasis" in row, false);
+});
+
+test("validateTaxRegimeBasis refuses a negative declared CA original capital cost", () => {
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis({
+        regime: "ca_cca",
+        relationship: "arms_length",
+        sourceOperation: "partial_disposal",
+        originalCapitalCost: "-1000",
+        allocationMethod: "ascertainable_fraction",
+        allocationFraction: "0.25",
+        statutoryProceeds: "100",
+        rolloverElection: "none",
+      }),
+    /originalCapitalCost must be nonnegative/,
+    "negative originalCapitalCost",
+  );
+});
+
+test("validateTaxRegimeBasis refuses allocated capital cost above original", () => {
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis({
+        regime: "ca_cca",
+        relationship: "arms_length",
+        sourceOperation: "partial_disposal",
+        originalCapitalCost: "1000.00",
+        allocationMethod: "ascertainable_amount",
+        allocatedCapitalCost: "1000.01",
+        statutoryProceeds: "100.00",
+        rolloverElection: "none",
+      }),
+    /allocatedCapitalCost .* cannot exceed originalCapitalCost/,
+    "allocated above original",
+  );
+});
+
+test("validateTaxRegimeBasis validates a supplied optional decimal, not only required fields", () => {
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis({
+        regime: "ca_cca",
+        relationship: "arms_length",
+        sourceOperation: "partial_disposal",
+        originalCapitalCost: "1000.00",
+        allocationMethod: "ascertainable_fraction",
+        allocationFraction: "0.25",
+        statutoryProceeds: "100.00",
+        rolloverElection: "none",
+        fairMarketValue: "-50.00",
+      }),
+    /fairMarketValue must be nonnegative/,
+    "optional negative fairMarketValue",
+  );
+});
+
+test("NZ pool reduction may be a signed computed net when disposal expenditure exceeds consideration", () => {
+  const row = validateTaxRegimeBasis({
+    regime: "nz_pool",
+    relationship: "arms_length",
+    sourceOperation: "partial_disposal",
+    consideration: "100.00",
+    disposalExpenditure: "250.00",
+  }) as NzPoolRegimeBasis;
+  assert.equal(nzPoolReduction(row), "-150.00");
 });

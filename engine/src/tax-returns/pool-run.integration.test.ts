@@ -159,6 +159,8 @@ test("Canadian vehicle cost caps apply to additions and disposition capital cost
       ["10.1", "37000.00", "5550.00", "31450.00"],
     ]);
 
+    // Legacy disposeAsset path: no financial_change_id. The run must keep
+    // lesser-of-proceeds-and-class-cap and must not demand a workpaper.
     await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
     const second = await runYear(org, actorId, "ca_cca", 2024);
     assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture, line.closingBalance]), [
@@ -385,12 +387,7 @@ test("years run consecutively: restating or skipping closed years is refused wit
   }
 });
 
-test("a MACRS run with a short-year factor is refused before persisting anything", { skip: !DB }, async () => {
-  // Live-Postgres regression: runMacrs accepted shortYearFactor, STORED it on
-  // the period row, but never applied it — a half-year MACRS run claimed the
-  // full-year allowance while its own evidence said 0.5. The stateless
-  // per-year MACRS schedule cannot carry a short-year deferral forward, so a
-  // short MACRS year must fail closed instead of silently over-claiming.
+test("a MACRS short year computes Pub 946 dates and refuses a factor that disagrees", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
   try {
     const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
@@ -401,17 +398,23 @@ test("a MACRS run with a short-year factor is refused before persisting anything
       runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
         yearStart: "2023-01-01",
         yearEnd: "2023-06-30",
-        shortYearFactor: "0.5",
+        shortYearFactor: "1",
         actorId,
       }),
-      (error: unknown) => error instanceof TaxPoolError && /short/i.test(error.message),
+      (error: unknown) => error instanceof TaxPoolError && /does not match/.test(error.message),
     );
-    assert.equal((await periodsFor(org.orgId)).length, 0, "refused short MACRS year persists nothing");
-    assert.equal((await poolsFor(org.orgId)).length, 0, "refused short MACRS year creates no pool");
+    assert.equal((await periodsFor(org.orgId)).length, 0, "factor/date disagreement persists nothing");
+    assert.equal((await poolsFor(org.orgId)).length, 0, "factor/date disagreement creates no pool");
 
-    // The full-year run on the same scope still computes.
-    const full = await runYear(scope, actorId, "us_macrs", 2023);
-    assert.equal(full.lines[0]!.allowance, "2000.00");
+    const short = await runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
+      yearStart: "2023-01-01",
+      yearEnd: "2023-06-30",
+      shortYearFactor: "0.5",
+      actorId,
+    });
+    // Half-year deemed April 1 in a January–June year: 3/12 × 40% × $10,000.
+    assert.equal(short.lines[0]!.allowance, "1000.00");
+    assert.equal((await periodsFor(org.orgId)).length, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

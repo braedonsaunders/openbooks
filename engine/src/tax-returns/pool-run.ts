@@ -2,16 +2,36 @@ import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
-import { computeMacrsYear, computePoolYear, type PoolClassDef, type PoolYearResult, TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
+import { add, formatMoney, fromUnits, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import {
+  computeMacrsThroughYear,
+  computeMacrsYear,
+  computePoolYear,
+  type MacrsYearWindow,
+  type PoolClassDef,
+  type PoolYearResult,
+  TAX_DEPRECIATION_REGIMES,
+} from "./depreciation-pool.ts";
+import { MacrsShortYearError, assertShortYearFactorAgrees } from "./macrs-short-year.ts";
+import { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
+
+export { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
 
 /**
  * Run a jurisdiction's tax depreciation pools for a tax year on a book. Groups
  * the org's assets by their regime class (from the asset category's
  * tax_attributes), derives additions (assets placed in service in the year) and
- * dispositions (asset events, capped at capital cost), then runs the pure
- * per-pool waterfall (computePoolYear), persisting each result and rolling the
- * pool's balance forward. Canada CCA is the first regime; the engine is generic.
+ * dispositions, then runs the pure per-pool waterfall (computePoolYear),
+ * persisting each result and rolling the pool's balance forward. Canada CCA is
+ * the first regime; the engine is generic.
+ *
+ * Disposition sources stay split on purpose:
+ *   - legacy `disposed` / `written_off` with financial_change_id NULL keep
+ *     lesser-of-proceeds-and-capital-cost, scoped to this book and cut off
+ *     by a same-or-earlier reversal;
+ *   - native governed changes (financial_change_id, partials, transfers)
+ *     consume an approved tax workpaper and refuse if it is missing.
+ * Do not fold the first path into the second without a backfill.
  *
  * A run is ONE atomic unit fenced against concurrent runs on the same scope:
  *   - every read, computation and write happens inside a single transaction,
@@ -46,6 +66,213 @@ export interface TaxPoolRunResult {
 
 export class TaxPoolError extends Error {
   readonly name = "TaxPoolError";
+}
+
+type LiveWorkpaper = {
+  asset_id: string;
+  receiving_asset_id: string | null;
+  effective_on: string;
+  source_operation: "partial_disposal" | "intercompany_transfer";
+  applicable: "seller" | "buyer" | "both";
+  seller_disposition: string | null;
+  buyer_addition: string | null;
+  remaining_basis: string | null;
+  seller_subsidiary_id: string;
+  seller_class: string;
+  buyer_subsidiary_id: string | null;
+  buyer_class: string | null;
+  short_year_method: string | null;
+  placed_in_service_on: string | null;
+  macrs_method: string | null;
+  macrs_convention: string | null;
+  carryover_basis: string | null;
+  excess_basis: string | null;
+  buyer_cost: string | null;
+  recognition: string | null;
+  disposed_unadjusted_basis: string | null;
+  related_person: string | null;
+  recovery_period_years: string | null;
+};
+
+function classifiedClassSql(
+  asset: "a" | "seller" | "buyer",
+  run: TaxPoolRun,
+  attr: string,
+) {
+  if (asset === "seller") {
+    return sql`coalesce(seller.custom->'taxDepreciation'->${run.regime}->>'classCode', seller_c.tax_attributes->>${attr}, '')`;
+  }
+  if (asset === "buyer") {
+    return sql`coalesce(buyer.custom->'taxDepreciation'->${run.regime}->>'classCode', buyer_c.tax_attributes->>${attr}, '')`;
+  }
+  return sql`coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '')`;
+}
+
+function eventOnRunBook(run: TaxPoolRun) {
+  return sql`(
+    e.book_id is null
+    or e.book_id = ${run.bookId}
+    or exists (
+      select 1 from journal_entries j
+       where j.org_id = e.org_id and j.id = e.journal_entry_id and j.book_id = ${run.bookId}
+    )
+  )`;
+}
+
+/** Predicate must stay aligned with taxEventRequiresTaxWorkpaper: do not add
+ *  NULL-change disposed/written_off, which still use the legacy proceeds path. */
+async function refuseMissingTaxWorkpaper(
+  tx: SqlExecutor,
+  run: TaxPoolRun,
+  attr: string,
+): Promise<void> {
+  const missing = (
+    await tx.execute<{ asset_number: string }>(sql`
+      select a.asset_number from fixed_assets a
+      join asset_categories c on c.org_id=a.org_id and c.id=a.category_id
+      where a.org_id=${run.orgId} and a.subsidiary_id=${run.subsidiaryId}
+        and ${classifiedClassSql("a", run, attr)}<>''
+        and (
+          exists(
+            select 1 from asset_events e
+             where e.org_id=a.org_id and e.asset_id=a.id
+               and e.occurred_on<=${run.yearEnd}
+               and (
+                 e.kind in ('partially_disposed','transferred')
+                 or (e.kind in ('disposed','written_off') and e.financial_change_id is not null)
+               )
+               and not exists(
+                 select 1 from asset_events r
+                  where r.org_id=e.org_id and r.reverses_event_id=e.id and r.occurred_on<=${run.yearEnd}
+               )
+               and not exists(
+                 select 1 from tax_asset_basis_workpapers w
+                  where w.org_id=a.org_id and w.regime=${run.regime}
+                    and w.effective_on<=${run.yearEnd}
+                    and (w.reversed_on is null or w.reversed_on>${run.yearEnd})
+                    and (w.asset_id=a.id or w.receiving_asset_id=a.id)
+                    and (
+                      (e.financial_change_id is not null and w.source_change_id=e.financial_change_id)
+                      or (e.financial_change_id is null and w.source_change_id is null and w.source_event_id=e.id)
+                    )
+               )
+          )
+          or exists(
+            select 1 from asset_transfer_bases t
+             where t.org_id=a.org_id and t.receiving_asset_id=a.id
+               and t.effective_on<=${run.yearEnd}
+               and (t.reversed_on is null or t.reversed_on>${run.yearEnd})
+               and not exists(
+                 select 1 from tax_asset_basis_workpapers w
+                  where w.org_id=t.org_id and w.regime=${run.regime}
+                    and w.receiving_asset_id=a.id and w.source_change_id=t.change_id
+                    and w.effective_on<=${run.yearEnd}
+                    and (w.reversed_on is null or w.reversed_on>${run.yearEnd})
+               )
+          )
+        )
+      order by a.asset_number limit 1`)
+  ).rows[0];
+  if (missing) {
+    throw new TaxPoolError(
+      `Tax depreciation for asset ${missing.asset_number} requires an applied tax basis workpaper for its approved disposal or intercompany transfer. ` +
+        `Record and apply the ${run.regime} workpaper from the asset's Tax basis workpaper action; do not substitute book cost, buyerAmount or group_component. ` +
+        `A legacy disposed or written-off event with no financial change still uses recorded proceeds capped at capital cost and does not need a workpaper.`,
+    );
+  }
+}
+
+async function liveWorkpapers(
+  tx: SqlExecutor,
+  run: TaxPoolRun,
+  attr: string,
+): Promise<LiveWorkpaper[]> {
+  return (
+    await tx.execute<LiveWorkpaper>(sql`
+      select w.asset_id, w.receiving_asset_id, w.effective_on::text, w.source_operation,
+             w.applicable, w.seller_disposition::text, w.buyer_addition::text, w.remaining_basis::text,
+             seller.subsidiary_id as seller_subsidiary_id,
+             ${classifiedClassSql("seller", run, attr)} as seller_class,
+             buyer.subsidiary_id as buyer_subsidiary_id,
+             ${classifiedClassSql("buyer", run, attr)} as buyer_class,
+             w.computed->>'shortYearMethod' as short_year_method,
+             w.computed->>'placedInServiceOn' as placed_in_service_on,
+             w.computed->>'method' as macrs_method,
+             w.computed->>'convention' as macrs_convention,
+             w.computed->>'carryoverBasis' as carryover_basis,
+             w.computed->>'excessBasis' as excess_basis,
+             w.computed->>'buyerCost' as buyer_cost,
+             w.computed->>'recognition' as recognition,
+             w.computed->>'disposedUnadjustedBasis' as disposed_unadjusted_basis,
+             w.facts->>'relatedPerson' as related_person,
+             w.facts->>'recoveryPeriodYears' as recovery_period_years
+        from tax_asset_basis_workpapers w
+        join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
+        join asset_categories seller_c on seller_c.org_id=seller.org_id and seller_c.id=seller.category_id
+        left join fixed_assets buyer on buyer.org_id=w.org_id and buyer.id=w.receiving_asset_id
+        left join asset_categories buyer_c on buyer_c.org_id=buyer.org_id and buyer_c.id=buyer.category_id
+       where w.org_id=${run.orgId} and w.regime=${run.regime}
+         and w.effective_on<=${run.yearEnd}
+         and (w.reversed_on is null or w.reversed_on>${run.yearEnd})
+         and (
+           w.source_change_id is null
+           or not exists(
+             select 1 from financial_changes r
+              where r.org_id=w.org_id and r.domain='asset' and r.operation='reversal'
+                and r.status='applied' and r.payload->>'sourceChangeId'=w.source_change_id::text
+                and r.effective_on<=${run.yearEnd}
+           )
+         )
+         and (
+           w.source_event_id is null
+           or not exists(
+             select 1 from asset_events r
+              where r.org_id=w.org_id and r.reverses_event_id=w.source_event_id
+                and r.occurred_on<=${run.yearEnd}
+           )
+         )
+       order by w.effective_on, w.id`)
+  ).rows;
+}
+
+async function qualifyingActivityCeased(tx: SqlExecutor, run: TaxPoolRun): Promise<boolean> {
+  if (run.regime !== "uk_wda") return true;
+  const row = (
+    await tx.execute<{ ceased: boolean }>(sql`
+      select true as ceased from tax_qualifying_activity_cessations
+       where org_id=${run.orgId} and subsidiary_id=${run.subsidiaryId} and regime=${run.regime}
+         and ceased_on<=${run.yearEnd}
+         and (resumed_on is null or resumed_on>${run.yearEnd})
+       limit 1`)
+  ).rows[0];
+  return !!row;
+}
+
+async function macrsWindows(tx: SqlExecutor, run: TaxPoolRun): Promise<MacrsYearWindow[]> {
+  const rows = (
+    await tx.execute<{ tax_year: number; year_start: string; year_end: string }>(sql`
+      select distinct pp.tax_year, pp.year_start::text, pp.year_end::text
+        from tax_pool_periods pp
+        join tax_depreciation_pools tp on tp.id=pp.pool_id and tp.org_id=pp.org_id
+       where tp.org_id=${run.orgId} and tp.book_id=${run.bookId}
+         and tp.subsidiary_id=${run.subsidiaryId} and tp.regime=${run.regime}
+         and pp.tax_year<${run.taxYear}
+       order by pp.tax_year`)
+  ).rows;
+  return [
+    ...rows.map((row) => ({ taxYear: row.tax_year, yearStart: row.year_start, yearEnd: row.year_end })),
+    { taxYear: run.taxYear, yearStart: run.yearStart, yearEnd: run.yearEnd },
+  ];
+}
+
+async function receiverAssetIds(tx: SqlExecutor, run: TaxPoolRun): Promise<Set<string>> {
+  const rows = (
+    await tx.execute<{ id: string }>(sql`
+      select receiving_asset_id as id from asset_transfer_bases
+       where org_id=${run.orgId} and effective_on<=${run.yearEnd}
+         and (reversed_on is null or reversed_on>${run.yearEnd})`)
+  ).rows;
+  return new Set(rows.map((row) => row.id));
 }
 
 /** Everything one annual run needs; fixed by runTaxPool before dispatch. */
@@ -162,6 +389,7 @@ export async function runTaxPool(
   // Pure input validation before any database work: a rejected run must not
   // open (or wait on) the scope fence.
   const shortYearFactor = normalizeDecimal(opts.shortYearFactor ?? 1, 10);
+  let macrsShortYearFactor = shortYearFactor;
 
   // One transaction for the whole year. The advisory lock is taken inside it
   // BEFORE any state is read, so two runs of this scope — same or adjacent
@@ -177,34 +405,25 @@ export async function runTaxPool(
     const attr = await regimeClassAttribute(tx, orgId, regime);
     const model = await regimeModel(tx, orgId, regime);
 
-    // Release containment for the new book lifecycle. A book cost allocation
-    // is not a statutory tax-basis allocation and related-party consideration
-    // is not necessarily the transferee's depreciable tax basis. Until native
-    // tax treatment is joined here, do not emit an apparently complete return.
-    // This is an explicit delivery dependency, not completed tax support.
-    const unpricedLifecycle = (await tx.execute<{ asset_number: string }>(sql`
-      select a.asset_number from fixed_assets a
-      join asset_categories c on c.org_id=a.org_id and c.id=a.category_id
-      where a.org_id=${orgId} and a.subsidiary_id=${subsidiaryId}
-        and coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode',c.tax_attributes->>${attr},'')<>''
-        and (
-          exists(select 1 from asset_events e where e.org_id=a.org_id and e.asset_id=a.id
-            and e.financial_change_id is not null
-            and e.kind in('disposed','written_off','partially_disposed','transferred')
-            and e.occurred_on<=${opts.yearEnd}
-            and not exists(select 1 from asset_events r where r.org_id=e.org_id and r.reverses_event_id=e.id and r.occurred_on<=${opts.yearEnd}))
-          or exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id
-            and t.effective_on<=${opts.yearEnd} and (t.reversed_on is null or t.reversed_on>${opts.yearEnd}))
-        ) order by a.asset_number limit 1`)).rows[0];
-    if (unpricedLifecycle) throw new TaxPoolError(
-      `Tax depreciation for asset ${unpricedLifecycle.asset_number} requires native statutory basis treatment of its approved disposal or intercompany transfer. ` +
-      `That lifecycle is not yet integrated with the ${regime} calculation, so no tax result has been produced. ` +
-      `This is an implementation blocker; do not change the transaction amount, date or classification to bypass it.`,
-    );
+    if (model === "macrs") {
+      try {
+        macrsShortYearFactor = assertShortYearFactorAgrees(opts.yearStart, opts.yearEnd, opts.shortYearFactor);
+      } catch (error) {
+        throw error instanceof MacrsShortYearError
+          ? new TaxPoolError(error.message)
+          : error;
+      }
+    }
+    const run: TaxPoolRun = {
+      orgId, bookId, subsidiaryId, regime, taxYear,
+      yearStart: opts.yearStart, yearEnd: opts.yearEnd,
+      shortYearFactor: model === "macrs" ? macrsShortYearFactor : shortYearFactor,
+      actorId: opts.actorId,
+    };
+    await refuseMissingTaxWorkpaper(tx, run, attr);
 
     await fenceRunOrdering(tx, orgId, bookId, subsidiaryId, regime, taxYear);
 
-    const run: TaxPoolRun = { orgId, bookId, subsidiaryId, regime, taxYear, yearStart: opts.yearStart, yearEnd: opts.yearEnd, shortYearFactor, actorId: opts.actorId };
     return model === "macrs"
       ? runMacrs(tx, run, attr, classes)
       : runPools(tx, run, attr, classes);
@@ -277,14 +496,15 @@ async function runPools(
   // has not itself been reversed by that year-end; the mutable present-day
   // asset status is deliberately not consulted.
   const assetRows = (await tx.execute<{
+    id: string;
     acquisition_cost: string;
     placed_on: string | null;
     class_code: string;
     held_at_year_end: boolean;
   }>(sql`
-    select a.acquisition_cost::text,
+    select a.id, a.acquisition_cost::text,
            coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
-           c.tax_attributes->>${attr} as class_code,
+           ${classifiedClassSql("a", run, attr)} as class_code,
            (
              coalesce(a.in_service_on, a.acquired_on) is not null
              and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
@@ -302,12 +522,19 @@ async function runPools(
                        and reversal.occurred_on <= ${run.yearEnd}
                   )
              )
+             and (
+               a.acquisition_cost + coalesce((
+                 select sum(x.cost_delta) from asset_basis_changes x
+                  where x.org_id = a.org_id and x.asset_id = a.id and x.book_id = ${run.bookId}
+                    and x.effective_on <= ${run.yearEnd}
+               ), 0)
+             ) > 0
            ) as held_at_year_end
       from fixed_assets a
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
-       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+       and ${classifiedClassSql("a", run, attr)} <> ''
      order by class_code, a.id`));
 
   const unknownClasses = [...new Set(assetRows.rows
@@ -334,45 +561,96 @@ async function runPools(
     return cap;
   };
 
+  const receivers = await receiverAssetIds(tx, run);
   for (const row of assetRows.rows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
     const capitalCost = cappedCost(row.acquisition_cost, classDef);
-    if (row.placed_on && row.placed_on >= run.yearStart && row.placed_on <= run.yearEnd) {
+    if (
+      row.placed_on &&
+      row.placed_on >= run.yearStart &&
+      row.placed_on <= run.yearEnd &&
+      !receivers.has(row.id)
+    ) {
       aggregate.additions += toUnits(capitalCost);
     }
     if (row.held_at_year_end) aggregate.hasAssets = true;
   }
 
-  // Dispositions this year: Σ least(proceeds, each asset's effective capital
-  // cost), where effective capital cost applies the class's per-asset ceiling.
-  const dispRows = (await tx.execute<{
-    amount: string | null;
-    acquisition_cost: string;
-    class_code: string;
-  }>(sql`
-    select e.amount::text, a.acquisition_cost::text,
-           c.tax_attributes->>${attr} as class_code
-      from asset_events e
-      join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
-      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-     where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
-       and e.kind in ('disposed', 'written_off')
-       and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
-       and coalesce(c.tax_attributes->>${attr}, '') <> ''
-       and not exists (
-         select 1
-           from asset_events reversal
-          where reversal.org_id = e.org_id
-            and reversal.reverses_event_id = e.id
-            and reversal.occurred_on <= ${run.yearEnd}
-       )`));
-  for (const row of dispRows.rows) {
-    const classDef = classes.get(row.class_code)!;
-    const aggregate = addAggregate(row.class_code);
-    const capitalCost = cappedCost(row.acquisition_cost, classDef);
-    const proceeds = row.amount ?? "0";
-    aggregate.dispositions += toUnits(toUnits(proceeds) <= toUnits(capitalCost) ? proceeds : capitalCost);
+  // Legacy ordinary disposals: disposed/written_off with no financial
+  // change. Σ least(proceeds, each asset's effective capital cost), one
+  // event per book (book_id or its journal book; NULL-book events still
+  // apply), reversed by year-end excluded. Native governed events are
+  // not in this query — they consume the frozen workpaper below.
+  const dispRows = (
+    await tx.execute<{
+      amount: string | null;
+      acquisition_cost: string;
+      class_code: string;
+    }>(sql`
+      select distinct on (e.id) e.amount::text, a.acquisition_cost::text,
+             ${classifiedClassSql("a", run, attr)} as class_code
+        from asset_events e
+        join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
+        join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+       where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
+         and e.kind in ('disposed', 'written_off')
+         and e.financial_change_id is null
+         and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
+         and ${classifiedClassSql("a", run, attr)} <> ''
+         and ${eventOnRunBook(run)}
+         and not exists (
+           select 1
+             from asset_events reversal
+            where reversal.org_id = e.org_id
+              and reversal.reverses_event_id = e.id
+              and reversal.occurred_on <= ${run.yearEnd}
+         )
+         and not exists (
+           select 1 from tax_asset_basis_workpapers w
+            where w.org_id = e.org_id and w.regime = ${run.regime}
+              and w.source_change_id is null and w.source_event_id = e.id
+              and w.effective_on <= ${run.yearEnd}
+              and (w.reversed_on is null or w.reversed_on > ${run.yearEnd})
+         )
+       order by e.id`)
+  ).rows;
+  for (const row of dispRows) {
+    const classDef = classes.get(row.class_code);
+    if (!classDef) {
+      throw new TaxPoolError(
+        `unknown tax class code "${row.class_code}" on a legacy ${run.regime} disposal; assign the tax class before running the pool`,
+      );
+    }
+    addAggregate(row.class_code).dispositions += toUnits(
+      legacyPoolDisposition(row.amount, cappedCost(row.acquisition_cost, classDef)),
+    );
+  }
+
+  const ceased = await qualifyingActivityCeased(tx, run);
+  const papers = await liveWorkpapers(tx, run, attr);
+  for (const paper of papers) {
+    if (paper.effective_on < run.yearStart || paper.effective_on > run.yearEnd) continue;
+    if (paper.seller_subsidiary_id === run.subsidiaryId && paper.seller_disposition) {
+      if (!paper.seller_class || !classes.has(paper.seller_class)) {
+        throw new TaxPoolError(
+          `unknown tax class code "${paper.seller_class}" on the frozen ${run.regime} workpaper; assign the seller's tax class before running the pool`,
+        );
+      }
+      addAggregate(paper.seller_class).dispositions += toUnits(paper.seller_disposition);
+    }
+    if (
+      paper.source_operation === "intercompany_transfer" &&
+      paper.buyer_subsidiary_id === run.subsidiaryId &&
+      paper.buyer_addition
+    ) {
+      if (!paper.buyer_class || !classes.has(paper.buyer_class)) {
+        throw new TaxPoolError(
+          `unknown tax class code "${paper.buyer_class}" on the frozen ${run.regime} workpaper; assign the receiving asset's tax class before running the pool`,
+        );
+      }
+      addAggregate(paper.buyer_class).additions += toUnits(paper.buyer_addition);
+    }
   }
 
   const classRows = [...aggregateByClass.entries()]
@@ -407,7 +685,7 @@ async function runPools(
       shortYearFactor: run.shortYearFactor,
       poolHasAssetsAtYearEnd: row.has_assets,
       allowRecapture: classDef.allowRecapture,
-      allowTerminalLoss: classDef.allowTerminalLoss,
+      allowTerminalLoss: classDef.allowTerminalLoss && (run.regime !== "uk_wda" || ceased),
     });
 
     prepared.push({ poolId: pool.id, classCode, def: classDef, result, enhancedMultiplier: rule.enhancedMultiplier ?? null });
@@ -421,18 +699,19 @@ async function runPools(
       insert into tax_pool_periods
         (org_id, pool_id, tax_year, opening_balance, additions, dispositions, net_additions,
          immediate_expense, base, allowance, closing_balance, recapture, terminal_loss,
-         short_year_factor, enhanced_multiplier, created_by, updated_by)
+         short_year_factor, year_start, year_end, enhanced_multiplier, created_by, updated_by)
       values (${orgId}, ${p.poolId}, ${taxYear}, ${p.result.openingBalance}, ${p.result.additions},
               ${p.result.dispositions}, ${p.result.netAdditions}, ${p.result.immediateExpense}, ${p.result.base},
               ${p.result.allowance}, ${p.result.closingBalance}, ${p.result.recapture}, ${p.result.terminalLoss},
-              ${run.shortYearFactor}, ${p.enhancedMultiplier}, ${run.actorId}, ${run.actorId})
+              ${run.shortYearFactor}, ${run.yearStart}, ${run.yearEnd}, ${p.enhancedMultiplier}, ${run.actorId}, ${run.actorId})
       on conflict (org_id, pool_id, tax_year) do update set
         opening_balance = excluded.opening_balance, additions = excluded.additions,
         dispositions = excluded.dispositions, net_additions = excluded.net_additions,
         immediate_expense = excluded.immediate_expense, base = excluded.base,
         allowance = excluded.allowance, closing_balance = excluded.closing_balance,
         recapture = excluded.recapture, terminal_loss = excluded.terminal_loss,
-        short_year_factor = excluded.short_year_factor, enhanced_multiplier = excluded.enhanced_multiplier,
+        short_year_factor = excluded.short_year_factor, year_start = excluded.year_start, year_end = excluded.year_end,
+        enhanced_multiplier = excluded.enhanced_multiplier,
         updated_at = now(), updated_by = ${run.actorId}
       where tax_pool_periods.org_id = ${orgId}`);
     await tx.execute(sql`
@@ -453,6 +732,125 @@ async function runPools(
   return { regime: run.regime, taxYear, lines, totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm } };
 }
 
+type MacrsVintage = {
+  basis: string;
+  placedInServiceOn: string;
+  recoveryPeriodYears: string;
+  method: "200_db" | "150_db" | "straight_line";
+  convention: "half_year" | "mid_quarter" | "mid_month";
+  disposedOn: string | null;
+  section179: string;
+  bonusPercent: string;
+  businessUsePercent: string;
+  shortYearMethod: "simplified" | "allocation";
+  role: "seller" | "buyer";
+  transferOn: string | null;
+};
+
+function resolveMacrsVintages(
+  asset: MacrsAssetRow,
+  papers: LiveWorkpaper[],
+  run: TaxPoolRun,
+  classDef: PoolClassDef,
+  convention: "half_year" | "mid_quarter" | "mid_month",
+  config: Record<string, unknown>,
+): MacrsVintage[] {
+  const defaults = {
+    recoveryPeriodYears: classDef.recoveryPeriodYears!,
+    method: classDef.macrsMethod!,
+    convention,
+    section179: String(config.section179 ?? "0"),
+    bonusPercent: decimalOr(config.bonusPercent, "0"),
+    businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+    shortYearMethod: "simplified" as const,
+  };
+  const seller = papers.filter((paper) => paper.asset_id === asset.id);
+  const receiver = papers.filter((paper) => paper.receiving_asset_id === asset.id);
+  const latestReceiver = receiver.at(-1);
+  const latestSeller = seller.at(-1);
+  if (latestReceiver && latestReceiver.buyer_subsidiary_id === run.subsidiaryId) {
+    const placed = latestReceiver.placed_in_service_on ?? latestReceiver.effective_on;
+    const method = (latestReceiver.macrs_method as MacrsVintage["method"]) ?? defaults.method;
+    const recConvention = (latestReceiver.macrs_convention as MacrsVintage["convention"]) ?? defaults.convention;
+    const related = latestReceiver.related_person === "true";
+    const shortYearMethod = latestReceiver.short_year_method === "allocation" ? "allocation" : "simplified";
+    const vintages: MacrsVintage[] = [];
+    if (latestReceiver.recognition === "nontaxable" && latestReceiver.carryover_basis) {
+      vintages.push({
+        ...defaults,
+        basis: latestReceiver.carryover_basis,
+        placedInServiceOn: placed,
+        method,
+        convention: recConvention,
+        disposedOn: null,
+        section179: related ? "0" : defaults.section179,
+        shortYearMethod,
+        role: "buyer",
+        transferOn: latestReceiver.effective_on,
+      });
+    }
+    if (latestReceiver.recognition === "nontaxable" && latestReceiver.excess_basis && cmpMoney(latestReceiver.excess_basis)) {
+      vintages.push({
+        ...defaults,
+        basis: latestReceiver.excess_basis,
+        placedInServiceOn: latestReceiver.effective_on,
+        disposedOn: null,
+        section179: related ? "0" : defaults.section179,
+        shortYearMethod,
+        role: "buyer",
+        transferOn: latestReceiver.effective_on,
+      });
+    }
+    if (latestReceiver.recognition === "taxable" && latestReceiver.buyer_cost) {
+      vintages.push({
+        ...defaults,
+        basis: latestReceiver.buyer_cost,
+        placedInServiceOn: latestReceiver.placed_in_service_on ?? latestReceiver.effective_on,
+        disposedOn: null,
+        shortYearMethod,
+        role: "buyer",
+        transferOn: latestReceiver.effective_on,
+      });
+    }
+    if (vintages.length > 0) return vintages;
+  }
+  if (latestSeller && latestSeller.seller_subsidiary_id === run.subsidiaryId) {
+    const vintages: MacrsVintage[] = [];
+    const shortYearMethod = latestSeller.short_year_method === "allocation" ? "allocation" : "simplified";
+    const placed = latestSeller.placed_in_service_on ?? asset.placed_on;
+    const method = (latestSeller.macrs_method as MacrsVintage["method"]) ?? defaults.method;
+    const recConvention = (latestSeller.macrs_convention as MacrsVintage["convention"]) ?? defaults.convention;
+    if (latestSeller.effective_on < run.yearStart) {
+      if (latestSeller.remaining_basis && cmpMoney(latestSeller.remaining_basis)) {
+        vintages.push({
+          ...defaults,
+          basis: latestSeller.remaining_basis,
+          placedInServiceOn: placed,
+          method,
+          convention: recConvention,
+          disposedOn: null,
+          shortYearMethod,
+          role: "seller",
+          transferOn: null,
+        });
+      }
+      return vintages;
+    }
+  }
+  return [{
+    ...defaults,
+    basis: asset.acquisition_cost,
+    placedInServiceOn: asset.placed_on,
+    disposedOn: asset.disposed_on,
+    role: "seller",
+    transferOn: null,
+  }];
+}
+
+function cmpMoney(value: string): boolean {
+  return toUnits(value) > 0n;
+}
+
 type MacrsAssetRow = {
   id: string;
   class_code: string;
@@ -460,6 +858,7 @@ type MacrsAssetRow = {
   placed_on: string;
   disposed_on: string | null;
   disposition_amount: string | null;
+  disposal_change_id: string | null;
   custom: Record<string, unknown> | null;
 };
 
@@ -470,27 +869,30 @@ async function runMacrs(
   classes: Map<string, PoolClassDef>,
 ): Promise<TaxPoolRunResult> {
   const { orgId, taxYear } = run;
-  // The pooled model prorates its allowance by the short-year factor, but the
-  // stateless per-asset MACRS schedule below has no short-year input: it would
-  // claim the full-year allowance while STORING the short factor on the
-  // period row. Refuse before any read or write instead of overstating.
-  if (run.shortYearFactor !== normalizeDecimal(1, 10)) {
-    throw new TaxPoolError(
-      `short tax year factor ${run.shortYearFactor} is not supported for the MACRS model; no result was produced. Native short-year MACRS computation must be implemented for this reporting period; do not replace a genuine short tax year with a full year`,
-    );
-  }
+  const papers = await liveWorkpapers(tx, run, attr);
+  const windows = await macrsWindows(tx, run);
+  const receivers = await receiverAssetIds(tx, run);
   const assets = (await tx.execute<MacrsAssetRow>(sql`
     select a.id,
            coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}) as class_code,
            a.acquisition_cost::text, coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
-           d.occurred_on::text as disposed_on, d.amount::text as disposition_amount, a.custom
+           d.occurred_on::text as disposed_on, d.amount::text as disposition_amount,
+           d.financial_change_id::text as disposal_change_id, a.custom
       from fixed_assets a
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
       left join lateral (
-        select e.occurred_on, e.amount from asset_events e
+        select e.occurred_on, e.amount, e.financial_change_id from asset_events e
          where e.asset_id = a.id and e.org_id = a.org_id and e.org_id = ${orgId}
            and e.kind in ('disposed', 'written_off')
-         order by e.occurred_on limit 1
+           and e.occurred_on <= ${run.yearEnd}
+           and ${eventOnRunBook(run)}
+           and not exists (
+             select 1 from asset_events reversal
+              where reversal.org_id = e.org_id
+                and reversal.reverses_event_id = e.id
+                and reversal.occurred_on <= ${run.yearEnd}
+           )
+         order by e.occurred_on, e.id limit 1
       ) d on true
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
@@ -546,24 +948,144 @@ async function runMacrs(
       const convention = group.def.convention === "half_year" && vintage && vintage.total > 0n && vintage.q4 * 100n > vintage.total * 40n
         ? "mid_quarter"
         : group.def.convention!;
-      const input = {
-        basis: asset.acquisition_cost,
-        placedInServiceOn: asset.placed_on,
-        recoveryPeriodYears: group.def.recoveryPeriodYears!,
-        method: group.def.macrsMethod!,
-        convention,
-        disposedOn: asset.disposed_on,
-        section179: String(config.section179 ?? "0"),
-        bonusPercent: decimalOr(config.bonusPercent, "0"),
-        businessUsePercent: decimalOr(config.businessUsePercent, "100"),
-      } as const;
-      const current = computeMacrsYear({ ...input, taxYear });
-      const prior = computeMacrsYear({ ...input, taxYear: taxYear - 1 });
-      if (placedYear < taxYear) opening += toUnits(prior.remainingBasis);
-      if (placedYear === taxYear) additions += toUnits(asset.acquisition_cost);
-      if (asset.disposed_on?.slice(0, 4) === String(taxYear)) dispositions += toUnits(asset.disposition_amount ?? "0");
-      allowance += toUnits(current.allowance);
-      closing += toUnits(current.remainingBasis);
+      const sellerPapers = papers.filter((paper) => paper.asset_id === asset.id);
+      const receiverPapers = papers.filter((paper) => paper.receiving_asset_id === asset.id);
+      const latestSeller = sellerPapers.at(-1);
+      const latestReceiver = receiverPapers.at(-1);
+      const yearPapers = [...sellerPapers, ...receiverPapers].filter(
+        (paper) => paper.effective_on >= run.yearStart && paper.effective_on <= run.yearEnd,
+      );
+      const vintages = resolveMacrsVintages(asset, papers, run, group.def, convention, config);
+      const splitThisYear = latestSeller
+        && latestSeller.seller_subsidiary_id === run.subsidiaryId
+        && latestSeller.effective_on >= run.yearStart
+        && latestSeller.effective_on <= run.yearEnd
+        && latestSeller.remaining_basis
+        && latestSeller.disposed_unadjusted_basis;
+      if (splitThisYear && latestSeller) {
+        const original = add(latestSeller.remaining_basis!, latestSeller.disposed_unadjusted_basis!);
+        const walked = computeMacrsThroughYear({
+          basis: original,
+          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
+          taxYear,
+          recoveryPeriodYears: group.def.recoveryPeriodYears!,
+          method: group.def.macrsMethod!,
+          convention,
+          section179: String(config.section179 ?? "0"),
+          bonusPercent: decimalOr(config.bonusPercent, "0"),
+          businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+          shortYearFactor: run.shortYearFactor,
+          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
+        }, windows);
+        if (placedYear < taxYear) opening += toUnits(walked.prior.remainingBasis);
+        const disposed = computeMacrsYear({
+          basis: latestSeller.disposed_unadjusted_basis!,
+          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
+          taxYear,
+          yearStart: run.yearStart,
+          yearEnd: run.yearEnd,
+          recoveryPeriodYears: group.def.recoveryPeriodYears!,
+          method: group.def.macrsMethod!,
+          convention,
+          disposedOn: latestSeller.effective_on,
+          shortYearFactor: run.shortYearFactor,
+          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
+          afterShortYear: walked.deemedPlacedOn != null && walked.deemedPlacedOn < run.yearStart,
+          allocationFollowYear: walked.allocationFollowYear,
+          firstYearMonthsInService: walked.firstYearMonthsInService ?? undefined,
+          deemedPlacedOn: walked.deemedPlacedOn ?? undefined,
+        });
+        const remaining = computeMacrsYear({
+          basis: latestSeller.remaining_basis!,
+          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
+          taxYear,
+          yearStart: run.yearStart,
+          yearEnd: run.yearEnd,
+          recoveryPeriodYears: group.def.recoveryPeriodYears!,
+          method: group.def.macrsMethod!,
+          convention,
+          shortYearFactor: run.shortYearFactor,
+          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
+          afterShortYear: walked.deemedPlacedOn != null && walked.deemedPlacedOn < run.yearStart,
+          allocationFollowYear: walked.allocationFollowYear,
+          firstYearMonthsInService: walked.firstYearMonthsInService ?? undefined,
+          deemedPlacedOn: walked.deemedPlacedOn ?? undefined,
+        });
+        allowance += toUnits(disposed.allowance) + toUnits(remaining.allowance);
+        closing += toUnits(remaining.remainingBasis);
+      } else {
+        for (const vintage of vintages) {
+          const walked = computeMacrsThroughYear({
+            basis: vintage.basis,
+            placedInServiceOn: vintage.placedInServiceOn,
+            taxYear,
+            recoveryPeriodYears: vintage.recoveryPeriodYears,
+            method: vintage.method,
+            convention: vintage.convention,
+            disposedOn: vintage.disposedOn,
+            section179: vintage.section179,
+            bonusPercent: vintage.bonusPercent,
+            businessUsePercent: vintage.businessUsePercent,
+            shortYearFactor: run.shortYearFactor,
+            shortYearMethod: vintage.shortYearMethod,
+          }, windows);
+          let current = walked.current;
+          if (
+            vintage.role === "buyer" &&
+            vintage.transferOn &&
+            vintage.transferOn >= run.yearStart &&
+            vintage.transferOn <= run.yearEnd &&
+            latestReceiver?.recognition === "nontaxable" &&
+            vintage.placedInServiceOn < vintage.transferOn
+          ) {
+            const sellerShare = computeMacrsYear({
+              basis: vintage.basis,
+              placedInServiceOn: vintage.placedInServiceOn,
+              taxYear,
+              yearStart: run.yearStart,
+              yearEnd: run.yearEnd,
+              recoveryPeriodYears: vintage.recoveryPeriodYears,
+              method: vintage.method,
+              convention: vintage.convention,
+              disposedOn: vintage.transferOn,
+              shortYearFactor: run.shortYearFactor,
+              shortYearMethod: vintage.shortYearMethod,
+            });
+            const residual = formatMoney(add(current.allowance, neg(sellerShare.allowance)), 2);
+            current = { ...current, allowance: residual, macrs: residual };
+          }
+          const vintagePlacedYear = Number(vintage.placedInServiceOn.slice(0, 4));
+          if (vintagePlacedYear < taxYear) opening += toUnits(walked.prior.remainingBasis);
+          if (vintagePlacedYear === taxYear && vintage.role === "buyer") {
+            additions += toUnits(vintage.basis);
+          } else if (vintagePlacedYear === taxYear && vintage.role === "seller" && !receivers.has(asset.id)) {
+            additions += toUnits(asset.acquisition_cost);
+          }
+          allowance += toUnits(current.allowance);
+          closing += toUnits(current.remainingBasis);
+        }
+      }
+      if (placedYear === taxYear && receivers.has(asset.id) && !latestReceiver?.buyer_addition && !latestReceiver?.carryover_basis && !latestReceiver?.buyer_cost) {
+        throw new TaxPoolError(
+          `receiving asset ${asset.id} has no frozen buyer tax basis; record the ${run.regime} workpaper — do not use book cost`,
+        );
+      }
+      let usedWorkpaperDisposition = false;
+      for (const paper of yearPapers) {
+        if (paper.asset_id === asset.id && paper.seller_subsidiary_id === run.subsidiaryId && paper.seller_disposition) {
+          dispositions += toUnits(paper.seller_disposition);
+          usedWorkpaperDisposition = true;
+        }
+      }
+      if (
+        !usedWorkpaperDisposition &&
+        !taxEventRequiresTaxWorkpaper("disposed", asset.disposal_change_id) &&
+        asset.disposed_on &&
+        asset.disposed_on >= run.yearStart &&
+        asset.disposed_on <= run.yearEnd
+      ) {
+        dispositions += toUnits(asset.disposition_amount ?? "0");
+      }
     }
 
     const pool = await ensurePool(tx, run, group.def);
@@ -576,15 +1098,16 @@ async function runMacrs(
       insert into tax_pool_periods
         (org_id, pool_id, tax_year, opening_balance, additions, dispositions, net_additions,
          immediate_expense, base, allowance, closing_balance, recapture, terminal_loss,
-         short_year_factor, created_by, updated_by)
+         short_year_factor, year_start, year_end, created_by, updated_by)
       values (${orgId}, ${p.poolId}, ${taxYear}, ${p.values.openingBalance}, ${p.values.additions},
               ${p.values.dispositions}, ${p.values.netAdditions}, ${p.values.immediateExpense}, ${p.values.base},
-              ${p.values.allowance}, ${p.values.closingBalance}, 0, 0, ${run.shortYearFactor}, ${run.actorId}, ${run.actorId})
+              ${p.values.allowance}, ${p.values.closingBalance}, 0, 0, ${run.shortYearFactor}, ${run.yearStart}, ${run.yearEnd}, ${run.actorId}, ${run.actorId})
       on conflict (org_id, pool_id, tax_year) do update set
         opening_balance=excluded.opening_balance, additions=excluded.additions, dispositions=excluded.dispositions,
         net_additions=excluded.net_additions, immediate_expense=excluded.immediate_expense, base=excluded.base,
         allowance=excluded.allowance, closing_balance=excluded.closing_balance, recapture=0, terminal_loss=0,
-        short_year_factor=excluded.short_year_factor, updated_at=now(), updated_by=${run.actorId}
+        short_year_factor=excluded.short_year_factor, year_start=excluded.year_start, year_end=excluded.year_end,
+        updated_at=now(), updated_by=${run.actorId}
       where tax_pool_periods.org_id = ${orgId}`);
     await tx.execute(sql`update tax_depreciation_pools set opening_balance=${p.values.closingBalance}, updated_at=now(), updated_by=${run.actorId} where id=${p.poolId} and org_id=${orgId}`);
     lines.push({ classCode: p.classCode, className: p.def.name, openingBalance: p.values.openingBalance, additions: p.values.additions, dispositions: p.values.dispositions, allowance: p.values.allowance, closingBalance: p.values.closingBalance, recapture: "0.00", terminalLoss: "0.00" });

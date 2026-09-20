@@ -1460,6 +1460,7 @@
         "regimes": "Tax regimes",
         "classes": "Tax classes",
         "firstYear": "First-year rules",
+        "cessation": "Qualifying activity",
         "methods": "Methods",
         "books": "Book policies"
       },
@@ -1495,6 +1496,10 @@
         "firstYear": {
           "title": "First-year rules",
           "description": "Effective-dated acceleration and first-year eligibility."
+        },
+        "cessation": {
+          "title": "CAA 55(4) cessation",
+          "description": "Record when a UK qualifying activity ceases so a balancing allowance is available. Disposing of the last asset is not cessation."
         },
         "assignments": {
           "title": "Asset-category assignments",
@@ -2091,6 +2096,11 @@
         "title": "First-Year Rules",
         "singularTitle": "First-Year Rule",
         "description": "Dated first-year rules per regime/class (half-year rule, accelerated investment incentive, immediate expensing)."
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Qualifying Activity Cessations",
+        "singularTitle": "Qualifying Activity Cessation",
+        "description": "Effective-dated CAA 55(4) cessation of a UK qualifying activity per legal entity. A balancing allowance is available only after this date; emptying the pool is not enough."
       },
       "classes": {
         "title": "Classes",

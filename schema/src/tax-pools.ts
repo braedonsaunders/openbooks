@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, date, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { TAX_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import { auditColumns, id, money, orgRef } from "./helpers";
@@ -55,6 +56,8 @@ export const taxPoolPeriods = pgTable(
     recapture: money("recapture").notNull().default("0"),
     terminalLoss: money("terminal_loss").notNull().default("0"),
     shortYearFactor: fxRate("short_year_factor").notNull().default("1"),
+    yearStart: date("year_start").notNull(),
+    yearEnd: date("year_end").notNull(),
     enhancedMultiplier: fxRate("enhanced_multiplier"),
     ...auditColumns,
   },
@@ -140,4 +143,28 @@ export const taxFirstYearRules = pgTable(
     ...auditColumns,
   },
   (t) => [index("tax_first_year_rules_lookup").on(t.orgId, t.regime, t.classCode)],
+);
+
+/**
+ * CAA 55(4) qualifying-activity cessation. UK main/special balancing
+ * allowance is available only after this dated fact — not merely because
+ * the last asset left the pool.
+ */
+export const taxQualifyingActivityCessations = pgTable(
+  "tax_qualifying_activity_cessations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    regime: text("regime").notNull(),
+    ceasedOn: date("ceased_on").notNull(),
+    resumedOn: date("resumed_on"),
+    evidence: text("evidence").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_qualifying_activity_cessations_open")
+      .on(t.orgId, t.subsidiaryId, t.regime)
+      .where(sql`${t.resumedOn} is null`),
+  ],
 );

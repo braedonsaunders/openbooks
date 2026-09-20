@@ -184,6 +184,7 @@ export async function loadSetupEntity(
     'tax-regimes': 'regimes',
     'tax-pool-classes': 'classes',
     'tax-first-year-rules': 'first-year',
+    'tax-qualifying-activity-cessations': 'cessation',
   }
   if (assetSetupTabs[entityKey]) {
     redirect(mergeHref('/admin/setup/tax-depreciation', sp, { tab: assetSetupTabs[entityKey] }))

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   computePoolYear,
   computeMacrsYear,
+  computeMacrsThroughYear,
   resolvePoolClass,
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
@@ -169,6 +170,67 @@ test("U.S. MACRS bonus and business-use percents fail closed outside 0..100", ()
   // use deducts nothing.
   assert.equal(computeMacrsYear({ ...base, bonusPercent: 100 }).allowance, "10000.00");
   assert.equal(computeMacrsYear({ ...base, businessUsePercent: 0 }).allowance, "0.00");
+});
+
+test("U.S. MACRS short year uses Pub 946 deemed dates, not a scaled calendar schedule", () => {
+  const tara = {
+    basis: "1000",
+    placedInServiceOn: "2023-10-16",
+    taxYear: 2023,
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    yearStart: "2023-03-15",
+    yearEnd: "2023-12-31",
+  };
+  // Pub 946: 10-month year, half-year deemed Aug 1, 5/12 × $400. IRS rounds the
+  // printed example to $167; ledger money is two decimal places.
+  const half = computeMacrsYear(tara);
+  assert.equal(half.allowance, "166.67");
+  assert.equal(half.remainingBasis, "833.33");
+  // Mid-quarter Oct 16 sits in the Aug 8–Oct 19 quarter; midpoint Sep 13 snaps
+  // to Sep 1, so 4/12 × $400. IRS prints $133.
+  const midQuarter = computeMacrsYear({ ...tara, convention: "mid_quarter" });
+  assert.equal(midQuarter.allowance, "133.33");
+  const simplified = computeMacrsYear({
+    ...tara,
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-12-31",
+    afterShortYear: true,
+    adjustedBasisAtYearStart: half.remainingBasis,
+  });
+  assert.equal(simplified.allowance, "333.33");
+  const allocated = computeMacrsYear({
+    ...tara,
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-12-31",
+    afterShortYear: true,
+    shortYearMethod: "allocation",
+    allocationFollowYear: true,
+    firstYearMonthsInService: 5,
+    deemedPlacedOn: "2023-08-01",
+  });
+  // 7/12 × $400 + 5/12 × $240 uses original MACRS basis, not the $833 opening.
+  assert.equal(allocated.allowance, "333.33");
+  assert.throws(
+    () => computeMacrsYear({ ...tara, yearStart: undefined, yearEnd: undefined, shortYearFactor: "0.5" }),
+    /yearStart and yearEnd/,
+  );
+  assert.throws(
+    () => computeMacrsYear({ ...tara, shortYearFactor: "0.5" }),
+    /does not match/,
+  );
+  const walked = computeMacrsThroughYear({ ...tara, taxYear: 2024 }, [
+    { taxYear: 2023, yearStart: "2023-03-15", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+  ]);
+  assert.equal(walked.current.allowance, "333.33");
+  assert.equal(walked.prior.allowance, "166.67");
+  assert.equal(walked.deemedPlacedOn, "2023-08-01");
+  assert.equal(walked.firstYearMonthsInService, 5);
+  assert.equal(walked.allocationFollowYear, true);
 });
 
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {
