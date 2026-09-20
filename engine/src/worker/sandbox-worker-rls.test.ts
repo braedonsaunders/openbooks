@@ -235,6 +235,19 @@ test("clone RLS proof accepts a production clone split that matches scoped reads
   });
 });
 
+function assertProofBeforeReady(label: string, fnSource: string) {
+  const proofAt = fnSource.indexOf("verifyCloneRls(");
+  assert.ok(proofAt >= 0, `${label} must call verifyCloneRls`);
+  const readyWrites = [...fnSource.matchAll(/status = 'ready'/g)].map((match) => match.index ?? -1);
+  assert.ok(readyWrites.length >= 1, `${label} must still mark ready after the proof`);
+  for (const readyAt of readyWrites) {
+    assert.ok(
+      proofAt < readyAt,
+      `${label} must not write status='ready' before verifyCloneRls (proof at ${proofAt}, ready at ${readyAt})`,
+    );
+  }
+}
+
 test("createSandbox re-verifies RLS against the clone it just created", () => {
   const create = createSandboxSource();
   assert.match(lifecycleSource, /from "\.\/verify-rls\.ts"/);
@@ -243,6 +256,11 @@ test("createSandbox re-verifies RLS against the clone it just created", () => {
   assert.match(create, /sandboxOrgId/);
   assert.match(refreshSandboxSource(), /verifyCloneRls\(\{/);
   assert.match(verifyRlsSource, /launchedAsCli|pathToFileURL/);
+});
+
+test("create and refresh do not mark the sandbox ready until clone RLS proof succeeds", () => {
+  assertProofBeforeReady("createSandbox", createSandboxSource());
+  assertProofBeforeReady("refreshSandbox", refreshSandboxSource());
 });
 
 test("requireFoundSandbox refuses a missing sandbox instead of succeeding", () => {

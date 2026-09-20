@@ -344,8 +344,10 @@ async function inRefreshTransaction<T>(
 /**
  * Refresh a sandbox from its production source. Non-destructive by default: the
  * sandbox's customization layer is preserved (only business/master data is
- * re-pulled). `keepCustomizations: false` is a full reset. The whole operation
- * is one atomic unit — readers see the old sandbox until it commits.
+ * re-pulled). `keepCustomizations: false` is a full reset. Clone work commits
+ * as one unit while status stays `refreshing`; the row is marked `ready` only
+ * after clone RLS re-verification succeeds on a bypass-off connection. A
+ * failed proof must not leave a ready sandbox.
  */
 export async function refreshSandbox(
   sandboxId: string,
@@ -411,11 +413,9 @@ export async function refreshSandbox(
       // outside world (worker-scheduled refreshes run unattended).
       await neuterSandbox(s.org_id);
       if (s.masked) await scrubSandboxOrgIdentity(s.org_id);
-
-      await db.execute(sql`
-        update sandboxes
-           set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
-         where id = ${sandboxId} and org_id = ${s.org_id}`);
+      // Status stays 'refreshing' through commit. The proof cannot run inside
+      // this unit: the pinned connection keeps app.bypass_rls=on, so a
+      // ready write here would publish the clone before isolation is proven.
     }, {
       isolationLevel: "REPEATABLE READ",
       // Same-sandbox refreshes serialize here instead of aborting each other
@@ -425,14 +425,25 @@ export async function refreshSandbox(
       // helper; the key follows the house pg_advisory_xact_lock convention.
       advisoryLockKey: `openbooks:sandbox-refresh:${sandboxId}`,
     });
-    // After the clone unit commits. The refresh transaction keeps
-    // app.bypass_rls=on on its pinned connection, so isolation cannot be
-    // proven from inside it. verifyCloneRls opens its own withOrg
+    // After the clone unit commits. verifyCloneRls opens its own withOrg
     // transactions (bypass off) against the materialized clone.
     await verifyCloneRls({
       productionOrgId: s.production_org_id,
       sandboxOrgId: s.org_id,
     });
+    const markedReady = await db.execute<{ id: string }>(sql`
+      update sandboxes
+         set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
+       where id = ${sandboxId} and org_id = ${s.org_id} and status = 'refreshing'
+       returning id`);
+    if (!markedReady.rows[0]) {
+      requireFoundSandbox(
+        sandboxId,
+        (await db.execute<{ status: string }>(sql`
+        select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0],
+      );
+      throw new Error(`cannot mark sandbox ${sandboxId} ready; it is no longer refreshing`);
+    }
   } catch (err) {
     // Never clobber a deleter's mark: losing the race above (or a delete that
     // landed mid-refresh) must leave 'deleting' for the deleter to finish.
