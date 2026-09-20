@@ -7,7 +7,15 @@
       "positions": "Positionen",
       "processes": "Vorgänge",
       "leave": "Urlaub",
-      "myLeave": "Mein Urlaub"
+      "myLeave": "Mein Urlaub",
+      "recruiting": "Einstellung"
+    },
+    "recruiting": {
+      "title": "Einstellung",
+      "open": "Offene Anfragen",
+      "awaiting": "Angebote mit offener Antwort",
+      "interviews": "Interviews diese Woche",
+      "viewAll": "Einstellung öffnen"
     },
     "vitals": {
       "headcount": "Personalbestand",
@@ -480,5 +488,128 @@
     "timeKind": "Zeit",
     "valueKind": "Geldwert",
     "unlimited": "Unbegrenzt"
+  },
+  "recruiting": {
+    "title": "Einstellung",
+    "description": "Von der Stelle zur Einstellung: Bedarfsanfragen zum Stellenplan, Kandidaten im Auswahlprozess, Interviews, Angebote und die Einstellung.",
+    "add": "Neue Anfrage",
+    "empty": "Keine Anfragen für diesen Filter.",
+    "total": "Gesamt",
+    "segmentsLabel": "Stand",
+    "statusAll": "Alle Status",
+    "status": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "on_hold": "Pausiert",
+      "filled": "Besetzt",
+      "cancelled": "Abgebrochen"
+    },
+    "columns": {
+      "number": "Nummer",
+      "title": "Titel",
+      "position": "Stelle",
+      "department": "Abteilung",
+      "headcount": "Besetzt / Plan",
+      "hiringManager": "Einstellende Führungskraft",
+      "opened": "Eröffnet",
+      "status": "Stand"
+    },
+    "drawer": {
+      "title": "Anfrage {number}",
+      "pipeline": "Prozess",
+      "applications": "Bewerbungen",
+      "noApplications": "Noch keine Kandidaten zugeordnet.",
+      "candidate": "Kandidat",
+      "stage": "Stufe",
+      "applied": "Beworben",
+      "lastEvent": "Letztes Ereignis",
+      "interviews": "Bewerbungsgespräche",
+      "offer": "Angebot",
+      "timeToFill": "Zeit bis Besetzung",
+      "days": "Tage",
+      "missing": "Dieser Datensatz ist nicht mehr sichtbar."
+    },
+    "create": {
+      "titleField": "Titel",
+      "employer": "Arbeitgeber",
+      "department": "Abteilung",
+      "noDepartment": "Keine Abteilung",
+      "headcount": "Planstellen",
+      "targetStart": "Zielstart",
+      "submit": "Anfrage erstellen",
+      "failed": "Die Anfrage konnte nicht erstellt werden."
+    },
+    "attach": {
+      "title": "Kandidat zuordnen",
+      "name": "Kandidatenname",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "submit": "Kandidat zuordnen",
+      "failed": "Der Kandidat konnte nicht zugeordnet werden.",
+      "rejectTitle": "Ablehnen",
+      "rejectReason": "Grund"
+    },
+    "move": {
+      "title": "Stufe wechseln",
+      "submit": "Wechseln",
+      "failed": "Die Bewerbung konnte nicht verschoben werden.",
+      "reject": "Ablehnen",
+      "withdraw": "Zurückziehen"
+    },
+    "interview": {
+      "title": "Interview planen",
+      "kind": "Art",
+      "when": "Wann",
+      "duration": "Minuten",
+      "location": "Ort",
+      "panel": "Auswahlgremium",
+      "submit": "Interview planen",
+      "failed": "Das Interview konnte nicht geplant werden.",
+      "completeTitle": "Abschließen",
+      "outcome": "Ergebnis",
+      "feedback": "Rückmeldung",
+      "completeSubmit": "Interview abschließen",
+      "cancel": "Interview absagen"
+    },
+    "interviewKind": {
+      "phone": "Telefon",
+      "video": "Videoanruf",
+      "onsite": "Vor Ort",
+      "panel": "Gremium",
+      "assessment": "Assessment"
+    },
+    "interviewOutcome": {
+      "advance": "Weiter",
+      "hold": "Warten",
+      "reject": "Ablehnen"
+    },
+    "offerCard": {
+      "title": "Konditionen entwerfen",
+      "job": "Stellenbezeichnung",
+      "start": "Startdatum",
+      "amount": "Betrag",
+      "currency": "Währung",
+      "basis": "Grundlage",
+      "expires": "Läuft ab",
+      "submit": "Angebot entwerfen",
+      "failed": "Das Angebot konnte nicht entworfen werden."
+    },
+    "offerActions": {
+      "send": "Senden",
+      "accept": "Annehmen und einstellen",
+      "decline": "Ablehnen",
+      "withdraw": "Zurückziehen",
+      "reason": "Grund",
+      "failed": "Die Angebotsaktion ist fehlgeschlagen."
+    },
+    "basis": {
+      "hourly": "Stündlich",
+      "annual": "Jährlich"
+    },
+    "candidate": {
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "source": "Quelle"
+    }
   }
 }

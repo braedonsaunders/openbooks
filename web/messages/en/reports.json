@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "Leave absences",
         "description": "One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission."
+      },
+      "hrm_requisitions": {
+        "label": "Requisitions",
+        "description": "One row per vacancy opening: number, title, status, employer, department, position, and headcount versus filled count. Requires the HRM recruiting permission."
+      },
+      "hrm_applications": {
+        "label": "Applications",
+        "description": "One row per candidacy with its funnel stage, plus time-to-fill from opening to hire. Candidate contact details never appear — names only. Requires the HRM recruiting permission."
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "Source",
         "employment_id": "Employment (id)",
         "id": "Absence (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Number",
+        "title": "Title",
+        "status": "Status",
+        "employer": "Employer",
+        "department": "Department",
+        "position": "Position",
+        "headcount": "Headcount",
+        "filled_count": "Filled",
+        "opened_on": "Opened",
+        "closed_on": "Closed",
+        "requisition_id": "Requisition (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Requisition",
+        "candidate": "Candidate",
+        "stage": "Stage",
+        "status": "Status",
+        "applied_on": "Applied",
+        "opened_on": "Requisition opened",
+        "hired_on": "Hired",
+        "days_to_fill": "Days to fill",
+        "application_id": "Application (id)"
       }
     },
     "enumValues": {

@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "Absences",
         "description": "Une ligne par jour d'absence — personne, employeur, service d'alors, type de congé et heures. Les contre-passations sont des lignes propres ; les totaux sont nets. Requiert la permission congés."
+      },
+      "hrm_requisitions": {
+        "label": "Réquisitions",
+        "description": "Une ligne par besoin : numéro, titre, statut, employeur, département, poste, effectif prévu contre pourvu. Requiert la permission de recrutement."
+      },
+      "hrm_applications": {
+        "label": "Candidatures",
+        "description": "Une ligne par candidature avec son étape du parcours et le délai de pourvoi. Les coordonnées n'apparaissent jamais — noms uniquement. Requiert la permission de recrutement."
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "Source",
         "employment_id": "Emploi (id)",
         "id": "Absence (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Numéro",
+        "title": "Titre",
+        "status": "Statut",
+        "employer": "Employeur",
+        "department": "Département",
+        "position": "Poste",
+        "headcount": "Postes",
+        "filled_count": "Pourvus",
+        "opened_on": "Ouverture",
+        "closed_on": "Clôture",
+        "requisition_id": "Réquisition (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Réquisition",
+        "candidate": "Candidat",
+        "stage": "Étape",
+        "status": "Statut",
+        "applied_on": "Candidature",
+        "opened_on": "Réquisition ouverte",
+        "hired_on": "Embauché",
+        "days_to_fill": "Délai de pourvoi",
+        "application_id": "Candidature (id)"
       }
     },
     "enumValues": {

@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "Ausencias",
         "description": "Una fila por día de ausencia — persona, empleador, departamento de entonces, tipo y horas. Las reversiones son filas propias; las sumas netean. Requiere el permiso de ausencias."
+      },
+      "hrm_requisitions": {
+        "label": "Requisiciones",
+        "description": "Una fila por vacante: número, título, estado, empleador, departamento, puesto y plazas frente a cubiertas. Requiere el permiso de contratación."
+      },
+      "hrm_applications": {
+        "label": "Candidaturas",
+        "description": "Una fila por candidatura con su etapa del proceso y el tiempo de cobertura. Los datos de contacto nunca aparecen — solo nombres. Requiere el permiso de contratación."
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "Origen",
         "employment_id": "Empleo (id)",
         "id": "Ausencia (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Número",
+        "title": "Título",
+        "status": "Estado",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "position": "Puesto",
+        "headcount": "Plazas",
+        "filled_count": "Cubiertas",
+        "opened_on": "Apertura",
+        "closed_on": "Cierre",
+        "requisition_id": "Requisición (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Requisición",
+        "candidate": "Candidato",
+        "stage": "Etapa",
+        "status": "Estado",
+        "applied_on": "Candidatura",
+        "opened_on": "Requisición abierta",
+        "hired_on": "Contratado",
+        "days_to_fill": "Días de cobertura",
+        "application_id": "Candidatura (id)"
       }
     },
     "enumValues": {

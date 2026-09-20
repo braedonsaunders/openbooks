@@ -7,7 +7,15 @@
       "positions": "ポジション",
       "processes": "プロセス",
       "leave": "休暇",
-      "myLeave": "自分の休暇"
+      "myLeave": "自分の休暇",
+      "recruiting": "採用"
+    },
+    "recruiting": {
+      "title": "採用",
+      "open": "募集中の求人",
+      "awaiting": "回答待ちのオファー",
+      "interviews": "今週の面接",
+      "viewAll": "採用を開く"
     },
     "vitals": {
       "headcount": "人員数",
@@ -480,5 +488,128 @@
     "timeKind": "時間",
     "valueKind": "金額",
     "unlimited": "無制限"
+  },
+  "recruiting": {
+    "title": "採用",
+    "description": "欠員から採用まで: 要員計画に対する求人、選考ファネルの候補者、面接、オファー、採用。",
+    "add": "新規求人",
+    "empty": "この条件に一致する求人はありません。",
+    "total": "合計",
+    "segmentsLabel": "ステータス",
+    "statusAll": "すべてのステータス",
+    "status": {
+      "draft": "下書き",
+      "open": "募集中",
+      "on_hold": "保留中",
+      "filled": "充足済み",
+      "cancelled": "取消済み"
+    },
+    "columns": {
+      "number": "番号",
+      "title": "タイトル",
+      "position": "ポジション",
+      "department": "部門",
+      "headcount": "充足 / 計画",
+      "hiringManager": "採用責任者",
+      "opened": "開始",
+      "status": "ステータス"
+    },
+    "drawer": {
+      "title": "求人 {number}",
+      "pipeline": "パイプライン",
+      "applications": "応募",
+      "noApplications": "まだ候補者が紐付いていません。",
+      "candidate": "候補者",
+      "stage": "ステージ",
+      "applied": "応募日",
+      "lastEvent": "最終イベント",
+      "interviews": "面接",
+      "offer": "オファー",
+      "timeToFill": "充足日数",
+      "days": "日",
+      "missing": "このレコードは表示できません。"
+    },
+    "create": {
+      "titleField": "タイトル",
+      "employer": "雇用主",
+      "department": "部門",
+      "noDepartment": "部門なし",
+      "headcount": "人数",
+      "targetStart": "開始予定",
+      "submit": "求人を作成",
+      "failed": "求人を作成できませんでした。"
+    },
+    "attach": {
+      "title": "候補者を紐付け",
+      "name": "氏名",
+      "email": "メール",
+      "phone": "電話",
+      "submit": "候補者を紐付け",
+      "failed": "候補者を紐付けできませんでした。",
+      "rejectTitle": "辞退",
+      "rejectReason": "理由"
+    },
+    "move": {
+      "title": "ステージ移動",
+      "submit": "移動",
+      "failed": "応募を移動できませんでした。",
+      "reject": "辞退",
+      "withdraw": "取下げ"
+    },
+    "interview": {
+      "title": "面接を設定",
+      "kind": "種類",
+      "when": "日時",
+      "duration": "分数",
+      "location": "場所",
+      "panel": "面接官",
+      "submit": "面接を設定",
+      "failed": "面接を設定できませんでした。",
+      "completeTitle": "完了",
+      "outcome": "結果",
+      "feedback": "フィードバック",
+      "completeSubmit": "面接を完了",
+      "cancel": "面接を取消"
+    },
+    "interviewKind": {
+      "phone": "電話",
+      "video": "ビデオ",
+      "onsite": "対面",
+      "panel": "パネル",
+      "assessment": "アセスメント"
+    },
+    "interviewOutcome": {
+      "advance": "次へ",
+      "hold": "保留",
+      "reject": "辞退"
+    },
+    "offerCard": {
+      "title": "条件を作成",
+      "job": "職種",
+      "start": "開始日",
+      "amount": "金額",
+      "currency": "通貨",
+      "basis": "基準",
+      "expires": "期限",
+      "submit": "オファーを作成",
+      "failed": "オファーを作成できませんでした。"
+    },
+    "offerActions": {
+      "send": "送信",
+      "accept": "承諾して採用",
+      "decline": "辞退",
+      "withdraw": "撤回",
+      "reason": "理由",
+      "failed": "オファー操作に失敗しました。"
+    },
+    "basis": {
+      "hourly": "時給",
+      "annual": "年俸"
+    },
+    "candidate": {
+      "email": "メール",
+      "phone": "電話",
+      "source": "経路"
+    }
   }
 }

@@ -837,6 +837,8 @@
     "hrm_leave_request": "Demander un congé pour son propre emploi",
     "hrm_leave_approve": "Statuer sur les demandes de congé",
     "hrm_leave_manage": "Configurer les types et politiques de congé",
+    "hrm_recruiting_read": "Voir le parcours de recrutement",
+    "hrm_recruiting_manage": "Gérer réquisitions, candidats, entretiens et offres",
     "hrm_employment_manage": "Rédiger des changements d'emploi",
     "hrm_employment_approve": "Décider des changements d'emploi",
     "hrm_position_read": "Consulter les postes et le plan d'effectifs",
@@ -3104,6 +3106,14 @@
         "none": "Aucun",
         "carry_all": "Tout reporter",
         "carry_up_to": "Reporter jusqu'à un plafond"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Présélection",
+        "interview": "Entretien",
+        "assessment": "Évaluation",
+        "offer": "Offre",
+        "hired": "Embauché",
+        "rejected": "Refusé"
       }
     },
     "laborCosting": {

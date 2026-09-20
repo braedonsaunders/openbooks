@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "休假缺勤",
         "description": "每个缺勤日一行——人员、雇主、当时部门、休假类型和小时。冲销为单独行；求和为净额。需要休假权限。"
+      },
+      "hrm_requisitions": {
+        "label": "招聘需求",
+        "description": "每个空缺一行: 编号、标题、状态、雇主、部门、岗位以及计划数与已入职数。需要招聘权限。"
+      },
+      "hrm_applications": {
+        "label": "应聘",
+        "description": "每位候选人一行: 漏斗阶段及填补用时。联系方式从不出现,仅显示姓名。需要招聘权限。"
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "来源",
         "employment_id": "雇佣 (ID)",
         "id": "缺勤 (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "编号",
+        "title": "标题",
+        "status": "状态",
+        "employer": "雇主",
+        "department": "部门",
+        "position": "岗位",
+        "headcount": "人数",
+        "filled_count": "已入职",
+        "opened_on": "开启",
+        "closed_on": "关闭",
+        "requisition_id": "需求 (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "需求",
+        "candidate": "候选人",
+        "stage": "阶段",
+        "status": "状态",
+        "applied_on": "应聘日期",
+        "opened_on": "需求开启",
+        "hired_on": "入职日期",
+        "days_to_fill": "填补天数",
+        "application_id": "应聘 (ID)"
       }
     },
     "enumValues": {

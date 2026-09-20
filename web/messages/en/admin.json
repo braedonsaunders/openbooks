@@ -970,7 +970,9 @@
     "hrm_leave_read": "View leave records",
     "hrm_leave_request": "Request leave for own employment",
     "hrm_leave_approve": "Decide leave requests",
-    "hrm_leave_manage": "Configure leave types and policies"
+    "hrm_leave_manage": "Configure leave types and policies",
+    "hrm_recruiting_read": "View recruiting funnel",
+    "hrm_recruiting_manage": "Manage requisitions, candidates, interviews, and offers"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3149,6 +3151,14 @@
         "none": "None",
         "carry_all": "Carry all",
         "carry_up_to": "Carry up to a cap"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "Screening",
+        "interview": "Interview",
+        "assessment": "Assessment",
+        "offer": "Offer",
+        "hired": "Hired",
+        "rejected": "Rejected"
       }
     },
     "payroll": {

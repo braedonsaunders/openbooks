@@ -656,6 +656,14 @@
       "hrm_leave_absences": {
         "label": "Fehltage",
         "description": "Eine Zeile pro Fehltag — Person, Arbeitgeber, damalige Abteilung, Urlaubsart und Stunden. Stornierungen sind eigene Zeilen; Summen saldieren. Erfordert die Urlaubs-Berechtigung."
+      },
+      "hrm_requisitions": {
+        "label": "Anfragen",
+        "description": "Eine Zeile pro offener Stelle: Nummer, Titel, Status, Arbeitgeber, Abteilung, Position sowie Planstellen gegen besetzte Stellen. Erfordert die Recruiting-Berechtigung."
+      },
+      "hrm_applications": {
+        "label": "Bewerbungen",
+        "description": "Eine Zeile pro Kandidatur mit Funnel-Stufe sowie Zeit bis zur Besetzung. Kontaktdaten erscheinen nie — nur Namen. Erfordert die Recruiting-Berechtigung."
       }
     },
     "columns": {
@@ -1262,6 +1270,30 @@
         "source": "Quelle",
         "employment_id": "Beschäftigung (ID)",
         "id": "Fehltag (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "Nummer",
+        "title": "Titel",
+        "status": "Stand",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "position": "Stelle",
+        "headcount": "Planstellen",
+        "filled_count": "Besetzt",
+        "opened_on": "Eröffnet",
+        "closed_on": "Geschlossen",
+        "requisition_id": "Anfrage (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Anfrage",
+        "candidate": "Kandidat",
+        "stage": "Stufe",
+        "status": "Stand",
+        "applied_on": "Beworben",
+        "opened_on": "Anfrage eröffnet",
+        "hired_on": "Eingestellt",
+        "days_to_fill": "Tage bis Besetzung",
+        "application_id": "Bewerbung (ID)"
       }
     },
     "enumValues": {
