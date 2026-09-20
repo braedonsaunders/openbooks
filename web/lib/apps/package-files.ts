@@ -11,6 +11,8 @@ export type EditableAppPackage = {
   grantedPermissions?: string[]
 }
 
+export const PACKAGE_PATH_REFUSAL = 'Use relative file paths without traversal.'
+
 export function validPackagePath(path: string): boolean {
   return (
     /^(?!\/)(?!.*\.\.)(?!.*\/\/)[a-z0-9._\-/]+$/i.test(path) &&
@@ -57,7 +59,7 @@ export function packageFromSourceFiles(
       (file) => file.path !== 'manifest.json' && !validPackagePath(file.path),
     )
   )
-    throw new Error('Use relative file paths without traversal.')
+    throw new Error(PACKAGE_PATH_REFUSAL)
   return {
     manifest,
     files: files.filter((file) => file.path !== 'manifest.json'),

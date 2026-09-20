@@ -1,5 +1,6 @@
 import { strFromU8, Unzip, UnzipInflate } from 'fflate'
 import { contentTypeFor } from './manifest'
+import { PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
 
 /**
  * Zip → bundle parsing for App uploads. Pure module (no server-only, no DB) so
@@ -156,6 +157,7 @@ export function parseZipBundle(bytes: Uint8Array): ParsedBundle {
       }
       continue
     }
+    if (!validPackagePath(path)) throw new ZipBundleError(PACKAGE_PATH_REFUSAL)
     const { binary } = contentTypeFor(path)
     files.push({
       path,
