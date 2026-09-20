@@ -118,6 +118,27 @@ test("query validation still rejects multiple statements and write prefixes", ()
   assert.throws(() => validateUserSql("update documents set memo = 'nope'"), /read-only/);
 });
 
+test("query validation refuses SET, CALL, and DO even after a leading comment", () => {
+  assert.throws(() => validateUserSql("set search_path to public"), /read-only/);
+  assert.throws(() => validateUserSql("call foo()"), /read-only/);
+  assert.throws(() => validateUserSql("do $$ begin null; end $$"), /read-only/);
+  assert.throws(() => validateUserSql("/* select 1 */ set search_path to public"), /read-only/);
+  assert.throws(() => validateUserSql("-- select 1\ncall foo()"), /read-only/);
+});
+
+test("query validation refuses unquoted set_config and keeps dollar-quoted literals", () => {
+  assert.throws(
+    () => validateUserSql("select set_config('app.current_org', 'x', true)"),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql("select pg_catalog.set_config('app.current_org', 'x', true)"),
+    /set_config/,
+  );
+  const dollarQuoted = "select $foo$set_config('app.current_org', 'x', true)$foo$ as payload";
+  assert.equal(validateUserSql(dollarQuoted), dollarQuoted);
+});
+
 test("SQL API operations use only the isolated governed pool", async () => {
   harness.reset();
 
