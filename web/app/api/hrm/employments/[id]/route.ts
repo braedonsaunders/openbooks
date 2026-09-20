@@ -31,7 +31,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = employmentGate instanceof NextResponse
     ? await guardFeaturePermission('hrm.self.read', 'hrm')
     : employmentGate
-  if (gate instanceof NextResponse) return employmentGate
+  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid employment' }, { status: 422 })
 
