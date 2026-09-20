@@ -1,9 +1,39 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ApplicationContext } from './context'
+
+const extensionsSource = readFileSync(new URL('./extensions.ts', import.meta.url), 'utf8')
+const draftsRouteSource = readFileSync(new URL('../../app/api/apps/drafts/route.ts', import.meta.url), 'utf8')
+
+function functionBody(source: string, name: string): string {
+  const start = source.indexOf(`export async function ${name}`)
+  assert.notEqual(start, -1, `${name} must remain defined`)
+  const end = source.indexOf('\nexport ', start + 1)
+  return source.slice(start, end === -1 ? undefined : end)
+}
+
+function registerSourceTests(): void {
+  test('discardExtensionDraft refuses a zero-row discard instead of reporting discarded:true', () => {
+    const body = functionBody(extensionsSource, 'discardExtensionDraft')
+    assert.match(body, /already discarded/)
+    assert.match(body, /if \(!changed\.length\)/)
+    assert.doesNotMatch(body, /status !== 'discarded'\) throw/)
+    assert.match(draftsRouteSource, /discardExtensionDraft/)
+  })
+
+  test('activateExtensionDraft refuses an already-applied draft before returning activated:true', () => {
+    const body = functionBody(extensionsSource, 'activateExtensionDraft')
+    const appliedGuard = body.search(/status === ['"]applied['"]/)
+    const activated = body.indexOf('activated: true')
+    assert.match(body, /already activated/)
+    assert.ok(appliedGuard >= 0 && appliedGuard < activated, 'already-applied must be refused before a success payload')
+    assert.match(draftsRouteSource, /activateExtensionDraft/)
+  })
+}
 
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
@@ -14,6 +44,8 @@ const { db, env, withBypassContext } = await import('@openbooks/engine/src/platf
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { draftExtension, discardExtensionDraft, getExtensionDraft, activateExtensionDraft, describeExtensionVocabulary, getExtensionPackage, previewExtensionPage } = await import('./extensions')
 const { getAppByKey, installApp } = await import('../apps/store')
+
+registerSourceTests()
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -79,6 +111,7 @@ test('extension draft isolation, exact review, atomic activation and immutable r
     assert.equal((await db.execute(sql`select id from page_specs where org_id=${org.orgId} and extension_version_id is not null`)).rows.length,0)
     const outcomes = await Promise.all([activateExtensionDraft(context, proposal), activateExtensionDraft(context, proposal)])
     assert.ok(outcomes.every(result => result.activated))
+    await assert.rejects(() => activateExtensionDraft(context, proposal), /already activated/)
     const app = await getAppByKey(org.orgId, bundle.manifest.key)
     assert.equal(app?.manifest?.frontend.renderer, 'native')
     assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check' and status='published'`)).rows.length, 1)
@@ -125,9 +158,13 @@ test('draft revision replaces only its author proposal and failed object install
     await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}','{"apps":false}'::jsonb) where id=${org.orgId}`)
     await assert.rejects(() => getExtensionDraft(context, second.draftId), /not found/)
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"apps":true}'::jsonb) where id=${org.orgId}`)
-    await discardExtensionDraft(context, second)
-    await discardExtensionDraft(context, second)
+    const discarded = await discardExtensionDraft(context, second)
+    assert.equal(discarded.discarded, true)
+    const discardAudit = (await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length
+    assert.equal(discardAudit, 1)
+    await assert.rejects(() => discardExtensionDraft(context, second), /already discarded/)
     assert.equal((await getExtensionDraft(context, second.draftId)).status, 'discarded')
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length, discardAudit)
     await assert.rejects(() => activateExtensionDraft(context, second), /no longer available/)
   } finally { await dropScratchOrg(org.orgId) }
 }))
