@@ -19,10 +19,13 @@ import {
 } from "./compute-statutory.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
   payrollTaxYearProblem,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
 } from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
 
@@ -166,4 +169,23 @@ test("BR tenant slots cover RAT, FAP and terceiros on the eSocial account", () =
     assert.equal(slot.scope, "filing_account");
     assert.equal(slot.programType, "br_cnpj_esocial");
   }
+});
+
+test("BR profile jurisdiction resolves to a declared employment calendar", () => {
+  // The profile always names the single national region, so the engine
+  // resolves jurisdictionKey("BR", "BR") = "BR-BR". A bare "BR" key
+  // declares a calendar no employee reaches, and the undeclared-jurisdiction
+  // gate then refuses every period containing a mandatory holiday (FR/IE
+  // precedent: one region, one-line key fix).
+  assert.equal(jurisdictionKey("BR", "BR"), "BR-BR");
+  assert.equal(payrollJurisdictionDeclared("BR-BR"), true);
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "BR",
+      jurisdiction: "BR-BR",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
+  );
 });

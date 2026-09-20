@@ -24,7 +24,7 @@ import type {
 import { ES_CERTIFICATES } from "./certificates.ts";
 import { computeEsStatutory, ES_FACTOR_LABELS } from "./compute-statutory.ts";
 import { esPackFilings } from "./filings.ts";
-import { ES_JURISDICTIONS } from "./jurisdictions.ts";
+import { ES_COMUNIDADES, ES_JURISDICTIONS } from "./jurisdictions.ts";
 import { ES_PACK_RATES, ES_TAX_YEARS } from "./rates.ts";
 import { ES_WITHHOLDING } from "./withholding.ts";
 import { ES_EMPLOYEE_FACTS } from "./employee-facts.ts";
@@ -42,24 +42,17 @@ const ES_AEAT_SUPPORTED = [
 
 /**
  * Display name per autonomous community and city code, for pickers and
- * labels. The communities' own Spanish proper nouns, as the Instituto
- * Nacional de Estadística (INE) lists them. Declared here — beside the
- * coverage that reads it — so no generic layer maps codes to names.
+ * labels. Derived from ES_COMUNIDADES — the pack's region names live in
+ * ./jurisdictions.ts beside the holiday calendar that reads them, so no
+ * generic layer maps codes to names and the two can never drift apart.
  */
-const ES_REGION_NAMES: Readonly<Record<string, string>> = {
-  AN: "Andalucía", AR: "Aragón", AS: "Asturias", CN: "Canarias",
-  CB: "Cantabria", CL: "Castilla y León", CM: "Castilla-La Mancha",
-  CT: "Cataluña", EX: "Extremadura", GA: "Galicia", IB: "Illes Balears",
-  RI: "La Rioja", MD: "Madrid", MC: "Murcia", NC: "Navarra",
-  PV: "País Vasco", VC: "Comunitat Valenciana", CE: "Ceuta", ML: "Melilla",
-};
+const ES_REGION_NAMES: Readonly<Record<string, string>> = Object.fromEntries(
+  ES_COMUNIDADES.map((comunidad) => [comunidad.code, comunidad.name]),
+);
 
 const ES_REGIONS: PayrollRegionCoverage = {
   label: "autonomous community",
-  known: [
-    "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
-    "IB", "RI", "MD", "MC", "NC", "PV", "VC", "CE", "ML",
-  ],
+  known: ES_COMUNIDADES.map((comunidad) => comunidad.code),
   regionNames: ES_REGION_NAMES,
   // The 2026 AEAT algorithm is transcribed (see ./rates.ts) and the engine
   // computes AEAT-territory IRPF end to end — only the foral NC/PV stay out.

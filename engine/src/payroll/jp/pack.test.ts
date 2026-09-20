@@ -25,6 +25,11 @@ import { JP_PAYROLL_PACK } from "./pack.ts";
 import { JP_PACK_RATES, JP_REFUSED_2026, JP_TAX_YEARS } from "./rates.ts";
 import { JP_PREFECTURE_CODES } from "./regions.ts";
 import { JP_WITHHOLDING } from "./withholding.ts";
+import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
+} from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 test("JP pack is installable for 2026, computes in JPY on the calendar year", () => {
   assert.equal(JP_PAYROLL_PACK.country, "JP");
@@ -142,8 +147,8 @@ test("filings declare the establishment program, no year-end builders", () => {
 });
 
 test("the holiday calendar carries 14 computed holidays; equinoxes stay out", () => {
-  assert.equal(JP_JURISDICTIONS.length, 1);
-  const japan = JP_JURISDICTIONS[0]!;
+  assert.equal(JP_JURISDICTIONS.length, 47);
+  const japan = JP_JURISDICTIONS.find((j) => j.key === "JP-13")!;
   assert.equal(japan.scope, "employment");
   assert.equal(japan.holidays.length, 14);
   const seijin = japan.holidays.find((holiday) => holiday.key === "seijin_no_hi")!;
@@ -363,5 +368,30 @@ test("adapter refusals name the missing channel", async () => {
   await assert.rejects(
     computeJpStatutoryWithRates(fakeCtx({ income: "300000.5000" }).ctx, TOKYO_RATE),
     /whole yen/,
+  );
+});
+
+test("JP profile jurisdictions resolve to declared prefecture calendars", () => {
+  // Every profile names its JIS prefecture, so the engine resolves
+  // jurisdictionKey("JP", "<code>") = "JP-<code>". A bare "JP" key
+  // declares a calendar no employee reaches, and the
+  // undeclared-jurisdiction gate then refuses every period containing a
+  // mandatory holiday. One entry per prefecture sharing the national
+  // 国民の祝日 (ES precedent); the equinoxes stay out exactly as before.
+  const byKey = new Map(JP_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
+  assert.equal(JP_PAYROLL_PACK.jurisdictions.length, 47);
+  for (const code of JP_PAYROLL_PACK.regions.known) {
+    assert.equal(jurisdictionKey("JP", code), `JP-${code}`);
+    assert.equal(payrollJurisdictionDeclared(`JP-${code}`), true, code);
+    assert.equal(byKey.get(`JP-${code}`)?.holidays.length, 14, code);
+  }
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "JP",
+      jurisdiction: "JP-13",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
   );
 });
