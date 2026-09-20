@@ -136,19 +136,17 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
       runUserSql('select * from public.accounts', { orgId: first.orgId }),
       /permission denied/,
     )
-    try {
-      const attemptedContextSwitch = await runUserSql(
+    await assert.rejects(
+      runUserSql(
         `with changed as materialized (
            select pg_catalog."set_config"('app.current_org', '${second.orgId}', true)
          )
          select distinct account.org_id::text as org_id
            from accounts account cross join changed`,
         { orgId: first.orgId },
-      )
-      assert.deepEqual(attemptedContextSwitch.rows, [{ org_id: first.orgId }])
-    } catch (error) {
-      assert.match(String(error), /permission denied for function set_config/)
-    }
+      ),
+      /set_config\(\) is not allowed|permission denied for function set_config/,
+    )
     const executableDefiners = await runUserSql(
       `select procedure.proname as name
          from pg_catalog.pg_proc procedure

@@ -7,8 +7,14 @@ import { connectGovernedReadClient } from "./db.ts";
  *   - runs as `openbooks_read` (SELECT-only role, no login)
  *   - inside a READ ONLY transaction (DML/DDL refused by Postgres itself)
  *   - SET LOCAL statement_timeout + row cap via wrapper
+ *   - the user query is submitted as an extended-protocol statement with an
+ *     empty parameter list, so PostgreSQL refuses a second command in that
+ *     message even if the UX checker is wrong
  * The single-statement/SELECT prefix check is defense-in-depth UX, not the
- * security boundary.
+ * security boundary. That checker still has to see the same tokens PostgreSQL
+ * would: comments and quotes are walked left-to-right, dollar-quote tags must
+ * match, and quoted identifiers keep their decoded name so set_config cannot
+ * hide behind "set_config".
  */
 
 export interface UserSqlOptions {
@@ -28,13 +34,101 @@ export interface UserSqlResult {
 
 const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
 const FORBIDDEN_BODY = /\b(?:pg_catalog\.)?set_config\s*\(/i;
-const STRING_OR_DOLLAR_QUOTE = /'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$/g;
+const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
+const UNCLOSED_SQL = "unclosed string, comment, or dollar-quote";
 
+/**
+ * Walk SQL the way PostgreSQL lexes it: comments are not tokens inside
+ * quotes, dollar-quote closers must repeat the opener tag, and "ident"
+ * uses "" — not a backslash — as the escape. Quoted identifiers are kept
+ * as their decoded name so a later token check can still see set_config.
+ */
 function stripSqlNoise(input: string): string {
-  return input
-    .replace(/--[^\n]*/g, " ")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(STRING_OR_DOLLAR_QUOTE, " ");
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    if (input.startsWith("--", i)) {
+      const newline = input.indexOf("\n", i + 2);
+      i = newline === -1 ? input.length : newline;
+      out += " ";
+      continue;
+    }
+    if (input.startsWith("/*", i)) {
+      let depth = 1;
+      i += 2;
+      while (i < input.length && depth > 0) {
+        if (input.startsWith("/*", i)) {
+          depth += 1;
+          i += 2;
+          continue;
+        }
+        if (input.startsWith("*/", i)) {
+          depth -= 1;
+          i += 2;
+          continue;
+        }
+        i += 1;
+      }
+      if (depth !== 0) throw new Error(UNCLOSED_SQL);
+      out += " ";
+      continue;
+    }
+    if (input[i] === "$") {
+      const tag = input.slice(i).match(DOLLAR_TAG);
+      if (tag) {
+        const delim = tag[0];
+        const close = input.indexOf(delim, i + delim.length);
+        if (close === -1) throw new Error(UNCLOSED_SQL);
+        i = close + delim.length;
+        out += " ";
+        continue;
+      }
+    }
+    if (input[i] === "'") {
+      i += 1;
+      let closed = false;
+      while (i < input.length) {
+        if (input[i] === "'" && input[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (input[i] === "'") {
+          i += 1;
+          closed = true;
+          break;
+        }
+        i += 1;
+      }
+      if (!closed) throw new Error(UNCLOSED_SQL);
+      out += " ";
+      continue;
+    }
+    if (input[i] === '"') {
+      i += 1;
+      let ident = "";
+      let closed = false;
+      while (i < input.length) {
+        if (input[i] === '"' && input[i + 1] === '"') {
+          ident += '"';
+          i += 2;
+          continue;
+        }
+        if (input[i] === '"') {
+          i += 1;
+          closed = true;
+          break;
+        }
+        ident += input[i];
+        i += 1;
+      }
+      if (!closed) throw new Error(UNCLOSED_SQL);
+      out += ident;
+      continue;
+    }
+    out += input[i];
+    i += 1;
+  }
+  return out;
 }
 
 export function validateUserSql(sqlText: string): string {
@@ -109,7 +203,9 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
   try {
     await prepareQueryContext(client, opts.orgId);
     await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
-    const res = await client.query(wrapped);
+    // values: [] forces the extended protocol. A string-only query uses the
+    // simple protocol, which will run every statement after the first.
+    const res = await client.query({ text: wrapped, values: [] });
     await client.query("rollback");
     const truncated = res.rows.length > maxRows;
     const rows = truncated ? res.rows.slice(0, maxRows) : res.rows;
