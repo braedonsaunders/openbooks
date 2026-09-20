@@ -4,12 +4,13 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { runTriggerScripts } from '@openbooks/engine/src/scripting/scripting.ts'
-import type { FieldValueMap } from '@openbooks/forms-core'
+import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import {
   buildSearchText,
+  hasSubsidiaryField,
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
@@ -39,8 +40,88 @@ async function loadScope(
   if (!record) return null
   const lint = lintRecordFields(type.fields, type.name)
   if (!lint.success) return null
-  if (!recordSubsidiaryScopeAllows(lint.sections, record.data, allowedSubsidiaryIds)) return null
+  if (!recordVisibleInSubsidiaryFence(lint.sections, record.data, allowedSubsidiaryIds)) return null
   return { type, record, sections: lint.sections }
+}
+
+/**
+ * Visibility when the live type no longer declares subsidiary_id: honor the
+ * JSON value if one is still stored, and keep field-less rows without a
+ * subsidiary_id org-visible. Field-present types stay on the existing
+ * fail-closed helper.
+ */
+function recordVisibleInSubsidiaryFence(
+  sections: FormSection[],
+  data: FieldValueMap,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): boolean {
+  const fence = allowedSubsidiaryIds ?? null
+  if (fence === null) return true
+  if (hasSubsidiaryField(sections)) {
+    return recordSubsidiaryScopeAllows(sections, data, fence)
+  }
+  const subsidiaryId = data.subsidiary_id
+  if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
+  return fence.has(subsidiaryId)
+}
+
+const RECORD_REFERENCE_TABLES: Record<string, string> = {
+  party: 'parties',
+  gl_account: 'accounts',
+}
+
+const RECORD_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Same ownership fence as web/lib/api/writers.ts findUnownedRecordReferences:
+ * party → parties.id and gl_account → accounts.id must belong to this org.
+ * Keep these aligned.
+ */
+async function findUnownedRecordReferences(
+  orgId: string,
+  sections: FormSection[],
+  data: FieldValueMap,
+): Promise<string[]> {
+  const wanted = new Map<string, { field: string; value: string }[]>()
+  const collect = (fieldId: string, fieldType: string, raw: unknown) => {
+    const refTable = RECORD_REFERENCE_TABLES[fieldType]
+    if (!refTable || typeof raw !== 'string' || !RECORD_UUID_RE.test(raw)) return
+    const list = wanted.get(refTable) ?? []
+    list.push({ field: fieldId, value: raw })
+    wanted.set(refTable, list)
+  }
+  for (const section of sections) {
+    if (section.repeating) {
+      const rows = data[section.id]
+      if (!Array.isArray(rows)) continue
+      for (const row of rows) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+        for (const field of section.fields) {
+          collect(field.id, field.type, (row as FieldValueMap)[field.id])
+        }
+      }
+      continue
+    }
+    for (const field of section.fields) {
+      collect(field.id, field.type, data[field.id])
+    }
+  }
+  const unowned: string[] = []
+  for (const [refTable, entries] of wanted) {
+    const ids = [...new Set(entries.map((e) => e.value))]
+    const owned = new Set(
+      (
+        await db.execute<{ id: string }>(sql`
+          select id from ${sql.raw(`"${refTable}"`)}
+           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)
+      ).rows.map((r) => r.id),
+    )
+    for (const entry of entries) {
+      if (!owned.has(entry.value)) unowned.push(entry.field)
+    }
+  }
+  return unowned
 }
 
 function mutationReason(value: unknown): string | null | NextResponse {
@@ -132,7 +213,7 @@ export async function PATCH(
     `)).rows[0]
     if (!locked) return { kind: 'not_found' as const }
     const record = locked as typeof scope.record
-    if (!recordSubsidiaryScopeAllows(sections, record.data, gate.allowedSubsidiaryIds)) {
+    if (!recordVisibleInSubsidiaryFence(sections, record.data, gate.allowedSubsidiaryIds)) {
       return { kind: 'not_found' as const }
     }
     // The token is compared against the row locked by this write transaction,
@@ -194,7 +275,7 @@ export async function PATCH(
     // are enforced whenever the record is (or is becoming) active.
     const effectiveData = nextData ?? stripUnknownData(sections, record.data)
     const effectiveStatus = nextStatus ?? record.status
-    if (!recordSubsidiaryScopeAllows(sections, effectiveData, gate.allowedSubsidiaryIds)) {
+    if (!recordVisibleInSubsidiaryFence(sections, effectiveData, gate.allowedSubsidiaryIds)) {
       return { kind: 'not_found' as const }
     }
     const stage = effectiveStatus === 'active' ? 'submit' : 'draft'
@@ -216,6 +297,36 @@ export async function PATCH(
           },
           { status: 422 },
         ),
+      }
+    }
+
+    // Picker values are uuid-SHAPED at this point but nothing proves the
+    // referenced row belongs to the caller: refuse foreign or dangling ids
+    // with a tenant-opaque 404 instead of persisting a cross-tenant pointer.
+    // Ownership applies to newly supplied references only.
+    if (
+      nextData !== undefined &&
+      typeof body.data === 'object' &&
+      body.data !== null &&
+      !Array.isArray(body.data)
+    ) {
+      const supplied: FieldValueMap = {}
+      for (const key of Object.keys(body.data as FieldValueMap)) {
+        if (nextData[key] !== undefined) supplied[key] = nextData[key]
+      }
+      const unownedRecordRefs = await findUnownedRecordReferences(user.orgId, sections, supplied)
+      if (unownedRecordRefs.length > 0) {
+        const field = unownedRecordRefs[0]!
+        return {
+          kind: 'response' as const,
+          response: NextResponse.json(
+            {
+              error: `${field} not found in this organization`,
+              fieldErrors: [{ field, message: 'not found in this organization' }],
+            },
+            { status: 404 },
+          ),
+        }
       }
     }
 
@@ -323,7 +434,7 @@ export async function DELETE(
        for update
     `)).rows[0]
     if (!before) return { kind: 'not_found' as const }
-    if (!recordSubsidiaryScopeAllows(scope.sections, before.data as FieldValueMap, gate.allowedSubsidiaryIds)) {
+    if (!recordVisibleInSubsidiaryFence(scope.sections, before.data as FieldValueMap, gate.allowedSubsidiaryIds)) {
       return { kind: 'not_found' as const }
     }
     if (before.status !== 'draft') {
