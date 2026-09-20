@@ -53,6 +53,30 @@ const USER_REFERENCE_COLUMNS: Readonly<Record<string, string>> = {
   saved_reports: "created_by_user_id",
 };
 
+/**
+ * resolveFormLayout and resolveListView both select only is_active rows
+ * before picking is_default. Promoting an inactive default is a write no
+ * resolve can observe — refuse it at apply (and at capture), and name the
+ * remedies the designer already exposes: activate, or unset default first.
+ */
+export function refuseInactivePromotedDefault(
+  table: string,
+  payload: Record<string, unknown>,
+  existing: Record<string, unknown> | null = null,
+): void {
+  const kind = table === "form_layouts" ? "form" : table === "list_views" ? "view" : null;
+  if (!kind) return;
+  const flag = (row: Record<string, unknown> | null, field: string, fallback: boolean): boolean =>
+    row && Object.hasOwn(row, field) ? row[field] === true : fallback;
+  const isDefault = flag(payload, "is_default", existing?.is_default === true);
+  const isActive = flag(payload, "is_active", existing == null ? true : existing.is_active === true);
+  if (isDefault && !isActive) {
+    throw new Error(
+      `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating; recapture the change set`,
+    );
+  }
+}
+
 function mappedUserReference(value: unknown, ids: ReadonlyMap<string, string>, label: string): string | null {
   if (value === null) return null;
   const mapped = typeof value === "string" ? ids.get(value.toLowerCase()) : undefined;
@@ -272,6 +296,7 @@ export async function buildChangeSet(
         if (!repairsProductionReference && contentSig(t, d.sbx_row) === contentSig(t, d.prod_row)) continue; // unchanged
         const targetId = d.prod_id ?? randomUUID();
         const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
+        refuseInactivePromotedDefault(t, payload, null);
         await db.insert(schema.changeSetItems).values({
           orgId: prod,
           changeSetId: cs.id,
@@ -526,6 +551,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
         if (Object.keys(payload).some((key) => !known.includes(key))) {
           throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
         }
+        refuseInactivePromotedDefault(t, payload, before);
         const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
         const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
         if (it.op === "update") {
