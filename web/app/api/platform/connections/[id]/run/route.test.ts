@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 type MockJob = {
   id: string;
@@ -74,10 +76,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:connection",
     `
-      export async function getConnection() {
-        const state = globalThis[Symbol.for('openbooks.connection-run-route-test')]
-        return { status: 'connected', source: 'netsuite', config: state.config, secrets: null }
-      }
+      export {}
     `,
   ],
   [
@@ -157,6 +156,23 @@ const mockSources = new Map<string, string>([
         }
       }
       export const db = {
+        async execute(query) {
+          const text = sqlText(query)
+          if (text.includes('from connections')) {
+            return {
+              rows: [{
+                id: 'conn-1',
+                orgId: 'org-1',
+                status: 'connected',
+                source: 'netsuite',
+                config: state.config,
+                secrets: null,
+                updatedAt: 't0',
+              }],
+            }
+          }
+          return { rows: [] }
+        },
         async transaction(callback) {
           const tx = makeTx()
           try { return await callback(tx) }
@@ -297,6 +313,9 @@ const refusedConnectorUrls = [
   ["NetSuite host loopback", { host: "https://127.0.0.1" }],
   ["IPv4-mapped IPv6 hex", { url: "http://[::ffff:7f00:1]/" }],
   ["IPv4-mapped IPv6 dotted", { url: "http://[::ffff:127.0.0.1]/" }],
+  ["RFC1918 10.0.0.1", { url: "http://10.0.0.1/" }],
+  ["IPv6 ULA fd00::1", { url: "http://[fd00::1]/" }],
+  ["unspecified 0.0.0.0", { url: "http://0.0.0.0/" }],
 ] as const;
 
 for (const [name, config] of refusedConnectorUrls) {
@@ -315,6 +334,14 @@ for (const [name, config] of refusedConnectorUrls) {
     assert.equal(routeState.createdJobIds.length, 0);
   });
 }
+
+test("run route source captures probe URL and version from one row", () => {
+  const source = readFileSync(fileURLToPath(new URL("./route.ts", import.meta.url)), "utf8");
+  assert.doesNotMatch(source, /\bgetConnection\b/);
+  assert.doesNotMatch(source, /loadConnectionVersion/);
+  assert.match(source, /updated_at as "updatedAt"/);
+  assert.match(source, /updated_at is not distinct from \$\{conn\.updatedAt\}/);
+});
 
 test("run does not enqueue after a concurrent connection change", async () => {
   reset();

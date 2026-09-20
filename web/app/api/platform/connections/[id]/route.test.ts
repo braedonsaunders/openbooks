@@ -191,6 +191,9 @@ const refused = [
   ["NetSuite host loopback", { host: "https://127.0.0.1" }],
   ["IPv4-mapped IPv6 hex", { url: "http://[::ffff:7f00:1]/" }],
   ["IPv4-mapped IPv6 dotted", { url: "http://[::ffff:127.0.0.1]/" }],
+  ["RFC1918 10.0.0.1", { url: "http://10.0.0.1/" }],
+  ["IPv6 ULA fd00::1", { url: "http://[fd00::1]/" }],
+  ["unspecified 0.0.0.0", { url: "http://0.0.0.0/" }],
 ] as const;
 
 function patch(config: Record<string, unknown>): Promise<Response> {

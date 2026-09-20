@@ -3,12 +3,14 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getConnection } from "@openbooks/engine/src/sync/connection.ts";
+import type { ConnectionRow } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
 export const runtime = "nodejs";
+
+type ProbeRow = ConnectionRow & { updatedAt: Date | string | null };
 
 const ACTIVE_MIGRATION_JOB_STATES = new Set([
   "active",
@@ -33,10 +35,24 @@ export async function POST(
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const { id } = await params;
-  const conn = await getConnection(orgId, id).catch((e) => {
-    if (storageIdentityError(e)) return null;
-    throw e;
-  });
+  const conn = await db
+    .execute<ProbeRow>(sql`
+      select id, org_id as "orgId", source, display_name as "displayName",
+             auth_kind as "authKind", status, config, secrets,
+             mirror_enabled as "mirrorEnabled", mirror_schedule as "mirrorSchedule",
+             posted_change_policy as "postedChangePolicy",
+             posted_change_authorized_by as "postedChangeAuthorizedBy",
+             posted_change_authorized_at as "postedChangeAuthorizedAt",
+             cursor, last_run_at as "lastRunAt", last_error as "lastError",
+             updated_at as "updatedAt"
+        from connections
+       where id = ${id} and org_id = ${orgId}
+    `)
+    .then((loaded) => loaded.rows[0] ?? null)
+    .catch((e) => {
+      if (storageIdentityError(e)) return null;
+      throw e;
+    });
   if (!conn)
     return NextResponse.json(
       { errorCode: "CONNECTION_NOT_FOUND" },
@@ -48,7 +64,7 @@ export async function POST(
       { status: 400 },
     );
   }
-  const urlError = connectionConfigUrlRefusal(conn.config);
+  const urlError = await connectionConfigUrlRefusal(conn.config);
   if (urlError) {
     return NextResponse.json(
       { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
@@ -110,8 +126,9 @@ export async function POST(
       )`);
 
     const live = await tx.execute(sql`
-      select 1 from connections
+      select id from connections
        where id = ${id} and org_id = ${orgId}
+         and updated_at is not distinct from ${conn.updatedAt}
          and config is not distinct from ${JSON.stringify(conn.config ?? {})}::jsonb
          and secrets is not distinct from ${conn.secrets}
        limit 1`);
