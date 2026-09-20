@@ -64,4 +64,3 @@ export function defaultCloseStepEnabled(
 export async function advancedCloseEnabled(orgId: string): Promise<boolean> {
   return (await defaultCloseFeatureContext(db, orgId)).advancedClose;
 }
-

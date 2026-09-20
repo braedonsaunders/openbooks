@@ -152,4 +152,3 @@ export async function arePeriodModulesOpen(
     throw error;
   }
 }
-

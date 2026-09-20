@@ -89,4 +89,3 @@ export type DocumentEditCurrent = {
   updatedAt: string
   custom?: Record<string, unknown>
 };
-

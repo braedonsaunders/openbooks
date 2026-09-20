@@ -87,4 +87,3 @@ export async function loadDocumentEditCurrent(
   `)
   return result.rows[0] ?? null
 }
-
