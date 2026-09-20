@@ -21,7 +21,7 @@ test("edition resolution: 122nd Jan–Jun, 123rd Jul–Dec, refuses unknown year
   assert.equal(ratesForPayDate("2026-07-01").edition, 123);
   assert.equal(ratesForPayDate("2026-12-31").edition, 123);
   assert.throws(() => ratesForPayDate("2027-01-01"));
-  assert.throws(() => ratesForPayDate("2024-12-31"));
+  assert.throws(() => ratesForPayDate("2023-12-31"));
 });
 
 test("published federal claim-code K1 values (122nd edition Table 8.9)", () => {
