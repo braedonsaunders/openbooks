@@ -79,16 +79,16 @@
       "path": "engine/src/payments/payments.ts",
       "lineRanges": [
         {
-          "start": 196,
-          "end": 322
+          "start": 141,
+          "end": 167
         },
         {
-          "start": 576,
-          "end": 622
+          "start": 405,
+          "end": 451
         },
         {
-          "start": 857,
-          "end": 897
+          "start": 686,
+          "end": 726
         }
       ],
       "tests": [
@@ -398,6 +398,20 @@
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/payments/settlement-policy.ts",
+      "lineRanges": [
+        {
+          "start": 24,
+          "end": 199
+        }
+      ],
+      "tests": [
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
       ]
     }
   ]
