@@ -542,9 +542,11 @@ test("hire without a template rolls the apply back with nothing applied", { skip
       select id, status from flow_gates where subject_id = ${draft.id} order by created_at`)).rows[0]!;
     // No onboarding template exists: the apply must refuse by name, and the
     // refusal rolls the versions back with it — no partial effect.
+    // The full sentence is asserted, not only its head: the kind and the
+    // remedy must survive the release wrap to reach the operator.
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: h.managerId }),
-      /no active onboarding template covers this employment/,
+      /no active onboarding template covers this employment — create or activate one in Setup that covers this employer subsidiary and department/,
     );
     const status = (await db.execute<{ status: string }>(sql`
       select status from hrm_employment_change_requests where id = ${draft.id}`)).rows[0]!.status;
