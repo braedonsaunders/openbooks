@@ -7,7 +7,7 @@ import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { isUuid } from "../../../../../lib/list-params";
-import { nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
 
 export const runtime = "nodejs";
 
@@ -115,36 +115,66 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
-  // resolveListView selects only is_active rows before picking isDefault.
-  // Next-state default+inactive is a save no resolve can observe.
-  const nextFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
-  const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
-  if (!inactiveDefault.ok) return NextResponse.json({ error: inactiveDefault.error }, { status: 400 });
+  // Request-complete contradiction needs no row snapshot. Concurrent
+  // default+deactivate is decided from the locked row inside the write.
+  const requestFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
+  const requestRefusal = refuseInactiveDefault({ kind: "view", ...requestFlags });
+  if (!requestRefusal.ok) return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
   if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
+
+  const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+  const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
   try {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
-    await db.transaction(async (tx) => {
+    const updated = await db.transaction(async (tx) => {
+      const locked = (await tx.execute<{
+        id: string;
+        recordType: string;
+        scope: string;
+        ownerId: string | null;
+        isDefault: boolean;
+        isActive: boolean;
+      }>(sql`
+        select id, record_type as "recordType", scope, owner_id as "ownerId",
+               is_default as "isDefault", is_active as "isActive"
+          from list_views
+         where id = ${id} and org_id = ${user.orgId}
+         for update`)).rows[0];
+      if (!locked) return { kind: "not_found" as const };
+      const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
+      const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
+      if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
       if (body.isDefault) {
-        if (existing.scope === "org")
+        if (locked.scope === "org")
           await tx.execute(sql`
             update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${existing.recordType} and scope='org'
+             where org_id = ${user.orgId} and record_type = ${locked.recordType} and scope='org'
                and is_default and id <> ${id}`);
         else
           await tx.execute(sql`
             update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${existing.recordType} and scope='user'
+             where org_id = ${user.orgId} and record_type = ${locked.recordType} and scope='user'
                and owner_id = ${user.id} and is_default and id <> ${id}`);
       }
-      await tx.execute(sql`
+      // Next-state default+inactive must match zero rows even if the JS
+      // refusal is skipped — refuse by name, never {ok:true}.
+      const written = (await tx.execute<{ id: string }>(sql`
         update list_views set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}`);
+         where id = ${id} and org_id = ${user.orgId}
+           and not (${nextDefaultSql} and not ${nextActiveSql})
+         returning id`)).rows[0];
+      if (!written) {
+        return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
+      }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
+      return { kind: "ok" as const };
     });
+    if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = (e as Error).message ?? "update failed";
