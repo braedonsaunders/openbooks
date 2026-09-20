@@ -47,10 +47,24 @@ test("cockpit gates on the hrm feature switch plus the employment read grant", (
 
 test("every cockpit figure comes from the canonical read service", () => {
   assert.match(loader, /getHeadcountAsOf/, "headcount resolves through the canonical read service");
+  assert.match(loader, /listChangeRequests\(/, "the pending queue resolves through the change-request service");
   assert.match(loader, /businessToday/, "as-of today is the org business date, never new Date arithmetic");
-  assert.ok(!/from worker_employments/.test(loader), "loader issues no direct employment table reads");
-  assert.ok(!/from worker_employment_versions/.test(loader), "loader issues no direct version reads");
-  assert.ok(!/from hrm_employment_change_requests/.test(loader), "loader issues no direct request reads");
+  assert.ok(!/from hrm_employment_change_requests/.test(loader), "loader issues no direct request-table reads");
+});
+
+test("the loader's scoped display queries stay org-predicated and scope-filtered", () => {
+  // Starts/ends, recent changes, and readiness have no engine service, so
+  // one clearly-scoped query each is the contract — and the contract pins
+  // the predicates that keep them honest.
+  assert.match(loader, /from worker_employment_versions/, "starts and ends read the live versions");
+  assert.match(loader, /recorded_until is null/, "the window reads recorded-live rows only");
+  assert.match(loader, /from employment_changes/, "recent changes read the aggregate evidence");
+  assert.match(loader, /from parties[\s\S]*?join employee_roles/, "readiness counts active employee parties");
+  assert.match(loader, /not exists \([\s\S]*?from worker_employments/, "readiness counts parties with no employment row");
+  const orgPredicates = loader.match(/org_id = \$\{orgId\}/g) ?? []
+  assert.ok(orgPredicates.length >= 3, `every scoped leg carries the org predicate (found ${orgPredicates.length})`);
+  assert.match(loader, /subsidiaryVisibleFilter/, "scoped legs filter the actor's subsidiary lens");
+  assert.match(loader, /loadQueueLabels\(/, "name resolution reuses the queue's shared resolver, never a second join");
 });
 
 test("headcount table carries its empty state and never invents copy", () => {
@@ -59,6 +73,28 @@ test("headcount table carries its empty state and never invents copy", () => {
   assert.match(widgets, /'hrm-headcount-table'/, "widget renders the shared section, never a second copy");
   assert.match(contracts, /'hrm-headcount-table': \{ props: \[/, "widget contract pins the prop surface");
   assert.match(names, /'hrm-headcount-table'/, "widget name is registered");
+});
+
+test("the cockpit keeps its hero and adds the workspace panels", () => {
+  for (const widget of ['hrm-headcount-table', 'hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness', 'directory-section']) {
+    assert.match(view, new RegExp(`'${widget}'`), `cockpit composes the ${widget} body`);
+  }
+  for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness']) {
+    assert.match(widgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
+    assert.match(contracts, new RegExp(`'${widget}': \\{ props: \\[`), `${widget} contract pins the prop surface`);
+    assert.match(names, new RegExp(`'${widget}'`), `${widget} name is registered`);
+  }
+  assert.match(view, /statTile\(\{\s*iconKey: 'clipboard-check'/, "the vitals strip carries the pending count");
+});
+
+test("quick actions stay permission-gated and the readiness panel links migration help", () => {
+  assert.match(view, /widget\(\s*'new-role-party'/, "the header carries the house New button");
+  assert.match(view, /f\('canCreateEmployee'\)/, "employee creation keeps the parties.manage ref");
+  assert.match(loader, /\/hrm\/change-requests/, "propose change enters through the queue");
+  assert.match(loader, /hrm\.employment\.manage/, "the propose entry keeps the manage grant");
+  assert.match(loader, /\/docs\/employment-migration/, "readiness links the migration article");
+  assert.ok(strings.includes("not yet migrated to employment records"), "readiness names the headcount exclusion in words");
+  assert.ok(strings.includes("never list here"), "the upcoming panel states probation ends are not modeled");
 });
 
 test("hrm route tabs keep the native employee list as the sibling tab", () => {
@@ -103,6 +139,16 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
     "home.directory.title",
   ]) {
     assert.ok(strings.includes(`"${key.split(".").pop()}"`), `en/hrm carries ${key}`);
+  }
+  for (const key of [
+    "pending",
+    "upcoming",
+    "recent",
+    "changes",
+    "readiness",
+    "actions",
+  ]) {
+    assert.ok(strings.includes(`"${key}"`), `en/hrm carries overview.${key}`);
   }
   assert.match(view, /f\('title'\)/, "spec titles resolve through view refs, never literals");
 });

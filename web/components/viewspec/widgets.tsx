@@ -74,7 +74,13 @@ import {
 } from '../../app/(app)/notifications/NotificationsInbox'
 import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
-import { HrmHeadcountTable } from '../../app/(app)/hrm/sections'
+import {
+  HrmHeadcountTable,
+  HrmPendingRequests,
+  HrmReadiness,
+  HrmRecentChanges,
+  HrmUpcomingChanges,
+} from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
@@ -1052,6 +1058,50 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       notAvailable={str(props, 'notAvailable') ?? ''}
       emptyTitle={str(props, 'emptyTitle') ?? ''}
       emptyDescription={str(props, 'emptyDescription') ?? ''}
+      truncated={props.truncated === true}
+      truncatedNote={str(props, 'truncatedNote') ?? ''}
+    />
+  ),
+  /** Pending change requests: the five newest beside the queue link, or
+   *  the scope refusal with its remedy intact. */
+  'hrm-pending-requests': (props) => (
+    <HrmPendingRequests
+      items={(props.items as ComponentProps<typeof HrmPendingRequests>['items']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      viewAllHref={str(props, 'viewAllHref') ?? ''}
+      viewAllLabel={str(props, 'viewAllLabel') ?? ''}
+      refusal={str(props, 'refusal') ?? null}
+      notAvailable={str(props, 'notAvailable') ?? ''}
+    />
+  ),
+  /** The honesty panel: unmigrated employees by count, the sentence that
+   *  headcount excludes them, and the migration article. */
+  'hrm-readiness': (props) => (
+    <HrmReadiness
+      message={str(props, 'message') ?? ''}
+      docHref={str(props, 'docHref') ?? ''}
+      docLabel={str(props, 'docLabel') ?? ''}
+      tone={props.tone === 'warning' ? 'warning' : 'positive'}
+    />
+  ),
+  /** The last recorded employment change events with their reasons. */
+  'hrm-recent-changes': (props) => (
+    <HrmRecentChanges
+      items={(props.items as ComponentProps<typeof HrmRecentChanges>['items']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      notAvailable={str(props, 'notAvailable') ?? ''}
+    />
+  ),
+  /** Starts and ends in the next 30 days, each half with its own empty state. */
+  'hrm-upcoming-changes': (props) => (
+    <HrmUpcomingChanges
+      starts={(props.starts as ComponentProps<typeof HrmUpcomingChanges>['starts']) ?? []}
+      ends={(props.ends as ComponentProps<typeof HrmUpcomingChanges>['ends']) ?? []}
+      startsTitle={str(props, 'startsTitle') ?? ''}
+      startsEmpty={str(props, 'startsEmpty') ?? ''}
+      endsTitle={str(props, 'endsTitle') ?? ''}
+      endsEmpty={str(props, 'endsEmpty') ?? ''}
+      notAvailable={str(props, 'notAvailable') ?? ''}
       truncated={props.truncated === true}
       truncatedNote={str(props, 'truncatedNote') ?? ''}
     />

@@ -29,6 +29,52 @@
       "title": "Diretório"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "Solicitações pendentes",
+      "sub": "Aguardando decisão",
+      "title": "Solicitações de alteração pendentes",
+      "empty": "Nenhuma solicitação de alteração aguarda decisão.",
+      "viewAll": "Abrir a fila"
+    },
+    "upcoming": {
+      "title": "Inícios e saídas próximos",
+      "hint": "Inícios e saídas efetivas nos próximos 30 dias. Períodos de experiência não são modelados no registro de emprego, por isso seus términos nunca aparecem aqui.",
+      "startsTitle": "Inícios",
+      "startsEmpty": "Ninguém inicia nos próximos 30 dias.",
+      "endsTitle": "Saídas",
+      "endsEmpty": "Ninguém sai nos próximos 30 dias.",
+      "truncatedNote": "Mostrando as primeiras {limit} mudanças próximas."
+    },
+    "recent": {
+      "title": "Alterações de emprego recentes",
+      "empty": "Nenhuma alteração de emprego foi registrada ainda."
+    },
+    "changes": {
+      "kinds": {
+        "created": "Criada",
+        "status_changed": "Status alterado",
+        "assignment_issued": "Atribuição emitida",
+        "assignment_superseded": "Atribuição substituída",
+        "corrected": "Corrigida",
+        "terminated": "Encerrada",
+        "rehired_reference": "Referência de recontratação"
+      }
+    },
+    "readiness": {
+      "title": "Prontidão",
+      "healthy": "Cada parte empregada ativa tem um registro de emprego.",
+      "unmigrated": "{count} partes empregadas ativas não têm registro de emprego — ainda não foram migradas para registros de emprego e o quadro as exclui.",
+      "docLabel": "Como funciona a migração de empregos"
+    },
+    "actions": {
+      "title": "Ações rápidas",
+      "newEmployee": "Novo funcionário",
+      "proposeChange": "Propor alteração",
+      "manageDepartments": "Gerenciar departamentos",
+      "openReports": "Abrir relatórios"
+    }
+  },
   "queue": {
     "title": "Solicitações de alteração",
     "description": "Cada proposta de alteração de emprego em uma única fila — rascunhos, envios e decisões — resolvida pelo serviço de solicitações de alteração.",

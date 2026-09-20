@@ -29,6 +29,52 @@
       "title": "名簿"
     }
   },
+  "overview": {
+    "pending": {
+      "label": "保留中の申請",
+      "sub": "決定待ち",
+      "title": "保留中の変更申請",
+      "empty": "決定待ちの変更申請はありません。",
+      "viewAll": "キューを開く"
+    },
+    "upcoming": {
+      "title": "開始・終了予定",
+      "hint": "今後30日間の発効開始と終了です。試用期間は雇用レコードにモデル化されていないため、試用期間の終了はここに表示されません。",
+      "startsTitle": "開始",
+      "startsEmpty": "今後30日間に開始する人はいません。",
+      "endsTitle": "終了",
+      "endsEmpty": "今後30日間に終了する人はいません。",
+      "truncatedNote": "今後の変更のうち最初の{limit}件を表示しています。"
+    },
+    "recent": {
+      "title": "最近の雇用変更",
+      "empty": "雇用変更はまだ記録されていません。"
+    },
+    "changes": {
+      "kinds": {
+        "created": "作成",
+        "status_changed": "ステータス変更",
+        "assignment_issued": "アサイン発行",
+        "assignment_superseded": "アサイン置換",
+        "corrected": "訂正",
+        "terminated": "終了",
+        "rehired_reference": "再雇用参照"
+      }
+    },
+    "readiness": {
+      "title": "移行状況",
+      "healthy": "有効な従業員パーティはすべて雇用レコードを持っています。",
+      "unmigrated": "有効な従業員パーティのうち{count}件には雇用レコードがありません — 雇用レコードへの移行が未完了であり、人員数から除外されています。",
+      "docLabel": "雇用移行の仕組み"
+    },
+    "actions": {
+      "title": "クイックアクション",
+      "newEmployee": "新規従業員",
+      "proposeChange": "変更を提案",
+      "manageDepartments": "部門を管理",
+      "openReports": "レポートを開く"
+    }
+  },
   "queue": {
     "title": "変更申請",
     "description": "すべての雇用変更提案を1つのキューに — 下書き、提出、決定 — 変更申請サービス経由で解決します。",
