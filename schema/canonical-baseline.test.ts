@@ -101,6 +101,7 @@ const payrollProfilePackFactsMigrationPath =
   "schema/migrations/generated/0191_payroll_profile_pack_facts.sql";
 const hrmEmploymentProcessesMigrationPath =
   "schema/migrations/generated/0193_hrm_employment_processes.sql";
+const hrmRecruitingMigrationPath = "schema/migrations/generated/0195_hrm_recruiting.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -386,6 +387,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0192_hrm_positions_headcount_plan.sql",
     "0193_hrm_employment_processes.sql",
     "0194_hrm_leave_attendance.sql",
+    "0195_hrm_recruiting.sql",
+    "0196_hrm_performance_retention.sql",
+    "0197_hrm_benefits.sql",
+    "0198_hrm_self_service_profile.sql",
     "0199_drop_form_response_steps.sql",
     "0200_stock_count_subsidiary.sql",
   ]);
@@ -1824,6 +1829,35 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.leave.request",
     "hrm.leave.approve",
     "hrm.leave.manage",
+    // HR-6 recruiting (migration 0195): read sees requisitions, candidates,
+    // the funnel, interviews and offers; manage authors every recruiting
+    // write. Admin-only like the employment keys above.
+    "hrm.recruiting.read",
+    "hrm.recruiting.manage",
+    // HR-7 performance and retention (migration 0196): added after the
+    // snapshot, so a LEGACY API key with an empty scope set does NOT gain
+    // them — reviews carry assessments of named people. performance.read
+    // sees cycles and reviews through the privacy scope, performance.manage
+    // runs cycles, calibrates and shares, retention.read sees exit records
+    // and turnover. Deliberate: this is an authorization decision, not a
+    // snapshot bump.
+    "hrm.performance.read",
+    "hrm.performance.manage",
+    "hrm.retention.read",
+    // HR-8 benefits (migration 0197): read sees plans, elections and
+    // inputs; manage authors plans, windows, elections and generates
+    // inputs. Admin-only like the employment keys above.
+    "hrm.benefits.read",
+    "hrm.benefits.manage",
+    // HR-9 self-service (migration 0198): self.read/request scope every
+    // read to the party behind the login and every proposal to one's own
+    // employment — every built-in role carries both self keys — while
+    // team.read/manage resolve structurally by holding direct reports,
+    // never by role grant. Post-snapshot like the employment keys above.
+    "hrm.self.read",
+    "hrm.self.request",
+    "hrm.team.read",
+    "hrm.team.manage",
   ];
   assert.deepEqual(
     snapshot,
@@ -1968,6 +2002,58 @@ test("hrm employment processes carry snapshot history with org isolation", () =>
   assert.match(migration, /hrm_process_steps_attachment_tenant_fkey/);
   assert.match(migration, /files_org_id_id_unique/);
   assert.match(migration, /hrm_process_steps_done_by_fkey/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("hrm recruiting carries funnel evidence with org isolation", () => {
+  // 0195 opens the vacancy-to-hire funnel: requisitions against a position
+  // or a planned headcount, candidates moving through a configurable
+  // pipeline with recorded events, interviews, single-live-offer terms, and
+  // the hire through the change-request path. The event ledger is
+  // append-only (updates refused on every path, deletes only on the
+  // governed amend path); terminal rows are immutable except an audit
+  // touch; the live-offer and default-funnel rules are partial uniques (a
+  // trigger would go blind under READ COMMITTED).
+  const migration = readFileSync(hrmRecruitingMigrationPath, "utf8");
+  for (const table of [
+    "hrm_pipeline_templates",
+    "hrm_pipeline_stages",
+    "hrm_requisitions",
+    "hrm_candidates",
+    "hrm_applications",
+    "hrm_application_events",
+    "hrm_interviews",
+    "hrm_interview_panel",
+    "hrm_offers",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
+  }
+  assert.match(migration, /hrm_offers_one_live_per_application/);
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS hrm_offers_one_live_per_application\s+ON public\.hrm_offers \(org_id, application_id\) WHERE status IN \('draft', 'sent'\)/,
+  );
+  assert.match(migration, /hrm_pipeline_templates_one_default_per_org/);
+  assert.match(migration, /hrm_requisitions_filled_bounded/);
+  assert.match(
+    migration,
+    /'hrm_pipeline_templates', 'hrm_pipeline_stages',\s*\n\s*'hrm_requisitions', 'hrm_candidates', 'hrm_applications',/,
+  );
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /openbooks:org_isolation:v1/);
+  assert.match(migration, /openbooks\.amend/);
+  assert.match(migration, /hrm_application_events_immutable/);
+  assert.match(migration, /record a new event instead of editing one/);
+  assert.match(migration, /hrm_pipeline_template_no_delete/);
+  assert.match(migration, /set is_active = false to retire it instead of deleting it/);
+  assert.match(migration, /to_jsonb\(NEW\) - ARRAY\['updated_at','updated_by'\]/);
+  assert.match(migration, /hrm_offers_approved_change_tenant_fkey/);
+  assert.match(migration, /hrm_employment_change_requests_org_id_id_unique/);
+  assert.match(migration, /hrm_candidates_party_tenant_fkey/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
   assert.doesNotMatch(migration, /0001_baseline/);

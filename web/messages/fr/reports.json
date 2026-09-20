@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "Absences",
         "description": "Une ligne par jour d'absence — personne, employeur, service d'alors, type de congé et heures. Les contre-passations sont des lignes propres ; les totaux sont nets. Requiert la permission congés."
+      },
+      "hrm_requisitions": {
+        "label": "Réquisitions",
+        "description": "Une ligne par besoin : numéro, titre, statut, employeur, département, poste, effectif prévu contre pourvu. Requiert la permission de recrutement."
+      },
+      "hrm_applications": {
+        "label": "Candidatures",
+        "description": "Une ligne par candidature avec son étape du parcours et le délai de pourvoi. Les coordonnées n'apparaissent jamais — noms uniquement. Requiert la permission de recrutement."
+      },
+      "hrm_reviews": {
+        "label": "Évaluations",
+        "description": "Une ligne par évaluation de performance — cycle et période, personne, type, statut, et la note de l’auteur à côté de la note calibrée. RH uniquement : les exécutants détiennent l’autorisation performance, donc les évaluations non partagées ne quittent jamais le périmètre RH."
+      },
+      "hrm_goals": {
+        "label": "Objectifs",
+        "description": "Une ligne par objectif de performance — personne, titre, statut, progression et échéance."
+      },
+      "hrm_turnover": {
+        "label": "Rotation",
+        "description": "Une ligne par départ — personne, date de fin, ancienneté en jours, motif de sortie et indicateurs volontaire et regretté issus de la fiche de sortie. Regroupez par mois de fin et service pour le tableau des départs ; les taux viennent du panneau de rétention."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Adhésions avantages",
+        "description": "Une ligne par adhésion — personne, employeur, service à l'adhésion, régime et niveau de couverture, statut et montants enregistrés par période. Exige la permission avantages."
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "Source",
         "employment_id": "Emploi (id)",
         "id": "Absence (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Numéro",
+        "title": "Titre",
+        "status": "Statut",
+        "employer": "Employeur",
+        "department": "Département",
+        "position": "Poste",
+        "headcount": "Postes",
+        "filled_count": "Pourvus",
+        "opened_on": "Ouverture",
+        "closed_on": "Clôture",
+        "requisition_id": "Réquisition (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Réquisition",
+        "candidate": "Candidat",
+        "stage": "Étape",
+        "status": "Statut",
+        "applied_on": "Candidature",
+        "opened_on": "Réquisition ouverte",
+        "hired_on": "Embauché",
+        "days_to_fill": "Délai de pourvoi",
+        "application_id": "Candidature (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Intitulé du cycle",
+        "period_end_on": "Fin de période",
+        "employee": "Personne employée",
+        "employer": "Employeur",
+        "kind": "Type",
+        "status": "Statut",
+        "overall_rating": "Note",
+        "calibrated_rating": "Note calibrée",
+        "employment_id": "Emploi (id)",
+        "id": "Évaluation (id)"
+      },
+      "hrm_goals": {
+        "employee": "Personne employée",
+        "employer": "Employeur",
+        "title": "Titre",
+        "status": "Statut",
+        "progress": "Progression",
+        "due_on": "Échéance",
+        "employment_id": "Emploi (id)",
+        "id": "Objectif (id)"
+      },
+      "hrm_turnover": {
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "terminated_on": "Fin le",
+        "tenure_days": "Ancienneté (jours)",
+        "reason": "Motif",
+        "voluntary": "Volontaire",
+        "regrettable": "Regretté",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "En vigueur depuis",
+        "person": "Personne",
+        "employer": "Employeur",
+        "department": "Service",
+        "plan": "Régime",
+        "plan_name": "Nom du régime",
+        "coverage": "Couverture",
+        "status": "Statut",
+        "employee_amount": "Montant salarié",
+        "employer_amount": "Montant employeur",
+        "currency": "Devise",
+        "effective_to": "En vigueur jusqu'au",
+        "employment_id": "Emploi (id)",
+        "id": "Adhésion (id)"
       }
     },
     "enumValues": {

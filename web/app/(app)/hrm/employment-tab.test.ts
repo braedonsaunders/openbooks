@@ -99,3 +99,12 @@ test("employment copy resolves from the hrm catalog, never inline English", () =
     assert.ok(strings.includes(`"${key}"`), `en/hrm carries ${key}`);
   }
 });
+
+test("benefits section lists elections and dependents beside the record", () => {
+  assert.match(tab, /employment\.benefits\.title/, "benefits section carries the catalog heading");
+  assert.match(tab, /\/api\/hrm\/enrollments\?employmentId=\$\{employmentId\}/, "elections load from the enrollments API");
+  assert.match(tab, /\/api\/hrm\/dependents\?employmentId=\$\{employmentId\}/, "dependents load from the dependents API");
+  assert.match(tab, /benefits: 'hidden'/, "a 403 without the benefits grant hides the section instead of failing the tab");
+  assert.match(tab, /benefits\.statusNames\./, "election status renders through catalog labels");
+  assert.match(tab, /employment\.benefits\.empty/, "an employment with no elections states so explicitly");
+});

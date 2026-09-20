@@ -103,6 +103,18 @@ const READER_PERMS = [
   "hrm.position.read",
   "hrm.process.read",
   "hrm.leave.read",
+  // The funnel (0195) has its own read grant for the same reason.
+  "hrm.recruiting.read",
+  // HR-7 (0196) has its own read grants; the harness reader holds every
+  // read grant so every read tool runs rather than refusing.
+  "hrm.performance.read",
+  "hrm.retention.read",
+  // Benefits elections (0197) read through the benefits read service;
+  // the harness reader holds the grant so the read tool runs.
+  "hrm.benefits.read",
+  // HR-9 self-service: the harness reader holds the self read grant so
+  // the own-employment summary tool runs rather than refusing.
+  "hrm.self.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

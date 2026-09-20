@@ -1,11 +1,18 @@
 import "server-only";
 import { z } from "zod";
 import {
+  listEnrollmentWindows,
+  listEnrollments,
+} from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
+import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import {
   listLeaveRequests,
   listLeaveTypes,
   timeBalanceAsOf,
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
+import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
 import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
@@ -19,7 +26,19 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
+import {
+  getCycleDetail,
+  getRetentionOverview,
+  getTurnover,
+  listCycleProgress,
+} from "@openbooks/engine/src/hrm/performance/performance-read.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
+import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import {
+  getRequisitionDetail,
+  listRequisitions,
+} from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -69,8 +88,12 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmPositionError ||
     error instanceof HrmProcessError ||
     error instanceof LeaveError ||
+    error instanceof RecruitingError ||
+    error instanceof HrmPerformanceError ||
+    error instanceof BenefitsError ||
     error instanceof HrmAuthorizationError ||
-    error instanceof TemporalError
+    error instanceof TemporalError ||
+    error instanceof SelfServiceError
   ) {
     return { ok: false, error: error.message };
   }
@@ -623,4 +646,380 @@ const hrmLeave: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave];
+const requisitionSegments = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
+
+const hrmRecruiting: AssistantToolDef = {
+  name: "hrm_recruiting",
+  description:
+    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Candidate contact PII never leaves through this tool, names only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.recruiting.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
+    segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { requisitionId?: string; segment?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      if (a.requisitionId) {
+        const detail = await getRequisitionDetail({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          requisitionId: a.requisitionId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
+            requisitionNumber: detail.requisitionNumber,
+            title: detail.title,
+            status: detail.status,
+            headcount: detail.headcount,
+            filledCount: detail.filledCount,
+            timeToFillDays: detail.timeToFillDays,
+            funnel: detail.funnel,
+            applications: detail.applications.map((application) => ({
+              id: application.id,
+              candidate: application.candidate.displayName,
+              stageKey: application.stageKey,
+              stageName: application.stageName,
+              status: application.status,
+              appliedOn: application.appliedOn,
+              lastEventKind: application.lastEventKind,
+              interviewsCount: application.interviewsCount,
+              liveOfferStatus: application.liveOfferStatus,
+            })),
+            href: "/hrm/recruiting",
+          },
+        };
+      }
+      const segment = a.segment ?? "open";
+      const openings = await listRequisitions({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        status: segment,
+      });
+      const page = compactRows(
+        openings.map((row) => ({
+          id: row.id,
+          requisitionNumber: row.requisitionNumber,
+          title: row.title,
+          status: row.status,
+          headcount: row.headcount,
+          filledCount: row.filledCount,
+          hiringManagerName: row.hiringManagerName,
+          openedOn: row.openedOn,
+        })),
+        { limit },
+      );
+      return {
+        ok: true,
+        data: {
+          segment,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
+          requisitions: page.items,
+          href: "/hrm/recruiting",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const cycleStatuses = ["draft", "open", "calibrating", "closed"] as const;
+
+const hrmPerformanceCycles: AssistantToolDef = {
+  name: "hrm_performance_cycles",
+  description:
+    "Review cycles with self/manager progress, or one cycle in full with its privacy-scoped reviews. HR sees every cycle; structural viewers see their slice. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    cycleId: uuidInput.optional().describe("One cycle in full; omit for the cycle list"),
+    status: z.enum(cycleStatuses).optional().describe("Keep only this cycle status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum cycles to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { cycleId?: string; status?: (typeof cycleStatuses)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      if (a.cycleId) {
+        const detail = await getCycleDetail({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          cycleId: a.cycleId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
+            name: detail.name,
+            templateName: detail.templateName,
+            periodStartOn: detail.periodStartOn,
+            periodEndOn: detail.periodEndOn,
+            status: detail.status,
+            totalSelf: detail.totalSelf,
+            submittedSelf: detail.submittedSelf,
+            totalManager: detail.totalManager,
+            submittedManager: detail.submittedManager,
+            reviews: detail.reviews.map((review) => ({
+              id: review.id,
+              kind: review.kind,
+              status: review.status,
+              overallRating: review.overallRating,
+              calibratedRating: review.calibratedRating,
+            })),
+            href: "/hrm/performance",
+          },
+        };
+      }
+      const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id });
+      const kept = cycles
+        .filter((cycle) => !a.status || cycle.status === a.status)
+        .map((cycle) => ({
+          id: cycle.id,
+          name: cycle.name,
+          templateName: cycle.templateName,
+          periodStartOn: cycle.periodStartOn,
+          periodEndOn: cycle.periodEndOn,
+          status: cycle.status,
+          totalSelf: cycle.totalSelf,
+          submittedSelf: cycle.submittedSelf,
+          totalManager: cycle.totalManager,
+          submittedManager: cycle.submittedManager,
+        }));
+      const page = compactRows(kept, { limit });
+      return {
+        ok: true,
+        data: {
+          status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
+          cycles: page.items,
+          href: "/hrm/performance",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmTurnover: AssistantToolDef = {
+  name: "hrm_turnover",
+  description:
+    "Attrition derived from employment history: trailing-twelve-months turnover with the regrettable count, or turnover per period and department. HR-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.retention.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    departmentId: uuidInput.optional().describe("Keep only this department"),
+    periods: z
+      .array(z.object({ start: dateInput, end: dateInput }))
+      .min(1)
+      .max(12)
+      .optional()
+      .describe("Explicit civil-date ranges; omit for the trailing-twelve-months overview"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { departmentId?: string; periods?: { start: string; end: string }[] };
+    try {
+      if (!a.periods) {
+        const overview = await getRetentionOverview({ orgId: authz.user.orgId, actorId: authz.user.id });
+        const trailing = overview.trailingTwelveMonths;
+        return {
+          ok: true,
+          data: {
+            periodStart: trailing?.periodStart ?? null,
+            periodEnd: trailing?.periodEnd ?? null,
+            headcountStart: trailing?.headcountStart ?? null,
+            headcountEnd: trailing?.headcountEnd ?? null,
+            terminations: trailing?.terminations ?? null,
+            voluntary: trailing?.voluntary ?? null,
+            involuntary: trailing?.involuntary ?? null,
+            turnoverRate: trailing?.turnoverRate ?? null,
+            regrettableLeavers: overview.regrettableLeavers,
+            missingExitRecords: overview.missingExitRecords.length,
+            exitRecordsWithoutInterview: overview.exitRecordsWithoutInterview.length,
+            href: "/hrm/performance",
+          },
+        };
+      }
+      const turnover = await getTurnover({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        periods: a.periods,
+        ...(a.departmentId ? { departmentId: a.departmentId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          periods: turnover.periods.map((row) => ({
+            periodStart: row.periodStart,
+            periodEnd: row.periodEnd,
+            departmentId: row.departmentId,
+            headcountStart: row.headcountStart,
+            headcountEnd: row.headcountEnd,
+            terminations: row.terminations,
+            voluntary: row.voluntary,
+            involuntary: row.involuntary,
+            turnoverRate: row.turnoverRate,
+            regrettableShare: row.regrettableShare,
+            medianTenureDays: row.medianTenureDays,
+          })),
+          href: "/hrm/performance",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const enrollmentStatuses = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const;
+
+const hrmBenefits: AssistantToolDef = {
+  name: 'hrm_benefits',
+  description:
+    'Benefit enrollment windows and elections for one employment (or every visible employment): window, plan, coverage tier, status, and stored per-period amounts. Read-only.',
+  category: 'search',
+  gate: { mode: 'anyOf', perms: ['hrm.benefits.read'] },
+  feature: 'hrm',
+  tier: 'module',
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's elections; omit for every visible employment"),
+    windowId: uuidInput.optional().describe('Keep only this enrollment window'),
+    status: z.enum(enrollmentStatuses).optional().describe('Keep only this lifecycle status'),
+    limit: z.number().int().min(1).max(200).optional().describe('Maximum elections to return (default 50)'),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as {
+      employmentId?: string;
+      windowId?: string;
+      status?: (typeof enrollmentStatuses)[number];
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      // Windows read org-wide through the loader's own aggregate gate;
+      // elections resolve per employment through the same gate.
+      const windows = await listEnrollmentWindows(db, authz.user.orgId, authz.user.id, {});
+      const scoped = a.employmentId
+        ? { ids: [a.employmentId], truncated: false }
+        : await visibleEmploymentIds(authz.user.orgId, authz.allowedSubsidiaryIds, 200);
+      const collected: {
+        employmentId: string;
+        id: string;
+        status: string;
+        planCode: string;
+        coverageLevelKey: string | null;
+        employeeAmountPerPeriod: string | null;
+        employerAmountPerPeriod: string | null;
+        currency: string;
+      }[] = [];
+      // Sequential, never parallel: one pinned client per loader call, the
+      // same discipline the record boundary keeps inside its transaction.
+      for (const employmentId of scoped.ids) {
+        const elections = await listEnrollments(db, authz.user.orgId, authz.user.id, {
+          employmentId,
+          ...(a.windowId ? { windowId: a.windowId } : {}),
+          ...(a.status ? { status: a.status } : {}),
+        });
+        for (const election of elections) {
+          collected.push({
+            employmentId,
+            id: election.id,
+            status: election.status,
+            planCode: election.planCode,
+            coverageLevelKey: election.coverageLevelKey,
+            employeeAmountPerPeriod: election.employeeAmountPerPeriod,
+            employerAmountPerPeriod: election.employerAmountPerPeriod,
+            currency: election.currency,
+          });
+        }
+        if (collected.length >= limit) break;
+      }
+      const page = compactRows(collected, { limit });
+      return {
+        ok: true,
+        data: {
+          employmentId: a.employmentId ?? null,
+          status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated || scoped.truncated,
+          windows: windows.map((window) => ({
+            id: window.id,
+            name: window.name,
+            kind: window.kind,
+            status: window.status,
+          })),
+          elections: page.items,
+          href: '/hrm/benefits',
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmMe: AssistantToolDef = {
+  name: "hrm_me",
+  description:
+    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({}),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    try {
+      // No employment parameter exists to forge: the read scopes by the
+      // party behind the login, so a second person's rows can never be
+      // returned no matter what the model puts in the (empty) input.
+      const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
+      return {
+        ok: true,
+        data: {
+          displayName: profile.displayName,
+          employments: profile.employments.map((summary) => ({
+            employmentId: summary.employmentId,
+            status: summary.status,
+            jobTitle: summary.jobTitle,
+            departmentName: summary.departmentName,
+            employerName: summary.employerName,
+            managerNames: [...summary.managerNames],
+            serviceStart: summary.serviceStart,
+          })),
+          href: "/me",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe];

@@ -143,6 +143,42 @@ export const PERMISSION_CATALOGUE = [
   "hrm.leave.request",
   "hrm.leave.approve",
   "hrm.leave.manage",
+  // HR-6 recruiting — the same confidentiality rule as employment:
+  // candidate PII plus the funnel are never a rider on time.*, payroll.*,
+  // or parties.*. read = see requisitions, candidates, the pipeline,
+  // interviews and offers; manage = author every recruiting write
+  // (requisitions, candidates, applications, interviews, offers, hire).
+  // A hiring manager reads and moves candidates on their OWN requisitions
+  // without the org-wide grant (fenced in authorization.ts); candidate PII
+  // (email, phone, resume) is returned only to hrm.recruiting.read holders.
+  "hrm.recruiting.read",
+  "hrm.recruiting.manage",
+  // HR-7 performance and retention (0196) — the same confidentiality
+  // rule as employment: reviews carry assessments of named people, so
+  // read = see cycles and reviews through the privacy scope (HR grant,
+  // subject-on-shared, manager-on-own-reports); manage = run cycles,
+  // calibrate and share. Retention is HR-only: hrm.retention.read sees
+  // exit records and turnover. Admin-only like the employment keys above.
+  "hrm.performance.read",
+  "hrm.performance.manage",
+  "hrm.retention.read",
+  // HR-8 benefits (0197) — the same confidentiality rule as employment:
+  // read sees plans, elections and inputs; manage authors plans, windows,
+  // elections and generates inputs. Admin-only like the employment keys.
+  "hrm.benefits.read",
+  "hrm.benefits.manage",
+  // HR-9 self-service — the person's own view and the manager's team.
+  // self.read sees only the actor's own employment summary, requests and
+  // steps (every read scopes by the party behind the login, never by a
+  // caller-supplied id); self.request files profile-change proposals for
+  // one's own party (leave already files under hrm.leave.request).
+  // team.read/team.manage are STRUCTURAL, not role grants: the team read
+  // service resolves them by holding direct reports as of today, and no
+  // role grant of these keys ever substitutes for that resolution.
+  "hrm.self.read",
+  "hrm.self.request",
+  "hrm.team.read",
+  "hrm.team.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -393,6 +429,17 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.leave.request", labelKey: permissionLabelKey("hrm.leave.request") },
       { key: "hrm.leave.approve", labelKey: permissionLabelKey("hrm.leave.approve") },
       { key: "hrm.leave.manage", labelKey: permissionLabelKey("hrm.leave.manage") },
+      { key: "hrm.recruiting.read", labelKey: permissionLabelKey("hrm.recruiting.read") },
+      { key: "hrm.recruiting.manage", labelKey: permissionLabelKey("hrm.recruiting.manage") },
+      { key: "hrm.performance.read", labelKey: permissionLabelKey("hrm.performance.read") },
+      { key: "hrm.performance.manage", labelKey: permissionLabelKey("hrm.performance.manage") },
+      { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
+      { key: "hrm.benefits.read", labelKey: permissionLabelKey("hrm.benefits.read") },
+      { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
+      { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
+      { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
+      { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
+      { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
     ],
   },
   {
@@ -636,6 +683,12 @@ export const BUILT_IN_ROLES: Record<
       "scripts.execute",
       "flows.manage",
       "flows.approve",
+      // HR-9 self-service: every login is a person — seeing one's own
+      // employment summary and filing one's own profile change ride the
+      // structural scope (party behind the login), so every built-in role
+      // carries both self keys. Team keys stay structural with no grant.
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   accountant: {
@@ -688,6 +741,9 @@ export const BUILT_IN_ROLES: Record<
       "data.import",
       "apps.use",
       "scripts.execute",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   approver: {
@@ -720,12 +776,15 @@ export const BUILT_IN_ROLES: Record<
       "feedback.use",
       "data.export",
       "apps.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read",
+      "hrm.self.request",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -737,6 +796,8 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read", "hrm.self.request",
     ],
   },
   sales_rep: {
@@ -749,6 +810,8 @@ export const BUILT_IN_ROLES: Record<
       "crm.forecasts.read", "crm.forecasts.manage",
       "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
+      // HR-9 self-service on every built-in role (see controller).
+      "hrm.self.read", "hrm.self.request",
     ],
   },
 };

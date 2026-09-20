@@ -5,11 +5,13 @@ import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-chang
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import {
   checkApprovalIdentitySeparation,
+  HrmAuthorizationError,
   loadActorPerson,
   loadApprovalPerson,
   requireHrmEmploymentApprove,
   requireHrmEmploymentManage,
   requireHrmEmploymentRead,
+  requireOwnEmploymentSubject,
 } from "./authorization.ts";
 import {
   HrmPositionError,
@@ -24,6 +26,12 @@ import {
   resolveAsOf,
 } from "./temporal.ts";
 import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
+import { endEnrollmentsForTermination } from "./benefits/enrollments.ts";
+import {
+  profileChangePayloadSchema,
+  type ProfileChangePayload,
+} from "./self-service/profile-schema.ts";
+import { loadMyAddress } from "./self-service/self-read.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -225,7 +233,14 @@ const positionAssignmentPayloadSchema = z
     }
   });
 
-const CHANGE_KINDS = ["hire", "status_change", "assignment_change", "termination", "position_assignment"] as const;
+const CHANGE_KINDS = [
+  "hire",
+  "status_change",
+  "assignment_change",
+  "termination",
+  "position_assignment",
+  "profile_change",
+] as const;
 
 export type HirePayload = z.infer<typeof hirePayloadSchema>;
 export type StatusChangePayload = z.infer<typeof statusChangePayloadSchema>;
@@ -237,7 +252,8 @@ export type ChangeRequestPayload =
   | StatusChangePayload
   | AssignmentChangePayload
   | TerminationPayload
-  | PositionAssignmentPayload;
+  | PositionAssignmentPayload
+  | ProfileChangePayload;
 
 function formatIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>): string {
   return issues
@@ -256,15 +272,28 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new HrmChangeRequestError(
       "INVALID_PAYLOAD",
-      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, termination, or position_assignment",
+      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, termination, position_assignment, or profile_change",
     );
   }
   const kind = (raw as { kind?: unknown }).kind;
   if (kind === undefined || typeof kind !== "string" || !(CHANGE_KINDS as readonly string[]).includes(kind)) {
     throw new HrmChangeRequestError(
       "UNKNOWN_KIND",
-      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, or position_assignment`,
+      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, position_assignment, or profile_change`,
     );
+  }
+  if (kind === "profile_change") {
+    // The self-service kind validates through its own contract (shared
+    // leaf schema, no parallel validator): its failures name profile
+    // fields, never employment ones.
+    const parsed = profileChangePayloadSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new HrmChangeRequestError(
+        "INVALID_PAYLOAD",
+        `change payload invalid: ${formatIssues(parsed.error.issues)} — fix the profile fields and file again`,
+      );
+    }
+    return parsed.data;
   }
   const schema =
     kind === "hire"
@@ -475,10 +504,61 @@ async function employmentVersionCount(
 }
 
 /**
+ * Kind-aware authoring gate. Employment kinds ride hrm.employment.manage;
+ * the self-service profile_change kind rides hrm.self.request plus proof
+ * the bound employment is the actor's own (the own-employment subject
+ * gate) — an HR manage grant never files a profile change, and a self
+ * grant never authors an employment change. Returns the trusted subject
+ * for revision binding either way.
+ */
+async function requireAuthoringAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  payload: ChangeRequestPayload,
+) {
+  if (payload.kind === "profile_change") {
+    return requireOwnEmploymentSubject(exec, orgId, actorId, employmentId, "hrm.self.request");
+  }
+  return requireHrmEmploymentManage(exec, orgId, actorId, employmentId);
+}
+
+/**
+ * Kind-aware read gate for one stored request row. The employment read
+ * gate is tried first, so HR keeps full queue visibility over every kind
+ * including profile_change; only when it denies AND the row is a
+ * profile_change does the own-employment self.read gate get its turn —
+ * the person watches their own proposal travel the approval. A stranger
+ * keeps the employment-gate refusal, never the self-service one.
+ */
+async function requireRequestReadAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  payload: unknown,
+): Promise<void> {
+  try {
+    await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+    return;
+  } catch (error) {
+    const kind = typeof payload === "object" && payload !== null
+      ? (payload as { kind?: unknown }).kind
+      : undefined;
+    if (!(error instanceof HrmAuthorizationError) || kind !== "profile_change") {
+      throw error;
+    }
+    await requireOwnEmploymentSubject(exec, orgId, actorId, employmentId, "hrm.self.read");
+  }
+}
+
+/**
  * Authoring-time preconditions per kind, re-checked at submit: a hire lands
  * only on a version-less (reserved) identity; every other kind needs an
  * existing effective version; a termination needs a non-terminated live
- * version. These are request-state checks — the apply re-derives everything
+ * version; a profile change binds the live revision of an employment that
+ * already has one (its worker party is the edited party). These are request-state checks — the apply re-derives everything
  * under the aggregate lock and refuses stale races there.
  */
 async function assertKindPreconditions(
@@ -545,8 +625,8 @@ export async function createChangeRequestDraft(query: CreateChangeRequestQuery):
   const payload = validateChangePayload(query.payload);
   return withOrgTransaction(orgId, async () => {
     // Authority first: denial (including unknown/other-org employment)
-    // reports uniformly through the authorization gate.
-    const subject = await requireHrmEmploymentManage(db, orgId, actorId, employmentId);
+    // reports uniformly through the kind-aware authorization gate.
+    const subject = await requireAuthoringAccess(db, orgId, actorId, employmentId, payload);
     await assertKindPreconditions(db, orgId, employmentId, payload);
     // payload_digest is NOT NULL without a default, but the guard trigger
     // overwrites it on insert with the canonical sha256 — the 64-zero
@@ -593,7 +673,9 @@ export async function updateChangeRequestPayload(
   const payload = validateChangePayload(query.payload);
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    await requireHrmEmploymentManage(db, orgId, actorId, current.employment_id);
+    // The gate follows the incoming kind: a profile proposal is the
+    // person's own to edit, an employment proposal is HR's.
+    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, payload);
     if (current.status !== "draft") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -649,14 +731,17 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
     // The row lock serializes a double-click or replayed submit against the
     // status check and the run stamp below.
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    await requireHrmEmploymentManage(db, orgId, actorId, current.employment_id);
+    // Stored payload validates before the gate so the kind-aware gate
+    // routes on a known kind; stored rows are always service-written.
+    const storedPayload = validateChangePayload(current.payload);
+    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, storedPayload);
     if (current.status !== "draft") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
         `a ${current.status} request cannot be submitted — only drafts submit`,
       );
     }
-    const payload = validateChangePayload(current.payload);
+    const payload = storedPayload;
     await assertKindPreconditions(db, orgId, current.employment_id, payload);
 
     // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
@@ -743,7 +828,15 @@ export async function withdrawChangeRequest(
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    await requireHrmEmploymentManage(db, orgId, actorId, current.employment_id);
+    // Stored payload validates before the gate so the kind-aware gate
+    // routes on a known kind; stored rows are always service-written.
+    await requireAuthoringAccess(
+      db,
+      orgId,
+      actorId,
+      current.employment_id,
+      validateChangePayload(current.payload),
+    );
     if (current.status !== "draft" && current.status !== "pending_approval") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -802,7 +895,7 @@ export interface GetChangeRequestQuery {
   readonly requestId: string;
 }
 
-/** Read one request; the employment read gate owns visibility. */
+/** Read one request; the kind-aware read gate owns visibility. */
 export async function getChangeRequest(query: GetChangeRequestQuery): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -819,7 +912,7 @@ export async function getChangeRequest(query: GetChangeRequestQuery): Promise<Ch
         "employment change request not found in this organization — check the request id",
       );
     }
-    await requireHrmEmploymentRead(db, orgId, actorId, row.employment_id);
+    await requireRequestReadAccess(db, orgId, actorId, row.employment_id, row.payload);
     return toDTO(row);
   });
 }
@@ -836,8 +929,8 @@ const LIST_STATUSES = ["draft", "pending_approval", "approved", "rejected", "wit
 
 /**
  * List requests in this org (newest first). Every returned row passes the
- * employment read gate, so a caller sees only employments in their
- * organization and legal-entity scope.
+ * kind-aware read gate, so a caller sees only employments in their
+ * organization and legal-entity scope — plus their own profile proposals.
  */
 export async function listChangeRequests(query: ListChangeRequestsQuery): Promise<ChangeRequestDTO[]> {
   const orgId = requireOrgId(query.orgId);
@@ -863,7 +956,7 @@ export async function listChangeRequests(query: ListChangeRequestsQuery): Promis
     `)).rows;
     const visible: ChangeRequestDTO[] = [];
     for (const row of rows) {
-      await requireHrmEmploymentRead(db, orgId, actorId, row.employment_id);
+      await requireRequestReadAccess(db, orgId, actorId, row.employment_id, row.payload);
       visible.push(toDTO(row));
     }
     return visible;
@@ -1122,9 +1215,182 @@ async function applyApprovedRequest(
     await applyEmploymentVersionChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "position_assignment") {
     await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
+  } else if (payload.kind === "profile_change") {
+    await applyProfileChange(exec, { orgId, actorId, request, payload, newRevision });
   } else {
     await applyAssignmentChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   }
+}
+
+/**
+ * (f) Profile change: the person's own contact proposal lands on the
+ * party row (and the profile address row) — never on an employment
+ * version, which is why no version closes here. The edited party is the
+ * bound employment's worker party re-resolved under the aggregate lock,
+ * never a caller-supplied id. Scalars follow missing-untouched /
+ * null-clears;
+ * the address object fully replaces the profile address row (updated in
+ * place, inserted when none exists). A proposal that changes nothing
+ * refuses; the evidence is a profile_changed employment_changes event
+ * with exact before-images, then the applied link and the revision bump —
+ * all in the one approval transaction.
+ */
+async function applyProfileChange(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    request: RequestRow;
+    payload: ProfileChangePayload;
+    newRevision: number;
+  },
+): Promise<void> {
+  const { orgId, actorId, request, payload, newRevision } = args;
+  const aggregate = (await exec.execute<{ revision: number; worker_party_id: string }>(sql`
+    select revision, worker_party_id from worker_employments
+     where org_id = ${orgId} and id = ${request.employment_id} for update
+  `)).rows[0];
+  if (!aggregate) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the employment is gone — withdraw this request; a proposal about a deleted aggregate never applies",
+    );
+  }
+  const partyId = aggregate.worker_party_id;
+  const before = (await exec.execute<{
+    phone: string | null;
+    email: string | null;
+    emergency_contact: unknown;
+  }>(sql`
+    select phone, email, emergency_contact as "emergency_contact"
+      from parties where org_id = ${orgId} and id = ${partyId}
+  `)).rows[0];
+  if (!before) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the person behind this employment has no party record — withdraw this request; a proposal about a deleted party never applies",
+    );
+  }
+  const beforeAddress = await loadMyAddress(exec, orgId, partyId);
+  const normContact = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "object" || Array.isArray(value)) return JSON.stringify(value);
+    const record = value as Record<string, unknown>;
+    return JSON.stringify({
+      name: typeof record.name === "string" ? record.name : null,
+      relationship: typeof record.relationship === "string" ? record.relationship : null,
+      phone: typeof record.phone === "string" ? record.phone : null,
+    });
+  };
+  const nextContact =
+    payload.emergencyContact === undefined
+      ? undefined
+      : payload.emergencyContact === null
+        ? null
+        : {
+            name: payload.emergencyContact.name,
+            relationship: payload.emergencyContact.relationship,
+            phone: payload.emergencyContact.phone,
+          };
+  const contactChanged =
+    nextContact !== undefined && normContact(before.emergency_contact) !== normContact(nextContact);
+  const phoneChanged = payload.phone !== undefined && (before.phone ?? null) !== (payload.phone ?? null);
+  const emailChanged = payload.email !== undefined && (before.email ?? null) !== (payload.email ?? null);
+  const addressChanged =
+    payload.address !== undefined &&
+    (beforeAddress === null ||
+      (beforeAddress.line1 ?? null) !== (payload.address.line1 ?? null) ||
+      (beforeAddress.line2 ?? null) !== (payload.address.line2 ?? null) ||
+      (beforeAddress.city ?? null) !== (payload.address.city ?? null) ||
+      (beforeAddress.region ?? null) !== (payload.address.region ?? null) ||
+      (beforeAddress.postalCode ?? null) !== (payload.address.postalCode ?? null) ||
+      (beforeAddress.country ?? null) !== (payload.address.country ?? null));
+  if (!phoneChanged && !emailChanged && !contactChanged && !addressChanged) {
+    throw new HrmChangeRequestError(
+      "BAD_STATE",
+      "the proposal changes nothing — the contact record already carries these values; withdraw the request",
+    );
+  }
+  if (phoneChanged || emailChanged || contactChanged) {
+    // Null crosses as SQL NULL through the parameter (a JSON null would
+    // store the JSON value null instead of clearing): the contact column
+    // is set from a JSON string only when the proposal carries an object.
+    const nextPhone = payload.phone === undefined ? before.phone : payload.phone;
+    const nextEmail = payload.email === undefined ? before.email : payload.email;
+    const contactFragment =
+      nextContact === undefined
+        ? sql`emergency_contact`
+        : nextContact === null
+          ? sql`null`
+          : sql`${JSON.stringify(nextContact)}::jsonb`;
+    const updated = (await exec.execute(sql`
+      update parties
+         set phone = ${nextPhone},
+             email = ${nextEmail},
+             emergency_contact = ${contactFragment},
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${partyId}
+      returning id
+    `)).rows;
+    if (updated.length !== 1) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "the contact record changed while the approval was applying — retry the decision",
+      );
+    }
+  }
+  if (addressChanged && payload.address !== undefined) {
+    if (beforeAddress === null) {
+      const inserted = (await exec.execute(sql`
+        insert into addresses
+          (org_id, party_id, line1, line2, city, region, postal_code, country,
+           is_default_billing, created_by, updated_by)
+        values (${orgId}, ${partyId}, ${payload.address.line1}, ${payload.address.line2},
+                ${payload.address.city}, ${payload.address.region},
+                ${payload.address.postalCode}, ${payload.address.country},
+                true, ${actorId}, ${actorId})
+        returning id
+      `)).rows;
+      if (inserted.length !== 1) {
+        throw new HrmChangeRequestError(
+          "REFUSED",
+          "the address was not stored — no row was written; retry the decision",
+        );
+      }
+    } else {
+      const updated = (await exec.execute(sql`
+        update addresses
+           set line1 = ${payload.address.line1}, line2 = ${payload.address.line2},
+               city = ${payload.address.city}, region = ${payload.address.region},
+               postal_code = ${payload.address.postalCode}, country = ${payload.address.country},
+               updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and id = ${beforeAddress.id}
+        returning id
+      `)).rows;
+      if (updated.length !== 1) {
+        throw new HrmChangeRequestError(
+          "REFUSED",
+          "the address changed while the approval was applying — retry the decision",
+        );
+      }
+    }
+  }
+  const changeId = await insertEmploymentChange(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    assignmentId: null,
+    revision: newRevision,
+    changeKind: "profile_changed",
+    priorSnapshot: {
+      party: { phone: before.phone, email: before.email, emergencyContact: before.emergency_contact },
+      address: beforeAddress,
+    },
+    closedVersions: [],
+    reason: request.reason ?? "",
+    actorId,
+  });
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }
 
 /**
@@ -1296,6 +1562,18 @@ async function applyEmploymentVersionChange(
       employmentId: request.employment_id,
       changeId,
       trigger: versionTrigger,
+    });
+  }
+  // A termination ends every live benefit enrolment in this same
+  // transaction (HR-8): coverage cannot outlive the employment, and the
+  // ends-or-cancels land atomically with the version successor above — a
+  // throw rolls all of it back together.
+  if (payload.kind === "termination") {
+    await endEnrollmentsForTermination(exec, {
+      orgId,
+      actorId,
+      employmentId: request.employment_id,
+      terminatedOn: parseCivilDate(payload.effectiveDate),
     });
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });

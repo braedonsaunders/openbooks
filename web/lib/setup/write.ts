@@ -10,6 +10,7 @@ import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-regis
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
+import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
   buildRow,
@@ -22,6 +23,9 @@ import {
   UUID_RE,
 } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
+import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
+import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
+import { benefitPlanShapeProblem } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
@@ -893,6 +897,75 @@ export async function validateEntityIntegrity(
       if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
     }
   }
+  // HRM benefit plans (0197): the coordinator-ruled component validation on
+  // plan save — a side with a cost and no component is refused by name,
+  // the employer component must be kind employer_contribution (so employer
+  // money can never reach net pay), the employee component kind deduction.
+  // prorationBasis carries no drawer default, so a missing rule is refused
+  // here with its remedy, never stored as a guess.
+  if (entity.key === 'benefit-plans') {
+    // Edits arrive partial: merge the stored row first so an edit that
+    // touches only the name is not refused for a rule it never changed
+    // (0193 steps precedent).
+    let values: Record<string, unknown> = body as Record<string, unknown>
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select proration_basis as "prorationBasis",
+               employee_cost_basis as "employeeCostBasis", employer_cost_basis as "employerCostBasis",
+               currency, waiting_period_days as "waitingPeriodDays",
+               employee_pay_component_id as "employeePayComponentId",
+               employer_pay_component_id as "employerPayComponentId",
+               provider_party_id as "providerPartyId", employer_subsidiary_id as "employerSubsidiaryId"
+          from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit plan not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...values }
+    }
+    const shape = benefitPlanShapeProblem(values)
+    if (shape) return shape
+    const employeeComponent = (values.employeePayComponentId ?? null) as string | null
+    const employerComponent = (values.employerPayComponentId ?? null) as string | null
+    const provider = (values.providerPartyId ?? null) as string | null
+    const subsidiary = (values.employerSubsidiaryId ?? null) as string | null
+    const refs = await executor.execute(sql`
+      select
+        ${provider ? sql`exists(select 1 from parties where id = ${provider} and org_id = ${orgId})` : sql`true`} as provider_ok,
+        ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+        ${employeeComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employeeComponent} and org_id = ${orgId})` : sql`null`} as employee_component,
+        ${employerComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employerComponent} and org_id = ${orgId})` : sql`null`} as employer_component
+    `)
+    if (!refs.rows[0]?.provider_ok) return 'The provider party is not visible in this organization'
+    if (!refs.rows[0]?.subsidiary_ok) return 'The employer subsidiary is not visible in this organization'
+    const employeeRow = refs.rows[0]?.employee_component as { kind?: string | null; active?: boolean } | null
+    if (employeeComponent && !employeeRow?.kind) return 'The employee pay component is not visible in this organization'
+    if (employeeComponent && employeeRow?.active !== true) return 'The employee pay component is inactive — reactivate it or link its replacement'
+    if (employeeComponent && employeeRow?.kind !== 'deduction') {
+      return 'The employee component must be kind deduction so a contribution can never inflate net pay'
+    }
+    const employerRow = refs.rows[0]?.employer_component as { kind?: string | null; active?: boolean } | null
+    if (employerComponent && !employerRow?.kind) return 'The employer pay component is not visible in this organization'
+    if (employerComponent && employerRow?.active !== true) return 'The employer pay component is inactive — reactivate it or link its replacement'
+    if (employerComponent && employerRow?.kind !== 'employer_contribution') {
+      return 'The employer component must be kind employer_contribution so employer money can never reach net pay'
+    }
+  }
+  // HRM benefit pricing tiers (0197): the parent plan must live in this
+  // org; keys and labels are non-blank; costs and position are explicit.
+  if (entity.key === 'benefit-plan-levels') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select plan_id as "planId" from hrm_benefit_plan_levels where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit tier not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const plan = (values.planId ?? null) as string | null
+    const planOk = plan
+      ? (await executor.execute(sql`select exists(select 1 from hrm_benefit_plans where id = ${plan} and org_id = ${orgId}) as ok`)).rows[0]?.ok
+      : false
+    if (!planOk) return 'The parent benefit plan is not visible in this organization'
+  }
   // HRM process template steps (0193): named owners must be visible parties
   // (named_party needs exactly one, other owners need none), and the parent
   // template must live in this org.
@@ -921,6 +994,93 @@ export async function validateEntityIntegrity(
     `)
     if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
     if (!refs.rows[0]?.party_ok) return 'The owner party is not visible in this organization'
+  }
+  // HRM pipeline stages (0195): the parent funnel must live in this org
+  // and the kind must name the fixed vocabulary — terminality derives
+  // from kind in storage, so an unknown kind is refused before the write.
+  if (entity.key === 'hrm-pipeline-stages') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select template_id as "templateId", kind from hrm_pipeline_stages
+         where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Pipeline stage not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.kind !== undefined && !['screening', 'interview', 'assessment', 'offer', 'hired', 'rejected'].includes(String(values.kind))) {
+      return 'The stage kind must be screening, interview, assessment, offer, hired, or rejected'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${values.templateId ? sql`exists(select 1 from hrm_pipeline_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
+    `)
+    if (!refs.rows[0]?.template_ok) return 'The parent funnel is not visible in this organization'
+  }
+  // HRM review templates (0196): the rating scale is refused with the
+  // engine's own words before the write, merging the current row on edit
+  // so a partial slot edit keeps the untouched bound. Sections prove
+  // their parent template and questions prove their parent section, both
+  // visible in this org — a form that can never open is refused by field
+  // name instead of saved as openable.
+  if (entity.key === 'hrm-review-templates') {
+    let scale = body.ratingScale as Record<string, unknown> | undefined
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select rating_scale as "ratingScale" from hrm_review_templates where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Review template not found'
+      const base = (current.rows[0] as Record<string, unknown>).ratingScale
+      scale = { ...((base ?? {}) as Record<string, unknown>), ...(scale ?? {}) }
+    }
+    try {
+      parseRatingScale(scale ?? {})
+    } catch (e) {
+      if (e instanceof PerformanceMathError) return e.message
+      throw e
+    }
+    // The merged scale is what writes: a partial slot edit keeps the
+    // untouched bound instead of storing a partial scale the storage
+    // CHECK would refuse with a worse message.
+    body.ratingScale = scale
+  }
+  if (entity.key === 'hrm-review-template-sections') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select template_id as "templateId", kind as "kind"
+          from hrm_review_template_sections where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Template section not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.kind !== undefined && !['competency', 'goals', 'free_text'].includes(String(values.kind))) {
+      return 'Place the section in competency, goals, or free_text'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${values.templateId ? sql`exists(select 1 from hrm_review_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
+    `)
+    if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
+  }
+  if (entity.key === 'hrm-review-template-questions') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select section_id as "sectionId", answer_kind as "answerKind"
+          from hrm_review_template_questions where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Template question not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.answerKind !== undefined && !['rating', 'text', 'rating_and_text'].includes(String(values.answerKind))) {
+      return 'Answer the question with rating, text, or rating_and_text'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${values.sectionId ? sql`exists(select 1 from hrm_review_template_sections where id = ${values.sectionId} and org_id = ${orgId})` : sql`false`} as section_ok
+    `)
+    if (!refs.rows[0]?.section_ok) return 'The parent section is not visible in this organization'
   }
   return null
 }
@@ -986,7 +1146,7 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1195,7 +1355,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {

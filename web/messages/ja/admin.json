@@ -837,6 +837,8 @@
     "hrm_leave_request": "自身の雇用の休暇申請",
     "hrm_leave_approve": "休暇申請の承認",
     "hrm_leave_manage": "休暇種別とポリシーの設定",
+    "hrm_recruiting_read": "採用ファネルを表示",
+    "hrm_recruiting_manage": "求人、候補者、面接、オファーを管理",
     "hrm_employment_manage": "雇用変更の作成",
     "hrm_employment_approve": "雇用変更の決定",
     "hrm_position_read": "ポジションと人員計画の表示",
@@ -970,7 +972,16 @@
     "payroll_read": "給与計算と明細を表示します",
     "payroll_run": "給与計算を作成・計算・確定します",
     "hrm_process_read": "プロセスチェックリストを表示",
-    "hrm_process_manage": "プロセスチェックリストを開く、完了する、キャンセルする"
+    "hrm_process_manage": "プロセスチェックリストを開く、完了する、キャンセルする",
+    "hrm_performance_read": "プライバシー範囲でレビューサイクルとレビューを閲覧",
+    "hrm_performance_manage": "レビューサイクルの実行、レビューの調整と共有",
+    "hrm_retention_read": "退職記録と離職率を閲覧",
+    "hrm_benefits_read": "福利厚生プランと加入の表示",
+    "hrm_benefits_manage": "福利厚生プラン、加入期間、加入の管理",
+    "hrm_self_read": "自分の雇用サマリーを閲覧",
+    "hrm_self_request": "自分のプロフィール変更を申請",
+    "hrm_team_read": "今日時点の直属の部下を閲覧",
+    "hrm_team_manage": "マネージャー割当のチームステップを処理"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2496,6 +2507,31 @@
         "title": "プロセステンプレートの手順",
         "singularTitle": "プロセステンプレートの手順",
         "description": "プロセステンプレートの順序付き手順。担当者、期限オフセット、証跡ルールを持ちます。"
+      },
+      "hrm-review-templates": {
+        "title": "レビューテンプレート",
+        "singularTitle": "レビューテンプレート",
+        "description": "組織ごとのレビューフォーム: 名称、評価スケール、質問付きの順序セクション。"
+      },
+      "hrm-review-template-sections": {
+        "title": "レビューセクション",
+        "singularTitle": "レビューセクション",
+        "description": "レビューテンプレートの順序セクション: コンピテンシー、目標、自由記述（任意の重み付き）。"
+      },
+      "hrm-review-template-questions": {
+        "title": "レビュー質問",
+        "singularTitle": "レビュー質問",
+        "description": "レビューテンプレートセクション内の設問: 評価、テキスト、または両方。必須設問は提出前に回答が必要。"
+      },
+      "benefit-plans": {
+        "title": "福利厚生プラン",
+        "singularTitle": "福利厚生プラン",
+        "description": "給与以外に組織が提供するもの — 健康、歯科、退職 — 金額、按分ルール、給与コンポーネント付き。"
+      },
+      "benefit-plan-levels": {
+        "title": "福利厚生区分",
+        "singularTitle": "福利厚生区分",
+        "description": "プランごとの保障区分 — 本人のみ、家族 — 区分金額付き。"
       }
     },
     "fields": {
@@ -2646,6 +2682,7 @@
       "customerId": "顧客",
       "projectId": "プロジェクト",
       "isDefault": "既定",
+      "isTerminal": "終了",
       "acquisitionCost": "取得原価",
       "acquisitionDate": "取得日",
       "acquisitionRate": "取得時為替レート",
@@ -2785,7 +2822,27 @@
       "accrualPeriodsPerYear": "年間の付与期間数",
       "carryoverKind": "繰越",
       "carryoverHours": "繰越上限（時間）",
-      "carryoverExpiresAfterDays": "繰越の失効（日数）"
+      "carryoverExpiresAfterDays": "繰越の失効（日数）",
+      "sectionId": "セクション",
+      "weight": "重み",
+      "prompt": "設問",
+      "answerKind": "回答形式",
+      "ratingScaleMin": "スケール最小値",
+      "ratingScaleMax": "スケール最大値",
+      "ratingScaleLabels": "スケールラベル",
+      "providerPartyId": "提供者",
+      "employerSubsidiaryId": "雇用子会社",
+      "employeeCostBasis": "本人費用基準",
+      "employeeCost": "本人費用",
+      "employerCostBasis": "会社費用基準",
+      "employerCost": "会社費用",
+      "pretax": "税引前",
+      "prorationBasis": "按分",
+      "employeePayComponentId": "本人コンポーネント",
+      "employerPayComponentId": "会社コンポーネント",
+      "waitingPeriodDays": "待機期間（日）",
+      "requiresApproval": "承認が必要",
+      "levelKey": "区分キー"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2848,7 +2905,23 @@
       "leaveAccrualPeriodsPerYear": "付与年内の期間数（期間ごとの付与では必須）。",
       "leaveCarryoverKind": "年度末の未使用時間の扱い：なし、全額繰越、上限まで繰越。",
       "leaveCarryoverHours": "繰り越せる最大時間（「上限まで繰越」では必須）。",
-      "leaveCarryoverExpiresAfterDays": "新年度開始から繰越時間が失効するまでの日数。空欄なら失効しません。"
+      "leaveCarryoverExpiresAfterDays": "新年度開始から繰越時間が失効するまでの日数。空欄なら失効しません。",
+      "hrmReviewScaleMin": "スケールが受け付ける最低評価（例: 1）。",
+      "hrmReviewScaleMax": "スケールが受け付ける最高評価（例: 5）。",
+      "hrmReviewScaleLabels": "任意の端点ラベル（低い方から）。",
+      "benefitKind": "組織が定める種類 — 健康、歯科、眼科、生命、退職、健康増進、その他。自由記述、選択肢にしない。",
+      "benefitProvider": "プランの提供者・保険者があれば。",
+      "benefitSubsidiary": "プランを提供する雇用子会社。空欄は全社。",
+      "benefitCurrency": "プラン通貨、3文字。各加入に保存され、換算されない。",
+      "benefitCostBasis": "金額の読み方：給与期間ごと、月ごと、年ごと、給与に対する割合。",
+      "benefitCost": "プラン通貨での金額。割合の数値はパーセント。",
+      "benefitPretax": "組織独自の税引前宣言。給与パックが解釈する。",
+      "benefitProrationBasis": "必須：部分月をどう支払うか。満月は月全体、日割りは対象日数で按分。",
+      "benefitEmployeeComponent": "本人分明細に課金する控除コンポーネント。本人費用がある場合は必須。",
+      "benefitEmployerComponent": "会社分明細に課金する会社拠出コンポーネント。会社費用がある場合は必須。",
+      "benefitWaitingPeriod": "加入できるまでの勤務日数。",
+      "benefitRequiresApproval": "加入は管理者の承認まで保留される。",
+      "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。"
     },
     "options": {
       "timeClassification": {
@@ -3217,6 +3290,34 @@
         "none": "なし",
         "carry_all": "全額繰越",
         "carry_up_to": "上限まで繰越"
+      },
+      "hrmPipelineStageKind": {
+        "screening": "書類選考",
+        "interview": "面接",
+        "assessment": "アセスメント",
+        "offer": "オファー",
+        "hired": "採用",
+        "rejected": "不採用"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "コンピテンシー",
+        "goals": "目標",
+        "freeText": "自由記述"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "評価",
+        "text": "テキスト",
+        "ratingAndText": "評価とテキスト"
+      },
+      "benefitCostBasis": {
+        "per_period": "給与期間ごと",
+        "per_month": "月ごと",
+        "per_year": "年ごと",
+        "percent_of_pay": "給与に対する割合"
+      },
+      "benefitProrationBasis": {
+        "full_month": "満月 — 日付にかかわらず月全体",
+        "daily": "日割り — 対象日数で按分"
       }
     },
     "invoicing": {
@@ -3966,7 +4067,9 @@
       "basisCaps": "基準上限",
       "deductionProtection": "控除保護",
       "holidayCompanyDay": "会社休日",
-      "holidayElection": "法定祝日への選択"
+      "holidayElection": "法定祝日への選択",
+      "benefitCosts": "費用と按分",
+      "benefitComponents": "給与コンポーネント"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",

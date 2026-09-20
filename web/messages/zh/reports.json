@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "休假缺勤",
         "description": "每个缺勤日一行——人员、雇主、当时部门、休假类型和小时。冲销为单独行；求和为净额。需要休假权限。"
+      },
+      "hrm_requisitions": {
+        "label": "招聘需求",
+        "description": "每个空缺一行: 编号、标题、状态、雇主、部门、岗位以及计划数与已入职数。需要招聘权限。"
+      },
+      "hrm_applications": {
+        "label": "应聘",
+        "description": "每位候选人一行: 漏斗阶段及填补用时。联系方式从不出现,仅显示姓名。需要招聘权限。"
+      },
+      "hrm_reviews": {
+        "label": "评审",
+        "description": "每次绩效评审一行 — 周期与期间、员工、类型、状态，以及作者评分与校准后评分。仅HR：运行者持有绩效权限，未共享评审不会离开HR范围。"
+      },
+      "hrm_goals": {
+        "label": "目标",
+        "description": "每个绩效目标一行 — 员工、标题、状态、进度和截止日期。"
+      },
+      "hrm_turnover": {
+        "label": "流失",
+        "description": "每位离职者一行 — 人员、终止日期、在职天数、离职原因，以及离职记录中的自愿与惋惜标志。按终止月份和部门分组得到期间×部门离职表；比率来自留任面板。"
+      },
+      "hrm_benefit_enrollments": {
+        "label": "福利参保",
+        "description": "每次参保一行 — 参保人、雇主、参保时部门、计划与保障档次、状态及按期存储金额。需要福利权限。"
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "来源",
         "employment_id": "雇佣 (ID)",
         "id": "缺勤 (ID)"
+      },
+      "hrm_requisitions": {
+        "number": "编号",
+        "title": "标题",
+        "status": "状态",
+        "employer": "雇主",
+        "department": "部门",
+        "position": "岗位",
+        "headcount": "人数",
+        "filled_count": "已入职",
+        "opened_on": "开启",
+        "closed_on": "关闭",
+        "requisition_id": "需求 (ID)"
+      },
+      "hrm_applications": {
+        "requisition_number": "需求",
+        "candidate": "候选人",
+        "stage": "阶段",
+        "status": "状态",
+        "applied_on": "应聘日期",
+        "opened_on": "需求开启",
+        "hired_on": "入职日期",
+        "days_to_fill": "填补天数",
+        "application_id": "应聘 (ID)"
+      },
+      "hrm_reviews": {
+        "cycle": "周期",
+        "period_end_on": "期间结束",
+        "employee": "员工",
+        "employer": "雇主",
+        "kind": "类型",
+        "status": "状态",
+        "overall_rating": "评分",
+        "calibrated_rating": "校准后评分",
+        "employment_id": "雇佣 (id)",
+        "id": "评审 (id)"
+      },
+      "hrm_goals": {
+        "employee": "员工",
+        "employer": "雇主",
+        "title": "标题",
+        "status": "状态",
+        "progress": "进度",
+        "due_on": "截止日期",
+        "employment_id": "雇佣 (id)",
+        "id": "目标 (id)"
+      },
+      "hrm_turnover": {
+        "person": "人员",
+        "employer": "雇主",
+        "department": "部门",
+        "terminated_on": "终止日期",
+        "tenure_days": "在职天数",
+        "reason": "原因",
+        "voluntary": "自愿",
+        "regrettable": "惋惜",
+        "employment_id": "雇佣 (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "生效自",
+        "person": "参保人",
+        "employer": "雇主",
+        "department": "部门",
+        "plan": "计划",
+        "plan_name": "计划名称",
+        "coverage": "保障档次",
+        "status": "状态",
+        "employee_amount": "个人金额",
+        "employer_amount": "公司金额",
+        "currency": "货币",
+        "effective_to": "生效至",
+        "employment_id": "雇佣（id）",
+        "id": "参保（id）"
       }
     },
     "enumValues": {

@@ -116,6 +116,34 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // employment now points at a different party are refused by name at
   // consume time (never silently absorbed).
   ["hrm_payroll_inputs", "employee_party_id"],
+  // 0195: the hired-party link on candidates and the hiring-manager slot on
+  // requisitions follow the merge wholesale. No uniqueness on either table
+  // involves those party columns, so re-pointing cannot duplicate. The
+  // composite tenant FKs keep the re-point inside the org.
+  ["hrm_candidates", "party_id"],
+  ["hrm_requisitions", "hiring_manager_party_id"],
+  // 0196: review subjects and exit interviewers follow the merge
+  // wholesale. SIMPLE, not GUARDED: the review uniqueness is
+  // (org, cycle, employment, kind, reviewer) and carries no subject
+  // column, and the exit record is unique on (org, employment) with no
+  // party column, so re-pointing the subject or the interviewer cannot
+  // duplicate. The composite tenant FKs keep the re-point inside the org.
+  ["hrm_reviews", "subject_party_id"],
+  ["hrm_exit_records", "interviewer_party_id"],
+  // 0197: the benefit pay-run input's employee_party_id is the key the run
+  // reads, resolved by HR from the employment at write time. SIMPLE, not
+  // GUARDED: the input uniqueness is (org, enrollment, kind, month) and
+  // carries no party column, so re-pointing the party cannot collide.
+  // employment_id columns need no entry (the employment rows move above,
+  // and inputs whose employment now points elsewhere are refused by name
+  // at consume time, never silently absorbed). pay_component_id is never
+  // re-pointed by a party merge: components carry no party column.
+  ["hrm_benefit_payroll_inputs", "employee_party_id"],
+  // 0197: a plan's provider is a vendor party that follows the merge
+  // wholesale — no uniqueness on hrm_benefit_plans involves that column,
+  // so re-pointing cannot duplicate (the party-merges coverage test names
+  // every parties(id) foreign key; this one was missing from the seam).
+  ["hrm_benefit_plans", "provider_party_id"],
 ];
 
 /**
@@ -246,6 +274,27 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and coalesce(lower(s.job_title), '') = coalesce(lower(d.job_title), '')" +
       " and s.trade_id is not distinct from d.trade_id and s.department_id is not distinct from d.department_id" +
       " and s.subsidiary_id is not distinct from d.subsidiary_id and s.effective_from = d.effective_from",
+  },
+  {
+    // 0195: the interview panel is unique on (org, interview, party) — two
+    // rows collide only when both parties sit on the SAME interview. The
+    // retained row stays on the absorbed party, counted in the audit.
+    table: "hrm_interview_panel",
+    column: "party_id",
+    conflict: "s.interview_id = d.interview_id",
+  },
+  {
+    // 0196: the review uniqueness is (org, cycle, employment, kind,
+    // reviewer) — re-pointing the reviewer collides exactly when the
+    // survivor already reviewed the same employment in the same cycle
+    // and kind. The conflicting row stays on the absorbed party
+    // (retained with cause), never silently absorbed into the
+    // survivor's review.
+    table: "hrm_reviews",
+    column: "reviewer_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.cycle_id = d.cycle_id and s.employment_id = d.employment_id" +
+      " and s.kind = d.kind",
   },
 ];
 

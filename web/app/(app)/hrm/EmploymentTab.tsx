@@ -8,6 +8,7 @@ import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, Tab
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
+import { ExitRecordForm } from './performance/ExitRecordForm'
 
 /**
  * The employee drawer's Employment tab — the ONE place the native
@@ -56,6 +57,37 @@ type ChangeRequest = {
   flowRunId: string | null
 }
 
+type ExitRecord = {
+  id: string
+  reasonKind: string
+  isVoluntary: boolean
+  destination: string | null
+  notes: string | null
+}
+
+type ExitState = {
+  status: 'hidden' | 'loading' | 'ready' | 'error'
+  record: ExitRecord | null
+  message: string | null
+}
+
+type BenefitElection = {
+  id: string
+  planCode: string
+  planName: string
+  coverageLabel: string | null
+  status: string
+  employeeAmountPerPeriod: string | null
+  employerAmountPerPeriod: string | null
+  currency: string
+}
+
+type BenefitDependent = {
+  id: string
+  displayName: string
+  relationship: string
+}
+
 type RecordState = {
   status: 'loading' | 'ready' | 'refused' | 'error'
   episodes: Episode[]
@@ -63,6 +95,9 @@ type RecordState = {
   asOfRefusal: { code: string; message: string } | null
   changeRequests: ChangeRequest[]
   refusalMessage: string | null
+  benefits: 'hidden' | 'loading' | 'ready'
+  benefitElections: BenefitElection[]
+  benefitDependents: BenefitDependent[]
 }
 
 function todayCivil(): string {
@@ -72,19 +107,27 @@ function todayCivil(): string {
 export function EmploymentTab({
   employmentId,
   canManageHrm,
+  canReadExits = false,
+  canRecordExit = false,
   departmentOptions = [],
 }: {
   employmentId: string
   /** hrm.employment.manage — readers see the request list only, without authoring actions. */
   canManageHrm: boolean
+  /** hrm.retention.read — readers see the exit record. */
+  canReadExits?: boolean
+  /** hrm.performance.manage — HR records and corrects the exit. */
+  canRecordExit?: boolean
   departmentOptions?: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
   const [date, setDate] = useState(todayCivil)
   const [revision, setRevision] = useState(0)
   const [proposing, setProposing] = useState(false)
+  const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
+    benefits: 'loading', benefitElections: [], benefitDependents: [],
   })
   const requestId = useRef(0)
   const reload = (): void => {
@@ -112,7 +155,38 @@ export function EmploymentTab({
           asOfRefusal: record.asOfRefusal ?? null,
           changeRequests: Array.isArray(record.changeRequests) ? record.changeRequests : [],
           refusalMessage: null,
+          benefits: 'loading',
+          benefitElections: [],
+          benefitDependents: [],
         })
+        // Benefits ride the benefits APIs beside the record: a 403 (no
+        // benefits grant) hides the section instead of failing the tab —
+        // the employment record is readable without benefits access.
+        try {
+          const [enrollmentsRes, dependentsRes] = await Promise.all([
+            fetch(`/api/hrm/enrollments?employmentId=${employmentId}`),
+            fetch(`/api/hrm/dependents?employmentId=${employmentId}`),
+          ])
+          if (cancelled || requestId.current !== current) return
+          if (enrollmentsRes.status === 403 || dependentsRes.status === 403) {
+            setState((s) => ({ ...s, benefits: 'hidden' }))
+            return
+          }
+          if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, 'failed to load benefits'))
+          if (!dependentsRes.ok) throw new Error(await readApiErrorMessage(dependentsRes, 'failed to load benefits'))
+          const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
+          const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({
+            ...s,
+            benefits: 'ready',
+            benefitElections: Array.isArray(enrollments.enrollments) ? enrollments.enrollments : [],
+            benefitDependents: Array.isArray(dependents.dependents) ? dependents.dependents : [],
+          }))
+        } catch {
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({ ...s, benefits: 'hidden' }))
+        }
       } catch (e) {
         if (cancelled || requestId.current !== current) return
         const message = (e as Error).message
@@ -124,6 +198,36 @@ export function EmploymentTab({
       cancelled = true
     }
   }, [employmentId, date, revision])
+
+  // The exit record loads once the as-of version reads terminated: the
+  // record describes a termination, and an unterminated employment shows
+  // no exit section at all.
+  const terminated = state.asOf?.version.status === 'terminated'
+  const showExit = terminated && (canReadExits || canRecordExit)
+  useEffect(() => {
+    if (!showExit) {
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/hrm/exit-records?employmentId=${employmentId}`)
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load the exit record'))
+        const j = await res.json()
+        if (cancelled) return
+        const exits = Array.isArray(j.exits) ? j.exits : []
+        setExit({ status: 'ready', record: exits[0] ?? null, message: null })
+      } catch (e) {
+        if (cancelled) return
+        const message = (e as Error).message
+        toast.error(message)
+        setExit({ status: 'error', record: null, message })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [employmentId, showExit, revision])
 
   // Catalog-backed enum labels with a raw fallback: a status the catalog
   // does not know yet renders as its stored value, never a raw key path.
@@ -252,6 +356,39 @@ export function EmploymentTab({
         ) : null}
       </section>
 
+      {showExit ? (
+        <section aria-label={t('employment.exit.title')}>
+          <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.exit.title')}
+          </h3>
+          {exit.status === 'hidden' || exit.status === 'loading' ? (
+            <div className="h-6 w-40 animate-pulse rounded bg-slate-100 dark:bg-slate-800" aria-busy="true" />
+          ) : exit.status === 'error' ? (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {exit.message}
+            </div>
+          ) : exit.record ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <span className="font-medium">{exit.record.reasonKind}</span>
+                {' · '}
+                {exit.record.isVoluntary ? t('performance.exitVoluntaryYes') : t('performance.exitVoluntaryNo')}
+                {exit.record.destination ? ` · ${exit.record.destination}` : null}
+              </p>
+              {exit.record.notes ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">{exit.record.notes}</p>
+              ) : null}
+              {canRecordExit ? (
+                <ExitRecordForm employmentId={employmentId} existing={exit.record} />
+              ) : null}
+            </div>
+          ) : canRecordExit ? (
+            <ExitRecordForm employmentId={employmentId} existing={null} />
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.exit.empty')}</p>
+          )}
+        </section>
+      ) : null}
       <section aria-label={t('employment.changeRequests.title')}>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -309,6 +446,44 @@ export function EmploymentTab({
           </ul>
         )}
       </section>
+      {state.benefits !== 'hidden' ? (
+      <section aria-label={t('employment.benefits.title')}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.benefits.title')}
+          </h3>
+          <Link href="/hrm/benefits" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('employment.benefits.viewAll')}
+          </Link>
+        </div>
+        {state.benefits === 'ready' && state.benefitElections.length === 0 && state.benefitDependents.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.benefits.empty')}</p>
+        ) : null}
+        {state.benefits === 'ready' && state.benefitElections.length > 0 ? (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {state.benefitElections.map((election) => (
+              <li key={election.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {election.planName}
+                  {election.coverageLabel ? ` · ${election.coverageLabel}` : ''}
+                </span>
+                <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">
+                  {election.employeeAmountPerPeriod ?? '–'} / {election.employerAmountPerPeriod ?? '–'} {election.currency}
+                </span>
+                <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {t.has(`benefits.statusNames.${election.status}`) ? t(`benefits.statusNames.${election.status}`) : election.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {state.benefits === 'ready' && state.benefitDependents.length > 0 ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            {t('employment.benefits.dependents', { count: state.benefitDependents.length, names: state.benefitDependents.map((d) => d.displayName).join(', ') })}
+          </p>
+        ) : null}
+      </section>
+      ) : null}
       {proposing && canManageHrm ? (
         <ChangeRequestDrawer
           employmentId={employmentId}

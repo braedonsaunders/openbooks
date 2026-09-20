@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
+  /** Independent outcome for the hrm.self.read fallback on the step-complete route. */
+  selfGate: { user: { id: string; orgId: string } } | { status: number } | null;
   featureOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
   serviceThrow: unknown;
@@ -20,6 +22,7 @@ const test: TestFn = isVitest
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
+  selfGate: null,
   featureOn: true,
   calls: [],
   serviceThrow: null,
@@ -35,6 +38,17 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.hrm-processes-route-test')]
       export async function guardPermission(permission) {
+        const NextResponse = globalThis.openbooksHrmProcessRouteNextResponse
+        if (permission === 'hrm.self.read') {
+          // The step-complete fallback: only that route asks, and only
+          // after hrm.process.read denies. Null selfGate means the caller
+          // under test never reaches the fallback.
+          if (state.selfGate && 'status' in state.selfGate) {
+            return NextResponse.json({ error: 'denied' }, { status: state.selfGate.status })
+          }
+          if (state.selfGate) return state.selfGate
+          throw new Error('unexpected self.read gate call')
+        }
         if (!permission.startsWith('hrm.process.')) {
           throw new Error('unexpected permission ' + permission)
         }
@@ -208,6 +222,7 @@ const FILE_ID = "00000000-0000-4000-8000-000000000024";
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.selfGate = null;
   routeState.featureOn = true;
   routeState.calls = [];
   routeState.serviceThrow = null;
@@ -386,6 +401,32 @@ if (isVitest) {
       fn: "skipStep",
       args: { orgId: "org-1", actorId: "user-1", stepId: STEP_ID, reason: "desk ready" },
     });
+  });
+
+  test("step complete admits a self-service reader through the fallback gate", async () => {
+    reset();
+    // process.read denies, self.read grants: the service still runs — the
+    // service's ownership check (not this gate) refuses strangers.
+    routeState.gate = { status: 403 };
+    routeState.selfGate = { user: { id: "user-1", orgId: "org-1" } };
+    const admitted = await stepCompleteRoute!.POST!(
+      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/complete", {}),
+      ctx({ stepId: STEP_ID }),
+    );
+    assert.equal(admitted.status, 200);
+    assert.deepEqual(routeState.calls, [
+      { fn: "completeStep", args: { orgId: "org-1", actorId: "user-1", stepId: STEP_ID } },
+    ]);
+    // Both deny: the process.read denial answers, and the service never runs.
+    reset();
+    routeState.gate = { status: 403 };
+    routeState.selfGate = { status: 403 };
+    const refused = await stepCompleteRoute!.POST!(
+      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/complete", {}),
+      ctx({ stepId: STEP_ID }),
+    );
+    assert.equal(refused.status, 403);
+    assert.deepEqual(routeState.calls, []);
   });
 
   test("complete refuses hostile payloads at the real boundary before the service runs", async () => {

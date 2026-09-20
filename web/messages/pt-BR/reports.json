@@ -656,6 +656,30 @@
       "hrm_leave_absences": {
         "label": "Ausências",
         "description": "Uma linha por dia de ausência — pessoa, empregador, departamento da época, tipo e horas. Reversões são linhas próprias; somas liquidam. Requer a permissão de licença."
+      },
+      "hrm_requisitions": {
+        "label": "Requisições",
+        "description": "Uma linha por vaga: número, título, status, empregador, departamento, cargo e vagas frente a preenchidas. Requer a permissão de recrutamento."
+      },
+      "hrm_applications": {
+        "label": "Candidaturas",
+        "description": "Uma linha por candidatura com sua etapa do funil e o tempo de preenchimento. Dados de contato nunca aparecem — só nomes. Requer a permissão de recrutamento."
+      },
+      "hrm_reviews": {
+        "label": "Avaliações",
+        "description": "Uma linha por avaliação de desempenho — ciclo e período, pessoa, tipo, situação e a nota do autor ao lado da calibrada. Somente RH: quem executa tem a permissão de desempenho, então avaliações não compartilhadas nunca saem do escopo do RH."
+      },
+      "hrm_goals": {
+        "label": "Metas",
+        "description": "Uma linha por meta de desempenho — pessoa, título, situação, progresso e prazo."
+      },
+      "hrm_turnover": {
+        "label": "Rotatividade",
+        "description": "Uma linha por saída — pessoa, data de desligamento, tempo de casa em dias, motivo de saída e os indicadores voluntário e lamentado do registro de saída. Agrupe por mês de desligamento e departamento para a tabela de saídas; as taxas vêm do painel de retenção."
+      },
+      "hrm_benefit_enrollments": {
+        "label": "Inscrições de benefícios",
+        "description": "Uma linha por inscrição de benefícios — pessoa, empregador, departamento na inscrição, plano e nível de cobertura, estado e valores guardados por período. Requer a permissão de benefícios."
       }
     },
     "columns": {
@@ -1262,6 +1286,79 @@
         "source": "Origem",
         "employment_id": "Emprego (id)",
         "id": "Ausência (id)"
+      },
+      "hrm_requisitions": {
+        "number": "Número",
+        "title": "Título",
+        "status": "Situação",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "position": "Cargo",
+        "headcount": "Vagas",
+        "filled_count": "Preenchidas",
+        "opened_on": "Abertura",
+        "closed_on": "Fechamento",
+        "requisition_id": "Requisição (id)"
+      },
+      "hrm_applications": {
+        "requisition_number": "Requisição",
+        "candidate": "Candidato",
+        "stage": "Etapa",
+        "status": "Situação",
+        "applied_on": "Candidatura",
+        "opened_on": "Requisição aberta",
+        "hired_on": "Contratado",
+        "days_to_fill": "Dias de preenchimento",
+        "application_id": "Candidatura (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Ciclo",
+        "period_end_on": "Fim do período",
+        "employee": "Pessoa empregada",
+        "employer": "Empregador",
+        "kind": "Tipo",
+        "status": "Situação",
+        "overall_rating": "Nota",
+        "calibrated_rating": "Nota calibrada",
+        "employment_id": "Vínculo (id)",
+        "id": "Avaliação (id)"
+      },
+      "hrm_goals": {
+        "employee": "Pessoa empregada",
+        "employer": "Empregador",
+        "title": "Título",
+        "status": "Situação",
+        "progress": "Progresso",
+        "due_on": "Prazo",
+        "employment_id": "Vínculo (id)",
+        "id": "Meta (id)"
+      },
+      "hrm_turnover": {
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "terminated_on": "Desligado em",
+        "tenure_days": "Tempo de casa (dias)",
+        "reason": "Motivo",
+        "voluntary": "Voluntária",
+        "regrettable": "Lamentada",
+        "employment_id": "Vínculo (id)"
+      },
+      "hrm_benefit_enrollments": {
+        "effective_from": "Vigente desde",
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "plan": "Plano",
+        "plan_name": "Nome do plano",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "employee_amount": "Valor do empregado",
+        "employer_amount": "Valor do empregador",
+        "currency": "Moeda",
+        "effective_to": "Vigente até",
+        "employment_id": "Emprego (id)",
+        "id": "Inscrição (id)"
       }
     },
     "enumValues": {

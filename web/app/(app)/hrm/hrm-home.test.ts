@@ -129,8 +129,8 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrmGroupTabs/, "permission exclusions stay at one call site");
 });
 
-test("hrm route tabs are the five working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave']) {
+test("hrm route tabs are the six working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee
@@ -142,7 +142,17 @@ test("hrm route tabs are the five working surfaces, each behind its own gate", (
   assert.match(groupTabs, /'\/hrm\/positions': 'hrm\.position\.read'/, "positions tab hides without the headcount-plan read grant");
   assert.match(groupTabs, /'\/hrm\/processes': 'hrm\.process\.read'/, "processes tab hides without the process read grant");
   assert.match(groupTabs, /'\/hrm\/leave': 'hrm\.leave\.read'/, "leave desk tab hides without the leave read grant");
+  assert.match(groupTabs, /'\/hrm\/benefits': 'hrm\.benefits\.read'/, "benefits tab hides without the benefits read grant");
+  assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm\.recruiting\.read'/, "recruiting tab hides without the funnel read grant");
+  assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm'/, "recruiting tab hides while the feature switch is off");
   assert.match(groupTabs, /'\/entities\/employees': 'parties\.read'/, "employees tab hides without the parties grant");
+  // The performance tab carries NO permission entry by design: it sits
+  // behind hrm.performance.read OR the structural scope (a manager with
+  // reports and no grant still gets the tab), and the page never
+  // access-denies — the read service narrows every row instead.
+  const tabPermission = groupTabs.match(/const HRM_TAB_PERMISSION[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.doesNotMatch(tabPermission, /hrm\/performance/, "performance tab never hides on a missing grant");
+  assert.match(groupTabs, /'\/hrm\/performance': 'hrm'/, "performance tab hides while the feature switch is off");
 });
 
 test("the employees list carries the same HRM strip", () => {
@@ -192,4 +202,17 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
     assert.ok(strings.includes(`"${key}"`), `en/hrm carries overview.${key}`);
   }
   assert.match(view, /f\('title'\)/, "spec titles resolve through view refs, never literals");
+});
+
+test("the cockpit rail carries the recruiting funnel panel behind its own grant", () => {
+  assert.match(view, /data\.recruiting/, "rail renders the recruiting panel when the loader resolves it");
+  assert.match(view, /hrm-recruiting-panel/, "rail composes the funnel widget, never a bespoke panel");
+  assert.match(loader, /loadRecruitingOverview/, "figures resolve through the canonical recruiting read service");
+  assert.match(loader, /can\(authz, 'hrm\.recruiting\.read'\)/, "the panel shows only for the funnel read grant");
+  assert.match(hrmWidgets, /'hrm-recruiting-panel'/, "the funnel widget lives in the hrm family");
+  assert.match(names, /'hrm-recruiting-panel'/, "the registry names the funnel widget");
+  assert.match(contracts, /'hrm-recruiting-panel'/, "widget contracts cover the funnel widget");
+  for (const key of ["title", "open", "awaiting", "interviews", "viewAll"]) {
+    assert.ok(strings.includes(`"${key}"`), `en/hrm carries home.recruiting.${key}`);
+  }
 });

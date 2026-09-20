@@ -29,9 +29,11 @@
  * Boundary: getEmploymentAsOf owns withOrgTransaction plus the authoritative
  * HRM feature gate (key `hrm`, registered in the coherent integration; the
  * gate fails closed until then). Authorization is hardwired to the auth
- * owner's requireHrmEmploymentRead — no caller-supplied authorizer exists at
- * any boundary, so production callers cannot swap or bypass it. The branded
- * trusted subject is reused in-transaction and never re-read for authority.
+ * owner's requireEmploymentOrTeamSubject — the employment read grant first,
+ * then the structural team fallback for a manager's direct reports — and no
+ * caller-supplied authorizer exists at any boundary, so production callers
+ * cannot swap or bypass it. The branded trusted subject is reused
+ * in-transaction and never re-read for authority.
  */
 
 import { sql } from "drizzle-orm";
@@ -39,7 +41,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { HrmAuthorizationError, requireHrmEmploymentRead } from "./authorization.ts";
+import { HrmAuthorizationError, requireEmploymentOrTeamSubject } from "./authorization.ts";
 import {
   NoRevisionError,
   parseCivilDate,
@@ -455,9 +457,11 @@ async function loadEmploymentSnapshot(
 
 /**
  * Load and assemble inside the caller's transaction (RLS applies), with
- * authorization hardwired: requireHrmEmploymentRead is the only gate and no
- * parameter can replace it. Missing/wrong-org/out-of-scope subjects are
- * refused inside the gate (HrmAuthorizationError).
+ * authorization hardwired: requireEmploymentOrTeamSubject is the only gate
+ * (employment read, then the structural team fallback) and no parameter
+ * can replace it. Missing/wrong-org/out-of-scope subjects are refused
+ * inside the gate (HrmAuthorizationError — the fallback rethrows the
+ * original employment refusal, so the error shape never changes).
  *
  * Gate-free of the feature key by design, but NOT reusable with foreign
  * authority: a future internal payroll canonical resolver must bring its own
@@ -480,7 +484,7 @@ export async function loadEmploymentAsOf(
   // later presence check cannot leak existence to an unauthorized actor.
   // The trusted subject supplies identity; the displayed revision comes from
   // the snapshot below so it can never mix with another snapshot's versions.
-  const subject = await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  const subject = await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   const snapshot = await loadEmploymentSnapshot(exec, orgId, employmentId);
 
   const assembled = assembleEmploymentAsOf(
@@ -568,11 +572,11 @@ export interface EmploymentEpisodesDTO {
 
 /**
  * List every recorded version (episode) of one employment, oldest first.
- * Authorized through requireHrmEmploymentRead, so a missing, foreign-org,
- * or out-of-scope employment is refused uniformly (HrmAuthorizationError),
- * never an empty list pretending the employment does not exist. An
- * employment with no versions lists none — the as-of read then refuses
- * with NO_REVISION, which names the remedy.
+ * Authorized through requireEmploymentOrTeamSubject, so a missing,
+ * foreign-org, or out-of-scope employment is refused uniformly
+ * (HrmAuthorizationError), never an empty list pretending the employment
+ * does not exist. An employment with no versions lists none — the as-of
+ * read then refuses with NO_REVISION, which names the remedy.
  */
 export async function loadEmploymentEpisodes(
   exec: SqlExecutor,
@@ -581,7 +585,7 @@ export async function loadEmploymentEpisodes(
   const orgId = requireId("orgId", query.orgId);
   const actorId = requireId("actorId", query.actorId);
   const employmentId = requireId("employmentId", query.employmentId);
-  const subject = await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  const subject = await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   const snapshot = await loadEmploymentSnapshot(exec, orgId, employmentId);
   const episodes = snapshot.employmentVersions
     .map((row) => ({
@@ -641,7 +645,7 @@ type ChangeRequestJson = {
 
 /**
  * List the employment's change requests, newest first. Authorized through
- * requireHrmEmploymentRead, so a missing, foreign-org, or out-of-scope
+ * requireEmploymentOrTeamSubject, so a missing, foreign-org, or out-of-scope
  * employment is refused uniformly (HrmAuthorizationError). An employment
  * with no requests lists none — a truthful empty, not a refusal.
  */
@@ -652,7 +656,7 @@ export async function loadEmploymentChangeRequests(
   const orgId = requireId("orgId", query.orgId);
   const actorId = requireId("actorId", query.actorId);
   const employmentId = requireId("employmentId", query.employmentId);
-  await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   // No arbitrary SQL identifiers: every value is a bound parameter, every
   // column list is explicit, stamps are microsecond UTC text, uuids are text.
   const rows = (await exec.execute<ChangeRequestJson>(sql`
@@ -779,7 +783,7 @@ export async function getEmploymentRecord(query: EmploymentAsOfQuery): Promise<E
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     // One pinned client inside the transaction: sequential, never parallel.
-    const subject = await requireHrmEmploymentRead(db, orgId, actorId, employmentId);
+    const subject = await requireEmploymentOrTeamSubject(db, orgId, actorId, employmentId);
     const episodes = await loadEmploymentEpisodes(db, { orgId, actorId, employmentId });
     let asOf: EmploymentDTO | null = null;
     let asOfRefusal: EmploymentAsOfRefusal | null = null;
