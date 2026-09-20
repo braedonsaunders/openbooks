@@ -36,13 +36,20 @@ export async function PUT(req: Request) {
   }
   if (viewId) {
     // Must be a view this user can actually use: in-org, right record type,
-    // and either org-shared or their own personal view.
-    const owned = (await db.execute(sql`
-      select 1 from list_views
+    // and either org-shared or their own personal view. resolveListView only
+    // loads is_active rows, so an inactive preference would report {ok} and
+    // then fall through to the org/system default — refuse by name instead.
+    const owned = (await db.execute<{ isActive: boolean; name: string }>(sql`
+      select is_active as "isActive", name from list_views
        where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
          and (scope = 'org' or owner_id = ${user.id})
     `));
     if (!owned.rows[0]) return NextResponse.json({ error: "list view not found" }, { status: 404 });
+    if (!owned.rows[0].isActive) {
+      return NextResponse.json({
+        error: `list view "${owned.rows[0].name}" is inactive — reactivate it or choose an active view`,
+      }, { status: 422 });
+    }
   }
   await db.execute(sql`
     insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
