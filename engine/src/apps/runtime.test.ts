@@ -356,6 +356,18 @@ test("a guest stack overflow is an endpoint error, not a host process abort", as
   assert.equal(after.response!.body, 1);
 });
 
+test("guest-controlled error text does not rewrite or skip runtime dispose", async () => {
+  for (const text of ["stack overflow", "Maximum call stack size exceeded"]) {
+    const r = await runAppEndpoint({
+      source: `function handler() { throw new Error(${JSON.stringify(text)}); }`,
+      request: req(),
+      adapters: fakeAdapters(),
+    });
+    assert.equal(r.status, "error");
+    assert.equal(r.error, text);
+  }
+});
+
 test('platform query plans round-trip through QuickJS without exposing SQL', async () => {
   const adapters = withPlatform(fakeAdapters())
   const plan = { from: { type: 'items', as: 'item' }, select: [{ source: 'item', field: 'id' }] }
