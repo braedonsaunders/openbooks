@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, isZero, neg, sum, toUnits } from "../money/money.ts";
+import { add, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";

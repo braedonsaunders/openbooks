@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, cmp, isZero, neg, sum } from "../money/money.ts";
+import { add, cmp, isZero, neg } from "../money/money.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { InventoryError, type Runner } from "./contracts.ts";

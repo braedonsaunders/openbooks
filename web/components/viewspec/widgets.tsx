@@ -1,7 +1,7 @@
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import { EmptyState } from '@openbooks/ui'
 import { KeyRound, Building2, Users, Mail, Activity, Send, CheckCircle2, Gauge, Camera, ShieldCheck, ScrollText, Trash2, BellRing } from 'lucide-react'
-import { OpportunityKanbanBoard, OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
+import { OpportunityKanbanBoard } from '../../app/(app)/crm/OpportunityKanban'
 import { RecordListSlot } from './record-list-slot'
 import { EntityListSlot } from './entity-list-slot'
 import { PAYROLL_WIDGETS } from './widgets-payroll'

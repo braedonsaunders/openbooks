@@ -90,7 +90,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', mockUrl('json')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],
-  ['../../../../lib/documents', mockUrl('documents')],
+  ['../../../../lib/documents.ts', mockUrl('documents')],
   ['../../../../lib/export', mockUrl('export')],
   ['../../../../lib/pdf-templates/render', mockUrl('render')],
   ['../../../../lib/pdf-templates/values', mockUrl('values')],
