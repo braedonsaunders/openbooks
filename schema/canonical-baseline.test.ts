@@ -394,6 +394,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0199_drop_form_response_steps.sql",
     "0200_stock_count_subsidiary.sql",
     "0201_pay_run_bank_file_sepa_cemtex.sql",
+    // HR-16 begin: 0226 automations, 0227 action reasons + event verbs.
+    "0226_hrm_automations.sql",
+    "0227_hrm_action_reasons_event_verbs.sql",
+    // HR-16 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -7,6 +7,7 @@ import {
   createChangeRequestDraft,
   withdrawChangeRequest,
 } from "../hrm/change-requests.ts";
+import { hrmFeatureOn } from "./services.ts";
 
 /**
  * HR-16 event verbs — cancel / rescind / correct on employment changes.
@@ -214,6 +215,13 @@ export async function rescindEmploymentChange(input: {
 }): Promise<{ changeId: string; revision: number }> {
   const reason = requireReason(input.reason, "rescind");
   await requirePermission(input.orgId, input.actorId, "hrm.employment.approve");
+  // Verbs absent while the feature is off (the routes 404 first; this is
+  // the second fence for direct service callers).
+  if (!(await hrmFeatureOn(input.orgId, "hrmEventVerbs"))) {
+    throw new EventVerbError(
+      "change event verbs are switched off for this organization — enable them in Company Settings → Features",
+    );
+  }
   return withOrgTransaction(input.orgId, async () => {
     const target = await loadChangeEvent(db, input.orgId, input.changeId);
     if (!target) throw new EventVerbError("change not found — reload the history and try again");
@@ -231,50 +239,48 @@ export async function rescindEmploymentChange(input: {
 
     const recordedAt = new Date();
     const newRevision = (await currentAggregateRevision(db, input.orgId, target.employmentId)) + 1;
-    const reopened: { table: string; identity: string }[] = [];
 
-    for (const element of target.closedVersions) {
-      const before = element.before as Record<string, unknown> | null;
-      if (!before || typeof before !== "object") {
-        throw new EventVerbError("the change evidence carries no reopenable image — file a correcting change request instead");
-      }
-      if (element.table === "worker_employment_versions") {
-        await rescindStatusVersion(db, {
-          orgId: input.orgId, actorId: input.actorId, target, element, before, recordedAt, newRevision,
-        });
-        reopened.push({ table: element.table, identity: element.identity });
-      } else if (element.table === "employment_assignment_versions") {
-        await rescindAssignmentVersion(db, {
-          orgId: input.orgId, actorId: input.actorId, target, element, before, recordedAt,
-        });
-        reopened.push({ table: element.table, identity: element.identity });
-      } else if (element.table === "reporting_relationships") {
-        await rescindReportingLine(db, {
-          orgId: input.orgId, actorId: input.actorId, target, element, before, recordedAt,
-        });
-        reopened.push({ table: element.table, identity: element.identity });
-      } else {
-        throw new EventVerbError(
-          `rescind cannot reopen evidence table '${element.table}' — file a correcting change request for the non-versioned part instead`,
-        );
-      }
-    }
-
-    // The payroll seam is checked against the change's effective date once
-    // the reopened windows are known (original effective dates preserved).
+    // The payroll seam is checked against the change's effective date before
+    // anything writes (original effective dates are preserved on reopen).
     const effectiveFrom = String(
       (target.closedVersions[0]!.before as Record<string, unknown>)["effective_from"] ?? "0001-01-01",
     );
     parseCivilDate(effectiveFrom);
     await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
 
-    const priorSnapshot = await getEmploymentAsOf({
+    // Pre-rescind state for the event's evidence (as-of now, before reopen).
+    const preSnapshot = await getEmploymentAsOf({
       orgId: input.orgId,
       actorId: input.actorId,
       employmentId: target.employmentId,
       effectiveDate: new Date().toISOString().slice(0, 10),
       knownAt: new Date().toISOString(),
     }).catch(() => null);
+
+    // Resolve every closure first: the deferred closure-evidence guard
+    // requires the event to name each row it closes (table, identity,
+    // version_no, row_id) in closed_versions, so the event carries the
+    // full closure list before any version closes.
+    const reopened: { table: string; identity: string }[] = [];
+    const closures: { element: (typeof target.closedVersions)[number]; before: Record<string, unknown>; liveId: string; liveVersionNo: number; nextNo: number; beforeClose: Record<string, unknown> }[] = [];
+    for (const element of target.closedVersions) {
+      const before = element.before as Record<string, unknown> | null;
+      if (!before || typeof before !== "object") {
+        throw new EventVerbError("the change evidence carries no reopenable image — file a correcting change request instead");
+      }
+      if (element.table !== "worker_employment_versions" && element.table !== "employment_assignment_versions" && element.table !== "reporting_relationships") {
+        throw new EventVerbError(
+          `rescind cannot reopen evidence table '${element.table}' — file a correcting change request for the non-versioned part instead`,
+        );
+      }
+      const live = await resolveLiveClosure(db, input.orgId, element.table, element.identity);
+      closures.push({ element, before, liveId: live.id, liveVersionNo: live.versionNo, nextNo: live.versionNo + 1, beforeClose: live.before });
+      reopened.push({ table: element.table, identity: element.identity });
+    }
+
+    // The rescind event FIRST: closures name it in closed_by_change_id (the
+    // version tables require all three closure columns together), exactly
+    // like the apply path closes with its own change id.
     const changeId = await appendVerbEvent(db, {
       orgId: input.orgId,
       actorId: input.actorId,
@@ -285,18 +291,76 @@ export async function rescindEmploymentChange(input: {
       verb: "rescind",
       reversesChangeId: target.id,
       correctedChangeId: null,
-      priorSnapshot: { rescinded: target.id, reopened, state: priorSnapshot },
-      closedVersions: [],
+      priorSnapshot: { rescinded: target.id, state: preSnapshot },
+      closedVersions: closures.map((c) => ({
+        table: c.element.table,
+        identity: c.element.identity,
+        version_no: c.liveVersionNo,
+        row_id: c.liveId,
+        // The image of the row THIS event closes (the live successor),
+        // not the original change's image — the guard proves exactness.
+        before: c.beforeClose,
+      })),
       reason,
       action: target.action,
       reasonCode: target.reasonCode,
     });
-    await db.execute(sql`
+
+    for (const c of closures) {
+      if (c.element.table === "worker_employment_versions") {
+        await rescindStatusVersion(db, {
+          orgId: input.orgId, actorId: input.actorId, target, element: c.element, before: c.before,
+          recordedAt, changeId, liveId: c.liveId, nextNo: c.nextNo,
+        });
+      } else if (c.element.table === "employment_assignment_versions") {
+        await rescindAssignmentVersion(db, {
+          orgId: input.orgId, actorId: input.actorId, target, element: c.element, before: c.before,
+          recordedAt, changeId, liveId: c.liveId, nextNo: c.nextNo,
+        });
+      } else {
+        await rescindReportingLine(db, {
+          orgId: input.orgId, actorId: input.actorId, target, element: c.element, before: c.before,
+          recordedAt, changeId, liveId: c.liveId, nextNo: c.nextNo,
+        });
+      }
+    }
+
+    const bumped = (await db.execute(sql`
       update worker_employments set revision = ${newRevision}, updated_by = ${input.actorId}, updated_at = now()
        where org_id = ${input.orgId} and id = ${target.employmentId} and revision = ${newRevision - 1}
-    `);
+      returning id
+    `)).rows;
+    if (bumped.length !== 1) {
+      throw new EventVerbError("the employment changed while rescinding — nothing applied; reload and try again");
+    }
     return { changeId, revision: newRevision };
   });
+}
+
+/** The live row a rescind/correct closes, resolved before the verb event
+ *  appends (the event must name it in closed_versions). */
+async function resolveLiveClosure(
+  exec: SqlExecutor,
+  orgId: string,
+  table: string,
+  identity: string,
+): Promise<{ id: string; versionNo: number; before: Record<string, unknown> }> {
+  const idColumn = table === "worker_employment_versions"
+    ? "employment_id"
+    : table === "employment_assignment_versions"
+      ? "assignment_id"
+      : "relationship_id";
+  const live = await exec.execute<{ id: string; version_no: number; before: unknown }>(sql`
+    select id, version_no, to_jsonb(t) as before from ${sql.identifier(table)} t
+     where org_id = ${orgId} and ${sql.identifier(idColumn)} = ${identity}
+       and recorded_until is null
+     limit 1
+  `);
+  const row = live.rows[0];
+  if (!row) {
+    throw new EventVerbError("the live version is gone — a concurrent change won; reload and try again");
+  }
+  return { id: row.id, versionNo: row.version_no, before: (row.before ?? {}) as Record<string, unknown> };
 }
 
 type RescindCtx = {
@@ -306,32 +370,29 @@ type RescindCtx = {
   element: { identity: string; version_no: number; row_id: string };
   before: Record<string, unknown>;
   recordedAt: Date;
-  newRevision?: number;
+  /** The rescind event closures name (all three closure columns together). */
+  changeId: string;
+  /** Pre-resolved live row this rescind closes. */
+  liveId: string;
+  nextNo: number;
 };
 
 async function rescindStatusVersion(exec: SqlExecutor, ctx: RescindCtx): Promise<void> {
   const effectiveFrom = String(ctx.before["effective_from"] ?? "");
   parseCivilDate(effectiveFrom);
-  // Close the version the change created (the live row on this identity).
-  const live = await exec.execute<{ id: string }>(sql`
-    select id from worker_employment_versions
-     where org_id = ${ctx.orgId} and employment_id = ${ctx.element.identity}
-       and recorded_until is null
-     limit 1
-  `);
-  const liveRow = live.rows[0];
-  if (!liveRow) throw new EventVerbError("the live employment version is gone — a concurrent change won; reload and try again");
-  // Reopen the prior image at the ORIGINAL effective date with the next version_no.
-  const maxNo = await exec.execute<{ maxNo: number }>(sql`
-    select coalesce(max(version_no), 0) as "maxNo" from worker_employment_versions
-     where org_id = ${ctx.orgId} and employment_id = ${ctx.element.identity}
-  `);
-  const nextNo = (maxNo.rows[0]?.maxNo ?? 0) + 1;
-  await exec.execute(sql`
+  // Close the pre-resolved live row (named in the rescind event's
+  // closed_versions); reopen the prior image at the ORIGINAL effective date.
+  const nextNo = ctx.nextNo;
+  const closed = (await exec.execute(sql`
     update worker_employment_versions
-       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo}
-     where org_id = ${ctx.orgId} and id = ${liveRow.id} and recorded_until is null
-  `);
+       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo},
+           closed_by_change_id = ${ctx.changeId}
+     where org_id = ${ctx.orgId} and id = ${ctx.liveId} and recorded_until is null
+    returning id
+  `)).rows;
+  if (closed.length !== 1) {
+    throw new EventVerbError("the live employment version changed while rescinding — reload and try again");
+  }
   await exec.execute(sql`
     insert into worker_employment_versions
       (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at, created_by, updated_by)
@@ -345,24 +406,17 @@ async function rescindStatusVersion(exec: SqlExecutor, ctx: RescindCtx): Promise
 async function rescindAssignmentVersion(exec: SqlExecutor, ctx: RescindCtx): Promise<void> {
   const effectiveFrom = String(ctx.before["effective_from"] ?? "");
   parseCivilDate(effectiveFrom);
-  const live = await exec.execute<{ id: string }>(sql`
-    select id from employment_assignment_versions
-     where org_id = ${ctx.orgId} and assignment_id = ${ctx.element.identity}
-       and recorded_until is null
-     limit 1
-  `);
-  const liveRow = live.rows[0];
-  if (!liveRow) throw new EventVerbError("the live assignment version is gone — a concurrent change won; reload and try again");
-  const maxNo = await exec.execute<{ maxNo: number }>(sql`
-    select coalesce(max(version_no), 0) as "maxNo" from employment_assignment_versions
-     where org_id = ${ctx.orgId} and assignment_id = ${ctx.element.identity}
-  `);
-  const nextNo = (maxNo.rows[0]?.maxNo ?? 0) + 1;
-  await exec.execute(sql`
+  const nextNo = ctx.nextNo;
+  const closed = (await exec.execute(sql`
     update employment_assignment_versions
-       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo}
-     where org_id = ${ctx.orgId} and id = ${liveRow.id} and recorded_until is null
-  `);
+       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo},
+           closed_by_change_id = ${ctx.changeId}
+     where org_id = ${ctx.orgId} and id = ${ctx.liveId} and recorded_until is null
+    returning id
+  `)).rows;
+  if (closed.length !== 1) {
+    throw new EventVerbError("the live assignment version changed while rescinding — reload and try again");
+  }
   await exec.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, position_id, version_no, job_title,
@@ -383,26 +437,24 @@ async function rescindAssignmentVersion(exec: SqlExecutor, ctx: RescindCtx): Pro
 async function rescindReportingLine(exec: SqlExecutor, ctx: RescindCtx): Promise<void> {
   const effectiveFrom = String(ctx.before["effective_from"] ?? "");
   parseCivilDate(effectiveFrom);
-  const live = await exec.execute<{ id: string }>(sql`
-    select id from reporting_relationships
-     where org_id = ${ctx.orgId} and relationship_id = ${ctx.element.identity}
-       and recorded_until is null
-     limit 1
-  `);
-  const liveRow = live.rows[0];
-  if (!liveRow) throw new EventVerbError("the live reporting line is gone — a concurrent change won; reload and try again");
-  await exec.execute(sql`
+  const nextNo = ctx.nextNo;
+  const closed = (await exec.execute(sql`
     update reporting_relationships
-       set recorded_until = ${ctx.recordedAt}
-     where org_id = ${ctx.orgId} and id = ${liveRow.id} and recorded_until is null
-  `);
+       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo},
+           closed_by_change_id = ${ctx.changeId}
+     where org_id = ${ctx.orgId} and id = ${ctx.liveId} and recorded_until is null
+    returning id
+  `)).rows;
+  if (closed.length !== 1) {
+    throw new EventVerbError("the live reporting line changed while rescinding — reload and try again");
+  }
   await exec.execute(sql`
     insert into reporting_relationships
       (org_id, employment_id, manager_employment_id, kind, relationship_id,
-       effective_from, effective_to, recorded_at, created_by, updated_by)
+       version_no, effective_from, effective_to, recorded_at, created_by, updated_by)
     values (${ctx.orgId}, ${ctx.target.employmentId},
             ${ctx.before["manager_employment_id"] as string},
-            ${String(ctx.before["kind"] ?? "line")}, ${ctx.element.identity},
+            ${String(ctx.before["kind"] ?? "line")}, ${ctx.element.identity}, ${nextNo},
             ${effectiveFrom}::date, ${ctx.before["effective_to"] as string | null}::date,
             ${ctx.recordedAt}, ${ctx.actorId}, ${ctx.actorId})
   `);
@@ -438,6 +490,11 @@ export async function correctEmploymentChange(input: {
   prefillPayload?: Record<string, unknown>;
 }): Promise<{ mode: "reapproval" | "direct"; requestId?: string; changeId?: string }> {
   const reason = requireReason(input.reason, "correct");
+  if (!(await hrmFeatureOn(input.orgId, "hrmEventVerbs"))) {
+    throw new EventVerbError(
+      "change event verbs are switched off for this organization — enable them in Company Settings → Features",
+    );
+  }
   return withOrg(input.orgId, async () => {
     const target = await loadChangeEvent(db, input.orgId, input.changeId);
     if (!target) throw new EventVerbError("change not found — reload the history and try again");
@@ -471,12 +528,13 @@ export async function correctEmploymentChange(input: {
       // Direct correction supersedes the LIVE version at the same effective
       // date (no re-approval by org policy). Only scalar version columns on
       // the two versioned chains; anything else refuses with the reapproval
-      // remedy.
-      const corrected = await applyDirectCorrection(db, {
-        orgId: input.orgId, actorId: input.actorId, target, fields, recordedAt,
+      // remedy. The live row resolves BEFORE the event appends so the event
+      // names its closure (the deferred evidence guard requires it).
+      const plan = await planDirectCorrection(db, {
+        orgId: input.orgId, target, fields,
       });
-      const effectiveFrom = corrected.effectiveFrom;
-      await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
+      // The correct event first so closures name it (all three closure
+      // columns together, like the apply path).
       const changeId = await appendVerbEvent(db, {
         orgId: input.orgId,
         actorId: input.actorId,
@@ -488,15 +546,30 @@ export async function correctEmploymentChange(input: {
         reversesChangeId: null,
         correctedChangeId: target.id,
         priorSnapshot: { corrected: target.id, fields },
-        closedVersions: [],
+        closedVersions: [{
+          table: plan.table,
+          identity: plan.identity,
+          version_no: plan.liveVersionNo,
+          row_id: plan.liveId,
+          before: plan.before,
+        }],
         reason,
         action: target.action,
         reasonCode: target.reasonCode,
       });
-      await db.execute(sql`
+      const corrected = await applyDirectCorrection(db, {
+        orgId: input.orgId, actorId: input.actorId, target, fields, recordedAt, changeId, plan,
+      });
+      const effectiveFrom = corrected.effectiveFrom;
+      await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
+      const bumped = (await db.execute(sql`
         update worker_employments set revision = ${newRevision}, updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and id = ${target.employmentId} and revision = ${newRevision - 1}
-      `);
+        returning id
+      `)).rows;
+      if (bumped.length !== 1) {
+        throw new EventVerbError("the employment changed while correcting — nothing applied; reload and try again");
+      }
       return { mode: "direct" as const, changeId };
     });
   });
@@ -505,16 +578,22 @@ export async function correctEmploymentChange(input: {
 const CORRECTABLE_ASSIGNMENT_FIELDS = ["job_title", "department_id", "location_id", "fte", "position_id"] as const;
 const CORRECTABLE_STATUS_FIELDS = ["status"] as const;
 
-async function applyDirectCorrection(
+type CorrectionPlan = {
+  table: "employment_assignment_versions" | "worker_employment_versions";
+  identity: string;
+  liveId: string;
+  liveVersionNo: number;
+  nextNo: number;
+  before: Record<string, unknown>;
+  row: Record<string, unknown>;
+  effectiveFrom: string;
+};
+
+/** Validate fields and resolve the live row the correction closes. */
+async function planDirectCorrection(
   exec: SqlExecutor,
-  ctx: {
-    orgId: string;
-    actorId: string;
-    target: ChangeEventRow;
-    fields: Record<string, unknown>;
-    recordedAt: Date;
-  },
-): Promise<{ effectiveFrom: string }> {
+  ctx: { orgId: string; target: ChangeEventRow; fields: Record<string, unknown> },
+): Promise<CorrectionPlan> {
   for (const key of Object.keys(ctx.fields)) {
     if (
       !(CORRECTABLE_ASSIGNMENT_FIELDS as readonly string[]).includes(key) &&
@@ -525,32 +604,67 @@ async function applyDirectCorrection(
       );
     }
   }
-  // Assignment chain first when an assignment field is present.
   const assignmentKeys = Object.keys(ctx.fields).filter((k) =>
     (CORRECTABLE_ASSIGNMENT_FIELDS as readonly string[]).includes(k),
   );
-  if (assignmentKeys.length > 0 && ctx.target.assignmentId) {
-    const live = await exec.execute<Record<string, unknown>>(sql`
-      select * from employment_assignment_versions
-       where org_id = ${ctx.orgId} and assignment_id = ${ctx.target.assignmentId}
-         and recorded_until is null
-       limit 1
-    `);
-    const row = live.rows[0];
-    if (!row) throw new EventVerbError("the live assignment version is gone — a concurrent change won; reload and try again");
-    const maxNo = await exec.execute<{ maxNo: number }>(sql`
-      select coalesce(max(version_no), 0) as "maxNo" from employment_assignment_versions
-       where org_id = ${ctx.orgId} and assignment_id = ${ctx.target.assignmentId}
-    `);
-    const nextNo = (maxNo.rows[0]?.maxNo ?? 0) + 1;
-    const effectiveFrom = String(row["effective_from"]);
-    parseCivilDate(effectiveFrom);
-    await exec.execute(sql`
-      update employment_assignment_versions
-         set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo}
-       where org_id = ${ctx.orgId} and id = ${row["id"]} and recorded_until is null
-    `);
-    const merged = { ...(row as Record<string, unknown>), ...ctx.fields };
+  const onAssignment = assignmentKeys.length > 0 && ctx.target.assignmentId;
+  const table = onAssignment ? "employment_assignment_versions" : "worker_employment_versions";
+  const idColumn = onAssignment ? "assignment_id" : "employment_id";
+  const identity = onAssignment ? ctx.target.assignmentId! : ctx.target.employmentId;
+  const live = await exec.execute<Record<string, unknown>>(sql`
+    select *, to_jsonb(t) as before from ${sql.identifier(table)} t
+     where org_id = ${ctx.orgId} and ${sql.identifier(idColumn)} = ${identity}
+       and recorded_until is null
+     limit 1
+  `);
+  const row = live.rows[0];
+  if (!row) throw new EventVerbError("the live version is gone — a concurrent change won; reload and try again");
+  const maxNo = await exec.execute<{ maxNo: number }>(sql`
+    select coalesce(max(version_no), 0) as "maxNo" from ${sql.identifier(table)}
+     where org_id = ${ctx.orgId} and ${sql.identifier(idColumn)} = ${identity}
+  `);
+  const effectiveFrom = String(row["effective_from"]);
+  parseCivilDate(effectiveFrom);
+  return {
+    table,
+    identity,
+    liveId: String(row["id"]),
+    liveVersionNo: Number(row["version_no"]),
+    nextNo: (maxNo.rows[0]?.maxNo ?? 0) + 1,
+    before: (row["before"] ?? row) as Record<string, unknown>,
+    row,
+    effectiveFrom,
+  };
+}
+
+async function applyDirectCorrection(
+  exec: SqlExecutor,
+  ctx: {
+    orgId: string;
+    actorId: string;
+    target: ChangeEventRow;
+    fields: Record<string, unknown>;
+    recordedAt: Date;
+    changeId: string;
+    plan: CorrectionPlan;
+  },
+): Promise<{ effectiveFrom: string }> {
+  const { plan } = ctx;
+  const row = plan.row;
+  const nextNo = plan.nextNo;
+  const effectiveFrom = plan.effectiveFrom;
+  const closed = (await exec.execute(sql`
+    update ${sql.identifier(plan.table)}
+       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo},
+           closed_by_change_id = ${ctx.changeId}
+     where org_id = ${ctx.orgId} and id = ${plan.liveId} and recorded_until is null
+    returning id
+  `)).rows;
+  if (closed.length !== 1) {
+    throw new EventVerbError("the live version changed while correcting — reload and try again");
+  }
+  if (plan.table === "employment_assignment_versions") {
+    const merged = { ...row, ...ctx.fields };
     await exec.execute(sql`
       insert into employment_assignment_versions
         (org_id, assignment_id, employment_id, position_id, version_no, job_title,
@@ -568,27 +682,6 @@ async function applyDirectCorrection(
     `);
     return { effectiveFrom };
   }
-  // Status chain.
-  const live = await exec.execute<Record<string, unknown>>(sql`
-    select * from worker_employment_versions
-     where org_id = ${ctx.orgId} and employment_id = ${ctx.target.employmentId}
-       and recorded_until is null
-     limit 1
-  `);
-  const row = live.rows[0];
-  if (!row) throw new EventVerbError("the live employment version is gone — a concurrent change won; reload and try again");
-  const maxNo = await exec.execute<{ maxNo: number }>(sql`
-    select coalesce(max(version_no), 0) as "maxNo" from worker_employment_versions
-     where org_id = ${ctx.orgId} and employment_id = ${ctx.target.employmentId}
-  `);
-  const nextNo = (maxNo.rows[0]?.maxNo ?? 0) + 1;
-  const effectiveFrom = String(row["effective_from"]);
-  parseCivilDate(effectiveFrom);
-  await exec.execute(sql`
-    update worker_employment_versions
-       set recorded_until = ${ctx.recordedAt}, superseded_by = ${nextNo}
-     where org_id = ${ctx.orgId} and id = ${row["id"]} and recorded_until is null
-  `);
   await exec.execute(sql`
     insert into worker_employment_versions
       (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at, created_by, updated_by)

@@ -4869,7 +4869,9 @@
       "runNow": "Ejecutar ahora",
       "enable": "Activar",
       "disable": "Desactivar",
-      "actionFailed": "La acción falló."
+      "actionFailed": "La acción falló.",
+      "recipeLabel": "Partir de una receta",
+      "recipeBlank": "Receta en blanco"
     },
     "status": {
       "enabled": "Activada",
@@ -4950,7 +4952,17 @@
       "viewSteps": "Pasos",
       "stepsTitle": "Pasos de la ejecución",
       "runLoadFailed": "No se pudo cargar la ejecución.",
-      "closeSteps": "Cerrar"
+      "closeSteps": "Cerrar",
+      "approvalTitle": "Ajustes de aprobación",
+      "approvalHelp": "La aprobación por excepción ajusta las puertas de Flows existentes por tipo de sujeto: dentro de los umbrales la puerta se aprueba como decisión del sistema nombrando cada control; fuera, sigue la vía humana.",
+      "approvalException": "Aprobación por excepción",
+      "approvalThresholds": "Umbrales (JSON)",
+      "approvalAuto": "Aprobar si no hay regla",
+      "approvalDelegate": "Delegar tras días (vacío = nunca)",
+      "approvalExclude": "Excluir al iniciador",
+      "approvalYes": "Sí",
+      "approvalNo": "No",
+      "approvalSave": "Guardar ajustes"
     }
   }
 }

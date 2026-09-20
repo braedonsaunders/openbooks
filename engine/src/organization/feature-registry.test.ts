@@ -53,3 +53,34 @@ test("home announcements is a default-on platform feature with no parent", () =>
   assert.equal(featureEnabled({ homeAnnouncements: false }, "homeAnnouncements"), false);
 });
 // HR-15 end
+test("automations is an opt-in platform feature under flows with four sub-features", () => {
+  const def = FEATURE_BY_KEY.get("automations");
+  assert.ok(def, "automations must be registered before the builder gates on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.parentKey, "flows");
+  assert.deepEqual(def.navModules, ["automations"]);
+  for (const key of [
+    "automationDateTriggers",
+    "automationFieldTriggers",
+    "automationWebhooks",
+    "automationSimulator",
+  ]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "automations");
+    // A stale stored override can never resurrect a child while the parent is off.
+    assert.equal(featureEnabled({ automations: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({ flows: true, automations: true, [key]: true }, key), true);
+  // Exception-only approval is a per-flow setting, never a feature key.
+  assert.equal(FEATURE_BY_KEY.has("automationExceptionApproval"), false);
+
+test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm", () => {
+  const reasons = FEATURE_BY_KEY.get("hrmActionReasons");
+  assert.ok(reasons, "hrmActionReasons must be registered");
+  assert.equal(reasons.defaultEnabled, true);
+  assert.equal(reasons.parentKey, "hrm");
+  const verbs = FEATURE_BY_KEY.get("hrmEventVerbs");
+  assert.ok(verbs, "hrmEventVerbs must be registered");
+  assert.equal(verbs.defaultEnabled, false);
+  assert.equal(verbs.parentKey, "hrm");
+  assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);

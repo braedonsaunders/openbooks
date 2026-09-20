@@ -12,7 +12,7 @@ import { automationErrorResponse } from "./_lib";
 export const runtime = "nodejs";
 
 /** Automation recipes: GET lists, POST authors a draft recipe. */
-export async function GET(req: Request) {
+export async function GET() {
   const gate = await guardPermission("automations.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {

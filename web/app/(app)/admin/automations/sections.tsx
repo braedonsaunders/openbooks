@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
-import { AutomationRowActions, NewAutomationButton } from './AutomationsClient'
+import type { ComponentProps } from 'react'
+import { AutomationApprovalSettings, AutomationRowActions, NewAutomationButton } from './AutomationsClient'
 
 /**
  * The automations list's composite cells, mirroring the flows list cells:
@@ -73,4 +74,8 @@ export function AutomationRowActionsCell({
 
 export function NewAutomationListButton({ label }: { label: string }) {
   return <NewAutomationButton label={label} />
+}
+
+export function AutomationApprovalSettingsSection(props: ComponentProps<typeof AutomationApprovalSettings>) {
+  return <AutomationApprovalSettings {...props} />
 }

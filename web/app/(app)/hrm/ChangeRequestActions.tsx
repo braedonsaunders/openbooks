@@ -46,9 +46,10 @@ export function ChangeRequestActions({
   const [editing, setEditing] = useState<EditableChangeRequest | null>(null)
   const [loadingEdit, setLoadingEdit] = useState(false)
   const [lifecycle, setLifecycle] = useState<'submit' | 'withdraw' | null>(null)
+  // HR-16: verb-action busyness lives with the other hooks (never conditional).
+  const [verbBusy, setVerbBusy] = useState(false)
 
   if ((TERMINAL as readonly string[]).includes(request.status) && !(request.status === 'applied' && appliedChangeId)) return null
-  const [verbBusy, setVerbBusy] = useState(false)
 
   async function verbAction(verb: 'rescind' | 'correct') {
     const reason = await promptDialog({

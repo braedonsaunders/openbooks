@@ -4869,7 +4869,9 @@
       "runNow": "Run now",
       "enable": "Enable",
       "disable": "Disable",
-      "actionFailed": "The action failed."
+      "actionFailed": "The action failed.",
+      "recipeLabel": "Start from a recipe",
+      "recipeBlank": "Blank recipe"
     },
     "status": {
       "enabled": "Enabled",
@@ -4950,7 +4952,17 @@
       "viewSteps": "Steps",
       "stepsTitle": "Run steps",
       "runLoadFailed": "Could not load the run.",
-      "closeSteps": "Close"
+      "closeSteps": "Close",
+      "approvalTitle": "Approval settings",
+      "approvalHelp": "Exception-only approval tunes the existing Flows gates per subject kind — within thresholds the gate auto-approves as a system decision naming every check; outside them the human route runs.",
+      "approvalException": "Exception-only approval",
+      "approvalThresholds": "Thresholds (JSON)",
+      "approvalAuto": "Auto-approve when no rule",
+      "approvalDelegate": "Delegate after days (blank = never)",
+      "approvalExclude": "Exclude the initiator",
+      "approvalYes": "Yes",
+      "approvalNo": "No",
+      "approvalSave": "Save settings"
     }
   }
 }

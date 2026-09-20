@@ -4869,7 +4869,9 @@
       "runNow": "Exécuter",
       "enable": "Activer",
       "disable": "Désactiver",
-      "actionFailed": "L'action a échoué."
+      "actionFailed": "L'action a échoué.",
+      "recipeLabel": "Partir d'une recette",
+      "recipeBlank": "Recette vierge"
     },
     "status": {
       "enabled": "Activée",
@@ -4950,7 +4952,17 @@
       "viewSteps": "Étapes",
       "stepsTitle": "Étapes de l'exécution",
       "runLoadFailed": "L'exécution n'a pas pu être chargée.",
-      "closeSteps": "Fermer"
+      "closeSteps": "Fermer",
+      "approvalTitle": "Réglages d'approbation",
+      "approvalHelp": "L'approbation par exception règle les grilles Flows existantes par type de sujet — dans les seuils, la grille approuve comme décision système en nommant chaque contrôle ; hors seuils, la voie humaine s'applique.",
+      "approvalException": "Approbation par exception",
+      "approvalThresholds": "Seuils (JSON)",
+      "approvalAuto": "Approuver sans règle",
+      "approvalDelegate": "Déléguer après jours (vide = jamais)",
+      "approvalExclude": "Exclure l'initiateur",
+      "approvalYes": "Oui",
+      "approvalNo": "Non",
+      "approvalSave": "Enregistrer"
     }
   }
 }
