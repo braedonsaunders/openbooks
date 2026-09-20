@@ -259,7 +259,8 @@ test("happy path: file → submit → decide → approved writes absences plus p
     const absences = await absencesOf(draft.id);
     assert.equal(absences.length, 3, "one absence row per day");
     assert.deepEqual(absences.map((a) => a.on_date), ["2026-09-01", "2026-09-02", "2026-09-03"]);
-    assert.deepEqual(absences.map((a) => a.hours), ["8", "8", "8"]);
+    // hours is numeric(9,2) in storage, so the text read carries the scale.
+    assert.deepEqual(absences.map((a) => a.hours), ["8.00", "8.00", "8.00"]);
 
     const inputs = await inputsOf(draft.id);
     assert.equal(inputs.length, 3, "one pay-run input per absence day");
@@ -390,10 +391,11 @@ async function seedRun(
   opts: { runStatus: "calculated" | "committed"; docStatus: string; periodStart: string; periodEnd: string; number: string },
 ): Promise<string> {
   const scheduleId = randomUUID();
+  // pay_schedules names are unique per org: one harness seeds several runs.
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${orgId}, 'Biweekly', 'biweekly', 26, '2026-06-28', 3, true, ${actorId}, ${actorId})`);
+    values (${scheduleId}, ${orgId}, ${`Biweekly ${opts.number}`}, 'biweekly', 26, '2026-06-28', 3, true, ${actorId}, ${actorId})`);
   const runId = randomUUID();
   await db.execute(sql`
     insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
@@ -440,8 +442,12 @@ test("approval refused with the retro remedy when a committed run covers the day
     });
     await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id });
     // The run commits between submit and decide: history the approval must not rewrite.
+    // Committed with the document approved-but-unposted (commitPayRun accepts
+    // draft and approved documents; posting follows with its own journal
+    // entry): posted would trip the unrelated documents_posted_period_required
+    // CHECK, while the refusal under test keys on run_status alone.
     await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
-      runStatus: "committed", docStatus: "posted",
+      runStatus: "committed", docStatus: "approved",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-RETRO-1",
     });
     const gate = await gateOf(draft.id);
@@ -515,8 +521,10 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
     });
     await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: second.id });
     await approveThroughGate(h.org.orgId, h.approverId, second.id);
+    // Approved-but-unposted like above: the cancel refusal keys on the
+    // committed run_status, not on document posting.
     const committedId = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
-      runStatus: "committed", docStatus: "posted",
+      runStatus: "committed", docStatus: "approved",
       periodStart: "2026-10-01", periodEnd: "2026-10-15", number: "PAY-SHUT-1",
     });
     await consumeLeavePayrollInputs(db, {
