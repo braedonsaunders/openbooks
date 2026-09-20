@@ -25,6 +25,11 @@ import { IT_PAYROLL_PACK } from "./pack.ts";
 import { IT_PACK_RATES, IT_TAX_YEARS } from "./rates.ts";
 import { IT_REGION_CODES } from "./regions.ts";
 import { IT_WITHHOLDING } from "./withholding.ts";
+import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
+} from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 test("IT pack is installable for 2025, computes in EUR on the calendar year", () => {
   assert.equal(IT_PAYROLL_PACK.country, "IT");
@@ -365,8 +370,8 @@ test("CU and 770 are declared annually, unpopulated, with refused corrections", 
 });
 
 test("the national festivity calendar is declared with Easter Monday computed", () => {
-  assert.equal(IT_JURISDICTIONS.length, 1);
-  const italy = IT_JURISDICTIONS[0]!;
+  assert.equal(IT_JURISDICTIONS.length, 20);
+  const italy = IT_JURISDICTIONS.find((j) => j.key === "IT-01")!;
   assert.equal(italy.scope, "employment");
   assert.equal(italy.holidays.length, 11);
   const pasquetta = italy.holidays.find((holiday) => holiday.key === "lunedi_angelo")!;
@@ -374,4 +379,29 @@ test("the national festivity calendar is declared with Easter Monday computed", 
   assert.equal(italy.holidayPay, null);
   assert.deepEqual(IT_PAYROLL_PACK.jurisdictions, IT_JURISDICTIONS);
   assert.equal(IT_PAYROLL_PACK.withholding(), IT_WITHHOLDING);
+});
+
+test("IT profile jurisdictions resolve to declared region calendars", () => {
+  // Every profile names its ISTAT region, so the engine resolves
+  // jurisdictionKey("IT", "<code>") = "IT-<code>". A bare "IT" key
+  // declares a calendar no employee reaches, and the
+  // undeclared-jurisdiction gate then refuses every period containing a
+  // mandatory holiday. One entry per region sharing the national festività
+  // (ES precedent); regional patron-saint days stay unmodelled by design.
+  const byKey = new Map(IT_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
+  assert.equal(IT_PAYROLL_PACK.jurisdictions.length, 20);
+  for (const code of IT_PAYROLL_PACK.regions.known) {
+    assert.equal(jurisdictionKey("IT", code), `IT-${code}`);
+    assert.equal(payrollJurisdictionDeclared(`IT-${code}`), true, code);
+    assert.equal(byKey.get(`IT-${code}`)?.holidays.length, 11, code);
+  }
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "IT",
+      jurisdiction: "IT-01",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
+  );
 });

@@ -20,7 +20,13 @@ import type { PayrollJurisdiction } from "../packs.ts";
 
 export const BR_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
-    key: "BR",
+    // The key is the profile-resolved jurisdiction, not the bare country:
+    // jurisdictionKey("BR", "BR") is "BR-BR" (the profile always names
+    // the single national region, so the bare country never resolves). A
+    // bare "BR" key declares a calendar no employee can ever reach, and
+    // the undeclared-jurisdiction gate then refuses every period containing
+    // a mandatory holiday.
+    key: "BR-BR",
     name: "Brasil (feriados nacionais)",
     scope: "employment",
     citation:

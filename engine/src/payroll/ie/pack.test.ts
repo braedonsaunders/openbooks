@@ -6,6 +6,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { IE_PAYROLL_PACK } from "./pack.ts";
+import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
+} from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 describe("IE payroll pack", () => {
   it("exists, is Irish, and is installable for 2026", () => {
@@ -116,10 +121,29 @@ describe("IE payroll pack", () => {
   it("declares the ten public holidays with a cited s.21 edition", () => {
     const [jurisdiction] = IE_PAYROLL_PACK.jurisdictions;
     assert.ok(jurisdiction, "IE jurisdiction declared");
-    assert.equal(jurisdiction.key, "IE");
+    assert.equal(jurisdiction.key, "IE-IE");
     assert.equal(jurisdiction.scope, "employment");
     assert.equal(jurisdiction.holidays.length, 10);
     assert.ok(jurisdiction.holidayPay !== null && jurisdiction.holidayPay.length === 1);
+  });
+
+  it("profile jurisdiction resolves to a declared employment calendar", () => {
+    // The profile always names the single national region, so the engine
+    // resolves jurisdictionKey("IE", "IE") = "IE-IE". A bare "IE" key
+    // declares a calendar no employee reaches, and the undeclared-jurisdiction
+    // gate then refuses every period containing a mandatory holiday (proven:
+    // a January 2026 run refused over New Year's Day before the key fix).
+    assert.equal(jurisdictionKey("IE", "IE"), "IE-IE");
+    assert.equal(payrollJurisdictionDeclared("IE-IE"), true);
+    assert.equal(
+      undeclaredJurisdictionHolidayConflict({
+        country: "IE",
+        jurisdiction: "IE-IE",
+        from: "2026-01-01",
+        to: "2026-01-31",
+      }),
+      null,
+    );
   });
 
   it("refuses a run with no pay date, and emergency basis with no RPN", async () => {

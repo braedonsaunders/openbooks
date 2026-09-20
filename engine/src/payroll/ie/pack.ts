@@ -212,7 +212,13 @@ const IE_WITHHOLDING = {
  */
 const IE_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
-    key: "IE",
+    // The key is the profile-resolved jurisdiction, not the bare country:
+    // jurisdictionKey("IE", "IE") is "IE-IE" (the profile always names
+    // the single national region, so the bare country never resolves). A
+    // bare "IE" key declares a calendar no employee can ever reach, and
+    // the undeclared-jurisdiction gate then refuses every period containing
+    // a mandatory holiday.
+    key: "IE-IE",
     name: "Ireland",
     scope: "employment",
     citation: "Organisation of Working Time Act 1997, s.21; S.I. No. 475/1997",
