@@ -22,14 +22,29 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { runEndpointScript, runScheduledScript } from "./scripting.ts";
+import {
+  MAX_SCRIPT_LOG_BYTES,
+  MAX_SCRIPT_LOG_ENTRIES,
+  MAX_SCRIPT_QUERY_RESULT_BYTES,
+  SCRIPT_HOST_TIMEOUT,
+  runEndpointScript,
+  runScheduledScript,
+  runScript,
+  scriptHostAllowsJournal,
+  scriptHostAllowsQuery,
+  scriptQueryResultCapRefusal,
+  serializeScriptQueryResult,
+  withScriptHostDeadline,
+} from "./scripting.ts";
 
 test("the __journal_create host fn resolves the live permission gate before any ledger write", () => {
   const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const hostStart = source.indexOf('"__journal_create"');
-  const tryStart = source.indexOf("try {", hostStart);
-  const boundary = source.slice(hostStart, tryStart);
-  assert.match(boundary, /actorHasPermission\(db, ctx\.org\.id, ctx\.user\.id, "gl\.post"\)/);
+  const host = source.slice(source.indexOf('"__journal_create"'), source.indexOf('vm.setProp(obHandle, "log"'));
+  const permAt = host.indexOf('actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post")');
+  const writeAt = host.indexOf("createScriptJournal");
+  assert.ok(permAt >= 0, "gl.post must be re-resolved live");
+  assert.ok(writeAt >= 0, "createScriptJournal must exist");
+  assert.ok(permAt < writeAt, "permission gate must run before the ledger write");
 });
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -450,10 +465,12 @@ async function setQueryConsole(orgId: string, enabled: boolean): Promise<void> {
 
 test("the __query host fn resolves the caller's query-console gates before any SQL runs", () => {
   const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const hostStart = source.indexOf('"__query"');
-  const tryStart = source.indexOf("try {", hostStart);
-  const boundary = source.slice(hostStart, tryStart);
-  assert.match(boundary, /scriptQueryRefusal\(ctx\)/);
+  const host = source.slice(source.indexOf('"__query"'), source.indexOf('"__journal_create"'));
+  const refuseAt = host.indexOf("scriptQueryRefusal(ctx)");
+  const sqlAt = host.indexOf("runUserSql");
+  assert.ok(refuseAt >= 0, "scriptQueryRefusal must run on the query host");
+  assert.ok(sqlAt >= 0, "runUserSql must exist");
+  assert.ok(refuseAt < sqlAt, "query gates must run before SQL");
   const gate = source.slice(source.indexOf("export async function scriptQueryRefusal"), source.indexOf("export async function scriptingFeatureEnabled"));
   assert.match(gate, /queryConsole/);
   assert.match(gate, /actorHasPermission\(db, ctx\.org\.id, userId, "sql\.execute"\)/);
@@ -541,4 +558,168 @@ test("system-driven runs keep ob.query: an actor-less scheduled script still rea
   } finally {
     await dropScratchOrgReporting(seeded.org.orgId);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Human-driven document triggers must carry ctx.user so query/journal gates
+// never take the actor-less system path for a signed-in submit/post/void.
+// ---------------------------------------------------------------------------
+
+const HOSTLESS_ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Host", baseCurrency: "CAD" };
+
+function callerSource(rel: string): string {
+  return readFileSync(new URL(rel, import.meta.url), "utf8");
+}
+
+test("human submit/post/void callers resolve the actor into ctx.user before runTriggerScripts", () => {
+  const submit = callerSource("../flows/submit.ts");
+  const submitCtx = submit.slice(submit.indexOf("const scriptCtx: ScriptContext"), submit.indexOf("runTriggerScripts(\"before_submit\""));
+  assert.match(submit, /resolveScriptUser\(/);
+  assert.match(submitCtx, /user/);
+
+  const prepare = callerSource("../ledger/posting-prepare.ts");
+  const beforePostAt = prepare.indexOf("const scriptCtx: ScriptContext");
+  const beforePost = prepare.slice(prepare.lastIndexOf("resolveScriptUser", beforePostAt), prepare.indexOf("runTriggerScripts(\"before_post\""));
+  assert.match(beforePost, /resolveScriptUser\(/);
+  assert.match(beforePost, /user/);
+  const dispatch = callerSource("../ledger/posting-dispatch.ts");
+  const afterPostAt = dispatch.indexOf("const ctx: ScriptContext");
+  const afterPost = dispatch.slice(dispatch.lastIndexOf("resolveScriptUser", afterPostAt), dispatch.indexOf("runTriggerScripts(\"after_post\""));
+  assert.match(afterPost, /resolveScriptUser\(/);
+  assert.match(afterPost, /user/);
+
+  const voids = callerSource("../ledger/document-void.ts");
+  const beforeVoid = voids.slice(voids.indexOf("const scriptCtx: ScriptContext"), voids.indexOf("runTriggerScripts(\"before_void\""));
+  assert.match(voids, /resolveScriptUser\(/);
+  assert.match(beforeVoid, /user/);
+});
+
+test("script host I/O is raced against the same wall-clock deadline as the interrupt handler", async () => {
+  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
+  const queryFn = source.slice(source.indexOf("\"__query\""), source.indexOf("\"__journal_create\""));
+  assert.match(queryFn, /withScriptHostDeadline/);
+  assert.match(queryFn, /remainingMs <= 0/);
+  const queryRaceAt = queryFn.indexOf("withScriptHostDeadline");
+  assert.ok(queryRaceAt >= 0, "__query must race host I/O");
+  const queryBeforeRace = queryFn.slice(0, queryRaceAt);
+  const queryRaced = queryFn.slice(queryRaceAt);
+  assert.doesNotMatch(
+    queryBeforeRace,
+    /scriptQueryRefusal|runUserSql/,
+    "query authorization and SQL must not await outside the host deadline",
+  );
+  assert.match(queryRaced, /scriptQueryRefusal/);
+  assert.match(queryRaced, /runUserSql/);
+
+  const journalFn = source.slice(source.indexOf("\"__journal_create\""), source.indexOf("vm.setProp(obHandle, \"log\""));
+  assert.match(journalFn, /withScriptHostDeadline/);
+  assert.match(journalFn, /remainingMs <= 0/);
+  const journalRaceAt = journalFn.indexOf("withScriptHostDeadline");
+  assert.ok(journalRaceAt >= 0, "__journal_create must race host I/O");
+  const journalBeforeRace = journalFn.slice(0, journalRaceAt);
+  const journalRaced = journalFn.slice(journalRaceAt);
+  assert.doesNotMatch(
+    journalBeforeRace,
+    /actorHasPermission|actorAllowedSubsidiaryIds|createScriptJournal/,
+    "journal authorization and scope reads must not await outside the host deadline",
+  );
+  assert.match(journalRaced, /actorHasPermission/);
+  assert.match(journalRaced, /actorAllowedSubsidiaryIds/);
+  assert.match(journalRaced, /createScriptJournal/);
+
+  let ranAfterDeadline = false;
+  const alreadyOver = await withScriptHostDeadline(Date.now() - 1, async () => {
+    ranAfterDeadline = true;
+    return "ran";
+  });
+  assert.equal(alreadyOver, SCRIPT_HOST_TIMEOUT);
+  assert.equal(ranAfterDeadline, false, "a host call must not start once the deadline has passed");
+
+  const started = Date.now();
+  const raced = await withScriptHostDeadline(Date.now() + 25, () =>
+    new Promise<string>((resolve) => {
+      setTimeout(() => resolve("late"), 250);
+    }),
+  );
+  assert.equal(raced, SCRIPT_HOST_TIMEOUT);
+  assert.ok(Date.now() - started < 200, `host deadline race exceeded bound: ${Date.now() - started}ms`);
+});
+
+test("ob.log is capped on the host side independently of the QuickJS heap", async () => {
+  const res = await runScript(
+    `function main(ctx) {
+      for (var i = 0; i < 400; i++) ob.log("${"x".repeat(400)}");
+      return { n: 1 };
+    }`,
+    { trigger: "before_submit", org: HOSTLESS_ORG },
+    2_000,
+  );
+  assert.equal(res.status, "ok", res.abortReason ?? "");
+  assert.ok(res.logs.length <= MAX_SCRIPT_LOG_ENTRIES + 1, `uncapped entries: ${res.logs.length}`);
+  const bytes = res.logs.reduce((n, line) => n + Buffer.byteLength(line, "utf8"), 0);
+  assert.ok(bytes <= MAX_SCRIPT_LOG_BYTES + 256, `uncapped log bytes: ${bytes}`);
+  assert.match(res.logs.at(-1) ?? "", /ob\.log truncated/);
+});
+
+test("payment_format and unknown triggers fail closed: no query or journal host I/O", async () => {
+  assert.equal(scriptHostAllowsQuery("payment_format"), false);
+  assert.equal(scriptHostAllowsJournal("payment_format"), false);
+  assert.equal(scriptHostAllowsQuery("not_a_real_trigger"), false);
+  assert.equal(scriptHostAllowsJournal("not_a_real_trigger"), false);
+  assert.equal(scriptHostAllowsQuery("before_submit"), true);
+  assert.equal(scriptHostAllowsJournal("scheduled"), true);
+  assert.equal(scriptHostAllowsQuery("custom_gl_lines", { deterministic: true }), false);
+
+  const query = await runScript(
+    `function main(ctx) { return ob.query("select 1"); }`,
+    { trigger: "payment_format", org: HOSTLESS_ORG },
+    2_000,
+  );
+  assert.equal(query.status, "error");
+  assert.match(query.abortReason ?? "", /query is not available in payment_format/);
+
+  const journal = await runScript(
+    `function main(ctx) { return ob.journal.create({ lines: [] }); }`,
+    { trigger: "payment_format", org: HOSTLESS_ORG },
+    2_000,
+  );
+  assert.equal(journal.status, "error");
+  assert.match(journal.abortReason ?? "", /journal\.create is not available in payment_format/);
+});
+
+test("ob.query encodes rows under a byte cap and never JSON.stringifies the complete result first", () => {
+  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
+  const queryFn = source.slice(source.indexOf("\"__query\""), source.indexOf("\"__journal_create\""));
+  assert.doesNotMatch(
+    queryFn,
+    /JSON\.stringify\(\s*result/,
+    "the host must not materialize an unbounded JSON copy before the byte cap",
+  );
+  assert.match(queryFn, /serializeScriptQueryResult/);
+
+  const rows = [{ id: 1, memo: "freight", amount: "10.00" }];
+  const under = serializeScriptQueryResult(rows, 256);
+  assert.equal(under.ok, true);
+  assert.equal(under.json, JSON.stringify(rows));
+
+  const over = serializeScriptQueryResult([{ blob: "x".repeat(200) }], 64);
+  assert.equal(over.ok, false);
+  assert.match(over.refusal, /host result cap/);
+  assert.match(over.refusal, /64/);
+  assert.equal("json" in over, false);
+
+  const many = Array.from({ length: 40 }, (_, i) => ({ i, blob: "yyyyyyyyyy" }));
+  const manyOver = serializeScriptQueryResult(many, 128);
+  assert.equal(manyOver.ok, false);
+  assert.match(manyOver.refusal, /host result cap/);
+
+  const dated = [{ postedAt: new Date("2020-01-01T00:00:00.000Z"), empty: null, flag: true }];
+  const datedOut = serializeScriptQueryResult(dated, 256);
+  assert.equal(datedOut.ok, true);
+  assert.equal(datedOut.json, JSON.stringify(dated));
+
+  const named = scriptQueryResultCapRefusal();
+  assert.match(named, /host result cap/);
+  assert.match(named, new RegExp(String(MAX_SCRIPT_QUERY_RESULT_BYTES)));
+  assert.doesNotMatch(named, /undefined/);
 });

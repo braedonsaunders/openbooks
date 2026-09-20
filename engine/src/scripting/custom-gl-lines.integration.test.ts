@@ -39,6 +39,55 @@ test("the custom-gl-lines path re-resolves gl.post live before any contribution"
   );
 });
 
+test("custom_gl_lines applies the posting actor's subsidiary allowlist", () => {
+  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
+  const host = source.slice(source.indexOf("runCustomGlLineScripts"), source.indexOf("const CUSTOM_GL_LINE_UUID_RE"));
+  assert.match(host, /actorAllowedSubsidiaryIds\(/);
+  const resolve = source.slice(source.indexOf("export async function resolveCustomGlLines"), source.indexOf("return parsed.map"));
+  assert.match(resolve, /allowedSubsidiaryIds/);
+});
+
+test("deterministic Date/Math locks are installed before user source and query is omitted", async () => {
+  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
+  const globalsAt = source.indexOf("const DETERMINISTIC_SCRIPT_GLOBALS");
+  const evalAt = source.indexOf("vm.evalCode(DETERMINISTIC_SCRIPT_GLOBALS)");
+  const programAt = source.indexOf("await vm.evalCodeAsync(program)");
+  assert.ok(globalsAt >= 0, "DETERMINISTIC_SCRIPT_GLOBALS must lock Date/Math before tenant source");
+  assert.ok(evalAt >= 0, "deterministic preparation must eval DETERMINISTIC_SCRIPT_GLOBALS");
+  assert.ok(programAt >= 0, "user source must still run through evalCodeAsync(program)");
+  assert.ok(
+    evalAt < programAt,
+    "Date/Math.random must be locked in a separate evaluation before tenant source runs",
+  );
+
+  const captured = await runScript(
+    `const now = Date.now;
+     function main(ctx) { return now(); }`,
+    {
+      trigger: "custom_gl_lines",
+      document: { kind: "journal" },
+      org: { id: "org", name: "Test org", baseCurrency: "CAD" },
+    },
+    2_000,
+    { strict: true, forbidJournalCreate: true, deterministic: true },
+  );
+  assert.equal(captured.status, "error");
+  assert.match(captured.abortReason ?? "", /deterministic: Date is not available/);
+
+  const queried = await runScript(
+    `function main(ctx) { return ob.query("select 1"); }`,
+    {
+      trigger: "custom_gl_lines",
+      document: { kind: "journal" },
+      org: { id: "org", name: "Test org", baseCurrency: "CAD" },
+    },
+    2_000,
+    { strict: true, forbidJournalCreate: true, deterministic: true },
+  );
+  assert.equal(queried.status, "error");
+  assert.match(queried.abortReason ?? "", /query is not available/);
+});
+
 test("strict scripts fail when they write to the frozen context", async () => {
   const res = await runScript(
     `function main(ctx) { ctx.document.memo = "mutated"; return {}; }`,
@@ -59,6 +108,7 @@ async function seedBalancedDraftJournal(
   org: ScratchOrg,
   documentNumber: string,
   createdBy: string,
+  subsidiaryId: string = org.subsidiaryId,
 ): Promise<string> {
   const documentId = randomUUID();
   await db.execute(sql`
@@ -67,7 +117,7 @@ async function seedBalancedDraftJournal(
        document_date, currency, subtotal, tax_total, total, created_by)
     values (
       ${documentId}, ${org.orgId}, 'journal', 'draft', ${documentNumber},
-      ${org.subsidiaryId}, ${org.date}, 'CAD', '10', '0', '10', ${createdBy}
+      ${subsidiaryId}, ${org.date}, 'CAD', '10', '0', '10', ${createdBy}
     )
   `);
   await db.execute(sql`
@@ -75,9 +125,9 @@ async function seedBalancedDraftJournal(
       (org_id, document_id, line_number, account_id, subsidiary_id,
        amount, quantity, unit_price, tax_amount, tax_input_amount)
     values
-      (${org.orgId}, ${documentId}, 1, ${org.accounts.bank}, ${org.subsidiaryId},
+      (${org.orgId}, ${documentId}, 1, ${org.accounts.bank}, ${subsidiaryId},
        '10', '1', '10', '0', '10'),
-      (${org.orgId}, ${documentId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId},
+      (${org.orgId}, ${documentId}, 2, ${org.accounts.cogs}, ${subsidiaryId},
        '-10', '1', '-10', '0', '-10')
   `);
   return documentId;
@@ -644,6 +694,59 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
     );
     assert.equal(runs.rows.length, 1, "only the first script ran");
     assert.notEqual(runs.rows[0]!.script_id, secondId);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the actor allowlist", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const childId = randomUUID();
+    await withOrgContext(org.orgId, async () => {
+      await enableAllocScripting(org.orgId);
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        select ${childId}, ${org.orgId}, ${org.subsidiaryId}, 'Child entity', base_currency, country
+          from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+      await db.execute(sql`
+        update app_roles
+           set permissions = '["gl.post"]'::jsonb,
+               subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [childId] })}::jsonb
+         where org_id = ${org.orgId} and key = 'poster'`);
+      const creditCode = await accountNumber(org.accounts.clearing);
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) {
+          return { lines: [
+            { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "7.50", subsidiaryId: ${JSON.stringify(org.subsidiaryId)} },
+            { accountCode: ${JSON.stringify(creditCode)}, amount: "-7.50", subsidiaryId: ${JSON.stringify(org.subsidiaryId)} },
+          ] };
+        }`,
+      );
+    });
+    const documentId = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-SCOPE", actorId, childId),
+    );
+    await withOrgContext(org.orgId, () =>
+      submitAndReleaseIfUngated("journal", documentId, actorId),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(documentId, postingControlDeps(org), {
+          deferEffects: true,
+          audit: { actorId, source: "test" },
+        }),
+      ),
+      /subsidiary not found/,
+    );
+    const after = await withOrgContext(org.orgId, () =>
+      db.execute<{ entries: number; scripted: number }>(sql`
+        select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
+               (select count(*)::int from journal_lines where org_id = ${org.orgId} and contributor_kind = 'script') as scripted`),
+    );
+    assert.deepEqual(after.rows[0], { entries: 0, scripted: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
