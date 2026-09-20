@@ -557,6 +557,13 @@ test("hire without a template rolls the apply back with nothing applied", { skip
     const processes = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
     assert.equal(processes, 0, "the refused apply opened no process");
+    const steps = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_process_steps
+       where process_id in (select id from hrm_processes where employment_id = ${employmentId})`)).rows[0]!.n;
+    assert.equal(steps, 0, "the refused apply snapshotted no steps");
+    const changes = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from employment_changes where employment_id = ${employmentId}`)).rows[0]!.n;
+    assert.equal(changes, 0, "the refused apply recorded no employment change event");
   });
 });
 
