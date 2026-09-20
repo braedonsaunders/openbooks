@@ -803,6 +803,8 @@
       "profile": "プロフィール",
       "leave": "休暇",
       "checklists": "チェックリスト",
+      "reviews": "評価",
+      "benefits": "福利厚生",
       "team": "チーム"
     },
     "refusedTitle": "セルフサービスは利用できません",
@@ -934,7 +936,8 @@
         "title": "職名",
         "department": "部門",
         "status": "ステータス",
-        "serviceStart": "勤務開始日"
+        "serviceStart": "勤務開始日",
+        "cycle": "サイクル"
       },
       "rosterEmpty": "直属の部下はいません",
       "stepsTitle": "自分に割り当てられたステップ",
@@ -943,7 +946,107 @@
       "leaveEmpty": "決定待ちの休暇申請はありません。",
       "decideInApprovals": "承認画面で決定する",
       "changesTitle": "未決定の変更申請",
-      "changesEmpty": "決定待ちの変更申請はありません。"
+      "changesEmpty": "決定待ちの変更申請はありません。",
+      "owedTitle": "担当の評価",
+      "owedEmpty": "オープン中のサイクルに担当の評価はありません。",
+      "openReview": "評価を開く"
+    },
+    "reviewStatus": {
+      "pending": "下書き",
+      "submitted": "提出済み",
+      "calibrated": "調整済み",
+      "shared": "共有済み",
+      "acknowledged": "確認済み"
+    },
+    "goalStatus": {
+      "active": "進行中",
+      "achieved": "達成",
+      "missed": "未達",
+      "cancelled": "中止"
+    },
+    "enrollmentStatus": {
+      "elected": "選択済み",
+      "waived": "辞退",
+      "pending_approval": "承認待ち",
+      "active": "有効",
+      "ended": "終了",
+      "cancelled": "取消"
+    },
+    "windowKinds": {
+      "open_enrollment": "定期登録",
+      "new_hire": "新規採用",
+      "life_event": "ライフイベント"
+    },
+    "reviews": {
+      "title": "自分の評価",
+      "description": "提出すべき自己評価、共有された評価、自分の目標。",
+      "selfTitle": "自己評価",
+      "columns": {
+        "cycle": "サイクル",
+        "period": "期間",
+        "status": "状態",
+        "rating": "評価",
+        "shared": "共有日",
+        "goal": "目標",
+        "progress": "進捗"
+      },
+      "selfEmpty": "自己評価はありません",
+      "selfEmptyDescription": "サイクルが開始すると提出すべき評価がここに表示されます。",
+      "answerInDrawer": "人事画面で回答",
+      "sharedTitle": "共有された評価",
+      "sharedEmpty": "共有はまだありません",
+      "sharedEmptyDescription": "共有されたマネージャー評価がここに表示されます。",
+      "acknowledge": "確認する",
+      "acknowledgeFailed": "評価を確認できませんでした。",
+      "goalsTitle": "自分の目標",
+      "goalsEmpty": "目標はまだありません",
+      "goalsEmptyDescription": "雇用の目標が進捗とともにここに表示されます。",
+      "goalDialogTitle": "目標の進捗を更新",
+      "goalDialogDescription": "メモとともに進捗を記録します — 目標の証跡になります。",
+      "goalNoteLabel": "メモ",
+      "goalNotePlaceholder": "前回更新からの進展",
+      "goalSubmit": "進捗を保存",
+      "goalUpdate": "更新",
+      "goalFailed": "進捗を保存できませんでした。"
+    },
+    "benefits": {
+      "title": "自分の福利厚生",
+      "description": "加入内容、登録期間中のウィンドウ、扶養家族。",
+      "electionsTitle": "加入内容",
+      "columns": {
+        "plan": "プラン",
+        "coverage": "保障内容",
+        "status": "状態",
+        "effective": "適用期間",
+        "monthly": "控除 / 期間",
+        "window": "ウィンドウ",
+        "kind": "種類",
+        "range": "期間",
+        "dependent": "扶養家族",
+        "relationship": "続柄"
+      },
+      "electionsEmpty": "加入はありません",
+      "electionsEmptyDescription": "選択した保障がここに表示されます。",
+      "monthlyHint": "給与から控除される保存済み金額 — 再計算されません。",
+      "windowsTitle": "登録受付中のウィンドウ",
+      "windowsEmpty": "受付中のウィンドウはありません",
+      "windowsEmptyDescription": "雇用主のウィンドウは受付中にここに表示されます。",
+      "dependentsTitle": "扶養家族",
+      "dependentsEmpty": "扶養家族は登録されていません。",
+      "elect": "保障を選択",
+      "electTitle": "保障を選択",
+      "electDescription": "雇用主の受付中ウィンドウ内で選択 — またはライフイベントを記録。",
+      "fromLabel": "適用開始日",
+      "lifeEventLabel": "ライフイベントの理由（ウィンドウの代わり）",
+      "lifeEventPlaceholder": "人事承認者向けに変更内容を記入",
+      "electSubmit": "選択する",
+      "electFailed": "加入を記録できませんでした。",
+      "change": "変更",
+      "changeTitle": "保障を変更",
+      "changeDescription": "受付中ウィンドウ内の日付から変更 — 旧行は前日に終了します。",
+      "changeReasonPlaceholder": "保障を変更する理由",
+      "changeSubmit": "変更を保存",
+      "changeFailed": "変更を記録できませんでした。"
     }
   }
 }

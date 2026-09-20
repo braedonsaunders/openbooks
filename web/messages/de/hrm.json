@@ -803,6 +803,8 @@
       "profile": "Profil",
       "leave": "Urlaub",
       "checklists": "Checklisten",
+      "reviews": "Beurteilungen",
+      "benefits": "Leistungen",
       "team": "Team"
     },
     "refusedTitle": "Self-Service ist nicht verfügbar",
@@ -934,7 +936,8 @@
         "title": "Titel",
         "department": "Abteilung",
         "status": "Status",
-        "serviceStart": "Dienstbeginn"
+        "serviceStart": "Dienstbeginn",
+        "cycle": "Zyklus"
       },
       "rosterEmpty": "Keine direkten Mitarbeitenden",
       "stepsTitle": "Mir zugewiesene Schritte",
@@ -943,7 +946,107 @@
       "leaveEmpty": "Keine Urlaubsanfragen zur Entscheidung.",
       "decideInApprovals": "In Genehmigungen entscheiden",
       "changesTitle": "Offene Änderungsanfragen",
-      "changesEmpty": "Keine Änderungsanfragen zur Entscheidung."
+      "changesEmpty": "Keine Änderungsanfragen zur Entscheidung.",
+      "owedTitle": "Offene Beurteilungen",
+      "owedEmpty": "Keine Beurteilungen im offenen Zyklus.",
+      "openReview": "Beurteilung öffnen"
+    },
+    "reviewStatus": {
+      "pending": "Entwurf",
+      "submitted": "Eingereicht",
+      "calibrated": "Kalibriert",
+      "shared": "Geteilt",
+      "acknowledged": "Bestätigt"
+    },
+    "goalStatus": {
+      "active": "Aktiv",
+      "achieved": "Erreicht",
+      "missed": "Verfehlt",
+      "cancelled": "Abgebrochen"
+    },
+    "enrollmentStatus": {
+      "elected": "Gewählt",
+      "waived": "Verzichtet",
+      "pending_approval": "Genehmigung offen",
+      "active": "Aktiv",
+      "ended": "Beendet",
+      "cancelled": "Storniert"
+    },
+    "windowKinds": {
+      "open_enrollment": "Offene Anmeldung",
+      "new_hire": "Neueinstellung",
+      "life_event": "Lebensereignis"
+    },
+    "reviews": {
+      "title": "Meine Beurteilungen",
+      "description": "Selbsteinschätzungen, geteilte Beurteilungen und Ihre Ziele.",
+      "selfTitle": "Selbsteinschätzungen",
+      "columns": {
+        "cycle": "Zyklus",
+        "period": "Zeitraum",
+        "status": "Status",
+        "rating": "Bewertung",
+        "shared": "Geteilt",
+        "goal": "Ziel",
+        "progress": "Fortschritt"
+      },
+      "selfEmpty": "Keine Selbsteinschätzungen",
+      "selfEmptyDescription": "Fällige Selbsteinschätzungen stehen hier, sobald ein Zyklus öffnet.",
+      "answerInDrawer": "In HR beantworten",
+      "sharedTitle": "Mit mir geteilt",
+      "sharedEmpty": "Noch nichts geteilt",
+      "sharedEmptyDescription": "Mit Ihnen geteilte Beurteilungen stehen hier.",
+      "acknowledge": "Bestätigen",
+      "acknowledgeFailed": "Die Beurteilung konnte nicht bestätigt werden.",
+      "goalsTitle": "Meine Ziele",
+      "goalsEmpty": "Noch keine Ziele",
+      "goalsEmptyDescription": "Ziele Ihrer Anstellung stehen hier mit Fortschritt.",
+      "goalDialogTitle": "Zielfortschritt melden",
+      "goalDialogDescription": "Melden Sie den Fortschritt mit Notiz — sie wird Nachweis des Ziels.",
+      "goalNoteLabel": "Notiz",
+      "goalNotePlaceholder": "Was sich seit der letzten Meldung getan hat",
+      "goalSubmit": "Fortschritt speichern",
+      "goalUpdate": "Aktualisieren",
+      "goalFailed": "Der Fortschritt konnte nicht gespeichert werden."
+    },
+    "benefits": {
+      "title": "Meine Leistungen",
+      "description": "Ihre Wahlen, offene Anmeldefenster und Angehörige.",
+      "electionsTitle": "Meine Wahlen",
+      "columns": {
+        "plan": "Plan",
+        "coverage": "Deckung",
+        "status": "Status",
+        "effective": "Wirksam",
+        "monthly": "Abzug / Periode",
+        "window": "Fenster",
+        "kind": "Art",
+        "range": "Zeitraum",
+        "dependent": "Angehörige(r)",
+        "relationship": "Beziehung"
+      },
+      "electionsEmpty": "Keine Wahlen",
+      "electionsEmptyDescription": "Gewählte Deckung steht hier.",
+      "monthlyHint": "Der gespeicherte Betrag, den die Abrechnung je Periode abzieht — nie neu berechnet.",
+      "windowsTitle": "Offene Anmeldefenster",
+      "windowsEmpty": "Kein offenes Fenster",
+      "windowsEmptyDescription": "Fenster Ihres Arbeitgebers stehen hier, solange sie offen sind.",
+      "dependentsTitle": "Angehörige",
+      "dependentsEmpty": "Keine Angehörigen erfasst.",
+      "elect": "Deckung wählen",
+      "electTitle": "Deckung wählen",
+      "electDescription": "Wählen Sie in einem offenen Fenster Ihres Arbeitgebers — oder melden Sie ein Lebensereignis.",
+      "fromLabel": "Wirksam ab",
+      "lifeEventLabel": "Grund des Lebensereignisses (statt Fenster)",
+      "lifeEventPlaceholder": "Was sich geändert hat, für die Personalabteilung",
+      "electSubmit": "Wählen",
+      "electFailed": "Die Wahl konnte nicht gespeichert werden.",
+      "change": "Ändern",
+      "changeTitle": "Deckung ändern",
+      "changeDescription": "Ändern Sie ab einem Datum in einem offenen Fenster — die alte Zeile endet am Vortag.",
+      "changeReasonPlaceholder": "Warum sich die Deckung ändert",
+      "changeSubmit": "Änderung speichern",
+      "changeFailed": "Die Änderung konnte nicht gespeichert werden."
     }
   }
 }

@@ -316,3 +316,370 @@ export function ProfileDialog({
     </UrlDrawer>
   )
 }
+
+/** One shared review's acknowledge action inside the reviews table: posts
+ * to the Me acknowledge route and refreshes on success, rendering the
+ * service refusal inline. Rows that cannot acknowledge render nothing. */
+export function ReviewAcknowledgeButton({
+  reviewId,
+  label,
+  canAcknowledge,
+  failedLabel,
+}: {
+  reviewId: string
+  label: string
+  canAcknowledge: boolean
+  failedLabel: string
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  if (!reviewId || !canAcknowledge) return null
+  const acknowledge = async (): Promise<void> => {
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/hrm/me/reviews/acknowledge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reviewId }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, failedLabel))
+        return
+      }
+      router.refresh()
+    } catch {
+      setStatus(failedLabel)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <Button size="sm" variant="outline" disabled={busy} onClick={acknowledge}>
+        {label}
+      </Button>
+      {status ? <span className="text-xs text-red-600 dark:text-red-400">{status}</span> : null}
+    </span>
+  )
+}
+
+interface GoalProgressDialogStrings {
+  goalId: string
+  title: string
+  description: string
+  percentLabel: string
+  noteLabel: string
+  notePlaceholder: string
+  submitLabel: string
+  cancelLabel: string
+  submitFailed: string
+}
+
+/** Goal progress dialog, opened from the goals table through the `goal`
+ * search param; submit posts progress with a note to the Me route. */
+export function GoalProgressDialog({
+  dialog,
+  closeHref,
+}: {
+  dialog: GoalProgressDialogStrings | null
+  closeHref: string
+}) {
+  const router = useRouter()
+  const [percent, setPercent] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  if (!dialog) return null
+  const submit = async (): Promise<void> => {
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/hrm/me/goals/progress', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ goalId: dialog.goalId, progressPercent: Number(percent), note: note.trim() === '' ? null : note.trim() }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, dialog.submitFailed))
+        return
+      }
+      router.push(closeHref)
+      router.refresh()
+    } catch {
+      setStatus(dialog.submitFailed)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <UrlDrawer open closeHref={closeHref} title={dialog.title} description={dialog.description}>
+      <div className="flex flex-col gap-4 p-4">
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.percentLabel}</Label>
+          <Input inputMode="numeric" value={percent} onChange={(event) => setPercent(event.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.noteLabel}</Label>
+          <Textarea placeholder={dialog.notePlaceholder} value={note} onChange={(event) => setNote(event.target.value)} />
+        </div>
+        {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" disabled={busy} onClick={() => router.push(closeHref)}>
+            {dialog.cancelLabel}
+          </Button>
+          <Button disabled={busy} onClick={submit}>
+            {dialog.submitLabel}
+          </Button>
+        </div>
+      </div>
+    </UrlDrawer>
+  )
+}
+
+interface BenefitElectDialogStrings {
+  title: string
+  description: string
+  employmentLabel: string
+  employments: { value: string; label: string }[]
+  planLabel: string
+  plans: { value: string; label: string; levels: { value: string; label: string }[] }[]
+  levelLabel: string
+  windowLabel: string
+  windows: { value: string; label: string }[]
+  fromLabel: string
+  lifeEventLabel: string
+  lifeEventPlaceholder: string
+  submitLabel: string
+  cancelLabel: string
+  submitFailed: string
+}
+
+/** Elect-coverage dialog, opened from the benefits header through the
+ * `elect` search param; submit elects through the Me route with the
+ * service refusal inline. */
+export function BenefitElectDialog({
+  dialog,
+  closeHref,
+}: {
+  dialog: BenefitElectDialogStrings | null
+  closeHref: string
+}) {
+  const router = useRouter()
+  const [employmentId, setEmploymentId] = useState('')
+  const [planId, setPlanId] = useState('')
+  const [levelKey, setLevelKey] = useState('')
+  const [windowId, setWindowId] = useState('')
+  const [from, setFrom] = useState('')
+  const [lifeEvent, setLifeEvent] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  if (!dialog) return null
+  const levels = dialog.plans.find((plan) => plan.value === planId)?.levels ?? []
+  const submit = async (): Promise<void> => {
+    const boundEmployment =
+      employmentId || (dialog.employments.length === 1 ? (dialog.employments[0]?.value ?? '') : '')
+    if (!boundEmployment || !planId || from.trim() === '') {
+      setStatus(dialog.submitFailed)
+      return
+    }
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/hrm/me/benefits/elect', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          employmentId: boundEmployment,
+          planId,
+          windowId: windowId === '' ? null : windowId,
+          coverageLevelKey: levelKey === '' ? null : levelKey,
+          effectiveFrom: from.trim(),
+          lifeEventReason: lifeEvent.trim() === '' ? null : lifeEvent.trim(),
+        }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, dialog.submitFailed))
+        return
+      }
+      router.push(closeHref)
+      router.refresh()
+    } catch {
+      setStatus(dialog.submitFailed)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <UrlDrawer open closeHref={closeHref} title={dialog.title} description={dialog.description}>
+      <div className="flex flex-col gap-4 p-4">
+        {dialog.employments.length > 1 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label>{dialog.employmentLabel}</Label>
+            <Select value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
+              <option value="">{dialog.employmentLabel}</option>
+              {dialog.employments.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.planLabel}</Label>
+          <Select value={planId} onChange={(event) => { setPlanId(event.target.value); setLevelKey('') }}>
+            <option value="">{dialog.planLabel}</option>
+            {dialog.plans.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {levels.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label>{dialog.levelLabel}</Label>
+            <Select value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
+              <option value="">{dialog.levelLabel}</option>
+              {levels.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.windowLabel}</Label>
+          <Select value={windowId} onChange={(event) => setWindowId(event.target.value)}>
+            <option value="">{dialog.lifeEventLabel}</option>
+            {dialog.windows.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.fromLabel}</Label>
+          <Input value={from} placeholder="2026-04-01" onChange={(event) => setFrom(event.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.lifeEventLabel}</Label>
+          <Textarea placeholder={dialog.lifeEventPlaceholder} value={lifeEvent} onChange={(event) => setLifeEvent(event.target.value)} />
+        </div>
+        {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" disabled={busy} onClick={() => router.push(closeHref)}>
+            {dialog.cancelLabel}
+          </Button>
+          <Button disabled={busy} onClick={submit}>
+            {dialog.submitLabel}
+          </Button>
+        </div>
+      </div>
+    </UrlDrawer>
+  )
+}
+
+interface BenefitChangeDialogStrings {
+  enrollmentId: string
+  planName: string
+  title: string
+  description: string
+  levelLabel: string
+  levels: { value: string; label: string }[]
+  dateLabel: string
+  reasonLabel: string
+  reasonPlaceholder: string
+  submitLabel: string
+  cancelLabel: string
+  submitFailed: string
+}
+
+/** Change-coverage dialog, opened from an active election row through the
+ * `change` search param; submit changes from a date inside an open
+ * window through the Me route. */
+export function BenefitChangeDialog({
+  dialog,
+  closeHref,
+}: {
+  dialog: BenefitChangeDialogStrings | null
+  closeHref: string
+}) {
+  const router = useRouter()
+  const [levelKey, setLevelKey] = useState('')
+  const [date, setDate] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  if (!dialog) return null
+  const submit = async (): Promise<void> => {
+    if (date.trim() === '' || reason.trim() === '') {
+      setStatus(dialog.submitFailed)
+      return
+    }
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/hrm/me/benefits/change', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          enrollmentId: dialog.enrollmentId,
+          changeDate: date.trim(),
+          coverageLevelKey: levelKey === '' ? null : levelKey,
+          reason: reason.trim(),
+        }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, dialog.submitFailed))
+        return
+      }
+      router.push(closeHref)
+      router.refresh()
+    } catch {
+      setStatus(dialog.submitFailed)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <UrlDrawer open closeHref={closeHref} title={dialog.title} description={`${dialog.planName} — ${dialog.description}`}>
+      <div className="flex flex-col gap-4 p-4">
+        {dialog.levels.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label>{dialog.levelLabel}</Label>
+            <Select value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
+              <option value="">{dialog.levelLabel}</option>
+              {dialog.levels.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.dateLabel}</Label>
+          <Input value={date} placeholder="2026-04-01" onChange={(event) => setDate(event.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>{dialog.reasonLabel}</Label>
+          <Textarea placeholder={dialog.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
+        </div>
+        {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" disabled={busy} onClick={() => router.push(closeHref)}>
+            {dialog.cancelLabel}
+          </Button>
+          <Button disabled={busy} onClick={submit}>
+            {dialog.submitLabel}
+          </Button>
+        </div>
+      </div>
+    </UrlDrawer>
+  )
+}
