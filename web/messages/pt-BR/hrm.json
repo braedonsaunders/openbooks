@@ -27,13 +27,7 @@
       "startingSoon": "Começam em breve",
       "startingSoonSub": "{count, plural, one {# termina nos próximos 30 dias} other {# terminam nos próximos 30 dias}}",
       "onLeave": "De licença hoje",
-      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}",
-      "employers": "Empregadores",
-      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
-      "unfundedFte": "FTE preenchido sem financiamento",
-      "unfundedFteSub": "Preenchido sem financiamento vinculado"
+      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}"
     },
     "groups": {
       "title": "Quadro de pessoal por departamento",

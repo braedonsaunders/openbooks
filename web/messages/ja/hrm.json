@@ -27,13 +27,7 @@
       "startingSoon": "まもなく入社",
       "startingSoonSub": "{count, plural, other {今後30日以内に # 名が退社}}",
       "onLeave": "本日休暇中",
-      "onLeaveSub": "{count, plural, other {承認待ち # 件}}",
-      "employers": "雇用主",
-      "employersSub": "{count, plural, other {# 子会社}}",
-      "departments": "部門",
-      "departmentsSub": "{count, plural, other {# 部門}}",
-      "unfundedFte": "財源のない充足済みFTE",
-      "unfundedFteSub": "充足済みだが財源の割り当てがない"
+      "onLeaveSub": "{count, plural, other {承認待ち # 件}}"
     },
     "groups": {
       "title": "部門別人員数",

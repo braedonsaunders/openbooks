@@ -885,26 +885,6 @@ const hrmTurnover: AssistantToolDef = {
             medianTenureDays: row.medianTenureDays,
           })),
           href: "/hrm/performance",
-const hrmMe: AssistantToolDef = {
-  name: "hrm_me",
-    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
-  category: "read",
-  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
-  inputSchema: z.object({}),
-      // No employment parameter exists to forge: the read scopes by the
-      // party behind the login, so a second person's rows can never be
-      // returned no matter what the model puts in the (empty) input.
-      const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
-          displayName: profile.displayName,
-          employments: profile.employments.map((summary) => ({
-            employmentId: summary.employmentId,
-            status: summary.status,
-            jobTitle: summary.jobTitle,
-            departmentName: summary.departmentName,
-            employerName: summary.employerName,
-            managerNames: [...summary.managerNames],
-            serviceStart: summary.serviceStart,
-          href: "/me",
         },
       };
     } catch (error) {
@@ -1003,5 +983,43 @@ const hrmBenefits: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits];
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmMe];
+const hrmMe: AssistantToolDef = {
+  name: "hrm_me",
+  description:
+    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({}),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    try {
+      // No employment parameter exists to forge: the read scopes by the
+      // party behind the login, so a second person's rows can never be
+      // returned no matter what the model puts in the (empty) input.
+      const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
+      return {
+        ok: true,
+        data: {
+          displayName: profile.displayName,
+          employments: profile.employments.map((summary) => ({
+            employmentId: summary.employmentId,
+            status: summary.status,
+            jobTitle: summary.jobTitle,
+            departmentName: summary.departmentName,
+            employerName: summary.employerName,
+            managerNames: [...summary.managerNames],
+            serviceStart: summary.serviceStart,
+          })),
+          href: "/me",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe];

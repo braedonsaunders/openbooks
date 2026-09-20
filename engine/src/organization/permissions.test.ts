@@ -74,7 +74,6 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
  * 0196 performance and retention keys ride it too: reviews assess named
  * people, so performance read/manage and retention read stay admin-only
  * like the employment keys.
- * employment read/manage keys (admin only, via the catalogue spread).
  * The HR-5 leave keys ride it too.
  * HR-9 splits the grant: the employment/position/process/leave/team keys
  * stay admin-only, while hrm.self.read and hrm.self.request ride on EVERY
@@ -102,8 +101,6 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
     "hrm.retention.read",
     "hrm.benefits.read",
     "hrm.benefits.manage",
-    "hrm.self.read",
-    "hrm.self.request",
     "hrm.team.read",
     "hrm.team.manage",
   ];
@@ -122,9 +119,9 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
   assert.ok(group, "hrm needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.hrm");
   assert.deepEqual(group.permissions.map((entry) => entry.key), [
-    ...keys.slice(0, 11),
+    ...keys.slice(0, 18),
     ...selfKeys,
-    ...keys.slice(11),
+    ...keys.slice(18),
   ]);
 
   const holds = (role: string, perm: string) =>
