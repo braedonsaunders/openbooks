@@ -23,7 +23,7 @@ import type { CustomFieldDef } from "../custom-fields";
  *
  * Precedence (source platform "Preferred Form" + saved-search model):
  *   form layout: user's preferred form → org default → system default
- *   list view:    ?view=<id> → user's default → org default → system default
+ *   list view:    ?view=<id> → user preference → personal isDefault → org default → system default
  *
  * Custom fields (custom_field_defs) are merged in at resolve time so a field
  * created after a layout was saved still appears: every active def for the
@@ -329,7 +329,7 @@ export const resolveListView = cache(
     // 1. explicit ?view=<id>
     let chosen: (ListViewRow & { config: unknown }) | undefined;
     if (viewId && isUuid(viewId)) chosen = byId(viewId);
-    // 2. user default
+    // 2. user preference (views-menu "set as default" — may point at org or personal)
     if (!chosen) {
       const pref = (await db.execute<{ viewId: string | null }>(sql`
         select view_id as "viewId" from user_list_preferences
@@ -338,9 +338,14 @@ export const resolveListView = cache(
       const pid = pref.rows[0]?.viewId;
       if (pid && isUuid(pid)) chosen = byId(pid);
     }
-    // 3. org default
+    // 3. personal default — the designer "default for its scope" flag on a
+    // user-scope row. The listing query already restricts user-scope to this
+    // owner, so a matching isDefault is theirs. Skipping this step stored a
+    // flag the list could badge but no resolve could observe.
+    if (!chosen) chosen = rows.rows.find((r) => r.scope === "user" && r.isDefault);
+    // 4. org default
     if (!chosen) chosen = rows.rows.find((r) => r.scope === "org" && r.isDefault);
-    // 4. no saved default wins over the system default: a first-available
+    // 5. no saved default wins over the system default: a first-available
     // non-default view must never outrank the registry (it is how a stale
     // Z→A snapshot kept winning after the registry declared A→Z).
 
