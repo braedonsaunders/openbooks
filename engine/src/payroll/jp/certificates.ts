@@ -90,7 +90,6 @@ const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
 export const JP_CERTIFICATES: PayrollPackCertificates = {
   country: "JP",
   certificates: [
-    JP_HYOJUN_CERTIFICATE,
     {
       key: "jp_fuyo",
       // Not a numbered form: the declaration has no preprinted number, so
@@ -157,5 +156,7 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
         },
       ],
     },
+    // Second: the payer-held facts, never a fileable form (see above).
+    JP_HYOJUN_CERTIFICATE,
   ],
 };

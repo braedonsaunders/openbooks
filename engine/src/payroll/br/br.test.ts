@@ -95,9 +95,20 @@ test("BR regions and withholding agree: one national region, implemented", () =>
 });
 
 test("BR declares no withholding certificate and one eSocial program type", () => {
-  // No employee-filed form exists for IRRF/INSS: an empty list states that.
+  // No employee-filed form exists for IRRF/INSS. Since 0191 the pack
+  // declares exactly one certificate, and it is explicitly NOT a form: the
+  // employer-held cadastre facts made explicit, because the profile-column
+  // channel validates against the typed declarations. A second declaration
+  // — or a row-backed one, which the certificates API would serve as
+  // fileable — fails this test.
   assert.equal(BR_CERTIFICATES.country, "BR");
-  assert.deepEqual(BR_CERTIFICATES.certificates, []);
+  assert.deepEqual(
+    BR_CERTIFICATES.certificates.map((certificate) => [
+      certificate.key,
+      certificate.storage,
+    ]),
+    [["br_cadastro", "profile_columns"]],
+  );
   const filings = brPackFilings();
   assert.deepEqual(filings.programTypes.map((program) => program.key), ["br_cnpj_esocial"]);
   assert.deepEqual(filings.yearEnd, []);
