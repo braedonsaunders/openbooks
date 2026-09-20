@@ -64,6 +64,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'approvals-table',
   'approvals-pagination',
   // HR-16 begin
+  'automation-approval-settings',
   'automation-builder',
   'automation-last-run-cell',
   'automation-name-cell',

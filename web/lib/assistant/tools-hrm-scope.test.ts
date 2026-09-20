@@ -74,7 +74,7 @@ const TOOL_PERMS: Record<string, string> = {
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the eleven HRM read tools plus the core inbox tool", () => {
+test("the module exports exactly the twelve slice tools plus the core inbox tool", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
 });
 
@@ -94,10 +94,6 @@ test("inbox_items is the core own-scope tool: self grant, no feature, read-only"
   tool.inputSchema.parse({ filter: "notices", limit: 10 });
   assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
   assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
-test("the module exports exactly the twelve HRM read tools", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
-});
-
 for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;

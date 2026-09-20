@@ -4869,7 +4869,9 @@
       "runNow": "Jetzt ausführen",
       "enable": "Aktivieren",
       "disable": "Deaktivieren",
-      "actionFailed": "Die Aktion ist fehlgeschlagen."
+      "actionFailed": "Die Aktion ist fehlgeschlagen.",
+      "recipeLabel": "Aus Vorlage starten",
+      "recipeBlank": "Leeres Rezept"
     },
     "status": {
       "enabled": "Aktiviert",
@@ -4950,7 +4952,17 @@
       "viewSteps": "Schritte",
       "stepsTitle": "Laufschritte",
       "runLoadFailed": "Der Lauf konnte nicht geladen werden.",
-      "closeSteps": "Schließen"
+      "closeSteps": "Schließen",
+      "approvalTitle": "Genehmigungseinstellungen",
+      "approvalHelp": "Die ausnahmebasierte Genehmigung stimmt die bestehenden Flows-Gates je Subjektart ab — innerhalb der Schwellen genehmigt das Gate als Systementscheidung mit allen Prüfungen; außerhalb läuft der normale Weg.",
+      "approvalException": "Ausnahmebasierte Genehmigung",
+      "approvalThresholds": "Schwellen (JSON)",
+      "approvalAuto": "Ohne Regel automatisch genehmigen",
+      "approvalDelegate": "Delegieren nach Tagen (leer = nie)",
+      "approvalExclude": "Initiator ausschließen",
+      "approvalYes": "Ja",
+      "approvalNo": "Nein",
+      "approvalSave": "Einstellungen speichern"
     }
   }
 }

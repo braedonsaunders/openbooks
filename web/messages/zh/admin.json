@@ -4869,7 +4869,9 @@
       "runNow": "立即运行",
       "enable": "启用",
       "disable": "禁用",
-      "actionFailed": "操作失败。"
+      "actionFailed": "操作失败。",
+      "recipeLabel": "从配方开始",
+      "recipeBlank": "空白配方"
     },
     "status": {
       "enabled": "已启用",
@@ -4950,7 +4952,17 @@
       "viewSteps": "步骤",
       "stepsTitle": "运行步骤",
       "runLoadFailed": "无法加载运行记录。",
-      "closeSteps": "关闭"
+      "closeSteps": "关闭",
+      "approvalTitle": "审批设置",
+      "approvalHelp": "例外审批按主体类型调整现有Flows关卡 — 阈值内以系统决策自动批准并列出每项检查，阈值外走人工流程。",
+      "approvalException": "例外审批",
+      "approvalThresholds": "阈值（JSON）",
+      "approvalAuto": "无规则时自动批准",
+      "approvalDelegate": "委托天数（空=从不）",
+      "approvalExclude": "排除发起人",
+      "approvalYes": "是",
+      "approvalNo": "否",
+      "approvalSave": "保存设置"
     }
   }
 }

@@ -3,6 +3,7 @@ import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
+import { automationsFeatureOn } from "./services.ts";
 import { parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
 
 /**
@@ -123,6 +124,8 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
     for (const automation of automations.rows) {
       try {
         await withOrg(automation.orgId, async () => {
+          // Feature-off orgs never fire, even with stale enabled rows.
+          if (!(await automationsFeatureOn(automation.orgId))) return;
           const trigger = parseAutomationTrigger(automation.trigger);
           if (trigger.kind === "schedule") {
             if (await fireSchedule(automation, trigger, now)) summary.schedulesFired += 1;

@@ -4869,7 +4869,9 @@
       "runNow": "今すぐ実行",
       "enable": "有効化",
       "disable": "無効化",
-      "actionFailed": "操作に失敗しました。"
+      "actionFailed": "操作に失敗しました。",
+      "recipeLabel": "レシピから開始",
+      "recipeBlank": "空のレシピ"
     },
     "status": {
       "enabled": "有効",
@@ -4950,7 +4952,17 @@
       "viewSteps": "ステップ",
       "stepsTitle": "実行ステップ",
       "runLoadFailed": "実行を読み込めませんでした。",
-      "closeSteps": "閉じる"
+      "closeSteps": "閉じる",
+      "approvalTitle": "承認設定",
+      "approvalHelp": "例外のみ承認は既存Flowsゲートをサブジェクト種別ごとに調整します — 閾値内は全チェックを明示したシステム決定で自動承認、外は通常ルート。",
+      "approvalException": "例外のみ承認",
+      "approvalThresholds": "閾値（JSON）",
+      "approvalAuto": "ルールなしで自動承認",
+      "approvalDelegate": "委任までの日数（空=しない）",
+      "approvalExclude": "起案者を除外",
+      "approvalYes": "はい",
+      "approvalNo": "いいえ",
+      "approvalSave": "設定を保存"
     }
   }
 }

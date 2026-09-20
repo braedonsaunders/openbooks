@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { featureEnabled } from "../organization/feature-registry.ts";
 import { AUTOMATION_STATUSES } from "@openbooks/schema/src/hrm-automations.ts";
 import {
   parseAutomationActions,
@@ -22,6 +23,23 @@ import type { ApprovalSettings } from "./approvals.ts";
  */
 
 export class AutomationServiceError extends Error {}
+
+/**
+ * Engine-side feature read (orgs.settings.features, registry defaults).
+ * API routes 404 first, but the tick and the executor refuse here too —
+ * a switched-off capability never fires, no matter the caller.
+ */
+export async function automationsFeatureOn(orgId: string): Promise<boolean> {
+  return hrmFeatureOn(orgId, "automations");
+}
+
+export async function hrmFeatureOn(orgId: string, key: string): Promise<boolean> {
+  const rows = await db.execute<{ features: Record<string, boolean> | null }>(sql`
+    select settings -> 'features' as features from orgs where id = ${orgId} limit 1
+  `);
+  const features = rows.rows[0]?.features ?? {};
+  return featureEnabled(features, key);
+}
 
 const automationBody = z.object({
   name: z.string().trim().min(1).max(200),

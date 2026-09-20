@@ -3009,7 +3009,6 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
   assert.equal(wanted.length, 3564, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
-  assert.equal(wanted.length, 3685, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3369,8 +3368,6 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   const ADMIN_I2_SOURCE_COUNT = 3564
   const ADMIN_I2_SOURCE_HASH = '5a7287d7cd9ce271ae2be34a62e6180579b61c1eaf80fb6cdabd44061acbbb2a'
-  const ADMIN_I2_SOURCE_COUNT = 3685
-  const ADMIN_I2_SOURCE_HASH = 'ce43d42a03336be0918e80747dd96a6db6d28067cfb001eecfc0b0269bed0dbf'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

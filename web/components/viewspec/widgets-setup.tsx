@@ -21,7 +21,7 @@ import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesT
 import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
 import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton } from '../../app/(app)/admin/flows/sections'
 import { AutomationBuilder } from '../../app/(app)/admin/automations/[id]/AutomationBuilder'
-import { AutomationLastRunCell, AutomationNameCell, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
+import { AutomationLastRunCell, AutomationNameCell, AutomationApprovalSettingsSection, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
 import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
 import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
 import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot } from '../../app/(app)/admin/setup/[entity]/sections'
@@ -377,6 +377,23 @@ export const SETUP_WIDGETS = {
       saveFailed={str(props, 'saveFailed') ?? ''}
       backHref={str(props, 'backHref') ?? '/admin/automations'}
       backLabel={str(props, 'backLabel') ?? ''}
+    />
+  ),
+  'automation-approval-settings': (props) => (
+    <AutomationApprovalSettingsSection
+      settings={(props.settings as ComponentProps<typeof AutomationApprovalSettingsSection>['settings']) ?? []}
+      saveFailed={str(props, 'saveFailed') ?? ''}
+      savedLabel={str(props, 'savedLabel') ?? ''}
+      saveLabel={str(props, 'saveLabel') ?? ''}
+      titleLabel={str(props, 'titleLabel') ?? ''}
+      helpLabel={str(props, 'helpLabel') ?? ''}
+      exceptionLabel={str(props, 'exceptionLabel') ?? ''}
+      thresholdsLabel={str(props, 'thresholdsLabel') ?? ''}
+      autoApproveLabel={str(props, 'autoApproveLabel') ?? ''}
+      delegateLabel={str(props, 'delegateLabel') ?? ''}
+      excludeLabel={str(props, 'excludeLabel') ?? ''}
+      yesLabel={str(props, 'yesLabel') ?? ''}
+      noLabel={str(props, 'noLabel') ?? ''}
     />
   ),
   // HR-16 end

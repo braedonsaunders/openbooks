@@ -4869,7 +4869,9 @@
       "runNow": "Executar agora",
       "enable": "Ativar",
       "disable": "Desativar",
-      "actionFailed": "A ação falhou."
+      "actionFailed": "A ação falhou.",
+      "recipeLabel": "Começar de uma receita",
+      "recipeBlank": "Receita em branco"
     },
     "status": {
       "enabled": "Ativada",
@@ -4950,7 +4952,17 @@
       "viewSteps": "Etapas",
       "stepsTitle": "Etapas da execução",
       "runLoadFailed": "Não foi possível carregar a execução.",
-      "closeSteps": "Fechar"
+      "closeSteps": "Fechar",
+      "approvalTitle": "Ajustes de aprovação",
+      "approvalHelp": "A aprovação por exceção ajusta as portas de Flows existentes por tipo de assunto — dentro dos limites a porta aprova como decisão do sistema nomeando cada verificação; fora, segue a via humana.",
+      "approvalException": "Aprovação por exceção",
+      "approvalThresholds": "Limites (JSON)",
+      "approvalAuto": "Aprovar sem regra",
+      "approvalDelegate": "Delegar após dias (vazio = nunca)",
+      "approvalExclude": "Excluir o iniciador",
+      "approvalYes": "Sim",
+      "approvalNo": "Não",
+      "approvalSave": "Salvar ajustes"
     }
   }
 }

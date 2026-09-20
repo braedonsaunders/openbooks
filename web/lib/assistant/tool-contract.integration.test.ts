@@ -115,6 +115,10 @@ const READER_PERMS = [
   // HR-9 self-service: the harness reader holds the self read grant so
   // the own-employment summary tool runs rather than refusing.
   "hrm.self.read",
+  // HR-16 begin: the harness reader holds the automations read grant so
+  // the automation status tool runs rather than refusing.
+  "automations.read",
+  // HR-16 end
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -158,6 +162,9 @@ const FEATURE_OFF = new Set([
   "allocations_feature_disabled",
   "hrm_feature_disabled",
   "api_access_feature_disabled",
+  // HR-16 begin: the contract scratch org never enables automations.
+  "automations_feature_disabled",
+  // HR-16 end
 ]);
 
 function readerAuthz(orgId: string): Authz {

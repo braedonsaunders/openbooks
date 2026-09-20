@@ -263,7 +263,7 @@ async function visibleEmploymentIds(
 const hrmChangeRequests: AssistantToolDef = {
   name: "hrm_change_requests",
   description:
-    "Employment change requests with status, revision binding, and flow run: one employment's list, or every visible employment newest-first with an optional status filter. Read-only.",
+    "Employment change requests with status, action/reason codes, applied verb, revision binding, and flow run: one employment's list, or every visible employment newest-first with an optional status filter. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.employment.read"] },
   feature: "hrm",
@@ -296,6 +296,7 @@ const hrmChangeRequests: AssistantToolDef = {
         // HR-16 begin: 0227 classification carried from submit.
         action: string | null;
         reasonCode: string | null;
+        appliedEmploymentChangeId: string | null;
         // HR-16 end
         submittedBy: string | null;
         submittedAt: string | null;
@@ -329,6 +330,7 @@ const hrmChangeRequests: AssistantToolDef = {
             // HR-16 begin
             action: request.action,
             reasonCode: request.reasonCode,
+            appliedEmploymentChangeId: request.appliedEmploymentChangeId,
             // HR-16 end
             submittedBy: request.submittedBy,
             submittedAt: request.submittedAt,
@@ -344,7 +346,25 @@ const hrmChangeRequests: AssistantToolDef = {
       // Newest first across employments (created_at is microsecond UTC text,
       // so lexicographic order is chronological; id breaks ties deterministically).
       collected.sort((x, y) => (y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1));
-      const page = compactRows(collected, { limit });
+      // HR-16 begin: the applied event's verb (0227) resolves from the
+      // employment_changes rows the loader already authorized, labels only —
+      // one batched read, never per-row, and never the request table itself.
+      const appliedIds = [...new Set(collected.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))];
+      const verbByChange = new Map<string, string>();
+      if (appliedIds.length > 0) {
+        const verbs = (await db.execute<{ id: string; verb: string }>(sql`
+          select id::text as id, verb from employment_changes
+           where org_id = ${authz.user.orgId}::uuid and id = any(${appliedIds}::uuid[])
+        `)).rows;
+        for (const v of verbs) verbByChange.set(v.id, v.verb);
+      }
+      const page = compactRows(
+        collected.map(({ appliedEmploymentChangeId, ...row }) => ({
+          ...row,
+          appliedVerb: appliedEmploymentChangeId ? (verbByChange.get(appliedEmploymentChangeId) ?? null) : null,
+        })),
+        { limit },
+      );
       return {
         ok: true,
         data: {
@@ -1082,7 +1102,6 @@ const hrmMe: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe];
 
 // HR-15 begin: the caller's own inbox items (own scope only, core surface).
 const inboxItems: AssistantToolDef = {
@@ -1139,7 +1158,6 @@ const inboxItems: AssistantToolDef = {
   },
 };
 
-HRM_TOOLS.push(inboxItems);
 // HR-15 end
 // HR-16 begin: automation run/error status (0226). Read-only: recipes and
 // the run log with errors, behind the automations switch and read grant.
@@ -1191,3 +1209,5 @@ const automationsStatus: AssistantToolDef = {
 // HR-16 end
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus];
+// HR-15: the core own-scope inbox tool rides after every slice tool.
+HRM_TOOLS.push(inboxItems);

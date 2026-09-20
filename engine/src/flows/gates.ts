@@ -493,7 +493,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         });
       }
 
-      const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
+      const ctx: FlowExecCtx = { orgId: gate.orgId, userId: asSystem ? null : userId };
       const subject = await adapter.loadContext(gate.subjectId);
 
       // The quorum is resolved — tell the requester what happened to their record
@@ -504,7 +504,9 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
           adapter,
           subject,
           branch: outcome.resume,
-          deciderUserId: userId,
+          // A system decision names no human decider to the submitter —
+          // the gate comment carries the threshold summary instead.
+          deciderUserId: asSystem ? "system" : userId,
           reason: args.comment?.trim() || null,
         });
       } catch (e) {
@@ -687,11 +689,17 @@ async function notifySubmitterOfDecision(args: {
   if (!submitterUserId || submitterUserId === args.deciderUserId) return;
   const submitter = await verifyUser(gate.orgId, submitterUserId);
   if (!submitter) return;
-  const decider = await verifyUser(gate.orgId, args.deciderUserId);
+  // The system sentinel is not a user row: never query it (an invalid uuid
+  // would abort the decision transaction inside this best-effort notify).
+  const decider = args.deciderUserId === "system" ? null : await verifyUser(gate.orgId, args.deciderUserId);
 
   const subjectLabel = subject ? adapter.label(gate.subjectId, subject.values) : gate.subjectKind;
   const verb = branch === "approve" ? "approved" : "rejected";
-  const byName = decider?.name ?? "an approver";
+  // A system (exception-only) decision names no human: the submitter learns
+  // it was automatic, with the threshold summary in the reason line.
+  const byName = args.deciderUserId === "system"
+    ? "automatically (within approval thresholds)"
+    : (decider?.name ?? "an approver");
   const title = `Your ${subjectLabel} was ${verb} by ${byName}`;
   const reasonLine = branch === "reject" && args.reason ? `Reason: ${args.reason}` : null;
   const href = adapter.deepLink(gate.subjectId);

@@ -24,7 +24,6 @@ export function registerWorkerDuties(): void {
   // One scanner per key (the registry refuses duplicates): the automation
   // tick covers schedule, date-relative, and queued field-change / event /
   // document triggers, claimed across replicas on its own advisory key.
-  // eslint-disable-next-line no-console
   console.log(`[worker] duty registered: automation-tick (${AUTOMATION_TICK_LOCK_KEY})`);
   registerWorkerDuty({
     key: "automation-tick",
@@ -46,7 +45,6 @@ if (isMain) {
   // engine/src/worker/index.ts self-starts on import. No top-level await:
   // tsx compiles scripts-adjacent files as CJS, where TLA is unsupported.
   void import("../engine/src/worker/index.ts").catch((error: unknown) => {
-    // eslint-disable-next-line no-console
     console.error("[worker] startup failed:", error);
     process.exit(1);
   });

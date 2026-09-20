@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scoreException, ApprovalPolicyError } from "./approvals.ts";
+import { scoreException, decideNoRule, ApprovalPolicyError } from "./approvals.ts";
 import { assertWritableField, registryEntity, AutomationRegistryError } from "./registry.ts";
 
 test("timesheet within thresholds passes and names every check with values", () => {
@@ -55,6 +55,27 @@ test("leave and expense scoring", () => {
   );
   assert.equal(expense.within, false);
   assert.deepEqual(expense.checked, ["max_amount: threshold 500, actual 5000"]);
+});
+
+test("no-rule disposition: flag on auto-approves with named absence, off routes human", () => {
+  const on = decideNoRule({
+    exceptionOnly: true, thresholds: {}, autoApproveWhenNoRule: true,
+    delegateAfterDays: null, excludeInitiator: true,
+  });
+  assert.equal(on.disposition, "auto_approve_no_rule");
+  assert.deepEqual(on.checked, ["no thresholds configured — auto_approve_when_no_rule"]);
+  const off = decideNoRule({
+    exceptionOnly: true, thresholds: {}, autoApproveWhenNoRule: false,
+    delegateAfterDays: null, excludeInitiator: true,
+  });
+  assert.equal(off.disposition, "normal_route");
+  // Non-empty thresholds always score instead of consulting the flag.
+  const scored = decideNoRule({
+    exceptionOnly: true, thresholds: { max_days: 3 }, autoApproveWhenNoRule: true,
+    delegateAfterDays: null, excludeInitiator: true,
+  });
+  assert.equal(scored.disposition, "normal_route");
+  assert.deepEqual(scored.checked, []);
 });
 
 test("unknown subject never auto-passes", () => {

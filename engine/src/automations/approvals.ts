@@ -149,10 +149,27 @@ function toNumber(value: unknown, field: string): number {
 }
 
 /**
- * Apply the exception-only policy to one pending gate. Returns the
- * disposition: 'auto_approved' (within thresholds, system decision with
- * named checks), 'normal_route' (outside thresholds or policy off — the
- * human gate is untouched), or 'no_policy' (no settings row).
+ * No-rule disposition (pure): when the org configured no thresholds for
+ * the subject, auto_approve_when_no_rule decides — true auto-approves with
+ * an audit entry naming the absence of rules, false sends the human route.
+ * Non-empty thresholds always score instead; this never overrides a score.
+ */
+export function decideNoRule(settings: ApprovalSettings): { disposition: "auto_approve_no_rule" | "normal_route"; checked: string[] } {
+  if (Object.keys(settings.thresholds).length > 0) return { disposition: "normal_route", checked: [] };
+  if (settings.autoApproveWhenNoRule) {
+    return {
+      disposition: "auto_approve_no_rule",
+      checked: ["no thresholds configured — auto_approve_when_no_rule"],
+    };
+  }
+  return { disposition: "normal_route", checked: [] };
+}
+
+/**
+ * Apply the exception-only policy to one pending gate. Dispositions:
+ * 'auto_approved' (within thresholds, system decision with named checks),
+ * 'normal_route' (outside thresholds, no-rule without the flag, or policy
+ * off — the human gate is untouched), 'no_policy' (no settings row).
  */
 export async function applyExceptionOnly(input: {
   orgId: string;
@@ -181,6 +198,16 @@ export async function applyExceptionOnly(input: {
           "exception-only approval refuses: the pending gate is assigned to the employee who initiated the request, and exclude_initiator is on — reassign the gate or turn exclude_initiator off",
         );
       }
+    }
+
+    const noRule = decideNoRule(settings);
+    if (noRule.disposition === "auto_approve_no_rule") {
+      await decideGateAsSystem({
+        gateId: input.gateId,
+        reason: `exception-only auto-approval: ${noRule.checked.join(", ")}`,
+        checked: noRule.checked,
+      });
+      return { disposition: "auto_approved", checked: noRule.checked };
     }
 
     const snapshot = await loadSubjectSnapshot(input.orgId, input.subjectKind, input.subjectId);

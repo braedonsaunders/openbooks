@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
-import { db, schema, withOrg } from "../platform/db.ts";
+import { db, schema, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
 import { openProcessInTx } from "../hrm/processes.ts";
+import { automationsFeatureOn } from "./services.ts";
 import {
   assertWritableField,
   loadSubjectSnapshot,
@@ -341,6 +342,14 @@ export async function executeAutomation(input: {
   fingerprint?: string;
 }): Promise<AutomationRunResult> {
   const mode = input.mode ?? "live";
+  // Feature-off: triggers must not fire from any caller (the routes 404
+  // first; this is the second fence for the tick and replays).
+  const on = await automationsFeatureOn(input.orgId);
+  if (!on) {
+    throw new AutomationExecuteError(
+      "automations are switched off for this organization — enable them in Company Settings → Features before running",
+    );
+  }
   if (mode === "live") {
     await requireAutomationsPermission(input.orgId, input.actorId, "automations.run");
   } else {
@@ -379,15 +388,38 @@ export async function executeAutomation(input: {
     const subjectId = input.subjectId ?? null;
 
     if (mode === "simulated") {
+      // Simulate evaluates the same gate the live path uses: a subject that
+      // matches nothing reports skipped_no_match with no steps, never a
+      // pretend step list.
+      if (subject) {
+        const verdict = evaluateAutomation(rules, conditions, subject);
+        if (verdict === "no_match") return { runId: "simulated", status: "simulated", steps: [] };
+      }
       const steps = await simulateSteps(actions, subject);
       return { runId: "simulated", status: "simulated", steps };
     }
 
-    // Idempotent run claim: the UNIQUE on
-    // (org, automation, subject_kind, subject_id, fingerprint) is the
-    // fence. ON CONFLICT DO NOTHING is justified here — the conflict is
-    // the expected benign case (a re-fired trigger) and the existing row
-    // is re-read and returned, so a re-fire never double-runs.
+    // Idempotent run claim, serialized per fingerprint: NULL subjects never
+    // match a UNIQUE (NULL <> NULL in Postgres), so the fence is an
+    // advisory xact lock plus a null-safe re-read (IS NOT DISTINCT FROM) —
+    // the UNIQUE stays as the backstop for subject-bound runs. ON CONFLICT
+    // DO NOTHING below is justified: the conflict is the expected benign
+    // case (a re-fired trigger) and the existing row is re-read and
+    // returned, so a re-fire never double-runs.
+    const lockKey = `${input.orgId}:${input.automationId}:${subjectKind ?? ""}:${subjectId ?? ""}:${fingerprint}`;
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+    const duplicate = await db.execute<{ id: string; status: string }>(sql`
+      select id, status from automation_runs
+       where org_id = ${input.orgId} and automation_id = ${input.automationId}
+         and subject_kind is not distinct from ${subjectKind}::text
+         and subject_id is not distinct from ${subjectId}::uuid
+         and trigger_fingerprint = ${fingerprint}
+       limit 1
+    `);
+    if (duplicate.rows[0]) {
+      const row = duplicate.rows[0];
+      return { runId: row.id, status: row.status, steps: [] };
+    }
     const claimed = await db.execute<{ id: string }>(sql`
       insert into automation_runs
         (org_id, automation_id, version, trigger_payload, subject_kind, subject_id, status, started_at, trigger_fingerprint, created_by)
@@ -397,7 +429,6 @@ export async function executeAutomation(input: {
       on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
       returning id
     `);
-    let runId: string;
     if (claimed.rows.length === 0) {
       const existing = await db.execute<{ id: string; status: string }>(sql`
         select id, status from automation_runs
@@ -413,7 +444,7 @@ export async function executeAutomation(input: {
       }
       return { runId: row.id, status: row.status, steps: [] };
     }
-    runId = claimed.rows[0]!.id;
+    const runId: string = claimed.rows[0]!.id;
 
     if (subject) {
       const verdict = evaluateAutomation(rules, conditions, subject);
@@ -426,12 +457,15 @@ export async function executeAutomation(input: {
       }
     }
 
-    // The run's DB writes happen in ONE transaction; a failed step throws,
-    // the transaction rolls back the run's writes, and the run row is then
-    // marked failed with the error — the inbox shows the failure.
+    // The run's DB writes happen in ONE savepoint: a failed step throws,
+    // the savepoint rolls the run's writes back (a bare throw cannot be
+    // trusted to roll back under an ambient transaction the caller may
+    // still commit — the flows decideGateCore savepoint exists for the same
+    // swallowed-error topology), and the run row is then marked failed with
+    // the error — the inbox shows the failure.
     const steps: RunStep[] = [];
     try {
-      await db.transaction(async () => {
+      await withTransactionSavepoint(db, async () => {
         let i = 0;
         for (const action of actions) {
           i += 1;
