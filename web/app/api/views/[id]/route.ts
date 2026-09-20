@@ -1,8 +1,10 @@
+import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { canRunReportEntity, guardReportEntity } from '../../../../lib/report-authz'
 import {
   deleteView,
   loadView,
@@ -14,7 +16,7 @@ import {
 
 export const runtime = 'nodejs'
 
-/** Load one view (respecting visibility). */
+/** Load one view (respecting visibility and the report entity gate). */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
@@ -23,6 +25,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const view = await loadView(user.orgId, id, user.id, permissions)
   if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canRunReportEntity(gate, view.query))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ view })
 }
 
@@ -37,6 +42,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const existing = await loadView(user.orgId, id, user.id, permissions)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canRunReportEntity(gate, existing.query))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -58,11 +66,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? (validateReportLayout(body.layout) as Record<string, unknown>)
       : existing.layout
 
+  let query = existing.query
+  if (body.query !== undefined) {
+    try {
+      query = await validateOrgReportQuery(gate, body.query)
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Invalid report query' },
+        { status: 422 },
+      )
+    }
+    const denied = await guardReportEntity(gate, query)
+    if (denied) return denied
+  }
+
   const res = await updateView(user.orgId, id, user.id, isAdmin, {
     name: body.name,
     slug: slug !== existing.slug ? slug : undefined,
     description: body.description,
-    query: body.query as never,
+    query: body.query !== undefined ? query : undefined,
     layout,
     scope: body.scope,
     allowedRoles: body.allowedRoles,
@@ -70,6 +92,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: 422 })
 
   const view = await loadView(user.orgId, id, user.id, permissions)
+  if (!view || !(await canRunReportEntity(gate, view.query))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ view })
 }
 
