@@ -124,6 +124,8 @@ export const flowRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Exact organization and id key required by tenant-coherent references (0214).
+    uniqueIndex("flow_runs_org_id_id_unique").on(t.orgId, t.id),
     // Tenant pair required by 0213: a run may only name a flow of its own org.
     foreignKey({
       name: "flow_runs_flow_id_fkey",
@@ -221,6 +223,17 @@ export const flowGates = pgTable(
     index("flow_gates_assignee").on(t.orgId, t.status, t.assigneeUserId),
     index("flow_gates_subject").on(t.orgId, t.subjectKind, t.subjectId),
     index("flow_gates_remind").on(t.orgId, t.status, t.remindAt),
+    // Tenant pairs required by 0214: a gate may only name a flow or run of its own org.
+    foreignKey({
+      name: "flow_gates_flow_id_fkey",
+      columns: [t.orgId, t.flowId],
+      foreignColumns: [flows.orgId, flows.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "flow_gates_run_id_fkey",
+      columns: [t.orgId, t.runId],
+      foreignColumns: [flowRuns.orgId, flowRuns.id],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -362,8 +375,8 @@ schema/migrations/referential-integrity.sql):
   flow_run_effects.org_id       → orgs.id (on delete cascade)
   flow_run_effects.run_id       → flow_runs.id (on delete cascade)
   flow_gates.org_id             → orgs.id (on delete cascade)
-  flow_gates.flow_id            → flows.id (on delete cascade)
-  flow_gates.run_id             → flow_runs.id (on delete cascade)
+  flow_gates.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0214)
+  flow_gates.(org_id, run_id)   → flow_runs(org_id, id) (on delete cascade; 0214)
   flow_gates.assignee_user_id   → users.id
   flow_gates.decided_by         → users.id
   approval_delegations.org_id       → orgs.id (on delete cascade)
