@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { businessToday } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /**
@@ -1159,3 +1160,82 @@ export async function requireOwnEmploymentSubject(
   permission: HrmSelfPermission,
       `Self-service requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
       "Self-service reaches only your own employment — HR files anything else as an employment change.",
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/**
+ * The single definition of the team predicate: employments whose
+ * currently-asserted LINE reporting relationship names one of the given
+ * manager employments — live recorded rows whose effective window
+ * contains today. One level (no transitive walk); matrix edges never
+ * confer visibility. Gate-free on purpose: callers prove personhood and
+ * permission first (team-read.ts pairs it with the self.read gate and
+ * the named NO_LINK/NO_TEAM refusals; the record fallback below pairs it
+ * with the preserved employment refusal).
+ */
+export async function loadTeamEmploymentIdsForManager(
+  exec: SqlExecutor,
+  orgId: string,
+  managerEmploymentIds: readonly string[],
+  today: string,
+): Promise<string[]> {
+  if (managerEmploymentIds.length === 0) return [];
+  const rows = (await exec.execute<{ id: string }>(sql`
+    select distinct r.employment_id::text as id
+      from reporting_relationships r
+     where r.org_id = ${orgId}
+       and r.manager_employment_id in (select jsonb_array_elements_text(${JSON.stringify([...managerEmploymentIds])}::jsonb)::uuid)
+       and r.kind = 'line'
+       and r.recorded_until is null
+       and r.effective_from <= ${today}::date
+       and (r.effective_to is null or r.effective_to > ${today}::date)
+     order by id
+  `)).rows;
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Employment record authority with a structural team fallback: the
+ * hrm.employment.read grant first (HR's unchanged path), then — only
+ * when it denies with HrmAuthorizationError — the manager's team (self
+ * readers whose direct reports as of today include the employment).
+ *
+ * A fallback denial rethrows the ORIGINAL employment refusal, so every
+ * existing surface keeps its exact error shape: strangers learn nothing
+ * new, and no new error class escapes this gate. Infrastructure failures
+ * (clock, database) propagate untouched — only authorization denials
+ * fall through.
+ */
+export async function requireEmploymentOrTeamSubject(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  try {
+    return await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+  } catch (error) {
+    if (!(error instanceof HrmAuthorizationError)) throw error;
+    const original = error;
+    try {
+      if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) throw original;
+      const person = await loadApprovalPerson(exec, orgId, actorId);
+      if (!person.partyId) throw original;
+      const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+      if (own.length === 0) throw original;
+      const today = await businessToday(orgId);
+      const team = await loadTeamEmploymentIdsForManager(exec, orgId, own, today);
+      if (!team.includes(employmentId)) throw original;
+      const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+      await assertEmployerScope(exec, orgId, actorId, subject);
+      return subject;
+    } catch (fallback) {
+      if (fallback instanceof HrmAuthorizationError) throw original;
+      throw fallback;
+    }
+  }
+}

@@ -20,10 +20,18 @@ export const dynamic = 'force-dynamic'
  * as a refusal beside the episodes and requests. Whole-call denials
  * (authorization, gate, malformed input) are HTTP errors with `{ error }`
  * bodies — the client checks res.ok before parsing.
+ *
+ * Managers arrive through the structural team fallback: employment.read
+ * first, then self.read for a direct report as of today. The service
+ * resolves the team and refuses strangers with the employment remedy
+ * intact — a widened gate with an unchanged refusal.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('hrm.employment.read', 'hrm')
-  if (gate instanceof NextResponse) return gate
+  const employmentGate = await guardFeaturePermission('hrm.employment.read', 'hrm')
+  const gate = employmentGate instanceof NextResponse
+    ? await guardFeaturePermission('hrm.self.read', 'hrm')
+    : employmentGate
+  if (gate instanceof NextResponse) return employmentGate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid employment' }, { status: 422 })
 
