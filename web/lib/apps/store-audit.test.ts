@@ -65,6 +65,12 @@ function registerSourceTests(): void {
     assert.match(body, /before:\s*\{/)
     assert.match(body, /after: preserveHistory \? \{ status: 'disabled', historyPreserved: true \} : null/)
     assert.match(body, /actor_id\)/)
+    assert.match(body, /if \(!app\) \{/)
+    assert.match(body, /throw new AppError\(/)
+    assert.match(body, /returning id/)
+    assert.match(body, /return \{ affectedRows: (updated|deleted)\.rows\.length \}/)
+    assert.doesNotMatch(body, /Promise<void>/)
+    assert.doesNotMatch(body, /if \(!app\) return/)
   })
 
   test('status transitions carry actor and before/after evidence in the same transaction', () => {
@@ -77,6 +83,13 @@ function registerSourceTests(): void {
     assert.match(body, /before: \{ key: app\.key, name: app\.name, status: app\.status \}/)
     assert.match(body, /after: \{ key: app\.key, name: app\.name, status \}/)
     assert.ok(update >= 0 && audit > update)
+    assert.match(body, /if \(!app\) \{/)
+    assert.match(body, /throw new AppError\(/)
+    assert.match(body, /app\.status === status/)
+    assert.match(body, /returning id/)
+    assert.match(body, /return \{ affectedRows: updated\.rows\.length \}/)
+    assert.doesNotMatch(body, /Promise<void>/)
+    assert.doesNotMatch(body, /if \(!app \|\| app\.status === status\) return/)
     assert.match(routeSource, /setAppStatus\(gate\.user\.orgId, gate\.user\.id, key, body\.status\)/)
   })
 
@@ -97,6 +110,7 @@ if (DB) {
     '@openbooks/engine/src/testing/fixtures.ts',
   )
   const {
+    AppError,
     deleteApp,
     getAppByKey,
     installApp,
@@ -167,8 +181,8 @@ if (DB) {
       })
       try {
         // deleteApp resolves its row through the ambient scope: unscoped it
-        // silently no-ops (no row found, no audit) and the refusal below
-        // would vacuously pass. The org scope reproduces the route.
+        // throws not-found (no row) and the audit-failure assertion below
+        // would miss the forced trigger. The org scope reproduces the route.
         await assert.rejects(
           withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key)),
           (error: unknown) => /forced app audit failure/.test(errorMessage(error)),
@@ -191,7 +205,7 @@ if (DB) {
 
       // Same ambient-scope class as the refusal call above: deleteApp resolves
       // its row through the ambient scope, so the real uninstall needs the
-      // org scope too — unscoped it silently no-ops and leaves no evidence.
+      // org scope too — unscoped it throws not-found and writes no evidence.
       await withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key))
       const evidence = await withBypass(() =>
         db.execute<{
@@ -296,6 +310,47 @@ if (DB) {
       const retained=(await withBypass(()=>db.execute<{version_id:string}>(sql`select version_id from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`))).rows
       assert.ok(retained.some(file=>file.version_id===edited.activeVersionId));assert.ok(!retained.some(file=>file.version_id===removed.activeVersionId))
     } finally { await withBypass(()=>dropScratchOrg(fx.org.orgId)) }
+  })
+
+  test('setAppStatus and deleteApp refuse a missing row or unchanged status instead of no-op success', async () => {
+    const fx = await seedApp()
+    try {
+      await assert.rejects(
+        withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, 'ghost', 'disabled')),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.status === 404 &&
+          /not found/.test(error.message) &&
+          /GET \/api\/apps\/ghost/.test(error.message),
+      )
+      await assert.rejects(
+        withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, 'ghost')),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.status === 404 &&
+          /not found/.test(error.message) &&
+          /uninstall/.test(error.message),
+      )
+      await withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'disabled'))
+      await assert.rejects(
+        withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'disabled')),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.status === 409 &&
+          /already disabled/.test(error.message) &&
+          /installed/.test(error.message),
+      )
+      await withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key))
+      await assert.rejects(
+        withOrgContext(fx.org.orgId, () => deleteApp(fx.org.orgId, fx.actorId, fx.key)),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.status === 404 &&
+          /not found/.test(error.message),
+      )
+    } finally {
+      await withBypass(() => dropScratchOrg(fx.org.orgId))
+    }
   })
 
 } else {
