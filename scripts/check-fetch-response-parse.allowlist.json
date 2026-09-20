@@ -2,82 +2,82 @@
   {
     "path": "web/app/(app)/_order/NewOrderButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/_order/NewOrderRedirect.tsx",
     "fn": "NewOrderRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/ai/AiSettingsForm.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/api-keys/KeyDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/api-keys/KeyDrawer.tsx",
     "fn": "saveChanges",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/AppDefinitions.tsx",
     "fn": "AppDefinitions",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/AppHistory.tsx",
     "fn": "AppHistory",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/AppPackageEditor.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/ExtensionDrawer.tsx",
     "fn": "request",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/ExtensionDrawer.tsx",
     "fn": "edit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/ExtensionReview.tsx",
     "fn": "activate",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/apps/ExtensionReview.tsx",
     "fn": "previewPage",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/custom-fields/FieldDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/customization/FormDesigner.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/customization/ListViewDesigner.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/customization/ListViewDesigner.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/email/EmailSettingsForm.tsx",
@@ -87,32 +87,32 @@
   {
     "path": "web/app/(app)/admin/email/EmailSettingsForm.tsx",
     "fn": "sendTest",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/flows/FlowsClient.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/flows/FlowsClient.tsx",
     "fn": "toggle",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/flows/FlowsClient.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/flows/[id]/FlowBuilder.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/navigation/NavEditor.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/pdf-templates/TemplateActions.tsx",
@@ -127,12 +127,12 @@
   {
     "path": "web/app/(app)/admin/scripts/ScriptDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/scripts/ScriptDrawer.tsx",
     "fn": "runNow",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx",
@@ -142,67 +142,67 @@
   {
     "path": "web/app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/labor-costing/LaborCostingWorkspace.tsx",
     "fn": "loadReconciliation",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/labor-costing/LaborCostingWorkspace.tsx",
     "fn": "postVariance",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/payroll/WorkSchedulesSection.tsx",
     "fn": "WorkSchedulesSection",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/payroll/WorkSchedulesSection.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/payroll/WorkSchedulesSection.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/admin/setup/project-types/ProjectTypesWorkspace.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
     "fn": "CaptureReviewDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
     "fn": "action",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
     "fn": "createDraft",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/ap/capture/CaptureUploadButton.tsx",
     "fn": "upload",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/ap/capture/sections.tsx",
     "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/apps/[key]/NativeActionForm.tsx",
     "fn": "submit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/assets/AssetDrawer.tsx",
@@ -212,17 +212,17 @@
   {
     "path": "web/app/(app)/assets/AssetDrawer.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/assets/NewAssetButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/assets/NewAssetRedirect.tsx",
     "fn": "NewAssetRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/assets/RunDepreciationButton.tsx",
@@ -232,7 +232,7 @@
   {
     "path": "web/app/(app)/assets/equipment/NewEquipmentButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/banking/[accountId]/StartReconciliationButton.tsx",
@@ -247,87 +247,87 @@
   {
     "path": "web/app/(app)/banking/rules/RuleDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/budgets/BudgetDrawer.tsx",
     "fn": "BudgetDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/budgets/BudgetDrawer.tsx",
     "fn": "validate",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/budgets/NewBudgetButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/close/StartCloseButton.tsx",
     "fn": "start",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/close/posting-periods/PostingPeriodsView.tsx",
     "fn": "commit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/crm/CrmNewButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/data/import/ImportWizard.tsx",
     "fn": "doParse",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/data/import/ImportWizard.tsx",
     "fn": "doPreview",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/data/import/ImportWizard.tsx",
     "fn": "doCommit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/expenses/ExpenseActions.tsx",
     "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/expenses/ExpenseDrawer.tsx",
     "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/expenses/ExpenseDrawer.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
     "fn": "FieldTicketDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
     "fn": "selectProject",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
     "fn": "cancelEdit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
     "fn": "setPreferredForm",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/insights/CardStudio.tsx",
@@ -337,37 +337,37 @@
   {
     "path": "web/app/(app)/insights/CardStudio.tsx",
     "fn": "setPublished",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/insights/CardTile.tsx",
     "fn": "CardTile",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/insights/NewCardButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/insights/dashboards/NewDashboardButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/insights/dashboards/[id]/DashboardBuilder.tsx",
     "fn": "setPublished",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/items/ItemDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/items/ItemDrawer.tsx",
     "fn": "setActiveState",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/items/ItemRatesEditor.tsx",
@@ -377,67 +377,67 @@
   {
     "path": "web/app/(app)/items/NewItemButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/items/NewItemRedirect.tsx",
     "fn": "NewItemRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/journal/NewJournalButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/knowledge/views/NewViewButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/knowledge/views/ViewStudio.tsx",
     "fn": "ViewStudio",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/knowledge/views/ViewStudio.tsx",
     "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/parties/NewPartyButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/parties/NewPartyRedirect.tsx",
     "fn": "NewPartyRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/parties/PartyDrawer.tsx",
     "fn": "ActivitySublist",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/parties/PartyDrawer.tsx",
     "fn": "TransactionSublist",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payments/NewPaymentButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payments/PaymentDrawer.tsx",
     "fn": "PaymentDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payments/RunDrawer.tsx",
     "fn": "openDeliver",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payments/RunDrawer.tsx",
@@ -447,82 +447,82 @@
   {
     "path": "web/app/(app)/payments/RunDrawer.tsx",
     "fn": "postRun",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/NewRunButton.tsx",
     "fn": "postRun",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
     "fn": "useFilingLifecycle",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
     "fn": "loadPreview",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
     "fn": "issue",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/filing-workspace.tsx",
     "fn": "recordOriginal",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/_ui/filing-workspace.tsx",
     "fn": "SlipDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/opening-balances/EntitlementOpeningsView.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/opening-balances/OpeningBalancesView.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/payroll/retro/RetroWorkspace.tsx",
     "fn": "call",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/NewProjectButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/NewProjectRedirect.tsx",
     "fn": "NewProjectRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/ProjectDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/ProjectDrawer.tsx",
     "fn": "setActiveState",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "preview",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "merge",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/tabs/BillingSection.tsx",
@@ -547,67 +547,67 @@
   {
     "path": "web/app/(app)/projects/tabs/WorkBreakdownTab.tsx",
     "fn": "refresh",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/projects/tabs/WorkBreakdownTab.tsx",
     "fn": "saveTask",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/property-management/DepositReconciliationWorkspace.tsx",
     "fn": "DepositReconciliationWorkspace",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/property-management/PropertyManagementWorkspace.tsx",
     "fn": "PropertyManagementWorkspace",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/records/[typeKey]/NewRecordButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/records/types/NewTypeButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
     "fn": "TypeBuilderDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
     "fn": "lifecycle",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
     "fn": "destroy",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/reports/custom/CustomReportActions.tsx",
     "fn": "clone",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/reports/custom/NewReportButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/reports/custom/builder/[id]/ReportBuilder.tsx",
     "fn": "ReportBuilder",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/reports/custom/run/[id]/delivery/DeliveryPanel.tsx",
     "fn": "runNow",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/(app)/revenue/RunRecognitionButton.tsx",
@@ -617,7 +617,7 @@
   {
     "path": "web/app/(app)/subcontracts/SubcontractsWorkspace.tsx",
     "fn": "SubcontractsWorkspace",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/app/pay/[token]/PayButton.tsx",
@@ -627,21 +627,21 @@
   {
     "path": "web/components/assistant/application-command-card.tsx",
     "fn": "apply",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/components/assistant/proposal-card.tsx",
     "fn": "apply",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/components/new-document-button.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
     "path": "web/components/views-menu.tsx",
     "fn": "setDefault",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (item 47)"
+    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   }
 ]

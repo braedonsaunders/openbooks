@@ -1,7 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { auditRepository, loadAllowlist, reconcile } from './check-fetch-response-parse.mjs'
+import { ALLOWLIST_CEILING, auditRepository, loadAllowlist, reconcile } from './check-fetch-response-parse.mjs'
 
 /**
  * The guard exists because three client saves in one day parsed the response
@@ -359,3 +358,13 @@ test('an allow-list entry without a reviewed reason is rejected', () => {
     /no reviewed reason/,
   )
 })
+
+// The list may only shrink: the ceiling is the guard-first landing count and
+// every batch that converts sites lowers it. A larger list is a new
+// exemption, which is exactly what the guard refuses.
+test('the allow-list is at or under its ceiling and the ceiling is the landing count', () => {
+  const entries = loadAllowlist()
+  assert.ok(entries.length <= ALLOWLIST_CEILING, `${entries.length} entries exceed the ceiling ${ALLOWLIST_CEILING}`)
+  assert.equal(ALLOWLIST_CEILING, 129, 'lower the ceiling with each converted batch; never raise it')
+})
+

@@ -42,7 +42,16 @@
  *   viol4  the same flow acknowledges the status ANYWHERE on the same
  *          receiver — after the parse, or before it without guarding. A
  *          success-path parse with no status read anywhere is a different
- *          pattern and out of scope for this guard.
+ *          pattern and out of scope for this guard, deliberately: this
+ *          guard proves an ORDERING (the flow does check the status, but
+ *          only after it could already have thrown on the body). A flow
+ *          that never reads the status at all has no error branch to
+ *          reorder; it fails in two ways (SyntaxError on a non-JSON body,
+ *          and a JSON refusal it silently treats as success) and the fix
+ *          is to add a status check, which is a different rule ("every
+ *          fetch acknowledges its status") with its own census and its
+ *          own allow-list. Catching it here would let a site pass by
+ *          deleting its status check, which is the opposite of the intent.
  *
  * Compliant rewrites, in order of preference:
  *
@@ -77,6 +86,16 @@ const ts = requireFromRoot("typescript-eslint-typescript");
 
 const SELF_PATH = "scripts/check-fetch-response-parse.mjs";
 const ALLOWLIST_PATH = "scripts/check-fetch-response-parse.allowlist.json";
+/**
+ * The allow-list may only SHRINK. This is the count at the guard-first
+ * landing (129 sites held for typechecked conversion batches, queue item 60,
+ * parent item 47); a change that
+ * needs a larger list is a new violation being exempted, which is the thing
+ * the guard exists to refuse. Lower this number as batches land; never raise
+ * it. The stale-entry ratchet below stops entries rotting; this stops the
+ * list growing.
+ */
+export const ALLOWLIST_CEILING = 129;
 
 function repoRoot() {
   return join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -452,7 +471,7 @@ function elseBranchGuards(condition, name) {
 /** Every `name.ok` / `name.status` read under root, excluding nested
  *  function bodies (a check inside a later callback is not this statement's
  *  guard). Positions are source offsets. */
-function statusReadsIn(root, name, sourceFile) {
+function statusReadsIn(root, name) {
   const reads = [];
   const visit = (node) => {
     if (node !== root && isFunctionLike(node)) return;
@@ -714,6 +733,14 @@ function main() {
     for (const file of syntaxErrors) console.error(`  ${file}`);
   }
 
+  if (allowlist.length > ALLOWLIST_CEILING) {
+    console.error(
+      `FAIL ${ALLOWLIST_PATH} holds ${allowlist.length} entries, above the ceiling of ${ALLOWLIST_CEILING}: ` +
+        "the allow-list may only shrink — convert the site (status check before the parse) instead of listing it.",
+    );
+    process.exitCode = 1;
+    return;
+  }
   const { knownGaps, newViolations, staleEntries } = reconcile(violations, allowlist);
 
   if (newViolations.length > 0) {
