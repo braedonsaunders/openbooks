@@ -6,6 +6,7 @@ import { windowsOverlap, type WindowShape } from "./benefits-math.ts";
 import {
   assertHrmEnabled,
   requireActorId,
+  requireCivilDate,
   requireId,
   requireOneRow,
   requireOrgId,
@@ -224,5 +225,92 @@ export async function closeEnrollmentWindow(query: {
       `);
     }
     return result;
+  });
+}
+
+export interface CreateEnrollmentWindowQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly opensOn: string;
+  readonly closesOn: string;
+  readonly planYearStartOn: string;
+  readonly employerSubsidiaryId?: string | null;
+  readonly departmentId?: string | null;
+}
+
+/**
+ * Create a draft window. Scope targets are proven visible in the org —
+ * an unknown subsidiary or department is refused at save, so a window
+ * that can never apply is never saved as applicable (0193 rule).
+ */
+export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery): Promise<EnrollmentWindowDTO> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const name =
+    typeof query.name === "string" && query.name.trim().length > 0 ? query.name.trim() : null;
+  if (!name) {
+    throw new BenefitsError("INVALID_INPUT", "a window carries a name — record which enrolment round this is");
+  }
+  const kind = query.kind;
+  if (kind !== "open_enrollment" && kind !== "new_hire" && kind !== "life_event") {
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "window kind is one of open_enrollment, new_hire, life_event — the kind decides who may elect",
+    );
+  }
+  const opensOn = requireCivilDate(query.opensOn, "opensOn");
+  const closesOn = requireCivilDate(query.closesOn, "closesOn");
+  const planYearStartOn = requireCivilDate(query.planYearStartOn, "planYearStartOn");
+  if (closesOn < opensOn) {
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `window closes ${closesOn} before it opens ${opensOn} — correct the dates before saving`,
+    );
+  }
+  const employerSubsidiaryId = query.employerSubsidiaryId ?? null;
+  const departmentId = query.departmentId ?? null;
+  return withOrgTransaction(orgId, async () => {
+    await requireHrmBenefitsManage(db, orgId, actorId);
+    await assertHrmEnabled(db, orgId);
+    if (employerSubsidiaryId !== null) {
+      const sub = (
+        await db.execute(sql`select id from subsidiaries where org_id = ${orgId} and id = ${employerSubsidiaryId}`)
+      ).rows;
+      if (sub.length !== 1) {
+        throw new BenefitsError(
+          "REFUSED",
+          "the window names an employer subsidiary outside this organization — scope it to a subsidiary of this org, or leave it org-wide",
+        );
+      }
+    }
+    if (departmentId !== null) {
+      const dept = (
+        await db.execute(sql`select id from departments where org_id = ${orgId} and id = ${departmentId}`)
+      ).rows;
+      if (dept.length !== 1) {
+        throw new BenefitsError(
+          "REFUSED",
+          "the window names a department outside this organization — scope it to a department of this org, or leave it org-wide",
+        );
+      }
+    }
+const inserted = requireOneRow(
+      (
+        await db.execute<Record<string, unknown>>(sql`
+          insert into hrm_enrollment_windows
+            (org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status, created_by, updated_by)
+          values (${orgId}, ${name}, ${kind}, ${opensOn}::date, ${closesOn}::date,
+                  ${planYearStartOn}::date,
+                  jsonb_build_object('employer_subsidiary_id', ${employerSubsidiaryId}::uuid,
+                                     'department_id', ${departmentId}::uuid),
+                  'draft', ${actorId}, ${actorId})
+          returning ${WINDOW_COLUMNS}
+        `)
+      ).rows,
+      "creating the enrollment window",
+    );
+    return toWindowDTO(inserted);
   });
 }
