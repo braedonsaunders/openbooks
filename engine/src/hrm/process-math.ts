@@ -281,7 +281,7 @@ export function resolveTemplateForEmployment(
   if (matching.length === 0) {
     throw new ProcessMathError(
       "NO_TEMPLATE",
-      `no active ${kind} template covers this employment — create one under /admin/setup before opening the process`,
+      `no active ${kind} template covers this employment — create or activate one in Setup that covers this employer subsidiary and department`,
     );
   }
   const specificity = (template: MatchableTemplate): number =>
