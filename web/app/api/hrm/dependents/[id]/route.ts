@@ -8,7 +8,7 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../benefits/_lib";
-import { updateDependentBody } from "../../compensation/bodies";
+import { updateDependentBody } from "../bodies";
 
 export const runtime = "nodejs";
 
