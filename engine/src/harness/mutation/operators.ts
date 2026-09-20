@@ -180,6 +180,14 @@ function insideTemplate(node: ts.Node): boolean {
   return false;
 }
 
+/** Negative literal types also contain unary-expression nodes but are erased. */
+function insideType(node: ts.Node): boolean {
+  for (let current = node.parent; current; current = current.parent) {
+    if (ts.isTypeNode(current)) return true;
+  }
+  return false;
+}
+
 /**
  * Real expression arithmetic only: BinaryExpression `+ - * /` plus unary
  * financial signs (`-amount`, `+fee`). Type syntax, increments, compound
@@ -195,7 +203,7 @@ function mutateArithSignFlip(source: string, sourceFile: ts.SourceFile, starts: 
   };
   const visit = (node: ts.Node): void => {
     if (ts.isBinaryExpression(node)) {
-      if (!insideTemplate(node)) {
+      if (!insideTemplate(node) && !insideType(node)) {
         const start = node.operatorToken.getStart(sourceFile);
         switch (node.operatorToken.kind) {
           case ts.SyntaxKind.PlusToken:
@@ -217,7 +225,7 @@ function mutateArithSignFlip(source: string, sourceFile: ts.SourceFile, starts: 
     } else if (ts.isPrefixUnaryExpression(node)) {
       if (
         (node.operator === ts.SyntaxKind.PlusToken || node.operator === ts.SyntaxKind.MinusToken) &&
-        !insideTemplate(node)
+        !insideTemplate(node) && !insideType(node)
       ) {
         const start = node.getStart(sourceFile);
         const ch = source[start]!;
@@ -241,7 +249,7 @@ function mutateComparisonFlip(sourceFile: ts.SourceFile, starts: number[], push:
     push({ operator: "comparison-flip", line, column, description, start: offset, end, text });
   };
   const visit = (node: ts.Node): void => {
-    if (ts.isBinaryExpression(node) && !insideTemplate(node)) {
+    if (ts.isBinaryExpression(node) && !insideTemplate(node) && !insideType(node)) {
       const start = node.operatorToken.getStart(sourceFile);
       const end = node.operatorToken.getEnd();
       switch (node.operatorToken.kind) {
