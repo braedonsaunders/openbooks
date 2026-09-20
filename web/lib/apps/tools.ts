@@ -58,21 +58,30 @@ export interface RunAppToolOptions {
   input: unknown
   userCan: (perm: string) => boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
-  /** Fresh caller key; generated per call when omitted. */
-  idempotencyKey?: string
+  /** Caller-generated invocation identity. Required: omitted keys are refused, never minted here. */
+  idempotencyKey: string
 }
 
 /**
  * Validate tool input against the stored JSON schema and invoke the handler
  * endpoint inside the governed envelope. Returns the endpoint body, or a
- * bridge-shaped refusal. Mutating tools must go through the confirmation
- * path (toAssistantToolDef) — this entry point executes unconditionally and
- * is for read tools, the commit route, and MCP.
+ * bridge-shaped refusal. Callers must supply an idempotencyKey; this function
+ * never mints one. Mutating tools must go through the confirmation path
+ * (toAssistantToolDef) — this entry point executes unconditionally and is for
+ * read tools, the commit route, and MCP.
  */
 export async function runAppTool(
   opts: RunAppToolOptions,
   deps?: { getApp?: typeof getAppByKey; invoke?: AppToolInvoker },
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
+  const idempotencyKey = typeof opts.idempotencyKey === 'string' ? opts.idempotencyKey.trim() : ''
+  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(idempotencyKey)) {
+    return {
+      ok: false,
+      error: 'idempotencyKey is required; pass a durable caller identity so a retry replays instead of mutating again',
+      status: 400,
+    }
+  }
   if (!opts.userCan('apps.use')) return { ok: false, error: 'forbidden', status: 403 }
   const app = await (deps?.getApp ?? getAppByKey)(opts.orgId, opts.appKey)
   if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
@@ -103,7 +112,7 @@ export async function runAppTool(
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
     operation: `apps.assistant_tool.${appToolAssistantName(opts.appKey, opts.toolKey)}`,
     auditEndpoint: `tool/${opts.toolKey}`,
-    idempotencyKey: opts.idempotencyKey ?? randomUUID(),
+    idempotencyKey: idempotencyKey,
   })
 }
 
@@ -156,6 +165,9 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
         input: parsed.value,
         userCan: (perm) => can(authz, perm),
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        // Each chat read is a new invocation; replaying a stored lookup would
+        // hide later writes. Same shape as platform.query's readInvocation nonce.
+        idempotencyKey: randomUUID(),
       })
       if (!outcome.ok) return { ok: false, error: outcome.error }
       const encoded = JSON.stringify(outcome.result)

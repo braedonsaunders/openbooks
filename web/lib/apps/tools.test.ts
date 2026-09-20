@@ -11,6 +11,14 @@ import test from 'node:test'
 
 const tools = readFileSync(new URL('./tools.ts', import.meta.url), 'utf8')
 const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
+const mcpServer = readFileSync(new URL('../mcp/server.ts', import.meta.url), 'utf8')
+
+function exportedBlock(source: string, signature: string, nextSignature: string): string {
+  const start = source.indexOf(signature)
+  assert.notEqual(start, -1, `${signature} must remain defined`)
+  const end = source.indexOf(nextSignature, start + 1)
+  return source.slice(start, end === -1 ? undefined : end)
+}
 
 test('runAppTool re-checks every gate against the stored manifest', () => {
   // Apps-use first, then the stored row, status, spec, and grant ∩ caller.
@@ -29,8 +37,37 @@ test('runAppTool validates input against the stored schema and invokes the envel
   assert.match(tools, /parseToolInput\(zodSchema, opts\.input\)/)
   assert.match(tools, /if \(!parsed\.ok\) return \{ ok: false, error: parsed\.error, status: 422 \}/)
   assert.match(tools, /operation: `apps\.assistant_tool\.\$\{appToolAssistantName\(opts\.appKey, opts\.toolKey\)\}`/)
-  assert.match(tools, /idempotencyKey: opts\.idempotencyKey \?\? randomUUID\(\)/)
   assert.match(tools, /\(deps\?\.invoke \?\? invokeAppEndpointHandler\)\(/)
+})
+
+test('runAppTool refuses an omitted idempotencyKey instead of minting a random one', () => {
+  const body = exportedBlock(tools, 'export async function runAppTool', 'export function toAssistantToolDef')
+  // A missing key is a failure the caller can act on, not a silent new mutation.
+  assert.match(body, /idempotencyKey is required/)
+  assert.match(body, /status: 400/)
+  assert.match(body, /idempotencyKey: idempotencyKey/)
+  assert.doesNotMatch(body, /\?\? randomUUID\(\)/)
+  assert.doesNotMatch(body, /idempotencyKey: opts\.idempotencyKey \?\?/)
+  const refuse = body.indexOf('idempotencyKey is required')
+  const invoke = body.indexOf('(deps?.invoke ?? invokeAppEndpointHandler)')
+  assert.ok(refuse >= 0 && invoke > refuse, 'the refusal must run before the envelope is invoked')
+})
+
+test('toAssistantToolDef read path mints a fresh readInvocation nonce', () => {
+  const body = exportedBlock(tools, 'export function toAssistantToolDef', 'export async function commitAppToolCommand')
+  assert.match(body, /idempotencyKey: randomUUID\(\)/)
+  // Mutating chat tools still propose; only the read execute() calls runAppTool.
+  assert.match(body, /proposedApplicationCommand: \{/)
+})
+
+test('MCP app-tool execute reuses the request identity on writes and mints a nonce on reads', () => {
+  const body = exportedBlock(mcpServer, 'const appCatalog', 'export async function createOpenBooksMcpServer')
+  assert.match(
+    body,
+    /definition\.category === "write"\s*\? candidate\.requestId\s*: randomUUID\(\)/s,
+  )
+  assert.match(body, /runAppTool\(\{/)
+  assert.match(body, /idempotencyKey/)
 })
 
 test('mutating app tools propose the shared confirmation card instead of executing', () => {
