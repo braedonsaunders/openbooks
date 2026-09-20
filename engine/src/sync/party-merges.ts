@@ -116,6 +116,12 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // employment now points at a different party are refused by name at
   // consume time (never silently absorbed).
   ["hrm_payroll_inputs", "employee_party_id"],
+  // 0195: the hired-party link on candidates and the hiring-manager slot on
+  // requisitions follow the merge wholesale. No uniqueness on either table
+  // involves those party columns, so re-pointing cannot duplicate. The
+  // composite tenant FKs keep the re-point inside the org.
+  ["hrm_candidates", "party_id"],
+  ["hrm_requisitions", "hiring_manager_party_id"],
 ];
 
 /**
@@ -246,6 +252,14 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and coalesce(lower(s.job_title), '') = coalesce(lower(d.job_title), '')" +
       " and s.trade_id is not distinct from d.trade_id and s.department_id is not distinct from d.department_id" +
       " and s.subsidiary_id is not distinct from d.subsidiary_id and s.effective_from = d.effective_from",
+  },
+  {
+    // 0195: the interview panel is unique on (org, interview, party) — two
+    // rows collide only when both parties sit on the SAME interview. The
+    // retained row stays on the absorbed party, counted in the audit.
+    table: "hrm_interview_panel",
+    column: "party_id",
+    conflict: "s.interview_id = d.interview_id",
   },
 ];
 
