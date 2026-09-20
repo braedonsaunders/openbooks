@@ -8,7 +8,8 @@
  *
  * What the pack declares:
  * - statutory slots: PAYE income tax, Class 1 NIC employee (primary) and
- *   employer (secondary), computed end to end for 2026/27. Student-loan /
+ *   employer (secondary), computed end to end for 2026/27, 2025/26 and
+ *   2024/25 — each year from its own transcribed tables (year-tables.ts). Student-loan /
  *   postgraduate-loan and workplace pension are REFUSED by name (see
  *   jurisdictions.ts header): no slot, no engine. The Employment Allowance
  *   (£10,500) is tenant-entered, never computed (conditional eligibility).
@@ -145,8 +146,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
     citation: "HMRC NIM39110: 'A NINO is made up of 2 letters, 6 numbers and a final letter, which is always A, B, C, or D'",
     numericEntry: false,
   },
-  // 2026/27 rUK + SCT editions transcribed (GB_TAX_YEARS), engine behind
-  // both, parity harnesses green: installable.
+  // 2024/25, 2025/26 and 2026/27 rUK + SCT editions transcribed
+  // (GB_TAX_YEARS), engine behind all three, parity harnesses green:
+  // installable.
   installable: true,
   statutorySlots: GB_STATUTORY_SLOTS,
   // PAYE and NIC are remitted to the HMRC Accounts Office on the employer's

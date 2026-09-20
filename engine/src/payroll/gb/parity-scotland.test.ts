@@ -218,13 +218,24 @@ test("NIC is nation-blind: one UK-wide schedule beside either code", () => {
 // Mechanism 3: the SCT edition exists, and the year guard still throws
 // ---------------------------------------------------------------------------
 
-test("SCT edition is published for 2026/27; pay dates outside it still throw", () => {
-  const sct = GB_TAX_YEARS.editions.find((entry) => entry.region === "SCT");
-  assert.equal(sct?.year, 2026);
-  assert.equal(sct?.status, "published");
+test("SCT editions are published per year; pay dates outside them still throw", () => {
+  for (const year of [2026, 2025, 2024]) {
+    const sct = GB_TAX_YEARS.editions.find(
+      (entry) => entry.region === "SCT" && entry.year === year,
+    );
+    assert.equal(sct?.status, "published", `SCT ${year}`);
+  }
+  const sct2026 = GB_TAX_YEARS.editions.find(
+    (entry) => entry.region === "SCT" && entry.year === 2026,
+  );
+  assert.equal(sct2026?.year, 2026);
   assert.equal(gbResolveTaxYear("2026-04-06"), 2026);
   assert.equal(gbResolveTaxYear("2027-04-05"), 2026);
-  for (const date of ["2026-04-05", "2027-04-06", "2025-04-06", "2028-01-01"]) {
+  // 2025/26 and 2024/25 resolve to their own SCT tables now; only dates
+  // outside every transcribed year throw.
+  assert.equal(gbResolveTaxYear("2025-04-06"), 2025);
+  assert.equal(gbResolveTaxYear("2024-04-06"), 2024);
+  for (const date of ["2024-04-05", "2027-04-06", "2028-01-01"]) {
     assert.throws(() => gbResolveTaxYear(date), /no transcribed tables/, date);
   }
 });
