@@ -383,3 +383,80 @@ test('platform query plans round-trip through QuickJS without exposing SQL', asy
   assert.deepEqual(result.response!.body, { records: [{ 'item.id': 'i1' }], hasMore: false })
   assert.equal(result.units, 80)
 })
+
+test("the sandbox has no host db, fs, or net primitives except injected adapters", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() {
+      var names = Object.getOwnPropertyNames(globalThis).sort();
+      return {
+        process: typeof process,
+        require: typeof require,
+        fetch: typeof fetch,
+        fs: typeof fs,
+        net: typeof net,
+        http: typeof http,
+        https: typeof https,
+        child_process: typeof child_process,
+        Buffer: typeof Buffer,
+        XMLHttpRequest: typeof XMLHttpRequest,
+        WebSocket: typeof WebSocket,
+        Deno: typeof Deno,
+        os: typeof os,
+        std: typeof std,
+        names: names
+      };
+    }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(r.status, "ok");
+  const body = r.response!.body as Record<string, unknown>;
+  for (const key of [
+    "process",
+    "require",
+    "fetch",
+    "fs",
+    "net",
+    "http",
+    "https",
+    "child_process",
+    "Buffer",
+    "XMLHttpRequest",
+    "WebSocket",
+    "Deno",
+    "os",
+    "std",
+  ]) {
+    assert.equal(body[key], "undefined", `${key} leaked into the sandbox`);
+  }
+  const names = body.names as string[];
+  assert.ok(names.includes("ob"));
+  assert.equal(names.includes("process"), false);
+  assert.equal(names.includes("require"), false);
+});
+
+test("raw records, journal, and platform host functions fail closed without adapters", async () => {
+  const records = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__records_get("equipment", "r1")); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(records.status, "forbidden");
+  assert.match(records.error!, /records\.read not granted/);
+
+  const journal = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__journal_create("{}", false)); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(journal.status, "forbidden");
+  assert.match(journal.error!, /gl\.post not granted/);
+
+  const platform = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__platform_create("items", "{}")); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(platform.status, "forbidden");
+  assert.match(platform.error!, /platform API unavailable/);
+});
