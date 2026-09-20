@@ -218,12 +218,14 @@ test("positions happy path: create, revise, fund, and vacancy with storage proof
        where org_id = ${orgId} and position_id = ${created.id} and revision = 2`)).rows[0]!.closed as Array<{
       table: string;
       version_no: number;
-      before: { planned_fte: string };
+      before: { planned_fte: number | string };
     }>;
     assert.equal(closures.length, 1);
     assert.equal(closures[0]!.table, "position_versions");
     assert.equal(closures[0]!.version_no, 1);
-    assert.equal(closures[0]!.before.planned_fte, "1.0000");
+    // The before-image is to_jsonb(row) verbatim (the closure guard compares
+    // it byte for byte), so numeric arrives as a JSON number: value, not scale.
+    assert.equal(Number(closures[0]!.before.planned_fte), 1);
 
     const funded = await writePositionFunding({
       orgId,
