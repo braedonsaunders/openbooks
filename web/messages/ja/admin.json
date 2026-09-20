@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "雇用記録の表示",
+    "hrm_leave_read": "休暇記録の表示",
+    "hrm_leave_request": "自身の雇用の休暇申請",
+    "hrm_leave_approve": "休暇申請の承認",
+    "hrm_leave_manage": "休暇種別とポリシーの設定",
     "hrm_employment_manage": "雇用変更の作成",
     "hrm_employment_approve": "雇用変更の決定",
     "hrm_position_read": "ポジションと人員計画の表示",

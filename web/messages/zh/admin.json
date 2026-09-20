@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "查看雇用记录",
+    "hrm_leave_read": "查看休假记录",
+    "hrm_leave_request": "为本人雇佣关系申请休假",
+    "hrm_leave_approve": "审批休假申请",
+    "hrm_leave_manage": "配置休假类型和政策",
     "hrm_employment_manage": "编写雇用变更",
     "hrm_employment_approve": "决定雇用变更",
     "hrm_position_read": "查看职位和人员编制计划",
