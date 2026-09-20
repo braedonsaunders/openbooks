@@ -268,6 +268,8 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     table: "hrm_interview_panel",
     column: "party_id",
     conflict: "s.interview_id = d.interview_id",
+  },
+  {
     // 0196: the review uniqueness is (org, cycle, employment, kind,
     // reviewer) — re-pointing the reviewer collides exactly when the
     // survivor already reviewed the same employment in the same cycle
