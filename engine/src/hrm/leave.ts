@@ -1064,9 +1064,13 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
          where org_id = ${orgId} and source_leave_request_id = ${requestId} and status <> 'voided'
       `);
     }
+    // Storage owns the lifecycle shape: cancelled groups with the undecided
+    // states (decided_by/decided_at NULL), so cancelling clears the approval
+    // decision and records the cancel reason in decision_reason.
     const cancelled = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
-         set status = 'cancelled', decision_reason = ${reason},
+         set status = 'cancelled', decided_by = null, decided_at = null,
+             decision_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'approved'
       returning ${REQUEST_COLUMNS}
