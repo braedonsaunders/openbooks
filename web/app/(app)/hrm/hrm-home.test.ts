@@ -131,6 +131,8 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
 
 test("hrm route tabs are the working surfaces, each behind its own gate", () => {
   for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compliance']) {
+test("hrm route tabs are the seven working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compensation']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee
@@ -148,6 +150,10 @@ test("hrm route tabs are the working surfaces, each behind its own gate", () => 
   assert.match(groupTabs, /'\/hrm\/compliance': 'hrm\.construction\.read'/, "compliance tab hides without the construction read grant");
   assert.match(groupTabs, /'\/hrm\/compliance': 'hrmConstructionCompliance'/, "compliance tab hides while the construction switch is off");
   // HR-13 end
+  // HR-12 begin
+  assert.match(groupTabs, /'\/hrm\/compensation': 'hrm\.compensation\.read'/, "compensation tab hides without the compensation read grant");
+  assert.match(groupTabs, /'\/hrm\/compensation': 'hrmCompensation'/, "compensation tab hides while the feature switch is off");
+  // HR-12 end
   assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm\.recruiting\.read'/, "recruiting tab hides without the funnel read grant");
   assert.match(groupTabs, /'\/hrm\/recruiting': 'hrm'/, "recruiting tab hides while the feature switch is off");
   assert.match(groupTabs, /'\/entities\/employees': 'parties\.read'/, "employees tab hides without the parties grant");

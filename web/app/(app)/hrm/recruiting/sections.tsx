@@ -93,6 +93,7 @@ export interface RequisitionDrawerData {
   status: string
   targetStartOn: string | null
   compensation: string | null
+  bandRange: string | null
   description: string | null
   stages: readonly { id: string; key: string; name: string; kind: string }[]
   funnel: readonly { stageKey: string; stageName: string; count: number }[]
@@ -179,6 +180,9 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
         </p>
         {detail.compensation ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">{detail.compensation}</p>
+        ) : null}
+        {detail.bandRange ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">{detail.bandRange}</p>
         ) : null}
         {detail.timeToFillDays !== null ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">

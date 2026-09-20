@@ -95,6 +95,13 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
   if (hasTeam || activeHref === '/me/team') {
     tabs.push({ href: '/me/team', label: t('me.tabs.team'), active: activeHref === '/me/team' })
   }
+  // HR-12 begin: the Compensation tab shows only when the feature is on
+  // and the person has something to see (a band or a statement) — the
+  // page itself re-checks and 404s otherwise.
+  if (activeHref === '/me/compensation' || (await meHasCompensation(authz))) {
+    tabs.push({ href: '/me/compensation', label: t('me.tabs.compensation'), active: activeHref === '/me/compensation' })
+  }
+  // HR-12 end
   return tabs
 }
 
@@ -102,6 +109,23 @@ export interface MeRefusal {
   title: string
   message: string
 }
+
+// HR-12 begin: Me Compensation tab visibility — the person has a band
+// (an architected position with a covering band) or a statement. Read
+// failures resolve to false (the tab hides) rather than denying the
+// whole Me strip.
+async function meHasCompensation(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return false
+    const { loadMyCompensation } = await import('./compensation')
+    const data = await loadMyCompensation(authz)
+    return data?.hasContent === true
+  } catch {
+    return false
+  }
+}
+// HR-12 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
