@@ -1815,6 +1815,13 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     // spread; the role seed refreshes on re-run).
     "hrm.process.read",
     "hrm.process.manage",
+    // HR-5 leave and attendance (migration 0194): read sees leave records,
+    // request files for one's own employment only, approve decides, manage
+    // configures types/policies. Admin-only like the employment keys above.
+    "hrm.leave.read",
+    "hrm.leave.request",
+    "hrm.leave.approve",
+    "hrm.leave.manage",
   ];
   assert.deepEqual(
     snapshot,
