@@ -17,7 +17,7 @@ export type ProcessMathErrorCode =
   | "DATE_OUT_OF_RANGE"
   | "EMPTY_SNAPSHOT"
   | "INVALID_TEMPLATE"
-  | "NO_TEMPLATE"
+  | "TEMPLATE_NOT_FOUND"
   | "AMBIGUOUS_TEMPLATE"
   | "INVALID_STEP";
 
@@ -280,7 +280,7 @@ export function resolveTemplateForEmployment(
   );
   if (matching.length === 0) {
     throw new ProcessMathError(
-      "NO_TEMPLATE",
+      "TEMPLATE_NOT_FOUND",
       `no active ${kind} template covers this employment — create or activate one in Setup that covers this employer subsidiary and department`,
     );
   }

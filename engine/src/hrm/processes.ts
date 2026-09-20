@@ -45,7 +45,7 @@ export type HrmProcessCode =
   | "BAD_STATE"
   | "REFUSED"
   | "FORBIDDEN"
-  | "NO_TEMPLATE"
+  | "TEMPLATE_NOT_FOUND"
   | "AMBIGUOUS_TEMPLATE"
   | "NO_LIVE_VERSION"
   | "DUPLICATE_OPEN"
@@ -1033,7 +1033,7 @@ async function resolveTemplateChoice(
     const steps = await loadTemplateSteps(exec, orgId, winnerRow.id);
     return { template: { id: winnerRow.id, kind, name: winnerRow.name }, steps };
   } catch (error) {
-    mathRefusal(error, "NO_TEMPLATE");
+    mathRefusal(error, "TEMPLATE_NOT_FOUND");
   }
 }
 
@@ -1132,7 +1132,7 @@ export async function openProcessInTx(exec: SqlExecutor, args: OpenProcessInTx):
     choice = await resolveTemplateChoice(exec, orgId, kind, employmentId, effectiveDate, templateId);
   } catch (error) {
     if (error instanceof HrmProcessError) throw error;
-    mathRefusal(error, "NO_TEMPLATE");
+    mathRefusal(error, "TEMPLATE_NOT_FOUND");
   }
   let snapshots;
   try {
@@ -1558,7 +1558,7 @@ export async function autoOpenProcessForChange(
     // (openProcess), where the operator asked for a checklist by name and
     // must hear why there is none. Every other failure still rolls the whole
     // application back.
-    if (error instanceof HrmProcessError && (error.code === "NO_TEMPLATE" || error.code === "DUPLICATE_OPEN")) {
+    if (error instanceof HrmProcessError && (error.code === "TEMPLATE_NOT_FOUND" || error.code === "DUPLICATE_OPEN")) {
       return null;
     }
     throw error;
