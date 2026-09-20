@@ -6,20 +6,19 @@ import {
   requestDocumentVoid,
 } from "@openbooks/engine/src/ledger/document-void.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/src/control-accounts.ts";
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { controlDeps, loadDocument } from "@openbooks/engine/src/records/document-service.ts";
+import { DocumentEditError } from "@openbooks/engine/src/records/document-edit-policy.ts";
+import type { DocumentEditInput } from "@openbooks/engine/src/records/document-input.ts";
+import { createPermission, postPermission, DOC_KINDS } from "../document-kinds";
+// The remaining editor dependency is deliberate: correction writes still compose
+// custom fields, tax, allocations, audit and flows in the shared web edit service.
 import {
-  controlDeps,
-  createPermission,
   createPostedCorrectionDraft,
   runPostedCorrectionDraftFlows,
-  DOC_KINDS,
-  DocumentEditError,
   isDocKindEnabled,
-  loadDocument,
-  postPermission,
-  type DocumentEditInput,
 } from "../documents";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
