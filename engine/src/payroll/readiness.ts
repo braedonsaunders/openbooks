@@ -46,7 +46,13 @@ import {
   type StatutoryRatePoint,
   type UnconfiguredStatutoryRate,
 } from "./statutory-rates.ts";
-import { packRates, payrollTaxYearForDate, payrollTaxYearProblem } from "./packs.ts";
+import {
+  packRates,
+  PayrollJurisdictionError,
+  payrollTaxYearForDate,
+  payrollTaxYearOperatorMessage,
+  payrollTaxYearProblem,
+} from "./packs.ts";
 import {
   employeeFactsFor,
   missingEmployeeFacts,
@@ -318,16 +324,31 @@ export function setupTaxYearCheck(
   today: string,
   setupHref: string,
 ): PayrollSetupCheck {
-  const { taxYear, problem } = payrollTaxYearForDate(country, today);
-  return {
-    severity: "blocker", code: "setup.taxYear", ok: problem === null,
-    // Operator text: the packs tab shows each pack's published coverage but
-    // offers no action that loads an unpublished year, so the detail must
-    // not prescribe the developer's scaffold script. The developer remedy
-    // stays on `problem.message` for engine throws and logs.
-    detail: problem ? problem.operatorMessage : `${country} · ${taxYear}`,
-    href: `${setupHref}?tab=packs`,
-  };
+  // Operator text: the packs tab shows each pack's published coverage but
+  // offers no action that loads an unpublished year, so the detail must
+  // not prescribe the developer's scaffold script. The developer remedy
+  // stays on `problem.message` for engine throws and logs.
+  try {
+    const { taxYear, problem } = payrollTaxYearForDate(country, today);
+    return {
+      severity: "blocker", code: "setup.taxYear", ok: problem === null,
+      detail: problem ? problem.operatorMessage : `${country} · ${taxYear}`,
+      href: `${setupHref}?tab=packs`,
+    };
+  } catch (error) {
+    // No pack ⇒ the year lookup throws out of the pack registry before the
+    // composer (and its undeclared branch) is reached. That throw is a
+    // jurisdiction error, not the refusal the setup surface must show:
+    // return the undeclared blocker instead, in the year-free form (no pack
+    // ⇒ no year arithmetic). Anything else rethrows — only the unknown-pack
+    // case converts. A crash becomes a refusal; nothing payable widens.
+    if (!(error instanceof PayrollJurisdictionError)) throw error;
+    return {
+      severity: "blocker", code: "setup.taxYear", ok: false,
+      detail: payrollTaxYearOperatorMessage(country, country, null, "undeclared", []),
+      href: `${setupHref}?tab=packs`,
+    };
+  }
 }
 
 export async function payrollSetupState(
