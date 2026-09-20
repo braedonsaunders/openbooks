@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { ensureCloseDefaults, runCloseAutomations } from "./close.ts";
+import { ensureCloseDefaults } from "./defaults.ts";
+import { runCloseAutomations } from "./run-automation.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

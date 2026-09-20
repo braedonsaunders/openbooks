@@ -274,7 +274,9 @@ export async function executeFlowPlan(
         ) {
           // Payment posting is a larger accounting unit than its GL entry:
           // applications, realized FX and provenance links must commit with it.
-          const { postPaymentWithApplications } = await import("../payments/payments.ts");
+          // Payment posting is a larger accounting unit than its GL entry:
+// applications, realized FX and provenance links must commit with it.
+const { postPaymentWithApplications } = await import("../payments/payment-posting.ts");
           entryId = (
             await postPaymentWithApplications(
               subjectId,
@@ -285,7 +287,8 @@ export async function executeFlowPlan(
           ).entryId;
         } else {
           // Break the static import cycle (posting.ts dispatches flows).
-          const { postDocument } = await import("../ledger/posting.ts");
+          // Break the static import cycle (posting.ts dispatches flows).
+const { postDocument } = await import("../ledger/posting-document.ts");
           const deps = { control: await loadRequiredControlAccounts(ctx.orgId) };
           entryId = await postDocument(subjectId, deps, {
             audit: { actorId: ctx.userId ?? null, source: "flows" },

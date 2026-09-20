@@ -3,12 +3,8 @@ import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import {
-  loadPaymentDocument,
-  openItemsForParty,
-  PAYMENT_KIND_SIDE,
-  type PaymentKind,
-} from '@openbooks/engine/src/payments/payments.ts'
+import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
+import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import type { OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
 import {
   RelatedTransactionDrawerClient,

@@ -9,7 +9,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "..
 
 
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   approveVendorPayApplication,
   createVendorPayApplication,

@@ -8,7 +8,7 @@ import {
   type AccretionPeriod,
 } from "../money/present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 
 /**
  * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.

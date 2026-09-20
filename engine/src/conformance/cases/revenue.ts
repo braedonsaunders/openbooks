@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add, fromUnits, toUnits } from "../../money/money.ts";
-import { postDocument } from "../../ledger/posting.ts";
+import { postDocument } from "../../ledger/posting-document.ts";
 import {
   allocateByRelativeSSP,
   computeRecognitionSchedule,

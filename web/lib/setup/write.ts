@@ -7,7 +7,8 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
-import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll/run.ts'
+import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
+import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {

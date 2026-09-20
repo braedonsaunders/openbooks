@@ -3,11 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { cmp, isZero, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
-import {
-  payrollSubsidiaryOutsideScopeFilter,
-  payrollSubsidiaryScopeFilter,
-  type PayrollSubsidiaryScope,
-} from "./run.ts";
+import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
   auditComparison,
   comparePriorPayrollPeriod,

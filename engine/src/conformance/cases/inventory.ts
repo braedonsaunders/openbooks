@@ -18,7 +18,7 @@ import {
 } from "../../inventory/inventory.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory/nrv.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
-import { postDocument } from "../../ledger/posting.ts";
+import { postDocument } from "../../ledger/posting-document.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
 /** Receive stock the way the product does: an approved vendor bill, then the

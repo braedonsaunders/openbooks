@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { type PostingDeps } from "../ledger/posting.ts";
+import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import { PaymentError } from "./payment-errors.ts";
 // ---------------------------------------------------------------------------
 // Control accounts

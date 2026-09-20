@@ -41,7 +41,7 @@ const { computeProvisionRun, getProvisionRun } =
   await import('@openbooks/engine/src/tax-returns/income-tax-provision.ts')
 const { createPlanVersion, publishPlanVersion, activateLifecycle } =
   await import('@openbooks/engine/src/billing/advanced-subscriptions.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { getAuthz } = await import('./authz')
 const { POST: consolidate } = await import('../app/api/consolidation/route')
 const { GET: provisions, POST: compute } =

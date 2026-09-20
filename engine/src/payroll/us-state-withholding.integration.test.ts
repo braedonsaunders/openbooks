@@ -12,9 +12,10 @@ import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import {
   CA_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
 } from "./us/states/index.ts";
-import {
-  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
-} from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 /**

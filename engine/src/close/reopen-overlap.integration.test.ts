@@ -4,7 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fixtures.ts';
-import { assertPeriodModulesOpen, CloseError, decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen, setPeriodLockState } from './close.ts';
+import { assertPeriodModulesOpen, CloseError } from "./period-policy.ts";
+import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "./reopening.ts";
+import { setPeriodLockState } from "./period-locks.ts";
 
 for (const order of ['global first','entity first','race','separate entities'] as const) {
   test(`reopen approvals refuse intersecting global/entity scopes: ${order}`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {

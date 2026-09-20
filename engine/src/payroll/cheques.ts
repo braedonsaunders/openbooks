@@ -3,10 +3,7 @@ import { db } from "../platform/db.ts";
 import { sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { lockAndCheckPayrollRunPopulation } from "./scope.ts";
-import {
-  payrollSubsidiaryScopeFilter,
-  type PayrollSubsidiaryScope,
-} from "./run.ts";
+import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 
 /**
  * Printed pay cheques.

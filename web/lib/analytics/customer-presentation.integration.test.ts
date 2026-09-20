@@ -10,7 +10,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { customerData } = await import('./customer-data')
 
 async function invoice(orgId: string, actor: string, subsidiaryId: string, partyId: string, revenue: string, currency: string, fxRate: string, date: string, accounts: { ar: string; ap: string; bank: string; revenue: string }) {

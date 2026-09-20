@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { reconcilePayrollFilingAccounts } from "./filing-reconciliation.ts";
 import { filingAccountsById, listFilingAccounts } from "./filing.ts";
-import { commitPayRun } from "./run.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";

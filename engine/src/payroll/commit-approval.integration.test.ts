@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { decideGate } from "../flows/gates.ts";
 import { submitForApproval } from "../flows/submit.ts";
-import { commitPayRun } from "./run.ts";
+import { commitPayRun } from "./run-commit.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
 import { dropScratchOrg, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
 import { PayrollError } from "./error.ts";

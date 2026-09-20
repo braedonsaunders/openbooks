@@ -6,7 +6,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "./close.ts";
+import { assertPeriodModulesOpen, CloseError } from "./period-policy.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.

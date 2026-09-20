@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { closeApprovedRun, startCloseRun } from "./close.ts";
+import { closeApprovedRun } from "./run-completion.ts";
+import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 

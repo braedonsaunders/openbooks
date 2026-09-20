@@ -10,7 +10,7 @@ import {
   markLegacy,
   seedAdoption,
 } from "../payroll/filing-test-fixtures.ts";
-import { commitPayRun } from "../payroll/run.ts";
+import { commitPayRun } from "../payroll/run-commit.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 /**

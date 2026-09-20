@@ -1,5 +1,5 @@
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
-import { PostingError } from '@openbooks/engine/src/ledger/posting.ts'
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 
 /**

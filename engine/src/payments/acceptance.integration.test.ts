@@ -17,13 +17,10 @@ import {
   toMinorUnits,
 } from "./acceptance.ts";
 import { add } from "../money/money.ts";
-import { postDocument } from "../ledger/posting.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} from "./payments.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

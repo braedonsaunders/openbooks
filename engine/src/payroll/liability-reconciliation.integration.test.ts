@@ -5,7 +5,7 @@ import {sql} from 'drizzle-orm';
 import {db,withOrgTransaction} from '../platform/db.ts';
 import {seedAdoption,calculatedRun} from './filing-test-fixtures.ts';
 import {createScratchOrg,dropScratchOrgReporting} from '../testing/fixtures.ts';
-import {commitPayRun} from './run.ts';
+import { commitPayRun } from "./run-commit.ts";
 import {payrollRemittanceSummary} from './remittance.ts';
 import {reconcilePayrollLiabilityAccounts} from './liability-reconciliation.ts';
 

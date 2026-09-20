@@ -8,7 +8,8 @@ import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { computeLineTaxes } from "../tax/tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist.ts";
-import { postDocument, type PostingDeps } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import {
   advancedBillingSnapshot,

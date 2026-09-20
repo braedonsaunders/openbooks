@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, sum } from "../money/money.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { recordPayRunPayment } from "./payment.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import {
@@ -12,7 +12,10 @@ import {
   payrollRemittanceSummary,
   remittanceFenceLockKey,
 } from "./remittance.ts";
-import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";

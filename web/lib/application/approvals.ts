@@ -16,7 +16,7 @@ import {
   type WorklistGate,
 } from "@openbooks/engine/src/flows/index.ts";
 import { decidePaymentRun } from "@openbooks/engine/src/payments/operations.ts";
-import { PaymentError } from "@openbooks/engine/src/payments/payments.ts";
+import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
 import { can, type Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { isUuid } from "../list-params";

@@ -6,7 +6,7 @@ import { deriveConsolidatedRates } from "../consolidation/consolidation.ts";
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

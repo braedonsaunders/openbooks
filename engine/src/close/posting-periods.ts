@@ -1,12 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
-import {
-  assertPeriodModulesOpen,
-  CloseError,
-  closeModuleForDocument,
-  type CloseModule,
-  NON_POSTING_DOCUMENT_KINDS,
-} from "./close.ts";
+import { assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule, NON_POSTING_DOCUMENT_KINDS } from "./period-policy.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { computeTaxReturn } from "./return.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 

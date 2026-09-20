@@ -15,7 +15,7 @@ import {
 import { deleteDocument } from "../ledger/document-delete.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { reverseProjectGlEntry } from "./recognition.ts";
 import { cmp } from "../money/money.ts";
 import {

@@ -16,7 +16,7 @@ const { generateInvoiceFromBillingRequest } = await import('./billing')
 const { createBillingRequest } = await import('./billing-requests')
 const { computeBillTotals, taxProfileMap } = await import('./bills')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>
 type Fixture = { org: Org; actor: string; project: string }

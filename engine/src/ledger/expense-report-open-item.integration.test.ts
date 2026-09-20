@@ -3,14 +3,12 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument, type PostingDeps } from "./posting.ts";
-import {
-  createPaymentDocument,
-  openItemsForParty,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} from "../payments/payments.ts";
+import { postDocument } from "./posting-document.ts";
+import { type PostingDeps } from "./posting-contracts.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { openItemsForParty } from "../payments/payment-queries.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

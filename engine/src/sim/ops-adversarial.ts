@@ -4,12 +4,9 @@ import { db } from "../platform/db.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { reverseProjectGlEntry } from "../projects/recognition.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} from "../payments/payments.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { add } from "../money/money.ts";
 import { collectibleOpenItems, createAndPostDocument, releaseDraftIfUngated } from "./activities/documents.ts";
 import type { SimOrg, SimPeriod } from "./world.ts";

@@ -20,7 +20,7 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { generateAccountingPeriods } from "./engine/src/close/close.ts";
+      import { generateAccountingPeriods } from "./engine/src/close/calendar.ts";
       import { deriveConsolidatedRates } from "./engine/src/consolidation/consolidation.ts";
       import { db, withOrgContext } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";

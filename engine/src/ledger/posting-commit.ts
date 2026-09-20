@@ -5,7 +5,7 @@ import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../
 
 import { type ContributedLineWithSource } from "../allocations/post.ts";
 
-import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../close/period-policy.ts";
 import { applyBillInventoryReceipts, applyVendorCreditInventoryReturns } from "../inventory/inventory.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
 

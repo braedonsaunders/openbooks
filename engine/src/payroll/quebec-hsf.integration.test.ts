@@ -6,7 +6,10 @@ import { db } from "../platform/db.ts";
 import { cmp, neg, sum } from "../money/money.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
-import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -123,3 +123,6 @@ export type PostDocumentOptions = {
     suppressAutomation?: boolean;
     audit?: { actorId: string | null; source: string };
   };
+
+/** Raised when a GL-affecting edit would land in a closed accounting period. */
+export class ClosedPeriodError extends Error {}

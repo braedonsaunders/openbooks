@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  nextPeriodAfter,
-  PayrollError,
-  payPeriodsPerYearProblem,
-  semiMonthlyAnchorProblem,
-  semiMonthlyBoundaries,
-} from "./run.ts";
+import { nextPeriodAfter, payPeriodsPerYearProblem, semiMonthlyAnchorProblem, semiMonthlyBoundaries } from "./run-calendar.ts";
+import { PayrollError } from "./error.ts";
 
 /**
  * Period boundaries derived from `pay_schedules.anchor_period_end`.

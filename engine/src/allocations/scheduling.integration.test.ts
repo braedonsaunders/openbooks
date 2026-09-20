@@ -9,7 +9,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { ensureCloseDefaults } from "../close/close.ts";
+import { ensureCloseDefaults } from "../close/defaults.ts";
 import { postProjectGlEntry } from "../projects/recognition.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,

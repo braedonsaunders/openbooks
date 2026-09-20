@@ -4,8 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { decidePaymentRun, runDuePaymentSchedules, submitPaymentRun } from "./operations.ts";
-import { createPaymentRun, PaymentError } from "./payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { createPaymentRun } from "./run-creation.ts";
+import { PaymentError } from "./payment-errors.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,

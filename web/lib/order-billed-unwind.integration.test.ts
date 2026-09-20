@@ -19,7 +19,7 @@ import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 const { convertOrder } = await import("./order-cycle.ts");
 const { requestDocumentVoid } = await import("@openbooks/engine/src/ledger/document-void.ts");
 const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { materializeCapture } = await import("@openbooks/engine/src/payables/ap-capture-service.ts");
 
 async function seedOrder(

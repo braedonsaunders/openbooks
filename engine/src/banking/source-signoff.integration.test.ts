@@ -10,7 +10,7 @@ import {
   sourceEvidencePolicyActive,
   startReconciliation,
 } from "./banking.ts";
-import { ensureCloseDefaults } from "../close/close.ts";
+import { ensureCloseDefaults } from "../close/defaults.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";

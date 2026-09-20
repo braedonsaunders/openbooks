@@ -2,14 +2,12 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import {
-  PaymentRevisionConflictError,
-  postPaymentWithApplications,
-  updateDraftPayment,
-  type PaymentKind,
-} from '@openbooks/engine/src/payments/payments.ts'
+import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments/payment-errors.ts";
+import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
+import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
+import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting.ts'
+import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import {
   DocumentEditError,

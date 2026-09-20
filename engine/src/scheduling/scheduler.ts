@@ -440,7 +440,7 @@ export async function tick(): Promise<void> {
 
       // Period close: expire temporary reopen windows and execute deadline rules.
       try {
-        const { recloseExpiredReopens, runDueCloseAutomations } = await import("../close/close.ts");
+        const { recloseExpiredReopens } = await import("../close/reopening.ts"), { runDueCloseAutomations } = await import("../close/run-automation.ts");
         await recloseExpiredReopens();
         await runDueCloseAutomations();
       } catch (e) {

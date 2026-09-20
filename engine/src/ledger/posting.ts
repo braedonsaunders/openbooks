@@ -7,5 +7,4 @@ export { providerTaxDocumentKind, defaultPartyAddress, taxConfigsFromEvidence } 
 export { validateRequiredDimensions } from "./posting-accounts.ts";
 export { type PostingDocument, type PostingDocumentLine, type KernelLine, type PostingDeps, type TaxPostingComponent, controlLineIsOpenItem, projectChargeKernelLines, componentsForLine, validateTaxControlAccounts, type ExpenseSettlement, settlementOf, RULES, PostingError, assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-rules.ts";
 
-/** Raised when a GL-affecting edit would land in a closed accounting period. */
-export class ClosedPeriodError extends Error {}
+export { ClosedPeriodError } from "./posting-contracts.ts";

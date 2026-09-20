@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";

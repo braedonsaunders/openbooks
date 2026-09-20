@@ -5,7 +5,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { saveOpeningBalances } from "@openbooks/engine/src/payroll/opening-balances.ts";
-import { commitPayRun } from "@openbooks/engine/src/payroll/run.ts";
+import { commitPayRun } from "@openbooks/engine/src/payroll/run-commit.ts";
 import { dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
 import {
   calculatedRun,

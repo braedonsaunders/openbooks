@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
+import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import {
   comparablePayRuns,
   comparableSlots,

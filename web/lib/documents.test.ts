@@ -40,7 +40,7 @@ const {
   requestDocumentVoid,
 } = await import('@openbooks/engine/src/ledger/document-void.ts')
 const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const {
   createScratchOrg,
   dropScratchOrg,

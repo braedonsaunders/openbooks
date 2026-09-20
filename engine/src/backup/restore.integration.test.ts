@@ -16,13 +16,10 @@ import {
   sealSecret as sealEmailSecret,
   unsealSecret as unsealEmailSecret,
 } from "@openbooks/emails";
-import { postDocument } from "../ledger/posting.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  reversePaymentForReturn,
-  updateDraftPayment,
-} from "../payments/payments.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { reversePaymentForReturn } from "../payments/payment-return.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting, orgRowCounts } from "../testing/fixtures.ts";
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";

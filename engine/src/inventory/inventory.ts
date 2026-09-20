@@ -8,7 +8,7 @@ import { add, cmp, fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnit
 import { consumeFifo, extendCost, exactCostFragments, issueStandard, receiveStandard, type CostLayer } from "./costing.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";

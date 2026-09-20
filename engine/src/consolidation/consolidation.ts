@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { periodLockBlocksPosting } from "../close/close.ts";
+import { periodLockBlocksPosting } from "../close/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "../money/money.ts";
-import { assertFinalKernelBalance } from "../ledger/posting.ts";
+import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
 /**

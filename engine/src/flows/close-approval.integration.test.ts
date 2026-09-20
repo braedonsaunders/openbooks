@@ -2,11 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  ensureCloseDefaults,
-  refreshCloseRun,
-  requestCloseApproval,
-} from "../close/close.ts";
+import { ensureCloseDefaults } from "../close/defaults.ts";
+import { refreshCloseRun } from "../close/run-automation.ts";
+import { requestCloseApproval } from "../close/approvals.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

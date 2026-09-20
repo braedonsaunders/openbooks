@@ -2,13 +2,9 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../../platform/db.ts";
 import { withSimClock } from "../../platform/clock.ts";
 import { createScriptJournal } from "../../ledger/journal-writes.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-  type AllocationInput,
-} from "../../payments/payments.ts";
+import { createPaymentDocument, updateDraftPayment } from "../../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../../payments/payment-posting.ts";
+import { sameCurrencyAllocation, type AllocationInput } from "../../payments/settlement-policy.ts";
 import { sum } from "../../money/money.ts";
 import { createDraftDocument, postDraftDocument, releaseDraftIfUngated } from "../../sim/activities/documents.ts";
 import type { SimOrg } from "../../sim/world.ts";

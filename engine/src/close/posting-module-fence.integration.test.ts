@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { DOCUMENT_KINDS, closeModuleForDocument, setPeriodLockState } from "./close.ts";
+import { DOCUMENT_KINDS, closeModuleForDocument } from "./period-policy.ts";
+import { setPeriodLockState } from "./period-locks.ts";
 import {
   createScratchOrg,
   createScratchUser,

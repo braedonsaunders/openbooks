@@ -6,8 +6,8 @@ import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } f
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
-import { assertFinalKernelBalance } from "../ledger/posting.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { loadSubsidiaryContext, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */

@@ -21,8 +21,9 @@ import type {
   EntityProvisionResult,
   ProvisionSourceSnapshot,
 } from "./income-tax-provision.ts";
-import { postDocument } from "../ledger/posting.ts";
-import { closeApprovedRun, startCloseRun } from "../close/close.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { closeApprovedRun } from "../close/run-completion.ts";
+import { startCloseRun } from "../close/run-start.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   TaxFilingError,

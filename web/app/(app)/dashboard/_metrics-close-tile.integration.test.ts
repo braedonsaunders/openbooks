@@ -26,7 +26,7 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { ensureCloseDefaults } = await import("@openbooks/engine/src/close/close.ts");
+const { ensureCloseDefaults } = await import("@openbooks/engine/src/close/defaults.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
