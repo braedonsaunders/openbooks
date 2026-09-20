@@ -116,7 +116,7 @@ export const FEATURES: FeatureDef[] = [
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'accounting' },
-  { key: 'fixedAssets', defaultEnabled: true, category: 'accounting', navModules: ['assets', 'tax-depreciation'] },
+  { key: 'fixedAssets', defaultEnabled: true, category: 'accounting', navModules: ['assets', 'leases', 'tax-depreciation'] },
   { key: 'budgets', defaultEnabled: true, category: 'accounting', navModules: ['budgets'] },
   { key: 'continuousClose', defaultEnabled: true, category: 'accounting', navModules: ['continuous-close'] },
   // Core period close is always available. This gate adds the mature-team

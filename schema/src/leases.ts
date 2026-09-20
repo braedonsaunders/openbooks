@@ -44,6 +44,8 @@ export const leaseAgreements = pgTable(
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     leaseNumber: text("lease_number").notNull(),
+    bookId: uuid("book_id"),
+    currency: text("currency"),
     description: text("description"),
     status: text("status", { enum: ["draft", "active", "terminated", "complete"] })
       .notNull()
@@ -78,6 +80,15 @@ export const leaseAgreements = pgTable(
     /** Measured at commencement; null until commenced. */
     initialLiability: money("initial_liability"),
     initialRouAsset: money("initial_rou_asset"),
+    revision: integer("revision").notNull().default(1),
+    initialDirectCosts: money("initial_direct_costs").notNull().default("0"),
+    prepayments: money("prepayments").notNull().default("0"),
+    incentives: money("incentives").notNull().default("0"),
+    costClearingAccountId: uuid("cost_clearing_account_id"),
+    lastChangeId: uuid("last_change_id"),
+    openingLiability: money("opening_liability"),
+    openingRouCarrying: money("opening_rou_carrying"),
+    openingBalancesAsOf: date("opening_balances_as_of"),
     /** Posting accounts. */
     rouAssetAccountId: uuid("rou_asset_account_id").notNull(),
     leaseLiabilityAccountId: uuid("lease_liability_account_id").notNull(),
@@ -118,6 +129,10 @@ export const leaseAgreementScheduleLines = pgTable(
     orgId: orgRef(),
     leaseId: uuid("lease_id").notNull(),
     sequence: integer("sequence").notNull(),
+    revision: integer("revision").notNull().default(1),
+    supersededByChangeId: uuid("superseded_by_change_id"),
+    paymentPostedAt: timestamp("payment_posted_at", { withTimezone: true }),
+    accrualPostedAt: timestamp("accrual_posted_at", { withTimezone: true }),
     dueOn: date("due_on").notNull(),
     periodStart: date("period_start").notNull(),
     periodEnd: date("period_end").notNull(),

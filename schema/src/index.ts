@@ -83,3 +83,5 @@ export * from "./hrm";
 export * from "./hrm-positions";
 
 export * from './extension-drafts';
+
+export * from "./financial-changes";
