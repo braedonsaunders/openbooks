@@ -29,21 +29,45 @@ export interface DaemonConfig {
   advertisedHost: string | null;
 }
 
+type DaemonRow = { enabled: boolean; port: number; host_key: string; advertised_host: string | null };
+
+function asDaemonConfig(row: DaemonRow): DaemonConfig {
+  return { enabled: row.enabled, port: row.port, hostKey: row.host_key, advertisedHost: row.advertised_host };
+}
+
+async function readDaemonRow(runner: SqlExecutor): Promise<DaemonRow | undefined> {
+  const r = await runner.execute<DaemonRow>(sql`
+    select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
+  `);
+  return r.rows[0];
+}
+
 /** Load the singleton daemon config, provisioning it (with a fresh host key) on first use. */
 export async function loadDaemonConfig(runner: SqlExecutor = db): Promise<DaemonConfig> {
-  const r = (await runner.execute<{ enabled: boolean; port: number; host_key: string; advertised_host: string | null }>(sql`
-    select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
-  `));
-  if (r.rows[0]) {
-    const c = r.rows[0];
-    return { enabled: c.enabled, port: c.port, hostKey: c.host_key, advertisedHost: c.advertised_host };
-  }
+  const existing = await readDaemonRow(runner);
+  if (existing) return asDaemonConfig(existing);
+
   const hostKey = generateHostKey();
-  await runner.execute(sql`
+  // Concurrent first-loads race on this singleton. Losing the insert is
+  // expected and benign: the winner's persisted PEM is the only host key
+  // we may advertise. Same claim shape as the username mint
+  // (`on conflict do nothing` + observe the stored row) — never return
+  // the discarded in-memory secret. Operators pin hostKeyFingerprint of
+  // whatever this function returns.
+  const inserted = await runner.execute<DaemonRow>(sql`
     insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
     on conflict (id) do nothing
+    returning enabled, port, host_key, advertised_host
   `);
-  return { enabled: false, port: 2222, hostKey, advertisedHost: null };
+  if (inserted.rows[0]) return asDaemonConfig(inserted.rows[0]);
+
+  const persisted = await readDaemonRow(runner);
+  if (!persisted) {
+    throw new Error(
+      "sftp_daemon row 'default' is missing after provision; retry the load so a later read can observe the persisted host key",
+    );
+  }
+  return asDaemonConfig(persisted);
 }
 
 /** SHA-256 fingerprint of the host public key (shown in the UI, like ssh-keygen -l). */
