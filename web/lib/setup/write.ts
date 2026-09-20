@@ -1,6 +1,7 @@
 import 'server-only'
 import { uuidId } from '../api/json'
 import { saveExtensionSettingRow } from './extension-settings'
+import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
@@ -1146,6 +1147,14 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
+  // HR-15: home announcements create into org settings JSON.
+  if (entity.dataSource === 'home-announcements') {
+    try { return { status: 200, body: await createHomeAnnouncementRow(orgId, rawBody) } }
+    catch (error) {
+      return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
+    }
+  }
+
   const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
@@ -1367,6 +1376,15 @@ export async function updateSetupRecord(
     catch (error) {
       const status = error instanceof Error && 'status' in error && error.status === 409 ? 409 : 400
       return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid module setting' } }
+    }
+  }
+
+  // HR-15: home announcements live in org settings JSON, not a table.
+  if (entity.dataSource === 'home-announcements') {
+    try { return { status: 200, body: await saveHomeAnnouncementRow(orgId, id, body) } }
+    catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 404 ? 404 : 400
+      return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
     }
   }
 
@@ -1672,6 +1690,17 @@ export async function deleteSetupRecord(
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (entity.key === 'accounting-books') {
     return { status: 405, body: { error: 'archive-only' } }
+  }
+
+  // HR-15: home announcements delete from org settings JSON.
+  if (entity.dataSource === 'home-announcements') {
+    try {
+      await deleteHomeAnnouncementRow(orgId, id)
+      return { status: 200, body: { ok: true } }
+    } catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 404 ? 404 : 400
+      return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
+    }
   }
 
   if (!id) return { status: 400, body: { error: 'id required' } }

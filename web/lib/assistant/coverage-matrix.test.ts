@@ -45,7 +45,7 @@ type Entry = {
 const MATRIX: Entry[] = [
   // --- landing / navigation -------------------------------------------------
   { prefix: "", tools: ["analytics_financial_health", "cash_position"] },
-  { prefix: "dashboard", tools: ["analytics_financial_health", "cash_position", "ar_position", "ap_position"] },
+  { prefix: "dashboard", tools: ["analytics_financial_health", "cash_position", "ar_position", "ap_position", "inbox_items"], note: "persona tiles read the caller's own inbox items through the inbox adapters" },
   { prefix: "accounting", tools: ["trial_balance", "find_journal_entries"] },
   { prefix: "accounts", tools: ["find_accounts", "account_register"] },
   { prefix: "account-groups", tools: ["find_accounts"] },
@@ -61,7 +61,8 @@ const MATRIX: Entry[] = [
   { prefix: "me", tools: ["whoami", "describe_page_layout"] },
   { prefix: "page-specs", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "settings/security", tools: ["list_users", "list_roles"] },
-  { prefix: "approvals", tools: ["list_approvals"] },
+  // HR-15: the approvals place is the inbox; the route moved with it.
+  { prefix: "inbox", tools: ["inbox_items", "list_approvals", "decide_approval"], note: "the unified inbox reads through the inbox adapters (same readers as the page) while decisions run through native Flows gates; step completion, submits, and acknowledgement are human-attested actions with no assistant write surface by design" },
   { prefix: "assistant", uncovered: "assistant surface: the chat/commit/conversation surface itself" },
   { prefix: "login", uncovered: "transport-only: session establishment, no data view" },
   { prefix: "access-denied", tools: ["whoami", "list_roles"], note: "permission-refusal explanation; no writes" },
@@ -128,7 +129,7 @@ const MATRIX: Entry[] = [
   { prefix: "sign", uncovered: "no application service: signature capture persists inline" },
   { prefix: "expenses", tools: ["list_expense_reports", "get_expense_report", "expense_overview", "expense_approvals"] },
   { prefix: "payroll", tools: ["list_pay_runs", "get_pay_run", "payroll_year_end", "payroll_setup_status", "list_payroll_employees", "payroll_entitlements", "payroll_remittances"], note: "profiles/settings/opening-balance/retro/parallel-run writes have no application service" },
-  { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me"], note: "as-of headcount, the effective version with assignments, the change-request list, positions with vacancy, the process checklists, leave requests with balances, requisitions with the funnel, review cycles with progress, turnover, benefit elections, and the caller's own employment summary reuse their canonical HRM read services; authoring stays human-attested with no tool" },
+  { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "inbox_items"], note: "as-of headcount, the effective version with assignments, the change-request list, positions with vacancy, the process checklists, leave requests with balances, requisitions with the funnel, review cycles with progress, turnover, benefit elections, the caller's own employment summary, and the caller's own inbox items reuse their canonical HRM read services; authoring stays human-attested with no tool" },
   { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_leave"], note: "as-of headcount, the effective version with assignments, the change-request list, and the leave-request list with TIME balances reuse the employment and leave read services; authoring stays human-attested with no tool" },
   { prefix: "labor-rate-cards", uncovered: "no application service: rate card writes are route-inline" },
   { prefix: "rate-book-assignments", tools: ["list_setup_records"], note: "item-rate-book-assignments is a setup entity" },

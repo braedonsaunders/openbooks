@@ -70,8 +70,26 @@ const TOOL_PERMS: Record<string, string> = {
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the eleven HRM read tools", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
+test("the module exports exactly the eleven HRM read tools plus the core inbox tool", () => {
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
+});
+
+test("inbox_items is the core own-scope tool: self grant, no feature, read-only", () => {
+  const tool = HRM_TOOLS.find((candidate) => candidate.name === "inbox_items")!;
+  assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["hrm.self.read"] });
+  assert.equal(tool.feature, undefined);
+  assert.equal(tool.tier, "module");
+  assert.equal(tool.category, "read");
+  assert.ok(
+    tool.description.length > 0 && tool.description.length <= 220,
+    `inbox_items description is ${tool.description.length} chars (slice ceiling is 220)`,
+  );
+  assert.match(tool.description, /Read-only\.$/);
+  assert.doesNotMatch(tool.description, /Approvals/, "the place is the inbox, not approvals");
+  tool.inputSchema.parse({});
+  tool.inputSchema.parse({ filter: "notices", limit: 10 });
+  assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
+  assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
 });
 
 for (const name of TOOL_NAMES) {

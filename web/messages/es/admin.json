@@ -2419,6 +2419,10 @@
         "title": "Niveles de beneficios",
         "singularTitle": "Nivel de beneficios",
         "description": "Niveles de cobertura por plan — solo empleado, familia — con los costos del nivel."
+      },
+      "home-announcements": {
+        "title": "Anuncios",
+        "description": "Anuncios de la empresa para el inicio, con audiencia y fechas."
       }
     },
     "fields": {
@@ -2729,7 +2733,11 @@
       "employerPayComponentId": "Componente del empleador",
       "waitingPeriodDays": "Espera (días)",
       "requiresApproval": "Requiere aprobación",
-      "levelKey": "Clave del nivel"
+      "levelKey": "Clave del nivel",
+      "body": "Cuerpo",
+      "audience": "Audiencia",
+      "startsOn": "Comienza el",
+      "endsOn": "Termina el"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -3205,6 +3213,11 @@
       "benefitProrationBasis": {
         "full_month": "Mes completo — todo el mes sean cuales sean las fechas",
         "daily": "Diario — prorrateado por días cubiertos"
+      },
+      "announcementAudience": {
+        "all": "Todos",
+        "managers": "Responsables",
+        "employees": "Empleados"
       }
     },
     "laborCosting": {

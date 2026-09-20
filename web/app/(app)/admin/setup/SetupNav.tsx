@@ -18,6 +18,7 @@ import {
   Landmark,
   Layers,
   MapPin,
+  Megaphone,
   Package,
   Percent,
   Receipt,
@@ -61,6 +62,8 @@ const ICONS: Record<string, ReactNode> = {
   history: <History size={15} />,
   payments: <WalletCards size={15} />,
   sparkles: <Sparkles size={15} />,
+  // HR-15: home announcements entity icon.
+  megaphone: <Megaphone size={15} />,
 }
 
 type NavItem = { href: string; label: string; iconKey: string }

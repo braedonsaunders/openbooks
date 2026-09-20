@@ -40,7 +40,23 @@
     "topCustomers": "Principaux clients",
     "topVendors": "Principaux fournisseurs",
     "openCount": "{count, plural, one {# ouvert} other {# ouverts}}",
-    "runway": "Autonomie de trésorerie"
+    "runway": "Autonomie de trésorerie",
+    "inboxList": "Mes tâches",
+    "payTile": "Paie",
+    "balanceTile": "Soldes de congés",
+    "whosOut": "Absents",
+    "homeUpcoming": "À venir",
+    "celebrations": "Célébrations",
+    "announcements": "Annonces",
+    "homeAsk": "Question",
+    "teamApprovals": "Approbations de l’équipe",
+    "teamSteps": "Étapes en retard",
+    "teamNudges": "1:1 et rappels",
+    "teamHeadcount": "Effectif",
+    "teamQuals": "Qualifications expirantes",
+    "adminAttention": "À traiter",
+    "workflowErrors": "Erreurs de flux",
+    "adminCalendar": "Calendrier de conformité"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -100,7 +116,23 @@
     "expectedPayments": "Paiements fournisseurs prévus sur les 30 prochains jours, en devise de référence.",
     "topCustomers": "Les cinq plus gros soldes clients ouverts.",
     "topVendors": "Les cinq plus gros soldes fournisseurs ouverts.",
-    "runway": "Trésorerie projetée et autonomie des prochaines semaines, en devise de référence."
+    "runway": "Trésorerie projetée et autonomie des prochaines semaines, en devise de référence.",
+    "inboxList": "Vos tâches principales avec lien vers la boîte.",
+    "payTile": "Prochaine paie et dernier bulletin.",
+    "balanceTile": "Soldes avec lien de demande.",
+    "whosOut": "Absents de la semaine.",
+    "homeUpcoming": "Jours fériés et entretiens.",
+    "celebrations": "Anniversaires et arrivées.",
+    "announcements": "Annonces de l’administration.",
+    "homeAsk": "Interroger l’assistant.",
+    "teamApprovals": "Approbations en attente.",
+    "teamSteps": "Étapes en retard.",
+    "teamNudges": "Rappels de 1:1 et alertes.",
+    "teamHeadcount": "Effectif de votre équipe.",
+    "teamQuals": "Qualifications expirantes.",
+    "adminAttention": "Points d’attention cumulés.",
+    "workflowErrors": "Exécutions en erreur.",
+    "adminCalendar": "Échéances de rapports et versements."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
@@ -181,5 +213,21 @@
     "personalBadge": "Votre tableau",
     "roleBadge": "Par défaut du rôle",
     "systemBadge": "Par défaut de l'entreprise"
+  },
+  "persona": {
+    "nothingWaiting": "Rien ne vous attend.",
+    "noBalances": "Aucun solde calculable.",
+    "nobodyOut": "Personne absent.",
+    "nothingUpcoming": "Rien à venir.",
+    "noCelebrations": "Aucune célébration.",
+    "noAnnouncements": "Aucune annonce.",
+    "askHint": "Question sur paie, congés, règles.",
+    "noOverdueSteps": "Aucune étape en retard.",
+    "noNudges": "Aucun rappel.",
+    "noExpiringQuals": "Aucune qualification expirante.",
+    "allClear": "Tout est à jour.",
+    "needsAttention": "À traiter.",
+    "requestTimeOff": "Demander un congé",
+    "lastSlip": "Dernier bulletin {date}"
   }
 }

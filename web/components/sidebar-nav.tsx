@@ -64,6 +64,7 @@ import {
 } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { findActiveNavHref } from './sidebar-nav-active'
+import { NavCountBadge } from './nav-count-badge'
 
 // Map string keys → icon components. RSCs can't serialise function references,
 // so the parent server component passes us a key and we resolve client-side.
@@ -506,6 +507,7 @@ function NavLink({ item, active, nested = false }: { item: SidebarNavItem; activ
         )}
       />
       <span>{item.label}</span>
+      {item.badgeCountHref ? <NavCountBadge source={item.badgeCountHref} /> : null}
     </>
   )
   return item.href.startsWith('https://') ? (

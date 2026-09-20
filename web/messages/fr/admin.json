@@ -2419,6 +2419,10 @@
         "title": "Niveaux de régime",
         "singularTitle": "Niveau de régime",
         "description": "Niveaux de couverture par régime — employé seul, famille — avec les coûts du niveau."
+      },
+      "home-announcements": {
+        "title": "Annonces",
+        "description": "Annonces de l'entreprise pour l'accueil, avec audience et dates."
       }
     },
     "fields": {
@@ -2729,7 +2733,11 @@
       "employerPayComponentId": "Composante de l'employeur",
       "waitingPeriodDays": "Attente (jours)",
       "requiresApproval": "Approbation requise",
-      "levelKey": "Clé du niveau"
+      "levelKey": "Clé du niveau",
+      "body": "Corps",
+      "audience": "Audience",
+      "startsOn": "Début le",
+      "endsOn": "Fin le"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3205,6 +3213,11 @@
       "benefitProrationBasis": {
         "full_month": "Mois complet — tout le mois quelles que soient les dates",
         "daily": "Quotidien — au prorata des jours couverts"
+      },
+      "announcementAudience": {
+        "all": "Tous",
+        "managers": "Managers",
+        "employees": "Employés"
       }
     },
     "laborCosting": {

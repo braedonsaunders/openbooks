@@ -232,7 +232,7 @@ export interface SetupEntity {
   /** Declaration-backed settings permit editing values but cannot be created/deleted here. */
   allowCreate?: boolean
   allowDelete?: boolean
-  dataSource?: 'extension-settings'
+  dataSource?: 'extension-settings' | 'home-announcements'
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string
   /** Parent setup entity that owns this configuration surface. Nested entities
@@ -719,6 +719,13 @@ const CONSOLIDATION_METHODS = [
   { value: 'equity', labelKey: 'options.consolidationMethod.equity' },
 ]
 
+// HR-15: home announcement audience scope options.
+const HOME_ANNOUNCEMENT_AUDIENCES = [
+  { value: 'all', labelKey: 'options.announcementAudience.all' },
+  { value: 'managers', labelKey: 'options.announcementAudience.managers' },
+  { value: 'employees', labelKey: 'options.announcementAudience.employees' },
+]
+
 const NCI_MEASUREMENTS = [
   { value: 'proportionate', labelKey: 'options.nciMeasurement.proportionate' },
   { value: 'fair_value', labelKey: 'options.nciMeasurement.fairValue' },
@@ -739,6 +746,21 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   // --- Company -------------------------------------------------------------
+  // HR-15 begin: admin-authored home announcements (org settings JSON, not a
+  // table) with audience scope and dates. Gated on homeAnnouncements.
+  {
+    key: 'home-announcements', table: 'orgs', dataSource: 'home-announcements', groupKey: 'company', iconKey: 'megaphone',
+    orgScoped: true, hasActive: false, featureKey: 'homeAnnouncements',
+    columns: [{ key: 'title', kind: 'text' }, { key: 'audience', kind: 'badge' }, { key: 'startsOn', kind: 'date' }],
+    fields: [
+      { key: 'title', kind: 'text', required: true },
+      { key: 'body', kind: 'textarea' },
+      { key: 'audience', kind: 'select', options: HOME_ANNOUNCEMENT_AUDIENCES, required: true, keepDefault: true },
+      { key: 'startsOn', kind: 'date', required: true },
+      { key: 'endsOn', kind: 'date' },
+    ],
+  },
+  // HR-15 end
   {
     // Subsidiaries form the organization's legal-entity tree.
     // baseCurrency is the entity's functional currency: locked after create so

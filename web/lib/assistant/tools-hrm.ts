@@ -44,6 +44,8 @@ import {
   listRequisitions,
 } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { listInbox } from "@openbooks/engine/src/inbox/index.ts";
+import { inboxContext } from "../inbox-context";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -1073,3 +1075,61 @@ const hrmMe: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe];
+
+// HR-15 begin: the caller's own inbox items (own scope only, core surface).
+const inboxItems: AssistantToolDef = {
+  name: "inbox_items",
+  description:
+    "The caller's own inbox items: approvals, checklist steps, requests, reviews, and notices waiting on them, with links into the inbox. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  tier: "module",
+  inputSchema: z.object({
+    filter: z.enum(["all", "approvals", "my_tasks", "signatures", "notices", "overdue"]).optional().describe("Keep only this inbox filter (default all)"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum items to return (default 20)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { filter?: "all" | "approvals" | "my_tasks" | "signatures" | "notices" | "overdue"; limit?: number };
+    const limit = Math.min(a.limit ?? 20, 50);
+    try {
+      // No subject parameter exists to forge: the read scopes by the login,
+      // so another person's items can never be returned no matter what the
+      // model puts in the (filter-only) input.
+      const ctx = await inboxContext(authz);
+      const kinds =
+        a.filter === undefined || a.filter === "all" || a.filter === "overdue"
+          ? undefined
+          : a.filter === "approvals"
+            ? (['flows_approval', 'expense_report'] as const)
+            : a.filter === "my_tasks"
+              ? (['hrm_process_step', 'hrm_leave_request', 'hrm_change_request', 'hrm_review', 'hrm_benefit_enrollment_window', 'hrm_qualification_alert', 'timesheet_week'] as const)
+              : a.filter === "signatures"
+                ? (['field_ticket_signature', 'document_signature'] as const)
+                : (['notification'] as const);
+      const items = await listInbox(ctx, kinds ? { kinds: [...kinds] } : undefined);
+      const kept = (a.filter === "overdue" ? items.filter((item) => item.priority === "overdue") : items).slice(0, limit);
+      return {
+        ok: true,
+        data: {
+          total: kept.length,
+          items: kept.map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            subtitle: item.subtitle,
+            dueAt: item.dueAt,
+            priority: item.priority,
+            href: item.subjectHref,
+            actions: item.actions.map((action) => action.key),
+          })),
+          href: "/inbox",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+HRM_TOOLS.push(inboxItems);
+// HR-15 end

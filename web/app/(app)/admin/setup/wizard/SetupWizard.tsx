@@ -103,6 +103,9 @@ export function SetupWizard(props: {
   canSwitchIndustry: boolean
   isRerun: boolean
   suppressOnWizardRoute?: boolean
+  /** HR-15: routes the overlay never covers (the inbox stays workable
+   *  while onboarding is pending — setup remains one nav click away). */
+  suppressOnPaths?: readonly string[]
   /** Installable payroll country packs, in registry order — declared by the
    *  server from the pack registry, never a list in this file. */
   payrollPacks?: WizardPayrollPack[]
@@ -182,6 +185,8 @@ export function SetupWizard(props: {
   }, [featureChoices, tAdmin, toggles])
 
   if (!props.open || (props.suppressOnWizardRoute && pathname === '/admin/setup/wizard')) return null
+  // HR-15: work waiting on the user stays reachable while onboarding pends.
+  if (props.suppressOnPaths?.some((path) => pathname === path || pathname.startsWith(`${path}/`))) return null
 
   // Close: if an onClose callback was provided (overlay mode), call it;
   // otherwise navigate away from the wizard page (rerun mode).
