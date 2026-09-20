@@ -225,6 +225,14 @@ function ctx(params: Record<string, string>): { params: Promise<Record<string, s
   return { params: Promise.resolve(params) };
 }
 
+function rawRequest(url: string, body: string): Request {
+  return new Request(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+}
+
 if (isVitest) {
   test("processes routes gate on the hrm feature and the process permissions", async () => {
     const { readFileSync } = await import("node:fs");
@@ -380,10 +388,34 @@ if (isVitest) {
     });
   });
 
+  test("complete refuses hostile payloads at the real boundary before the service runs", async () => {
+    reset();
+    // Complete takes no body, but it still parses one: malformed JSON and
+    // non-object payloads are refused at the shared boundary — the service
+    // never sees them. The parser here is the real parseJsonBody (never
+    // mocked above), so this is a test of the refusal, not of a double.
+    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+      const refused = await completeRoute!.POST!(
+        rawRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, body),
+        ctx({ id: PROCESS_ID }),
+      );
+      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+    }
+    assert.deepEqual(routeState.calls, []);
+    const done = await completeRoute!.POST!(
+      jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, {}),
+      ctx({ id: PROCESS_ID }),
+    );
+    assert.equal(done.status, 200);
+    assert.deepEqual(routeState.calls, [
+      { fn: "completeProcess", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID } },
+    ]);
+  });
+
   test("complete and cancel reach the service with the record id", async () => {
     reset();
     const done = await completeRoute!.POST!(
-      new Request(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, { method: "POST" }),
+      jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, {}),
       ctx({ id: PROCESS_ID }),
     );
     assert.equal(done.status, 200);
