@@ -100,6 +100,8 @@ export async function draftExtension(context: ApplicationContext, input: { bundl
 export async function activateExtensionDraft(context: ApplicationContext, input: { draftId: string; contentHash: string }) {
   const draft = await getExtensionDraft(context, input.draftId)
   if (input.contentHash !== draft.content_hash) throw conflict('The reviewed package changed; reopen its review')
+  if (draft.status === 'applied') throw conflict('This draft is already activated. Prepare a new draft to change the installed package.')
+  if (draft.status !== 'draft') throw conflict('This extension draft is no longer available')
   const bundle = validateExtensionBundle(draft.bundle)
   const manifest = parseManifest(bundle.manifest).manifest!
   for (const permission of manifest.permissions) if (!can(context.authz, permission)) throw forbidden(permission)
@@ -166,11 +168,18 @@ export async function getExtensionPackage(context: ApplicationContext, input: { 
 export async function discardExtensionDraft(context: ApplicationContext, input: { draftId: string; contentHash: string }) {
   const draft = await getExtensionDraft(context, input.draftId)
   if (draft.content_hash !== input.contentHash) throw conflict('The reviewed package changed')
-  if (draft.status === 'applied') throw conflict('An activated version cannot be discarded')
+  if (draft.status === 'applied') throw conflict('An activated version cannot be discarded. Prepare a new draft to change the installed package.')
+  if (draft.status === 'discarded') throw conflict('This draft is already discarded. Prepare a new draft if you still need a revision.')
+  if (draft.status !== 'draft') throw conflict('This extension draft is no longer available')
   await db.transaction(async tx => {
     const changed = (await tx.execute(sql`update extension_drafts set status='discarded' where org_id=${context.authz.user.orgId} and id=${draft.id} and created_by=${context.authz.user.id} and status='draft' returning id`)).rows
-    if (changed.length) await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${context.authz.user.orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_discarded', contentHash: draft.content_hash, before: { status: 'draft' }, after: { status: 'discarded' } })}::jsonb,${context.authz.user.id})`)
-    else if ((await tx.execute<{ status: string }>(sql`select status from extension_drafts where org_id=${context.authz.user.orgId} and id=${draft.id}`)).rows[0]?.status !== 'discarded') throw conflict('An activated version cannot be discarded')
+    if (!changed.length) {
+      const status = (await tx.execute<{ status: string }>(sql`select status from extension_drafts where org_id=${context.authz.user.orgId} and id=${draft.id}`)).rows[0]?.status
+      if (status === 'applied') throw conflict('An activated version cannot be discarded. Prepare a new draft to change the installed package.')
+      if (status === 'discarded') throw conflict('This draft is already discarded. Prepare a new draft if you still need a revision.')
+      throw conflict('This extension draft is no longer available')
+    }
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${context.authz.user.orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_discarded', contentHash: draft.content_hash, before: { status: 'draft' }, after: { status: 'discarded' } })}::jsonb,${context.authz.user.id})`)
   })
   return { discarded: true }
 }
