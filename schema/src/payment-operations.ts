@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { paymentRuns } from "./banking";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 
@@ -103,7 +104,7 @@ export const paymentSchedules = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
     // Exact organization and id key required by tenant-coherent references (0210).
     uniqueIndex("payment_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("payment_schedules_org_name").on(t.orgId, t.name),
