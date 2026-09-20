@@ -8,7 +8,9 @@
       "departments": "部門",
       "reports": "レポート",
       "positions": "ポジション",
-      "processes": "プロセス"
+      "processes": "プロセス",
+      "leave": "休暇",
+      "myLeave": "自分の休暇"
     },
     "vitals": {
       "headcount": "人員数",
@@ -100,6 +102,11 @@
       "proposeChange": "変更を提案",
       "manageDepartments": "部門を管理",
       "openReports": "レポートを開く"
+    },
+    "leave": {
+      "title": "休暇",
+      "onLeaveEmpty": "本日欠勤中の人はいません。",
+      "pendingSub": "承認待ち"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "完了",
       "skipped": "スキップ済み"
     }
+  },
+  "leave": {
+    "title": "休暇",
+    "description": "申請、承認、欠勤記録 — 時間残高と、残高がある場合は金額も表示します。",
+    "listTitle": "休暇申請",
+    "segmentsLabel": "表示",
+    "allLabel": "すべて",
+    "segments": {
+      "pending": "承認待ち",
+      "upcoming": "予定",
+      "today": "本日欠勤中",
+      "history": "履歴"
+    },
+    "columns": {
+      "employee": "氏名",
+      "type": "種別",
+      "range": "期間",
+      "hours": "時間",
+      "status": "状態"
+    },
+    "emptyTitle": "ここには何もありません",
+    "emptyDescription": "この区分にはまだ何もありません。",
+    "truncatedNote": "最初の{limit}件を表示しています。",
+    "unknownSegmentTitle": "不明な区分",
+    "unknownSegment": "{segment}という区分はありません。",
+    "refusedTitle": "休暇は拒否されました",
+    "fileTitle": "休暇を申請する",
+    "fileButton": "新規申請",
+    "recordTitle": "欠勤を記録する",
+    "recordButton": "欠勤を記録",
+    "calendarTitle": "部門別カレンダー",
+    "calendarDepartmentLabel": "部門",
+    "calendarFromLabel": "開始",
+    "calendarToLabel": "終了",
+    "calendarShowLabel": "表示",
+    "calendarEmpty": "この期間に欠勤はありません。部門を選んでください。",
+    "openRequest": "開く",
+    "drawerTitle": "休暇申請",
+    "detailLoading": "申請を読み込んでいます…",
+    "detailFailed": "申請を読み込めませんでした。",
+    "actionFailed": "操作に失敗しました。",
+    "submitButton": "承認に提出する",
+    "withdrawButton": "取り下げる",
+    "cancelButton": "申請を取り消す",
+    "withdrawReasonTitle": "この申請を取り下げる理由は？",
+    "cancelReasonTitle": "この申請を取り消す理由は？",
+    "fileFailed": "申請を登録できませんでした。",
+    "fileEmploymentLabel": "雇用",
+    "fileEmploymentPlaceholder": "雇用ID",
+    "fileTypeLabel": "休暇種別",
+    "fileTypePlaceholder": "休暇種別を選ぶ",
+    "fileHoursLabel": "時間",
+    "fileReasonLabel": "理由",
+    "timeBalanceTitle": "{date}時点の時間残高",
+    "timeBalanceValue": "{balance}時間（付与{earned}、繰越{carried}、取得{taken}）",
+    "unlimitedBalance": "無制限 — 残高数値なし。",
+    "noPolicyBalance": "この雇用に適用されるポリシーがありません。",
+    "valueBalanceTitle": "{date}時点の給与残高",
+    "statusNames": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "withdrawn": "取下げ",
+      "cancelled": "取消済み"
+    }
+  },
+  "myLeave": {
+    "title": "自分の休暇",
+    "description": "自分の申請と残高のみ表示します。",
+    "emptyTitle": "申請はまだありません",
+    "emptyDescription": "最初の申請を登録してください。",
+    "balancesTitle": "残高",
+    "balancesEmpty": "有効な休暇種別がありません。",
+    "timeKind": "時間",
+    "valueKind": "金額",
+    "unlimited": "無制限"
   }
 }

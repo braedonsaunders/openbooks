@@ -8,7 +8,9 @@
       "departments": "Departamentos",
       "reports": "Relatórios",
       "positions": "Posições",
-      "processes": "Processos"
+      "processes": "Processos",
+      "leave": "Licenças",
+      "myLeave": "Minhas licenças"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -100,6 +102,11 @@
       "proposeChange": "Propor alteração",
       "manageDepartments": "Gerenciar departamentos",
       "openReports": "Abrir relatórios"
+    },
+    "leave": {
+      "title": "Licenças",
+      "onLeaveEmpty": "Ninguém ausente hoje.",
+      "pendingSub": "aguardando aprovação"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "Concluído",
       "skipped": "Pulado"
     }
+  },
+  "leave": {
+    "title": "Licenças",
+    "description": "Solicitações, aprovações e registro de ausências — com saldos em tempo e, onde houver banco, em valor.",
+    "listTitle": "Solicitações de licença",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "pending": "Aguardando aprovação",
+      "upcoming": "Próximas",
+      "today": "Ausentes hoje",
+      "history": "Histórico"
+    },
+    "columns": {
+      "employee": "Pessoa",
+      "type": "Tipo",
+      "range": "Período",
+      "hours": "Horas",
+      "status": "Estado"
+    },
+    "emptyTitle": "Nada aqui",
+    "emptyDescription": "Ainda nada neste segmento.",
+    "truncatedNote": "Mostrando as primeiras {limit} solicitações.",
+    "unknownSegmentTitle": "Segmento desconhecido",
+    "unknownSegment": "Não existe o segmento {segment}.",
+    "refusedTitle": "Licença recusada",
+    "fileTitle": "Solicitar uma licença",
+    "fileButton": "Nova solicitação",
+    "recordTitle": "Registrar uma ausência",
+    "recordButton": "Registrar ausência",
+    "calendarTitle": "Calendário por departamento",
+    "calendarDepartmentLabel": "Departamento",
+    "calendarFromLabel": "De",
+    "calendarToLabel": "Até",
+    "calendarShowLabel": "Mostrar",
+    "calendarEmpty": "Sem ausências neste período. Escolha um departamento.",
+    "openRequest": "Abrir",
+    "drawerTitle": "Solicitação de licença",
+    "detailLoading": "Carregando a solicitação…",
+    "detailFailed": "Não foi possível carregar a solicitação.",
+    "actionFailed": "A ação falhou.",
+    "submitButton": "Enviar para aprovação",
+    "withdrawButton": "Retirar",
+    "cancelButton": "Cancelar solicitação",
+    "withdrawReasonTitle": "Por que esta solicitação é retirada?",
+    "cancelReasonTitle": "Por que esta solicitação é cancelada?",
+    "fileFailed": "Não foi possível registrar a solicitação.",
+    "fileEmploymentLabel": "Emprego",
+    "fileEmploymentPlaceholder": "ID do emprego",
+    "fileTypeLabel": "Tipo de licença",
+    "fileTypePlaceholder": "Escolha um tipo",
+    "fileHoursLabel": "Horas",
+    "fileReasonLabel": "Motivo",
+    "timeBalanceTitle": "Saldo de tempo em {date}",
+    "timeBalanceValue": "{balance} horas (acumuladas {earned}, transferidas {carried}, usadas {taken})",
+    "unlimitedBalance": "Ilimitado — sem número de saldo.",
+    "noPolicyBalance": "Nenhuma política cobre este emprego.",
+    "valueBalanceTitle": "Valor bancário em {date}",
+    "statusNames": {
+      "draft": "Rascunho",
+      "submitted": "Enviada",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "withdrawn": "Retirada",
+      "cancelled": "Cancelada"
+    }
+  },
+  "myLeave": {
+    "title": "Minhas licenças",
+    "description": "Suas solicitações e saldos — nada mais.",
+    "emptyTitle": "Sem solicitações",
+    "emptyDescription": "Registre sua primeira solicitação.",
+    "balancesTitle": "Saldos",
+    "balancesEmpty": "Sem tipos de licença ativos.",
+    "timeKind": "tempo",
+    "valueKind": "valor",
+    "unlimited": "Ilimitado"
   }
 }

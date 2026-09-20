@@ -157,6 +157,26 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 }),
               ],
             }),
+            ...(data.leavePanel
+              ? [
+                  panel({
+                    title: data.leavePanel.title,
+                    iconKey: 'calendar',
+                    bodyClassName: 'p-0',
+                    className: 'shrink-0',
+                    blocks: [
+                      widgetBlock('hrm-leave-panel', {
+                        items: data.leavePanel.onLeaveToday,
+                        empty: data.leavePanel.onLeaveEmpty,
+                        pendingCount: data.leavePanel.pendingCount,
+                        pendingLabel: data.leavePanel.pendingLabel,
+                        queueHref: data.leavePanel.queueHref,
+                        viewAllLabel: data.pendingViewAll,
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
           ]),
 
           grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [

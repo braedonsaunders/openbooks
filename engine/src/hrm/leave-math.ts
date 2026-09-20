@@ -31,7 +31,7 @@ export function parseHoursToCents(value: string): HourCents {
     );
   }
   const sign = match[1] ? -1n : 1n;
-  const whole = BigInt(match[2]);
+  const whole = BigInt(match[2] ?? "0");
   const frac = BigInt((match[3] ?? "").padEnd(2, "0"));
   return sign * (whole * 100n + frac);
 }

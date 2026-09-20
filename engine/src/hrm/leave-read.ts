@@ -11,6 +11,7 @@ import {
   requireHrmLeaveRead,
 } from "./authorization.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { LeaveError } from "./leave-errors.ts";
 import {
   accrualEarned,
@@ -42,7 +43,7 @@ export interface PolicyScope {
   readonly departmentId: string | null;
 }
 
-export interface PolicyRow {
+export type PolicyRow = {
   readonly id: string;
   readonly leave_type_id: string;
   readonly applies_to: { employer_subsidiary_id: string | null; department_id: string | null };
@@ -52,7 +53,7 @@ export interface PolicyRow {
   readonly effective_from: string;
   readonly effective_to: string | null;
   readonly is_active: boolean;
-}
+};
 
 /** Accrual-year start for a date: the calendar year. */
 export function accrualYearOf(date: string): string {
@@ -168,7 +169,6 @@ export async function timeBalanceAsOf(
     return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true };
   }
   const yearStart = accrualYearOf(asOf);
-  const yearEnd = `${yearStart.slice(0, 4)}-12-31`;
   const earned = accrualEarned(accrual, yearStart, asOf);
   const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
   // Prior-year unused feeds carryover only when the policy already covered
@@ -264,14 +264,14 @@ export async function leaveToday(orgId: string): Promise<string> {
   return businessToday(orgId);
 }
 
-export interface LeaveTypeSummary {
+export type LeaveTypeSummary = {
   readonly id: string;
   readonly code: string;
   readonly name: string;
   readonly paid: boolean;
   readonly valueCrossing: "none" | "payout" | "bank_in";
   readonly isActive: boolean;
-}
+};
 
 /** Leave-type taxonomy for an org, in code order. Authorization rides on the caller. */
 export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<LeaveTypeSummary[]> {
@@ -280,6 +280,18 @@ export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<
       from hrm_leave_types where org_id = ${orgId} order by code
   `)).rows;
   return rows;
+}
+
+/** Active leave types as picker options (code — name). Authorization rides on the caller. */
+export async function listLeaveTypeOptions(
+  exec: SqlExecutor,
+  orgId: string,
+): Promise<{ id: string; label: string }[]> {
+  const rows = (await exec.execute<{ id: string; code: string; name: string }>(sql`
+    select id, code, name from hrm_leave_types
+     where org_id = ${orgId} and is_active order by code limit 200
+  `)).rows;
+  return rows.map((row) => ({ id: row.id, label: `${row.code} — ${row.name}` }));
 }
 
 // --- Request reads ----------------------------------------------------------
@@ -386,6 +398,75 @@ export async function listLeaveRequests(query: {
     `)).rows;
     return rows.map(toSummary);
   });
+}
+
+export interface OrgLeaveList {
+  readonly requests: LeaveRequestSummary[];
+  readonly truncated: boolean;
+}
+
+/**
+ * Org-wide request list for queues and panels: every employment in the
+ * actor's subsidiary lens, newest start first, each row authorized by its
+ * own employment gate inside. A scope denial refuses the whole list rather
+ * than rendering a silent subset; callers surface the refusal as data.
+ */
+export async function listOrgLeaveRequests(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  opts: { status?: string; limit?: number } = {},
+): Promise<OrgLeaveList> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  // Bare JS arrays interpolate as row constructors, never PostgreSQL arrays:
+  // the allowlist crosses as a JSON string, exactly like the sibling reads.
+  const employments = (await exec.execute<{ id: string }>(sql`
+    select id from worker_employments
+     where org_id = ${orgId}
+       and (${allowed === null}::boolean
+            or employer_subsidiary_id in (
+              select jsonb_array_elements_text(${allowed === null ? "[]" : JSON.stringify([...allowed])}::jsonb)::uuid
+            ))
+     order by id limit 501
+  `)).rows;
+  const limit = Math.min(Math.max(opts.limit ?? 500, 1), 500);
+  const collected: LeaveRequestSummary[] = [];
+  const truncated = employments.length > 500;
+  for (const employment of employments.slice(0, 500)) {
+    const rows = await listLeaveRequestsIn(
+      exec,
+      orgId,
+      actorId,
+      employment.id,
+      opts.status,
+    );
+    collected.push(...rows);
+  }
+  collected.sort((a, b) => (b.startsOn < a.startsOn ? -1 : b.startsOn > a.startsOn ? 1 : a.id < b.id ? -1 : 1));
+  if (collected.length > limit) {
+    return { requests: collected.slice(0, limit), truncated: true };
+  }
+  return { requests: collected, truncated };
+}
+
+/** listLeaveRequests against a caller-held executor (no nested transaction). */
+async function listLeaveRequestsIn(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  status?: string,
+): Promise<LeaveRequestSummary[]> {
+  await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
+  const rows = (await exec.execute<Record<string, unknown>>(sql`
+    select ${SUMMARY_COLUMNS} from hrm_leave_requests r
+      join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+      join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
+     where r.org_id = ${orgId} and r.employment_id = ${employmentId}
+       and (${status ?? null}::text is null or r.status = ${status ?? null}::text)
+     order by r.starts_on desc, r.created_at desc
+  `)).rows;
+  return rows.map(toSummary);
 }
 
 /**

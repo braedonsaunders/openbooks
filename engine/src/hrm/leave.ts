@@ -824,12 +824,12 @@ export interface ReleaseLeaveRequestQuery {
   readonly comment: unknown;
 }
 
-export interface CommittedRunCover {
+export type CommittedRunCover = {
   readonly documentId: string;
   readonly documentNumber: string;
   readonly periodStart: string;
   readonly periodEnd: string;
-}
+};
 
 /**
  * A COMMITTED run covering one party-day — queried the way the run itself

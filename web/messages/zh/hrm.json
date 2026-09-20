@@ -8,7 +8,9 @@
       "departments": "部门",
       "reports": "报表",
       "positions": "职位",
-      "processes": "流程"
+      "processes": "流程",
+      "leave": "休假",
+      "myLeave": "我的休假"
     },
     "vitals": {
       "headcount": "人员数量",
@@ -100,6 +102,11 @@
       "proposeChange": "提议变更",
       "manageDepartments": "管理部门",
       "openReports": "打开报表"
+    },
+    "leave": {
+      "title": "休假",
+      "onLeaveEmpty": "今日无人休假。",
+      "pendingSub": "等待审批"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "已完成",
       "skipped": "已跳过"
     }
+  },
+  "leave": {
+    "title": "休假",
+    "description": "申请、审批与缺勤记录——显示时间余额，有余额时同时显示金额。",
+    "listTitle": "休假申请",
+    "segmentsLabel": "显示",
+    "allLabel": "全部",
+    "segments": {
+      "pending": "待审批",
+      "upcoming": "即将到来",
+      "today": "今日休假",
+      "history": "历史"
+    },
+    "columns": {
+      "employee": "人员",
+      "type": "类型",
+      "range": "期间",
+      "hours": "小时",
+      "status": "状态"
+    },
+    "emptyTitle": "此处暂无",
+    "emptyDescription": "此分组中还没有内容。",
+    "truncatedNote": "仅显示前{limit}条申请。",
+    "unknownSegmentTitle": "未知分组",
+    "unknownSegment": "没有名为{segment}的分组。",
+    "refusedTitle": "休假被拒绝",
+    "fileTitle": "申请休假",
+    "fileButton": "新建申请",
+    "recordTitle": "补记缺勤",
+    "recordButton": "补记缺勤",
+    "calendarTitle": "按部门查看日历",
+    "calendarDepartmentLabel": "部门",
+    "calendarFromLabel": "从",
+    "calendarToLabel": "至",
+    "calendarShowLabel": "显示",
+    "calendarEmpty": "该时间范围内无缺勤。请选择一个部门。",
+    "openRequest": "打开",
+    "drawerTitle": "休假申请",
+    "detailLoading": "正在加载申请…",
+    "detailFailed": "无法加载该申请。",
+    "actionFailed": "操作失败。",
+    "submitButton": "提交审批",
+    "withdrawButton": "撤回",
+    "cancelButton": "取消申请",
+    "withdrawReasonTitle": "撤回此申请的原因？",
+    "cancelReasonTitle": "取消此申请的原因？",
+    "fileFailed": "无法提交申请。",
+    "fileEmploymentLabel": "雇佣",
+    "fileEmploymentPlaceholder": "雇佣ID",
+    "fileTypeLabel": "休假类型",
+    "fileTypePlaceholder": "选择休假类型",
+    "fileHoursLabel": "小时",
+    "fileReasonLabel": "原因",
+    "timeBalanceTitle": "截至{date}的时间余额",
+    "timeBalanceValue": "{balance}小时（累积{earned}、结转{carried}、已用{taken}）",
+    "unlimitedBalance": "无限制——无余额数字。",
+    "noPolicyBalance": "没有适用于此雇佣的政策。",
+    "valueBalanceTitle": "截至{date}的工资余额",
+    "statusNames": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "withdrawn": "已撤回",
+      "cancelled": "已取消"
+    }
+  },
+  "myLeave": {
+    "title": "我的休假",
+    "description": "仅显示本人的申请与余额。",
+    "emptyTitle": "暂无申请",
+    "emptyDescription": "提交第一条申请吧。",
+    "balancesTitle": "余额",
+    "balancesEmpty": "没有启用的休假类型。",
+    "timeKind": "时间",
+    "valueKind": "金额",
+    "unlimited": "无限制"
   }
 }

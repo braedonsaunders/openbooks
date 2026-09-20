@@ -1,0 +1,303 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
+import { promptDialog } from '../../../../lib/prompt'
+
+/**
+ * Leave filing and detail drawer. Opens blank for filing (employment, type,
+ * range, hours, reason) or on a request id for detail: the request with its
+ * TIME balance and, where a payroll bank exists, its VALUE balances — each
+ * labelled with its unit so the two are never conflated.
+ *
+ * Withdraw and cancel run here against the leave API routes with their
+ * refusals; submit opens the approval run. Approval outcomes stay in native
+ * Approvals (the drawer deep-links the run): the governed decision path is
+ * never duplicated. Every API refusal renders with its message intact —
+ * res.ok is checked before parsing, failures render inline, and nothing is
+ * swallowed.
+ */
+
+interface Detail {
+  request: {
+    id: string
+    employmentId: string
+    leaveTypeCode: string
+    startsOn: string
+    endsOn: string
+    hours: string
+    reason: string | null
+    status: string
+    decidedBy: string | null
+    decisionReason: string | null
+  }
+  timeBalance: { kind: 'time'; policyId: string | null; earned: string | null; carried: string; taken: string; balance: string | null; unlimited: boolean } | null
+  valueBalances: { kind: 'value'; planCode: string; planName: string; balance: string }[]
+  asOf: string
+}
+
+export function LeaveDrawer({ requestId, onClose }: { requestId: string | null; onClose: () => void }) {
+  const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
+  const router = useRouter()
+  const [detail, setDetail] = useState<Detail | null>(null)
+  const [loading, setLoading] = useState(requestId !== null)
+  const [status, setStatus] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (!requestId) return
+    let live = true
+    fetch(`/api/hrm/leave-requests/${requestId}`, { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.detailFailed')))
+          setLoading(false)
+          return
+        }
+        setDetail((await res.json().catch(() => null)) as Detail | null)
+        setStatus(undefined)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!live) return
+        setStatus(t('leave.detailFailed'))
+        setLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [requestId, t])
+
+  const runAction = async (action: 'submit' | 'withdraw' | 'cancel', reason?: string): Promise<void> => {
+    if (!requestId) return
+    const res = await fetch(`/api/hrm/leave-requests/${requestId}/${action}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(action === 'submit' ? {} : { reason }),
+    })
+    if (!res.ok) {
+      setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
+      return
+    }
+    router.refresh()
+    onClose()
+  }
+
+  const askReason = async (title: string): Promise<string | null> =>
+    promptDialog({ title, label: title })
+
+  return (
+    <Drawer open onClose={onClose} size="md" title={requestId ? t('leave.drawerTitle') : t('leave.fileTitle')}>
+      {loading ? <p className="text-sm text-slate-500">{t('leave.detailLoading')}</p> : null}
+      {status ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {status}
+        </p>
+      ) : null}
+      {!loading && requestId && detail ? (
+        <div className="space-y-4">
+          <dl className="grid grid-cols-2 gap-2 text-sm">
+            <dt className="text-slate-500">{t('leave.columns.type')}</dt>
+            <dd className="font-medium">{detail.request.leaveTypeCode}</dd>
+            <dt className="text-slate-500">{t('leave.columns.range')}</dt>
+            <dd className="tabular-nums">
+              {detail.request.startsOn} → {detail.request.endsOn}
+            </dd>
+            <dt className="text-slate-500">{t('leave.columns.hours')}</dt>
+            <dd className="tabular-nums">{detail.request.hours}</dd>
+            <dt className="text-slate-500">{t('leave.columns.status')}</dt>
+            <dd>{detail.request.status}</dd>
+          </dl>
+          {detail.request.reason ? <p className="text-sm text-slate-600">{detail.request.reason}</p> : null}
+          <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
+            <p className="font-semibold">{t('leave.timeBalanceTitle', { date: detail.asOf })}</p>
+            {detail.timeBalance?.unlimited ? (
+              <p>{t('leave.unlimitedBalance')}</p>
+            ) : detail.timeBalance?.balance !== null && detail.timeBalance ? (
+              <p className="tabular-nums">
+                {t('leave.timeBalanceValue', {
+                  balance: detail.timeBalance.balance ?? '',
+                  earned: detail.timeBalance.earned ?? '',
+                  carried: detail.timeBalance.carried,
+                  taken: detail.timeBalance.taken,
+                })}
+              </p>
+            ) : (
+              <p>{t('leave.noPolicyBalance')}</p>
+            )}
+          </div>
+          {detail.valueBalances.length > 0 ? (
+            <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
+              <p className="font-semibold">{t('leave.valueBalanceTitle', { date: detail.asOf })}</p>
+              <ul>
+                {detail.valueBalances.map((bank) => (
+                  <li key={bank.planCode} className="tabular-nums">
+                    {bank.planName}: {bank.balance}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {detail.request.decisionReason ? (
+            <p className="text-sm text-slate-600">{detail.request.decisionReason}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {detail.request.status === 'draft' ? (
+              <Button size="sm" onClick={() => void runAction('submit')}>
+                {t('leave.submitButton')}
+              </Button>
+            ) : null}
+            {detail.request.status === 'draft' || detail.request.status === 'submitted' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void askReason(t('leave.withdrawReasonTitle')).then((reason) => {
+                    if (reason !== null) void runAction('withdraw', reason)
+                  })
+                }
+              >
+                {t('leave.withdrawButton')}
+              </Button>
+            ) : null}
+            {detail.request.status === 'approved' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void askReason(t('leave.cancelReasonTitle')).then((reason) => {
+                    if (reason !== null) void runAction('cancel', reason)
+                  })
+                }
+              >
+                {t('leave.cancelButton')}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              {tCommon('actions.close')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {!loading && !requestId ? <LeaveFileForm onClose={onClose} /> : null}
+    </Drawer>
+  )
+}
+
+function LeaveFileForm({ onClose }: { onClose: () => void }) {
+  const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
+  const router = useRouter()
+  const [employmentId, setEmploymentId] = useState('')
+  const [leaveTypeId, setLeaveTypeId] = useState('')
+  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string }[]>([])
+  const [startsOn, setStartsOn] = useState('')
+  const [endsOn, setEndsOn] = useState('')
+  const [hours, setHours] = useState('')
+  const [reason, setReason] = useState('')
+  const [status, setStatus] = useState<string | undefined>(undefined)
+  const [saving, setSaving] = useState(false)
+
+  // Leave-type options ride the HRM options route with its refusals; the
+  // drawer submits ids, never labels.
+  useEffect(() => {
+    let live = true
+    fetch('/api/hrm/options?source=leave-types&limit=200', { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { id?: unknown; label?: unknown }[]
+        }
+        if (!live) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        setTypeOptions(
+          page.flatMap((row) =>
+            typeof row.id === 'string' && typeof row.label === 'string'
+              ? [{ value: row.id, label: row.label }]
+              : [],
+          ),
+        )
+      })
+      .catch(() => {
+        if (live) setStatus(t('leave.fileFailed'))
+      })
+    return () => {
+      live = false
+    }
+  }, [t])
+
+  const save = async (): Promise<void> => {
+    setSaving(true)
+    const res = await fetch('/api/hrm/leave-requests', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
+    })
+    if (!res.ok) {
+      setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+      setSaving(false)
+      return
+    }
+    router.refresh()
+    onClose()
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="leave-employment">{t('leave.fileEmploymentLabel')}</Label>
+        <Input id="leave-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)} placeholder={t('leave.fileEmploymentPlaceholder')} />
+      </div>
+      <div>
+        <Label htmlFor="leave-type">{t('leave.fileTypeLabel')}</Label>
+        <Select id="leave-type" value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}>
+          <option value="">{t('leave.fileTypePlaceholder')}</option>
+          {typeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label htmlFor="leave-starts">{t('leave.calendarFromLabel')}</Label>
+          <Input id="leave-starts" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor="leave-ends">{t('leave.calendarToLabel')}</Label>
+          <Input id="leave-ends" type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="leave-hours">{t('leave.fileHoursLabel')}</Label>
+        <Input id="leave-hours" inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} placeholder="8" />
+      </div>
+      <div>
+        <Label htmlFor="leave-reason">{t('leave.fileReasonLabel')}</Label>
+        <Textarea id="leave-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </div>
+      {status ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {status}
+        </p>
+      ) : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          {tCommon('actions.cancel')}
+        </Button>
+        <Button size="sm" disabled={saving} onClick={() => void save()}>
+          {t('leave.fileButton')}
+        </Button>
+      </div>
+    </div>
+  )
+}

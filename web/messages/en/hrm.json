@@ -8,7 +8,9 @@
       "departments": "Departments",
       "reports": "Reports",
       "positions": "Positions",
-      "processes": "Processes"
+      "processes": "Processes",
+      "leave": "Leave",
+      "myLeave": "My leave"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -100,6 +102,11 @@
       "proposeChange": "Propose change",
       "manageDepartments": "Manage departments",
       "openReports": "Open reports"
+    },
+    "leave": {
+      "title": "Leave",
+      "onLeaveEmpty": "Nobody on leave today.",
+      "pendingSub": "awaiting approval"
     }
   },
   "queue": {
@@ -385,5 +392,82 @@
       "done": "Done",
       "skipped": "Skipped"
     }
+  },
+  "leave": {
+    "title": "Leave",
+    "description": "Requests, approvals, and the absence record — with balances in time and, where a bank exists, in value.",
+    "listTitle": "Leave requests",
+    "segmentsLabel": "Show",
+    "allLabel": "All",
+    "segments": {
+      "pending": "Pending approval",
+      "upcoming": "Upcoming",
+      "today": "On leave today",
+      "history": "History"
+    },
+    "columns": {
+      "employee": "Employee",
+      "type": "Type",
+      "range": "Range",
+      "hours": "Hours",
+      "status": "Status"
+    },
+    "emptyTitle": "No leave requests here",
+    "emptyDescription": "Nothing in this segment yet.",
+    "truncatedNote": "Showing the first {limit} requests.",
+    "unknownSegmentTitle": "Unknown segment",
+    "unknownSegment": "There is no leave segment {segment}.",
+    "refusedTitle": "Leave refused",
+    "fileTitle": "File a leave request",
+    "fileButton": "New request",
+    "recordTitle": "Record an absence",
+    "recordButton": "Record absence",
+    "calendarTitle": "Calendar by department",
+    "calendarDepartmentLabel": "Department",
+    "calendarFromLabel": "From",
+    "calendarToLabel": "To",
+    "calendarShowLabel": "Show",
+    "calendarEmpty": "No absences in this window. Pick a department to resolve the calendar.",
+    "openRequest": "Open",
+    "drawerTitle": "Leave request",
+    "detailLoading": "Loading the request…",
+    "detailFailed": "The request could not be loaded.",
+    "actionFailed": "The action failed.",
+    "submitButton": "Submit for approval",
+    "withdrawButton": "Withdraw",
+    "cancelButton": "Cancel request",
+    "withdrawReasonTitle": "Why is this request withdrawn?",
+    "cancelReasonTitle": "Why is this request cancelled?",
+    "fileFailed": "The request could not be filed.",
+    "fileEmploymentLabel": "Employment",
+    "fileEmploymentPlaceholder": "Employment id",
+    "fileTypeLabel": "Leave type",
+    "fileTypePlaceholder": "Pick a leave type",
+    "fileHoursLabel": "Hours",
+    "fileReasonLabel": "Reason",
+    "timeBalanceTitle": "Time balance as of {date}",
+    "timeBalanceValue": "{balance} hours (earned {earned}, carried {carried}, taken {taken})",
+    "unlimitedBalance": "Unlimited — no balance number.",
+    "noPolicyBalance": "No policy covers this employment on these dates.",
+    "valueBalanceTitle": "Payroll bank value as of {date}",
+    "statusNames": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
+      "cancelled": "Cancelled"
+    }
+  },
+  "myLeave": {
+    "title": "My leave",
+    "description": "Your requests and balances — nothing else lists here.",
+    "emptyTitle": "No requests yet",
+    "emptyDescription": "File your first request to see it here.",
+    "balancesTitle": "Balances",
+    "balancesEmpty": "No active leave types.",
+    "timeKind": "time",
+    "valueKind": "value",
+    "unlimited": "Unlimited"
   }
 }
