@@ -584,6 +584,11 @@ export const payStubs = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_stubs_pay_run_document_id_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }),
     foreignKey({ name: "pay_stubs_filing_account_tenant_fkey",
       columns: [t.orgId, t.filingAccountId],
       foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
