@@ -73,6 +73,16 @@
     "employeesLink": "Employees list",
     "setupLink": "Manage departments"
   },
+  "reports": {
+    "title": "Reports",
+    "description": "Workforce reports: the headcount statement preset and the employment entities, opened in the report builder.",
+    "presetTitle": "Headcount statement",
+    "presetHint": "The preset opens the org's saved plan — or the builder catalog while the seed has never materialized.",
+    "entitiesTitle": "Workforce entities",
+    "entitiesHint": "Start a new workforce report from one of the employment entities.",
+    "hubTitle": "All reports",
+    "hubDescription": "Open the reports hub."
+  },
   "employment": {
     "episodes": {
       "title": "Employment episodes",

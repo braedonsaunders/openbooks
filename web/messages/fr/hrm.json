@@ -73,6 +73,16 @@
     "employeesLink": "Liste des employés",
     "setupLink": "Gérer les services"
   },
+  "reports": {
+    "title": "Rapports",
+    "description": "Rapports d'effectif : le modèle de déclaration d'effectif et les entités d'emploi, ouverts dans le générateur de rapports.",
+    "presetTitle": "Déclaration d'effectif",
+    "presetHint": "Le modèle ouvre le plan enregistré de l'organisation — ou le catalogue du générateur si l'initialisation ne s'est jamais matérialisée.",
+    "entitiesTitle": "Entités d'effectif",
+    "entitiesHint": "Créez un rapport d'effectif à partir d'une des entités d'emploi.",
+    "hubTitle": "Tous les rapports",
+    "hubDescription": "Ouvrir le centre de rapports."
+  },
   "employment": {
     "episodes": {
       "title": "Épisodes d'emploi",

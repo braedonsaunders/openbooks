@@ -73,6 +73,16 @@
     "employeesLink": "従業員リスト",
     "setupLink": "部門を管理"
   },
+  "reports": {
+    "title": "レポート",
+    "description": "人員レポート：ヘッドカウントステートメントのプリセットと雇用エンティティを、レポートビルダーで開きます。",
+    "presetTitle": "ヘッドカウントステートメント",
+    "presetHint": "プリセットは組織の保存済みプランを開きます — シードが未実行の場合はビルダーカタログを開きます。",
+    "entitiesTitle": "人員エンティティ",
+    "entitiesHint": "雇用エンティティのいずれかから新しい人員レポートを開始します。",
+    "hubTitle": "すべてのレポート",
+    "hubDescription": "レポートハブを開く。"
+  },
   "employment": {
     "episodes": {
       "title": "雇用エピソード",
