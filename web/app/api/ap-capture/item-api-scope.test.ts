@@ -56,6 +56,33 @@ for (const file of ITEM_ROUTES) {
   });
 }
 
+test("PATCH fences the vendor and PO resolveAndValidateCapture will persist, not only the pre-update row", () => {
+  const src = source("[id]/route.ts");
+  const resolveAt = src.indexOf("const resolved = await resolveAndValidateCapture(");
+  assert.ok(resolveAt >= 0, "PATCH must resolve before persisting associations");
+  const afterResolve = src.slice(resolveAt);
+  assert.match(
+    afterResolve,
+    /if \(resolved\.vendorId\)[\s\S]*?guardSubsidiaryScope\(gate, vendor\.subsidiaryId, \{ orgWideNull: true \}\)/,
+    "auto-resolved vendorId must pass the inbox subsidiary gate before UPDATE",
+  );
+  assert.match(
+    afterResolve,
+    /if \(resolved\.purchaseOrderId\)[\s\S]*?guardSubsidiaryScope\(gate, purchaseOrder\.subsidiaryId, \{ orgWideNull: true \}\)/,
+    "auto-resolved purchaseOrderId must pass the inbox subsidiary gate before UPDATE",
+  );
+  assert.match(afterResolve, /throw new Error\('capture_not_found'\)/, "out-of-scope resolved associations must be the same 404 as a missing capture");
+});
+
+test("ap-capture malformed-id authz double exports the PATCH subsidiary gate", () => {
+  const src = source("route-malformed-id.integration.test.ts");
+  assert.match(
+    src,
+    /export function guardSubsidiaryScope/,
+    "the authz mock must export every symbol [id]/route.ts imports or the suite fails to link and reports zero tests",
+  );
+});
+
 test("ap-capture actions refuse a 36-hyphen id as not_found before a uuid bind", () => {
   const src = source("actions/route.ts");
   assert.match(src, /import \{ isUuid \}/);
