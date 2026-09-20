@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { ArrowRight, FileDown } from 'lucide-react'
 import {
   Alert,
@@ -23,6 +23,7 @@ import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend
 import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
+import { countryName } from '../../../../lib/format'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
 import {
@@ -196,6 +197,7 @@ export function FilingWorkspace({
 }) {
   const t = useTranslations('payroll.filings')
   const router = useRouter()
+  const locale = useLocale()
   const { money } = useMoney()
   // The selected year stays selectable even when the offered list moved on
   // (a bookmarked ?year=): the list itself is derived once, server-side.
@@ -297,7 +299,7 @@ export function FilingWorkspace({
                     <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                       {section.label}
                     </div>
-                    <Badge variant="outline">{section.country}</Badge>
+                    <Badge variant="outline">{countryName(section.country, locale)}</Badge>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                     <span>{t('rowCount', { count: section.data.rows.length })}</span>
