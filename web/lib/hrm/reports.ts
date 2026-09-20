@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { BUILT_IN_REPORT_DEFINITION_MAP, HRM_REPORT_ENTITIES } from '@openbooks/reports'
 import { type Authz } from '../authz'
 import { canRunReportEntity } from '../report-authz'
