@@ -95,3 +95,21 @@ test("ordinary accounting evidence keeps its own labels and exact reference text
   assert.match(markup, /contract_2026_amendment\.pdf/);
   assert.doesNotMatch(markup, /transport-only-request-key/);
 });
+
+test("tax approval evidence distinguishes the monthly allocation from the consolidated-group rule", () => {
+  for (const [kind, expected] of [
+    ["nonrecognition", /monthly months-held allocation/],
+    [
+      "consolidated_group",
+      /consolidated-group member transfer — no monthly split/,
+    ],
+    ["partnership_721_prior_interest", /bonus stays with the transferor/],
+  ] as const) {
+    const markup = renderToStaticMarkup(
+      <ChangeEvidence taxBasis value={{ section168i7Kind: kind }} />,
+    );
+    assert.match(markup, /§168\(i\)\(7\) transfer kind/);
+    assert.match(markup, expected);
+    assert.doesNotMatch(markup, new RegExp(`>${kind}<`));
+  }
+});

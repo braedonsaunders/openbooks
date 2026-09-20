@@ -170,3 +170,40 @@ test("both classified parties receive both statutory worksheets with no applicab
   assert.match(markup, /-sellerOriginalCapitalCost"/);
   assert.doesNotMatch(markup, /-(?:applicable|sourceOperation)"/);
 });
+
+test("a nontaxable transfer requires an explicit statutory vehicle and taxable transfers hide it", () => {
+  const context = {
+    regime: "us_macrs",
+    sourceOperation: "intercompany_transfer" as const,
+    applicable: "buyer" as const,
+    relationship: "non_arms_length",
+  };
+  const unanswered = render({ ...context, recognition: "nontaxable" });
+  const nativeKindSelect = unanswered
+    .match(/<select\b[^>]*>[\s\S]*?<\/select>/g)
+    ?.find((select) => select.includes('value="nonrecognition"'));
+  assert.ok(
+    nativeKindSelect,
+    "statutory transfer kind must have a native form control",
+  );
+  assert.match(nativeKindSelect, /^<select\b[^>]*required=""/);
+  assert.match(unanswered, /<option value="nonrecognition">/);
+  assert.match(unanswered, /<option value="consolidated_group">/);
+  assert.match(unanswered, /<option value="partnership_721_prior_interest">/);
+  assert.doesNotMatch(
+    unanswered,
+    /value="(?:nonrecognition|consolidated_group|partnership_721_prior_interest)" selected/,
+  );
+  const answered = render({
+    ...context,
+    recognition: "nontaxable",
+    section168i7Kind: "consolidated_group",
+  });
+  assert.match(answered, /value="consolidated_group" selected=""/);
+  const taxable = render({
+    ...context,
+    recognition: "taxable",
+    section168i7Kind: "consolidated_group",
+  });
+  assert.doesNotMatch(taxable, /-section168i7Kind"/);
+});
