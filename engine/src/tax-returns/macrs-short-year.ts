@@ -423,30 +423,29 @@ function annualForRecoveryYear(args: {
   recoveryYearIndex: number;
 }): string {
   const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
+  if (args.recoveryYearIndex * 12 >= recoveryMonths) return "0.00";
+  const rate = decliningBalanceRate(args.method, args.recoveryPeriodYears);
+  // Rev. Proc. 89-15 §4.03(1), (3): allocate the declining-balance
+  // recovery years first. The switch to straight line is evaluated on the
+  // TAXABLE year's opening adjusted basis, not within these recovery years.
+  // Table 3's fourth taxable year is 12.00, not an allocation of recovery
+  // years that have independently switched to straight line.
+  if (args.method === "straight_line") {
+    return mulDecimal(args.originalMacrsBasis, rate);
+  }
   let basis = persistExact(args.originalMacrsBasis);
   for (let year = 0; year < args.recoveryYearIndex; year += 1) {
-    const remaining = recoveryMonths - year * 12;
-    const annual = applicableAnnualDeduction({
-      adjustedBasis: basis,
-      method: args.method,
-      recoveryPeriodYears: args.recoveryPeriodYears,
-      remainingMonths: remaining,
-    });
-    basis = remainingAfter(basis, annual);
+    basis = persistExact(add(basis, neg(mulDecimal(basis, rate))));
   }
-  return applicableAnnualDeduction({
-    adjustedBasis: basis,
-    method: args.method,
-    recoveryPeriodYears: args.recoveryPeriodYears,
-    remainingMonths: recoveryMonths - args.recoveryYearIndex * 12,
-  });
+  return mulDecimal(basis, rate);
 }
 
 function persistExact(value: string): string {
   return formatMoney(value, 4);
 }
 
-/** Allocation applies every year after a short year — not only the follow year. */
+/** Allocate the unswitched recovery-year amounts. The caller compares this
+ * with straight line on the taxable year's adjusted basis (§4.03(3)). */
 export function allocationRecoveryDeduction(args: {
   originalMacrsBasis: string;
   method: "200_db" | "150_db" | "straight_line";
@@ -489,14 +488,31 @@ export function subsequentRecoveryDeduction(args: {
   const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
   const remainingMonths = recoveryMonths - args.elapsedMonths;
   if (remainingMonths <= 0) return "0.00";
+  const serviceMonths = Math.min(args.monthsThisYear, remainingMonths, 12);
   if (args.shortYearMethod === "allocation") {
-    return allocationRecoveryDeduction({
+    const allocated = allocationRecoveryDeduction({
       originalMacrsBasis: args.originalMacrsBasis,
       method: args.method,
       recoveryPeriodYears: args.recoveryPeriodYears,
       elapsedMonths: args.elapsedMonths,
       monthsThisYear: args.monthsThisYear,
     });
+    const straightLine = mulRatio(
+      args.adjustedBasis,
+      halfMonths(serviceMonths),
+      halfMonths(remainingMonths),
+    );
+    const deduction =
+      args.method === "straight_line" || cmp(straightLine, allocated) > 0
+        ? straightLine
+        : allocated;
+    return formatMoney(
+      roundMoney(
+        cmp(deduction, args.adjustedBasis) > 0 ? args.adjustedBasis : deduction,
+        2,
+      ),
+      2,
+    );
   }
   const annual = applicableAnnualDeduction({
     adjustedBasis: args.adjustedBasis,
@@ -504,7 +520,6 @@ export function subsequentRecoveryDeduction(args: {
     recoveryPeriodYears: args.recoveryPeriodYears,
     remainingMonths,
   });
-  const serviceMonths = Math.min(args.monthsThisYear, remainingMonths, 12);
   const deduction = mulRatio(annual, halfMonths(serviceMonths), 24n);
   return formatMoney(
     roundMoney(
