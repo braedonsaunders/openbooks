@@ -2656,7 +2656,13 @@
       "leaveTypeId": "Tipo de ausencia",
       "minimumNoticeDays": "Antelación mínima (días)",
       "accrualRule": "Regla de acumulación (JSON)",
-      "carryoverRule": "Regla de arrastre (JSON)"
+      "carryoverRule": "Regla de arrastre (JSON)",
+      "accrualKind": "Devengo",
+      "accrualHours": "Horas devengadas",
+      "accrualPeriodsPerYear": "Períodos de devengo por año",
+      "carryoverKind": "Arrastre",
+      "carryoverHours": "Tope de arrastre (horas)",
+      "carryoverExpiresAfterDays": "El arrastre vence a los (días)"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2712,9 +2718,14 @@
       "hrmProcessAppliesSubsidiary": "Vacío: la plantilla se aplica a todas las filiales.",
       "hrmProcessAppliesDepartment": "Vacío: la plantilla se aplica a todos los departamentos.",
       "leaveValueCrossing": "Qué insumo de nómina genera un día de ausencia aprobado. Ninguno nunca toca el libro de nómina; pago y acumulación cruzan como horas que el cálculo valora.",
-      "leaveAppliesTo": "Alcance como JSON, p. ej. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null significa toda la organización; el motor resuelve solapamientos por especificidad.",
-      "leaveAccrualRule": "Acumulación como JSON, p. ej. {\"kind\": \"per_year\", \"hours\": \"120\"}. Tipos: none, per_period (necesita hours y periods_per_year), per_year (necesita hours), unlimited.",
-      "leaveCarryoverRule": "Arrastre como JSON, p. ej. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Tipos: none, carry_all, carry_up_to (necesita hours). Opcional expires_after_days."
+      "leaveAppliesSubsidiary": "Vacío significa que la política aplica a todas las subsidiarias.",
+      "leaveAppliesDepartment": "Vacío significa que la política aplica a todos los departamentos.",
+      "leaveAccrualKind": "Cómo se devenga el tiempo: ninguno, por período, por año o ilimitado.",
+      "leaveAccrualHours": "Horas devengadas por período o por año (obligatorio para esos tipos).",
+      "leaveAccrualPeriodsPerYear": "Períodos completos en un año de devengo (obligatorio para el devengo por período).",
+      "leaveCarryoverKind": "Qué pasa con el tiempo no usado al cierre del año: nada, arrastrar todo o hasta un tope.",
+      "leaveCarryoverHours": "Máximo de horas arrastradas (obligatorio para «hasta un tope»).",
+      "leaveCarryoverExpiresAfterDays": "Días desde el inicio del nuevo año hasta que vencen las horas arrastradas; vacío significa que no vencen."
     },
     "options": {
       "timeClassification": {
@@ -3072,6 +3083,17 @@
         "none": "Ninguno — no remunerado o en salario",
         "payout": "Pago desde el banco",
         "bankIn": "Acumular como tiempo"
+      },
+      "leaveAccrualKind": {
+        "none": "Ninguno",
+        "per_period": "Por período",
+        "per_year": "Por año",
+        "unlimited": "Ilimitado"
+      },
+      "leaveCarryoverKind": {
+        "none": "Ninguno",
+        "carry_all": "Arrastrar todo",
+        "carry_up_to": "Arrastrar hasta un tope"
       }
     },
     "laborCosting": {

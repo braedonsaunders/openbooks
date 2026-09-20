@@ -2656,7 +2656,13 @@
       "leaveTypeId": "Type de congé",
       "minimumNoticeDays": "Préavis minimum (jours)",
       "accrualRule": "Règle d'accumulation (JSON)",
-      "carryoverRule": "Règle de report (JSON)"
+      "carryoverRule": "Règle de report (JSON)",
+      "accrualKind": "Acquisition",
+      "accrualHours": "Heures d'acquisition",
+      "accrualPeriodsPerYear": "Périodes d'acquisition par an",
+      "carryoverKind": "Report",
+      "carryoverHours": "Plafond de report (heures)",
+      "carryoverExpiresAfterDays": "Le report expire après (jours)"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2712,9 +2718,14 @@
       "hrmProcessAppliesSubsidiary": "Vide : le modèle s'applique à toutes les filiales.",
       "hrmProcessAppliesDepartment": "Vide : le modèle s'applique à tous les services.",
       "leaveValueCrossing": "Quelle entrée de paie un jour d'absence approuvé génère. Aucune ne touche jamais le livre de paie ; paiement et accumulation transitent en heures que le calcul valorise.",
-      "leaveAppliesTo": "Portée en JSON, p. ex. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null signifie toute l'organisation ; le moteur résout les chevauchements par spécificité.",
-      "leaveAccrualRule": "Accumulation en JSON, p. ex. {\"kind\": \"per_year\", \"hours\": \"120\"}. Genres : none, per_period (exige hours et periods_per_year), per_year (exige hours), unlimited.",
-      "leaveCarryoverRule": "Report en JSON, p. ex. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Genres : none, carry_all, carry_up_to (exige hours). expires_after_days facultatif."
+      "leaveAppliesSubsidiary": "Vide signifie que la politique s'applique à toutes les filiales.",
+      "leaveAppliesDepartment": "Vide signifie que la politique s'applique à tous les services.",
+      "leaveAccrualKind": "Comment le temps est acquis : aucun, par période, par an ou illimité.",
+      "leaveAccrualHours": "Heures acquises par période ou par an (obligatoire pour ces types).",
+      "leaveAccrualPeriodsPerYear": "Périodes entières dans une année d'acquisition (obligatoire pour l'acquisition par période).",
+      "leaveCarryoverKind": "Ce qu'il advient du temps non utilisé en fin d'année : rien, tout reporter ou reporter jusqu'à un plafond.",
+      "leaveCarryoverHours": "Heures reportées au maximum (obligatoire pour « jusqu'à un plafond »).",
+      "leaveCarryoverExpiresAfterDays": "Jours après le début de la nouvelle année avant l'expiration des heures reportées ; vide signifie sans expiration."
     },
     "options": {
       "timeClassification": {
@@ -3072,6 +3083,17 @@
         "none": "Aucun — sans solde ou sur salaire",
         "payout": "Paiement depuis le compteur",
         "bankIn": "Compter en temps accumulé"
+      },
+      "leaveAccrualKind": {
+        "none": "Aucune",
+        "per_period": "Par période",
+        "per_year": "Par an",
+        "unlimited": "Illimitée"
+      },
+      "leaveCarryoverKind": {
+        "none": "Aucun",
+        "carry_all": "Tout reporter",
+        "carry_up_to": "Reporter jusqu'à un plafond"
       }
     },
     "laborCosting": {

@@ -2701,7 +2701,13 @@
       "leaveTypeId": "休假类型",
       "minimumNoticeDays": "最短提前通知（天）",
       "accrualRule": "累积规则 (JSON)",
-      "carryoverRule": "结转规则 (JSON)"
+      "carryoverRule": "结转规则 (JSON)",
+      "accrualKind": "累计方式",
+      "accrualHours": "累计小时数",
+      "accrualPeriodsPerYear": "每年累计期数",
+      "carryoverKind": "结转",
+      "carryoverHours": "结转上限（小时）",
+      "carryoverExpiresAfterDays": "结转到期（天数）"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2757,9 +2763,14 @@
       "hrmProcessAppliesSubsidiary": "留空表示模板适用于所有子公司。",
       "hrmProcessAppliesDepartment": "留空表示模板适用于所有部门。",
       "leaveValueCrossing": "已批准休假日生成的工资核算输入。“无”永不触及工资台账；支付和累积以小时形式传递，由核算计价。",
-      "leaveAppliesTo": "以JSON指定范围，例如 {\"employer_subsidiary_id\": null, \"department_id\": null}。null表示整个组织；重叠由引擎按具体程度解决。",
-      "leaveAccrualRule": "以JSON指定累积，例如 {\"kind\": \"per_year\", \"hours\": \"120\"}。种类：none、per_period（需要hours和periods_per_year）、per_year（需要hours）、unlimited。",
-      "leaveCarryoverRule": "以JSON指定结转，例如 {\"kind\": \"carry_up_to\", \"hours\": \"40\"}。种类：none、carry_all、carry_up_to（需要hours）。expires_after_days可选。"
+      "leaveAppliesSubsidiary": "留空表示该政策适用于所有子公司。",
+      "leaveAppliesDepartment": "留空表示该政策适用于所有部门。",
+      "leaveAccrualKind": "时间的累计方式：无、按期、按年或不限。",
+      "leaveAccrualHours": "每期或每年累计的小时数（这些方式必填）。",
+      "leaveAccrualPeriodsPerYear": "一个累计年度内的完整期数（按期累计必填）。",
+      "leaveCarryoverKind": "年末未使用时间的处理：不结转、全部结转或结转至上限。",
+      "leaveCarryoverHours": "最多可结转的小时数（“结转至上限”必填）。",
+      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。"
     },
     "options": {
       "payFrequency": {
@@ -3117,6 +3128,17 @@
         "none": "无——无薪或按工资",
         "payout": "从余额支付",
         "bankIn": "累积为调休时间"
+      },
+      "leaveAccrualKind": {
+        "none": "无",
+        "per_period": "按期",
+        "per_year": "按年",
+        "unlimited": "不限"
+      },
+      "leaveCarryoverKind": {
+        "none": "不结转",
+        "carry_all": "全部结转",
+        "carry_up_to": "结转至上限"
       }
     },
     "payroll": {

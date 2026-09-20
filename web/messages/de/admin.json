@@ -2769,7 +2769,13 @@
       "leaveTypeId": "Urlaubsart",
       "minimumNoticeDays": "Mindestvorlauf (Tage)",
       "accrualRule": "Ansammlungsregel (JSON)",
-      "carryoverRule": "Übertragsregel (JSON)"
+      "carryoverRule": "Übertragsregel (JSON)",
+      "accrualKind": "Ansammlung",
+      "accrualHours": "Ansammlungsstunden",
+      "accrualPeriodsPerYear": "Ansammlungsperioden pro Jahr",
+      "carryoverKind": "Übertrag",
+      "carryoverHours": "Übertragsgrenze (Stunden)",
+      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2825,9 +2831,14 @@
       "hrmProcessAppliesSubsidiary": "Leer bedeutet: Die Vorlage gilt für alle Tochtergesellschaften.",
       "hrmProcessAppliesDepartment": "Leer bedeutet: Die Vorlage gilt für alle Abteilungen.",
       "leaveValueCrossing": "Welchen Lohnlauf-Input ein genehmigter Fehltag erzeugt. „Keine“ berührt nie die Lohnkonten; Auszahlung und Gutschrift werden als Stunden übergeben, die der Lauf bepreist.",
-      "leaveAppliesTo": "Geltungsbereich als JSON, z. B. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null bedeutet unternehmensweit; Überschneidungen löst die Engine nach Spezifität.",
-      "leaveAccrualRule": "Ansammlung als JSON, z. B. {\"kind\": \"per_year\", \"hours\": \"120\"}. Arten: none, per_period (braucht hours und periods_per_year), per_year (braucht hours), unlimited.",
-      "leaveCarryoverRule": "Übertrag als JSON, z. B. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Arten: none, carry_all, carry_up_to (braucht hours). Optional expires_after_days."
+      "leaveAppliesSubsidiary": "Leer bedeutet, die Richtlinie gilt für jede Tochtergesellschaft.",
+      "leaveAppliesDepartment": "Leer bedeutet, die Richtlinie gilt für jede Abteilung.",
+      "leaveAccrualKind": "Wie Zeit verdient wird: keine, pro Periode, pro Jahr oder unbegrenzt.",
+      "leaveAccrualHours": "Verdiente Stunden pro Periode oder pro Jahr (für diese Arten erforderlich).",
+      "leaveAccrualPeriodsPerYear": "Ganze Perioden in einem Ansammlungsjahr (für Ansammlung pro Periode erforderlich).",
+      "leaveCarryoverKind": "Was mit ungenutzter Zeit zum Jahresende geschieht: nichts, alles übertragen oder bis zu einer Grenze.",
+      "leaveCarryoverHours": "Höchstens übertragene Stunden (für „bis zu einer Grenze“ erforderlich).",
+      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall."
     },
     "options": {
       "timeClassification": {
@@ -3185,6 +3196,17 @@
         "none": "Keine — unbezahlt oder gehaltsbasiert",
         "payout": "Auszahlung aus dem Konto",
         "bankIn": "Gutschrift als Ersatzzeit"
+      },
+      "leaveAccrualKind": {
+        "none": "Keine",
+        "per_period": "Pro Periode",
+        "per_year": "Pro Jahr",
+        "unlimited": "Unbegrenzt"
+      },
+      "leaveCarryoverKind": {
+        "none": "Keiner",
+        "carry_all": "Alles übertragen",
+        "carry_up_to": "Bis zu einer Grenze übertragen"
       }
     },
     "bankFeeds": {
