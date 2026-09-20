@@ -972,7 +972,10 @@
     "compliance_waive": "授予合规例外",
     "compliance_file": "定稿并报送信息申报表",
     "hrm_process_read": "查看流程清单",
-    "hrm_process_manage": "创建、完成和取消流程清单"
+    "hrm_process_manage": "创建、完成和取消流程清单",
+    "hrm_performance_read": "在隐私范围内查看评审周期和评审",
+    "hrm_performance_manage": "运行评审周期、校准和共享评审",
+    "hrm_retention_read": "查看离职记录和流失率"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2430,6 +2433,21 @@
         "title": "流程模板步骤",
         "singularTitle": "流程模板步骤",
         "description": "流程模板中的一个有序步骤，含负责人、到期偏移和证据规则。"
+      },
+      "hrm-review-templates": {
+        "title": "评审模板",
+        "singularTitle": "评审模板",
+        "description": "每个组织的评审表单：名称、评分量表和带问题的有序章节。"
+      },
+      "hrm-review-template-sections": {
+        "title": "评审章节",
+        "singularTitle": "评审章节",
+        "description": "评审模板的有序章节：能力、目标或自由文本，可带权重。"
+      },
+      "hrm-review-template-questions": {
+        "title": "评审问题",
+        "singularTitle": "评审问题",
+        "description": "评审模板章节内的问题：评分、文本或两者。必答题须在提交前作答。"
       }
     },
     "fields": {
@@ -2720,7 +2738,14 @@
       "accrualPeriodsPerYear": "每年累计期数",
       "carryoverKind": "结转",
       "carryoverHours": "结转上限（小时）",
-      "carryoverExpiresAfterDays": "结转到期（天数）"
+      "carryoverExpiresAfterDays": "结转到期（天数）",
+      "sectionId": "章节",
+      "weight": "权重",
+      "prompt": "问题",
+      "answerKind": "作答类型",
+      "ratingScaleMin": "量表最小值",
+      "ratingScaleMax": "量表最大值",
+      "ratingScaleLabels": "量表标签"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2783,7 +2808,10 @@
       "leaveAccrualPeriodsPerYear": "一个累计年度内的完整期数（按期累计必填）。",
       "leaveCarryoverKind": "年末未使用时间的处理：不结转、全部结转或结转至上限。",
       "leaveCarryoverHours": "最多可结转的小时数（“结转至上限”必填）。",
-      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。"
+      "leaveCarryoverExpiresAfterDays": "新年度开始后多少天结转小时数失效；留空表示不失效。",
+      "hrmReviewScaleMin": "量表接受的最低评分，例如1。",
+      "hrmReviewScaleMax": "量表接受的最高评分，例如5。",
+      "hrmReviewScaleLabels": "可选的端点标签，最低值在前。"
     },
     "options": {
       "payFrequency": {
@@ -3160,6 +3188,16 @@
         "offer": "录用通知",
         "hired": "已入职",
         "rejected": "已拒绝"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "能力",
+        "goals": "目标",
+        "freeText": "自由文本"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "评分",
+        "text": "文本",
+        "ratingAndText": "评分加文本"
       }
     },
     "payroll": {

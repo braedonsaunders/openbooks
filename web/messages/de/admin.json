@@ -972,7 +972,10 @@
     "payroll_read": "Lohnläufe und Abrechnungen anzeigen",
     "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben",
     "hrm_process_read": "Prozess-Checklisten anzeigen",
-    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen"
+    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen",
+    "hrm_performance_read": "Überprüfungszyklen und Beurteilungen im Datenschutzkreis einsehen",
+    "hrm_performance_manage": "Überprüfungszyklen durchführen, Beurteilungen kalibrieren und teilen",
+    "hrm_retention_read": "Austrittsdatensätze und Fluktuation einsehen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2498,6 +2501,21 @@
         "title": "Prozessvorlagen-Schritte",
         "singularTitle": "Prozessvorlagen-Schritt",
         "description": "Ein geordneter Schritt einer Prozessvorlage mit Verantwortlichem, Fälligkeitsversatz und Nachweisregel."
+      },
+      "hrm-review-templates": {
+        "title": "Beurteilungsvorlagen",
+        "singularTitle": "Beurteilungsvorlage",
+        "description": "Das Beurteilungsformular pro Organisation: Name, Bewertungsskala und geordnete Abschnitte mit Fragen."
+      },
+      "hrm-review-template-sections": {
+        "title": "Beurteilungsabschnitte",
+        "singularTitle": "Beurteilungsabschnitt",
+        "description": "Geordnete Abschnitte einer Beurteilungsvorlage: Kompetenz, Ziele oder Freitext, mit optionaler Gewichtung."
+      },
+      "hrm-review-template-questions": {
+        "title": "Beurteilungsfragen",
+        "singularTitle": "Beurteilungsfrage",
+        "description": "Fragen in einem Beurteilungsabschnitt: Bewertung, Text oder beides. Pflichtfragen müssen vor dem Einreichen beantwortet werden."
       }
     },
     "fields": {
@@ -2788,7 +2806,14 @@
       "accrualPeriodsPerYear": "Ansammlungsperioden pro Jahr",
       "carryoverKind": "Übertrag",
       "carryoverHours": "Übertragsgrenze (Stunden)",
-      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)"
+      "carryoverExpiresAfterDays": "Übertrag verfällt nach (Tagen)",
+      "sectionId": "Abschnitt",
+      "weight": "Gewichtung",
+      "prompt": "Frage",
+      "answerKind": "Antwortart",
+      "ratingScaleMin": "Skalenminimum",
+      "ratingScaleMax": "Skalenmaximum",
+      "ratingScaleLabels": "Skalenbeschriftungen"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2851,7 +2876,10 @@
       "leaveAccrualPeriodsPerYear": "Ganze Perioden in einem Ansammlungsjahr (für Ansammlung pro Periode erforderlich).",
       "leaveCarryoverKind": "Was mit ungenutzter Zeit zum Jahresende geschieht: nichts, alles übertragen oder bis zu einer Grenze.",
       "leaveCarryoverHours": "Höchstens übertragene Stunden (für „bis zu einer Grenze“ erforderlich).",
-      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall."
+      "leaveCarryoverExpiresAfterDays": "Tage nach Jahresbeginn, bis übertragene Stunden verfallen; leer bedeutet kein Verfall.",
+      "hrmReviewScaleMin": "Niedrigste Bewertung, die die Skala akzeptiert, zum Beispiel 1.",
+      "hrmReviewScaleMax": "Höchste Bewertung, die die Skala akzeptiert, zum Beispiel 5.",
+      "hrmReviewScaleLabels": "Optionale Endpunktbeschriftungen, niedrigste zuerst."
     },
     "options": {
       "timeClassification": {
@@ -3228,6 +3256,16 @@
         "offer": "Angebot",
         "hired": "Eingestellt",
         "rejected": "Abgelehnt"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Kompetenz",
+        "goals": "Ziele",
+        "freeText": "Freitext"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Bewertung",
+        "text": "Textantwort",
+        "ratingAndText": "Bewertung und Text"
       }
     },
     "bankFeeds": {

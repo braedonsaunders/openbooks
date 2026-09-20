@@ -664,6 +664,18 @@
       "hrm_applications": {
         "label": "Applications",
         "description": "One row per candidacy with its funnel stage, plus time-to-fill from opening to hire. Candidate contact details never appear — names only. Requires the HRM recruiting permission."
+      },
+      "hrm_reviews": {
+        "label": "Reviews",
+        "description": "One row per performance review — cycle and period, employee, kind, status, and the author rating beside the calibration. HR-only: runners hold the performance grant, so unshared reviews never leave the HR scope."
+      },
+      "hrm_goals": {
+        "label": "Goals",
+        "description": "One row per performance goal — employee, title, status, progress, and due date."
+      },
+      "hrm_turnover": {
+        "label": "Turnover",
+        "description": "One row per leaver — person, termination date, tenure in days, exit reason, and the voluntary and regrettable flags from the exit record. Group by termination month and department for the period-by-department leaver table; rates come from the Retention panel."
       }
     },
     "columns": {
@@ -1294,6 +1306,39 @@
         "hired_on": "Hired",
         "days_to_fill": "Days to fill",
         "application_id": "Application (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Cycle",
+        "period_end_on": "Period end",
+        "employee": "Employee",
+        "employer": "Employer",
+        "kind": "Kind",
+        "status": "Status",
+        "overall_rating": "Rating",
+        "calibrated_rating": "Calibrated rating",
+        "employment_id": "Employment (id)",
+        "id": "Review (id)"
+      },
+      "hrm_goals": {
+        "employee": "Employee",
+        "employer": "Employer",
+        "title": "Title",
+        "status": "Status",
+        "progress": "Progress",
+        "due_on": "Due on",
+        "employment_id": "Employment (id)",
+        "id": "Goal (id)"
+      },
+      "hrm_turnover": {
+        "person": "Person",
+        "employer": "Employer",
+        "department": "Department",
+        "terminated_on": "Terminated on",
+        "tenure_days": "Tenure (days)",
+        "reason": "Reason",
+        "voluntary": "Voluntary",
+        "regrettable": "Regrettable",
+        "employment_id": "Employment (id)"
       }
     },
     "enumValues": {

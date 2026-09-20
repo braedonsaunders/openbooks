@@ -2878,6 +2878,10 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // HR-5 grew it to 3416 (leave-types/leave-policies entities, leave fields,
   // fieldHelp, leaveValueCrossing options, hrm.leave.* permission labels);
   // all 24 ship translated in zh/pt-BR.
+  // HR-7 grows it to 3488 (hrm-review-templates/sections/questions entities,
+  // scale fields, review kinds/answers options, scale fieldHelp,
+  // hrm.performance.*/hrm.retention.* permission labels); all 28 ship
+  // translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2997,6 +3001,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
   assert.equal(wanted.length, 3475, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3488, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3339,6 +3344,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   const ADMIN_I2_SOURCE_COUNT = 3475
   const ADMIN_I2_SOURCE_HASH = '395c82918b7cc0aecac328ef43ab41a5bae574c58d6d429671546f66730ed63c'
+  const ADMIN_I2_SOURCE_COUNT = 3488
+  const ADMIN_I2_SOURCE_HASH = 'b69ce77847770c2584c8a72ebae94126456d446a149c243bd1460dd65cff1003'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5105,6 +5112,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
   "reports": 1314,
+  "reports": 1323,
   "sync": 172,
   "login": 33,
   "accounts": 82,

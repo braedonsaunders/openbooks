@@ -664,6 +664,18 @@
       "hrm_applications": {
         "label": "Candidaturas",
         "description": "Una fila por candidatura con su etapa del proceso y el tiempo de cobertura. Los datos de contacto nunca aparecen — solo nombres. Requiere el permiso de contratación."
+      },
+      "hrm_reviews": {
+        "label": "Evaluaciones",
+        "description": "Una fila por evaluación de desempeño — ciclo y período, persona, tipo, estado y la calificación del autor junto a la calibrada. Solo RR. HH.: quienes ejecutan tienen el permiso de desempeño, así las evaluaciones no compartidas nunca salen del ámbito de RR. HH."
+      },
+      "hrm_goals": {
+        "label": "Objetivos",
+        "description": "Una fila por objetivo de desempeño — persona, título, estado, progreso y fecha límite."
+      },
+      "hrm_turnover": {
+        "label": "Rotación",
+        "description": "Una fila por salida — persona, fecha de terminación, antigüedad en días, motivo de salida y los indicadores voluntario y lamentado del registro de salida. Agrupe por mes de terminación y departamento para la tabla de salidas; las tasas vienen del panel de retención."
       }
     },
     "columns": {
@@ -1294,6 +1306,39 @@
         "hired_on": "Contratado",
         "days_to_fill": "Días de cobertura",
         "application_id": "Candidatura (id)"
+      },
+      "hrm_reviews": {
+        "cycle": "Ciclo",
+        "period_end_on": "Fin del período",
+        "employee": "Persona empleada",
+        "employer": "Empleador",
+        "kind": "Tipo",
+        "status": "Estado",
+        "overall_rating": "Calificación",
+        "calibrated_rating": "Calificación calibrada",
+        "employment_id": "Empleo (id)",
+        "id": "Evaluación (id)"
+      },
+      "hrm_goals": {
+        "employee": "Persona empleada",
+        "employer": "Empleador",
+        "title": "Título",
+        "status": "Estado",
+        "progress": "Progreso",
+        "due_on": "Vence el",
+        "employment_id": "Empleo (id)",
+        "id": "Objetivo (id)"
+      },
+      "hrm_turnover": {
+        "person": "Persona",
+        "employer": "Empleador",
+        "department": "Departamento",
+        "terminated_on": "Terminó el",
+        "tenure_days": "Antigüedad (días)",
+        "reason": "Motivo",
+        "voluntary": "Voluntaria",
+        "regrettable": "Lamentada",
+        "employment_id": "Empleo (id)"
       }
     },
     "enumValues": {

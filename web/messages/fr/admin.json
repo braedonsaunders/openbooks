@@ -972,7 +972,10 @@
     "payroll_read": "Consulter les cycles et les bulletins de paie",
     "payroll_run": "Créer, calculer et valider les cycles de paie",
     "hrm_process_read": "Voir les listes de processus",
-    "hrm_process_manage": "Ouvrir, terminer et annuler les listes de processus"
+    "hrm_process_manage": "Ouvrir, terminer et annuler les listes de processus",
+    "hrm_performance_read": "Voir les cycles et évaluations dans le périmètre de confidentialité",
+    "hrm_performance_manage": "Mener les cycles, calibrer et partager les évaluations",
+    "hrm_retention_read": "Voir les fiches de sortie et la rotation"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2385,6 +2388,21 @@
         "title": "Étapes de modèle de processus",
         "singularTitle": "Étape de modèle de processus",
         "description": "Une étape ordonnée d'un modèle de processus avec son responsable, son délai et sa règle de preuve."
+      },
+      "hrm-review-templates": {
+        "title": "Modèles d’évaluation",
+        "singularTitle": "Modèle d’évaluation",
+        "description": "Le formulaire d’évaluation par organisation : nom, échelle de notation et sections ordonnées avec questions."
+      },
+      "hrm-review-template-sections": {
+        "title": "Sections d’évaluation",
+        "singularTitle": "Section d’évaluation",
+        "description": "Sections ordonnées d’un modèle d’évaluation : compétence, objectifs ou texte libre, avec pondération optionnelle."
+      },
+      "hrm-review-template-questions": {
+        "title": "Questions d’évaluation",
+        "singularTitle": "Question d’évaluation",
+        "description": "Questions d’une section du modèle : note, texte ou les deux. Les questions obligatoires doivent être renseignées avant l’envoi."
       }
     },
     "fields": {
@@ -2675,7 +2693,14 @@
       "accrualPeriodsPerYear": "Périodes d'acquisition par an",
       "carryoverKind": "Report",
       "carryoverHours": "Plafond de report (heures)",
-      "carryoverExpiresAfterDays": "Le report expire après (jours)"
+      "carryoverExpiresAfterDays": "Le report expire après (jours)",
+      "sectionId": "Section parente",
+      "weight": "Pondération",
+      "prompt": "Question",
+      "answerKind": "Type de réponse",
+      "ratingScaleMin": "Minimum de l’échelle",
+      "ratingScaleMax": "Maximum de l’échelle",
+      "ratingScaleLabels": "Libellés de l’échelle"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2738,7 +2763,10 @@
       "leaveAccrualPeriodsPerYear": "Périodes entières dans une année d'acquisition (obligatoire pour l'acquisition par période).",
       "leaveCarryoverKind": "Ce qu'il advient du temps non utilisé en fin d'année : rien, tout reporter ou reporter jusqu'à un plafond.",
       "leaveCarryoverHours": "Heures reportées au maximum (obligatoire pour « jusqu'à un plafond »).",
-      "leaveCarryoverExpiresAfterDays": "Jours après le début de la nouvelle année avant l'expiration des heures reportées ; vide signifie sans expiration."
+      "leaveCarryoverExpiresAfterDays": "Jours après le début de la nouvelle année avant l'expiration des heures reportées ; vide signifie sans expiration.",
+      "hrmReviewScaleMin": "Note la plus basse acceptée par l’échelle, par exemple 1.",
+      "hrmReviewScaleMax": "Note la plus haute acceptée par l’échelle, par exemple 5.",
+      "hrmReviewScaleLabels": "Libellés d’extrémité optionnels, le plus bas d’abord."
     },
     "options": {
       "timeClassification": {
@@ -3115,6 +3143,16 @@
         "offer": "Offre",
         "hired": "Embauché",
         "rejected": "Refusé"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Compétence",
+        "goals": "Objectifs",
+        "freeText": "Texte libre"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Note",
+        "text": "Texte",
+        "ratingAndText": "Note et texte"
       }
     },
     "laborCosting": {
