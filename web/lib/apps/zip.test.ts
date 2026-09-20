@@ -4,9 +4,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { zipSync, strToU8, Zip, ZipDeflate } from 'fflate'
 import { parseZipBundle, ZipBundleError } from './zip.ts'
 import { parseObjectSpecs } from './objects.ts'
+import { PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files.ts'
 
 const MANIFEST = JSON.stringify({
   key: 'demo',
@@ -159,6 +161,86 @@ test('allows an archive within compressed, ratio, and decompressed limits', () =
   const bundle = parseZipBundle(zip)
   assert.equal((bundle.manifest as { key: string }).key, 'demo')
   assert.equal(bundle.files.length, 2)
+})
+
+test('refuses zip entry paths that fail the package path gate by name', () => {
+  for (const path of ['../outside', '/absolute', 'frontend/../../etc/passwd']) {
+    assert.equal(validPackagePath(path), false, path)
+    const zip = zipSync({
+      'manifest.json': strToU8(MANIFEST),
+      [path]: strToU8('nope'),
+    })
+    assert.throws(() => parseZipBundle(zip), (error: unknown) => {
+      assert.ok(error instanceof ZipBundleError)
+      assert.equal(error.message, PACKAGE_PATH_REFUSAL)
+      return true
+    })
+  }
+})
+
+test('refuses traversal that remains after unwrapping a shared root folder', () => {
+  const zip = zipSync({
+    'my-app/manifest.json': strToU8(MANIFEST),
+    'my-app/frontend/../../outside.txt': strToU8('nope'),
+  })
+  assert.throws(() => parseZipBundle(zip), (error: unknown) => {
+    assert.ok(error instanceof ZipBundleError)
+    assert.equal(error.message, PACKAGE_PATH_REFUSAL)
+    return true
+  })
+})
+
+function storeFunctionBody(name: string): string {
+  const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
+  const start = store.indexOf(`export async function ${name}`)
+  assert.notEqual(start, -1, `${name} must remain defined`)
+  const end = store.indexOf('\nexport ', start + 1)
+  return store.slice(start, end === -1 ? undefined : end)
+}
+
+test('installApp applies the same package path gate before persistence', () => {
+  const body = storeFunctionBody('installApp')
+  assert.match(body, /validPackagePath/)
+  assert.match(body, /PACKAGE_PATH_REFUSAL/)
+})
+
+test('unpublishApp refuses a withdraw that writes zero rows', () => {
+  const body = storeFunctionBody('unpublishApp')
+  assert.doesNotMatch(body, /if \(!listing\.is_active\) return/)
+  assert.match(body, /and is_active=true/)
+  assert.match(body, /returning id/)
+  assert.match(body, /already unpublished/)
+})
+
+test('setAppStatus and deleteApp refuse a scoped lookup that matches zero rows', () => {
+  const statusBody = storeFunctionBody('setAppStatus')
+  const deleteBody = storeFunctionBody('deleteApp')
+  assert.doesNotMatch(statusBody, /if \(!app \|\| app\.status === status\) return/)
+  assert.doesNotMatch(deleteBody, /if \(!app\) return/)
+  assert.match(statusBody, /if \(!app\) throw new AppError\('app not found', 404\)/)
+  assert.match(deleteBody, /if \(!app\) throw new AppError\('app not found', 404\)/)
+})
+
+test('applied draft activation validates current state instead of returning a no-op', () => {
+  const body = storeFunctionBody('installApp')
+  assert.doesNotMatch(body, /if \(proposal\.status === 'applied'\) return/)
+  assert.match(body, /proposal\.status === 'applied'/)
+  assert.match(body, /no longer present/)
+  assert.match(body, /installed extension changed after this draft/)
+})
+
+test('platform schema, list, and get take a fresh read invocation nonce', () => {
+  const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
+  const body = storeFunctionBody('runBridgeMethod')
+  assert.match(body, /platformReadNeedsFreshInvocation\(opts\.method\)/)
+  assert.match(store, /function platformReadNeedsFreshInvocation\(method: string\): boolean/)
+  assert.match(store, /method === 'platform\.schema'/)
+  assert.match(store, /method === 'platform\.list'/)
+  assert.match(store, /method === 'platform\.get'/)
+  assert.doesNotMatch(
+    body,
+    /\.\.\.\(opts\.method === 'platform\.query' \? \{ readInvocation: crypto\.randomUUID\(\) \} : \{\}\)/,
+  )
 })
 
 // ---------------------------------------------------------------------------
