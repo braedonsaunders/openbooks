@@ -115,10 +115,12 @@ export async function appendApplicationEvent(
 }
 
 /**
- * Manage authority over an application: the org-wide grant, or the hiring
- * manager on their own requisition. Either refusal names the same remedy.
+ * Move authority over an application: the org-wide manage grant, or the
+ * hiring manager on their own requisition. Terminal funnel decisions
+ * (attach, reject, withdraw) are NOT covered here — they need the grant in
+ * full. Either refusal names the same remedy.
  */
-async function requireApplicationManage(
+async function requireApplicationMove(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -152,7 +154,7 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
   const requisitionId = requireId(query.requisitionId, "requisitionId");
   const candidateId = requireId(query.candidateId, "candidateId");
   return withOrgTransaction(orgId, async () => {
-    await requireApplicationManage(db, orgId, actorId, requisitionId);
+    await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
     const requisition = (await db.execute<{ status: string; pipelineTemplateId: string | null }>(sql`
       select status, pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
@@ -241,7 +243,7 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
   const reason = query.reason === undefined || query.reason === null ? null : String(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
-    await requireApplicationManage(db, orgId, actorId, current.requisitionId);
+    await requireApplicationMove(db, orgId, actorId, current.requisitionId);
     const requisition = (await db.execute<{ pipelineTemplateId: string | null }>(sql`
       select pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${current.requisitionId}
@@ -310,7 +312,7 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
-    await requireApplicationManage(db, orgId, actorId, current.requisitionId);
+    await requireHrmRecruitingManage(db, orgId, actorId, current.requisitionId);
     if (current.status !== "active") {
       throw new RecruitingError(
         "BAD_STATE",
@@ -352,7 +354,7 @@ export async function withdrawApplication(query: WithdrawApplicationQuery): Prom
   const applicationId = requireId(query.applicationId, "applicationId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
-    await requireApplicationManage(db, orgId, actorId, current.requisitionId);
+    await requireHrmRecruitingManage(db, orgId, actorId, current.requisitionId);
     if (current.status !== "active") {
       throw new RecruitingError(
         "BAD_STATE",

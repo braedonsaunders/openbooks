@@ -890,6 +890,12 @@ test("the hiring manager moves their own funnel without the grant and never sees
       toStageId: screen.id,
     });
     assert.equal(moved.stageId, screen.id, "the manager moves their own funnel");
+    // Terminal funnel decisions stay behind the grant: the manager moves,
+    // never rejects.
+    await assert.rejects(
+      rejectApplication({ orgId, actorId: h.managerId, applicationId: application.id, reason: "no" }),
+      /hrm.recruiting.manage/,
+    );
     // Another manager's opening stays shut.
     const other = await createRequisition({
       orgId,

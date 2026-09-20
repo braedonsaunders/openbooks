@@ -637,3 +637,82 @@ export async function loadRecruitingOverview(query: LoadRecruitingOverviewQuery)
   `)).rows[0]?.n ?? 0;
   return { openRequisitions: open, offersAwaitingResponse: offers, interviewsThisWeek: interviews };
 }
+
+export interface OfferView {
+  readonly id: string;
+  readonly applicationId: string;
+  readonly requisitionId: string;
+  readonly positionId: string | null;
+  readonly employerSubsidiaryId: string;
+  readonly jobTitle: string;
+  readonly proposedStartOn: string;
+  readonly compensationAmount: string;
+  readonly compensationCurrency: string;
+  readonly compensationBasis: string;
+  readonly status: string;
+  readonly effectiveStatus: string;
+  readonly sentAt: string | null;
+  readonly expiresOn: string | null;
+  readonly respondedAt: string | null;
+  readonly declineReason: string | null;
+  readonly href: string;
+}
+
+export interface GetOfferQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly offerId: string;
+}
+
+/** The offer drawer: terms with the reader-reported (expiry-computed) status. */
+export async function getOfferDetail(query: GetOfferQuery): Promise<OfferView> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const offerId = requireId(query.offerId, "offerId");
+  const row = (await db.execute<{
+    id: string;
+    applicationId: string;
+    requisitionId: string | null;
+    positionId: string | null;
+    employerSubsidiaryId: string;
+    jobTitle: string;
+    proposedStartOn: string;
+    compensationAmount: string;
+    compensationCurrency: string;
+    compensationBasis: string;
+    status: string;
+    sentAt: string | null;
+    expiresOn: string | null;
+    respondedAt: string | null;
+    declineReason: string | null;
+  }>(sql`
+    select o.id, o.application_id as "applicationId",
+           a.requisition_id as "requisitionId", o.position_id as "positionId",
+           o.employer_subsidiary_id as "employerSubsidiaryId",
+           o.job_title as "jobTitle",
+           o.proposed_start_on as "proposedStartOn",
+           o.compensation_amount as "compensationAmount",
+           o.compensation_currency as "compensationCurrency",
+           o.compensation_basis as "compensationBasis", o.status,
+           o.sent_at as "sentAt", o.expires_on as "expiresOn",
+           o.responded_at as "respondedAt", o.decline_reason as "declineReason"
+      from hrm_offers o
+      left join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
+     where o.org_id = ${orgId} and o.id = ${offerId}
+  `)).rows[0];
+  if (!row || !row.requisitionId) {
+    throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
+  }
+  try {
+    await requireHrmRecruitingRead(db, orgId, actorId, row.requisitionId);
+  } catch {
+    await requireOwnRequisitionForHiringManager(db, orgId, actorId, row.requisitionId);
+  }
+  const today = await businessToday(orgId);
+  return {
+    ...row,
+    requisitionId: row.requisitionId,
+    effectiveStatus: effectiveOfferStatus({ status: row.status, expiresOn: row.expiresOn, businessToday: today }),
+    href: `/hrm/recruiting?offer=${row.id}`,
+  };
+}
