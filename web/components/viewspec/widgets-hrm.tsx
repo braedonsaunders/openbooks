@@ -31,6 +31,16 @@ import {
   RetentionPanel,
   ReviewDrawer,
 } from '../../app/(app)/hrm/performance/sections'
+import {
+  CompCycleDialog,
+  CompEquityDialog,
+  CompLineDrawer,
+  CompPlanDialog,
+  PacingBar,
+  PayInfoRequest,
+  PlacementBar,
+  PlacementSummary,
+} from '../../app/(app)/hrm/compensation/sections'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -371,6 +381,65 @@ export const HRM_WIDGETS = {
       missingLabel={str(props, 'missingLabel') ?? ''}
       queueHref={str(props, 'queueHref') ?? '/hrm/benefits'}
       viewAllLabel={str(props, 'viewAllLabel') ?? ''}
+    />
+  ),
+  /* --- HR-12 compensation --- */
+  /** Band placement bar: min/target/max with the payroll-side rate
+   *  marker, loader-resolved edges — 'no band' renders the label. */
+  'hrm-placement-bar': (props) => (
+    <PlacementBar
+      min={str(props, 'min') ?? null}
+      target={str(props, 'target') ?? null}
+      max={str(props, 'max') ?? null}
+      rate={str(props, 'rate') ?? null}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  /** Cycle budget pacing bar: computed percent with the over-budget
+   *  tone, loader-resolved. */
+  'hrm-pacing-bar': (props) => (
+    <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} />
+  ),
+  /** The cycle line drawer: propose form, decide buttons, and the
+   *  append-only event history, opened from the line's `line` param. */
+  'hrm-comp-line-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof CompLineDrawer>['drawer']
+    if (!drawer) return null
+    return <CompLineDrawer drawer={drawer} />
+  },
+  /** The new-cycle dialog, opened from the page header through the
+   *  `cycle` search param; closing navigates the param away. */
+  'hrm-comp-cycle-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompCycleDialog>['dialog']
+    if (!dialog) return null
+    return <CompCycleDialog dialog={dialog} />
+  },
+  /** The new-plan dialog, opened from the page header through the
+   *  `plan` search param. */
+  'hrm-comp-plan-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompPlanDialog>['dialog']
+    if (!dialog) return null
+    return <CompPlanDialog dialog={dialog} />
+  },
+  /** The snapshot-generate dialog on the equity surface. */
+  'hrm-comp-equity-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompEquityDialog>['dialog']
+    if (!dialog) return null
+    return <CompEquityDialog dialog={dialog} />
+  },
+  /** Placement summary on the Me surface: loader-resolved strings. */
+  'hrm-placement-summary': (props) => (
+    <PlacementSummary placement={str(props, 'placement') ?? ''} compaRatio={str(props, 'compaRatio') ?? null} bandRange={str(props, 'bandRange') ?? null} />
+  ),
+  /** Pay-information request action with the open request's status. */
+  'hrm-pay-info-request': (props) => (
+    <PayInfoRequest
+      employmentId={str(props, 'employmentId') ?? ''}
+      requestLabel={str(props, 'requestLabel') ?? ''}
+      requestStatus={str(props, 'requestStatus') ?? null}
+      failed={str(props, 'failed') ?? ''}
+      submit={str(props, 'submit') ?? ''}
+      cancel={str(props, 'cancel') ?? ''}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

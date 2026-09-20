@@ -88,6 +88,11 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // the hrmConstructionCompliance switch (TAB_FEATURE).
     { href: '/hrm/compliance', ns: 'hrm', key: 'home.tabs.compliance' },
     // HR-13 end
+    // HR-12 begin: job architecture, bands, merit cycles, headcount
+    // plans and pay transparency — behind hrm.compensation.read
+    // (HRM_TAB_PERMISSION) with the hrmCompensation switch (TAB_FEATURE).
+    { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation' },
+    // HR-12 end
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -122,6 +127,9 @@ const TAB_FEATURE: Record<string, string> = {
   // HR-13 begin
   '/hrm/compliance': 'hrmConstructionCompliance',
   // HR-13 end
+  // HR-12 begin
+  '/hrm/compensation': 'hrmCompensation',
+  // HR-12 end
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -206,6 +214,9 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   // HR-13 begin
   '/hrm/compliance': 'hrm.construction.read',
   // HR-13 end
+  // HR-12 begin
+  '/hrm/compensation': 'hrm.compensation.read',
+  // HR-12 end
 }
 
 /**
