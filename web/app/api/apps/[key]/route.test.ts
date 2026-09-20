@@ -5,6 +5,8 @@ import test from 'node:test'
 // Route boundary for app status and uninstall. Helpers return this request's
 // affected-row count (or throw). {ok:true} is only returned when that count
 // is greater than zero — a void resolve is a refusal, not success.
+// parseJsonBody stays the real validator; only authz, NextResponse, and the
+// store writes are doubled.
 
 const stateKey = Symbol.for('openbooks.app-key-route-test')
 
@@ -57,19 +59,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const body = await request.json().catch(() => undefined)
-        if (!body || typeof body !== 'object' || Array.isArray(body)) {
-          return { ok: false, response: { status: 400, json: async () => ({ error: 'invalid request body' }) } }
-        }
-        return { ok: true, data: body }
-      }
-    `,
-  ],
-  [
     'mock:store',
     `
       const state = globalThis[Symbol.for('openbooks.app-key-route-test')]
@@ -96,7 +85,6 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['next/server', 'mock:next'],
   ['@/lib/feature-gates', 'mock:gates'],
-  ['@/lib/api/json', 'mock:json'],
   ['@/lib/apps/store', 'mock:store'],
 ])
 
@@ -104,6 +92,10 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    // parseJsonBody is a pure validator — use the real module, never a double.
+    if (specifier === '@/lib/api/json') {
+      return nextResolve(new URL('../../../../lib/api/json.ts', import.meta.url).href, context)
     }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -145,6 +137,23 @@ function remove(key: string) {
     params: Promise.resolve({ key }),
   })
 }
+
+test('PATCH refuses a non-object body through the real parseJsonBody validator', async () => {
+  reset()
+  const response = await PATCH(
+    new Request('http://openbooks.test/api/apps/ledger', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(['disabled']),
+    }),
+    { params: Promise.resolve({ key: 'ledger' }) },
+  )
+  assert.equal(response.status, 400)
+  const body = (await response.json()) as { ok?: unknown; error: string }
+  assert.equal(body.ok, undefined)
+  assert.equal(body.error, 'invalid request body')
+  assert.equal(state.setCalls.length, 0)
+})
 
 test('PATCH refuses when setAppStatus still returns void', async () => {
   reset()

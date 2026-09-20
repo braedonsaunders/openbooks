@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const storeSource = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
 const routeSource = readFileSync(new URL('../../app/api/apps/[key]/route.ts', import.meta.url), 'utf8')
+const routeTestSource = readFileSync(new URL('../../app/api/apps/[key]/route.test.ts', import.meta.url), 'utf8')
 
 function functionBody(source: string, name: string): string {
   const start = source.indexOf(`export async function ${name}`)
@@ -49,6 +50,11 @@ test('deleteApp throws in-transaction on a missing row or zero-row uninstall wri
   assert.match(body, /if \(!updated\.rows\.length\)/)
   assert.match(body, /if \(!deleted\.rows\.length\)/)
   assert.doesNotMatch(body, /if \(!app\) return/)
+})
+
+test('the app key route test does not double parseJsonBody', () => {
+  assert.doesNotMatch(routeTestSource, /export async function parseJsonBody/)
+  assert.match(routeTestSource, /lib\/api\/json\.ts/)
 })
 
 test('PATCH and DELETE report {ok:true} only when this request\'s affectedRows is greater than zero', () => {
