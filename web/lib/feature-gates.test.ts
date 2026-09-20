@@ -1229,17 +1229,17 @@ test('the surfaces this test was written for are covered', () => {
     'manual FX sync must refuse when Multi-currency is off',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-automation.ts'),
     /if \(!\(await advancedCloseEnabled\(context\.orgId\)\)\) return \{ completed: 0, failed: 0 \}/,
     'close automations must not fire when Advanced close is off — core close still runs',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-automation.ts'),
     /coalesce\(\(organization\.settings->'features'->>'advancedClose'\)::boolean, false\)/,
     'scheduled close automations must skip orgs whose Advanced close switch is off',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-completion.ts'),
     /export async function publishCloseRun[\s\S]{0,200}advancedCloseEnabled/,
     'publishCloseRun must refuse when Advanced close is off — stored binders stay',
   )

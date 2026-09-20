@@ -77,7 +77,7 @@ test("scheduler outbox enqueues and processes the allocation_run kind", () => {
 });
 
 test("close automation routes run_allocation to the allocation scheduler", () => {
-  const source = readFileSync(new URL("../close/close.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../close/run-automation.ts", import.meta.url), "utf8");
   assert.match(source, /rule\.action === "run_allocation"/);
   assert.match(source, /runAllocationCloseAction/);
 });
