@@ -694,19 +694,30 @@ export async function generatePayRunBankFile(
       );
     }
 
+    // The stored bytes are the bank's bytes: Zengin files are Shift_JIS
+    // (the renderer's `contentBytes` off `encodeZenginFile`); every other
+    // rail is the UTF-8 of its logical text.
+    const bytes = rendered.contentBytes ?? Buffer.from(rendered.content, "utf8");
     // us-ascii on the fixed-width rails: the byte length must equal the
     // character length, or a name with an accent has silently shifted every
     // field after it. SEPA pain.001 is UTF-8 XML by declaration —
     // length-delimited by markup, not by offsets — so non-ASCII names are
-    // legal there and this check does not apply.
-    const bytes = Buffer.from(rendered.content, "utf8");
-    if (format !== "sepa" && bytes.length !== rendered.content.length) {
+    // legal there and this check does not apply. Zengin's Shift_JIS bytes
+    // are single-byte-per-character by construction (the encoder refuses
+    // anything else), asserted here with the rail's own message.
+    if (format === "zengin") {
+      if (bytes.length !== rendered.content.length) {
+        throw new PayrollError(
+          "payroll bank file contains characters without a Shift_JIS single-byte form, which would shift every fixed-width field after them",
+        );
+      }
+    } else if (format !== "sepa" && bytes.length !== rendered.content.length) {
       throw new PayrollError(
         "payroll bank file contains non-ASCII characters, which would shift every fixed-width field after them",
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : format === "bacs" ? "BACS" : "NACHA"}-${
+    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : format === "bacs" ? "BACS" : format === "zengin" ? "ZENGIN" : "NACHA"}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

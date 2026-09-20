@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildBacsFile, buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, type BacsPayment, type CemtexPayment, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
+import { buildBacsFile, buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, buildZenginFile, encodeZenginFile, type BacsPayment, type CemtexPayment, type Cpa005Payment, type NachaEntry, type ZenginPayment } from "../payments/rail-formatters.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, normalizeBankCode, normalizeBranchCode, normalizeBsb, normalizeZenginAccount, toZenginKana, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateZenginSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type ZenginSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -37,7 +37,7 @@ import { unsealJson } from "../platform/secrets.ts";
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
 
-export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs";
+export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "zengin";
 
 export interface PayRunBankFileFormatSpec {
   /** Off means: do not emit these bytes, and say why. */
@@ -153,8 +153,8 @@ export interface PayRunBankFileFormatSpec {
  * digit account number is a named refusal, never a silent drop and never a
  * coerced account (a coerced BSB pays a stranger).
  *
- * All five writers are the audited AP ones in engine/src/payments/rail-formatters.ts
- * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`, `buildBacsFile`) — payroll deliberately does not fork a
+ * All writers are the audited AP ones in engine/src/payments/rail-formatters.ts
+ * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`, `buildBacsFile`, `buildZenginFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
  *
  * ── BACS (United Kingdom) — ON ────────────────────────────────────────────
@@ -175,6 +175,27 @@ export interface PayRunBankFileFormatSpec {
  * never a coerced account (a coerced sort code pays a stranger). No bank has
  * cleared a file from this writer; Bacs is a weaker evidence class than
  * Cemtex.
+ *
+ * ── ZENGIN (Japan) — ON ─────────────────────────────────────────────────
+ * 給与振込 (salary transfer, 種別コード 11) in 全銀協規定形式: 120-byte
+ * header (1), one 120-byte data record (2) per payment, 120-byte trailer
+ * (8) and end record (9), CRLF-terminated, Shift_JIS bytes — rendered by
+ * the shared AP builder (`buildZenginFile` + `encodeZenginFile`,
+ * engine/src/payments/rail-formatters.ts). Payroll maps its EFT population
+ * onto the builder's generic payment rows and adds nothing of its own, so
+ * AP can originate the same rail later with no fork. Seven bank-published
+ * manuals (MUFG BizStation, Chiba, Tajima, Kiraboshi, Tsuruga Shinkin, MUFG
+ * Trust, Docomo SMTB Net Bank) agree on every field boundary; the writer's
+ * evidence log names every source with publisher and date and states the
+ * corroboration gradient. A Japanese credit is addressed by 4-digit bank
+ * code + 3-digit branch code + 種目 + 7-digit account — validated by shape,
+ * never through the IBAN validator — and the payee name travels as
+ * half-width katakana: a name with no mechanical kana reading (kanji) is a
+ * named refusal with the フリガナ remedy, never a guessed reading. JPY has
+ * no minor unit, so sub-yen net pay is refused, never rounded.
+ *
+ * No bank has cleared a file from this writer; Zengin is a weaker evidence
+ * class than Cemtex.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
   cpa005: {
@@ -213,6 +234,16 @@ export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankF
     rails: ["bacs_credit"],
     extension: "txt",
     contentType: "text/plain; charset=us-ascii",
+  },
+  zengin: {
+    enabled: true,
+    currency: "JPY",
+    rails: ["zengin_credit"],
+    extension: "txt",
+    // Shift_JIS, never UTF-8: text fields are half-width katakana and the
+    // bank reads Shift_JIS bytes (see `buildZenginFile` /
+    // `encodeZenginFile`, engine/src/payments/rail-formatters.ts).
+    contentType: "text/plain; charset=Shift_JIS",
   },
 };
 
@@ -331,6 +362,7 @@ export interface PayrollOriginatorConfig {
   sepa?: SepaSettings;
   cemtex?: CemtexSettings;
   bacs?: BacsSettings;
+  zengin?: ZenginSettings;
 }
 
 export type PayrollOriginatorResult =
@@ -351,6 +383,7 @@ function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "c
   if (format === "sepa") return "lf";
   if (format === "cemtex") return "crlf";
   if (format === "bacs") return "crlf";
+  if (format === "zengin") return "crlf";
   return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
 }
 
@@ -652,11 +685,47 @@ function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * Zengin originator validation.
+ *
+ * The originator half of a 給与振込 file is the bank-assigned 委託者コード
+ * (10 digits) and kana 委託者名 plus the originating bank/branch/種目/
+ * account the transfer draws on. All are tenant configuration on the payment
+ * bank profile (Setup → Payment operations, `zengin_credit` rail) and all
+ * are validated by the shared `validateZenginSettings` — a malformed client
+ * code or an unmappable (kanji) client name is refused by name rather than
+ * emitted into fixed-width fields the bank would misread.
+ */
+function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
+  const raw = unsealJson<Partial<ZenginSettings>>(row.originator_secrets_encrypted) ?? {};
+  const checked = validateZenginSettings(raw);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: checked.missing.map(
+        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+      ),
+    };
+  }
+  return {
+    ok: true,
+    config: {
+      paymentBankProfileId: row.id,
+      profileName: row.name,
+      format: "zengin",
+      currency: row.currency ?? "JPY",
+      lineEnding: "crlf",
+      zengin: checked.settings,
+    },
+  };
+}
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
   // Branch on the profile's rail-mapped format, never on a country: packs
   // declare which rail they settle on and this resolver only reads it.
   const resolved =
-    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : resolveNacha(row);
+    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : format === "zengin" ? resolveZengin(row) : resolveNacha(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -707,6 +776,14 @@ export interface PayRunBankFileCredit extends PayRunBankFileEntry {
   bsb?: string;
   /** Bacs only: the validated creditor sort code (NN-NN-NN) this credit will be paid to. */
   sortCode?: string;
+  /** Zengin only: the validated 4-digit destination bank code. */
+  bankCode?: string;
+  /** Zengin only: the validated 3-digit destination branch code. */
+  branchCode?: string;
+  /** Zengin only: the validated deposit type ("1" = 普通, "2" = 当座). */
+  depositType?: string;
+  /** Zengin only: the half-width katakana payee name on the data record. */
+  payeeKana?: string;
 }
 
 /**
@@ -814,6 +891,67 @@ export function resolveBacsCreditor(
     };
   }
   return { ok: true, sortCode, accountNumber: normalized };
+}
+
+/**
+ * The Zengin address of one payroll credit, resolved purely.
+ *
+ * Split out from `loadCredits` so the refusal logic is unit-testable with no
+ * database: a bank code that is not 4 digits, a branch code that is not 3
+ * digits, a deposit type outside {1 = 普通, 2 = 当座}, or an account number
+ * that is not 1–7 digits is a typed refusal naming the employee and the
+ * remedy, never a silent drop and never a coerced account — a coerced bank
+ * code pays a stranger. The IBAN validator is never consulted: a Japanese
+ * bank/branch/account triple is not an IBAN.
+ *
+ * The payee kana name comes from the bank row (`routing.payeeKana`, with
+ * `kanaName`/`accountNameKana` accepted as aliases), falling back to a
+ * mechanical mapping of the employee's name. A name with no mechanical
+ * kana reading — kanji — refuses with the フリガナ remedy: the reading is
+ * operator knowledge, not a derivable byte string.
+ */
+export function resolveZenginCreditor(
+  employeeName: string,
+  routing: Record<string, string>,
+  accountNumber: string,
+): { ok: true; bankCode: string; branchCode: string; depositType: string; accountNumber: string; payeeKana: string } | { ok: false; reason: string } {
+  const bankCode = normalizeBankCode(routing.bankCode ?? routing.bank_code ?? routing.bank ?? "");
+  if (!bankCode) {
+    return {
+      ok: false,
+      reason: `${employeeName}: Zengin needs a 4-digit bank code (金融機関コード) on the employee's approved bank account — add one or pay this employee by cheque`,
+    };
+  }
+  const branchCode = normalizeBranchCode(routing.branchCode ?? routing.branch_code ?? routing.branch ?? "");
+  if (!branchCode) {
+    return {
+      ok: false,
+      reason: `${employeeName}: Zengin needs a 3-digit branch code (支店コード) on the employee's approved bank account — add one or pay this employee by cheque`,
+    };
+  }
+  const depositType = (routing.depositType ?? routing.deposit_type ?? routing.accountType ?? "").trim();
+  if (depositType !== "1" && depositType !== "2") {
+    return {
+      ok: false,
+      reason: `${employeeName}: Zengin needs a deposit type of 1 (普通) or 2 (当座) on the employee's approved bank account — add one or pay this employee by cheque`,
+    };
+  }
+  const normalized = normalizeZenginAccount(accountNumber);
+  if (normalized === null) {
+    return {
+      ok: false,
+      reason: `${employeeName}: "${accountNumber}" is not a valid Japanese account number (1–7 digits) — correct it on the employee's approved bank account or pay this employee by cheque`,
+    };
+  }
+  const kanaSource = routing.payeeKana ?? routing.kanaName ?? routing.accountNameKana ?? "";
+  const kana = toZenginKana((kanaSource || employeeName).trim());
+  if (kana === null || kana === "") {
+    return {
+      ok: false,
+      reason: `${employeeName}: the payee name cannot be expressed in half-width katakana — register the payee's katakana name (フリガナ) as payeeKana on the employee's approved bank account or pay this employee by cheque`,
+    };
+  }
+  return { ok: true, bankCode, branchCode, depositType, accountNumber: normalized, payeeKana: kana };
 }
 
 /**
@@ -933,6 +1071,28 @@ export async function loadCredits(
         sortCode: resolved.sortCode,
       });
       continue;
+    } else if (format === "zengin") {
+      // A Zengin credit is addressed by bank code + branch code + 種目 +
+      // account number, and named in half-width katakana. Any one of them
+      // unshaped — or a name with no kana reading — is a named refusal:
+      // never silently dropped, never coerced into a differently-numbered
+      // account, never a guessed reading.
+      const resolved = resolveZenginCreditor(entry.employeeName, routing, accountNumber);
+      if (!resolved.ok) {
+        problems.push(resolved.reason);
+        continue;
+      }
+      credits.push({
+        ...entry,
+        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+        routing,
+        accountNumber: resolved.accountNumber,
+        bankCode: resolved.bankCode,
+        branchCode: resolved.branchCode,
+        depositType: resolved.depositType,
+        payeeKana: resolved.payeeKana,
+      });
+      continue;
     } else {
       const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
       if (!/^\d{9}$/.test(aba)) {
@@ -993,6 +1153,9 @@ export interface TrailerTotals {
  * positions 38–44 credit count (7). The debit total at 5–17 must equal the
  * credit total on a payroll file (one contra for all credits), so the
  * credit field alone ties to the ledger.
+ * Zengin trailer "8" record: positions 2–7 detail-record count (6),
+ * positions 8–19 total transfer value in yen (12). JPY has no minor unit,
+ * so the parsed yen total is the file's minor-unit total directly.
  */
 export function readTrailerTotals(format: PayRunBankFileFormat, content: string): TrailerTotals {
   // Split on either terminator: the terminator is per-institution and never
@@ -1037,6 +1200,23 @@ export function readTrailerTotals(format: PayRunBankFileFormat, content: string)
     return {
       totalCents: BigInt(last.slice(30, 40)),
       count: Number(last.slice(74, 80)),
+    };
+  }
+  if (format === "zengin") {
+    // The trailer "8" record is the SECOND-TO-LAST record (the end "9"
+    // record closes the file); the detail count sits at positions 2–7
+    // (slice 1–7) and the yen total at positions 8–19 (slice 7–19).
+    const last = records[records.length - 1];
+    const trailer8 = records[records.length - 2];
+    if (!last || last[0] !== "9" || last.length !== 120) {
+      throw new PayrollError("generated Zengin file has no readable end record");
+    }
+    if (!trailer8 || trailer8[0] !== "8" || trailer8.length !== 120) {
+      throw new PayrollError("generated Zengin file has no readable trailer record");
+    }
+    return {
+      totalCents: BigInt(trailer8.slice(7, 19)),
+      count: Number(trailer8.slice(1, 7)),
     };
   }
   if (format === "bacs") {
@@ -1162,6 +1342,13 @@ export interface PayRunBankFileResult {
   excludedTotal: string;
   /** Totals parsed back out of the produced characters. */
   trailer: TrailerTotals;
+  /**
+   * The exact bytes to store and hand to the bank, when the bank's encoding
+   * is not UTF-8. Zengin files are Shift_JIS (`encodeZenginFile` over the
+   * logical content); every other rail stores the UTF-8 bytes of `content`
+   * and leaves this null.
+   */
+  contentBytes: Buffer | null;
 }
 
 /** Local date (YYYY-MM-DD) → Date at local midnight, matching the AP writers. */
@@ -1238,21 +1425,27 @@ export function renderPayRunBankFile(
           ? buildCemtexPayroll(input, credits)
           : format === "bacs"
             ? buildBacsPayroll(input, credits)
-            : buildNachaPayroll(input, credits),
+            : format === "zengin"
+              ? buildZenginPayroll(input, credits)
+              : buildNachaPayroll(input, credits),
     input.originator.lineEnding,
     // Mixed widths (80-char labels, 100-char data) are asserted per record
     // by the Bacs builder itself; applyLineEnding only applies the
-    // terminator for that rail.
-    format === "cpa005" ? 1464 : format === "nacha" ? 94 : format === "cemtex" ? 120 : null,
+    // terminator for that rail. Zengin is 120; CNAB 240 is 240.
+    format === "cpa005" ? 1464 : format === "nacha" ? 94 : format === "cemtex" || format === "zengin" ? 120 : null,
   );
 
   // Everything below is read back out of the produced characters.
   const trailer = readTrailerTotals(format, content);
-  const expectedCents = toUnits(population.total) / 100n;
-  if (trailer.totalCents !== expectedCents) {
+  // JPY has no minor unit: the Zengin trailer carries whole yen, so the
+  // ledger total scales by 10,000 (numeric(19,4) units), not by 100.
+  const expectedMinor =
+    format === "zengin" ? toUnits(population.total) / 10000n : toUnits(population.total) / 100n;
+  const unitWord = format === "zengin" ? "yen" : "cents";
+  if (trailer.totalCents !== expectedMinor) {
     throw new PayrollError(
-      `payroll bank file trailer total ${trailer.totalCents} cents does not equal the run's EFT net pay ` +
-        `${formatMoney(population.total, 2)} (${expectedCents} cents)`,
+      `payroll bank file trailer total ${trailer.totalCents} ${unitWord} does not equal the run's EFT net pay ` +
+        `${formatMoney(population.total, 2)} (${expectedMinor} ${unitWord})`,
     );
   }
   if (trailer.count !== credits.length) {
@@ -1272,6 +1465,7 @@ export function renderPayRunBankFile(
     excludedCheque: population.excludedCheque,
     excludedTotal: population.excludedTotal,
     trailer,
+    contentBytes: format === "zengin" ? encodeZenginFile(content) : null,
   };
 }
 
@@ -1440,6 +1634,61 @@ function buildBacsPayroll(
     creationDate: input.createdAt,
     volSerial: input.bacsVolSerial,
     fileNumber: input.bacsFileNumber,
+    payments,
+  });
+}
+
+/**
+ * Render payroll credits through the SHARED AP Zengin builder
+ * (`buildZenginFile`, engine/src/payments/rail-formatters.ts) — the same
+ * function, the same bank/branch shape gates, the same 120-byte records.
+ * Payroll only maps its own population onto the builder's generic payment
+ * rows; there is no second Zengin implementation here.
+ *
+ * JPY has no minor unit: a net pay with a fractional yen is refused here —
+ * the generic render gate above only polices sub-cent fractions, which a
+ * whole-cent fractional yen (e.g. 100.50) passes. Rounding would change what
+ * the employee is owed.
+ */
+function buildZenginPayroll(
+  input: PayRunBankFileBuildInput,
+  credits: PayRunBankFileCredit[],
+): string {
+  const settings = input.originator.zengin;
+  if (!settings) throw new PayrollError("Zengin originator configuration is missing");
+  const payments: ZenginPayment[] = credits.map((credit) => {
+    if (!credit.bankCode || !credit.branchCode || !credit.depositType || !credit.payeeKana) {
+      throw new PayrollError(
+        `payroll bank file refuses ${credit.employeeName}: no validated Zengin coordinates were resolved for this credit`,
+      );
+    }
+    const units = toUnits(credit.amount);
+    if (units % 10000n !== 0n) {
+      throw new PayrollError(
+        `payroll bank file refuses ${credit.employeeName}: net pay ${credit.amount} is not a whole ` +
+          "number of yen and a Zengin file cannot express a fraction of one",
+      );
+    }
+    return {
+      // Yen via money.ts bigint units — never a float division.
+      amountYen: units / 10000n,
+      bankCode: credit.bankCode,
+      branchCode: credit.branchCode,
+      depositType: credit.depositType,
+      accountNumber: credit.accountNumber,
+      // Already half-width katakana from `resolveZenginCreditor`; the
+      // builder re-maps idempotently and refuses defensively.
+      payeeName: credit.payeeKana,
+      // 社員番号 (10 chars) — what the employer reconciles the bank
+      // reporting by. Mirrors the CPA-005 cross-reference.
+      employeeNumber: credit.employeeNumber,
+    };
+  });
+  return buildZenginFile({
+    settings,
+    // The transfer date: the day the salary must move — the run's pay date,
+    // the same date the other rails settle on (emitted as MMDD).
+    transferDate: localDate(input.fundsDate),
     payments,
   });
 }
