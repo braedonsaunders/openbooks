@@ -646,10 +646,6 @@
       "hrm_positions": {
         "label": "职位",
         "description": "报表日期每个已设立职位一行：编码、标题、状态、部门、雇主以及计划 FTE、已拨款 FTE 和已填补 FTE。需要人力资源职位权限。"
-      },
-      "hrm_processes": {
-        "label": "流程清单",
-        "description": "每个流程清单步骤一行 — 流程类型与状态、员工、模板、步骤负责人、到期日、凭证类型，以及步骤状态及其凭证。需要 HRM 流程权限。"
       }
     },
     "columns": {
@@ -1228,23 +1224,6 @@
         "filled_fte": "已填补 FTE",
         "vacant_fte": "空缺 FTE",
         "position_id": "职位（ID）"
-      },
-      "hrm_processes": {
-        "process_kind": "流程类型",
-        "process_status": "流程状态",
-        "effective_date": "生效日期",
-        "employee": "员工",
-        "employer": "雇主",
-        "template": "模板",
-        "step": "步骤",
-        "step_status": "步骤状态",
-        "owner": "负责人",
-        "due_on": "到期日",
-        "evidence": "凭证",
-        "done_at": "完成时间",
-        "skip_reason": "跳过原因",
-        "process_id": "流程（ID）",
-        "employment_id": "雇用（ID）"
       }
     },
     "enumValues": {

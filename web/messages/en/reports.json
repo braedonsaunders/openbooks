@@ -646,10 +646,6 @@
       "hrm_positions": {
         "label": "Positions",
         "description": "One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission."
-      },
-      "hrm_processes": {
-        "label": "Process checklists",
-        "description": "One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission."
       }
     },
     "columns": {
@@ -1228,23 +1224,6 @@
         "filled_fte": "Filled FTE",
         "vacant_fte": "Vacant FTE",
         "position_id": "Position (id)"
-      },
-      "hrm_processes": {
-        "process_kind": "Process kind",
-        "process_status": "Process status",
-        "effective_date": "Effective date",
-        "employee": "Employee",
-        "employer": "Employer",
-        "template": "Template",
-        "step": "Step",
-        "step_status": "Step status",
-        "owner": "Owner",
-        "due_on": "Due on",
-        "evidence": "Evidence",
-        "done_at": "Done at",
-        "skip_reason": "Skip reason",
-        "process_id": "Process (id)",
-        "employment_id": "Employment (id)"
       }
     },
     "enumValues": {

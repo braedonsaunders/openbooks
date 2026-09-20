@@ -7,8 +7,7 @@
       "changeRequests": "变更申请",
       "departments": "部门",
       "reports": "报表",
-      "positions": "职位",
-      "processes": "流程"
+      "positions": "职位"
     },
     "vitals": {
       "headcount": "人员数量",
@@ -46,14 +45,6 @@
       "unassignedDepartment": "无部门",
       "empty": "截至 {date} 没有已设立的职位。",
       "total": "合计"
-    },
-    "onboarding": {
-      "title": "入职",
-      "openLabel": "进行中的清单",
-      "overdueLabel": "逾期",
-      "upcomingLabel": "即将到期",
-      "empty": "暂无进行中的清单。",
-      "viewAll": "查看所有流程"
     }
   },
   "overview": {
@@ -322,67 +313,6 @@
       "warnings": "警告",
       "refusal": "需要注意",
       "missing": "此职位不再可见。"
-    }
-  },
-  "processes": {
-    "title": "流程清单",
-    "description": "包含负责人、到期日和凭证的入职、离职和调动清单。",
-    "listTitle": "清单",
-    "listFailed": "无法加载流程。",
-    "detailTitle": "清单",
-    "detailFailed": "无法加载清单。",
-    "actionFailed": "无法完成操作。",
-    "loading": "加载中…",
-    "empty": "此分组中暂无清单。",
-    "overdueBadge": "逾期 {count} 项",
-    "progressLine": "必需步骤 {required} 项中已完成 {done} 项 · 生效日期 {effective}",
-    "dueOn": "到期 {date}",
-    "required": "必需",
-    "completeStep": "完成步骤",
-    "skipStep": "跳过步骤",
-    "completeProcess": "完成清单",
-    "cancelProcess": "取消清单",
-    "attachmentLabel": "凭证文件",
-    "attachmentUnset": "输入以搜索文件",
-    "skipReasonLabel": "跳过原因",
-    "skipReasonPlaceholder": "跳过此步骤的原因",
-    "cancelReasonLabel": "取消原因",
-    "cancelReasonPlaceholder": "取消此清单的原因",
-    "confirmReason": "确认",
-    "cancelReasonAbort": "返回",
-    "segments": {
-      "open": "进行中",
-      "overdue": "逾期",
-      "completed": "已完成",
-      "cancelled": "已取消"
-    },
-    "columns": {
-      "employee": "员工",
-      "kind": "类型",
-      "effective": "生效日期",
-      "progress": "进度",
-      "nextDue": "下个到期日"
-    },
-    "kinds": {
-      "onboarding": "入职",
-      "offboarding": "离职",
-      "transfer": "调动"
-    },
-    "owners": {
-      "manager": "经理",
-      "hr": "人力资源",
-      "employee": "员工",
-      "named_party": "指定人员"
-    },
-    "evidence": {
-      "none": "无",
-      "acknowledgement": "确认",
-      "attachment": "附件"
-    },
-    "stepStatus": {
-      "pending": "待处理",
-      "done": "已完成",
-      "skipped": "已跳过"
     }
   }
 }

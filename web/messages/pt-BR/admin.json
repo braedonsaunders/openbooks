@@ -964,9 +964,7 @@
     "compliance_manage": "Registrar certificados, isenções e declarações",
     "compliance_verify": "Verificar certificados",
     "compliance_waive": "Conceder exceções de conformidade",
-    "compliance_file": "Finalizar e entregar declarações informativas",
-    "hrm_process_read": "Ver listas de processos",
-    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos"
+    "compliance_file": "Finalizar e entregar declarações informativas"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2670,17 +2668,7 @@
       "dateBasis": "Base de data",
       "unitsTotal": "Unidades totais",
       "network": "Bandeira",
-      "lastFour": "Últimos quatro",
-      "templateId": "Modelo",
-      "position": "Posição",
-      "title": "Título",
-      "ownerKind": "Responsável",
-      "ownerPartyId": "Parte responsável",
-      "dueOffsetDays": "Deslocamento (dias)",
-      "required": "Obrigatório",
-      "evidenceKind": "Evidência",
-      "appliesEmployerSubsidiaryId": "Subsidiária aplicável",
-      "appliesDepartmentId": "Departamento aplicável"
+      "lastFour": "Últimos quatro"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2732,9 +2720,7 @@
       "holidayObservance": "Feriados legais mantêm a data e a lei dá um dia de folga substituto. Escolha um deslocamento só para feriado da empresa que você realmente move.",
       "equipmentUnitId": "Pague sobre uma máquina nomeada apenas. Deixe vazio e use o item de cobrança para cobrir uma classe inteira de equipamentos com uma regra.",
       "itemId": "Pague sobre cada unidade que cobra por este item de catálogo — \"todas as escavadeiras\" como uma regra em vez de uma por máquina.",
-      "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados.",
-      "hrmProcessAppliesSubsidiary": "Vazio: o modelo se aplica a todas as subsidiárias.",
-      "hrmProcessAppliesDepartment": "Vazio: o modelo se aplica a todos os departamentos."
+      "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados."
     },
     "options": {
       "payFrequency": {
@@ -3071,22 +3057,6 @@
         "none": "Mantém a data",
         "nextMonday": "Passa p/ o próximo dia útil",
         "nearestWeekday": "Passa p/ o dia útil mais próximo"
-      },
-      "hrmProcessKind": {
-        "onboarding": "Integração",
-        "offboarding": "Desligamento",
-        "transfer": "Transferência"
-      },
-      "hrmStepOwner": {
-        "manager": "Gestor",
-        "hr": "RH",
-        "employee": "Colaborador",
-        "namedParty": "Pessoa designada"
-      },
-      "hrmStepEvidence": {
-        "none": "Nenhuma",
-        "acknowledgement": "Ciência",
-        "attachment": "Anexo"
       }
     },
     "payroll": {

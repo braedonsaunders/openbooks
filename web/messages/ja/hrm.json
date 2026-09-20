@@ -7,8 +7,7 @@
       "changeRequests": "変更申請",
       "departments": "部門",
       "reports": "レポート",
-      "positions": "ポジション",
-      "processes": "プロセス"
+      "positions": "ポジション"
     },
     "vitals": {
       "headcount": "人員数",
@@ -46,14 +45,6 @@
       "unassignedDepartment": "部門なし",
       "empty": "{date} 時点で設定済みのポジションはありません。",
       "total": "合計"
-    },
-    "onboarding": {
-      "title": "オンボーディング",
-      "openLabel": "未完了のチェックリスト",
-      "overdueLabel": "期限切れ",
-      "upcomingLabel": "期限間近",
-      "empty": "未完了のチェックリストはありません。",
-      "viewAll": "すべてのプロセスを表示"
     }
   },
   "overview": {
@@ -322,67 +313,6 @@
       "warnings": "警告",
       "refusal": "要対応",
       "missing": "このポジションは表示できなくなりました。"
-    }
-  },
-  "processes": {
-    "title": "プロセスチェックリスト",
-    "description": "担当者、期限、証跡付きのオンボーディング、オフボーディング、異動チェックリスト。",
-    "listTitle": "チェックリスト",
-    "listFailed": "プロセスを読み込めませんでした。",
-    "detailTitle": "チェックリスト",
-    "detailFailed": "チェックリストを読み込めませんでした。",
-    "actionFailed": "操作を完了できませんでした。",
-    "loading": "読み込み中…",
-    "empty": "このセグメントにチェックリストはありません。",
-    "overdueBadge": "期限切れ {count}件",
-    "progressLine": "必須 {required} 件中 {done} 件完了 · 発効日 {effective}",
-    "dueOn": "期限 {date}",
-    "required": "必須",
-    "completeStep": "手順を完了",
-    "skipStep": "手順をスキップ",
-    "completeProcess": "チェックリストを完了",
-    "cancelProcess": "チェックリストをキャンセル",
-    "attachmentLabel": "証跡ファイル",
-    "attachmentUnset": "検索語を入力",
-    "skipReasonLabel": "スキップ理由",
-    "skipReasonPlaceholder": "この手順をスキップする理由",
-    "cancelReasonLabel": "キャンセル理由",
-    "cancelReasonPlaceholder": "このチェックリストをキャンセルする理由",
-    "confirmReason": "確定",
-    "cancelReasonAbort": "戻る",
-    "segments": {
-      "open": "未完了",
-      "overdue": "期限切れ",
-      "completed": "完了済み",
-      "cancelled": "キャンセル済み"
-    },
-    "columns": {
-      "employee": "従業員",
-      "kind": "種類",
-      "effective": "発効日",
-      "progress": "進捗",
-      "nextDue": "次の期限"
-    },
-    "kinds": {
-      "onboarding": "オンボーディング",
-      "offboarding": "オフボーディング",
-      "transfer": "異動"
-    },
-    "owners": {
-      "manager": "マネージャー",
-      "hr": "人事",
-      "employee": "従業員",
-      "named_party": "指定者"
-    },
-    "evidence": {
-      "none": "なし",
-      "acknowledgement": "確認",
-      "attachment": "添付ファイル"
-    },
-    "stepStatus": {
-      "pending": "未完了",
-      "done": "完了",
-      "skipped": "スキップ済み"
     }
   }
 }

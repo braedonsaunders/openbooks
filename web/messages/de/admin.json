@@ -964,9 +964,7 @@
     "compliance_waive": "Compliance-Ausnahmen gewähren",
     "payroll_manage": "Lohnabrechnung und Mitarbeiterprofile konfigurieren",
     "payroll_read": "Lohnläufe und Abrechnungen anzeigen",
-    "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben",
-    "hrm_process_read": "Prozess-Checklisten anzeigen",
-    "hrm_process_manage": "Prozess-Checklisten eröffnen, abschließen und abbrechen"
+    "payroll_run": "Lohnläufe erstellen, berechnen und festschreiben"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2738,17 +2736,7 @@
       "dateBasis": "Datumsbasis",
       "unitsTotal": "Gesamteinheiten",
       "network": "Netzwerk",
-      "lastFour": "Letzte vier",
-      "templateId": "Vorlage",
-      "position": "Reihenfolge",
-      "title": "Titel",
-      "ownerKind": "Verantwortlich",
-      "ownerPartyId": "Verantwortliche Partei",
-      "dueOffsetDays": "Fälligkeitsversatz (Tage)",
-      "required": "Erforderlich",
-      "evidenceKind": "Nachweis",
-      "appliesEmployerSubsidiaryId": "Gilt für Tochtergesellschaft",
-      "appliesDepartmentId": "Gilt für Abteilung"
+      "lastFour": "Letzte vier"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2800,9 +2788,7 @@
       "protectionPriority": "Welche Reihenfolge gewinnt, wenn mehrere geschützte Abzüge um denselben Lohn konkurrieren. Niedrigste zuerst; Unterhaltstitel haben normalerweise Vorrang vor gewöhnlichen Gläubigern.",
       "requiresExpiry": "Ein für Versicherungen; aus für ein W-9, das nicht abläuft.",
       "requiresVerification": "Wer ein Zertifikat erfasst, darf niemals derjenige sein, der es verifiziert.",
-      "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft.",
-      "hrmProcessAppliesSubsidiary": "Leer bedeutet: Die Vorlage gilt für alle Tochtergesellschaften.",
-      "hrmProcessAppliesDepartment": "Leer bedeutet: Die Vorlage gilt für alle Abteilungen."
+      "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft."
     },
     "options": {
       "timeClassification": {
@@ -3139,22 +3125,6 @@
         "accelerated2": "Beschleunigt – Schwelle 2",
         "quarterly": "Quartalsweise",
         "regular": "Regulär (monatlich)"
-      },
-      "hrmProcessKind": {
-        "onboarding": "Einarbeitung",
-        "offboarding": "Austritt",
-        "transfer": "Versetzung"
-      },
-      "hrmStepOwner": {
-        "manager": "Vorgesetzte(r)",
-        "hr": "Personal",
-        "employee": "Mitarbeiter",
-        "namedParty": "Benannte Person"
-      },
-      "hrmStepEvidence": {
-        "none": "Keine",
-        "acknowledgement": "Bestätigung",
-        "attachment": "Anhang"
       }
     },
     "bankFeeds": {

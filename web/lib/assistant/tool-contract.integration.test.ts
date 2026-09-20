@@ -101,7 +101,6 @@ const READER_PERMS = [
   // The headcount plan (0192) has its own read grant; the harness reader
   // holds every read grant so every read tool runs rather than refusing.
   "hrm.position.read",
-  "hrm.process.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

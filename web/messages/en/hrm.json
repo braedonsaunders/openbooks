@@ -7,8 +7,7 @@
       "changeRequests": "Change requests",
       "departments": "Departments",
       "reports": "Reports",
-      "positions": "Positions",
-      "processes": "Processes"
+      "positions": "Positions"
     },
     "vitals": {
       "headcount": "Headcount",
@@ -46,14 +45,6 @@
       "unassignedDepartment": "No department",
       "empty": "No positions are established as of {date}.",
       "total": "Total"
-    },
-    "onboarding": {
-      "title": "Onboarding",
-      "openLabel": "Open checklists",
-      "overdueLabel": "Overdue",
-      "upcomingLabel": "Due soon",
-      "empty": "No open checklists.",
-      "viewAll": "View all processes"
     }
   },
   "overview": {
@@ -323,67 +314,6 @@
       "warnings": "Warnings",
       "refusal": "Needs attention",
       "missing": "This position is no longer visible."
-    }
-  },
-  "processes": {
-    "title": "Process checklists",
-    "description": "Onboarding, offboarding, and transfer checklists with owners, due dates, and evidence.",
-    "listTitle": "Checklists",
-    "listFailed": "Processes could not be loaded.",
-    "detailTitle": "Checklist",
-    "detailFailed": "Checklist could not be loaded.",
-    "actionFailed": "Action could not be completed.",
-    "loading": "Loading…",
-    "empty": "No checklists in this segment.",
-    "overdueBadge": "{count} overdue",
-    "progressLine": "{done} of {required} required steps · effective {effective}",
-    "dueOn": "Due {date}",
-    "required": "Required",
-    "completeStep": "Complete step",
-    "skipStep": "Skip step",
-    "completeProcess": "Complete checklist",
-    "cancelProcess": "Cancel checklist",
-    "attachmentLabel": "Evidence file",
-    "attachmentUnset": "Type to search files",
-    "skipReasonLabel": "Skip reason",
-    "skipReasonPlaceholder": "Why is this step skipped?",
-    "cancelReasonLabel": "Cancellation reason",
-    "cancelReasonPlaceholder": "Why is this checklist cancelled?",
-    "confirmReason": "Confirm",
-    "cancelReasonAbort": "Back",
-    "segments": {
-      "open": "Open",
-      "overdue": "Overdue",
-      "completed": "Completed",
-      "cancelled": "Cancelled"
-    },
-    "columns": {
-      "employee": "Employee",
-      "kind": "Kind",
-      "effective": "Effective",
-      "progress": "Progress",
-      "nextDue": "Next due"
-    },
-    "kinds": {
-      "onboarding": "Onboarding",
-      "offboarding": "Offboarding",
-      "transfer": "Transfer"
-    },
-    "owners": {
-      "manager": "Manager",
-      "hr": "HR",
-      "employee": "Employee",
-      "named_party": "Named person"
-    },
-    "evidence": {
-      "none": "None",
-      "acknowledgement": "Acknowledgement",
-      "attachment": "Attachment"
-    },
-    "stepStatus": {
-      "pending": "Pending",
-      "done": "Done",
-      "skipped": "Skipped"
     }
   }
 }
