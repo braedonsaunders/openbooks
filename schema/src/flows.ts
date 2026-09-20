@@ -164,7 +164,15 @@ export const flowRunEffects = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("flow_run_effects_run_effect").on(t.runId, t.effectKey)],
+  (t) => [
+    uniqueIndex("flow_run_effects_run_effect").on(t.runId, t.effectKey),
+    // Tenant pair required by 0216: an effect may only name a run of its own org.
+    foreignKey({
+      name: "flow_run_effects_run_id_fkey",
+      columns: [t.orgId, t.runId],
+      foreignColumns: [flowRuns.orgId, flowRuns.id],
+    }).onDelete("cascade"),
+  ],
 );
 
 /**
@@ -379,7 +387,7 @@ schema/migrations/referential-integrity.sql):
   flow_runs.org_id              → orgs.id (on delete cascade)
   flow_runs.(org_id, flow_id)   → flows(org_id, id) (on delete cascade; 0213)
   flow_run_effects.org_id       → orgs.id (on delete cascade)
-  flow_run_effects.run_id       → flow_runs.id (on delete cascade)
+  flow_run_effects.(org_id, run_id) → flow_runs(org_id, id) (on delete cascade; 0216)
   flow_gates.org_id             → orgs.id (on delete cascade)
   flow_gates.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0214)
   flow_gates.(org_id, run_id)   → flow_runs(org_id, id) (on delete cascade; 0214)
