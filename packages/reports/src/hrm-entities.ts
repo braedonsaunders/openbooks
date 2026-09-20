@@ -1,20 +1,18 @@
 import { REPORT_AS_OF } from './report-as-of'
 import type { ReportEntity } from './entities'
 
-// Workforce reports over the HRM employment foundation (0184), the
-// employment change-request ledger (0185), and the leave absence record
-// (0194).
+// Workforce reports over the HRM employment foundation (0184) and the
+// employment change-request ledger (0185).
 //
-// The four entities below are the report-catalog face of the engine HRM
-// read path (engine/src/hrm/employment-read.ts, leave-read.ts, temporal.ts,
+// The three entities below are the report-catalog face of the engine HRM
+// read path (engine/src/hrm/employment-read.ts, temporal.ts,
 // authorization.ts), which they never call and never re-implement: the
 // catalog carries the same temporal predicates as SQL so the shared
 // executor, the builder, saved views and the insights card studio all read
 // governed employment state through one list. Permission and the Features
 // switch ride on the catalog fields every run path already enforces
-// (web/lib/report-authz.ts): the slice permission refuses with 403 and a
-// switched-off `hrm` feature 404s — a refusal, never empty rows. The leave
-// entity carries TIME only; payroll VALUE lives in payroll's own entities.
+// (web/lib/report-authz.ts): `hrm.employment.read` refuses with 403 and a
+// switched-off `hrm` feature 404s — a refusal, never empty rows.
 //
 // Temporal contract (mirrors temporal.ts containsDate and the
 // assembleEmploymentAsOf resolution the headcount service applies in JS):
@@ -48,13 +46,13 @@ const HRM_REQUEST_STATUSES = [
 ] as const
 const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
 
+const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
+
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination'] as const
-const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -317,6 +315,8 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'p.employment_id' },
     ],
     defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  {
     key: 'hrm_leave_absences',
     label: 'Leave absences',
     category: 'hrm',

@@ -125,6 +125,11 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     // process gate, not the employment one, so it carries its own keys.
     "hrm.process.read",
     "hrm.process.manage",
+    // 0194 HRM leave and attendance: post-snapshot like the rest of HRM.
+    "hrm.leave.read",
+    "hrm.leave.request",
+    "hrm.leave.approve",
+    "hrm.leave.manage",
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
