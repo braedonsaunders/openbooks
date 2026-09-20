@@ -395,7 +395,10 @@ test('two personal isDefaults are refused rather than resolved to a view', async
     () => resolve({ viewRows: [orgDefault, first, second] }, 'org-case-16'),
     (error: unknown) => {
       assert.ok(error instanceof AmbiguousListViewDefaultError)
-      assert.match(error.message, /Clear the extra default/)
+      assert.equal(
+        error.message,
+        'More than one default view is stored for this scope. Clear the extra default and save again.',
+      )
       return true
     },
   )

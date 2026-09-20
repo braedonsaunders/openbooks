@@ -8,6 +8,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import {
+  AmbiguousListViewDefaultError,
   resolveFormLayout,
   resolveListView,
 } from '../../../lib/customization/resolve'
@@ -68,6 +69,9 @@ export interface PropertyManagementData {
   }
   fixedAssetsEnabled: boolean
   multiCurrency: boolean
+  /** Named overlapping-default refusal; empty-state renders this, never a digest. */
+  listViewRefusal: string | null
+  hasContent: boolean
 }
 
 export async function loadPropertyManagement(
@@ -88,7 +92,7 @@ export async function loadPropertyManagement(
       ? sql``
       : sql`and d.subsidiary_id = any(${`{${allowed.join(',')}}`}::uuid[])`
   const fieldDefs = await loadFieldDefs('managed_properties')
-  const [resolvedForm, resolvedView, fixedAssetsEnabled, multiCurrency] = await Promise.all([
+  const [resolvedForm, resolvedViewResult, fixedAssetsEnabled, multiCurrency] = await Promise.all([
     resolveFormLayout({
       orgId,
       userId: authz.user.id,
@@ -104,10 +108,55 @@ export async function loadPropertyManagement(
       recordType: 'property',
       viewId: pickString(sp.view),
       showInListDefs: fieldDefs.filter((def) => def.config.showInList),
-    }),
+    }).then(
+      (view) => ({ ok: true as const, view }),
+      (error: unknown) => {
+        // Next.js error.tsx sanitizes thrown messages to a digest. Carry the
+        // named remedy as loader data so the spec can render it in-page.
+        if (error instanceof AmbiguousListViewDefaultError) return { ok: false as const, error }
+        throw error
+      },
+    ),
     isFeatureEnabled(orgId, 'fixedAssets'),
     isFeatureEnabled(orgId, 'multiCurrency'),
   ])
+  if (!resolvedViewResult.ok) {
+    const t = await getTranslations('entities.propertyManagement.workspace')
+    return {
+      title: t('title'),
+      description: resolvedViewResult.error.message,
+      listViewRefusal: resolvedViewResult.error.message,
+      hasContent: false,
+      customization: {
+        layout: resolvedForm.layout,
+        forms: resolvedForm.available.map(({ id, name }) => ({ id, name })),
+        currentFormId: resolvedForm.row?.id ?? null,
+        fieldDefs: fieldDefs as unknown as CustomFieldDefClient[],
+        listView: null,
+      },
+      options: {
+        subsidiaries: [],
+        locations: [],
+        tenants: [],
+        incomeAccounts: [],
+        expenseAccounts: [],
+        liabilityAccounts: [],
+        bankAccounts: [],
+        assets: [],
+        openInvoices: [],
+      },
+      permissions: {
+        manage: can(authz, 'ar.create'),
+        bill: can(authz, 'ar.create'),
+        account: can(authz, 'gl.post'),
+        bulk: authz.allowedSubsidiaryIds === null,
+        customize: can(authz, 'admin.customization.manage'),
+      },
+      fixedAssetsEnabled,
+      multiCurrency,
+    }
+  }
+  const resolvedView = resolvedViewResult.view
   const [
     subsidiaries,
     locations,
@@ -182,6 +231,8 @@ export async function loadPropertyManagement(
     },
     fixedAssetsEnabled,
     multiCurrency,
+    listViewRefusal: null,
+    hasContent: true,
   }
 }
 
@@ -198,18 +249,32 @@ export function propertyManagementSpec(data: PropertyManagementData): PageSpec {
       }),
     ],
     body: [
+      // A computed overlapping-default refusal renders with its message
+      // intact — never a success workspace, never the generic error digest.
+      widgetBlock(
+        'empty-state',
+        {
+          title: data.title,
+          description: data.listViewRefusal,
+        },
+        f('listViewRefusal'),
+      ),
       // One client island, like the labor-costing workspace. The loader hands
       // over the customization, option pickers, permission flags and feature
       // probes it already resolved; the component keeps its own tab, drawer,
       // fetch and mutation state exactly as on the native path. No remount
       // key: the native page renders the workspace keyless.
-      widgetBlock('property-management-workspace', {
-        customization: data.customization,
-        options: data.options,
-        permissions: data.permissions,
-        fixedAssetsEnabled: data.fixedAssetsEnabled,
-        multiCurrency: data.multiCurrency,
-      }),
+      widgetBlock(
+        'property-management-workspace',
+        {
+          customization: data.customization,
+          options: data.options,
+          permissions: data.permissions,
+          fixedAssetsEnabled: data.fixedAssetsEnabled,
+          multiCurrency: data.multiCurrency,
+        },
+        f('hasContent'),
+      ),
     ],
   })
 }
