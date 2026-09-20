@@ -92,6 +92,12 @@ export const hrmEmploymentChangeRequests = pgTable(
     appliedEmploymentRevision: integer("applied_employment_revision"),
     /** Link to the canonical immutable change the approval produced. */
     appliedEmploymentChangeId: uuid("applied_employment_change_id"),
+    /** Generic HR action vocabulary (0227, hrmActionReasons). Null when the
+     *  feature is off — unclassified, never a refusal. */
+    action: text("action"),
+    /** Reason code from hrm_action_reasons; service-validated, never FK: a
+     *  renamed code must not strand submitted history. */
+    reasonCode: text("reason_code"),
     ...auditColumns,
   },
   (t) => [
