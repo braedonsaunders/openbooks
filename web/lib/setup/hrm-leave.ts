@@ -84,6 +84,9 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
   docSlug: 'leave-time-versus-value',
   columns: [
     { key: 'leaveTypeId', kind: 'ref', ref: 'leave-types' },
+    { key: 'appliesEmployerSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+    { key: 'appliesDepartmentId', kind: 'ref', ref: 'departments' },
+    { key: 'accrualKind', kind: 'badge' },
     { key: 'effectiveFrom', kind: 'date' },
     { key: 'effectiveTo', kind: 'date' },
     { key: 'minimumNoticeDays', kind: 'number' },
@@ -91,16 +94,34 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
   ],
   fields: [
     { key: 'leaveTypeId', kind: 'ref', ref: 'leave-types', required: true },
-    // Structured rules edit as JSON (parsed by the setup coercer; invalid
-    // JSON is refused, never stored). Scope pins are null for org-wide; the
-    // engine resolves overlaps by specificity. Prefer the engine leave
-    // service for validated authoring; the drawer carries the declaration.
+    // Scope, accrual and carryover edit through typed slots projected from
+    // the rule jsonb by 0194 STORED GENERATED columns (readable for prefill,
+    // never written); normalizeHrmLeavePolicyInput folds them back into
+    // applies_to, accrual_rule and carryover_rule and hrm-rule-slots.ts
+    // persists the folded objects. Empty scope slots mean the whole org.
+    { key: 'appliesEmployerSubsidiaryId', kind: 'ref', ref: 'subsidiaries', helpTextKey: 'fieldHelp.leaveAppliesSubsidiary' },
+    { key: 'appliesDepartmentId', kind: 'ref', ref: 'departments', helpTextKey: 'fieldHelp.leaveAppliesDepartment' },
     {
-      key: 'appliesTo', kind: 'json', required: true,
-      helpTextKey: 'fieldHelp.leaveAppliesTo',
+      key: 'accrualKind', kind: 'select', defaultValue: 'none', helpTextKey: 'fieldHelp.leaveAccrualKind',
+      options: [
+        { value: 'none', labelKey: 'options.leaveAccrualKind.none' },
+        { value: 'per_period', labelKey: 'options.leaveAccrualKind.per_period' },
+        { value: 'per_year', labelKey: 'options.leaveAccrualKind.per_year' },
+        { value: 'unlimited', labelKey: 'options.leaveAccrualKind.unlimited' },
+      ],
     },
-    { key: 'accrualRule', kind: 'json', required: true, helpTextKey: 'fieldHelp.leaveAccrualRule' },
-    { key: 'carryoverRule', kind: 'json', required: true, helpTextKey: 'fieldHelp.leaveCarryoverRule' },
+    { key: 'accrualHours', kind: 'text', helpTextKey: 'fieldHelp.leaveAccrualHours' },
+    { key: 'accrualPeriodsPerYear', kind: 'integer', helpTextKey: 'fieldHelp.leaveAccrualPeriodsPerYear' },
+    {
+      key: 'carryoverKind', kind: 'select', defaultValue: 'none', helpTextKey: 'fieldHelp.leaveCarryoverKind',
+      options: [
+        { value: 'none', labelKey: 'options.leaveCarryoverKind.none' },
+        { value: 'carry_all', labelKey: 'options.leaveCarryoverKind.carry_all' },
+        { value: 'carry_up_to', labelKey: 'options.leaveCarryoverKind.carry_up_to' },
+      ],
+    },
+    { key: 'carryoverHours', kind: 'text', helpTextKey: 'fieldHelp.leaveCarryoverHours' },
+    { key: 'carryoverExpiresAfterDays', kind: 'integer', helpTextKey: 'fieldHelp.leaveCarryoverExpiresAfterDays' },
     { key: 'minimumNoticeDays', kind: 'integer', keepDefault: true, defaultValue: 0 },
     { key: 'effectiveFrom', kind: 'date', required: true },
     { key: 'effectiveTo', kind: 'date' },
