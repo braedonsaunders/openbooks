@@ -723,6 +723,21 @@ export interface PayrollCountryPack {
    */
   employeeFacts: readonly PayrollEmployeeFact[];
   /**
+   * Profile-column values the pack DERIVES from facts it already collects,
+   * keyed by `employee_payroll_profiles` column — today, only the PL birth
+   * year off the PESEL (see `pl/pesel.ts`). OPTIONAL: most packs derive
+   * nothing. The profile API reads this generically: a derived value
+   * PREFILLS a blank field on save, while a supplied value that contradicts
+   * it refuses naming both — two sources that disagree are the
+   * parallel-sources-of-truth the product forbids. A derivation that cannot
+   * answer (no identifier on file, an uncited century band) yields nothing,
+   * and the declared field then stands alone.
+   */
+  deriveEmployeeFacts?: (input: {
+    /** The pack's sealed employee identifier, unsealed — or null when none. */
+    identifier: string | null;
+  }) => readonly { column: string; value: string }[];
+  /**
    * Which regions levy income tax, what sits below them, and how each one
    * treats its residents' out-of-region wages
    * (engine/src/payroll/withholding-jurisdictions.ts). REQUIRED: this is the

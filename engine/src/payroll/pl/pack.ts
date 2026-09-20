@@ -24,6 +24,7 @@ import { PL_CERTIFICATES } from "./certificates.ts";
 import { computePlStatutory, PL_FACTOR_LABELS } from "./compute-statutory.ts";
 import { plPackFilings } from "./filings.ts";
 import { PL_JURISDICTIONS } from "./jurisdictions.ts";
+import { peselBirthYear } from "./pesel.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
 import { PL_WITHHOLDING } from "./withholding.ts";
 import { PL_EMPLOYEE_FACTS } from "./employee-facts.ts";
@@ -201,4 +202,14 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   statutoryEngineLabel: "PIT/ZUS",
   factorLabels: { ...PL_FACTOR_LABELS },
   employeeFacts: PL_EMPLOYEE_FACTS,
+  // The PESEL derives the birth year it encodes (see `./pesel.ts` for the
+  // cited century rule). The profile API reads this generically: a derived
+  // year prefills a blank `pl_rok_urodzenia`, while a supplied year that
+  // contradicts it refuses naming both. No PESEL on file — or a month code
+  // outside the cited bands — derives nothing, and the declared field then
+  // stands alone (foreign workers on NIP/passport).
+  deriveEmployeeFacts: ({ identifier }) => {
+    const year = peselBirthYear(identifier);
+    return year === null ? [] : [{ column: "pl_rok_urodzenia", value: String(year) }];
+  },
 };

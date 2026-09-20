@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# empleado va} other {# empleados van}} a pagarse por depósito directo sin datos bancarios aprobados, y la alternativa de cheque está desactivada, así que no hay forma de pagarles.",
           "noOpeningBalance": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ningún saldo inicial {detail} de su sistema de nómina anterior, así que sus topes legales anuales reiniciarán en cero en este ciclo.",
           "noOpeningComponentYtd": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ningún acumulado inicial para {detail}, que tiene un límite anual — el límite reinicia en cero en este ciclo, así que pueden aportar un segundo límite anual completo.",
-          "noOpeningEntitlement": "{count, plural, one {# empleado trae} other {# empleados traen}} un saldo de su sistema de nómina anterior pero ningún saldo inicial para {detail}. Este es el primer ciclo que lo mueve, así que su banco parte de cero."
+          "noOpeningEntitlement": "{count, plural, one {# empleado trae} other {# empleados traen}} un saldo de su sistema de nómina anterior pero ningún saldo inicial para {detail}. Este es el primer ciclo que lo mueve, así que su banco parte de cero.",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "El pago de festivos no puede calcularse: {detail}",

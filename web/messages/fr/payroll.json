@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# employé est} other {# employés sont}} à payer par dépôt direct sans coordonnées bancaires approuvées, et le secours par chèque est désactivé, donc il n’y a aucun moyen de les payer.",
           "noOpeningBalance": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun solde d’ouverture {detail} de votre ancien système de paie, donc leurs plafonds légaux annuels repartiront de zéro sur cette paie.",
           "noOpeningComponentYtd": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun cumul annuel d’ouverture pour {detail}, qui a un plafond annuel — le plafond repart de zéro sur cette paie, donc ils peuvent cotiser un deuxième plafond annuel complet.",
-          "noOpeningEntitlement": "{count, plural, one {# employé reporte} other {# employés reportent}} un solde de votre ancien système de paie mais aucun solde d’ouverture pour {detail}. C’est la première paie qui le fait bouger, donc leur banque part de zéro."
+          "noOpeningEntitlement": "{count, plural, one {# employé reporte} other {# employés reportent}} un solde de votre ancien système de paie mais aucun solde d’ouverture pour {detail}. C’est la première paie qui le fait bouger, donc leur banque part de zéro.",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "L’indemnité de jour férié ne peut pas être calculée : {detail}",

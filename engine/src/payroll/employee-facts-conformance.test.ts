@@ -165,10 +165,15 @@ for (const country of FOURTEEN) {
   });
 }
 
-test("payable is derived: ten packs payable, PL/ES/JP/BR not", () => {
+test("payable is derived: all fourteen packs payable once every required fact has a producer", () => {
+  // 0191 built the seven blocking producers (plus the BR pensão column, so
+  // the deduction is enterable): every required fact in every pack now
+  // resolves, so `payable` derives true everywhere. If a future pack
+  // declares a required fact with no producer, this flips back to false
+  // for it — that is the derivation working, not this test rotting.
   const expectedPayable: Record<string, boolean> = {
     CA: true, US: true, GB: true, DE: true, FR: true, IE: true,
-    AU: true, IT: true, NL: true, ES: false, SG: true, JP: false, PL: false, BR: false,
+    AU: true, IT: true, NL: true, ES: true, SG: true, JP: true, PL: true, BR: true,
   };
   const packOf = (country: string) => {
     const pack = PAYROLL_COUNTRY_PACKS[country];
@@ -185,18 +190,26 @@ test("payable is derived: ten packs payable, PL/ES/JP/BR not", () => {
       assert.ok(problem, `${country} names why it cannot pay`);
     }
   }
-  assert.match(packPayableProblem(packOf("PL")) ?? "", /pl_rok_urodzenia/);
-  assert.match(packPayableProblem(packOf("ES")) ?? "", /es_grupo_cotizacion/);
-  assert.match(packPayableProblem(packOf("ES")) ?? "", /es_situacion_laboral/);
-  assert.match(packPayableProblem(packOf("ES")) ?? "", /es_ano_nacimiento/);
-  assert.match(packPayableProblem(packOf("JP")) ?? "", /jp_hyojun_hoshu/);
-  assert.match(packPayableProblem(packOf("JP")) ?? "", /jp_kaigo_dainigou/);
-  assert.match(packPayableProblem(packOf("BR")) ?? "", /br_dependentes/);
-  // Optional facts never block: the ES temporal flag, the BR pensão and
-  // regime vacancies change nothing about payable.
-  assert.doesNotMatch(packPayableProblem(packOf("ES")) ?? "", /es_contrato_temporal/);
-  assert.doesNotMatch(packPayableProblem(packOf("BR")) ?? "", /br_pensao_mensal/);
-  assert.doesNotMatch(packPayableProblem(packOf("BR")) ?? "", /br_regime/);
+  // The derivation still names blockers by key when they exist — and still
+  // ignores optional vacancies: prove both against a synthetic pack-shaped
+  // declaration rather than by wishing a real pack unpayable again.
+  const syntheticProblem = packPayableProblem({
+    ...packOf("PL"),
+    employeeFacts: [
+      {
+        key: "pl_rok_urodzenia", kind: "year", label: "Birth year (rok urodzenia)",
+        refusalReason: "Fixture.", required: true,
+        producer: { kind: "none", notes: "Fixture: no producer." },
+      },
+      {
+        key: "zz_optional", kind: "flag", label: "Fixture optional",
+        refusalReason: "Fixture.", required: false,
+        producer: { kind: "none", notes: "Fixture: no producer." },
+      },
+    ],
+  }) ?? "";
+  assert.match(syntheticProblem, /pl_rok_urodzenia/);
+  assert.doesNotMatch(syntheticProblem, /zz_optional/);
 });
 
 test("missingEmployeeFacts lists required-but-absent facts, never optional ones", () => {
@@ -220,16 +233,24 @@ test("missingEmployeeFacts lists required-but-absent facts, never optional ones"
   );
 });
 
-test("Brazil's prose is not a producer: empty certificate list, honest nones", () => {
-  // The exact trap the grep census fell into: both files MENTION the facts
-  // in comments, and neither DECLARES them.
-  assert.deepEqual(packCertificates("BR").certificates, []);
+test("Brazil's prose is not a producer: one explicit non-form declaration, typed producers", () => {
+  // The exact trap the grep census fell into: two files MENTION the facts
+  // in comments (`br/certificates.ts`, `br/withholding.ts`), and mentions
+  // satisfy nothing — only the typed declaration below does. Since 0191 the
+  // pack declares exactly one certificate, and it is explicitly NOT an
+  // employee-filed form: the eSocial cadastre facts made explicit, because
+  // the profile-column channel validates against the typed declarations and
+  // a column no certificate field maps is not a producer.
+  const certificates = packCertificates("BR").certificates;
+  assert.equal(certificates.length, 1, "Brazil declares exactly its cadastre facts, no invented form");
+  assert.equal(certificates[0]?.key, "br_cadastro");
+  assert.equal(certificates[0]?.storage, "profile_columns");
   const producers = (PAYROLL_COUNTRY_PACKS["BR"]?.employeeFacts ?? []).map(
     (fact) => `${fact.key}:${fact.producer.kind}`,
   );
   assert.deepEqual(producers, [
-    "br_dependentes:none",
-    "br_pensao_mensal:none",
+    "br_dependentes:profile_column",
+    "br_pensao_mensal:profile_column",
     "br_regime:none",
   ]);
 });

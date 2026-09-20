@@ -10,14 +10,18 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads four `emp[...]` keys
-  // and NO surface produces any of them — no profile column, no Modelo 145
-  // field (it carries situación familiar, hijos, ascendientes and
-  // discapacidad — not situación laboral, grupo, año or contrato), no API
-  // input, no UI. Three block every employee; the fourth (contrato
-  // temporal) accepts absence. Declared here with no producers yet, so
-  // readiness names the gap before calculation and `payable` derives false
-  // until the next shard builds the channels.
+// Required employee facts. The compute path reads four `emp[...]` keys;
+  // the three blocking ones (situación, grupo, año) are served since 0191
+  // by the profile columns the `es_datos_perceptor` certificate fields map
+  // — kept apart from the Modelo 145, whose situación familiar (art. 81
+  // RIRPF) is a FAMILY status, not the labour status SITUPER prices. The
+  // fourth (contrato temporal) accepts absence and stays unbuilt.
+  //
+  // OPEN, still: which AEAT/TGSS artefact the operator copies each value
+  // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
+  // whether the age-banded rule keys on BIRTH YEAR or on AGE AT THE PAY
+  // DATE. This channel supplies the values; it answers neither question,
+  // and both still owe a citation.
   export const ES_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     {
       key: "es_situacion_laboral",
@@ -27,14 +31,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
       refusalReason:
         "SITUPER moves gastos and REDU, so the employment situation is never defaulted.",
       required: true,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists. Modelo 145's situación familiar (art. 81 RIRPF: soltero/viudo/divorciado "
-          + "con hijos, casado, resto) is a FAMILY status, not the labour status SITUPER prices — the two "
-          + "must not be conflated. OPEN QUESTION: which AEAT artefact carries situación laboral for the "
-          + "operator (contrato, alta en Seguridad Social, otro)? AEAT citation required before building.",
-      },
+      producer: { kind: "profile_column", column: "es_situacion_laboral" },
     },
     {
       key: "es_grupo_cotizacion",
@@ -46,14 +43,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         "The contribution group selects the Seguridad Social bases and topes; an undeclared group "
         + "must not fall through to group 1 pricing.",
       required: true,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists. OPEN QUESTION: which source fixes the group for the operator — the "
-          + "contrato/convenio colectivo (the group follows the professional category) or a TGSS alta "
-          + "document? TGSS/AEAT citation required before building; the 1–11 band itself is Orden "
-          + "PJC/297/2026 art. 33.",
-      },
+      producer: { kind: "profile_column", column: "es_grupo_cotizacion" },
     },
     {
       key: "es_ano_nacimiento",
@@ -64,14 +54,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
       refusalReason:
         "The birth year feeds an age-banded rule; an unknown age must not fall through to standard pricing.",
       required: true,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists. OPEN QUESTION, shared with PL: is the age-banded rule keyed on BIRTH YEAR "
-          + "or on AGE AT THE PAY DATE? Those differ for anyone whose birthday falls inside the period. "
-          + "AEAT citation required before building. The DNI/NIE the pack already collects carries no "
-          + "birth date, so unlike PL there is no deriving identifier — this needs a declared field.",
-      },
+      producer: { kind: "profile_column", column: "es_ano_nacimiento" },
     },
     {
       key: "es_contrato_temporal",

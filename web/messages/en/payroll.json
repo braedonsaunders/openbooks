@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them.",
           "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their annual statutory ceilings will restart at zero on this run.",
           "noOpeningComponentYtd": "{count, plural, one {# employee has} other {# employees have}} no opening year-to-date for {detail}, which has an annual cap — the cap restarts at zero on this run, so they can contribute a second full annual limit.",
-          "noOpeningEntitlement": "{count, plural, one {# employee carries} other {# employees carry}} a balance from your previous payroll system but no opening balance for {detail}. This is the first pay run that moves it, so their bank starts at zero."
+          "noOpeningEntitlement": "{count, plural, one {# employee carries} other {# employees carry}} a balance from your previous payroll system but no opening balance for {detail}. This is the first pay run that moves it, so their bank starts at zero.",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "Statutory holiday pay cannot be calculated: {detail}",

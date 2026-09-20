@@ -10,13 +10,17 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads two `emp[...]` keys
-  // and NO surface produces either — no profile column, no 扶養控除等申告書
-  // field (it carries dependent counts and flags, not the 標準報酬 grade or
-  // the kaigo status), no API input, no UI. Both block every employee.
-  // Declared here with no producers yet, so readiness names the gap before
-  // calculation and `payable` derives false until the next shard builds
-  // the channels.
+// Required employee facts. The compute path reads two `emp[...]` keys,
+  // served since 0191 by the profile columns the `jp_hyojun` certificate
+  // fields map — kept apart from the 扶養控除等申告書, which carries
+  // dependent counts and flags, not the 標準報酬 grade or the kaigo status.
+  // The kaigo input stays a checkbox that fails closed toward the
+  // employee's side (no cheaper default), never an age-derived display.
+  //
+  // OPEN, still: which artefact fixes the grade for the operator — the JPS
+  // 標準報酬決定通知書 after 定時決定/随時改定, or a grade table the operator
+  // reads the monthly remuneration through. This channel carries the value;
+  // it does not answer that, and the citation is still owed.
   export const JP_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     {
       key: "jp_hyojun_hoshu",
@@ -26,15 +30,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         "Pension and health price off the 標準報酬 grade, never off raw pay; an undeclared grade "
         + "must not fall through to pricing on the month's wages.",
       required: true,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists. OPEN QUESTION: which artefact fixes the grade for the operator — the "
-          + "JPS 標準報酬決定通知書 after 定時決定/随時改定, or a grade table the operator reads the "
-          + "monthly remuneration through? JPS/NTA citation required before building; the refusal "
-          + "already names the statutory artefact (標準報酬月額), which is the best of the four packs "
-          + "and the pattern the other three should follow.",
-      },
+      producer: { kind: "profile_column", column: "jp_hyojun_hoshu" },
     },
     {
       key: "jp_kaigo_dainigou",
@@ -44,14 +40,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         "A 介護保険第2号被保険者 (40–64) owes the 介護 premium this engine does not price, and an "
         + "undeclared status must not default into health-without-介護 — the cheaper premium.",
       required: true,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists. The refusal deliberately fails closed toward the employee's side (no "
-          + "cheaper default) — keep that direction when the input is built. OPEN QUESTION: the status "
-          + "follows age 40–64 almost mechanically; whether the input is a checkbox or an age-derived "
-          + "display with an override needs the same birth-year citation PL and ES are waiting on.",
-      },
+      producer: { kind: "profile_column", column: "jp_kaigo_dainigou" },
     },
 ];
 

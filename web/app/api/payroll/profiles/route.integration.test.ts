@@ -465,4 +465,108 @@ test('profile POST holds the employee row lock across the scope check and upsert
   }
 })
 
+test('profile POST validates pack-declared employee facts against the declaration', { skip: !DB }, async () => {
+  // 0191 facts: every band and closed set comes from the pack's own
+  // certificate declaration, and every refusal names the fact's
+  // operator-facing label — never the engine key. An answer for a column
+  // the pack does not declare is refused rather than stored where no
+  // engine reads it.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    for (const [label, patch, status, message] of [
+      ['PL birth year', { country: 'PL', province: 'PL', plRokUrodzenia: 1990 }, 200, null],
+      ['PL birth year band', { country: 'PL', province: 'PL', plRokUrodzenia: 1850 }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
+      ['PL birth year unreadable', { country: 'PL', province: 'PL', plRokUrodzenia: 'sometime' }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
+      ['ES trio', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990 }, 200, null],
+      ['ES grupo band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 12, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
+      ['ES grupo zero', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 0, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
+      ['ES situacion closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'casado', esGrupoCotizacion: 3, esAnoNacimiento: 1990 }, 422, /Situación laboral \(SITUPER\) must be one of activo, pensionista, desempleado/],
+      ['ES ano band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1850 }, 422, /Año de nacimiento must be 1906–2026/],
+      ['ES grupo on a PL profile', { country: 'PL', province: 'PL', plRokUrodzenia: 1990, esGrupoCotizacion: 3 }, 422, /Grupo de cotización \(1–11\) is not declared by the PL payroll pack/],
+      ['JP grade and status', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'false' }, 200, null],
+      ['JP grade whole yen', { country: 'JP', province: '13', jpHyojunHoshu: -5, jpKaigoDainigou: 'false' }, 422, /must be a whole number at least 0/],
+      ['JP kaigo closed', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'yes' }, 422, /must be answered "true" or "false"/],
+      ['BR dependentes and pensao', { country: 'BR', province: 'BR', brDependentes: 2, brPensaoMensal: '1500.00' }, 200, null],
+      ['BR dependentes floor', { country: 'BR', province: 'BR', brDependentes: -1 }, 422, /Dependentes \(eSocial cadastro\) must be a whole number at least 0/],
+      ['BR pensao unreadable', { country: 'BR', province: 'BR', brDependentes: 0, brPensaoMensal: 'abc' }, 422, /Pensão alimentícia mensal \(court-ordered\) must be an amount — "abc" is not a number/],
+      ['BR pensao negative', { country: 'BR', province: 'BR', brDependentes: 0, brPensaoMensal: '-5' }, 422, /Pensão alimentícia mensal \(court-ordered\) cannot be negative — got -5/],
+    ] as const) {
+      const response = await post({ ...base, ...patch })
+      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
+      if (message) {
+        const error = ((await response.json()) as { error: string }).error
+        assert.match(error, message)
+        assert.doesNotMatch(error, /pl_rok_urodzenia|es_grupo_cotizacion|es_situacion_laboral|es_ano_nacimiento|jp_hyojun_hoshu|jp_kaigo_dainigou|br_dependentes|br_pensao_mensal/, `${label} names an engine key`)
+      }
+    }
+    // The last accepted save (BR dependentes 0, pensão refused) leaves the
+    // row BR with dependentes 0 — the accepted zero, not a default — and a
+    // null pensão. A separate valid BR save proves both columns persist.
+    const saved = await post({ ...base, country: 'BR', province: 'BR', brDependentes: 2, brPensaoMensal: '1500.00' })
+    assert.equal(saved.status, 200, await saved.clone().text())
+    const stored = await withOrgContext(org.orgId, () => db.execute<{ dependentes: number; pensao: string }>(sql`
+      select br_dependentes as dependentes, br_pensao_mensal::text as pensao
+        from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.deepEqual(stored.rows[0], { dependentes: 2, pensao: '1500.0000' })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('profile POST derives the PL birth year from the PESEL and refuses contradictions', { skip: !DB }, async () => {
+  // Decided, not re-decided: a declared field, the PESEL deriving and
+  // prefilling it, a contradicting saved value refusing naming both — and
+  // no PESEL (or an uncited century band) leaving the field to stand
+  // alone. The pack's example PESEL 44051401359 encodes 1944.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly', country: 'PL', province: 'PL' }
+    const storedYear = () => withOrgContext(org.orgId, () => db.execute<{ rok: number | null }>(sql`
+      select pl_rok_urodzenia as rok from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`)).then((rows) => rows.rows[0]?.rok ?? null)
+    // A bare PESEL prefills the blank field at write: 1944, derived.
+    const prefilled = await post({ ...base, sin: '44051401359' })
+    assert.equal(prefilled.status, 200, await prefilled.clone().text())
+    assert.equal(await storedYear(), 1944)
+    // The editor sees the derivation before saving: the GET hint carries
+    // the value, while the sealed PESEL itself is never echoed.
+    const hinted = (await (await get(`?employee=${employeeId}`)).json()) as {
+      profile: Record<string, unknown>; derivedProfileColumns?: Record<string, string>;
+    }
+    assert.equal(hinted.derivedProfileColumns?.['pl_rok_urodzenia'], '1944')
+    assert.equal(hinted.profile['pl_rok_urodzenia'], 1944)
+    assert.ok(!('sin' in hinted.profile), 'the sealed value is never echoed')
+    assert.ok(!('sin_encrypted' in hinted.profile), 'the ciphertext is never echoed')
+    // A contradicting year refuses naming both values and both sources.
+    const clash = await post({ ...base, sin: '44051401359', plRokUrodzenia: 1990 })
+    assert.equal(clash.status, 422, await clash.clone().text())
+    const clashError = ((await clash.json()) as { error: string }).error
+    assert.match(clashError, /Birth year \(rok urodzenia\) 1990 does not match the PESEL on file, which gives 1944/)
+    assert.equal(await storedYear(), 1944)
+    // The stored PESEL answers too: omitting the key does not drop the
+    // cross-check — the contradiction is against what the save leaves
+    // behind, not only what it carries.
+    const stale = await post({ ...base, plRokUrodzenia: 1990 })
+    assert.equal(stale.status, 422, await stale.clone().text())
+    assert.match(((await stale.json()) as { error: string }).error, /which gives 1944/)
+    assert.equal(await storedYear(), 1944)
+    // An agreeing year saves.
+    const agreed = await post({ ...base, sin: '44051401359', plRokUrodzenia: 1944 })
+    assert.equal(agreed.status, 200, await agreed.clone().text())
+    // Clearing the identifier leaves the declared field to stand alone.
+    const cleared = await post({ ...base, sin: '', plRokUrodzenia: 1990 })
+    assert.equal(cleared.status, 200, await cleared.clone().text())
+    assert.equal(await storedYear(), 1990)
+    // An uncited century band derives nothing: month 99 carries no cited
+    // century, so the field stands alone and saves unchallenged.
+    const uncited = await post({ ...base, sin: '00994101359', plRokUrodzenia: 1990 })
+    assert.equal(uncited.status, 200, await uncited.clone().text())
+    assert.equal(await storedYear(), 1990)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test.after(async () => { await pool.end() })

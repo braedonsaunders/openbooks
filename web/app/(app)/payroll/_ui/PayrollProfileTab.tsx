@@ -33,10 +33,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     countries: string[]
     packProfiles: Record<string, PackProfileDeclaration>
     storedCertificates: StoredCertificateRow[]
+    derivedColumns: Record<string, string>
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, schedules: [], filingAccounts: [],
     labourJurisdictions: {}, countries: [], packProfiles: {}, storedCertificates: [],
+    derivedColumns: {},
     defaultCountry: '',
   })
   const [version, setVersion] = useState(0)
@@ -67,6 +69,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
             countries,
             packProfiles: j.packProfiles ?? {},
             storedCertificates: Array.isArray(j.storedCertificates) ? j.storedCertificates : [],
+            derivedColumns: j.derivedProfileColumns ?? {},
             // The API derives this from the employee's own legal entity (or
             // the root subsidiary, or the org's sole installed pack) —
             // '' when nothing answers, and then the operator chooses.
@@ -143,6 +146,17 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     w4_allowances: null,
     fica_exempt: false,
     futa_exempt: false,
+    // Pack-declared employee facts (0191): a new employment answers nothing
+    // until somebody does — the generic extra-column state binds whatever
+    // the selected pack declares, so no per-country fields here.
+    pl_rok_urodzenia: null,
+    es_ano_nacimiento: null,
+    es_grupo_cotizacion: null,
+    es_situacion_laboral: null,
+    jp_hyojun_hoshu: null,
+    jp_kaigo_dainigou: null,
+    br_dependentes: null,
+    br_pensao_mensal: null,
     vacation_percent: null,
     vacation_method: 'accrue',
     filing_account_id: null,
@@ -164,6 +178,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
         countries={state.countries}
         packProfiles={state.packProfiles}
         storedCertificates={state.storedCertificates}
+        derivedColumns={state.derivedColumns}
         onClose={() => {}}
         onSaved={() => setVersion((v) => v + 1)}
       />

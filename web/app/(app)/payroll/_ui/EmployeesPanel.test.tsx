@@ -49,10 +49,14 @@ test('profile editor names no country in code', () => {
   assert.doesNotMatch(code, /country\.US\b/)
 })
 
-// The renderer binds declared columns through its binding maps. A pack that
-// declares a column nobody binds would render nothing and save null —
-// silently dropping the operator's answer — so the binding set must cover
-// every column every pack declares, and the build (this test) refuses the gap.
+// The renderer binds declared columns through its binding maps plus a
+// generic extra-column path. A pack that declares a column nobody binds
+// would render nothing and save null — silently dropping the operator's
+// answer — so every column every pack declares must resolve through one of
+// the two, and the build (this test) refuses the gap. The generic path is
+// proved live by the unknown-column render test below; this test pins that
+// the real packs' columns each have a binding and that the generic path
+// still exists (its removal would orphan every future pack's first fact).
 test('profile editor binds every column the packs declare', () => {
   const columns = new Set<string>()
   for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
@@ -66,10 +70,18 @@ test('profile editor binds every column the packs declare', () => {
     for (const flag of pack.profileExemptionFlags ?? []) columns.add(flag.column)
   }
   assert.ok(columns.size > 0, 'expected the packs to declare profile columns')
+  // The generic extra-column path: comments were stripped above, so these
+  // markers prove the mechanism is code, not prose.
+  assert.match(code, /extraColumns\[column\]/, 'the generic extra-column read is gone')
+  assert.match(code, /setExtraValue\(column\)/, 'the generic extra-column write is gone')
+  assert.match(code, /\.\.\.extraFactSave/, 'the generic extra-column save is gone')
   for (const column of [...columns].sort()) {
-    // Binding-map key syntax (`federal_claim_code: [...]`), not a passing
-    // mention in a comment — comments were stripped above.
-    assert.match(code, new RegExp(`(^|[^\\w])${column}\\s*:`), `no editor binding for declared column ${column}`)
+    // Binding-map key syntax (`federal_claim_code: [...]`) or the generic
+    // path (which binds by column at render time) — a passing mention in a
+    // comment is not a binding, and comments were stripped above.
+    const literal = new RegExp(`(^|[^\\w])${column}\\s*:`).test(code)
+    const generic = /extraValue\(column\)/.test(code) && /\.\.\.extraFactSave/.test(code)
+    assert.ok(literal || generic, `no editor binding for declared column ${column}`)
   }
 })
 
@@ -127,6 +139,7 @@ function render(
   packProfiles: Record<string, PackProfileDeclaration> = { XX: xxPack },
   countries: string[] = ['XX'],
   storedCertificates: StoredCertificateRow[] = [],
+  derivedColumns: Record<string, string> = {},
 ): string {
   const profileCountry = (overrides.country as string | undefined) ?? countries[0]!
   return renderToStaticMarkup(
@@ -164,6 +177,14 @@ function render(
           w4_allowances: null,
           fica_exempt: false,
           futa_exempt: false,
+          pl_rok_urodzenia: null,
+          es_ano_nacimiento: null,
+          es_grupo_cotizacion: null,
+          es_situacion_laboral: null,
+          jp_hyojun_hoshu: null,
+          jp_kaigo_dainigou: null,
+          br_dependentes: null,
+          br_pensao_mensal: null,
           vacation_percent: null,
           vacation_method: 'accrue',
           filing_account_id: null,
@@ -179,6 +200,7 @@ function render(
         countries={countries}
         packProfiles={packProfiles}
         storedCertificates={storedCertificates}
+        derivedColumns={derivedColumns}
         onClose={() => {}}
         onSaved={() => {}}
       />
@@ -362,4 +384,77 @@ test('the sealed identifier field renders the pack declaration', () => {
   assert.match(alphaHtml, /NINO-like/)
   assert.match(alphaHtml, /placeholder="QQ 12 34 56 C"/)
   assert.match(alphaHtml, /id="pp-sin"[^>]*inputmode="text"/i)
+})
+
+// A column no binding map knows: the generic extra-column path renders it
+// from the declaration alone — the proof the next pack's fact appears with
+// no UI change. Neither column below is bound in the editor source; both
+// must still render, seed from the row, and accept the derived hint.
+const zzPack: PackProfileDeclaration = {
+  countryName: 'Zetland',
+  subdivisionLabel: 'canton',
+  subdivisions: ['ZH'],
+  subdivisionNames: { ZH: 'Zurich' },
+  supportedSubdivisions: ['ZH'],
+  unsupportedReason: 'withholding for {region} is not implemented by the ZZ pack',
+  unsupportedReasons: {},
+  certificates: [
+    {
+      key: 'zz_bio',
+      form: 'ZZ-B',
+      label: 'Fixture life facts',
+      citation: 'Fixture revenue authority, Life facts (2026)',
+      storage: 'profile_columns' as const,
+      scope: { level: 'country' },
+      fields: [
+        {
+          key: 'birth_year',
+          label: 'Fixture birth year',
+          kind: 'count',
+          min: '1900',
+          max: '2026',
+          storage: { kind: 'column', column: 'zz_birth_year' },
+          required: true,
+          help: 'The fixture birth year.',
+        },
+        {
+          key: 'standing',
+          label: 'Fixture standing',
+          kind: 'flag',
+          storage: { kind: 'column', column: 'zz_standing' },
+          help: 'The fixture standing.',
+        },
+      ],
+    },
+  ],
+  exemptionFlags: [],
+  identifier: {
+    label: 'Fixture payroll number',
+    formatHelp: '6 digits',
+    example: '123456',
+    required: true,
+    neededFor: null,
+    numericEntry: true,
+  },
+}
+
+test('profile editor renders a column it has never bound', () => {
+  // The row seeds the unbound count; the derived hint answers the unbound
+  // flag — neither column appears in any binding map in the editor source.
+  const html = render(
+    { province: 'ZH', zz_birth_year: 1990 },
+    { ZZ: zzPack },
+    ['ZZ'],
+    [],
+    { zz_standing: 'true' },
+  )
+  assert.match(html, /ZZ-B · Fixture life facts/)
+  // Required count with a wide band: a typed input carrying the row value,
+  // marked required — not a codeset dropdown.
+  assert.match(html, /id="pp-zz_bio-birth_year"/)
+  assert.match(html, /Fixture birth year \*/)
+  assert.match(html, /value="1990"/)
+  // The unbound flag renders as a checkbox, checked from the derived hint.
+  assert.match(html, /id="pp-zz_bio-standing"/)
+  assert.match(html, /id="pp-zz_bio-standing"[^>]*checked/)
 })

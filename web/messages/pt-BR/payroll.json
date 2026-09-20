@@ -158,7 +158,8 @@
           "eftNoBankDetails": "{count, plural, one {# funcionário} other {# funcionários}} com depósito direto configurado, mas sem dados bancários aprovados, e com o pagamento em cheque desativado — não há como efetuar o pagamento.",
           "noOpeningBalance": "{count, plural, one {# funcionário} other {# funcionários}} sem saldo inicial de {detail} do sistema de folha anterior; os tetos anuais obrigatórios recomeçam do zero nesta folha.",
           "noOpeningComponentYtd": "{count, plural, one {# funcionário} other {# funcionários}} sem acumulado inicial de {detail}, que tem teto anual — o teto recomeça do zero nesta folha, permitindo uma segunda contribuição integral do limite anual.",
-          "noOpeningEntitlement": "{count, plural, one {# funcionário traz} other {# funcionários trazem}} saldo do sistema de folha anterior, mas sem saldo inicial de {detail}. Esta é a primeira folha que o movimenta, por isso o banco começa do zero."
+          "noOpeningEntitlement": "{count, plural, one {# funcionário traz} other {# funcionários trazem}} saldo do sistema de folha anterior, mas sem saldo inicial de {detail}. Esta é a primeira folha que o movimenta, por isso o banco começa do zero.",
+          "missingFact": "{detail}"
         },
         "holiday": {
           "undeclaredJurisdiction": "O pagamento de feriado legal não pode ser calculado: {detail}",

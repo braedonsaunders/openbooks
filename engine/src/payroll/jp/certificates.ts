@@ -17,11 +17,80 @@
  * channel). The 16歳未満扶養親族 detail lives inside the count the operator
  * copies off the filed form; the engine trusts the declared total.
  */
-import type { PayrollPackCertificates } from "../certificates.ts";
+import type {
+  PayrollCertificate,
+  PayrollPackCertificates,
+} from "../certificates.ts";
+
+/**
+ * The payer-held social-insurance facts the 月額表 engine prices: the
+ * 標準報酬月額 grade and the 介護保険第2号被保険者 status.
+ *
+ * This is NOT the 扶養控除等申告書: that declaration carries dependent
+ * counts and person-attribute flags, not the 標準報酬 grade or the kaigo
+ * status — so they are declared on a separate certificate. The grade is
+ * copied off the JPS 標準報酬決定通知書 after 定時決定/随時改定 (which
+ * artefact fixes it for the operator — the notice or a grade table — is
+ * still open, recorded on the employeeFacts notes); the kaigo status
+ * follows age 40–64 almost mechanically but is ENTERED, never derived, and
+ * fails closed toward the employee's side (no cheaper default).
+ *
+ * Column-backed (`storage: "profile_columns"`), like the TD1/W-4 mappings:
+ * the answers live on `employee_payroll_profiles.jp_*`, the profile editor
+ * renders them from this declaration, and the engine reads them off the
+ * profile row. The grade is whole yen (JPY has no minor unit) and the
+ * status is the "true"/"false" text the engine compares against — a
+ * boolean column would refuse forever (false is not "false").
+ */
+const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
+  key: "jp_hyojun",
+  // Not a numbered form: no agency form carries these facts, so the form
+  // names the declaration itself instead of inventing a code.
+  form: "標準報酬・介護",
+  label: "標準報酬月額 grade and 介護保険第2号被保険者 status (JPS notice / declared)",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "JPS 標準報酬決定通知書 after 定時決定/随時改定 (grade); 介護保険法: 第2号被保険者 "
+    + "(40–64) owes the 介護 premium this engine does not price",
+  summary:
+    "The 標準報酬月額 grade pension and health price off, and whether the employee is a "
+    + "介護保険第2号被保険者. An undeclared grade never falls through to pricing on the month's "
+    + "wages; an undeclared status never defaults into the cheaper premium.",
+  storage: "profile_columns",
+  fields: [
+    {
+      key: "hyojun_hoshu",
+      label: "標準報酬月額 (grade value, off the JPS notice)",
+      // Whole yen, entered as a count: JPY has no minor unit, and the
+      // engine reads /^\d+$/ — a decimal shape would refuse at read time.
+      kind: "count",
+      min: "0",
+      storage: { kind: "column", column: "jp_hyojun_hoshu" },
+      // Required: the engine prices no JP employee without it — but an
+      // UNANSWERED profile still saves, so readiness names the gap before
+      // calculation rather than the save refusing an incomplete setup.
+      required: true,
+      help: "The published 厚生年金 grade value in whole yen, copied off the JPS notice — "
+        + "never the month's raw pay.",
+    },
+    {
+      key: "kaigo_dainigou",
+      label: "介護保険第2号被保険者 status",
+      kind: "flag",
+      storage: { kind: "column", column: "jp_kaigo_dainigou" },
+      required: true,
+      help: "Whether the employee is a 介護保険第2号被保険者 (40–64), who owes the 介護 premium "
+        + "this engine does not price. Unanswered refuses; it never defaults into "
+        + "health-without-介護.",
+    },
+  ],
+};
 
 export const JP_CERTIFICATES: PayrollPackCertificates = {
   country: "JP",
   certificates: [
+    JP_HYOJUN_CERTIFICATE,
     {
       key: "jp_fuyo",
       // Not a numbered form: the declaration has no preprinted number, so
