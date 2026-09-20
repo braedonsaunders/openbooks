@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { NextResponse } from 'next/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { roeSourceScope } from '@openbooks/engine/src/payroll-yearend.ts'
 import {
@@ -6,7 +7,6 @@ import {
   type PayrollFilingData,
   type PayrollYearEndFiling,
 } from '@openbooks/engine/src/payroll-filing-registry.ts'
-import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -143,8 +143,12 @@ export async function guardPayrollFilingRowIds(
   rowIds: readonly string[],
   taxYear: number,
 ): Promise<Response | null> {
-  if (gate.allowedSubsidiaryIds === null) return null
-  if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
+  // Input shape first, for every caller: the filing must be declared and each
+  // row id must fit its grammar. Both are actor-independent, so they sit
+  // BEFORE the scope short-circuit — see the refusal-class note above. The
+  // tax year is not checked here: every route parses it through
+  // payrollYearRefusal (422) before calling in, and the artifact route reads
+  // it from a stored submission.
   let declared: PayrollYearEndFiling
   try {
     declared = yearEndFiling(country, filing)
@@ -152,7 +156,10 @@ export async function guardPayrollFilingRowIds(
     return notFound()
   }
   const parsed = rowIds.map((rowId) => declared.parseRowId(rowId))
-  if (parsed.some((row) => row === null)) return notFound()
+  if (parsed.some((row) => row === null)) {
+    return malformedInput(`row ids must match the ${country}/${filing} row grammar`)
+  }
+  if (gate.allowedSubsidiaryIds === null) return null
   // The FILING's declared deadline class decides which ownership proves the
   // rows — no (country, filing) pair is enumerated here: a sixth filing is
   // guarded by declaring itself. A future separation filing with different
@@ -270,9 +277,11 @@ export async function guardPayrollRoeEmployees(
   gate: Authz,
   employeeIds: readonly string[],
 ): Promise<Response | null> {
+  // Ids are shape-valid on entry: the ROE row grammar parses them above and
+  // the file route validates its pack-owned selection before calling in. A
+  // uuid check here would run only for restricted callers.
   if (gate.allowedSubsidiaryIds === null) return null
   const ids = [...new Set(employeeIds)]
-  if (ids.some(id => !isUuid(id))) return notFound()
   const employeeDenied = await guardPayrollEmployees(gate, ids)
   if (employeeDenied) return employeeDenied
   const sources = await roeSourceScope(gate.user.orgId, ids)
@@ -334,8 +343,29 @@ async function activeRoot(gate: Authz): Promise<string | null> {
   `)).rows[0]?.id ?? null
 }
 
+/**
+ * Refusal classes in this file, stated so the next reader does not "fix" them:
+ *
+ * - SCOPE refusals are a uniform 404 on purpose. A guard that answered
+ *   "exists but is not yours" differently from "does not exist" would be an
+ *   existence oracle over another subsidiary's rows. Do not convert them.
+ * - INPUT-SHAPE refusals (a malformed row id, a year outside the sanity
+ *   window, a non-uuid employee id) are NOT scope refusals and never depend on
+ *   the actor. They belong where the request parses its inputs — the route's
+ *   422 boundary — or, for pack-declared row grammars that only this file can
+ *   parse, BEFORE the actor short-circuit below. A shape check placed after
+ *   `if (gate.allowedSubsidiaryIds === null) return null` runs only for
+ *   restricted callers, so the most privileged user is the one whose malformed
+ *   input reaches the database untested (queue item 34: the result was a
+ *   database error, the wrong error class, for privileged callers).
+ */
 function notFound(): Response {
   return Response.json({ error: 'not found' }, { status: 404 })
+}
+
+/** Actor-independent: the request's inputs do not fit the declared grammar. */
+function malformedInput(message: string): Response {
+  return NextResponse.json({ error: message }, { status: 422 })
 }
 
 // Keep the shared list predicate in this module as well as the direct guards:

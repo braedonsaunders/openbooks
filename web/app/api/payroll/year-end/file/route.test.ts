@@ -23,14 +23,16 @@ const mockSources = new Map<string, string>([
   [
     'mock:subsidiary-scope',
     `
-      export async function guardPayrollRoeEmployees() { return null }
+      const state = globalThis[Symbol.for('openbooks.payroll-year-end-file-test')]
+      export async function guardPayrollRoeEmployees(_gate, ids) { state.roeCalls.push([...ids]); return null }
       export async function guardPayrollFilingData() { return null }
     `,
   ],
   [
     'mock:yearend',
     `
-      export async function orgYearEndFilings() { return [] }
+      const state = globalThis[Symbol.for('openbooks.payroll-year-end-file-test')]
+      export async function orgYearEndFilings() { return state.sections }
     `,
   ],
   [
@@ -71,6 +73,10 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
   ['@openbooks/engine/src/payroll-run.ts', 'mock:payroll-error'],
 ])
+
+type FileRouteTestState = { sections: unknown[]; roeCalls: string[][] }
+const routeState: FileRouteTestState = { sections: [], roeCalls: [] }
+;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.payroll-year-end-file-test')] = routeState
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -142,3 +148,24 @@ test('GET and POST accept the boundary years 2020 and 2100', async () => {
     assert.equal(postResponse.status, 200, `POST year ${year} was not accepted`)
   }
 })
+
+test('ROE selection: a malformed employee id is refused at the route before any scope guard runs', async () => {
+  routeState.sections = [{
+    country: 'CA', key: 'roe', label: 'ROE',
+    issue: { maxSelection: 10, commentMaxLength: 100 },
+    data: { rows: [], rowKey: 'employee' },
+  }]
+  routeState.roeCalls = []
+  // The gate mock is an UNRESTRICTED caller (allowedSubsidiaryIds: null) — the
+  // one whose malformed input used to skip every check inside the guard.
+  const malformed = await post({ filing: 'roe', employees: 'not-a-uuid:left the company' })
+  assert.equal(malformed.status, 422)
+  assert.deepEqual(await malformed.json(), { error: 'invalid employee selection' })
+  assert.deepEqual(routeState.roeCalls, [], 'the scope guard never saw the malformed id')
+
+  const id = '5a1c2b3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+  const wellFormed = await post({ filing: 'roe', employees: `${id}:left the company` })
+  assert.notEqual(wellFormed.status, 422, 'a well-formed selection passes the shape boundary')
+  assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard receives exactly the parsed ids')
+})
+
