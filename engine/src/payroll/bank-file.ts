@@ -216,7 +216,9 @@ export interface PayRunBankFileFormatSpec {
  * employees ride forma 41 / TED câmara 018 in a second lote. An employee row
  * without a shaped agência/conta/DVs, a 3-digit bank code or a check-digit-
  * valid CPF/CNPJ is a named refusal, never a silent drop and never a
- * coerced account (a coerced agência pays a stranger).
+ * coerced account (a coerced agência pays a stranger). No bank has
+ * cleared a file from this writer; CNAB 240 is a weaker evidence class
+ * than Cemtex.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
   cpa005: {
