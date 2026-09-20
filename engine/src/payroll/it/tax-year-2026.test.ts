@@ -188,4 +188,5 @@ test("refused list carries 2025's gaps plus the 2026-only substitute regimes", (
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("5%")), "c. 7 rinnovi regime refused by name");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("15%")), "c. 10–11 turni regime refused by name");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("200.000")), "sterilizzazione recorded, not branched");
+  assert.ok(IT_REFUSED_2026.some((r) => r.includes("c. 18–21")), "tourism integrativo refused by name");
 });
