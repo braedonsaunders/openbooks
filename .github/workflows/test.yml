@@ -632,8 +632,14 @@ jobs:
             suites: "close-to-reporting:close procure-to-pay:procure"
           - group: cash-and-tax
             suites: "quote-to-cash:qtc fx-and-tax:fxtax"
-          - group: bank-and-payroll
-            suites: "bank-to-books:bank payroll:payroll"
+          # Payroll is deliberately NOT here. Its browser walk is long, it is
+          # the slowest suite in the repository, and it does not need to run on
+          # every commit — it moves only when a pack or the run wizard changes.
+          # It lives in .github/workflows/payroll-e2e.yml, which is
+          # workflow_dispatch only, so it is run on demand rather than as a
+          # merge gate. Do not add a payroll suite back into this matrix.
+          - group: bank
+            suites: "bank-to-books:bank"
           - group: subscription-and-project
             suites: "subscription-to-revenue:subrev project-cost-to-cash:w1"
           - group: inventory-and-dashboard
