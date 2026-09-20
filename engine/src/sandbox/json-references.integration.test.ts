@@ -68,6 +68,72 @@ for (const tier of ["full", "masked", "as_of", "dev"] as const) {
   }));
 }
 
+test("HRM scope filters are rebased through proven sandbox counterparts and their generated projections follow", enabled, async () => fixture(async (org, _actors, child) => {
+  const department = randomUUID();
+  await db.execute(sql`insert into departments(id,org_id,name) values(${department},${org.orgId},'Field crews')`);
+  const leaveType = randomUUID();
+  await db.execute(sql`insert into hrm_leave_types(id,org_id,code,name) values(${leaveType},${org.orgId},'VAC','Vacation')`);
+  const scopedTemplate = randomUUID();
+  const openTemplate = randomUUID();
+  const policy = randomUUID();
+  // Upper-case ids on purpose: the filter is text inside jsonb and production
+  // rows may carry either casing; the counterpart lookup must not care.
+  await db.execute(sql`insert into hrm_process_templates(id,org_id,kind,name,applies_to) values
+    (${scopedTemplate},${org.orgId},'onboarding','Branch crews',jsonb_build_object('employer_subsidiary_id',${child.toUpperCase()}::text,'department_id',${department}::text)),
+    (${openTemplate},${org.orgId},'offboarding','Everyone','{}'::jsonb)`);
+  await db.execute(sql`insert into hrm_leave_policies(id,org_id,leave_type_id,applies_to,accrual_rule,effective_from) values
+    (${policy},${org.orgId},${leaveType},jsonb_build_object('employer_subsidiary_id',null,'department_id',${department.toUpperCase()}::text),'{"kind":"per_year","hours":"80"}'::jsonb,'2026-01-01')`);
+  const sandbox = await createSandbox({ productionOrgId: org.orgId, name: "HRM scope", tier: "full", masked: false });
+  const assertScopes = async () => {
+    const branch = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${sandbox.sandboxOrgId} and parent_id is not null`)).rows[0]!.id;
+    const departments = (await db.execute<{ id: string }>(sql`select id from departments where org_id=${sandbox.sandboxOrgId}`)).rows;
+    assert.equal(departments.length, 1);
+    const dept = departments[0]!.id;
+    assert.notEqual(dept, department);
+    type Scoped = { id: string; name: string; applies_to: Record<string, string | null>; applies_employer_subsidiary_id: string | null; applies_department_id: string | null };
+    const templates = (await db.execute<Scoped>(sql`
+      select id,name,applies_to,applies_employer_subsidiary_id,applies_department_id from hrm_process_templates where org_id=${sandbox.sandboxOrgId} order by name`)).rows;
+    assert.deepEqual(templates.map(row => row.name), ["Branch crews", "Everyone"]);
+    const [scoped, open] = templates as [Scoped, Scoped];
+    assert.deepEqual(scoped.applies_to, { employer_subsidiary_id: branch, department_id: dept });
+    // The STORED projections recomputed from the rebased filter, which is the
+    // whole reason the clone must never name them.
+    assert.equal(scoped.applies_employer_subsidiary_id, branch);
+    assert.equal(scoped.applies_department_id, dept);
+    assert.deepEqual(open.applies_to, {});
+    assert.equal(open.applies_department_id, null);
+    const policies = (await db.execute<Scoped & { accrual_rule: unknown }>(sql`
+      select id,applies_to,applies_employer_subsidiary_id,applies_department_id,accrual_rule from hrm_leave_policies where org_id=${sandbox.sandboxOrgId}`)).rows;
+    assert.equal(policies.length, 1);
+    assert.deepEqual(policies[0]!.applies_to, { employer_subsidiary_id: null, department_id: dept });
+    assert.equal(policies[0]!.applies_employer_subsidiary_id, null);
+    assert.equal(policies[0]!.applies_department_id, dept);
+    // Rule JSON carries no identities and copies verbatim.
+    assert.deepEqual(policies[0]!.accrual_rule, { kind: "per_year", hours: "80" });
+    const evidence = (await db.execute<{ table_name: string; row_id: string }>(sql`
+      select table_name,row_id from audit_log where org_id=${sandbox.sandboxOrgId} and changes->>'mode'='sandbox_json_reference_rebase'
+         and table_name in ('hrm_process_templates','hrm_leave_policies')`)).rows;
+    // Every copy (create, refresh, reset) records its own rebase; the audit
+    // trail survives a keep-customizations refresh, so compare the distinct set.
+    assert.deepEqual(
+      [...new Set(evidence.map(row => `${row.table_name}:${row.row_id}`))].sort(),
+      [`hrm_leave_policies:${policies[0]!.id}`, `hrm_process_templates:${scoped.id}`].sort(),
+    );
+  };
+  await assertScopes();
+  await refreshSandbox(sandbox.sandboxId, { keepCustomizations: true });
+  await assertScopes();
+  await resetSandbox(sandbox.sandboxId);
+  await assertScopes();
+  // A filter pinned to a department production no longer has cannot be
+  // guessed into the sandbox: the clone refuses as a whole.
+  await db.execute(sql`update hrm_process_templates set applies_to=jsonb_build_object('department_id',${randomUUID()}::text) where org_id=${org.orgId} and id=${openTemplate}`);
+  await assert.rejects(
+    createSandbox({ productionOrgId: org.orgId, name: "HRM stale scope", tier: "full", masked: false }),
+    /scope filter department_id has no counterpart in the target organization/,
+  );
+}));
+
 test("role scope promotion compares and writes production identities while preserving assignments", enabled, async () => fixture(async (org, actors, child) => {
   const sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Scope promotion", tier: "full", masked: false });
   const unchanged = await buildChangeSet(sandbox.sandboxId, "No role changes", actors[0]);
