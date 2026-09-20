@@ -651,15 +651,6 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
-const cycleStatuses = ["draft", "open", "calibrating", "closed"] as const;
-
-const hrmPerformanceCycles: AssistantToolDef = {
-  name: "hrm_performance_cycles",
-    "Review cycles with self/manager progress, or one cycle in full with its privacy-scoped reviews. HR sees every cycle; structural viewers see their slice. Read-only.",
-  gate: { mode: "anyOf", perms: ["hrm.performance.read"] },
-    cycleId: uuidInput.optional().describe("One cycle in full; omit for the cycle list"),
-    status: z.enum(cycleStatuses).optional().describe("Keep only this cycle status"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum cycles to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -672,10 +663,6 @@ const hrmPerformanceCycles: AssistantToolDef = {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           requisitionId: a.requisitionId,
-    const a = raw as { cycleId?: string; status?: (typeof cycleStatuses)[number]; limit?: number };
-      if (a.cycleId) {
-        const detail = await getCycleDetail({
-          cycleId: a.cycleId,
         });
         return {
           ok: true,
@@ -731,10 +718,50 @@ const hrmPerformanceCycles: AssistantToolDef = {
           truncated: page.truncated,
           requisitions: page.items,
           href: "/hrm/recruiting",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const cycleStatuses = ["draft", "open", "calibrating", "closed"] as const;
+
+const hrmPerformanceCycles: AssistantToolDef = {
+  name: "hrm_performance_cycles",
+  description:
+    "Review cycles with self/manager progress, or one cycle in full with its privacy-scoped reviews. HR sees every cycle; structural viewers see their slice. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    cycleId: uuidInput.optional().describe("One cycle in full; omit for the cycle list"),
+    status: z.enum(cycleStatuses).optional().describe("Keep only this cycle status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum cycles to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { cycleId?: string; status?: (typeof cycleStatuses)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      if (a.cycleId) {
+        const detail = await getCycleDetail({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          cycleId: a.cycleId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: detail.id,
             name: detail.name,
             templateName: detail.templateName,
             periodStartOn: detail.periodStartOn,
             periodEndOn: detail.periodEndOn,
+            status: detail.status,
             totalSelf: detail.totalSelf,
             submittedSelf: detail.submittedSelf,
             totalManager: detail.totalManager,
@@ -745,7 +772,11 @@ const hrmPerformanceCycles: AssistantToolDef = {
               status: review.status,
               overallRating: review.overallRating,
               calibratedRating: review.calibratedRating,
+            })),
             href: "/hrm/performance",
+          },
+        };
+      }
       const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id });
       const kept = cycles
         .filter((cycle) => !a.status || cycle.status === a.status)
@@ -762,7 +793,13 @@ const hrmPerformanceCycles: AssistantToolDef = {
           submittedManager: cycle.submittedManager,
         }));
       const page = compactRows(kept, { limit });
+      return {
+        ok: true,
+        data: {
           status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated,
           cycles: page.items,
           href: "/hrm/performance",
         },
@@ -773,7 +810,6 @@ const hrmPerformanceCycles: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting];
 const hrmTurnover: AssistantToolDef = {
   name: "hrm_turnover",
   description:
@@ -848,4 +884,4 @@ const hrmTurnover: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmPerformanceCycles, hrmTurnover];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover];

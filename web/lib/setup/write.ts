@@ -946,6 +946,7 @@ export async function validateEntityIntegrity(
         ${values.templateId ? sql`exists(select 1 from hrm_pipeline_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
     `)
     if (!refs.rows[0]?.template_ok) return 'The parent funnel is not visible in this organization'
+  }
   // HRM review templates (0196): the rating scale is refused with the
   // engine's own words before the write, merging the current row on edit
   // so a partial slot edit keeps the untouched bound. Sections prove
@@ -954,34 +955,61 @@ export async function validateEntityIntegrity(
   // name instead of saved as openable.
   if (entity.key === 'hrm-review-templates') {
     let scale = body.ratingScale as Record<string, unknown> | undefined
+    if (rowId) {
+      const current = await executor.execute(sql`
         select rating_scale as "ratingScale" from hrm_review_templates where id = ${rowId} and org_id = ${orgId}
+      `)
       if (!current.rows[0]) return 'Review template not found'
       const base = (current.rows[0] as Record<string, unknown>).ratingScale
       scale = { ...((base ?? {}) as Record<string, unknown>), ...(scale ?? {}) }
+    }
     try {
       parseRatingScale(scale ?? {})
     } catch (e) {
       if (e instanceof PerformanceMathError) return e.message
       throw e
+    }
     // The merged scale is what writes: a partial slot edit keeps the
     // untouched bound instead of storing a partial scale the storage
     // CHECK would refuse with a worse message.
     body.ratingScale = scale
+  }
   if (entity.key === 'hrm-review-template-sections') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
         select template_id as "templateId", kind as "kind"
           from hrm_review_template_sections where id = ${rowId} and org_id = ${orgId}
+      `)
       if (!current.rows[0]) return 'Template section not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
     if (values.kind !== undefined && !['competency', 'goals', 'free_text'].includes(String(values.kind))) {
       return 'Place the section in competency, goals, or free_text'
+    }
+    const refs = await executor.execute(sql`
+      select
         ${values.templateId ? sql`exists(select 1 from hrm_review_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
+    `)
     if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
+  }
   if (entity.key === 'hrm-review-template-questions') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
         select section_id as "sectionId", answer_kind as "answerKind"
           from hrm_review_template_questions where id = ${rowId} and org_id = ${orgId}
+      `)
       if (!current.rows[0]) return 'Template question not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
     if (values.answerKind !== undefined && !['rating', 'text', 'rating_and_text'].includes(String(values.answerKind))) {
       return 'Answer the question with rating, text, or rating_and_text'
+    }
+    const refs = await executor.execute(sql`
+      select
         ${values.sectionId ? sql`exists(select 1 from hrm_review_template_sections where id = ${values.sectionId} and org_id = ${orgId})` : sql`false`} as section_ok
+    `)
     if (!refs.rows[0]?.section_ok) return 'The parent section is not visible in this organization'
   }
   return null
@@ -1048,8 +1076,7 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
-  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1258,8 +1285,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
-  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {

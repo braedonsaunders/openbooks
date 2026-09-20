@@ -464,8 +464,12 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'application_id', label: 'Application (id)', kind: 'uuid', expr: 'a.id' },
     ],
     defaultSort: { column: 'applied_on', direction: 'desc' },
+  },
+  {
     key: 'hrm_reviews',
     label: 'Reviews',
+    category: 'hrm',
+    description:
       'One row per performance review — cycle and period, employee, kind, status, and the author rating beside the calibration. HR-only: runners hold the performance grant, so unshared reviews never leave the HR scope. Requires the HRM performance permission.',
     // One row per hrm_reviews assessment with its cycle period and the
     // subject's name. Calibration never overwrites: both ratings read
@@ -477,23 +481,32 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN worker_employments e ON e.id = r.employment_id AND e.org_id = r.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = r.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
     // The cycle period end is the fact: the period picker narrows reviews
     // to the cycles that ended in the window.
     defaultPeriodField: 'period_end_on',
+    columns: [
       { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
       { key: 'period_end_on', label: 'Period end', kind: 'date', expr: 'c.period_end_on' },
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
       { key: 'kind', label: 'Kind', kind: 'enum', expr: 'r.kind', options: HRM_REVIEW_KINDS },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REVIEW_STATUSES },
       { key: 'overall_rating', label: 'Rating', kind: 'number', expr: 'r.overall_rating' },
       { key: 'calibrated_rating', label: 'Calibrated rating', kind: 'number', expr: 'r.calibrated_rating' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
       { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 'r.id' },
+    ],
     defaultSort: { column: 'period_end_on', direction: 'desc' },
+  },
+  {
     key: 'hrm_goals',
     label: 'Goals',
+    category: 'hrm',
+    description:
       'One row per performance goal — employee, title, status, progress, and due date. Requires the HRM performance permission.',
     from: `hrm_goals g
       JOIN worker_employments e ON e.id = g.employment_id AND e.org_id = g.org_id
@@ -502,17 +515,25 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'g.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
     defaultPeriodField: 'due_on',
+    columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
       { key: 'title', label: 'Title', kind: 'text', expr: 'g.title' },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'g.status', options: HRM_GOAL_STATUSES },
       { key: 'progress', label: 'Progress', kind: 'number', expr: 'g.progress_percent' },
       { key: 'due_on', label: 'Due on', kind: 'date', expr: 'g.due_on' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'g.employment_id' },
       { key: 'id', label: 'Goal (id)', kind: 'uuid', expr: 'g.id' },
+    ],
     defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  {
     key: 'hrm_turnover',
     label: 'Turnover',
+    category: 'hrm',
+    description:
       'One row per leaver — person, termination date, tenure in days, exit reason, and the voluntary and regrettable flags from the exit record. Group by termination month and department for the period-by-department leaver table; rates come from the Retention panel, which pairs leavers with both headcount legs. Leavers without an exit record read involuntary until recorded. Requires the HRM retention permission.',
     // Leaver facts: the terminated version start is the termination date.
     // The base subquery pins the leaver set (terminated, currently
@@ -540,14 +561,19 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 't.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_RETENTION_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
     defaultPeriodField: 'terminated_on',
+    columns: [
       { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 't.effective_from' },
       { key: 'tenure_days', label: 'Tenure (days)', kind: 'number', expr: `(t.effective_from - f.first_from)` },
       { key: 'reason', label: 'Reason', kind: 'enum', expr: 'x.reason_kind', options: HRM_EXIT_REASONS },
       { key: 'voluntary', label: 'Voluntary', kind: 'boolean', expr: 'coalesce(x.is_voluntary, false)' },
       { key: 'regrettable', label: 'Regrettable', kind: 'boolean', expr: 'coalesce(x.is_regrettable, false)' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 't.employment_id' },
+    ],
     defaultSort: { column: 'terminated_on', direction: 'desc' },
   },
 ]
