@@ -120,7 +120,42 @@ function scratch(): Promise<LegacyFixture> {
   return (scratchPromise ??= buildScratch());
 }
 
+interface PendingFixture {
+  control?: pg.Client;
+  client?: pg.Client;
+  createdDatabaseName?: string;
+}
+
+async function disposeScratch(pending: PendingFixture): Promise<void> {
+  const failures: unknown[] = [];
+  if (pending.client) {
+    try { await pending.client.end(); } catch (error) { failures.push(error); }
+  }
+  if (pending.control && pending.createdDatabaseName) {
+    try {
+      await pending.control.query(`drop database if exists "${pending.createdDatabaseName}" with (force)`);
+    } catch (error) { failures.push(error); }
+  }
+  // Even a failed DROP must not leave the maintenance socket holding Node open.
+  if (pending.control) {
+    try { await pending.control.end(); } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, "Migration fixture cleanup failed");
+}
+
 async function buildScratch(): Promise<LegacyFixture> {
+  const pending: PendingFixture = {};
+  try {
+    return await initializeScratch(pending);
+  } catch (error) {
+    try { await disposeScratch(pending); } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "Migration fixture setup and cleanup failed", { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function initializeScratch(pending: PendingFixture): Promise<LegacyFixture> {
   const baseUrl = new URL(ADMIN_DB_URL());
   const databaseName = `openbooks_evidence_upgrade_${randomBytes(4).toString("hex")}`;
 
@@ -129,12 +164,15 @@ async function buildScratch(): Promise<LegacyFixture> {
   const controlUrl = new URL(baseUrl.href);
   controlUrl.pathname = "/postgres";
   const control = new pg.Client({ connectionString: controlUrl.href });
+  pending.control = control;
   await control.connect();
   await control.query(`create database "${databaseName}"`);
+  pending.createdDatabaseName = databaseName;
 
   const sandboxUrl = new URL(baseUrl.href);
   sandboxUrl.pathname = `/${databaseName}`;
   const client = new pg.Client({ connectionString: sandboxUrl.href });
+  pending.client = client;
   await client.connect();
   // The suite is a trusted maintenance context (like bootstrap's migrate unit):
   // policies key off this GUC directly, so tenant RLS cannot hide fixture rows
@@ -269,14 +307,14 @@ async function applyTailThroughBootstrap(fixture: LegacyFixture): Promise<void> 
 
 test.after(async () => {
   if (!scratchPromise) return;
-  const fixture = await scratchPromise;
-  await fixture.client.end().catch(() => {});
-  await fixture.control
-    .query(`drop database if exists "${fixture.databaseName}" with (force)`)
-    .catch((error: unknown) => {
-      throw new Error(`failed to drop scratch database ${fixture.databaseName}: ${(error as Error).message}`);
-    });
-  await fixture.control.end();
+  // Failed setup already cleaned its partial resources and failed its test.
+  const fixture = await scratchPromise.catch(() => null);
+  if (!fixture) return;
+  await disposeScratch({
+    control: fixture.control,
+    client: fixture.client,
+    createdDatabaseName: fixture.databaseName,
+  });
 });
 
 test("legacy upgrades attest the gap honestly and make source evidence mandatory", { skip: !DB, timeout: 300_000 }, async () => {
