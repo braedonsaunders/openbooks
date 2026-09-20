@@ -103,6 +103,15 @@ export const US_REQUIRED_PARTIAL_TRIGGERS: readonly UsDispositionTrigger[] = [
 export const US_RECOGNITIONS = ["taxable", "nontaxable"] as const;
 export type UsRecognition = (typeof US_RECOGNITIONS)[number];
 
+/** §168(i)(7) vehicle. Monthly placement-year allocation is only (B)(i)
+ *  outside a consolidated group. 26 CFR 1.168(d)-1(b)(7); 1.168(k)-2(g)(1)(iii). */
+export const US_SECTION_168I7_KINDS = [
+  "nonrecognition",
+  "partnership_721_prior_interest",
+  "consolidated_group",
+] as const;
+export type UsSection168i7Kind = (typeof US_SECTION_168I7_KINDS)[number];
+
 export const US_SHORT_YEAR_METHODS = ["simplified", "allocation"] as const;
 export type UsShortYearMethod = (typeof US_SHORT_YEAR_METHODS)[number];
 
@@ -353,6 +362,7 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   method?: MacrsMethod;
   convention?: MacrsConvention;
   recognition: UsRecognition;
+  section168i7Kind?: UsSection168i7Kind;
   relatedPerson: boolean;
   statutoryProceeds?: string;
   amountRealizedRule?: UsAmountRealizedRule;
@@ -841,6 +851,19 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     help: "An intercompany book transfer is not nontaxable by default.",
   },
   {
+    name: "section168i7Kind",
+    label: "§168(i)(7) transfer kind",
+    kind: "enum",
+    choices: labeledChoices(US_SECTION_168I7_KINDS, {
+      nonrecognition: "§168(i)(7)(B)(i) 332/351/361/721/731 — monthly months-held allocation",
+      partnership_721_prior_interest: "§721(a) where another partner already had a depreciable interest — bonus stays with the transferor",
+      consolidated_group: "§168(i)(7)(B)(ii) consolidated-group member transfer — no monthly split",
+    }),
+    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    help: "26 CFR 1.168(d)-1(b)(7) monthly allocation does not apply between consolidated-group members. Ordinary half-year disposal is not this allocation.",
+  },
+  {
     name: "relatedPerson",
     label: "Related person (Pub 946 / §179 / §267)",
     kind: "boolean",
@@ -1024,6 +1047,7 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "regime", "relationship", "dispositionTrigger", "partialDispositionElection",
     "originalUnadjustedBasis", "remainingUnadjustedBasis", "disposedUnadjustedBasis",
     "placedInServiceOn", "recoveryPeriodYears", "method", "convention", "recognition",
+    "section168i7Kind",
     "relatedPerson", "statutoryProceeds", "amountRealizedRule", "adjustedAmountRealized",
     "deemedValueAdjustmentEvidence", "buyerCost", "carryoverBasis", "excessBasis",
     "section179", "bonusPercent", "businessUsePercent", "priorDepreciation",
@@ -1326,6 +1350,14 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
       "a nontaxable MACRS carryover belongs on the receiving asset of an intercompany_transfer; a sale to a customer is a taxable disposition — do not record buyer carryover on a partial_disposal",
     );
   }
+  if (draft.recognition === "nontaxable") {
+    const kind = draft.section168i7Kind;
+    if (kind !== "nonrecognition" && kind !== "partnership_721_prior_interest" && kind !== "consolidated_group") {
+      throw new TaxBasisPolicyError(
+        "section168i7Kind is required for a nontaxable MACRS transfer; declare §168(i)(7)(B)(i) nonrecognition, a §721 prior-partner depreciable interest, or a consolidated-group member transfer — do not allocate the placement year by ordinary half-year disposal",
+      );
+    }
+  }
   if (
     draft.recognition === "taxable" &&
     (draft.amountRealizedRule === "section_482" || draft.amountRealizedRule === "other_evidenced") &&
@@ -1615,6 +1647,34 @@ export function nzPooledDepreciationRate(
   return rate;
 }
 
+/** IR260 p24 associated-person equivalent-rate cap continues while the
+ *  acquired cost remains. A prior-year transfer still restricts later years. */
+export function continuingNzAssociatedRates(
+  papers: ReadonlyArray<{
+    effective_on: string;
+    buyer_subsidiary_id: string | null;
+    buyer_class: string | null;
+    relationship: string | null;
+    associated_person_equivalent_rate: string | null;
+  }>,
+  run: { subsidiaryId: string; yearEnd: string },
+  classCode: string,
+): string[] {
+  const associated: string[] = [];
+  for (const paper of papers) {
+    if (paper.effective_on > run.yearEnd) continue;
+    if (paper.buyer_subsidiary_id !== run.subsidiaryId || paper.buyer_class !== classCode) continue;
+    if (paper.relationship !== "non_arms_length") continue;
+    if (!paper.associated_person_equivalent_rate) {
+      throw new TaxBasisPolicyError(
+        `NZ associated-person transfer into class ${classCode} is missing associatedPersonEquivalentRate; reverse and re-propose the workpaper — do not depreciate at the class rate`,
+      );
+    }
+    associated.push(paper.associated_person_equivalent_rate);
+  }
+  return associated;
+}
+
 /** Receiving-asset MACRS schedule frozen on approval. Taxable cost and
  *  nontaxable excess use this; carryover keeps the transferor vintage. */
 export type UsBuyerMacrsSchedule = {
@@ -1727,6 +1787,7 @@ export function usRegimeWorkpaperOutcome(
     method: transferorHistory ? row.method ?? null : null,
     convention: transferorHistory ? row.convention ?? null : null,
     recognition: row.recognition,
+    section168i7Kind: !taxable ? row.section168i7Kind ?? null : null,
     carryoverBasis: buyer && !taxable ? row.carryoverBasis ?? null : null,
     excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
     buyerCost: buyer && taxable ? row.buyerCost ?? null : null,

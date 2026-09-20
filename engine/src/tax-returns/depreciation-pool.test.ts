@@ -4,11 +4,21 @@ import {
   computePoolYear,
   computeMacrsYear,
   computeMacrsThroughYear,
+  exclusiveShortYearMonths,
+  lastThreeMonthsStart,
+  macrsConventionAfterMidQuarter,
+  macrsMidQuarterApplies,
+  macrsMidQuarterByTaxYear,
+  eligibleMacrsMidQuarterPlacements,
+  shortYearMathEnd,
   placedAndDisposedInSameTaxYear,
+  section168i7HeldMonths,
   resolvePoolClass,
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
 } from "./depreciation-pool.ts";
+import { remainingAfter, subsequentRecoveryDeduction } from "./macrs-short-year.ts";
+import { add, formatMoney, mulRatio, neg } from "../money/money.ts";
 
 const run = (over: Partial<PoolYearInput>): ReturnType<typeof computePoolYear> =>
   computePoolYear({ openingBalance: "0", additions: "0", dispositions: "0", rate: 0.2, ...over });
@@ -491,6 +501,203 @@ test("transfer-year buyer residual is stored in the walk so next year's opening 
   assert.equal(nextYear.prior.remainingBasis, transferYear.current.remainingBasis);
   assert.equal(nextYear.prior.allowance, transferYear.current.allowance);
   assert.notEqual(nextYear.prior.remainingBasis, "4480.00");
+});
+
+test("successive short years that share a calendar month drop that month from the first year", () => {
+  const windows = [
+    { taxYear: 1988, yearStart: "1988-06-01", yearEnd: "1988-10-15" },
+    { taxYear: 1989, yearStart: "1988-10-16", yearEnd: "1989-05-31" },
+  ];
+  assert.equal(exclusiveShortYearMonths(windows, 0), 4);
+  assert.equal(exclusiveShortYearMonths(windows, 1), 8);
+  assert.equal(shortYearMathEnd("1988-10-15", true), "1988-09-30");
+  const first = computeMacrsThroughYear({
+    basis: "100",
+    placedInServiceOn: "1988-06-01",
+    taxYear: 1988,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, windows);
+  assert.equal(first.deemedPlacedOn, "1988-08-01");
+  assert.equal(first.firstYearMonthsInService, 2);
+  assert.notEqual(first.deemedPlacedOn, "1988-08-15");
+});
+
+test("mid-quarter 40% uses the tax window's last three months and vintage tax basis", () => {
+  const fiscal = { taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" };
+  assert.equal(lastThreeMonthsStart("2026-06-30"), "2026-04-01");
+  assert.equal(lastThreeMonthsStart("2025-12-31"), "2025-10-01");
+  const may = { placedInServiceOn: "2026-05-01", basis: "6000", disposedOn: null, convention: "half_year" as const };
+  const august = { placedInServiceOn: "2025-08-01", basis: "4000", disposedOn: null, convention: "half_year" as const };
+  assert.equal(macrsMidQuarterApplies(fiscal, [
+    { placedOn: may.placedInServiceOn, basis: may.basis },
+    { placedOn: august.placedInServiceOn, basis: august.basis },
+  ]), true);
+  const calendarOct = { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" };
+  assert.equal(macrsMidQuarterApplies(calendarOct, [
+    { placedOn: "2025-11-01", basis: "10000" },
+  ]), true);
+  const short = { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-03-31" };
+  assert.equal(macrsMidQuarterApplies(short, [{ placedOn: "2025-01-15", basis: "1000" }]), true);
+  const split = [
+    { placedInServiceOn: "2025-08-01", basis: "1000", disposedOn: "2026-01-15", convention: "half_year" as const, recognition: "taxable" as const },
+    { placedInServiceOn: "2026-05-01", basis: "9000", disposedOn: null, convention: "half_year" as const },
+  ];
+  assert.deepEqual(
+    eligibleMacrsMidQuarterPlacements(split, fiscal),
+    [{ placedOn: "2026-05-01", basis: "9000" }],
+  );
+  const retained = macrsMidQuarterByTaxYear([fiscal], split);
+  assert.equal(retained.get(2026), true);
+  const convention = macrsConventionAfterMidQuarter(
+    may,
+    "half_year",
+    [fiscal],
+    new Map([[2026, true]]),
+  );
+  assert.equal(convention, "mid_quarter");
+});
+
+test("§168(i)(7) placement-year bonus is allocated by months held, not ordinary HY disposal", () => {
+  // IRS 2019-41 Example 2 XX/BC: Jan 5 place, Aug 20 §721 transfer, $9,000 bonus.
+  const held = section168i7HeldMonths({
+    placedInServiceOn: "2018-01-05",
+    transferredOn: "2018-08-20",
+    yearStart: "2018-01-01",
+    yearEnd: "2018-12-31",
+  });
+  assert.equal(held.sellerMonths, 7);
+  assert.equal(held.inServiceMonths, 12);
+  const windows = [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }];
+  const buyer = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-01-05",
+    taxYear: 2018,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    adjustedCarryover: "3750.00",
+    carryoverOn: "2018-08-20",
+    section168i7Kind: "nonrecognition",
+  }, windows);
+  assert.equal(buyer.current.bonus, "3750.00");
+  assert.equal(buyer.current.section179, "0.00");
+  assert.equal(buyer.current.macrs, "0.00");
+  assert.equal(buyer.current.allowance, "3750.00");
+  assert.equal(buyer.current.remainingBasis, "0.00");
+  assert.equal(
+    formatMoney(add(add(buyer.current.section179, buyer.current.bonus), buyer.current.macrs), 2),
+    buyer.current.allowance,
+  );
+  const seller = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-01-05",
+    taxYear: 2018,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    disposedOn: "2018-08-20",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, windows);
+  assert.equal(seller.current.bonus, "5250.00");
+  assert.equal(seller.current.allowance, "5250.00");
+  assert.notEqual(buyer.current.allowance, "0.00");
+});
+
+test("a consolidated-group placement-year transfer does not monthly-split the year", () => {
+  const buyer = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-01-05",
+    taxYear: 2018,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    adjustedCarryover: "3750.00",
+    carryoverOn: "2018-08-20",
+    section168i7Kind: "consolidated_group",
+  }, [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }]);
+  assert.equal(buyer.current.allowance, "0.00");
+  assert.equal(buyer.current.bonus, "0.00");
+  assert.equal(buyer.current.remainingBasis, "3750.00");
+});
+
+test("a §721 prior-partner depreciable interest keeps bonus with the transferor", () => {
+  const buyer = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-01-05",
+    taxYear: 2018,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    adjustedCarryover: "0.00",
+    carryoverOn: "2018-08-20",
+    section168i7Kind: "partnership_721_prior_interest",
+  }, [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }]);
+  assert.equal(buyer.current.bonus, "0.00");
+  assert.equal(buyer.current.allowance, "0.00");
+});
+
+test("after a short year a later-year transfer reuses beginning-of-window remaining life", () => {
+  const windows = [
+    { taxYear: 2023, yearStart: "2023-07-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const input = {
+    basis: "10000",
+    placedInServiceOn: "2023-07-01",
+    recoveryPeriodYears: 5 as const,
+    method: "straight_line" as const,
+    convention: "half_year" as const,
+    adjustedCarryover: "7500.00",
+    carryoverOn: "2025-07-01",
+    section168i7Kind: "nonrecognition" as const,
+  };
+  const annual = subsequentRecoveryDeduction({
+    method: "straight_line",
+    recoveryPeriodYears: "5",
+    originalMacrsBasis: "10000",
+    adjustedBasis: "7500.00",
+    elapsedMonths: 15,
+    monthsThisYear: 12,
+    shortYearMethod: "simplified",
+  });
+  const seller = subsequentRecoveryDeduction({
+    method: "straight_line",
+    recoveryPeriodYears: "5",
+    originalMacrsBasis: "10000",
+    adjustedBasis: "7500.00",
+    elapsedMonths: 15,
+    monthsThisYear: 6,
+    shortYearMethod: "simplified",
+  });
+  const residual = formatMoney(add(annual, neg(seller)), 2);
+  const nextOpening = remainingAfter("7500.00", residual);
+  const nextAnnual = subsequentRecoveryDeduction({
+    method: "straight_line",
+    recoveryPeriodYears: "5",
+    originalMacrsBasis: "10000",
+    adjustedBasis: nextOpening,
+    elapsedMonths: 27,
+    monthsThisYear: 12,
+    shortYearMethod: "simplified",
+  });
+  const transferYear = computeMacrsThroughYear({ ...input, taxYear: 2025 }, windows);
+  const nextYear = computeMacrsThroughYear({ ...input, taxYear: 2026 }, windows);
+  assert.equal(annual, "2000.00");
+  assert.equal(seller, "1000.00");
+  assert.equal(transferYear.current.allowance, residual);
+  assert.equal(transferYear.current.remainingBasis, nextOpening);
+  assert.equal(nextYear.prior.remainingBasis, transferYear.current.remainingBasis);
+  assert.equal(nextYear.current.allowance, nextAnnual);
+  assert.notEqual(transferYear.current.allowance, formatMoney(mulRatio("7500.00", 6n, 33n), 2));
 });
 
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {

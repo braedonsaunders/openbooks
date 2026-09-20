@@ -235,6 +235,10 @@ export interface MacrsYearInput {
   /** Inclusive statutory year window. Required for a short year. */
   yearStart?: string;
   yearEnd?: string;
+  /** Rev. Proc. 89-15 §4.01(1)(a)(i) shared-month exclusion. Walker-derived
+   *  from adjacent short windows only — not an operator election. Membership
+   *  still uses the actual yearStart/yearEnd. */
+  excludedTerminalMonth?: boolean;
   /** True when a prior recovery year was short — tables no longer apply. */
   afterShortYear?: boolean;
   /** Beginning-of-year adjusted basis after a short year (simplified method). */
@@ -253,6 +257,8 @@ export interface MacrsYearInput {
   adjustedCarryover?: string;
   /** Transfer date that starts the carryover checkpoint (pre-transfer years are history only). */
   carryoverOn?: string;
+  /** §168(i)(7) vehicle — required for a same-placement-year nontaxable allocation. */
+  section168i7Kind?: "nonrecognition" | "partnership_721_prior_interest" | "consolidated_group";
   /** Fiscal month of original placement, frozen from the original service window. */
   placedMonth?: number;
   /**
@@ -388,7 +394,11 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   }
   if (input.yearStart && input.yearEnd) {
     try {
-      assertShortYearFactorAgrees(input.yearStart, input.yearEnd, input.shortYearFactor);
+      assertShortYearFactorAgrees(
+        input.yearStart,
+        shortYearMathEnd(input.yearEnd, input.excludedTerminalMonth),
+        input.shortYearFactor,
+      );
     } catch (error) {
       throw error instanceof MacrsShortYearError ? new Error(error.message) : error;
     }
@@ -495,14 +505,15 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
   placedYear: number;
 }): MacrsYearResult {
   const rate = decliningBalanceRate(input.method, String(input.recoveryPeriodYears));
+  const mathEnd = shortYearMathEnd(input.yearEnd, input.excludedTerminalMonth);
   const disposedThisYear = !!input.disposedOn && input.disposedOn >= input.yearStart && input.disposedOn <= input.yearEnd;
   if (input.afterShortYear) {
     const opening = persistMacrsBasis(input.adjustedBasisAtYearStart ?? input.macrsBasis);
-    const months = shortTaxYearMonths(input.yearStart, input.yearEnd);
+    const months = input.shortYearMonths ?? shortTaxYearMonths(input.yearStart, mathEnd);
     let serviceMonths = months;
     if (disposedThisYear && input.disposedOn) {
-      const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn);
-      const held = monthsTreatedInService(deemedEnd, input.yearEnd);
+      const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.disposedOn);
+      const held = monthsTreatedInService(deemedEnd, mathEnd);
       serviceMonths = Math.max(0, months - held);
     }
     if ((input.shortYearMethod ?? "simplified") === "allocation" && input.firstYearMonthsInService == null && input.elapsedRecoveryMonths == null) {
@@ -528,11 +539,11 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
       remainingBasis: remaining,
     };
   }
-  const deemed = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.placedInServiceOn);
-  let months = monthsTreatedInService(deemed, input.yearEnd);
+  const deemed = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.placedInServiceOn);
+  let months = monthsTreatedInService(deemed, mathEnd);
   if (disposedThisYear && input.disposedOn && input.dispositionRecognition === "nontaxable") {
-    const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn);
-    months = Math.min(months, Math.max(0, monthsTreatedInService(deemed, input.yearEnd) - monthsTreatedInService(deemedEnd, input.yearEnd)));
+    const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, mathEnd, input.disposedOn);
+    months = Math.min(months, Math.max(0, monthsTreatedInService(deemed, mathEnd) - monthsTreatedInService(deemedEnd, mathEnd)));
   }
   const macrs = shortYearPlacementDeduction({ basis: input.macrsBasis, rate, monthsInService: months });
   const used179 = input.taxYear >= input.placedYear ? input.section179Cap : "0.0000";
@@ -552,6 +563,262 @@ export interface MacrsYearWindow {
   taxYear: number;
   yearStart: string;
   yearEnd: string;
+}
+
+/** Rev. Proc. 89-15 §4.01(1)(a)(i): successive short years that share a
+ *  calendar month exclude that month from the FIRST year. Derived only from
+ *  validated adjacent windows. */
+export function adjacentShortYearExclusion(
+  windows: readonly MacrsYearWindow[],
+  index: number,
+): boolean {
+  const window = windows[index];
+  const next = windows[index + 1];
+  return !!(
+    window
+    && next
+    && isShortTaxYear(window.yearStart, window.yearEnd)
+    && isShortTaxYear(next.yearStart, next.yearEnd)
+    && window.yearEnd.slice(0, 7) === next.yearStart.slice(0, 7)
+  );
+}
+
+/** Convention/service/factor math end when the shared month is excluded.
+ *  Membership still uses the actual yearEnd. */
+export function shortYearMathEnd(yearEnd: string, excludedTerminalMonth?: boolean): string {
+  if (!excludedTerminalMonth) return yearEnd;
+  const year = Number(yearEnd.slice(0, 4));
+  const month = Number(yearEnd.slice(5, 7));
+  const prior = new Date(Date.UTC(year, month - 1, 0));
+  return `${String(prior.getUTCFullYear()).padStart(4, "0")}-${String(prior.getUTCMonth() + 1).padStart(2, "0")}-${String(prior.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Rev. Proc. 89-15 §4.01(1)(a)(i): Jun 1–Oct 15 then Oct 16–May 31 is 4 then
+ *  8, not 5+8. The helper sees only one start/end; this applies the adjacent
+ *  exclusion to month count, first-year HY deeming, and service. */
+export function exclusiveShortYearMonths(
+  windows: readonly MacrsYearWindow[],
+  index: number,
+): number {
+  const window = windows[index];
+  if (!window) {
+    throw new Error("MACRS exclusive short-year months require an adjacent-window index");
+  }
+  return shortTaxYearMonths(
+    window.yearStart,
+    shortYearMathEnd(window.yearEnd, adjacentShortYearExclusion(windows, index)),
+  );
+}
+
+/** Inclusive first day of the tax year's final three months. July–June ends
+ *  30 June so the last quarter is 1 April, not 1 October. */
+export function lastThreeMonthsStart(yearEnd: string): string {
+  const year = Number(yearEnd.slice(0, 4));
+  const month = Number(yearEnd.slice(5, 7));
+  const startMonth = month - 2;
+  if (startMonth <= 0) {
+    return `${year - 1}-${String(startMonth + 12).padStart(2, "0")}-01`;
+  }
+  return `${year}-${String(startMonth).padStart(2, "0")}-01`;
+}
+
+export type MacrsMidQuarterVintage = {
+  placedInServiceOn: string;
+  basis: string;
+  disposedOn: string | null;
+  convention: "half_year" | "mid_quarter" | "mid_month";
+  recognition?: "taxable" | "nontaxable" | null;
+  role?: "seller" | "buyer";
+  transferOn?: string | null;
+  adjustedCarryover?: string | null;
+  section168i7Kind?: "nonrecognition" | "partnership_721_prior_interest" | "consolidated_group" | null;
+};
+
+/** Pub 946 / 26 CFR 1.168(d)-1: a tax year of three months or less uses
+ *  mid-quarter; otherwise more than 40% of eligible tax basis in the last
+ *  three months of THIS window. Same-year taxable disposals are omitted;
+ *  a retained split vintage is not. */
+export function eligibleMacrsMidQuarterPlacements(
+  vintages: readonly MacrsMidQuarterVintage[],
+  window: MacrsYearWindow,
+): { placedOn: string; basis: string }[] {
+  const out: { placedOn: string; basis: string }[] = [];
+  for (const vintage of vintages) {
+    if (vintage.convention === "mid_month") continue;
+    const monthly168i7 = vintage.recognition === "nontaxable"
+      && vintage.section168i7Kind
+      && vintage.section168i7Kind !== "consolidated_group";
+    if (
+      vintage.role === "buyer"
+      && vintage.adjustedCarryover
+      && vintage.transferOn
+      && vintage.transferOn >= window.yearStart
+      && vintage.transferOn <= window.yearEnd
+      && monthly168i7
+    ) {
+      out.push({ placedOn: vintage.transferOn, basis: vintage.adjustedCarryover });
+      continue;
+    }
+    if (
+      vintage.role === "seller"
+      && monthly168i7
+      && vintage.disposedOn
+      && vintage.disposedOn >= window.yearStart
+      && vintage.disposedOn <= window.yearEnd
+    ) {
+      continue;
+    }
+    if (vintage.placedInServiceOn < window.yearStart || vintage.placedInServiceOn > window.yearEnd) continue;
+    if (
+      vintage.disposedOn
+      && vintage.recognition !== "nontaxable"
+      && placedAndDisposedInSameTaxYear({
+        placedInServiceOn: vintage.placedInServiceOn,
+        disposedOn: vintage.disposedOn,
+        yearStart: window.yearStart,
+        yearEnd: window.yearEnd,
+        taxYear: window.taxYear,
+      })
+    ) {
+      continue;
+    }
+    out.push({ placedOn: vintage.placedInServiceOn, basis: vintage.basis });
+  }
+  return out;
+}
+
+export function macrsMidQuarterApplies(
+  window: MacrsYearWindow,
+  placements: readonly { placedOn: string; basis: string }[],
+  excludedTerminalMonth = false,
+): boolean {
+  if (shortTaxYearMonths(window.yearStart, shortYearMathEnd(window.yearEnd, excludedTerminalMonth)) <= 3) {
+    return placements.length > 0;
+  }
+  let total = 0n;
+  let lastQuarter = 0n;
+  const lastStart = lastThreeMonthsStart(window.yearEnd);
+  for (const row of placements) {
+    const amount = toUnits(row.basis);
+    total += amount;
+    if (row.placedOn >= lastStart) lastQuarter += amount;
+  }
+  return total > 0n && lastQuarter * 100n > total * 40n;
+}
+
+export function macrsMidQuarterByTaxYear(
+  windows: readonly MacrsYearWindow[],
+  vintages: readonly MacrsMidQuarterVintage[],
+): Map<number, boolean> {
+  const out = new Map<number, boolean>();
+  windows.forEach((window, index) => {
+    out.set(
+      window.taxYear,
+      macrsMidQuarterApplies(
+        window,
+        eligibleMacrsMidQuarterPlacements(vintages, window),
+        adjacentShortYearExclusion(windows, index),
+      ),
+    );
+  });
+  return out;
+}
+
+export function macrsConventionAfterMidQuarter(
+  vintage: MacrsMidQuarterVintage,
+  classConvention: "half_year" | "mid_quarter" | "mid_month",
+  windows: readonly MacrsYearWindow[],
+  midQuarterByTaxYear: ReadonlyMap<number, boolean>,
+): "half_year" | "mid_quarter" | "mid_month" {
+  if (classConvention !== "half_year" || vintage.convention === "mid_month") return vintage.convention;
+  if (vintage.adjustedCarryover) return vintage.convention;
+  const window = windows.find((row) =>
+    vintage.placedInServiceOn >= row.yearStart && vintage.placedInServiceOn <= row.yearEnd,
+  );
+  if (!window) return vintage.convention;
+  return midQuarterByTaxYear.get(window.taxYear) ? "mid_quarter" : vintage.convention;
+}
+
+/** 26 CFR 1.168(d)-1(b)(7)(ii): transferor includes the placement month and
+ *  excludes the transfer month. Transferee takes the remaining in-service months. */
+export function section168i7HeldMonths(args: {
+  placedInServiceOn: string;
+  transferredOn: string;
+  yearStart: string;
+  yearEnd: string;
+}): { sellerMonths: number; inServiceMonths: number } {
+  const placed = parseIsoDate(args.placedInServiceOn);
+  const transferred = parseIsoDate(args.transferredOn);
+  const start = parseIsoDate(args.yearStart);
+  const end = parseIsoDate(args.yearEnd);
+  if (!placed || !transferred || !start || !end) {
+    throw new Error(
+      "§168(i)(7) monthly allocation requires calendar placed, transfer, yearStart and yearEnd dates",
+    );
+  }
+  const placedIndex = (placed.year - start.year) * 12 + (placed.month - start.month);
+  const transferIndex = (transferred.year - start.year) * 12 + (transferred.month - start.month);
+  const endIndex = (end.year - start.year) * 12 + (end.month - start.month);
+  const inServiceMonths = endIndex - placedIndex + 1;
+  const sellerMonths = transferIndex - placedIndex;
+  if (inServiceMonths <= 0 || sellerMonths < 0 || sellerMonths > inServiceMonths) {
+    throw new Error(
+      `§168(i)(7) months-held allocation is not defined for placed ${args.placedInServiceOn} transferred ${args.transferredOn} in ${args.yearStart}–${args.yearEnd}; reverse and re-propose the workpaper — do not allocate by ordinary half-year disposal`,
+    );
+  }
+  return { sellerMonths, inServiceMonths };
+}
+
+function allocate168i7Component(amount: string, takeMonths: number, inServiceMonths: number): string {
+  if (inServiceMonths <= 0) return formatMoney(amount, 2);
+  return formatMoney(mulRatio(amount, BigInt(takeMonths), BigInt(inServiceMonths)), 2);
+}
+
+function composeMacrsComponents(
+  section179: string,
+  bonus: string,
+  macrs: string,
+  remainingBasis: string,
+): MacrsYearResult {
+  return {
+    section179,
+    bonus,
+    macrs,
+    allowance: formatMoney(sum([section179, bonus, macrs]), 2),
+    remainingBasis,
+  };
+}
+
+function applySameYear168i7(args: {
+  result: MacrsYearResult;
+  kind: NonNullable<MacrsYearInput["section168i7Kind"]>;
+  opening: string;
+  placedInServiceOn: string;
+  transferredOn: string;
+  yearStart: string;
+  yearEnd: string;
+  buyer: boolean;
+  fullyDisposed: boolean;
+}): MacrsYearResult {
+  if (args.kind === "consolidated_group") {
+    if (args.buyer) return composeMacrsComponents("0.00", "0.00", "0.00", args.opening);
+    return { ...args.result, remainingBasis: args.fullyDisposed ? "0.00" : args.result.remainingBasis };
+  }
+  const { sellerMonths, inServiceMonths } = section168i7HeldMonths(args);
+  const takeMonths = args.buyer ? inServiceMonths - sellerMonths : sellerMonths;
+  const section179 = allocate168i7Component(args.result.section179, takeMonths, inServiceMonths);
+  const bonus = args.kind === "partnership_721_prior_interest"
+    ? (args.buyer ? "0.00" : formatMoney(args.result.bonus, 2))
+    : allocate168i7Component(args.result.bonus, takeMonths, inServiceMonths);
+  const macrs = allocate168i7Component(args.result.macrs, takeMonths, inServiceMonths);
+  const allowance = formatMoney(sum([section179, bonus, macrs]), 2);
+  return {
+    section179,
+    bonus,
+    macrs,
+    allowance,
+    remainingBasis: args.buyer || !args.fullyDisposed ? remainingAfter(args.opening, allowance) : "0.00",
+  };
 }
 
 /** Walk statutory windows so a later partial disposal cannot reprice a prior opening.
@@ -592,7 +859,8 @@ export function computeMacrsThroughYear(
   let prior = zeroMacrs(checkpoint ?? adjusted);
   let current = zeroMacrs(checkpoint ?? adjusted);
   let currentRecoveryYearIndex: number | null = null;
-  for (const window of ordered) {
+  for (let index = 0; index < ordered.length; index += 1) {
+    const window = ordered[index]!;
     if (window.taxYear > input.taxYear) break;
     if (input.placedInServiceOn > window.yearEnd) continue;
     if (input.disposedOn && input.disposedOn < window.yearStart) {
@@ -610,30 +878,64 @@ export function computeMacrsThroughYear(
     const afterShortYear = vintageShortSeen || (short && !firstServiceYear);
     const followYear = yearsSinceVintageShort === 1;
     const preTransfer = !!(checkpoint && carryoverOn && window.yearEnd < carryoverOn);
-    const windowFactor = impliedShortYearFactor(window.yearStart, window.yearEnd);
+    const excludedTerminalMonth = adjacentShortYearExclusion(ordered, index);
+    const mathEnd = shortYearMathEnd(window.yearEnd, excludedTerminalMonth);
+    const windowFactor = impliedShortYearFactor(window.yearStart, mathEnd);
+    const exclusiveMonths = exclusiveShortYearMonths(ordered, index);
     const openingCheckpoint = checkpoint && !preTransfer
       ? persistMacrsBasis(add(checkpoint, neg(postTransferTaken)))
       : undefined;
-    const result = computeMacrsYear({
+    const transferOn = checkpoint
+      ? carryoverOn
+      : input.dispositionRecognition === "nontaxable" ? input.disposedOn ?? null : null;
+    const placementThisWindow =
+      input.placedInServiceOn >= window.yearStart && input.placedInServiceOn <= window.yearEnd;
+    const transferThisWindow = !!(
+      transferOn
+      && transferOn > window.yearStart
+      && transferOn <= window.yearEnd
+      && input.placedInServiceOn < transferOn
+    );
+    const sameYear168i7 = !!(placementThisWindow && transferThisWindow);
+    if (sameYear168i7 && !input.section168i7Kind) {
+      throw new Error(
+        "nontaxable MACRS placement-year transfer requires section168i7Kind (§168(i)(7)(B)(i) nonrecognition, a §721 prior-partner depreciable interest, or a consolidated-group member transfer); do not allocate by ordinary half-year disposal",
+      );
+    }
+    const yearContext = {
       ...input,
       taxYear: window.taxYear,
       yearStart: window.yearStart,
       yearEnd: window.yearEnd,
+      excludedTerminalMonth,
       recoveryYearIndex: serviceYears,
       placedMonth: frozenPlacedMonth,
       afterShortYear,
       allocationFollowYear: followYear,
       firstYearMonthsInService: firstYearMonthsInService ?? undefined,
       elapsedRecoveryMonths,
+      shortYearMonths: exclusiveMonths,
       adjustedBasisAtYearStart: afterShortYear ? (openingCheckpoint ?? adjusted) : undefined,
       deemedPlacedOn: deemedPlacedOn ?? undefined,
-      shortYearFactor: window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
-      disposedOn: input.disposedOn,
-      dispositionRecognition: input.dispositionRecognition,
-    });
+      shortYearFactor: excludedTerminalMonth
+        ? windowFactor
+        : window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
+      disposedOn: sameYear168i7 ? undefined : input.disposedOn,
+      dispositionRecognition: sameYear168i7 ? undefined : input.dispositionRecognition,
+    };
+    const result = computeMacrsYear(yearContext);
+    const laterYearSellerShare = checkpoint && transferThisWindow && !sameYear168i7 && !preTransfer
+      ? computeMacrsYear({
+          ...yearContext,
+          disposedOn: transferOn!,
+          dispositionRecognition: "nontaxable",
+          adjustedCarryover: undefined,
+          carryoverOn: undefined,
+        })
+      : null;
     if (firstServiceYear && short) {
       deemedPlacedOn = formatCalendarDay(
-        deemedPlacedInServiceOn(input.convention, window.yearStart, window.yearEnd, input.placedInServiceOn),
+        deemedPlacedInServiceOn(input.convention, window.yearStart, mathEnd, input.placedInServiceOn),
       );
       firstYearMonthsInService = monthsTreatedInService(
         {
@@ -641,16 +943,16 @@ export function computeMacrsThroughYear(
           month: Number(deemedPlacedOn.slice(5, 7)),
           day: Number(deemedPlacedOn.slice(8, 10)),
         },
-        window.yearEnd,
+        mathEnd,
       );
       elapsedRecoveryMonths = firstYearMonthsInService;
       vintageShortSeen = true;
       yearsSinceVintageShort = 0;
     } else if (short && !firstServiceYear) {
       vintageShortSeen = true;
-      elapsedRecoveryMonths += shortTaxYearMonths(window.yearStart, window.yearEnd);
+      elapsedRecoveryMonths += exclusiveMonths;
     } else if (vintageShortSeen) {
-      elapsedRecoveryMonths += short ? shortTaxYearMonths(window.yearStart, window.yearEnd) : 12;
+      elapsedRecoveryMonths += short ? exclusiveMonths : 12;
     } else {
       elapsedRecoveryMonths += firstServiceYear
         ? Number(taxConventionHalfMonths(input.convention, frozenPlacedMonth, "placed")) / 2
@@ -667,36 +969,28 @@ export function computeMacrsThroughYear(
       continue;
     }
     let applied = result;
-    if (checkpoint) {
+    if (sameYear168i7) {
+      applied = applySameYear168i7({
+        result,
+        kind: input.section168i7Kind!,
+        opening: openingCheckpoint ?? persistMacrsBasis(input.basis),
+        placedInServiceOn: input.placedInServiceOn,
+        transferredOn: transferOn!,
+        yearStart: window.yearStart,
+        yearEnd: window.yearEnd,
+        buyer: !!checkpoint,
+        fullyDisposed: !!(
+          input.disposedOn
+          && input.disposedOn >= window.yearStart
+          && input.disposedOn <= window.yearEnd
+        ),
+      });
+      if (checkpoint) postTransferTaken = formatMoney(add(postTransferTaken, applied.allowance), 2);
+    } else if (checkpoint) {
       const opening = persistMacrsBasis(add(checkpoint, neg(postTransferTaken)));
-      const transferThisWindow = !!(
-        carryoverOn
-        && carryoverOn > window.yearStart
-        && carryoverOn <= window.yearEnd
-        && input.placedInServiceOn < carryoverOn
-      );
-      let take = firstServiceYear ? result.allowance : result.macrs;
-      if (transferThisWindow) {
-        const sellerShare = computeMacrsYear({
-          ...input,
-          taxYear: window.taxYear,
-          yearStart: window.yearStart,
-          yearEnd: window.yearEnd,
-          recoveryYearIndex: serviceYears,
-          placedMonth: frozenPlacedMonth,
-          afterShortYear,
-          allocationFollowYear: followYear,
-          firstYearMonthsInService: firstYearMonthsInService ?? undefined,
-          elapsedRecoveryMonths,
-          adjustedBasisAtYearStart: afterShortYear ? opening : undefined,
-          deemedPlacedOn: deemedPlacedOn ?? undefined,
-          shortYearFactor: window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
-          disposedOn: carryoverOn,
-          dispositionRecognition: "nontaxable",
-          adjustedCarryover: undefined,
-          carryoverOn: undefined,
-        });
-        const residual = formatMoney(add(take, neg(sellerShare.allowance)), 2);
+      let take = result.macrs;
+      if (laterYearSellerShare) {
+        const residual = formatMoney(add(result.macrs, neg(laterYearSellerShare.macrs)), 2);
         if (cmp(residual, "0") < 0) {
           throw new Error(
             "nontaxable MACRS transfer-year allocation produced a negative buyer residual; reverse and re-propose the workpaper — do not invent a split",
@@ -709,13 +1003,7 @@ export function computeMacrsThroughYear(
         && input.disposedOn <= window.yearEnd
         ? "0.00"
         : remainingAfter(opening, take);
-      applied = {
-        section179: firstServiceYear ? result.section179 : "0.00",
-        bonus: firstServiceYear ? result.bonus : "0.00",
-        macrs: take,
-        allowance: firstServiceYear && !transferThisWindow ? result.allowance : take,
-        remainingBasis: remaining,
-      };
+      applied = composeMacrsComponents("0.00", "0.00", take, remaining);
       postTransferTaken = formatMoney(add(postTransferTaken, take), 2);
     }
     adjusted = persistMacrsBasis(applied.remainingBasis);

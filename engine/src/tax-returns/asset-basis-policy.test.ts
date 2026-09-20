@@ -26,6 +26,7 @@ import {
   usDispositionProceeds,
   usRegimeWorkpaperOutcome,
   validateTaxRegimeBasis,
+  continuingNzAssociatedRates,
   nzAssociatedPersonEquivalentRate,
   nzPooledDepreciationRate,
   nzPoolReduction,
@@ -395,6 +396,7 @@ test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () =
     method: "200_db",
     convention: "half_year",
     recognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
     relatedPerson: true,
     carryoverBasis: "4000.00",
     excessBasis: "250.00",
@@ -411,6 +413,7 @@ test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () =
   });
   assert.equal(computed.amountRealized, null);
   assert.equal(computed.recognition, "nontaxable");
+  assert.equal(computed.section168i7Kind, "nonrecognition");
   assert.equal(computed.carryoverBasis, "4000.00");
   assert.equal(computed.originalUnadjustedBasis, "10000.0000");
   assert.equal(computed.section179, "0.0000");
@@ -563,6 +566,7 @@ test("buyer-only nontaxable carryover requires transferor history and allocated 
   assert.equal(taxBasisFieldRequired(field("section179"), draft), true);
   assert.equal(taxBasisFieldRequired(field("priorDepreciation"), draft), true);
   assert.equal(taxBasisFieldRequired(field("carryoverBasis"), draft), true);
+  assert.equal(taxBasisFieldRequired(field("section168i7Kind"), draft), true);
   assert.equal(taxBasisFieldVisible(field("disposedUnadjustedBasis"), draft), false);
   throwsPolicy(
     () =>
@@ -602,6 +606,7 @@ test("buyer-only nontaxable carryover requires transferor history and allocated 
       bonusPercent: "0",
       businessUsePercent: "100",
       priorDepreciation: "3600.00",
+      section168i7Kind: "nonrecognition",
     },
     { sourceOperation: "intercompany_transfer", applicable: "buyer" },
   );
@@ -687,5 +692,27 @@ test("NZ associated-person equivalent rate caps the pool and refuses a missing d
     () => nzAssociatedPersonEquivalentRate({ relationship: "non_arms_length" }),
     (error: unknown) =>
       error instanceof TaxBasisPolicyError && /associatedPersonEquivalentRate is required/.test(error.message),
+  );
+});
+
+test("NZ associated-person rate cap continues after the transfer year", () => {
+  const papers = [{
+    effective_on: "2024-06-01",
+    buyer_subsidiary_id: "sub-a",
+    buyer_class: "1",
+    relationship: "non_arms_length",
+    associated_person_equivalent_rate: "0.0800000000",
+  }];
+  assert.deepEqual(
+    continuingNzAssociatedRates(papers, { subsidiaryId: "sub-a", yearEnd: "2025-03-31" }, "1"),
+    ["0.0800000000"],
+  );
+  assert.deepEqual(
+    continuingNzAssociatedRates(
+      [{ ...papers[0]!, effective_on: "2026-04-01" }],
+      { subsidiaryId: "sub-a", yearEnd: "2025-03-31" },
+      "1",
+    ),
+    [],
   );
 });

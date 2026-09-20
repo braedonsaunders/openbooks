@@ -6,7 +6,8 @@ import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits 
 import {
   computeMacrsThroughYear,
   computePoolYear,
-  placedAndDisposedInSameTaxYear,
+  macrsConventionAfterMidQuarter,
+  macrsMidQuarterByTaxYear,
   type MacrsYearWindow,
   type PoolClassDef,
   type PoolYearResult,
@@ -14,7 +15,7 @@ import {
 } from "./depreciation-pool.ts";
 import { MacrsShortYearError, assertShortYearFactorAgrees } from "./macrs-short-year.ts";
 import { MacrsVintageError, resolveMacrsVintages, type MacrsWorkpaperEvent } from "./macrs-vintages.ts";
-import { nzPooledDepreciationRate } from "./asset-basis-policy.ts";
+import { continuingNzAssociatedRates, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
 import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
 import { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
 
@@ -92,6 +93,7 @@ type LiveWorkpaper = {
   excess_basis: string | null;
   buyer_cost: string | null;
   recognition: string | null;
+  section_168i7_kind: string | null;
   disposed_unadjusted_basis: string | null;
   related_person: string | null;
   recovery_period_years: string | null;
@@ -217,6 +219,7 @@ async function liveWorkpapers(
              w.computed->>'excessBasis' as excess_basis,
              w.computed->>'buyerCost' as buyer_cost,
              w.computed->>'recognition' as recognition,
+             w.computed->>'section168i7Kind' as section_168i7_kind,
              w.computed->>'disposedUnadjustedBasis' as disposed_unadjusted_basis,
              w.facts->>'relatedPerson' as related_person,
              w.facts->>'recoveryPeriodYears' as recovery_period_years,
@@ -734,19 +737,11 @@ function nzYearRate(
   papers: LiveWorkpaper[],
 ): string | number {
   if (run.regime !== "nz_pool") return classDef.rate;
-  const associated: string[] = [];
-  for (const paper of papers) {
-    if (paper.effective_on < run.yearStart || paper.effective_on > run.yearEnd) continue;
-    if (paper.buyer_subsidiary_id !== run.subsidiaryId || paper.buyer_class !== classCode) continue;
-    if (paper.relationship !== "non_arms_length") continue;
-    if (!paper.associated_person_equivalent_rate) {
-      throw new TaxPoolError(
-        `NZ associated-person transfer into class ${classCode} is missing associatedPersonEquivalentRate; reverse and re-propose the workpaper — do not depreciate at the class rate`,
-      );
-    }
-    associated.push(paper.associated_person_equivalent_rate);
+  try {
+    return nzPooledDepreciationRate(classDef.rate, continuingNzAssociatedRates(papers, run, classCode));
+  } catch (error) {
+    throw error instanceof TaxBasisPolicyError ? new TaxPoolError(error.message) : error;
   }
-  return nzPooledDepreciationRate(classDef.rate, associated);
 }
 
 function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
@@ -762,6 +757,7 @@ function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
     excess_basis: paper.excess_basis,
     buyer_cost: paper.buyer_cost,
     recognition: paper.recognition,
+    section_168i7_kind: paper.section_168i7_kind,
     related_person: paper.related_person,
     recovery_period_years: paper.recovery_period_years,
     placed_in_service_on: paper.placed_in_service_on,
@@ -778,16 +774,6 @@ function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
     business_use_percent: paper.business_use_percent,
     prior_depreciation: paper.prior_depreciation,
   }));
-}
-
-function lastThreeMonthsStart(yearEnd: string): string {
-  const year = Number(yearEnd.slice(0, 4));
-  const month = Number(yearEnd.slice(5, 7));
-  const startMonth = month - 2;
-  if (startMonth <= 0) {
-    return `${year - 1}-${String(startMonth + 12).padStart(2, "0")}-01`;
-  }
-  return `${year}-${String(startMonth).padStart(2, "0")}-01`;
 }
 
 type MacrsAssetRow = {
@@ -848,34 +834,6 @@ async function runMacrs(
     );
   }
 
-  // The mid-quarter test is made per placed-in-service vintage. If more than
-  // 40% of eligible basis was placed in service in the final three months,
-  // that vintage uses mid-quarter instead of half-year for its full schedule.
-  const vintageBasis = new Map<number, { total: bigint; q4: bigint }>();
-  for (const asset of assets.rows) {
-    const def = classes.get(asset.class_code);
-    if (!def || def.convention !== "half_year") continue;
-    if (asset.placed_on > run.yearEnd) continue;
-    if (
-      asset.disposed_on &&
-      placedAndDisposedInSameTaxYear({
-        placedInServiceOn: asset.placed_on,
-        disposedOn: asset.disposed_on,
-        yearStart: run.yearStart,
-        yearEnd: run.yearEnd,
-        taxYear: run.taxYear,
-      })
-    ) {
-      continue;
-    }
-    const year = Number(asset.placed_on.slice(0, 4));
-    const amount = toUnits(asset.acquisition_cost);
-    const v = vintageBasis.get(year) ?? { total: 0n, q4: 0n };
-    v.total += amount;
-    if (asset.placed_on >= lastThreeMonthsStart(`${year}-12-31`)) v.q4 += amount;
-    vintageBasis.set(year, v);
-  }
-
   const grouped = new Map<string, { def: PoolClassDef; assets: MacrsAssetRow[] }>();
   for (const asset of assets.rows) {
     const def = classes.get(asset.class_code);
@@ -888,47 +846,69 @@ async function runMacrs(
     grouped.set(asset.class_code, group);
   }
 
+  type ResolvedMacrsAsset = {
+    classCode: string;
+    def: PoolClassDef;
+    asset: MacrsAssetRow;
+    vintages: ReturnType<typeof resolveMacrsVintages>;
+    sellerPapers: LiveWorkpaper[];
+    receiverPapers: LiveWorkpaper[];
+    latestReceiver: LiveWorkpaper | undefined;
+    yearPapers: LiveWorkpaper[];
+  };
+  const resolved: ResolvedMacrsAsset[] = [];
+  for (const [classCode, group] of grouped) {
+    for (const asset of group.assets) {
+      const config = taxAssetConfig(asset.custom, run.regime);
+      const sellerPapers = papers.filter((paper) => paper.asset_id === asset.id);
+      const receiverPapers = papers.filter((paper) => paper.receiving_asset_id === asset.id);
+      try {
+        resolved.push({
+          classCode,
+          def: group.def,
+          asset,
+          sellerPapers,
+          receiverPapers,
+          latestReceiver: receiverPapers.at(-1),
+          yearPapers: [...sellerPapers, ...receiverPapers].filter(
+            (paper) => paper.effective_on >= run.yearStart && paper.effective_on <= run.yearEnd,
+          ),
+          vintages: resolveMacrsVintages({
+            assetId: asset.id,
+            subsidiaryId: run.subsidiaryId,
+            placedOn: asset.placed_on,
+            acquisitionCost: asset.acquisition_cost,
+            disposedOn: asset.disposed_on,
+            papers: asMacrsEvents([...sellerPapers, ...receiverPapers]),
+            defaults: {
+              recoveryPeriodYears: String(group.def.recoveryPeriodYears!),
+              method: group.def.macrsMethod!,
+              convention: group.def.convention!,
+              section179: String(config.section179 ?? "0"),
+              bonusPercent: decimalOr(config.bonusPercent, "0"),
+              businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+              shortYearMethod: "simplified",
+            },
+          }),
+        });
+      } catch (error) {
+        throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
+      }
+    }
+  }
+  const midQuarterByTaxYear = macrsMidQuarterByTaxYear(
+    windows,
+    resolved.flatMap((row) => row.vintages),
+  );
+
   // Compute every class first, then persist all periods and roll-forwards in
   // this one transaction — identical atomicity contract to the pooled model.
   const prepared: { poolId: string; classCode: string; def: PoolClassDef; values: ReturnType<typeof macrsValues> }[] = [];
   let totalAllowance = "0";
   for (const [classCode, group] of grouped) {
     let opening = 0n, additions = 0n, dispositions = 0n, allowance = 0n, closing = 0n;
-    for (const asset of group.assets) {
-      const config = taxAssetConfig(asset.custom, run.regime);
-      const placedYear = Number(asset.placed_on.slice(0, 4));
-      const vintage = vintageBasis.get(placedYear);
-      const convention = group.def.convention === "half_year" && vintage && vintage.total > 0n && vintage.q4 * 100n > vintage.total * 40n
-        ? "mid_quarter"
-        : group.def.convention!;
-      const sellerPapers = papers.filter((paper) => paper.asset_id === asset.id);
-      const receiverPapers = papers.filter((paper) => paper.receiving_asset_id === asset.id);
-      const latestReceiver = receiverPapers.at(-1);
-      const yearPapers = [...sellerPapers, ...receiverPapers].filter(
-        (paper) => paper.effective_on >= run.yearStart && paper.effective_on <= run.yearEnd,
-      );
-      let vintages;
-      try {
-        vintages = resolveMacrsVintages({
-          assetId: asset.id,
-          subsidiaryId: run.subsidiaryId,
-          placedOn: asset.placed_on,
-          acquisitionCost: asset.acquisition_cost,
-          disposedOn: asset.disposed_on,
-          papers: asMacrsEvents([...sellerPapers, ...receiverPapers]),
-          defaults: {
-            recoveryPeriodYears: String(group.def.recoveryPeriodYears!),
-            method: group.def.macrsMethod!,
-            convention,
-            section179: String(config.section179 ?? "0"),
-            bonusPercent: decimalOr(config.bonusPercent, "0"),
-            businessUsePercent: decimalOr(config.businessUsePercent, "100"),
-            shortYearMethod: "simplified",
-          },
-        });
-      } catch (error) {
-        throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
-      }
+    for (const row of resolved.filter((item) => item.classCode === classCode)) {
+      const { asset, vintages, latestReceiver, yearPapers } = row;
       for (const vintage of vintages) {
         if (vintage.placedInServiceOn > run.yearEnd) continue;
         const walked = computeMacrsThroughYear({
@@ -937,7 +917,12 @@ async function runMacrs(
           taxYear,
           recoveryPeriodYears: vintage.recoveryPeriodYears,
           method: vintage.method,
-          convention: vintage.convention,
+          convention: macrsConventionAfterMidQuarter(
+            vintage,
+            group.def.convention!,
+            windows,
+            midQuarterByTaxYear,
+          ),
           disposedOn: vintage.disposedOn,
           dispositionRecognition: vintage.recognition,
           section179: vintage.section179,
@@ -947,6 +932,7 @@ async function runMacrs(
           shortYearMethod: vintage.shortYearMethod,
           adjustedCarryover: vintage.adjustedCarryover ?? undefined,
           carryoverOn: vintage.transferOn && vintage.adjustedCarryover ? vintage.transferOn : undefined,
+          section168i7Kind: vintage.section168i7Kind ?? undefined,
         }, windows);
         const current = walked.current;
         const transferredThisYear = !!(
@@ -973,7 +959,7 @@ async function runMacrs(
         if (!vintage.adjustedCarryover && vintagePlacedThisYear && vintage.role === "buyer") {
           additions += toUnits(vintage.basis);
         } else if (vintagePlacedThisYear && vintage.role === "seller" && !receivers.has(asset.id)) {
-          additions += toUnits(asset.acquisition_cost);
+          additions += toUnits(vintage.basis);
         }
         allowance += toUnits(current.allowance);
         closing += toUnits(current.remainingBasis);
