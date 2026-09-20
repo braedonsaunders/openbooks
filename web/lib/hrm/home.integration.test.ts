@@ -37,7 +37,10 @@ const { loadHrmHome } = await import('./home')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 test('the HRM overview loader executes every one of its queries against a live database', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
+  // Wrapped, not listed: scripts/check-test-bypass-scope.test.mjs flags a bare
+  // seeding call because a web test's import graph can replace the bypass
+  // resolver process-wide, leaving setup to run under RLS.
+  const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'HRM overview reader', 'hrm_overview_reader'))
     // The engine read services resolve the actor's grants from app_roles
@@ -87,6 +90,6 @@ test('the HRM overview loader executes every one of its queries against a live d
     assert.equal(data.positions.totals.positions, 0)
     assert.ok(data.tabs.some((tab) => tab.href === '/hrm' && tab.active), 'the overview tab is active on the overview')
   } finally {
-    await dropScratchOrg(org.orgId)
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
