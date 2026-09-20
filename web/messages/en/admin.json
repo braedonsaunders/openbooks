@@ -972,7 +972,10 @@
     "hrm_leave_approve": "Decide leave requests",
     "hrm_leave_manage": "Configure leave types and policies",
     "hrm_recruiting_read": "View recruiting funnel",
-    "hrm_recruiting_manage": "Manage requisitions, candidates, interviews, and offers"
+    "hrm_recruiting_manage": "Manage requisitions, candidates, interviews, and offers",
+    "hrm_performance_read": "View review cycles and reviews through the privacy scope",
+    "hrm_performance_manage": "Run review cycles, calibrate and share reviews",
+    "hrm_retention_read": "View exit records and turnover"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2430,6 +2433,21 @@
         "title": "Process template steps",
         "singularTitle": "Process template step",
         "description": "One ordered step of a process template with its owner, due offset and evidence rule."
+      },
+      "hrm-review-templates": {
+        "title": "Review templates",
+        "singularTitle": "Review template",
+        "description": "The review form per org: name, the rating scale, and ordered sections with prompts. Deactivation preserves history; a template that opened cycles is never deleted."
+      },
+      "hrm-review-template-sections": {
+        "title": "Review sections",
+        "singularTitle": "Review section",
+        "description": "Ordered sections of a review template: competency, goals, or free text, with an optional weight."
+      },
+      "hrm-review-template-questions": {
+        "title": "Review questions",
+        "singularTitle": "Review question",
+        "description": "Prompts inside a review template section: rating, text, or both. Required prompts must be answered before submit."
       }
     },
     "fields": {
@@ -2720,7 +2738,14 @@
       "accrualPeriodsPerYear": "Accrual periods per year",
       "carryoverKind": "Carryover",
       "carryoverHours": "Carryover cap (hours)",
-      "carryoverExpiresAfterDays": "Carryover expires after (days)"
+      "carryoverExpiresAfterDays": "Carryover expires after (days)",
+      "sectionId": "Section",
+      "weight": "Weight",
+      "prompt": "Prompt",
+      "answerKind": "Answer kind",
+      "ratingScaleMin": "Scale minimum",
+      "ratingScaleMax": "Scale maximum",
+      "ratingScaleLabels": "Scale labels"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2783,7 +2808,10 @@
       "leaveAccrualPeriodsPerYear": "Whole periods in an accrual year (required for per-period accrual).",
       "leaveCarryoverKind": "What unused time does at year end: nothing, carry all, or carry up to a cap.",
       "leaveCarryoverHours": "Maximum hours carried forward (required for carry up to).",
-      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not."
+      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not.",
+      "hrmReviewScaleMin": "Lowest rating the scale accepts, for example 1.",
+      "hrmReviewScaleMax": "Highest rating the scale accepts, for example 5.",
+      "hrmReviewScaleLabels": "Optional endpoint labels, lowest first."
     },
     "options": {
       "payFrequency": {
@@ -3160,6 +3188,16 @@
         "offer": "Offer",
         "hired": "Hired",
         "rejected": "Rejected"
+      },
+      "hrmReviewSectionKind": {
+        "competency": "Competency",
+        "goals": "Goals",
+        "freeText": "Free text"
+      },
+      "hrmReviewAnswerKind": {
+        "rating": "Rating",
+        "text": "Text",
+        "ratingAndText": "Rating and text"
       }
     },
     "payroll": {

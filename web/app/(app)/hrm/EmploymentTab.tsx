@@ -8,6 +8,7 @@ import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, Tab
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
+import { ExitRecordForm } from './performance/ExitRecordForm'
 
 /**
  * The employee drawer's Employment tab — the ONE place the native
@@ -56,6 +57,20 @@ type ChangeRequest = {
   flowRunId: string | null
 }
 
+type ExitRecord = {
+  id: string
+  reasonKind: string
+  isVoluntary: boolean
+  destination: string | null
+  notes: string | null
+}
+
+type ExitState = {
+  status: 'hidden' | 'loading' | 'ready' | 'error'
+  record: ExitRecord | null
+  message: string | null
+}
+
 type RecordState = {
   status: 'loading' | 'ready' | 'refused' | 'error'
   episodes: Episode[]
@@ -72,17 +87,24 @@ function todayCivil(): string {
 export function EmploymentTab({
   employmentId,
   canManageHrm,
+  canReadExits = false,
+  canRecordExit = false,
   departmentOptions = [],
 }: {
   employmentId: string
   /** hrm.employment.manage — readers see the request list only, without authoring actions. */
   canManageHrm: boolean
+  /** hrm.retention.read — readers see the exit record. */
+  canReadExits?: boolean
+  /** hrm.performance.manage — HR records and corrects the exit. */
+  canRecordExit?: boolean
   departmentOptions?: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
   const [date, setDate] = useState(todayCivil)
   const [revision, setRevision] = useState(0)
   const [proposing, setProposing] = useState(false)
+  const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
   })
@@ -124,6 +146,36 @@ export function EmploymentTab({
       cancelled = true
     }
   }, [employmentId, date, revision])
+
+  // The exit record loads once the as-of version reads terminated: the
+  // record describes a termination, and an unterminated employment shows
+  // no exit section at all.
+  const terminated = state.asOf?.version.status === 'terminated'
+  const showExit = terminated && (canReadExits || canRecordExit)
+  useEffect(() => {
+    if (!showExit) {
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/hrm/exit-records?employmentId=${employmentId}`)
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load the exit record'))
+        const j = await res.json()
+        if (cancelled) return
+        const exits = Array.isArray(j.exits) ? j.exits : []
+        setExit({ status: 'ready', record: exits[0] ?? null, message: null })
+      } catch (e) {
+        if (cancelled) return
+        const message = (e as Error).message
+        toast.error(message)
+        setExit({ status: 'error', record: null, message })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [employmentId, showExit, revision])
 
   // Catalog-backed enum labels with a raw fallback: a status the catalog
   // does not know yet renders as its stored value, never a raw key path.
@@ -252,6 +304,39 @@ export function EmploymentTab({
         ) : null}
       </section>
 
+      {showExit ? (
+        <section aria-label={t('employment.exit.title')}>
+          <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.exit.title')}
+          </h3>
+          {exit.status === 'hidden' || exit.status === 'loading' ? (
+            <div className="h-6 w-40 animate-pulse rounded bg-slate-100 dark:bg-slate-800" aria-busy="true" />
+          ) : exit.status === 'error' ? (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {exit.message}
+            </div>
+          ) : exit.record ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <span className="font-medium">{exit.record.reasonKind}</span>
+                {' · '}
+                {exit.record.isVoluntary ? t('performance.exitVoluntaryYes') : t('performance.exitVoluntaryNo')}
+                {exit.record.destination ? ` · ${exit.record.destination}` : null}
+              </p>
+              {exit.record.notes ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">{exit.record.notes}</p>
+              ) : null}
+              {canRecordExit ? (
+                <ExitRecordForm employmentId={employmentId} existing={exit.record} />
+              ) : null}
+            </div>
+          ) : canRecordExit ? (
+            <ExitRecordForm employmentId={employmentId} existing={null} />
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.exit.empty')}</p>
+          )}
+        </section>
+      ) : null}
       <section aria-label={t('employment.changeRequests.title')}>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">

@@ -73,6 +73,13 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // The vacancy-to-hire funnel — requisitions, candidates, interviews
     // and offers — behind hrm.recruiting.read (HRM_TAB_PERMISSION).
     { href: '/hrm/recruiting', ns: 'hrm', key: 'home.tabs.recruiting' },
+    // Review cycles, goals, and retention (HR-7): the tab sits behind
+    // hrm.performance.read OR the structural scope — a manager with
+    // reports and no grant still gets the tab with only their reviews —
+    // so it deliberately carries NO HRM_TAB_PERMISSION entry below. The
+    // page never access-denies: the read service narrows every row to
+    // the actor's privacy scope instead.
+    { href: '/hrm/performance', ns: 'hrm', key: 'home.tabs.performance' },
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -102,6 +109,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/hrm': 'hrm',
   '/hrm/leave': 'hrm',
   '/hrm/recruiting': 'hrm',
+  '/hrm/performance': 'hrm',
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',

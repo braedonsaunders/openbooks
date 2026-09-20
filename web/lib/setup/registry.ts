@@ -2197,6 +2197,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+  // Review templates (0196, HR-7): the review form per org — name, the
+  // rating scale edited as structured min/max/labels fields (folded into
+  // rating_scale before buildRow, never raw JSON), and ordered sections
+  // with prompts. Deactivation (isActive) preserves history; deleting a
+  // template that opened cycles is refused by name — retire it instead.
+    key: 'hrm-review-templates',
+    table: 'hrm_review_templates',
+    iconKey: 'star',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -2208,12 +2216,17 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'name', kind: 'text', required: true },
       { key: 'isDefault', kind: 'boolean' },
+      { key: 'ratingScaleMin', kind: 'integer', required: true, helpTextKey: 'fieldHelp.hrmReviewScaleMin' },
+      { key: 'ratingScaleMax', kind: 'integer', required: true, helpTextKey: 'fieldHelp.hrmReviewScaleMax' },
+      { key: 'ratingScaleLabels', kind: 'stringArray', helpTextKey: 'fieldHelp.hrmReviewScaleLabels' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
   {
     key: 'hrm-pipeline-stages',
     table: 'hrm_pipeline_stages',
+    key: 'hrm-review-template-sections',
+    table: 'hrm_review_template_sections',
     actorCols: true,
     groupKey: 'workforce',
     featureKey: 'hrm',
@@ -2232,6 +2245,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'position', kind: 'integer', required: true },
       { key: 'key', kind: 'text', required: true },
       { key: 'name', kind: 'text', required: true },
+      { key: 'templateId', kind: 'ref', ref: 'hrm-review-templates' },
+      { key: 'title', kind: 'text' },
+      { key: 'templateId', kind: 'ref', ref: 'hrm-review-templates', required: true },
+      { key: 'title', kind: 'text', required: true },
       {
         key: 'kind',
         kind: 'select',
@@ -2249,6 +2266,39 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       // drawer hides it and the write path folds kind into it before
       // buildRow (see normalizeHrmPipelineStageInput).
       { key: 'isTerminal', kind: 'boolean', hidden: true },
+          { value: 'competency', labelKey: 'options.hrmReviewSectionKind.competency' },
+          { value: 'goals', labelKey: 'options.hrmReviewSectionKind.goals' },
+          { value: 'free_text', labelKey: 'options.hrmReviewSectionKind.freeText' },
+      { key: 'weight', kind: 'decimal' },
+  {
+    key: 'hrm-review-template-questions',
+    table: 'hrm_review_template_questions',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrm',
+    iconKey: 'list-checks',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'sectionId', kind: 'ref', ref: 'hrm-review-template-sections' },
+      { key: 'position', kind: 'number' },
+      { key: 'prompt', kind: 'text' },
+      { key: 'answerKind', kind: 'badge' },
+      { key: 'required', kind: 'boolean' },
+    fields: [
+      { key: 'sectionId', kind: 'ref', ref: 'hrm-review-template-sections', required: true },
+      { key: 'position', kind: 'integer', required: true },
+      { key: 'prompt', kind: 'textarea', required: true },
+      {
+        key: 'answerKind',
+        kind: 'select',
+        required: true,
+        options: [
+          { value: 'rating', labelKey: 'options.hrmReviewAnswerKind.rating' },
+          { value: 'text', labelKey: 'options.hrmReviewAnswerKind.text' },
+          { value: 'rating_and_text', labelKey: 'options.hrmReviewAnswerKind.ratingAndText' },
+      { key: 'required', kind: 'boolean' },
     ],
   },
   // --- Assets --------------------------------------------------------------
