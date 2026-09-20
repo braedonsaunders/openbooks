@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
+import { resolve } from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 // Regression coverage for direct document email delivery attribution: every
 // email_log row a direct send produces must name its sender in audit evidence.
@@ -31,6 +33,14 @@ const state = {
   sendOutcome: null as { kind: 'uncertain'; reason: string } | null,
   uncertaintyWriteError: null as Error | null,
   uncertaintyWriteAmbiguous: false,
+  /**
+   * When false, email_log status updates return zero rows — the same shape as
+   * an RLS miss, a deleted log, or a scope mismatch. Default true so the
+   * happy-path attribution tests observe a durable write.
+   */
+  auditUpdateMatches: true,
+  /** Visible email_log.status after a zero-row status update, or null if none. */
+  existingEmailLogStatus: null as string | null,
 }
 
 const harness = {
@@ -54,7 +64,13 @@ const harness = {
         // response after the uncertainty transition was applied.
         if (state.uncertaintyWriteAmbiguous) throw new Error('uncertainty write commit status unknown')
       }
-      return { rows: [] }
+      if (!state.auditUpdateMatches) return { rows: [] }
+      return { rows: [{ id: `updated-${state.updates.length}` }] }
+    }
+    if (text.includes('from email_log') && text.includes('select')) {
+      return {
+        rows: state.existingEmailLogStatus ? [{ status: state.existingEmailLogStatus }] : [],
+      }
     }
     // readOrgEmailConfig: no stored provider config; the mocked transport
     // package resolves one regardless so the send pipeline proceeds.
@@ -184,11 +200,19 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+const emailConfigUrl = pathToFileURL(resolve(import.meta.dirname, '../../../engine/src/delivery/email-config.ts')).href
+
 registerHooks({  resolve(specifier, context, nextResolve) {
     // The real email-config module under test imports its db sibling
     // relatively; share the same mocked engine db instance.
     if (specifier === '../platform/db.ts' && context.parentURL?.includes('/engine/src/delivery/email-config.ts')) {
       return { url: 'mock:db', shortCircuit: true }
+    }
+    // Pin the package specifier to this worktree's email-config so a shared
+    // node_modules that resolves @openbooks/engine elsewhere cannot silently
+    // exercise a different checkout's markEmail* helpers.
+    if (specifier === '@openbooks/engine/src/delivery/email-config.ts') {
+      return { url: emailConfigUrl, shortCircuit: true }
     }
     const mocks: Record<string, string> = {
       'server-only': 'mock:server-only',
@@ -228,7 +252,9 @@ registerHooks({  resolve(specifier, context, nextResolve) {
 // while the hooks above route its dependencies to the mocks.
 const sendModuleUrl = './send.ts?attribution-test'
 const { sendRecordPdfEmail } = await import(sendModuleUrl) as typeof import('./send.ts')
-const { insertEmailLog } = await import('../../../engine/src/delivery/email-config.ts')
+const { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain } = await import(
+  '../../../engine/src/delivery/email-config.ts'
+)
 
 function reset(): void {
   state.requestScope = false
@@ -240,6 +266,8 @@ function reset(): void {
   state.sendOutcome = null
   state.uncertaintyWriteError = null
   state.uncertaintyWriteAmbiguous = false
+  state.auditUpdateMatches = true
+  state.existingEmailLogStatus = null
 }
 
 /** Map an INSERT's column list onto its bound parameter values. */
@@ -443,4 +471,76 @@ test('an empty user attribution fails closed instead of writing a blank audit co
     /non-empty/,
   )
   assert.equal(state.inserts.length, insertsBefore)
+})
+
+test('a sent-state audit update that matches zero rows refuses instead of reporting delivery success', async () => {
+  reset()
+  state.auditUpdateMatches = false
+
+  await assert.rejects(
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    /was not marked sent|matched no row/u,
+  )
+  assert.equal(state.deliveries.length, 1, 'provider acceptance is not a substitute for the sent audit write')
+  const sent = state.updates.find((update) => update.text.includes("status = 'sent'"))
+  assert.ok(sent, 'the sent-state update must be attempted')
+  assert.match(sent.text, /returning/u)
+})
+
+test('an uncertain-state audit update that matches zero rows refuses so the fence is not assumed', async () => {
+  reset()
+  state.sendOutcome = { kind: 'uncertain', reason: 'provider acceptance could not be confirmed' }
+  state.auditUpdateMatches = false
+
+  await assert.rejects(
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    /was not marked uncertain|matched no row/u,
+  )
+  const uncertain = state.updates.filter((update) => update.text.includes("status = 'uncertain'"))
+  assert.equal(uncertain.length, 1, 'the uncertainty transition must be attempted')
+  assert.match(uncertain[0]!.text, /returning/u)
+  assert.equal(
+    state.updates.some((update) => update.text.includes("status = 'failed'")),
+    false,
+    'a missing uncertainty write must not be relabelled as a failed delivery',
+  )
+})
+
+test('markEmailSent refuses when the sent-state audit update writes zero rows', async () => {
+  reset()
+  state.auditUpdateMatches = false
+  await assert.rejects(
+    () => markEmailSent('org-1', 'log-missing', 'provider-message-1'),
+    /email_log log-missing was not marked sent[\s\S]*matched no row/u,
+  )
+  assert.match(state.updates.at(-1)!.text, /returning/u)
+})
+
+test('markEmailFailed refuses when the failed-state audit update writes zero rows and no row is visible', async () => {
+  reset()
+  state.auditUpdateMatches = false
+  await assert.rejects(
+    () => markEmailFailed('org-1', 'log-missing', 'smtp down'),
+    /email_log log-missing was not marked failed[\s\S]*matched no row/u,
+  )
+  assert.match(state.updates.at(-1)!.text, /returning/u)
+})
+
+test('markEmailUncertain refuses when the uncertainty fence writes zero rows and the log remains queued', async () => {
+  reset()
+  state.auditUpdateMatches = false
+  state.existingEmailLogStatus = 'queued'
+  await assert.rejects(
+    () => markEmailUncertain('org-1', 'log-queued', 'provider acceptance could not be confirmed'),
+    /email_log log-queued was not marked uncertain[\s\S]*matched no row/u,
+  )
+  assert.match(state.updates.at(-1)!.text, /returning/u)
+})
+
+test('markEmailFailed does not throw when the status guard refuses to overwrite an uncertain row', async () => {
+  reset()
+  state.auditUpdateMatches = false
+  state.existingEmailLogStatus = 'uncertain'
+  await markEmailFailed('org-1', 'log-uncertain', 'retry also failed')
+  assert.match(state.updates.at(-1)!.text, /returning/u)
 })
