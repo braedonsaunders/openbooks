@@ -647,18 +647,27 @@ export async function generatePayRunBankFile(
 
     // CPA-005 carries a 4-digit file creation number (1–9999) unique per
     // originator; NACHA carries a single-character file ID modifier; SEPA
-    // carries a message identification the bank deduplicates on. All three are
-    // derived from the SAME allocation, once, and stored — so a wrap of either
-    // alphabet still produces a file the operator can trace to a sequence
-    // value that never repeats. Cemtex carries no per-file bank number: its
-    // reel sequence is the literal "01" (multi-file batches, which would
-    // advance it, are refused — a run past 500 details never becomes bytes).
+    // carries a message identification the bank deduplicates on. Cemtex
+    // carries no per-file bank number: its reel sequence is the literal "01"
+    // (multi-file batches, which would advance it, are refused — a run past
+    // 500 details never becomes bytes). Bacs carries a 6-char VOL1 serial
+    // (duplicate-checked by Bacs) and a 3-digit UHL1 file number. All of
+    // these are derived from the SAME allocation, once, and stored — so a
+    // wrap of either alphabet still produces a file the operator can trace
+    // to a sequence value that never repeats.
     const fileCreationNumber =
       format === "cpa005" ? ((sequenceValue - 1) % 9999) + 1 : null;
     const fileIdModifier =
       format === "nacha"
         ? FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!
         : null;
+    // VOL1 serials cannot be blank or all zeros and are duplicate-checked
+    // over 3 months: ((seq - 1) % 999999) + 1 spans 000001–999999, never
+    // 000000. The UHL1 file number spans 001–999 the same way.
+    const bacsVolSerial =
+      format === "bacs" ? String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0") : null;
+    const bacsFileNumber =
+      format === "bacs" ? String(((sequenceValue - 1) % 999) + 1).padStart(3, "0") : null;
 
     // --- render (pure) -----------------------------------------------------
     const rendered = renderPayRunBankFile(inputs, {
@@ -669,6 +678,8 @@ export async function generatePayRunBankFile(
       fileCreationNumber: fileCreationNumber ?? undefined,
       fileIdModifier: fileIdModifier ?? undefined,
       messageId: format === "sepa" ? fileNumber : undefined,
+      bacsVolSerial: bacsVolSerial ?? undefined,
+      bacsFileNumber: bacsFileNumber ?? undefined,
       fundsDate: entitlement.payDate,
       createdAt: now,
     });
@@ -695,7 +706,7 @@ export async function generatePayRunBankFile(
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : "NACHA"}-${
+    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : format === "bacs" ? "BACS" : "NACHA"}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

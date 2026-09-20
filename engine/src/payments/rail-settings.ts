@@ -316,3 +316,106 @@ export async function loadCemtexSettings(orgId: string, runId?: string) {
   `));
   return validateCemtexSettings(unsealJson<Partial<CemtexSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
+
+// ---------------------------------------------------------------------------
+// Bacs (United Kingdom) counterparty coordinates — SHAPE ONLY
+// ---------------------------------------------------------------------------
+
+/**
+ * A UK sort code, canonical `NN-NN-NN` form.
+ *
+ * Six digits with optional hyphens or spaces canonicalize; anything else is
+ * not a sort code and is refused rather than coerced (a coerced sort code
+ * pays a stranger). This validates SHAPE only: whether the code is allocated
+ * lives in the industry's Extended Industry Sort Code Directory, which is not
+ * transcribed here, and the VocaLink modulus check needs its full weight
+ * tables — so a shaped-but-unallocated code passes and the bank refuses it.
+ */
+export function normalizeSortCode(value: string): string | null {
+  const digits = value.replace(/[\s-]/g, "");
+  if (!/^\d{6}$/.test(digits)) return null;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+}
+
+export function isValidSortCode(value: string): boolean {
+  return normalizeSortCode(value) !== null;
+}
+
+/**
+ * A UK account number as a Bacs destination account: exactly eight digits.
+ * Spaces and hyphens are formatting and edit out; anything that is not eight
+ * digits — shorter, longer, alpha, blank, all zeros — cannot be expressed in
+ * the fixed-width account field and is refused, never truncated or padded
+ * into a differently-numbered account.
+ */
+export function normalizeGbAccountNumber(value: string): string | null {
+  const stripped = value.replace(/[-\s]/g, "");
+  if (stripped === "" || !/^\d{8}$/.test(stripped)) return null;
+  if (/^0+$/.test(stripped)) return null;
+  return stripped;
+}
+
+// NOTE: Bacs originator settings ARE shaped here (unlike counterparty-only
+// rails) because the writer needs exactly four bank-assigned values — the
+// 6-digit Service User Number and the originating sort code, account and
+// account name — and each is validated to its channel shape below. The file
+// LAYOUT they populate is transcribed in `buildBacsFile`
+// (engine/src/payments/rail-formatters.ts) with per-field source notes.
+export interface BacsSettings {
+  /** 6-digit Service User Number assigned by the bank (VOL1 owner + HDR1 SUN). */
+  serviceUserNumber: string;
+  /** Originating (debit-side) sort code, NNNN-NN canonical `NN-NN-NN`. */
+  originatingSortCode: string;
+  /** Originating (debit-side) account number, exactly 8 digits. */
+  originatingAccount: string;
+  /** Service user's account name (Standard 18 field 9, ≤18 chars). */
+  serviceUserName: string;
+}
+
+const BACS_REQUIRED: (keyof BacsSettings)[] = [
+  "serviceUserNumber", "originatingSortCode", "originatingAccount", "serviceUserName",
+];
+
+export function validateBacsSettings(raw: Partial<BacsSettings> | null): { ok: true; settings: BacsSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing: string[] = BACS_REQUIRED.filter((k) => {
+    const v = s[k];
+    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
+  });
+  if (!missing.includes("serviceUserNumber") && !/^\d{6}$/.test(s.serviceUserNumber!.trim())) {
+    missing.push("serviceUserNumber (6-digit Service User Number assigned by your bank)");
+  }
+  if (!missing.includes("originatingSortCode") && !isValidSortCode(s.originatingSortCode!)) {
+    missing.push("originatingSortCode (6-digit sort code of the account the Bacs debit will draw)");
+  }
+  if (!missing.includes("originatingAccount") && normalizeGbAccountNumber(s.originatingAccount!) === null) {
+    missing.push("originatingAccount (8-digit account the Bacs debit will draw)");
+  }
+  if (!missing.includes("serviceUserName") && s.serviceUserName!.length > 18) {
+    missing.push("serviceUserName (max 18 characters, shown on employee statements)");
+  }
+  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
+  return {
+    ok: true,
+    settings: {
+      serviceUserNumber: s.serviceUserNumber!.trim(),
+      originatingSortCode: normalizeSortCode(s.originatingSortCode!)!,
+      originatingAccount: normalizeGbAccountNumber(s.originatingAccount!)!,
+      serviceUserName: s.serviceUserName!.trim(),
+    },
+  };
+}
+
+export async function loadBacsSettings(orgId: string, runId?: string) {
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'bacs_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `));
+  return validateBacsSettings(unsealJson<Partial<BacsSettings>>(r.rows[0]?.originator_secrets_encrypted));
+}
