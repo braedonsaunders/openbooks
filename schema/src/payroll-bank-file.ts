@@ -58,7 +58,7 @@ export const payRunBankFiles = pgTable(
      * selection is recorded here so the file can be traced back to it.
      */
     paymentBankProfileId: uuid("payment_bank_profile_id").notNull(),
-    format: text("format", { enum: ["cpa005", "nacha", "sepa", "cemtex"] }).notNull(),
+    format: text("format", { enum: ["cpa005", "nacha", "sepa", "cemtex", "bacs"] }).notNull(),
     /** Nth artifact for this run. 2+ means a regeneration happened — see status. */
     sequenceNumber: integer("sequence_number").notNull(),
     /** Human number off `number_sequences` (kind `payroll_bank_file`). */
@@ -146,18 +146,21 @@ export const payRunBankFiles = pgTable(
     check("pay_run_bank_files_control_total", sql`control_total > 0`),
     // Format-specific bank numbering must be present, and only for its format.
     // cpa005 carries a 1–9999 file creation number; nacha carries a
-    // single-character file ID modifier. sepa and cemtex carry neither: the
-    // artifact writer (engine/src/payroll/bank-file-artifact.ts) allocates a
-    // number ONLY for cpa005 and a modifier ONLY for nacha, so both columns
+    // single-character file ID modifier. sepa, cemtex and bacs carry neither:
+    // the artifact writer (engine/src/payroll/bank-file-artifact.ts) allocates
+    // a number ONLY for cpa005 and a modifier ONLY for nacha, so both columns
     // stay NULL for every other format, whose traceable identity is the
-    // sequence_value allocation (SEPA's message id). One honest arm per
-    // format — never a catch-all, so the cpa005/nacha arms keep checking.
+    // sequence_value allocation (SEPA's message id; the Bacs VOL1 serial and
+    // UHL1 file number live in the file bytes, derived from that same
+    // allocation). One honest arm per format — never a catch-all, so the
+    // cpa005/nacha arms keep checking.
     check(
       "pay_run_bank_files_format_numbering",
       sql`(format = 'cpa005' and file_creation_number between 1 and 9999 and file_id_modifier is null)
           or (format = 'nacha' and file_id_modifier ~ '^[A-Z0-9]$' and file_creation_number is null)
           or (format = 'sepa' and file_creation_number is null and file_id_modifier is null)
-          or (format = 'cemtex' and file_creation_number is null and file_id_modifier is null)`,
+          or (format = 'cemtex' and file_creation_number is null and file_id_modifier is null)
+          or (format = 'bacs' and file_creation_number is null and file_id_modifier is null)`,
     ),
   ],
 );
